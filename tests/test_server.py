@@ -11,11 +11,14 @@ from automation_mcp.process_lifecycle import SubprocessResult
 from automation_mcp.server import (
     EXECUTOR_PRESERVE_DIRS,
     PLANNER_PATH_PREFIXES,
+    _check_dry_walkthrough,
     _run_subprocess,
     classify_fix,
+    merge_worktree,
     reset_executor,
     reset_test_dir,
     run_cmd,
+    run_skill_retry,
 )
 
 
@@ -99,9 +102,7 @@ class TestClassifyFix:
         changed = "agents/graph/planner/nodes/create.py\npackages/sdk/core.py\n"
         mock_run.return_value = _make_result(0, changed, "")
 
-        result = json.loads(
-            await classify_fix(worktree_path="/tmp/wt", base_branch="main")
-        )
+        result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
         assert result["restart_scope"] == "restart_plan"
         assert len(result["planner_files"]) == 1
@@ -114,9 +115,7 @@ class TestClassifyFix:
         changed = "agents/graph/executor/nodes/run.py\npackages/sdk/core.py\n"
         mock_run.return_value = _make_result(0, changed, "")
 
-        result = json.loads(
-            await classify_fix(worktree_path="/tmp/wt", base_branch="main")
-        )
+        result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
         assert result["restart_scope"] == "restart_executor"
         assert result["planner_files"] == []
@@ -127,9 +126,7 @@ class TestClassifyFix:
     async def test_git_diff_failure(self, mock_run):
         mock_run.return_value = _make_result(128, "", "fatal: bad revision")
 
-        result = json.loads(
-            await classify_fix(worktree_path="/tmp/wt", base_branch="main")
-        )
+        result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
         assert "error" in result
         assert "git diff failed" in result["error"]
@@ -140,9 +137,7 @@ class TestClassifyFix:
         changed = "tests/agents/graph/planner/test_nodes.py\n"
         mock_run.return_value = _make_result(0, changed, "")
 
-        result = json.loads(
-            await classify_fix(worktree_path="/tmp/wt", base_branch="main")
-        )
+        result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
         assert result["restart_scope"] == "restart_plan"
 
@@ -151,9 +146,7 @@ class TestClassifyFix:
     async def test_all_planner_prefixes_recognized(self, mock_run):
         for prefix in PLANNER_PATH_PREFIXES:
             mock_run.return_value = _make_result(0, f"{prefix}some_file.py\n", "")
-            result = json.loads(
-                await classify_fix(worktree_path="/tmp/wt", base_branch="main")
-            )
+            result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
             assert result["restart_scope"] == "restart_plan", f"Failed for {prefix}"
 
 
@@ -162,9 +155,7 @@ class TestResetExecutor:
 
     @pytest.mark.asyncio
     async def test_rejects_non_playground_path(self):
-        result = json.loads(
-            await reset_executor(test_dir="/home/talon/projects/helper_agents")
-        )
+        result = json.loads(await reset_executor(test_dir="/home/talon/projects/helper_agents"))
         assert result["error"] == "Safety: only playground directories allowed"
 
     @pytest.mark.asyncio
@@ -235,10 +226,173 @@ class TestResetExecutor:
         ]
 
 
-class TestToolRegistration:
-    """T8: All 7 tools are registered on the MCP server."""
+class TestCheckDryWalkthrough:
+    """Dry-walkthrough gate blocks both /implement-worktree variants."""
 
-    def test_all_seven_tools_exist(self):
+    def test_dry_walkthrough_gate_blocks_implement_no_merge(self, tmp_path):
+        """Gate blocks /implement-worktree-no-merge when plan lacks marker."""
+        plan = tmp_path / "plan.md"
+        plan.write_text("# My Plan\n\nSome content")
+        result = _check_dry_walkthrough(f"/implement-worktree-no-merge {plan}", str(tmp_path))
+        assert result is not None
+        parsed = json.loads(result)
+        assert "error" in parsed
+        assert "dry-walked" in parsed["error"].lower()
+
+    def test_dry_walkthrough_gate_passes_implement_no_merge(self, tmp_path):
+        """Gate allows /implement-worktree-no-merge when plan has marker."""
+        plan = tmp_path / "plan.md"
+        plan.write_text("Dry-walkthrough verified = TRUE\n# My Plan")
+        result = _check_dry_walkthrough(f"/implement-worktree-no-merge {plan}", str(tmp_path))
+        assert result is None
+
+    def test_dry_walkthrough_gate_still_works_for_implement_worktree(self, tmp_path):
+        """Original /implement-worktree gating is not broken."""
+        plan = tmp_path / "plan.md"
+        plan.write_text("# No marker plan")
+        result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
+        assert result is not None
+        parsed = json.loads(result)
+        assert "error" in parsed
+
+    def test_dry_walkthrough_gate_ignores_unrelated_skills(self):
+        """Gate ignores skills that are not implement-worktree variants."""
+        result = _check_dry_walkthrough("/investigate some-error", "/tmp")
+        assert result is None
+
+
+class TestMergeWorktree:
+    """merge_worktree enforces test gate, rebases, and merges."""
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server._run_subprocess")
+    async def test_merge_worktree_blocks_on_failing_tests(self, mock_run, tmp_path):
+        """merge_worktree returns error with failed_step when test-check fails."""
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse --git-dir
+            (0, "impl-branch\n", ""),  # branch --show-current
+            (1, "FAIL\n3 failed, 97 passed", ""),  # test-check
+        ]
+        result = json.loads(await merge_worktree(str(wt), "main"))
+        assert "error" in result
+        assert result["failed_step"] == "test_gate"
+        assert result["state"] == "worktree_intact"
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server._run_subprocess")
+    async def test_merge_worktree_merges_on_green(self, mock_run, tmp_path):
+        """merge_worktree performs rebase+merge when tests pass."""
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
+            (0, "impl-branch\n", ""),  # branch
+            (0, "PASS\n100 passed", ""),  # test-check
+            (0, "", ""),  # git fetch
+            (0, "", ""),  # git rebase
+            (0, "", ""),  # git diff (no-op rebase)
+            (
+                0,
+                "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n"
+                "worktree /wt\nHEAD def456\nbranch refs/heads/impl-branch\n\n",
+                "",
+            ),  # worktree list --porcelain
+            (0, "", ""),  # git merge
+            (0, "", ""),  # worktree remove
+            (0, "", ""),  # branch -D
+        ]
+        result = json.loads(await merge_worktree(str(wt), "main"))
+        assert result["success"] is True
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server._run_subprocess")
+    async def test_merge_worktree_skip_test_gate(self, mock_run, tmp_path):
+        """merge_worktree skips internal test-check when skip_test_gate=True."""
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
+            (0, "impl-branch\n", ""),  # branch
+            # NO test-check — skipped
+            (0, "", ""),  # git fetch
+            (0, "", ""),  # git rebase
+            (0, "", ""),  # git diff (no-op rebase)
+            (
+                0,
+                "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n"
+                "worktree /wt\nHEAD def456\nbranch refs/heads/impl-branch\n\n",
+                "",
+            ),  # worktree list --porcelain
+            (0, "", ""),  # git merge
+            (0, "", ""),  # worktree remove
+            (0, "", ""),  # branch -D
+        ]
+        result = json.loads(await merge_worktree(str(wt), "main", skip_test_gate=True))
+        assert result["success"] is True
+        # Verify test-check was NOT called (9 calls instead of 10)
+        assert mock_run.call_count == 9
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server._run_subprocess")
+    async def test_merge_worktree_aborts_on_rebase_failure(self, mock_run, tmp_path):
+        """merge_worktree runs rebase --abort and returns step-specific error."""
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
+            (0, "impl-branch\n", ""),  # branch
+            (0, "PASS\n100 passed", ""),  # test-check
+            (0, "", ""),  # git fetch
+            (1, "", "CONFLICT (content): ..."),  # git rebase FAILS
+            (0, "", ""),  # git rebase --abort
+        ]
+        result = json.loads(await merge_worktree(str(wt), "main"))
+        assert "error" in result
+        assert result["failed_step"] == "rebase"
+        assert "aborted" in result["state"]
+
+    @pytest.mark.asyncio
+    async def test_merge_worktree_rejects_nonexistent_path(self):
+        """merge_worktree rejects non-existent paths."""
+        result = json.loads(await merge_worktree("/nonexistent/path", "main"))
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_merge_worktree_rejects_non_worktree(self, tmp_path):
+        """merge_worktree rejects paths that aren't git worktrees."""
+        result = json.loads(await merge_worktree(str(tmp_path), "main"))
+        assert "error" in result
+
+
+class TestRunSkillRetryGate:
+    """run_skill_retry applies dry-walkthrough gate to implement skills."""
+
+    @pytest.mark.asyncio
+    async def test_run_skill_retry_gates_implement_no_merge(self, tmp_path):
+        """run_skill_retry applies dry-walkthrough gate to /implement-worktree-no-merge."""
+        plan = tmp_path / "plan.md"
+        plan.write_text("# No marker plan")
+        result = json.loads(
+            await run_skill_retry(f"/implement-worktree-no-merge {plan}", str(tmp_path))
+        )
+        assert "error" in result
+        assert "dry-walked" in result["error"].lower()
+
+
+class TestToolRegistration:
+    """All 8 tools are registered on the MCP server."""
+
+    def test_all_eight_tools_exist(self):
         from automation_mcp.server import mcp as server
 
         tool_names = set()
@@ -253,6 +407,7 @@ class TestToolRegistration:
             "reset_test_dir",
             "classify_fix",
             "reset_executor",
+            "merge_worktree",
         }
         assert expected == tool_names
 
@@ -273,9 +428,7 @@ class TestResetTestDirUnchanged:
 
     @pytest.mark.asyncio
     async def test_rejects_nonexistent(self, tmp_path):
-        result = json.loads(
-            await reset_test_dir(test_dir=str(tmp_path / "playground" / "nope"))
-        )
+        result = json.loads(await reset_test_dir(test_dir=str(tmp_path / "playground" / "nope")))
         assert "does not exist" in result["error"]
 
     @pytest.mark.asyncio
@@ -295,9 +448,7 @@ class TestResetTestDirUnchanged:
         (playground_dir / ".git").mkdir()
         (playground_dir / "file.txt").touch()
 
-        result = json.loads(
-            await reset_test_dir(test_dir=str(playground_dir), force=True)
-        )
+        result = json.loads(await reset_test_dir(test_dir=str(playground_dir), force=True))
         assert result["success"] is True
         assert not (playground_dir / ".git").exists()
         assert not (playground_dir / "file.txt").exists()
@@ -321,9 +472,7 @@ class TestRunSubprocessDelegatesToManaged:
     @patch("automation_mcp.server.run_managed_async")
     async def test_normal_completion(self, mock_run):
         mock_run.return_value = _make_result(0, "output", "")
-        rc, stdout, stderr = await _run_subprocess(
-            ["echo", "hi"], cwd="/tmp", timeout=10
-        )
+        rc, stdout, stderr = await _run_subprocess(["echo", "hi"], cwd="/tmp", timeout=10)
         assert rc == 0
         assert stdout == "output"
         assert stderr == ""
@@ -332,8 +481,6 @@ class TestRunSubprocessDelegatesToManaged:
     @patch("automation_mcp.server.run_managed_async")
     async def test_timeout_returns_minus_one(self, mock_run):
         mock_run.return_value = _make_timeout_result()
-        rc, stdout, stderr = await _run_subprocess(
-            ["sleep", "999"], cwd="/tmp", timeout=1
-        )
+        rc, stdout, stderr = await _run_subprocess(["sleep", "999"], cwd="/tmp", timeout=1)
         assert rc == -1
         assert "timed out" in stderr

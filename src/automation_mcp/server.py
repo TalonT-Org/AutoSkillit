@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """MCP server for orchestrating automated bug-fix loops.
 
-Seven tools expose command execution, skill invocation, test checking, fix
-classification, and directory reset to an interactive Claude Code session
-acting as the orchestrator.
+Eight tools expose command execution, skill invocation, test checking, worktree
+merging, fix classification, and directory reset to an interactive Claude Code
+session acting as the orchestrator.
 
 Transport: stdio (default for FastMCP).
 """
@@ -47,19 +47,22 @@ async def _run_subprocess(
 DRY_WALKTHROUGH_MARKER = "Dry-walkthrough verified = TRUE"
 
 
+IMPLEMENT_SKILLS = {"/implement-worktree", "/implement-worktree-no-merge"}
+
+
 def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
-    """If skill_command is /implement-worktree, verify the plan has been dry-walked.
+    """If skill_command is an implement skill, verify the plan has been dry-walked.
 
     Returns an error JSON string if validation fails, None if OK.
     """
     parts = skill_command.strip().split(None, 1)
-    if not parts or parts[0] != "/implement-worktree":
+    if not parts or parts[0] not in IMPLEMENT_SKILLS:
         return None
 
+    skill_name = parts[0]
+
     if len(parts) < 2:
-        return json.dumps(
-            {"error": "Missing plan path argument for /implement-worktree"}
-        )
+        return json.dumps({"error": f"Missing plan path argument for {skill_name}"})
 
     plan_path = Path(cwd) / parts[1].strip().strip('"').strip("'")
     if not plan_path.is_file():
@@ -239,6 +242,163 @@ async def test_check(worktree_path: str) -> str:
     )
 
 
+@mcp.tool()
+async def merge_worktree(
+    worktree_path: str, base_branch: str, skip_test_gate: bool = False
+) -> str:
+    """Merge a worktree branch into the base branch after verifying tests pass.
+
+    Programmatic gate: runs task test-check in the worktree before allowing merge.
+    If tests fail, returns error without merging. Use skip_test_gate=True when the
+    caller has already verified tests (e.g. after test_check or assess-and-merge).
+
+    Args:
+        worktree_path: Absolute path to the git worktree.
+        base_branch: Branch to merge into (e.g. "main").
+        skip_test_gate: Skip internal test-check (caller already verified).
+    """
+    _log(f"merge_worktree: path={worktree_path} base={base_branch} skip_gate={skip_test_gate}")
+
+    # Validate worktree path exists
+    if not os.path.isdir(worktree_path):
+        return json.dumps({"error": f"Path does not exist: {worktree_path}"})
+
+    # Verify it's a git worktree
+    rc, git_dir, stderr = await _run_subprocess(
+        ["git", "rev-parse", "--git-dir"],
+        cwd=worktree_path,
+        timeout=10,
+    )
+    if rc != 0 or "/worktrees/" not in git_dir:
+        return json.dumps({"error": f"Not a git worktree: {worktree_path}", "stderr": stderr})
+
+    # Get branch name
+    rc, branch_out, stderr = await _run_subprocess(
+        ["git", "branch", "--show-current"],
+        cwd=worktree_path,
+        timeout=10,
+    )
+    if rc != 0:
+        return json.dumps({"error": f"Could not determine branch: {stderr}"})
+    worktree_branch = branch_out.strip()
+
+    # Test gate
+    if not skip_test_gate:
+        rc, test_stdout, test_stderr = await _run_subprocess(
+            ["task", "test-check"],
+            cwd=worktree_path,
+            timeout=600,
+        )
+        if rc != 0:
+            summary = ""
+            for line in reversed(test_stdout.splitlines()):
+                if "passed" in line or "failed" in line or "error" in line:
+                    summary = line.strip()
+                    break
+            return json.dumps(
+                {
+                    "error": "Tests failed in worktree — merge blocked",
+                    "failed_step": "test_gate",
+                    "state": "worktree_intact",
+                    "test_summary": summary,
+                    "worktree_path": worktree_path,
+                }
+            )
+
+    # Rebase
+    await _run_subprocess(
+        ["git", "fetch", "origin"],
+        cwd=worktree_path,
+        timeout=60,
+    )
+
+    rc, _, rebase_stderr = await _run_subprocess(
+        ["git", "rebase", f"origin/{base_branch}"],
+        cwd=worktree_path,
+        timeout=120,
+    )
+    if rc != 0:
+        await _run_subprocess(
+            ["git", "rebase", "--abort"],
+            cwd=worktree_path,
+            timeout=30,
+        )
+        return json.dumps(
+            {
+                "error": "Rebase failed — aborted to clean state",
+                "failed_step": "rebase",
+                "state": "worktree_intact_rebase_aborted",
+                "stderr": rebase_stderr,
+                "worktree_path": worktree_path,
+            }
+        )
+
+    # Check if rebase changed anything (for potential re-test)
+    rc, diff_out, _ = await _run_subprocess(
+        ["git", "diff", "HEAD@{1}..HEAD"],
+        cwd=worktree_path,
+        timeout=30,
+    )
+
+    # Determine main repo path from worktree list
+    rc, wt_list, _ = await _run_subprocess(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=worktree_path,
+        timeout=10,
+    )
+    main_repo = ""
+    for line in wt_list.splitlines():
+        if line.startswith("worktree "):
+            main_repo = line.split(" ", 1)[1].strip()
+            break  # First entry is always the main working tree
+
+    if not main_repo:
+        return json.dumps({"error": "Could not determine main repo path from worktree list"})
+
+    # Merge from main repo
+    rc, _, merge_stderr = await _run_subprocess(
+        ["git", "merge", worktree_branch],
+        cwd=main_repo,
+        timeout=60,
+    )
+    if rc != 0:
+        await _run_subprocess(
+            ["git", "merge", "--abort"],
+            cwd=main_repo,
+            timeout=30,
+        )
+        return json.dumps(
+            {
+                "error": "Merge failed — aborted to clean state",
+                "failed_step": "merge",
+                "state": "main_repo_merge_aborted",
+                "stderr": merge_stderr,
+                "worktree_path": worktree_path,
+            }
+        )
+
+    # Cleanup
+    await _run_subprocess(
+        ["git", "worktree", "remove", worktree_path],
+        cwd=main_repo,
+        timeout=30,
+    )
+    await _run_subprocess(
+        ["git", "branch", "-D", worktree_branch],
+        cwd=main_repo,
+        timeout=10,
+    )
+
+    return json.dumps(
+        {
+            "success": True,
+            "merged_branch": worktree_branch,
+            "into_branch": base_branch,
+            "worktree_removed": True,
+        }
+    )
+
+
 PROJECT_MARKERS = [".claude", "CLAUDE.md", ".git", "pyproject.toml", "package.json"]
 
 
@@ -263,15 +423,16 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
     if not os.path.isdir(resolved):
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
-    found_markers = [
-        m for m in PROJECT_MARKERS if os.path.exists(os.path.join(resolved, m))
-    ]
+    found_markers = [m for m in PROJECT_MARKERS if os.path.exists(os.path.join(resolved, m))]
     if found_markers and not force:
         return json.dumps(
             {
                 "error": "Safety: directory contains project markers",
                 "markers_found": found_markers,
-                "hint": "Set force=True to override. This looks like a real project, not a scratch directory.",
+                "hint": (
+                    "Set force=True to override."
+                    " This looks like a real project, not a scratch directory."
+                ),
             }
         )
 
@@ -282,9 +443,7 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
         else:
             os.unlink(path)
 
-    return json.dumps(
-        {"success": True, "forced": force, "markers_cleared": found_markers}
-    )
+    return json.dumps({"success": True, "forced": force, "markers_cleared": found_markers})
 
 
 PLANNER_PATH_PREFIXES = [
@@ -324,9 +483,7 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
     changed_files = [f.strip() for f in stdout.splitlines() if f.strip()]
 
     planner_files = [
-        f
-        for f in changed_files
-        if any(f.startswith(prefix) for prefix in PLANNER_PATH_PREFIXES)
+        f for f in changed_files if any(f.startswith(prefix) for prefix in PLANNER_PATH_PREFIXES)
     ]
 
     if planner_files:

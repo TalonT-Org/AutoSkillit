@@ -1,24 +1,23 @@
 ---
-name: implement-worktree-no-merge
-description: Implement a plan in an isolated git worktree without merging, testing, or cleaning up. For MCP orchestration use — the orchestrator handles testing and merging separately.
+name: implement-worktree
+description: Implement a plan in an isolated git worktree. Use when user says "implement in worktree", "worktree implement", or "isolated implementation". Creates a worktree from current branch, explores affected systems with subagents, then implements phase by phase.
 hooks:
   PreToolUse:
     - matcher: "*"
       hooks:
         - type: command
-          command: "echo '🌳 [SKILL: implement-worktree-no-merge] Implementing in isolated worktree (no merge)...'"
+          command: "echo '🌳 [SKILL: implement-worktree] Setting up isolated worktree implementation...'"
           once: true
 ---
 
-# Implement in Worktree (No Merge) Skill
+# Implement in Worktree Skill
 
 Implement a provided plan in an isolated git worktree branched from the current branch.
-The worktree is left intact for the orchestrator to test and merge separately.
 
 ## When to Use
 
-- MCP orchestrator calls this via `run_skill_retry`
-- Orchestrator wants to control test/merge gates independently
+- User says "implement in worktree", "worktree implement", "isolated implementation"
+- User provides a plan and wants it executed in a fresh worktree
 
 ## Critical Constraints
 
@@ -26,20 +25,16 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - Implement without first exploring affected systems with subagents
 - Implement in the main working directory (always use the worktree)
 - Force push or perform destructive git operations
-- Merge the worktree branch into any branch
-- Delete or remove the worktree
-- Run the full test suite (the orchestrator handles testing)
-- Rebase onto the base branch
-- Clean up the worktree environment
+- Consider implementation complete if ANY test fails
+- Blame test failures on "pre-existing issues" — ALL tests must pass
 - Re-run tests just to see failures — grep the saved output file instead
-- Pipe test output through `tail`, `head`, or other truncation commands
 
 **ALWAYS:**
 - Create a new worktree from the current branch
 - Use subagents to deeply understand affected systems BEFORE implementing
 - Implement one phase at a time
-- Commit per phase with descriptive messages
-- Leave the worktree intact when done
+- Run the project's test suite after implementation
+- Rebase onto base branch before completion (ready for squash-and-merge)
 
 ## Workflow
 
@@ -47,7 +42,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 
 1. Verify plan exists (file path or pasted content)
 2. **Check for dry-walkthrough verification:** Read the first line of the plan file. If it does not contain exactly `Dry-walkthrough verified = TRUE`:
-   - Display warning: "WARNING: This plan has NOT been validated with a dry-walkthrough. Implementation may encounter issues that could have been caught beforehand."
+   - Display warning: "⚠️ WARNING: This plan has NOT been validated with a dry-walkthrough. Implementation may encounter issues that could have been caught beforehand."
    - Use `AskUserQuestion` to prompt: "Do you want to continue without dry-walkthrough validation?"
    - If user declines, abort and suggest running `/dry-walkthrough` first
 3. Check `git status --porcelain` — if dirty, warn user
@@ -89,17 +84,17 @@ uv pip install -e '.[dev]' --python .venv/bin/python
 
 **Why isolated venv matters:** Running `uv pip install -e .` without a venv overwrites the global `.pth` file. When the worktree is deleted, CLI commands break with `ModuleNotFoundError`.
 
-**All commands in Steps 4–5 must run from `${WORKTREE_PATH}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
+**All commands in Steps 4–6 must run from `${WORKTREE_PATH}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
 
 ### Step 3.5: Re-point Code Index to Worktree (REQUIRED)
 
-**CRITICAL:** After setting up the worktree environment, you **MUST** update the MCP code-index project path to the worktree:
+**CRITICAL:** After setting up the worktree environment, you **MUST** update the MCP code-index project path to the worktree. This ensures all subsequent code searches operate on the worktree's files (which will diverge from the original as implementation proceeds):
 
 ```
 mcp__code-index__set_project_path(path="${WORKTREE_PATH}")
 ```
 
-**Failure to do this means code-index searches will return results from the original project, not your worktree.**
+**Failure to do this means code-index searches will return results from the original project, not your worktree — leading to confusion and incorrect file reads.**
 
 ### Step 4: Implement Phase by Phase
 
@@ -107,39 +102,50 @@ For each phase:
 1. Announce phase objective and files to modify
 2. Implement changes guided by understanding from Step 2
 3. Run per-phase verification if plan specifies it
-4. Commit per phase with descriptive messages
+4. Commit per phase if possible
 5. Report phase completion
 
 Where practical, delegate test updates to subagents to keep main conversation context lean.
 
-### Step 5: Run Pre-commit Checks
+### Step 5: Final Verification
 
 ```bash
+[[ -d "${WORKTREE_PATH}/.venv" ]] || { echo "ERROR: .venv missing in worktree"; exit 1; }
 cd "${WORKTREE_PATH}" && pre-commit run --all-files
+cd "${WORKTREE_PATH}" && .venv/bin/pytest -v
 ```
 
-Fix any formatting or linting issues. Do NOT run the full test suite.
+If tests fail, fix the issue and re-run.
 
-### Step 6: Handoff Report
+### Step 6: Rebase for Squash-and-Merge
 
-Output to terminal:
-- **Worktree path:** `${WORKTREE_PATH}`
-- **Branch name:** `${WORKTREE_NAME}`
-- **Base branch:** the branch the worktree was created from
-- **Summary:** list of implemented phases and key changes
+```bash
+git fetch origin
+git rebase origin/{base_branch}
+```
 
-Explicitly state: "Worktree left intact for orchestrator to test and merge."
+If conflicts occur, resolve them, `git rebase --continue`, then re-run tests. Report rebase status.
 
-### Step 6.5: Reset Code Index to Original Project (REQUIRED)
+### Step 7: Completion Report
 
-**CRITICAL:** After completion, you **MUST** reset the MCP code-index project path back to the original project directory:
+Output to terminal: worktree path, branch name, base branch, status, summary of changes, and next steps (fast-forward merge then clean up).
+Change directory before removing worktree to prevent deleting the cwd.
+Always confirm the merge went through before removing work tree.
+Do not merge until user confirms first!
+
+### Step 7.5: Reset Code Index to Original Project (REQUIRED)
+
+**CRITICAL:** After worktree cleanup, you **MUST** reset the MCP code-index project path back to the original project directory:
 
 ```
 mcp__code-index__set_project_path(path="{ORIGINAL_PROJECT_PATH}")
 ```
 
+**Failure to do this leaves code-index pointing at a deleted worktree path, breaking all subsequent code searches in any session.**
+
 ## Error Handling
 
 - **Worktree creation fails** — check `git worktree list`, suggest `git worktree prune`
-- **Phase fails** — report which phase and why, offer to fix/retry, skip (if optional), or abort. Do NOT clean up the worktree.
-- **Pre-commit fails** — fix formatting/linting issues and re-commit
+- **Phase fails** — report which phase and why, offer to fix/retry, skip (if optional), or abort and clean up
+- **Tests fail** — implementation is NOT complete. Fix the issue. If truly unfixable, report to user and ask for guidance. Do NOT proceed or mark as complete.
+- **Rebase conflicts** — resolve keeping implementation intent intact, re-run full test suite after

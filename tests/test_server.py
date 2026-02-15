@@ -23,6 +23,8 @@ from automation_mcp.server import (
     test_check,
 )
 
+test_check.__test__ = False  # type: ignore[attr-defined]
+
 
 def _make_result(returncode: int = 0, stdout: str = "", stderr: str = ""):
     """Create a SubprocessResult for mocking run_managed_async."""

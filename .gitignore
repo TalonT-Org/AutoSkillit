@@ -7,3 +7,4 @@ build/
 .ruff_cache/
 temp/
 .mypy_cache/
+.pytest_cache/

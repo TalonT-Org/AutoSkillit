@@ -1,0 +1,416 @@
+#!/usr/bin/env python3
+"""MCP server for orchestrating automated bug-fix loops.
+
+Seven tools expose command execution, skill invocation, test checking, fix
+classification, and directory reset to an interactive Claude Code session
+acting as the orchestrator.
+
+Transport: stdio (default for FastMCP).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import sys
+from pathlib import Path
+
+from mcp.server.fastmcp import FastMCP
+
+from automation_mcp.process_lifecycle import run_managed_async
+
+mcp = FastMCP("bugfix-loop")
+
+
+def _log(msg: str) -> None:
+    print(msg, file=sys.stderr)
+
+
+async def _run_subprocess(
+    cmd: list[str],
+    *,
+    cwd: str,
+    timeout: float,
+) -> tuple[int, str, str]:
+    """Run a subprocess asynchronously with timeout. Returns (returncode, stdout, stderr).
+
+    Delegates to run_managed_async which uses temp file I/O (immune to
+    pipe-blocking from child FD inheritance) and psutil process tree cleanup.
+    """
+    result = await run_managed_async(cmd, cwd=Path(cwd), timeout=timeout)
+    if result.timed_out:
+        return -1, result.stdout, f"Process timed out after {timeout}s"
+    return result.returncode, result.stdout, result.stderr
+
+
+DRY_WALKTHROUGH_MARKER = "Dry-walkthrough verified = TRUE"
+
+
+def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
+    """If skill_command is /implement-worktree, verify the plan has been dry-walked.
+
+    Returns an error JSON string if validation fails, None if OK.
+    """
+    parts = skill_command.strip().split(None, 1)
+    if not parts or parts[0] != "/implement-worktree":
+        return None
+
+    if len(parts) < 2:
+        return json.dumps(
+            {"error": "Missing plan path argument for /implement-worktree"}
+        )
+
+    plan_path = Path(cwd) / parts[1].strip().strip('"').strip("'")
+    if not plan_path.is_file():
+        return json.dumps({"error": f"Plan file not found: {plan_path}"})
+
+    first_line = plan_path.read_text().split("\n", 1)[0].strip()
+    if first_line != DRY_WALKTHROUGH_MARKER:
+        return json.dumps(
+            {
+                "error": "Plan has NOT been dry-walked. Run /dry-walkthrough on the plan first.",
+                "plan_path": str(plan_path),
+                "expected_first_line": DRY_WALKTHROUGH_MARKER,
+                "actual_first_line": first_line[:100],
+            }
+        )
+
+    return None
+
+
+def _truncate(text: str, max_len: int = 5000) -> str:
+    if len(text) <= max_len:
+        return text
+    return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]
+
+
+@mcp.tool()
+async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
+    """Run an arbitrary shell command in the specified directory.
+
+    Args:
+        cmd: The full command to run (e.g. "planner create -t 'my task' --debug").
+        cwd: Working directory for the command.
+        timeout: Max seconds before killing the process (default 600).
+    """
+    _log(f"run_cmd: cmd={cmd[:80]}... cwd={cwd}")
+    returncode, stdout, stderr = await _run_subprocess(
+        ["bash", "-c", cmd],
+        cwd=cwd,
+        timeout=float(timeout),
+    )
+    return json.dumps(
+        {
+            "success": returncode == 0,
+            "exit_code": returncode,
+            "stdout": _truncate(stdout),
+            "stderr": _truncate(stderr),
+        }
+    )
+
+
+@mcp.tool()
+async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
+    """Run a Claude Code headless session with a skill command (no turn limit).
+
+    Args:
+        skill_command: The full prompt including skill invocation (e.g. "/investigate ...").
+        cwd: Working directory for the claude session.
+        add_dir: Optional additional directory to add to the session context.
+    """
+    _log(f"run_skill: command={skill_command[:80]}... cwd={cwd}")
+    cmd = [
+        "claude",
+        "-p",
+        skill_command,
+        "--output-format",
+        "json",
+        "--dangerously-skip-permissions",
+    ]
+    if add_dir:
+        cmd.extend(["--add-dir", add_dir])
+
+    returncode, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=3600)
+
+    output: dict = {}
+    if stdout:
+        try:
+            output = json.loads(stdout)
+        except json.JSONDecodeError:
+            output = {"result": stdout}
+
+    return json.dumps(
+        {
+            "result": _truncate(output.get("result", "")),
+            "session_id": output.get("session_id", ""),
+            "exit_code": returncode,
+        }
+    )
+
+
+_MAX_API_CALLS = 200
+
+
+@mcp.tool()
+async def run_skill_retry(skill_command: str, cwd: str) -> str:
+    """Run a Claude Code headless session with an API call limit.
+
+    Use this for /implement-worktree and /retry-worktree where context exhaustion
+    is expected. The hit_api_limit field indicates whether to continue with
+    /retry-worktree.
+
+    Args:
+        skill_command: The full prompt including skill invocation.
+        cwd: Working directory for the claude session.
+    """
+    _log(f"run_skill_retry: command={skill_command[:80]}...")
+
+    gate_error = _check_dry_walkthrough(skill_command, cwd)
+    if gate_error is not None:
+        return gate_error
+
+    cmd = [
+        "claude",
+        "-p",
+        skill_command,
+        "--output-format",
+        "json",
+        "--dangerously-skip-permissions",
+        "--max-turns",
+        str(_MAX_API_CALLS),
+    ]
+
+    returncode, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=7200)
+
+    output: dict = {}
+    if stdout:
+        try:
+            output = json.loads(stdout)
+        except json.JSONDecodeError:
+            output = {"result": stdout}
+
+    hit_api_limit = returncode != 0 and "turn" in stderr.lower()
+
+    return json.dumps(
+        {
+            "result": _truncate(output.get("result", "")),
+            "session_id": output.get("session_id", ""),
+            "exit_code": returncode,
+            "hit_api_limit": hit_api_limit,
+        }
+    )
+
+
+@mcp.tool()
+async def test_check(worktree_path: str) -> str:
+    """Run task test-check in a worktree directory. Returns unambiguous PASS/FAIL.
+
+    Args:
+        worktree_path: Path to the git worktree to run tests in.
+    """
+    _log(f"test_check: worktree={worktree_path}")
+    returncode, stdout, stderr = await _run_subprocess(
+        ["task", "test-check"],
+        cwd=worktree_path,
+        timeout=600,
+    )
+
+    passed = returncode == 0
+
+    summary = ""
+    for line in reversed(stdout.splitlines()):
+        if "passed" in line or "failed" in line or "error" in line:
+            summary = line.strip()
+            break
+
+    output_file = ""
+    for line in stdout.splitlines():
+        if "Test output saved to:" in line:
+            output_file = line.split(":", 1)[1].strip()
+            break
+
+    return json.dumps(
+        {
+            "passed": passed,
+            "summary": summary,
+            "output_file": output_file,
+        }
+    )
+
+
+PROJECT_MARKERS = [".claude", "CLAUDE.md", ".git", "pyproject.toml", "package.json"]
+
+
+@mcp.tool()
+async def reset_test_dir(test_dir: str, force: bool = False) -> str:
+    """Remove all files from a test directory. Only works on playground directories.
+
+    Refuses to wipe directories containing project markers (.claude, .git, etc.)
+    unless force=True is explicitly set.
+
+    Args:
+        test_dir: Path to the test directory to clear. Must contain 'playground' in path.
+        force: Override project marker safety check. Required if the directory
+               contains .claude, .git, pyproject.toml, or package.json.
+    """
+    resolved = os.path.realpath(test_dir)
+    _log(f"reset_test_dir: resolved={resolved} force={force}")
+
+    if "playground" not in resolved:
+        return json.dumps({"error": "Safety: only playground directories allowed"})
+
+    if not os.path.isdir(resolved):
+        return json.dumps({"error": f"Directory does not exist: {resolved}"})
+
+    found_markers = [
+        m for m in PROJECT_MARKERS if os.path.exists(os.path.join(resolved, m))
+    ]
+    if found_markers and not force:
+        return json.dumps(
+            {
+                "error": "Safety: directory contains project markers",
+                "markers_found": found_markers,
+                "hint": "Set force=True to override. This looks like a real project, not a scratch directory.",
+            }
+        )
+
+    for item in os.listdir(resolved):
+        path = os.path.join(resolved, item)
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        else:
+            os.unlink(path)
+
+    return json.dumps(
+        {"success": True, "forced": force, "markers_cleared": found_markers}
+    )
+
+
+PLANNER_PATH_PREFIXES = [
+    "agents/graph/planner/",
+    "agents/prompts/planner/",
+    "apps/cli/planner/",
+    "tests/agents/graph/planner/",
+    "tests/integration/agents/planner/",
+    "tests/apps/cli/planner/",
+]
+
+
+@mcp.tool()
+async def classify_fix(worktree_path: str, base_branch: str) -> str:
+    """Analyze a worktree's changes to determine if the fix requires restarting
+    from plan creation or just re-running the executor.
+
+    Inspects git diff between the worktree HEAD and the base branch merge-base.
+    If any changed files are in planner code paths, returns restart_plan.
+    Otherwise returns restart_executor.
+
+    Args:
+        worktree_path: Path to the git worktree with the implemented fix.
+        base_branch: The branch the worktree was created from (for merge-base).
+    """
+    _log(f"classify_fix: worktree={worktree_path} base={base_branch}")
+
+    returncode, stdout, stderr = await _run_subprocess(
+        ["git", "diff", "--name-only", f"origin/{base_branch}...HEAD"],
+        cwd=worktree_path,
+        timeout=30,
+    )
+
+    if returncode != 0:
+        return json.dumps({"error": f"git diff failed: {stderr}"})
+
+    changed_files = [f.strip() for f in stdout.splitlines() if f.strip()]
+
+    planner_files = [
+        f
+        for f in changed_files
+        if any(f.startswith(prefix) for prefix in PLANNER_PATH_PREFIXES)
+    ]
+
+    if planner_files:
+        return json.dumps(
+            {
+                "restart_scope": "restart_plan",
+                "reason": f"Fix touches planner code: {', '.join(planner_files[:5])}",
+                "planner_files": planner_files,
+                "all_changed_files": changed_files,
+            }
+        )
+
+    return json.dumps(
+        {
+            "restart_scope": "restart_executor",
+            "reason": "Fix does not touch planner code — executor re-run is sufficient",
+            "planner_files": [],
+            "all_changed_files": changed_files,
+        }
+    )
+
+
+EXECUTOR_PRESERVE_DIRS = {".agent_data", "plans"}
+
+
+@mcp.tool()
+async def reset_executor(test_dir: str) -> str:
+    """Reset executor status and clean the test directory while preserving
+    the plan and agent data. Runs ai-executor reset-status then deletes
+    everything except .agent_data/ and plans/.
+
+    Args:
+        test_dir: Path to the test project directory. Must contain 'playground' in path.
+    """
+    resolved = os.path.realpath(test_dir)
+    _log(f"reset_executor: resolved={resolved}")
+
+    if "playground" not in resolved:
+        return json.dumps({"error": "Safety: only playground directories allowed"})
+
+    if not os.path.isdir(resolved):
+        return json.dumps({"error": f"Directory does not exist: {resolved}"})
+
+    returncode, stdout, stderr = await _run_subprocess(
+        ["ai-executor", "reset-status", "--force", "--no-backup"],
+        cwd=resolved,
+        timeout=60,
+    )
+
+    if returncode != 0:
+        return json.dumps(
+            {
+                "error": "ai-executor reset-status failed",
+                "exit_code": returncode,
+                "stderr": _truncate(stderr),
+            }
+        )
+
+    deleted = []
+    preserved = []
+    for item in os.listdir(resolved):
+        if item in EXECUTOR_PRESERVE_DIRS:
+            preserved.append(item)
+            continue
+        path = os.path.join(resolved, item)
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        else:
+            os.unlink(path)
+        deleted.append(item)
+
+    return json.dumps(
+        {
+            "success": True,
+            "preserved": preserved,
+            "deleted": deleted,
+        }
+    )
+
+
+def main():
+    """Entry point for the automation-mcp CLI command."""
+    mcp.run()
+
+
+if __name__ == "__main__":
+    main()

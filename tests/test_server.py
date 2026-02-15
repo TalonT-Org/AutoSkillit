@@ -1,0 +1,339 @@
+"""Tests for automation_mcp server MCP tools."""
+
+from __future__ import annotations
+
+import json
+from unittest.mock import patch
+
+import pytest
+
+from automation_mcp.process_lifecycle import SubprocessResult
+from automation_mcp.server import (
+    EXECUTOR_PRESERVE_DIRS,
+    PLANNER_PATH_PREFIXES,
+    _run_subprocess,
+    classify_fix,
+    reset_executor,
+    reset_test_dir,
+    run_cmd,
+)
+
+
+def _make_result(returncode: int = 0, stdout: str = "", stderr: str = ""):
+    """Create a SubprocessResult for mocking run_managed_async."""
+    return SubprocessResult(
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        timed_out=False,
+        pid=12345,
+    )
+
+
+def _make_timeout_result(stdout: str = "", stderr: str = ""):
+    """Create a timed-out SubprocessResult."""
+    return SubprocessResult(
+        returncode=-1,
+        stdout=stdout,
+        stderr=stderr,
+        timed_out=True,
+        pid=12345,
+    )
+
+
+class TestRunCmd:
+    """T1, T2: run_cmd executes commands and returns exit code semantics."""
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_successful_command(self, mock_run):
+        mock_run.return_value = _make_result(0, "hello\n", "")
+        result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))
+
+        assert result["success"] is True
+        assert result["exit_code"] == 0
+        assert "hello" in result["stdout"]
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
+        assert call_args[0][0] == ["bash", "-c", "echo hello"]
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_failing_command(self, mock_run):
+        mock_run.return_value = _make_result(1, "", "error")
+        result = json.loads(await run_cmd(cmd="false", cwd="/tmp"))
+
+        assert result["success"] is False
+        assert result["exit_code"] == 1
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_custom_timeout(self, mock_run):
+        mock_run.return_value = _make_result(0, "", "")
+        await run_cmd(cmd="sleep 1", cwd="/tmp", timeout=30)
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["timeout"] == 30.0
+
+
+class TestRunPlannerRemoved:
+    """T3: run_planner tool no longer exists."""
+
+    def test_run_planner_not_importable(self):
+        from automation_mcp import server
+
+        assert not hasattr(server, "run_planner")
+
+    def test_run_cmd_exists(self):
+        from automation_mcp import server
+
+        assert hasattr(server, "run_cmd")
+
+
+class TestClassifyFix:
+    """T4, T5: classify_fix returns correct restart scope based on changed files."""
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_planner_files_return_restart_plan(self, mock_run):
+        changed = "agents/graph/planner/nodes/create.py\npackages/sdk/core.py\n"
+        mock_run.return_value = _make_result(0, changed, "")
+
+        result = json.loads(
+            await classify_fix(worktree_path="/tmp/wt", base_branch="main")
+        )
+
+        assert result["restart_scope"] == "restart_plan"
+        assert len(result["planner_files"]) == 1
+        assert result["planner_files"][0] == "agents/graph/planner/nodes/create.py"
+        assert len(result["all_changed_files"]) == 2
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_executor_only_returns_restart_executor(self, mock_run):
+        changed = "agents/graph/executor/nodes/run.py\npackages/sdk/core.py\n"
+        mock_run.return_value = _make_result(0, changed, "")
+
+        result = json.loads(
+            await classify_fix(worktree_path="/tmp/wt", base_branch="main")
+        )
+
+        assert result["restart_scope"] == "restart_executor"
+        assert result["planner_files"] == []
+        assert len(result["all_changed_files"]) == 2
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_git_diff_failure(self, mock_run):
+        mock_run.return_value = _make_result(128, "", "fatal: bad revision")
+
+        result = json.loads(
+            await classify_fix(worktree_path="/tmp/wt", base_branch="main")
+        )
+
+        assert "error" in result
+        assert "git diff failed" in result["error"]
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_planner_test_files_trigger_restart_plan(self, mock_run):
+        changed = "tests/agents/graph/planner/test_nodes.py\n"
+        mock_run.return_value = _make_result(0, changed, "")
+
+        result = json.loads(
+            await classify_fix(worktree_path="/tmp/wt", base_branch="main")
+        )
+
+        assert result["restart_scope"] == "restart_plan"
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_all_planner_prefixes_recognized(self, mock_run):
+        for prefix in PLANNER_PATH_PREFIXES:
+            mock_run.return_value = _make_result(0, f"{prefix}some_file.py\n", "")
+            result = json.loads(
+                await classify_fix(worktree_path="/tmp/wt", base_branch="main")
+            )
+            assert result["restart_scope"] == "restart_plan", f"Failed for {prefix}"
+
+
+class TestResetExecutor:
+    """T6, T7: reset_executor preserves .agent_data and plans, rejects non-playground."""
+
+    @pytest.mark.asyncio
+    async def test_rejects_non_playground_path(self):
+        result = json.loads(
+            await reset_executor(test_dir="/home/talon/projects/helper_agents")
+        )
+        assert result["error"] == "Safety: only playground directories allowed"
+
+    @pytest.mark.asyncio
+    async def test_rejects_nonexistent_directory(self, tmp_path):
+        playground_dir = tmp_path / "playground" / "project"
+        result = json.loads(await reset_executor(test_dir=str(playground_dir)))
+        assert "does not exist" in result["error"]
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_preserves_agent_data_and_plans(self, mock_run, tmp_path):
+        playground_dir = tmp_path / "playground" / "project"
+        playground_dir.mkdir(parents=True)
+
+        (playground_dir / ".agent_data").mkdir()
+        (playground_dir / ".agent_data" / "agent_data.db").touch()
+        (playground_dir / "plans").mkdir()
+        (playground_dir / "plans" / "plan.json").touch()
+        (playground_dir / "output.txt").touch()
+        (playground_dir / "temp_dir").mkdir()
+        (playground_dir / "temp_dir" / "file.txt").touch()
+
+        mock_run.return_value = _make_result(0, "", "")
+
+        result = json.loads(await reset_executor(test_dir=str(playground_dir)))
+
+        assert result["success"] is True
+        assert ".agent_data" in result["preserved"]
+        assert "plans" in result["preserved"]
+        assert "output.txt" in result["deleted"]
+        assert "temp_dir" in result["deleted"]
+
+        assert (playground_dir / ".agent_data" / "agent_data.db").exists()
+        assert (playground_dir / "plans" / "plan.json").exists()
+        assert not (playground_dir / "output.txt").exists()
+        assert not (playground_dir / "temp_dir").exists()
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_reset_status_failure(self, mock_run, tmp_path):
+        playground_dir = tmp_path / "playground" / "project"
+        playground_dir.mkdir(parents=True)
+
+        mock_run.return_value = _make_result(1, "", "command not found")
+
+        result = json.loads(await reset_executor(test_dir=str(playground_dir)))
+
+        assert "error" in result
+        assert result["error"] == "ai-executor reset-status failed"
+        assert result["exit_code"] == 1
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_runs_correct_reset_command(self, mock_run, tmp_path):
+        playground_dir = tmp_path / "playground" / "project"
+        playground_dir.mkdir(parents=True)
+
+        mock_run.return_value = _make_result(0, "", "")
+
+        await reset_executor(test_dir=str(playground_dir))
+
+        call_args = mock_run.call_args[0][0]
+        assert call_args == [
+            "ai-executor",
+            "reset-status",
+            "--force",
+            "--no-backup",
+        ]
+
+
+class TestToolRegistration:
+    """T8: All 7 tools are registered on the MCP server."""
+
+    def test_all_seven_tools_exist(self):
+        from automation_mcp.server import mcp as server
+
+        tool_names = set()
+        for route in server._tool_manager._tools.values():
+            tool_names.add(route.name)
+
+        expected = {
+            "run_cmd",
+            "run_skill",
+            "run_skill_retry",
+            "test_check",
+            "reset_test_dir",
+            "classify_fix",
+            "reset_executor",
+        }
+        assert expected == tool_names
+
+    def test_run_planner_not_registered(self):
+        from automation_mcp.server import mcp as server
+
+        tool_names = {route.name for route in server._tool_manager._tools.values()}
+        assert "run_planner" not in tool_names
+
+
+class TestResetTestDirUnchanged:
+    """Verify existing reset_test_dir safety guards still work."""
+
+    @pytest.mark.asyncio
+    async def test_rejects_non_playground(self):
+        result = json.loads(await reset_test_dir(test_dir="/home/user/project"))
+        assert result["error"] == "Safety: only playground directories allowed"
+
+    @pytest.mark.asyncio
+    async def test_rejects_nonexistent(self, tmp_path):
+        result = json.loads(
+            await reset_test_dir(test_dir=str(tmp_path / "playground" / "nope"))
+        )
+        assert "does not exist" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_rejects_project_markers_without_force(self, tmp_path):
+        playground_dir = tmp_path / "playground" / "project"
+        playground_dir.mkdir(parents=True)
+        (playground_dir / ".git").mkdir()
+
+        result = json.loads(await reset_test_dir(test_dir=str(playground_dir)))
+        assert result["error"] == "Safety: directory contains project markers"
+        assert ".git" in result["markers_found"]
+
+    @pytest.mark.asyncio
+    async def test_accepts_project_markers_with_force(self, tmp_path):
+        playground_dir = tmp_path / "playground" / "project"
+        playground_dir.mkdir(parents=True)
+        (playground_dir / ".git").mkdir()
+        (playground_dir / "file.txt").touch()
+
+        result = json.loads(
+            await reset_test_dir(test_dir=str(playground_dir), force=True)
+        )
+        assert result["success"] is True
+        assert not (playground_dir / ".git").exists()
+        assert not (playground_dir / "file.txt").exists()
+
+
+class TestConstants:
+    """Verify module-level constants are correct."""
+
+    def test_planner_path_prefixes_are_directories(self):
+        for prefix in PLANNER_PATH_PREFIXES:
+            assert prefix.endswith("/"), f"{prefix} should end with /"
+
+    def test_executor_preserve_dirs(self):
+        assert EXECUTOR_PRESERVE_DIRS == {".agent_data", "plans"}
+
+
+class TestRunSubprocessDelegatesToManaged:
+    """Verify _run_subprocess delegates to run_managed_async correctly."""
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_normal_completion(self, mock_run):
+        mock_run.return_value = _make_result(0, "output", "")
+        rc, stdout, stderr = await _run_subprocess(
+            ["echo", "hi"], cwd="/tmp", timeout=10
+        )
+        assert rc == 0
+        assert stdout == "output"
+        assert stderr == ""
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_timeout_returns_minus_one(self, mock_run):
+        mock_run.return_value = _make_timeout_result()
+        rc, stdout, stderr = await _run_subprocess(
+            ["sleep", "999"], cwd="/tmp", timeout=1
+        )
+        assert rc == -1
+        assert "timed out" in stderr

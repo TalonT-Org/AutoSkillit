@@ -282,6 +282,7 @@ class TestMergeWorktree:
         assert "error" in result
         assert result["failed_step"] == "test_gate"
         assert result["state"] == "worktree_intact"
+        assert "test_summary" not in result
 
     @pytest.mark.asyncio
     @patch("automation_mcp.server._run_subprocess")
@@ -310,36 +311,6 @@ class TestMergeWorktree:
         ]
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert result["success"] is True
-
-    @pytest.mark.asyncio
-    @patch("automation_mcp.server._run_subprocess")
-    async def test_merge_worktree_skip_test_gate(self, mock_run, tmp_path):
-        """merge_worktree skips internal test-check when skip_test_gate=True."""
-        wt = tmp_path / "worktree"
-        wt.mkdir()
-        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
-
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
-            (0, "impl-branch\n", ""),  # branch
-            # NO test-check — skipped
-            (0, "", ""),  # git fetch
-            (0, "", ""),  # git rebase
-            (0, "", ""),  # git diff (no-op rebase)
-            (
-                0,
-                "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n"
-                "worktree /wt\nHEAD def456\nbranch refs/heads/impl-branch\n\n",
-                "",
-            ),  # worktree list --porcelain
-            (0, "", ""),  # git merge
-            (0, "", ""),  # worktree remove
-            (0, "", ""),  # branch -D
-        ]
-        result = json.loads(await merge_worktree(str(wt), "main", skip_test_gate=True))
-        assert result["success"] is True
-        # Verify test-check was NOT called (9 calls instead of 10)
-        assert mock_run.call_count == 9
 
     @pytest.mark.asyncio
     @patch("automation_mcp.server._run_subprocess")

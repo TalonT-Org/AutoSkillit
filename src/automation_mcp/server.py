@@ -205,6 +205,27 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
     )
 
 
+_FAILURE_INDICATORS = {"failed", "error"}
+
+
+def _check_test_passed(returncode: int, stdout: str) -> bool:
+    """Determine test pass/fail with cross-validation.
+
+    Uses exit code as primary signal, but overrides to False if the
+    output contains failure indicators — defense against exit code bugs
+    in external tools (e.g. Taskfile PIPESTATUS in non-bash shell).
+    """
+    if returncode != 0:
+        return False
+    for line in reversed(stdout.splitlines()):
+        if "passed" in line or "failed" in line or "error" in line:
+            for indicator in _FAILURE_INDICATORS:
+                if indicator in line:
+                    return False
+            break
+    return True
+
+
 @mcp.tool()
 async def test_check(worktree_path: str) -> str:
     """Run task test-check in a worktree directory. Returns unambiguous PASS/FAIL.
@@ -219,45 +240,23 @@ async def test_check(worktree_path: str) -> str:
         timeout=600,
     )
 
-    passed = returncode == 0
+    passed = _check_test_passed(returncode, stdout)
 
-    summary = ""
-    for line in reversed(stdout.splitlines()):
-        if "passed" in line or "failed" in line or "error" in line:
-            summary = line.strip()
-            break
-
-    output_file = ""
-    for line in stdout.splitlines():
-        if "Test output saved to:" in line:
-            output_file = line.split(":", 1)[1].strip()
-            break
-
-    return json.dumps(
-        {
-            "passed": passed,
-            "summary": summary,
-            "output_file": output_file,
-        }
-    )
+    return json.dumps({"passed": passed})
 
 
 @mcp.tool()
-async def merge_worktree(
-    worktree_path: str, base_branch: str, skip_test_gate: bool = False
-) -> str:
+async def merge_worktree(worktree_path: str, base_branch: str) -> str:
     """Merge a worktree branch into the base branch after verifying tests pass.
 
     Programmatic gate: runs task test-check in the worktree before allowing merge.
-    If tests fail, returns error without merging. Use skip_test_gate=True when the
-    caller has already verified tests (e.g. after test_check or assess-and-merge).
+    If tests fail, returns error without merging.
 
     Args:
         worktree_path: Absolute path to the git worktree.
         base_branch: Branch to merge into (e.g. "main").
-        skip_test_gate: Skip internal test-check (caller already verified).
     """
-    _log(f"merge_worktree: path={worktree_path} base={base_branch} skip_gate={skip_test_gate}")
+    _log(f"merge_worktree: path={worktree_path} base={base_branch}")
 
     # Validate worktree path exists
     if not os.path.isdir(worktree_path):
@@ -282,28 +281,21 @@ async def merge_worktree(
         return json.dumps({"error": f"Could not determine branch: {stderr}"})
     worktree_branch = branch_out.strip()
 
-    # Test gate
-    if not skip_test_gate:
-        rc, test_stdout, test_stderr = await _run_subprocess(
-            ["task", "test-check"],
-            cwd=worktree_path,
-            timeout=600,
+    # Test gate — always runs, no bypass
+    rc, test_stdout, test_stderr = await _run_subprocess(
+        ["task", "test-check"],
+        cwd=worktree_path,
+        timeout=600,
+    )
+    if not _check_test_passed(rc, test_stdout):
+        return json.dumps(
+            {
+                "error": "Tests failed in worktree — merge blocked",
+                "failed_step": "test_gate",
+                "state": "worktree_intact",
+                "worktree_path": worktree_path,
+            }
         )
-        if rc != 0:
-            summary = ""
-            for line in reversed(test_stdout.splitlines()):
-                if "passed" in line or "failed" in line or "error" in line:
-                    summary = line.strip()
-                    break
-            return json.dumps(
-                {
-                    "error": "Tests failed in worktree — merge blocked",
-                    "failed_step": "test_gate",
-                    "state": "worktree_intact",
-                    "test_summary": summary,
-                    "worktree_path": worktree_path,
-                }
-            )
 
     # Rebase
     await _run_subprocess(

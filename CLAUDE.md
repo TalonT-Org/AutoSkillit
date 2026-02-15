@@ -15,6 +15,11 @@ A standalone MCP server that orchestrates automated bug-fix loops using Claude C
 
 ## **3. Critical Rules - DO NOT VIOLATE**
 
+### **3.0. Skill Invocations Are Orders**
+
+  * When a message includes a `/skill-name`, execute it via the Skill tool **BEFORE** any other action. No exceptions.
+  * Never skip or substitute a skill invocation based on your own judgment.
+
 ### **3.1. Code and Implementation**
 
   * **Do Not Oversimplify**: Implement logic with required complexity. No shortcuts that compromise correctness.

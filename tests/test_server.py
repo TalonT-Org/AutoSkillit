@@ -19,6 +19,7 @@ from automation_mcp.server import (
     reset_test_dir,
     run_cmd,
     run_skill_retry,
+    test_check,
 )
 
 
@@ -484,3 +485,97 @@ class TestRunSubprocessDelegatesToManaged:
         rc, stdout, stderr = await _run_subprocess(["sleep", "999"], cwd="/tmp", timeout=1)
         assert rc == -1
         assert "timed out" in stderr
+
+
+class TestTestCheck:
+    """test_check returns unambiguous PASS/FAIL with cross-validation."""
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_passes_on_clean_run(self, mock_run):
+        """returncode=0 with passing summary -> passed=True."""
+        mock_run.return_value = _make_result(0, "100 passed\n", "")
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is True
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_fails_on_nonzero_exit(self, mock_run):
+        """returncode=1 -> passed=False regardless of output."""
+        mock_run.return_value = _make_result(1, "3 failed, 97 passed\n", "")
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is False
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_cross_validates_exit_code_against_output(self, mock_run):
+        """returncode=0 but output contains 'failed' -> passed=False.
+        This is THE bug: Taskfile PIPESTATUS fails silently, exit code is 0,
+        but output clearly shows test failures."""
+        mock_run.return_value = _make_result(0, "3 failed, 8538 passed\n", "")
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is False
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_does_not_expose_summary(self, mock_run):
+        """test_check returns ONLY passed boolean — no summary, no output_file."""
+        mock_run.return_value = _make_result(
+            0, "100 passed\nTest output saved to: /tmp/out.txt\n", ""
+        )
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert "summary" not in result
+        assert "output_file" not in result
+        assert list(result.keys()) == ["passed"]
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_cross_validates_error_in_output(self, mock_run):
+        """returncode=0 but output contains 'error' -> passed=False."""
+        mock_run.return_value = _make_result(0, "1 error, 99 passed\n", "")
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is False
+
+
+class TestMergeWorktreeNoBypass:
+    """merge_worktree always runs its own test gate — no bypass possible."""
+
+    @pytest.mark.asyncio
+    async def test_skip_test_gate_parameter_rejected(self):
+        """merge_worktree does not accept skip_test_gate parameter."""
+        with pytest.raises(TypeError, match="skip_test_gate"):
+            await merge_worktree("/tmp/wt", "main", skip_test_gate=True)
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server._run_subprocess")
+    async def test_internal_gate_cross_validates_output(self, mock_run, tmp_path):
+        """merge_worktree's internal gate catches rc=0 with failure text."""
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
+            (0, "impl-branch\n", ""),  # branch
+            (0, "3 failed, 97 passed", ""),  # test-check: rc=0 but failed text
+        ]
+        result = json.loads(await merge_worktree(str(wt), "main"))
+        assert "error" in result
+        assert result["failed_step"] == "test_gate"
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server._run_subprocess")
+    async def test_gate_failure_does_not_expose_summary(self, mock_run, tmp_path):
+        """When gate blocks, response contains no test output details."""
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
+            (0, "impl-branch\n", ""),  # branch
+            (1, "3 failed, 97 passed", ""),  # test-check
+        ]
+        result = json.loads(await merge_worktree(str(wt), "main"))
+        assert "error" in result
+        assert "test_summary" not in result

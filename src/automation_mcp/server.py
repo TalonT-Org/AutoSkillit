@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -193,7 +194,7 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
         except json.JSONDecodeError:
             output = {"result": stdout}
 
-    hit_api_limit = returncode != 0 and "turn" in stderr.lower()
+    hit_api_limit = returncode != 0 and bool(re.search(r"\bturn", stderr, re.IGNORECASE))
 
     return json.dumps(
         {
@@ -205,7 +206,27 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
     )
 
 
-_FAILURE_INDICATORS = {"failed", "error"}
+_OUTCOME_PATTERN = re.compile(
+    r"(\d+)\s+(passed|failed|error|xfailed|xpassed|skipped|warnings?|deselected)"
+)
+
+
+def _parse_pytest_summary(stdout: str) -> dict[str, int]:
+    """Extract pytest outcome counts from the last summary-like line.
+
+    Scans stdout in reverse for a line containing recognizable pytest
+    outcome words (e.g. "passed", "failed") and extracts all "N outcome"
+    pairs into a dict. Returns empty dict if no summary line found.
+    """
+    for line in reversed(stdout.splitlines()):
+        matches = _OUTCOME_PATTERN.findall(line)
+        if matches:
+            counts: dict[str, int] = {}
+            for count_str, outcome in matches:
+                key = outcome.rstrip("s") if outcome == "warnings" else outcome
+                counts[key] = int(count_str)
+            return counts
+    return {}
 
 
 def _check_test_passed(returncode: int, stdout: str) -> bool:
@@ -217,12 +238,9 @@ def _check_test_passed(returncode: int, stdout: str) -> bool:
     """
     if returncode != 0:
         return False
-    for line in reversed(stdout.splitlines()):
-        if "passed" in line or "failed" in line or "error" in line:
-            for indicator in _FAILURE_INDICATORS:
-                if indicator in line:
-                    return False
-            break
+    counts = _parse_pytest_summary(stdout)
+    if counts.get("failed", 0) > 0 or counts.get("error", 0) > 0:
+        return False
     return True
 
 

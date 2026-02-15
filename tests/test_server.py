@@ -12,6 +12,7 @@ from automation_mcp.server import (
     EXECUTOR_PRESERVE_DIRS,
     PLANNER_PATH_PREFIXES,
     _check_dry_walkthrough,
+    _parse_pytest_summary,
     _run_subprocess,
     classify_fix,
     merge_worktree,
@@ -506,6 +507,111 @@ class TestTestCheck:
         mock_run.return_value = _make_result(0, "1 error, 99 passed\n", "")
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is False
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_xfailed_not_treated_as_failure(self, mock_run):
+        """xfailed tests are expected failures — exit code 0, should pass."""
+        mock_run.return_value = _make_result(0, "8552 passed, 3 xfailed\n", "")
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is True
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_xpassed_not_treated_as_failure(self, mock_run):
+        """xpassed tests are unexpected passes — exit code 0, should pass."""
+        mock_run.return_value = _make_result(0, "99 passed, 1 xpassed\n", "")
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is True
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_mixed_xfail_with_real_failure(self, mock_run):
+        """Real failure + xfailed — should still fail on the real failure."""
+        mock_run.return_value = _make_result(0, "1 failed, 2 xfailed, 97 passed\n", "")
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is False
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_skipped_with_exit_zero_passes(self, mock_run):
+        """Skipped tests with exit 0 — parser trusts exit code."""
+        mock_run.return_value = _make_result(0, "97 passed, 3 skipped\n", "")
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is True
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_warnings_not_treated_as_failure(self, mock_run):
+        """Warnings with exit 0 — should pass."""
+        mock_run.return_value = _make_result(0, "100 passed, 5 warnings\n", "")
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is True
+
+
+class TestRunSkillRetryApiLimit:
+    """run_skill_retry correctly detects API call limit from stderr."""
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_detects_api_limit_on_turn_message(self, mock_run):
+        """Actual Claude Code API limit message triggers hit_api_limit."""
+        mock_run.return_value = _make_result(1, '{"result": ""}', "Max turns reached")
+        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        assert result["hit_api_limit"] is True
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_no_false_positive_on_return_in_stderr(self, mock_run):
+        """'return' in stderr must NOT trigger hit_api_limit."""
+        mock_run.return_value = _make_result(1, '{"result": ""}', "return code error")
+        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        assert result["hit_api_limit"] is False
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_no_false_positive_on_nocturnal(self, mock_run):
+        """Compound words containing 'turn' must NOT trigger hit_api_limit."""
+        mock_run.return_value = _make_result(1, '{"result": ""}', "nocturnal process failed")
+        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        assert result["hit_api_limit"] is False
+
+
+class TestParsePytestSummary:
+    """_parse_pytest_summary extracts structured counts from pytest output."""
+
+    def test_simple_pass(self):
+        assert _parse_pytest_summary("100 passed\n") == {"passed": 100}
+
+    def test_failed_and_passed(self):
+        assert _parse_pytest_summary("3 failed, 97 passed\n") == {"failed": 3, "passed": 97}
+
+    def test_xfailed_parsed_separately(self):
+        counts = _parse_pytest_summary("8552 passed, 3 xfailed\n")
+        assert counts == {"passed": 8552, "xfailed": 3}
+        assert "failed" not in counts
+
+    def test_mixed_all_outcomes(self):
+        counts = _parse_pytest_summary("1 failed, 2 xfailed, 1 xpassed, 3 skipped, 93 passed\n")
+        assert counts["failed"] == 1
+        assert counts["xfailed"] == 2
+        assert counts["xpassed"] == 1
+        assert counts["skipped"] == 3
+        assert counts["passed"] == 93
+
+    def test_error_outcome(self):
+        assert _parse_pytest_summary("1 error, 99 passed\n") == {"error": 1, "passed": 99}
+
+    def test_multiline_finds_summary(self):
+        output = "some log output\nERROR in setup\n100 passed in 2.5s\n"
+        counts = _parse_pytest_summary(output)
+        assert counts == {"passed": 100}
+
+    def test_empty_output(self):
+        assert _parse_pytest_summary("") == {}
+
+    def test_no_summary_line(self):
+        assert _parse_pytest_summary("no test results here\n") == {}
 
 
 class TestMergeWorktreeNoBypass:

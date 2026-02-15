@@ -16,10 +16,11 @@ import logging
 import signal
 import subprocess
 import tempfile
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Generator, Optional, Tuple
+from typing import IO
 
 import psutil
 
@@ -84,8 +85,8 @@ def kill_process_tree(pid: int, timeout: float = 2.0) -> None:
 
 @contextmanager
 def create_temp_io(
-    input_data: Optional[str] = None,
-) -> Generator[Tuple[IO[bytes], IO[bytes], Optional[Path]], None, None]:
+    input_data: str | None = None,
+) -> Generator[tuple[IO[bytes], IO[bytes], Path | None], None, None]:
     """Context manager yielding temp file paths for subprocess I/O.
 
     Creates temp files for stdout and stderr (and optionally stdin).
@@ -96,9 +97,9 @@ def create_temp_io(
         stdout_file and stderr_file are open file handles ready to pass
         to subprocess, and stdin_path is a Path if input_data was provided.
     """
-    stdout_file: Optional[IO[bytes]] = None
-    stderr_file: Optional[IO[bytes]] = None
-    stdin_path: Optional[Path] = None
+    stdout_file: IO[bytes] | None = None
+    stderr_file: IO[bytes] | None = None
+    stdin_path: Path | None = None
     paths_to_clean: list[Path] = []
 
     try:
@@ -141,7 +142,7 @@ def create_temp_io(
                 pass
 
 
-def read_temp_output(stdout_path: Path, stderr_path: Path) -> Tuple[str, str]:
+def read_temp_output(stdout_path: Path, stderr_path: Path) -> tuple[str, str]:
     """Read stdout/stderr from temp files. Safe even if children hold FDs.
 
     Files aren't EOF-gated like pipes, so this works regardless of whether
@@ -165,8 +166,8 @@ async def run_managed_async(
     *,
     cwd: Path,
     timeout: float,
-    input_data: Optional[str] = None,
-    env: Optional[dict[str, str]] = None,
+    input_data: str | None = None,
+    env: dict[str, str] | None = None,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -193,7 +194,7 @@ async def run_managed_async(
         # inheriting parent's stdin (e.g. MCP server socket that never closes)
         stdin_handle = None
         if stdin_path is not None:
-            stdin_handle = open(stdin_path, "r")  # noqa: SIM115
+            stdin_handle = open(stdin_path)  # noqa: SIM115
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -209,11 +210,9 @@ async def run_managed_async(
             timed_out = False
             try:
                 await asyncio.wait_for(proc.wait(), timeout=timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 timed_out = True
-                logger.warning(
-                    "Process %d timed out after %ss, killing tree", proc.pid, timeout
-                )
+                logger.warning("Process %d timed out after %ss, killing tree", proc.pid, timeout)
                 kill_process_tree(proc.pid)
 
             # Flush and close before reading
@@ -245,10 +244,10 @@ async def run_managed_async(
 def run_managed_sync(
     cmd: list[str],
     *,
-    cwd: Optional[Path],
+    cwd: Path | None,
     timeout: float,
-    input_data: Optional[str] = None,
-    env: Optional[dict[str, str]] = None,
+    input_data: str | None = None,
+    env: dict[str, str] | None = None,
 ) -> SubprocessResult:
     """Sync subprocess execution with temp file I/O and process tree cleanup.
 
@@ -270,7 +269,7 @@ def run_managed_sync(
         # inheriting parent's stdin (e.g. MCP server socket that never closes)
         stdin_handle = None
         if stdin_path is not None:
-            stdin_handle = open(stdin_path, "r")  # noqa: SIM115
+            stdin_handle = open(stdin_path)  # noqa: SIM115
 
         process = None
         try:

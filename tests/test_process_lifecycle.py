@@ -22,7 +22,6 @@ from automation_mcp.process_lifecycle import (
     run_managed_sync,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
 # ---------------------------------------------------------------------------

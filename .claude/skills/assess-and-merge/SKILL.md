@@ -66,7 +66,7 @@ Fix test failures in a worktree implemented by `/implement-worktree-no-merge`, t
 
 ### Step 4: Merge via `merge_worktree` MCP tool
 
-1. Call `merge_worktree(worktree_path, base_branch, skip_test_gate=True)` — tests were already verified
+1. Call `merge_worktree(worktree_path, base_branch)` — merge_worktree always runs its own test gate
 2. If `merge_worktree` returns error: report the `failed_step` and `state` from the response
 3. If `merge_worktree` returns success: report merged branch and summary
 

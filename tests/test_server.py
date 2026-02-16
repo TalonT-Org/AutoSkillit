@@ -7,10 +7,9 @@ from unittest.mock import patch
 
 import pytest
 
+from automation_mcp.config import AutomationConfig, ClassifyFixConfig, ResetExecutorConfig
 from automation_mcp.process_lifecycle import SubprocessResult
 from automation_mcp.server import (
-    EXECUTOR_PRESERVE_DIRS,
-    PLANNER_PATH_PREFIXES,
     _check_dry_walkthrough,
     _disable_tools_handler,
     _enable_tools_handler,
@@ -103,6 +102,25 @@ class TestRunPlannerRemoved:
 class TestClassifyFix:
     """T4, T5: classify_fix returns correct restart scope based on changed files."""
 
+    @pytest.fixture(autouse=True)
+    def _set_prefixes(self, monkeypatch):
+        """Configure planner path prefixes for classify_fix tests."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(
+            classify_fix=ClassifyFixConfig(
+                path_prefixes=[
+                    "agents/graph/planner/",
+                    "agents/prompts/planner/",
+                    "apps/cli/planner/",
+                    "tests/agents/graph/planner/",
+                    "tests/integration/agents/planner/",
+                    "tests/apps/cli/planner/",
+                ]
+            )
+        )
+        monkeypatch.setattr(server, "_config", cfg)
+
     @pytest.mark.asyncio
     @patch("automation_mcp.server.run_managed_async")
     async def test_planner_files_return_restart_plan(self, mock_run):
@@ -148,17 +166,21 @@ class TestClassifyFix:
 
         assert result["restart_scope"] == "restart_plan"
 
-    @pytest.mark.asyncio
-    @patch("automation_mcp.server.run_managed_async")
-    async def test_all_planner_prefixes_recognized(self, mock_run):
-        for prefix in PLANNER_PATH_PREFIXES:
-            mock_run.return_value = _make_result(0, f"{prefix}some_file.py\n", "")
-            result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
-            assert result["restart_scope"] == "restart_plan", f"Failed for {prefix}"
-
 
 class TestResetExecutor:
     """T6, T7: reset_executor preserves .agent_data and plans, rejects non-playground."""
+
+    @pytest.fixture(autouse=True)
+    def _set_reset_command(self, monkeypatch):
+        """Configure reset_executor with a command for these tests."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(
+            reset_executor=ResetExecutorConfig(
+                command=["ai-executor", "reset-status", "--force", "--no-backup"]
+            )
+        )
+        monkeypatch.setattr(server, "_config", cfg)
 
     @pytest.mark.asyncio
     async def test_rejects_non_playground_path(self):
@@ -211,7 +233,7 @@ class TestResetExecutor:
         result = json.loads(await reset_executor(test_dir=str(playground_dir)))
 
         assert "error" in result
-        assert result["error"] == "ai-executor reset-status failed"
+        assert result["error"] == "reset command failed"
         assert result["exit_code"] == 1
 
     @pytest.mark.asyncio
@@ -436,15 +458,20 @@ class TestResetTestDirUnchanged:
         assert not (playground_dir / "file.txt").exists()
 
 
-class TestConstants:
-    """Verify module-level constants are correct."""
+class TestConfigDefaults:
+    """Verify config defaults match expected values."""
 
-    def test_planner_path_prefixes_are_directories(self):
-        for prefix in PLANNER_PATH_PREFIXES:
-            assert prefix.endswith("/"), f"{prefix} should end with /"
+    def test_default_preserve_dirs(self):
+        cfg = AutomationConfig()
+        assert cfg.reset_executor.preserve_dirs == {".agent_data", "plans"}
 
-    def test_executor_preserve_dirs(self):
-        assert EXECUTOR_PRESERVE_DIRS == {".agent_data", "plans"}
+    def test_default_test_command(self):
+        cfg = AutomationConfig()
+        assert cfg.test_check.command == ["task", "test-check"]
+
+    def test_default_classify_fix_empty_prefixes(self):
+        cfg = AutomationConfig()
+        assert cfg.classify_fix.path_prefixes == []
 
 
 class TestRunSubprocessDelegatesToManaged:
@@ -756,3 +783,182 @@ class TestGatedToolAccess:
         tools = [c for c in mcp._local_provider._components.values() if isinstance(c, Tool)]
         for tool in tools:
             assert "bugfix" in tool.tags, f"{tool.name} missing 'bugfix' tag"
+
+
+class TestConfigDrivenBehavior:
+    """S1-S10: Verify tools use config instead of hardcoded values."""
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_test_check_uses_config_command(self, mock_run, monkeypatch):
+        """S1: test_check runs _config.test_check.command."""
+        from automation_mcp import server
+        from automation_mcp.config import TestCheckConfig
+
+        cfg = AutomationConfig(test_check=TestCheckConfig(command=["pytest", "-x"], timeout=300))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        mock_run.return_value = _make_result(0, "100 passed\n", "")
+        await test_check(worktree_path="/tmp/wt")
+
+        call_args = mock_run.call_args
+        assert call_args[0][0] == ["pytest", "-x"]
+        assert call_args[1]["timeout"] == 300
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_classify_fix_uses_config_prefixes(self, mock_run, monkeypatch):
+        """S2: classify_fix uses _config.classify_fix.path_prefixes."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(classify_fix=ClassifyFixConfig(path_prefixes=["src/custom/"]))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        changed = "src/custom/handler.py\nsrc/other/util.py\n"
+        mock_run.return_value = _make_result(0, changed, "")
+        result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
+
+        assert result["restart_scope"] == "restart_plan"
+        assert "src/custom/handler.py" in result["planner_files"]
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_classify_fix_empty_prefixes_always_executor(self, mock_run, monkeypatch):
+        """S3: Empty prefix list -> always returns restart_executor."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(classify_fix=ClassifyFixConfig(path_prefixes=[]))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        changed = "agents/graph/planner/nodes/create.py\n"
+        mock_run.return_value = _make_result(0, changed, "")
+        result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
+
+        assert result["restart_scope"] == "restart_executor"
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_reset_executor_uses_config_command(self, mock_run, monkeypatch, tmp_path):
+        """S4: reset_executor runs _config.reset_executor.command."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(reset_executor=ResetExecutorConfig(command=["make", "reset"]))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        playground_dir = tmp_path / "playground" / "project"
+        playground_dir.mkdir(parents=True)
+        mock_run.return_value = _make_result(0, "", "")
+
+        await reset_executor(test_dir=str(playground_dir))
+        assert mock_run.call_args[0][0] == ["make", "reset"]
+
+    @pytest.mark.asyncio
+    async def test_reset_executor_not_configured_returns_error(self, monkeypatch, tmp_path):
+        """S5: command=None -> returns not-configured error."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(reset_executor=ResetExecutorConfig(command=None))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        playground_dir = tmp_path / "playground" / "project"
+        playground_dir.mkdir(parents=True)
+        result = json.loads(await reset_executor(test_dir=str(playground_dir)))
+
+        assert result["error"] == "reset_executor not configured for this project"
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_reset_executor_uses_config_preserve_dirs(self, mock_run, monkeypatch, tmp_path):
+        """S6: Preserves _config.reset_executor.preserve_dirs."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(
+            reset_executor=ResetExecutorConfig(
+                command=["true"],
+                preserve_dirs={"keep_me"},
+            )
+        )
+        monkeypatch.setattr(server, "_config", cfg)
+
+        playground_dir = tmp_path / "playground" / "project"
+        playground_dir.mkdir(parents=True)
+        (playground_dir / "keep_me").mkdir()
+        (playground_dir / "delete_me").touch()
+        mock_run.return_value = _make_result(0, "", "")
+
+        result = json.loads(await reset_executor(test_dir=str(playground_dir)))
+
+        assert "keep_me" in result["preserved"]
+        assert "delete_me" in result["deleted"]
+        assert (playground_dir / "keep_me").exists()
+        assert not (playground_dir / "delete_me").exists()
+
+    def test_dry_walkthrough_uses_config_marker(self, monkeypatch, tmp_path):
+        """S7: Gate checks _config.implement_gate.marker."""
+        from automation_mcp import server
+        from automation_mcp.config import ImplementGateConfig
+
+        cfg = AutomationConfig(implement_gate=ImplementGateConfig(marker="CUSTOM MARKER"))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        plan = tmp_path / "plan.md"
+        plan.write_text("CUSTOM MARKER\n# Plan content")
+        result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
+        assert result is None  # passes with custom marker
+
+        plan.write_text("Dry-walkthrough verified = TRUE\n# Plan content")
+        result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
+        assert result is not None  # fails with old default marker
+
+    def test_dry_walkthrough_uses_config_skill_names(self, monkeypatch, tmp_path):
+        """S8: Gate checks _config.implement_gate.skill_names."""
+        from automation_mcp import server
+        from automation_mcp.config import ImplementGateConfig
+
+        cfg = AutomationConfig(implement_gate=ImplementGateConfig(skill_names={"/custom-impl"}))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        plan = tmp_path / "plan.md"
+        plan.write_text("# No marker")
+
+        result = _check_dry_walkthrough(f"/custom-impl {plan}", str(tmp_path))
+        assert result is not None  # /custom-impl is gated
+
+        result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
+        assert result is None  # /implement-worktree is NOT gated (not in skill_names)
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server._run_subprocess")
+    async def test_merge_worktree_uses_config_test_command(self, mock_run, monkeypatch, tmp_path):
+        """S9: Merge's test gate runs _config.test_check.command."""
+        from automation_mcp import server
+        from automation_mcp.config import TestCheckConfig
+
+        cfg = AutomationConfig(test_check=TestCheckConfig(command=["make", "test"], timeout=120))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
+            (0, "impl-branch\n", ""),  # branch
+            (1, "FAIL", ""),  # test gate fails
+        ]
+        result = json.loads(await merge_worktree(str(wt), "main"))
+        assert result["failed_step"] == "test_gate"
+
+        # Verify the test command was ["make", "test"]
+        test_call = mock_run.call_args_list[2]
+        assert test_call[0][0] == ["make", "test"]
+
+    @pytest.mark.asyncio
+    async def test_require_enabled_still_gates_execution(self, monkeypatch):
+        """S10: _require_enabled() defense-in-depth still works with config."""
+        from automation_mcp import server
+
+        server._tools_enabled = False
+        result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
+        assert "error" in result
+        assert "not enabled" in result["error"].lower()

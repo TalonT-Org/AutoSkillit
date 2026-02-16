@@ -58,12 +58,15 @@ Configured hooks: ruff format (auto-fix), ruff check (auto-fix), mypy type check
 ```
 src/automation_mcp/
 ├── __init__.py              # Package version
-├── __main__.py              # python -m automation_mcp entry point
+├── __main__.py              # python -m automation_mcp entry point (delegates to cli)
+├── cli.py                   # CLI: serve, init, config show
+├── config.py                # Dataclass config + YAML loading (layered resolution)
 ├── server.py                # FastMCP server with 8 gated MCP tools + 2 prompts
 └── process_lifecycle.py     # Subprocess management (kill trees, temp I/O, timeouts)
 
 tests/
-├── conftest.py              # Shared fixtures
+├── conftest.py              # Shared fixtures (tools enabled + default config)
+├── test_config.py           # Config loading tests
 ├── test_server.py           # Server unit tests
 └── test_process_lifecycle.py # Subprocess integration tests
 
@@ -72,7 +75,9 @@ temp/                        # Temporary/working files (gitignored)
 
 ### **Key Components**
 
-  * **server.py**: FastMCP server. All tools are gated by default (`_tools_enabled` flag) and require user activation via MCP prompts. Tools delegate subprocess work to `process_lifecycle.run_managed_async`. The `_check_dry_walkthrough` gate blocks `/implement-worktree` without a verified plan.
+  * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.automation-mcp/config.yaml`) → project (`.automation-mcp/config.yaml`). No config file = current hardcoded defaults.
+  * **cli.py**: Minimal CLI entry point. `automation-mcp` (no args) starts the MCP server. Also provides `init` (write template config) and `config show` (dump resolved config).
+  * **server.py**: FastMCP server. All tools are gated by default (`_tools_enabled` flag) and require user activation via MCP prompts. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/implement-worktree` without a verified plan.
   * **process_lifecycle.py**: Self-contained subprocess utilities (no internal deps, only stdlib + psutil). Handles process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts.
 
 ### **MCP Tools**
@@ -95,3 +100,24 @@ temp/                        # Temporary/working files (gitignored)
 All tools are gated by default. At the start of a session, the user must type
 `/mcp__bugfix-loop__enable_tools` to activate. This uses MCP prompts (user-only,
 model cannot invoke) and survives `--dangerously-skip-permissions`.
+
+### **Configuration**
+
+All tool behavior is configurable via `.automation-mcp/config.yaml`. No config file = hardcoded defaults (backward compatible). Run `automation-mcp init` to generate a template.
+
+**Resolution order:** defaults → `~/.automation-mcp/config.yaml` (user) → `.automation-mcp/config.yaml` (project). Project overrides user, user overrides defaults. Partial configs are fine — unset fields keep their defaults.
+
+**Available settings:**
+
+| Section | Key | Default | Description |
+|---------|-----|---------|-------------|
+| `test_check` | `command` | `["task", "test-check"]` | Test command for `test_check` and `merge_worktree` |
+| `test_check` | `timeout` | `600` | Test command timeout in seconds |
+| `classify_fix` | `path_prefixes` | `[]` | File path prefixes that trigger `restart_plan` |
+| `reset_executor` | `command` | `null` | Reset command (`null` = not configured) |
+| `reset_executor` | `preserve_dirs` | `[".agent_data", "plans"]` | Directories preserved during reset |
+| `implement_gate` | `marker` | `"Dry-walkthrough verified = TRUE"` | Required first line in plan files |
+| `implement_gate` | `skill_names` | `["/implement-worktree", "/implement-worktree-no-merge"]` | Skills subject to dry-walkthrough gate |
+| `safety` | `playground_guard` | `true` | Require "playground" in paths for destructive ops |
+| `safety` | `require_dry_walkthrough` | `true` | Enforce plan verification before implementation |
+| `safety` | `test_gate_on_merge` | `true` | Run tests before allowing merge |

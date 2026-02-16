@@ -21,9 +21,12 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 
+from automation_mcp.config import AutomationConfig, load_config
 from automation_mcp.process_lifecycle import run_managed_async
 
 mcp = FastMCP("bugfix-loop")
+
+_config: AutomationConfig = load_config(Path.cwd())
 
 _tools_enabled = False
 
@@ -69,19 +72,13 @@ async def _run_subprocess(
     return result.returncode, result.stdout, result.stderr
 
 
-DRY_WALKTHROUGH_MARKER = "Dry-walkthrough verified = TRUE"
-
-
-IMPLEMENT_SKILLS = {"/implement-worktree", "/implement-worktree-no-merge"}
-
-
 def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
     """If skill_command is an implement skill, verify the plan has been dry-walked.
 
     Returns an error JSON string if validation fails, None if OK.
     """
     parts = skill_command.strip().split(None, 1)
-    if not parts or parts[0] not in IMPLEMENT_SKILLS:
+    if not parts or parts[0] not in _config.implement_gate.skill_names:
         return None
 
     skill_name = parts[0]
@@ -94,12 +91,12 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
         return json.dumps({"error": f"Plan file not found: {plan_path}"})
 
     first_line = plan_path.read_text().split("\n", 1)[0].strip()
-    if first_line != DRY_WALKTHROUGH_MARKER:
+    if first_line != _config.implement_gate.marker:
         return json.dumps(
             {
                 "error": "Plan has NOT been dry-walked. Run /dry-walkthrough on the plan first.",
                 "plan_path": str(plan_path),
-                "expected_first_line": DRY_WALKTHROUGH_MARKER,
+                "expected_first_line": _config.implement_gate.marker,
                 "actual_first_line": first_line[:100],
             }
         )
@@ -285,9 +282,9 @@ async def test_check(worktree_path: str) -> str:
         return gate
     _log(f"test_check: worktree={worktree_path}")
     returncode, stdout, stderr = await _run_subprocess(
-        ["task", "test-check"],
+        _config.test_check.command,
         cwd=worktree_path,
-        timeout=600,
+        timeout=_config.test_check.timeout,
     )
 
     passed = _check_test_passed(returncode, stdout)
@@ -335,9 +332,9 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
 
     # Test gate — always runs, no bypass
     rc, test_stdout, test_stderr = await _run_subprocess(
-        ["task", "test-check"],
+        _config.test_check.command,
         cwd=worktree_path,
-        timeout=600,
+        timeout=_config.test_check.timeout,
     )
     if not _check_test_passed(rc, test_stdout):
         return json.dumps(
@@ -492,16 +489,6 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
     return json.dumps({"success": True, "forced": force, "markers_cleared": found_markers})
 
 
-PLANNER_PATH_PREFIXES = [
-    "agents/graph/planner/",
-    "agents/prompts/planner/",
-    "apps/cli/planner/",
-    "tests/agents/graph/planner/",
-    "tests/integration/agents/planner/",
-    "tests/apps/cli/planner/",
-]
-
-
 @mcp.tool(tags={"bugfix"})
 async def classify_fix(worktree_path: str, base_branch: str) -> str:
     """Analyze a worktree's changes to determine if the fix requires restarting
@@ -530,9 +517,8 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
 
     changed_files = [f.strip() for f in stdout.splitlines() if f.strip()]
 
-    planner_files = [
-        f for f in changed_files if any(f.startswith(prefix) for prefix in PLANNER_PATH_PREFIXES)
-    ]
+    prefixes = _config.classify_fix.path_prefixes
+    planner_files = [f for f in changed_files if any(f.startswith(prefix) for prefix in prefixes)]
 
     if planner_files:
         return json.dumps(
@@ -552,9 +538,6 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
             "all_changed_files": changed_files,
         }
     )
-
-
-EXECUTOR_PRESERVE_DIRS = {".agent_data", "plans"}
 
 
 @mcp.tool(tags={"bugfix"})
@@ -577,8 +560,11 @@ async def reset_executor(test_dir: str) -> str:
     if not os.path.isdir(resolved):
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
+    if _config.reset_executor.command is None:
+        return json.dumps({"error": "reset_executor not configured for this project"})
+
     returncode, stdout, stderr = await _run_subprocess(
-        ["ai-executor", "reset-status", "--force", "--no-backup"],
+        _config.reset_executor.command,
         cwd=resolved,
         timeout=60,
     )
@@ -586,7 +572,7 @@ async def reset_executor(test_dir: str) -> str:
     if returncode != 0:
         return json.dumps(
             {
-                "error": "ai-executor reset-status failed",
+                "error": "reset command failed",
                 "exit_code": returncode,
                 "stderr": _truncate(stderr),
             }
@@ -595,7 +581,7 @@ async def reset_executor(test_dir: str) -> str:
     deleted = []
     preserved = []
     for item in os.listdir(resolved):
-        if item in EXECUTOR_PRESERVE_DIRS:
+        if item in _config.reset_executor.preserve_dirs:
             preserved.append(item)
             continue
         path = os.path.join(resolved, item)
@@ -648,12 +634,3 @@ def disable_tools() -> str:
     """
     _disable_tools_handler()
     return "Bugfix-loop tools are now disabled."
-
-
-def main():
-    """Entry point for the automation-mcp CLI command."""
-    mcp.run()
-
-
-if __name__ == "__main__":
-    main()

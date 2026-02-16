@@ -1,3 +1,3 @@
-from automation_mcp.server import main
+from automation_mcp.cli import main
 
 main()

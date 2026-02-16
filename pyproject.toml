@@ -10,6 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=3.0.0rc2",
     "psutil>=7.2.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -20,7 +21,7 @@ dev = [
 ]
 
 [project.scripts]
-automation-mcp = "automation_mcp.server:main"
+automation-mcp = "automation_mcp.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/automation_mcp"]

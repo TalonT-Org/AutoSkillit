@@ -12,7 +12,10 @@ from automation_mcp.server import (
     EXECUTOR_PRESERVE_DIRS,
     PLANNER_PATH_PREFIXES,
     _check_dry_walkthrough,
+    _disable_tools_handler,
+    _enable_tools_handler,
     _parse_pytest_summary,
+    _require_enabled,
     _run_subprocess,
     classify_fix,
     merge_worktree,
@@ -368,11 +371,12 @@ class TestToolRegistration:
     """All 8 tools are registered on the MCP server."""
 
     def test_all_eight_tools_exist(self):
+        from fastmcp.tools import Tool
+
         from automation_mcp.server import mcp as server
 
-        tool_names = set()
-        for route in server._tool_manager._tools.values():
-            tool_names.add(route.name)
+        tools = [c for c in server._local_provider._components.values() if isinstance(c, Tool)]
+        tool_names = {t.name for t in tools}
 
         expected = {
             "run_cmd",
@@ -387,9 +391,12 @@ class TestToolRegistration:
         assert expected == tool_names
 
     def test_run_planner_not_registered(self):
+        from fastmcp.tools import Tool
+
         from automation_mcp.server import mcp as server
 
-        tool_names = {route.name for route in server._tool_manager._tools.values()}
+        tools = [c for c in server._local_provider._components.values() if isinstance(c, Tool)]
+        tool_names = {t.name for t in tools}
         assert "run_planner" not in tool_names
 
 
@@ -658,3 +665,94 @@ class TestMergeWorktreeNoBypass:
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
         assert "test_summary" not in result
+
+
+class TestGatedToolAccess:
+    """Prompt-gated tool access: tools disabled by default, user-only activation."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_tools(self):
+        """Override the global autouse fixture — start disabled for gate tests."""
+        from automation_mcp import server
+
+        server._tools_enabled = False
+        yield
+        server._tools_enabled = False
+
+    @pytest.mark.asyncio
+    async def test_tools_return_error_when_disabled(self):
+        """All tools return error JSON when _tools_enabled is False."""
+        result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
+        assert "error" in result
+        assert "not enabled" in result["error"].lower()
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_tools_work_after_enable(self, mock_run):
+        """After enable_tools prompt handler sets the flag, tools execute normally."""
+        _enable_tools_handler()
+        mock_run.return_value = _make_result(0, "hello\n", "")
+        result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))
+        assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_disable_reverses_enable(self):
+        """After disable_tools prompt handler, tools return error again."""
+        _enable_tools_handler()
+        _disable_tools_handler()
+        result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
+        assert "error" in result
+
+    def test_tools_disabled_by_default(self):
+        """_tools_enabled defaults to False at module load."""
+        from automation_mcp import server
+
+        assert server._tools_enabled is False
+
+    def test_prompts_registered(self):
+        """enable_tools and disable_tools prompts are registered on the server."""
+        from fastmcp.prompts import Prompt
+
+        from automation_mcp.server import mcp
+
+        prompts = [c for c in mcp._local_provider._components.values() if isinstance(c, Prompt)]
+        prompt_names = {p.name for p in prompts}
+        assert prompt_names == {"enable_tools", "disable_tools"}
+
+    def test_all_tools_still_registered(self):
+        """All 8 operational tools remain registered (gated, not removed)."""
+        from fastmcp.tools import Tool
+
+        from automation_mcp.server import mcp
+
+        tools = [c for c in mcp._local_provider._components.values() if isinstance(c, Tool)]
+        tool_names = {t.name for t in tools}
+        expected = {
+            "run_cmd",
+            "run_skill",
+            "run_skill_retry",
+            "test_check",
+            "merge_worktree",
+            "reset_test_dir",
+            "classify_fix",
+            "reset_executor",
+        }
+        assert expected == tool_names
+
+    def test_gate_error_structure(self):
+        """_require_enabled returns well-formed error JSON with activation instructions."""
+        error = _require_enabled()
+        assert error is not None
+        parsed = json.loads(error)
+        assert "error" in parsed
+        assert "mcp__bugfix-loop__enable_tools" in parsed["error"]
+
+    def test_all_tools_tagged_bugfix(self):
+        """All 8 tools have the 'bugfix' tag for future visibility control."""
+        from fastmcp.tools import Tool
+
+        from automation_mcp.server import mcp
+
+        tools = [c for c in mcp._local_provider._components.values() if isinstance(c, Tool)]
+        for tool in tools:
+            assert "bugfix" in tool.tags, f"{tool.name} missing 'bugfix' tag"

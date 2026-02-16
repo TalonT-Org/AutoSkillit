@@ -1,0 +1,96 @@
+name: bugfix-loop
+description: End-to-end test with automatic bug fixing in isolated worktrees.
+
+inputs:
+  test_dir:
+    description: Directory containing the project to test
+    required: true
+  base_branch:
+    description: Branch to merge fixes into
+    default: main
+  helper_dir:
+    description: Directory for helper agent sessions
+    required: true
+
+steps:
+  reset:
+    tool: reset_test_dir
+    with:
+      test_dir: ${{ inputs.test_dir }}
+    on_success: test
+    on_failure: escalate
+
+  test:
+    tool: test_check
+    with:
+      worktree_path: ${{ inputs.test_dir }}
+    on_success: done
+    on_failure: investigate
+
+  investigate:
+    tool: run_skill
+    with:
+      skill_command: "/investigate the test failures"
+      cwd: ${{ inputs.helper_dir }}
+    on_success: plan
+    on_failure: escalate
+
+  plan:
+    tool: run_skill
+    with:
+      skill_command: "/rectify the investigation findings"
+      cwd: ${{ inputs.helper_dir }}
+    on_success: implement
+    on_failure: escalate
+
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "/implement-worktree-no-merge the plan"
+      cwd: ${{ inputs.helper_dir }}
+    retry:
+      max_attempts: 3
+      on: hit_api_limit
+      on_exhausted: escalate
+    on_success: verify
+    on_failure: escalate
+
+  verify:
+    tool: test_check
+    with:
+      worktree_path: ${{ inputs.test_dir }}
+    on_success: merge
+    on_failure: assess
+
+  assess:
+    tool: run_skill
+    with:
+      skill_command: "/assess-and-merge fix test failures"
+      cwd: ${{ inputs.helper_dir }}
+    on_success: verify
+    on_failure: classify
+
+  classify:
+    tool: classify_fix
+    with:
+      worktree_path: ${{ inputs.test_dir }}
+      base_branch: ${{ inputs.base_branch }}
+    note: If restart_plan, go back to investigate. If restart_executor, go back to implement.
+    on_success: merge
+    on_failure: escalate
+
+  merge:
+    tool: merge_worktree
+    with:
+      worktree_path: ${{ inputs.test_dir }}
+      base_branch: ${{ inputs.base_branch }}
+    on_success: done
+    on_failure: escalate
+
+  done:
+    action: stop
+    message: "All tests passing. Fix merged successfully."
+
+  escalate:
+    action: stop
+    message: "Human intervention needed. Review the latest output for details."

@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A standalone MCP server that orchestrates automated bug-fix loops using Claude Code headless sessions. It provides 7 tools (run_cmd, run_skill, run_skill_retry, test_check, reset_test_dir, classify_fix, reset_executor) for driving worktree-based fix-and-verify cycles.
+A standalone MCP server that orchestrates automated bug-fix loops using Claude Code headless sessions. It provides 8 tools (run_cmd, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_executor) gated behind MCP prompts for user-only activation, driving worktree-based fix-and-verify cycles.
 
 ## **2. General Principles**
 
@@ -59,7 +59,7 @@ Configured hooks: ruff format (auto-fix), ruff check (auto-fix), mypy type check
 src/automation_mcp/
 ├── __init__.py              # Package version
 ├── __main__.py              # python -m automation_mcp entry point
-├── server.py                # FastMCP server with 7 MCP tools
+├── server.py                # FastMCP server with 8 gated MCP tools + 2 prompts
 └── process_lifecycle.py     # Subprocess management (kill trees, temp I/O, timeouts)
 
 tests/
@@ -72,7 +72,7 @@ temp/                        # Temporary/working files (gitignored)
 
 ### **Key Components**
 
-  * **server.py**: FastMCP server. All tools delegate subprocess work to `process_lifecycle.run_managed_async`. The `_check_dry_walkthrough` gate blocks `/implement-worktree` without a verified plan.
+  * **server.py**: FastMCP server. All tools are gated by default (`_tools_enabled` flag) and require user activation via MCP prompts. Tools delegate subprocess work to `process_lifecycle.run_managed_async`. The `_check_dry_walkthrough` gate blocks `/implement-worktree` without a verified plan.
   * **process_lifecycle.py**: Self-contained subprocess utilities (no internal deps, only stdlib + psutil). Handles process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts.
 
 ### **MCP Tools**
@@ -83,6 +83,15 @@ temp/                        # Temporary/working files (gitignored)
 | `run_skill` | Run Claude Code headless with a skill command |
 | `run_skill_retry` | Run Claude Code headless with API call limit (for long-running skills) |
 | `test_check` | Run test suite in a worktree, returns PASS/FAIL |
+| `merge_worktree` | Merge worktree branch after test gate passes |
 | `reset_test_dir` | Clear test directory (playground safety guard) |
 | `classify_fix` | Analyze worktree diff to determine restart scope (plan vs executor) |
 | `reset_executor` | Reset executor status preserving .agent_data and plans |
+| `enable_tools` (prompt) | User-only activation — type `/mcp__bugfix-loop__enable_tools` |
+| `disable_tools` (prompt) | User-only deactivation — type `/mcp__bugfix-loop__disable_tools` |
+
+### **Tool Activation**
+
+All tools are gated by default. At the start of a session, the user must type
+`/mcp__bugfix-loop__enable_tools` to activate. This uses MCP prompts (user-only,
+model cannot invoke) and survives `--dangerously-skip-permissions`.

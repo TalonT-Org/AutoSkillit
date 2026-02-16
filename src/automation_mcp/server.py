@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """MCP server for orchestrating automated bug-fix loops.
 
-Eight tools expose command execution, skill invocation, test checking, worktree
-merging, fix classification, and directory reset to an interactive Claude Code
-session acting as the orchestrator.
+All tools are gated by default and require the user to type
+/mcp__bugfix-loop__enable_tools to activate. This uses MCP prompts
+(user-controlled, model cannot invoke) to set an in-memory flag
+that each tool checks before executing. The gate survives
+--dangerously-skip-permissions.
 
 Transport: stdio (default for FastMCP).
 """
@@ -17,11 +19,33 @@ import shutil
 import sys
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 from automation_mcp.process_lifecycle import run_managed_async
 
 mcp = FastMCP("bugfix-loop")
+
+_tools_enabled = False
+
+
+def _require_enabled() -> str | None:
+    """Return error JSON if tools are not enabled, None if OK.
+
+    All tools are gated by default and can only be activated by the user
+    typing /mcp__bugfix-loop__enable_tools. This survives
+    --dangerously-skip-permissions because MCP prompts are outside
+    the permission system.
+    """
+    if not _tools_enabled:
+        return json.dumps(
+            {
+                "error": (
+                    "Bugfix-loop tools are not enabled. "
+                    "User must type /mcp__bugfix-loop__enable_tools to activate."
+                ),
+            }
+        )
+    return None
 
 
 def _log(msg: str) -> None:
@@ -89,7 +113,7 @@ def _truncate(text: str, max_len: int = 5000) -> str:
     return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]
 
 
-@mcp.tool()
+@mcp.tool(tags={"bugfix"})
 async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
     """Run an arbitrary shell command in the specified directory.
 
@@ -98,6 +122,8 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
         cwd: Working directory for the command.
         timeout: Max seconds before killing the process (default 600).
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     _log(f"run_cmd: cmd={cmd[:80]}... cwd={cwd}")
     returncode, stdout, stderr = await _run_subprocess(
         ["bash", "-c", cmd],
@@ -114,7 +140,7 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
     )
 
 
-@mcp.tool()
+@mcp.tool(tags={"bugfix"})
 async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
     """Run a Claude Code headless session with a skill command (no turn limit).
 
@@ -123,6 +149,8 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
         cwd: Working directory for the claude session.
         add_dir: Optional additional directory to add to the session context.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     _log(f"run_skill: command={skill_command[:80]}... cwd={cwd}")
     cmd = [
         "claude",
@@ -156,7 +184,7 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
 _MAX_API_CALLS = 200
 
 
-@mcp.tool()
+@mcp.tool(tags={"bugfix"})
 async def run_skill_retry(skill_command: str, cwd: str) -> str:
     """Run a Claude Code headless session with an API call limit.
 
@@ -168,6 +196,8 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
         skill_command: The full prompt including skill invocation.
         cwd: Working directory for the claude session.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     _log(f"run_skill_retry: command={skill_command[:80]}...")
 
     gate_error = _check_dry_walkthrough(skill_command, cwd)
@@ -244,13 +274,15 @@ def _check_test_passed(returncode: int, stdout: str) -> bool:
     return True
 
 
-@mcp.tool()
+@mcp.tool(tags={"bugfix"})
 async def test_check(worktree_path: str) -> str:
     """Run task test-check in a worktree directory. Returns unambiguous PASS/FAIL.
 
     Args:
         worktree_path: Path to the git worktree to run tests in.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     _log(f"test_check: worktree={worktree_path}")
     returncode, stdout, stderr = await _run_subprocess(
         ["task", "test-check"],
@@ -263,7 +295,7 @@ async def test_check(worktree_path: str) -> str:
     return json.dumps({"passed": passed})
 
 
-@mcp.tool()
+@mcp.tool(tags={"bugfix"})
 async def merge_worktree(worktree_path: str, base_branch: str) -> str:
     """Merge a worktree branch into the base branch after verifying tests pass.
 
@@ -274,6 +306,8 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         worktree_path: Absolute path to the git worktree.
         base_branch: Branch to merge into (e.g. "main").
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     _log(f"merge_worktree: path={worktree_path} base={base_branch}")
 
     # Validate worktree path exists
@@ -412,7 +446,7 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
 PROJECT_MARKERS = [".claude", "CLAUDE.md", ".git", "pyproject.toml", "package.json"]
 
 
-@mcp.tool()
+@mcp.tool(tags={"bugfix"})
 async def reset_test_dir(test_dir: str, force: bool = False) -> str:
     """Remove all files from a test directory. Only works on playground directories.
 
@@ -424,6 +458,8 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
         force: Override project marker safety check. Required if the directory
                contains .claude, .git, pyproject.toml, or package.json.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     resolved = os.path.realpath(test_dir)
     _log(f"reset_test_dir: resolved={resolved} force={force}")
 
@@ -466,7 +502,7 @@ PLANNER_PATH_PREFIXES = [
 ]
 
 
-@mcp.tool()
+@mcp.tool(tags={"bugfix"})
 async def classify_fix(worktree_path: str, base_branch: str) -> str:
     """Analyze a worktree's changes to determine if the fix requires restarting
     from plan creation or just re-running the executor.
@@ -479,6 +515,8 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
         worktree_path: Path to the git worktree with the implemented fix.
         base_branch: The branch the worktree was created from (for merge-base).
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     _log(f"classify_fix: worktree={worktree_path} base={base_branch}")
 
     returncode, stdout, stderr = await _run_subprocess(
@@ -519,7 +557,7 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
 EXECUTOR_PRESERVE_DIRS = {".agent_data", "plans"}
 
 
-@mcp.tool()
+@mcp.tool(tags={"bugfix"})
 async def reset_executor(test_dir: str) -> str:
     """Reset executor status and clean the test directory while preserving
     the plan and agent data. Runs ai-executor reset-status then deletes
@@ -528,6 +566,8 @@ async def reset_executor(test_dir: str) -> str:
     Args:
         test_dir: Path to the test project directory. Must contain 'playground' in path.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     resolved = os.path.realpath(test_dir)
     _log(f"reset_executor: resolved={resolved}")
 
@@ -572,6 +612,42 @@ async def reset_executor(test_dir: str) -> str:
             "deleted": deleted,
         }
     )
+
+
+def _enable_tools_handler() -> None:
+    """Set the tools-enabled flag. Extracted for testability."""
+    global _tools_enabled
+    _tools_enabled = True
+
+
+def _disable_tools_handler() -> None:
+    """Clear the tools-enabled flag. Extracted for testability."""
+    global _tools_enabled
+    _tools_enabled = False
+
+
+@mcp.prompt()
+def enable_tools() -> str:
+    """Enable all bugfix-loop tools for this session.
+
+    Tools are disabled by default to prevent accidental use by agents.
+    Only a human can invoke this prompt — the model cannot.
+    This survives --dangerously-skip-permissions.
+
+    Type /mcp__bugfix-loop__enable_tools to activate.
+    """
+    _enable_tools_handler()
+    return "Bugfix-loop tools are now enabled for this session."
+
+
+@mcp.prompt()
+def disable_tools() -> str:
+    """Disable all bugfix-loop tools for this session.
+
+    Type /mcp__bugfix-loop__disable_tools to deactivate.
+    """
+    _disable_tools_handler()
+    return "Bugfix-loop tools are now disabled."
 
 
 def main():

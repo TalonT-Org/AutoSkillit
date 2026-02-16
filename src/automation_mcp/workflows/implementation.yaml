@@ -1,0 +1,59 @@
+name: implementation
+description: Plan, verify, and implement a feature in an isolated worktree.
+
+inputs:
+  task_description:
+    description: Description of the feature or change to implement
+    required: true
+  work_dir:
+    description: Working directory for agent sessions
+    required: true
+  base_branch:
+    description: Branch to merge into
+    default: main
+
+steps:
+  plan:
+    tool: run_skill
+    with:
+      skill_command: "/make-plan ${{ inputs.task_description }}"
+      cwd: ${{ inputs.work_dir }}
+    on_success: review
+    on_failure: escalate
+
+  review:
+    tool: run_skill
+    with:
+      skill_command: "/review-approach the plan"
+      cwd: ${{ inputs.work_dir }}
+    on_success: dry_walkthrough
+    on_failure: escalate
+
+  dry_walkthrough:
+    tool: run_skill
+    with:
+      skill_command: "/dry-walkthrough the plan"
+      cwd: ${{ inputs.work_dir }}
+    on_success: implement
+    on_failure: plan
+    note: If walkthrough finds issues, re-plan.
+
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "/implement-worktree the verified plan"
+      cwd: ${{ inputs.work_dir }}
+    retry:
+      max_attempts: 3
+      on: hit_api_limit
+      on_exhausted: escalate
+    on_success: done
+    on_failure: escalate
+
+  done:
+    action: stop
+    message: "Implementation complete. Worktree ready for review."
+
+  escalate:
+    action: stop
+    message: "Human intervention needed."

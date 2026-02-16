@@ -1,4 +1,4 @@
-"""Minimal CLI for automation-mcp: serve, init, config show, skills list/install."""
+"""CLI for automation-mcp: serve, init, config, skills, workflows."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 def main() -> None:
-    """Entry point: automation-mcp [serve|init|config show|skills list|skills install]."""
+    """Entry point for automation-mcp CLI."""
     args = sys.argv[1:]
 
     if not args or args[0] == "serve":
@@ -23,12 +23,14 @@ def main() -> None:
         _skills_list()
     elif args[0] == "skills" and len(args) > 2 and args[1] == "install":
         _skills_install(args[2])
+    elif args[0] == "workflows" and len(args) > 1 and args[1] == "list":
+        _workflows_list()
+    elif args[0] == "workflows" and len(args) > 2 and args[1] == "show":
+        _workflows_show(args[2])
     else:
         print(f"Unknown command: {' '.join(args)}", file=sys.stderr)
-        print(
-            "Usage: automation-mcp [serve|init|config show|skills list|skills install <name>]",
-            file=sys.stderr,
-        )
+        print("Commands: serve, init, config show, skills list, skills install <name>,", file=sys.stderr)
+        print("          workflows list, workflows show <name>", file=sys.stderr)
         sys.exit(1)
 
 
@@ -111,3 +113,30 @@ def _skills_install(name: str) -> None:
     dest = dest_dir / "SKILL.md"
     shutil.copy2(src, dest)
     print(f"Installed '{name}' to {dest}")
+
+
+def _workflows_list() -> None:
+    from automation_mcp.workflow_loader import list_workflows
+
+    workflows = list_workflows(Path.cwd())
+    if not workflows:
+        print("No workflows found.")
+        return
+
+    name_w = max(len(w.name) for w in workflows)
+    src_w = max(len(w.source) for w in workflows)
+    print(f"{'NAME':<{name_w}}  {'SOURCE':<{src_w}}  DESCRIPTION")
+    print(f"{'-' * name_w}  {'-' * src_w}  {'-' * 11}")
+    for w in workflows:
+        print(f"{w.name:<{name_w}}  {w.source:<{src_w}}  {w.description}")
+
+
+def _workflows_show(name: str) -> None:
+    from automation_mcp.workflow_loader import list_workflows
+
+    workflows = list_workflows(Path.cwd())
+    match = next((w for w in workflows if w.name == name), None)
+    if match is None:
+        print(f"No workflow named '{name}'.", file=sys.stderr)
+        sys.exit(1)
+    print(match.path.read_text())

@@ -1,0 +1,55 @@
+name: audit-and-fix
+description: Audit codebase, investigate findings, plan fixes, and implement.
+
+inputs:
+  work_dir:
+    description: Working directory for agent sessions
+    required: true
+  audit_type:
+    description: Type of audit to run (arch, tests, cohesion, defense-standards)
+    default: arch
+
+steps:
+  audit:
+    tool: run_skill
+    with:
+      skill_command: "/audit-${{ inputs.audit_type }}"
+      cwd: ${{ inputs.work_dir }}
+    on_success: investigate
+    on_failure: escalate
+
+  investigate:
+    tool: run_skill
+    with:
+      skill_command: "/investigate the audit findings"
+      cwd: ${{ inputs.work_dir }}
+    on_success: plan
+    on_failure: escalate
+
+  plan:
+    tool: run_skill
+    with:
+      skill_command: "/rectify the investigation"
+      cwd: ${{ inputs.work_dir }}
+    on_success: implement
+    on_failure: escalate
+
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "/implement-worktree the plan"
+      cwd: ${{ inputs.work_dir }}
+    retry:
+      max_attempts: 3
+      on: hit_api_limit
+      on_exhausted: escalate
+    on_success: done
+    on_failure: escalate
+
+  done:
+    action: stop
+    message: "Audit findings addressed. Changes ready for review."
+
+  escalate:
+    action: stop
+    message: "Human intervention needed."

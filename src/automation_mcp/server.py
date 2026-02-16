@@ -612,6 +612,18 @@ def _disable_tools_handler() -> None:
     _tools_enabled = False
 
 
+@mcp.resource("workflow://{name}")
+def get_workflow(name: str) -> str:
+    """Return workflow YAML for the orchestrating agent to follow."""
+    from automation_mcp.workflow_loader import list_workflows
+
+    workflows = list_workflows(Path.cwd())
+    match = next((w for w in workflows if w.name == name), None)
+    if match is None:
+        return json.dumps({"error": f"No workflow named '{name}'."})
+    return match.path.read_text()
+
+
 @mcp.prompt()
 def enable_tools() -> str:
     """Enable all bugfix-loop tools for this session.

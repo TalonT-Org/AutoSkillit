@@ -1,4 +1,4 @@
-"""CLI for automation-mcp: serve, init, config, skills, workflows."""
+"""CLI for automation-mcp: serve, init, config, skills, workflows, update."""
 
 from __future__ import annotations
 
@@ -8,39 +8,47 @@ import shutil
 import sys
 from pathlib import Path
 
+from cyclopts import App
 
-def main() -> None:
-    """Entry point for automation-mcp CLI."""
-    args = sys.argv[1:]
+app = App(
+    name="automation-mcp",
+    help="MCP server for orchestrating automated workflows with Claude Code.",
+)
 
-    if not args or args[0] == "serve":
-        _serve()
-    elif args[0] == "init":
-        _init(args[1:])
-    elif args[0] == "config" and len(args) > 1 and args[1] == "show":
-        _config_show()
-    elif args[0] == "skills" and len(args) > 1 and args[1] == "list":
-        _skills_list()
-    elif args[0] == "skills" and len(args) > 2 and args[1] == "install":
-        _skills_install(args[2])
-    elif args[0] == "workflows" and len(args) > 1 and args[1] == "list":
-        _workflows_list()
-    elif args[0] == "workflows" and len(args) > 2 and args[1] == "show":
-        _workflows_show(args[2])
-    else:
-        print(f"Unknown command: {' '.join(args)}", file=sys.stderr)
-        print("Commands: serve, init, config show, skills list, skills install <name>,", file=sys.stderr)
-        print("          workflows list, workflows show <name>", file=sys.stderr)
-        sys.exit(1)
+config_app = App(name="config", help="Configuration commands.")
+skills_app = App(name="skills", help="Skill management.")
+workflows_app = App(name="workflows", help="Workflow management.")
+
+app.command(config_app)
+app.command(skills_app)
+app.command(workflows_app)
 
 
-def _serve() -> None:
+@app.default
+def serve():
+    """Start the MCP server (default command)."""
     from automation_mcp.server import mcp
 
     mcp.run()
 
 
-def _init(args: list[str]) -> None:
+@app.command(name="serve")
+def serve_explicit():
+    """Start the MCP server."""
+    serve()
+
+
+@app.command
+def init(*, quick: bool = False, force: bool = False):
+    """Initialize automation-mcp for a project.
+
+    Parameters
+    ----------
+    quick
+        Minimal questions: test command and base branch only.
+    force
+        Overwrite existing config without prompting.
+    """
     import yaml
 
     project_dir = Path.cwd()
@@ -48,39 +56,65 @@ def _init(args: list[str]) -> None:
     config_dir.mkdir(exist_ok=True)
     config_path = config_dir / "config.yaml"
 
-    if config_path.exists() and "--force" not in args:
+    if config_path.exists() and not force:
         print(f"Config already exists: {config_path}")
         print("Use --force to overwrite.")
         return
 
-    template = {
-        "version": 1,
-        "test_check": {"command": ["pytest", "-v"]},
-        "classify_fix": {"path_prefixes": []},
-        "reset_executor": {"command": None, "preserve_dirs": [".agent_data", "plans"]},
-        "implement_gate": {
-            "marker": "Dry-walkthrough verified = TRUE",
-            "skill_names": ["/implement-worktree", "/implement-worktree-no-merge"],
-        },
-        "safety": {
-            "playground_guard": True,
-            "require_dry_walkthrough": True,
-            "test_gate_on_merge": True,
-        },
-    }
-    config_path.write_text(yaml.dump(template, default_flow_style=False, sort_keys=False))
+    if quick:
+        answers = _quick_init()
+    else:
+        answers = _interactive_init()
+
+    config_path.write_text(yaml.dump(answers, default_flow_style=False, sort_keys=False))
     print(f"Config written to: {config_path}")
-    print("Edit the config to match your project, then restart the MCP server.")
 
 
-def _config_show() -> None:
+@app.command
+def update():
+    """Refresh built-in workflows, preserving customized ones."""
+    from automation_mcp.workflow_loader import builtin_workflows_dir
+
+    project_wf_dir = Path.cwd() / ".automation-mcp" / "workflows"
+    if not project_wf_dir.is_dir():
+        print("No project workflows directory found. Nothing to update.")
+        return
+
+    builtin_dir = builtin_workflows_dir()
+    updated = []
+    skipped = []
+
+    for builtin_file in sorted(builtin_dir.glob("*.yaml")):
+        project_file = project_wf_dir / builtin_file.name
+        if not project_file.exists():
+            shutil.copy2(builtin_file, project_file)
+            updated.append(builtin_file.stem)
+        elif project_file.read_text() == builtin_file.read_text():
+            shutil.copy2(builtin_file, project_file)
+            updated.append(builtin_file.stem)
+        else:
+            skipped.append(builtin_file.stem)
+
+    if updated:
+        print(f"Updated: {', '.join(updated)}")
+    if skipped:
+        print(f"Skipped (customized): {', '.join(skipped)}")
+    if not updated and not skipped:
+        print("No built-in workflows found.")
+
+
+@config_app.command(name="show")
+def config_show():
+    """Show resolved configuration as JSON."""
     from automation_mcp.config import load_config
 
     cfg = load_config(Path.cwd())
     print(json.dumps(dataclasses.asdict(cfg), indent=2, default=list))
 
 
-def _skills_list() -> None:
+@skills_app.command(name="list")
+def skills_list():
+    """List available skills with their resolution source."""
     from automation_mcp.config import load_config
     from automation_mcp.skill_resolver import SkillResolver
 
@@ -100,7 +134,9 @@ def _skills_list() -> None:
         print(f"{s.name:<{name_w}}  {s.source:<{src_w}}  {s.path}")
 
 
-def _skills_install(name: str) -> None:
+@skills_app.command(name="install")
+def skills_install(name: str):
+    """Install a bundled skill to the project's .claude/skills/ directory."""
     from automation_mcp.skill_resolver import bundled_skills_dir
 
     src = bundled_skills_dir() / name / "SKILL.md"
@@ -115,7 +151,9 @@ def _skills_install(name: str) -> None:
     print(f"Installed '{name}' to {dest}")
 
 
-def _workflows_list() -> None:
+@workflows_app.command(name="list")
+def workflows_list():
+    """List available workflows with sources."""
     from automation_mcp.workflow_loader import list_workflows
 
     workflows = list_workflows(Path.cwd())
@@ -131,7 +169,9 @@ def _workflows_list() -> None:
         print(f"{w.name:<{name_w}}  {w.source:<{src_w}}  {w.description}")
 
 
-def _workflows_show(name: str) -> None:
+@workflows_app.command(name="show")
+def workflows_show(name: str):
+    """Print the YAML content of a named workflow."""
     from automation_mcp.workflow_loader import list_workflows
 
     workflows = list_workflows(Path.cwd())
@@ -140,3 +180,103 @@ def _workflows_show(name: str) -> None:
         print(f"No workflow named '{name}'.", file=sys.stderr)
         sys.exit(1)
     print(match.path.read_text())
+
+
+# --- Init helpers ---
+
+
+def _quick_init() -> dict:
+    test_cmd = _prompt("Test command", "pytest -v")
+    return {
+        "version": 1,
+        "test_check": {"command": test_cmd.split()},
+        "safety": {
+            "playground_guard": True,
+            "require_dry_walkthrough": True,
+            "test_gate_on_merge": True,
+        },
+    }
+
+
+def _interactive_init() -> dict:
+    project_type = _choose(
+        "Project type",
+        ["Python (pytest)", "TypeScript", "Go", "Custom"],
+    )
+    test_defaults = {
+        "Python (pytest)": "pytest -v",
+        "TypeScript": "npm test",
+        "Go": "go test ./...",
+        "Custom": "",
+    }
+    test_cmd = _prompt("Test command", test_defaults.get(project_type, ""))
+
+    config: dict = {
+        "version": 1,
+        "test_check": {"command": test_cmd.split()},
+    }
+
+    uses_planner = _confirm("Do you use a planner/executor system?", default=False)
+    if uses_planner:
+        prefixes = _prompt("Planner path prefixes (comma-separated)", "")
+        config["classify_fix"] = {
+            "path_prefixes": [p.strip() for p in prefixes.split(",") if p.strip()]
+        }
+        reset_cmd = _prompt("Executor reset command (blank for none)", "")
+        config["reset_executor"] = {
+            "command": reset_cmd.split() if reset_cmd else None,
+            "preserve_dirs": [".agent_data", "plans"],
+        }
+
+    config["safety"] = {
+        "playground_guard": True,
+        "require_dry_walkthrough": True,
+        "test_gate_on_merge": True,
+    }
+
+    return config
+
+
+def _prompt(message: str, default: str) -> str:
+    try:
+        from InquirerPy import inquirer
+
+        return inquirer.text(message=message, default=default).execute()
+    except ImportError:
+        suffix = f" [{default}]" if default else ""
+        answer = input(f"{message}{suffix}: ").strip()
+        return answer if answer else default
+
+
+def _choose(message: str, choices: list[str]) -> str:
+    try:
+        from InquirerPy import inquirer
+
+        return inquirer.select(message=message, choices=choices).execute()
+    except ImportError:
+        print(f"{message}:")
+        for i, c in enumerate(choices, 1):
+            print(f"  {i}. {c}")
+        while True:
+            raw = input("Choice [1]: ").strip()
+            idx = int(raw) - 1 if raw else 0
+            if 0 <= idx < len(choices):
+                return choices[idx]
+
+
+def _confirm(message: str, *, default: bool = True) -> bool:
+    try:
+        from InquirerPy import inquirer
+
+        return inquirer.confirm(message=message, default=default).execute()
+    except ImportError:
+        suffix = " [Y/n]" if default else " [y/N]"
+        answer = input(f"{message}{suffix}: ").strip().lower()
+        if not answer:
+            return default
+        return answer in ("y", "yes")
+
+
+def main() -> None:
+    """Entry point for automation-mcp."""
+    app()

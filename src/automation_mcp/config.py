@@ -1,6 +1,7 @@
 """Configuration loading with layered YAML resolution.
 
-Resolution order: defaults → user (~/.automation-mcp/config.yaml) → project (.automation-mcp/config.yaml).
+Resolution order: defaults > user (~/.automation-mcp/config.yaml)
+> project (.automation-mcp/config.yaml).
 """
 
 from __future__ import annotations
@@ -47,9 +48,7 @@ class SafetyConfig:
 
 @dataclass
 class SkillsConfig:
-    resolution_order: list[str] = field(
-        default_factory=lambda: ["project", "user", "bundled"]
-    )
+    resolution_order: list[str] = field(default_factory=lambda: ["project", "user", "bundled"])
 
 
 @dataclass
@@ -63,7 +62,7 @@ class AutomationConfig:
 
 
 def load_config(project_dir: Path | None = None) -> AutomationConfig:
-    """Load config: project .automation-mcp/config.yaml > ~/.automation-mcp/config.yaml > defaults."""
+    """Load layered config: defaults < user config < project config."""
     config = AutomationConfig()
 
     user_path = Path.home() / ".automation-mcp" / "config.yaml"

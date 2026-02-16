@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from automation_mcp.config import AutomationConfig, SkillsConfig
 from automation_mcp.skill_resolver import SkillResolver, bundled_skills_dir
 
@@ -148,9 +146,7 @@ class TestSkillResolver:
         project_skills = project / ".claude" / "skills"
         _create_skill(project_skills, "investigate")
 
-        config = AutomationConfig(
-            skills=SkillsConfig(resolution_order=["bundled", "project"])
-        )
+        config = AutomationConfig(skills=SkillsConfig(resolution_order=["bundled", "project"]))
         resolver = SkillResolver(project, config)
         info = resolver.resolve("investigate")
         assert info is not None

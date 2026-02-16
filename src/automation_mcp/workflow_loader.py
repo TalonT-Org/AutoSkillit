@@ -81,8 +81,7 @@ def validate_workflow(wf: Workflow) -> list[str]:
             target = getattr(step, goto_field)
             if target and target not in step_names and target != "done":
                 errors.append(
-                    f"Step '{step_name}'.{goto_field} references "
-                    f"unknown step '{target}'."
+                    f"Step '{step_name}'.{goto_field} references unknown step '{target}'."
                 )
         if step.retry and step.retry.on_exhausted not in step_names:
             errors.append(

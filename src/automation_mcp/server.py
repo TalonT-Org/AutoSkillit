@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastmcp import FastMCP
@@ -119,6 +120,53 @@ def _truncate(text: str, max_len: int = 5000) -> str:
     return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]
 
 
+@dataclass
+class CleanupResult:
+    deleted: list[str] = field(default_factory=list)
+    failed: list[tuple[str, str]] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+
+    @property
+    def success(self) -> bool:
+        return len(self.failed) == 0
+
+    def to_dict(self) -> dict:
+        return {
+            "success": self.success,
+            "deleted": self.deleted,
+            "failed": [{"path": p, "error": e} for p, e in self.failed],
+            "skipped": self.skipped,
+        }
+
+
+def _delete_directory_contents(
+    directory: Path,
+    preserve: set[str] | None = None,
+) -> CleanupResult:
+    """Delete all items in directory, skipping preserved names.
+
+    Never raises. All errors captured in CleanupResult.failed.
+    FileNotFoundError treated as success (item already gone).
+    """
+    result = CleanupResult()
+    for item_name in os.listdir(directory):
+        if preserve and item_name in preserve:
+            result.skipped.append(item_name)
+            continue
+        path = directory / item_name
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            result.deleted.append(item_name)
+        except FileNotFoundError:
+            result.deleted.append(item_name)  # gone = success
+        except OSError as exc:
+            result.failed.append((item_name, f"{type(exc).__name__}: {exc}"))
+    return result
+
+
 @mcp.tool(tags={"bugfix"})
 async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
     """Run an arbitrary shell command in the specified directory.
@@ -158,6 +206,11 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     _log(f"run_skill: command={skill_command[:80]}... cwd={cwd}")
+
+    if _config.safety.require_dry_walkthrough:
+        if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
+            return gate_error
+
     cmd = [
         "claude",
         "-p",
@@ -206,9 +259,9 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
         return gate
     _log(f"run_skill_retry: command={skill_command[:80]}...")
 
-    gate_error = _check_dry_walkthrough(skill_command, cwd)
-    if gate_error is not None:
-        return gate_error
+    if _config.safety.require_dry_walkthrough:
+        if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
+            return gate_error
 
     cmd = [
         "claude",
@@ -339,28 +392,39 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         return json.dumps({"error": f"Could not determine branch: {stderr}"})
     worktree_branch = branch_out.strip()
 
-    # Test gate — always runs, no bypass
-    rc, test_stdout, test_stderr = await _run_subprocess(
-        _config.test_check.command,
-        cwd=worktree_path,
-        timeout=_config.test_check.timeout,
-    )
-    if not _check_test_passed(rc, test_stdout):
-        return json.dumps(
-            {
-                "error": "Tests failed in worktree — merge blocked",
-                "failed_step": "test_gate",
-                "state": "worktree_intact",
-                "worktree_path": worktree_path,
-            }
+    # Test gate
+    if _config.safety.test_gate_on_merge:
+        rc, test_stdout, test_stderr = await _run_subprocess(
+            _config.test_check.command,
+            cwd=worktree_path,
+            timeout=_config.test_check.timeout,
         )
+        if not _check_test_passed(rc, test_stdout):
+            return json.dumps(
+                {
+                    "error": "Tests failed in worktree — merge blocked",
+                    "failed_step": "test_gate",
+                    "state": "worktree_intact",
+                    "worktree_path": worktree_path,
+                }
+            )
 
     # Rebase
-    await _run_subprocess(
+    fetch_rc, _, fetch_stderr = await _run_subprocess(
         ["git", "fetch", "origin"],
         cwd=worktree_path,
         timeout=60,
     )
+    if fetch_rc != 0:
+        return json.dumps(
+            {
+                "error": "git fetch origin failed",
+                "failed_step": "fetch",
+                "state": "worktree_intact",
+                "stderr": _truncate(fetch_stderr),
+                "worktree_path": worktree_path,
+            }
+        )
 
     rc, _, rebase_stderr = await _run_subprocess(
         ["git", "rebase", f"origin/{base_branch}"],
@@ -382,13 +446,6 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
                 "worktree_path": worktree_path,
             }
         )
-
-    # Check if rebase changed anything (for potential re-test)
-    rc, diff_out, _ = await _run_subprocess(
-        ["git", "diff", "HEAD@{1}..HEAD"],
-        cwd=worktree_path,
-        timeout=30,
-    )
 
     # Determine main repo path from worktree list
     rc, wt_list, _ = await _run_subprocess(
@@ -428,12 +485,12 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         )
 
     # Cleanup
-    await _run_subprocess(
+    wt_rc, _, wt_stderr = await _run_subprocess(
         ["git", "worktree", "remove", worktree_path],
         cwd=main_repo,
         timeout=30,
     )
-    await _run_subprocess(
+    br_rc, _, br_stderr = await _run_subprocess(
         ["git", "branch", "-D", worktree_branch],
         cwd=main_repo,
         timeout=10,
@@ -444,7 +501,8 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
             "success": True,
             "merged_branch": worktree_branch,
             "into_branch": base_branch,
-            "worktree_removed": True,
+            "worktree_removed": wt_rc == 0,
+            "branch_deleted": br_rc == 0,
         }
     )
 
@@ -469,7 +527,7 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
     resolved = os.path.realpath(test_dir)
     _log(f"reset_test_dir: resolved={resolved} force={force}")
 
-    if "playground" not in resolved:
+    if _config.safety.playground_guard and "playground" not in resolved:
         return json.dumps({"error": "Safety: only playground directories allowed"})
 
     if not os.path.isdir(resolved):
@@ -488,14 +546,14 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
             }
         )
 
-    for item in os.listdir(resolved):
-        path = os.path.join(resolved, item)
-        if os.path.isdir(path):
-            shutil.rmtree(path)
-        else:
-            os.unlink(path)
-
-    return json.dumps({"success": True, "forced": force, "markers_cleared": found_markers})
+    cleanup = _delete_directory_contents(Path(resolved))
+    return json.dumps(
+        {
+            **cleanup.to_dict(),
+            "forced": force,
+            "markers_cleared": found_markers,
+        }
+    )
 
 
 @mcp.tool(tags={"bugfix"})
@@ -563,7 +621,7 @@ async def reset_executor(test_dir: str) -> str:
     resolved = os.path.realpath(test_dir)
     _log(f"reset_executor: resolved={resolved}")
 
-    if "playground" not in resolved:
+    if _config.safety.playground_guard and "playground" not in resolved:
         return json.dumps({"error": "Safety: only playground directories allowed"})
 
     if not os.path.isdir(resolved):
@@ -587,26 +645,11 @@ async def reset_executor(test_dir: str) -> str:
             }
         )
 
-    deleted = []
-    preserved = []
-    for item in os.listdir(resolved):
-        if item in _config.reset_executor.preserve_dirs:
-            preserved.append(item)
-            continue
-        path = os.path.join(resolved, item)
-        if os.path.isdir(path):
-            shutil.rmtree(path)
-        else:
-            os.unlink(path)
-        deleted.append(item)
-
-    return json.dumps(
-        {
-            "success": True,
-            "preserved": preserved,
-            "deleted": deleted,
-        }
+    cleanup = _delete_directory_contents(
+        Path(resolved),
+        preserve=set(_config.reset_executor.preserve_dirs),
     )
+    return json.dumps(cleanup.to_dict())
 
 
 def _enable_tools_handler() -> None:

@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 import json
+import shutil
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from automation_mcp.config import AutomationConfig, ClassifyFixConfig, ResetExecutorConfig
+from automation_mcp.config import (
+    AutomationConfig,
+    ClassifyFixConfig,
+    ResetExecutorConfig,
+    SafetyConfig,
+)
 from automation_mcp.process_lifecycle import SubprocessResult
 from automation_mcp.server import (
+    CleanupResult,
     _check_dry_walkthrough,
+    _delete_directory_contents,
     _disable_tools_handler,
     _enable_tools_handler,
     _parse_pytest_summary,
@@ -21,6 +30,7 @@ from automation_mcp.server import (
     reset_executor,
     reset_test_dir,
     run_cmd,
+    run_skill,
     run_skill_retry,
     test_check,
 )
@@ -212,8 +222,8 @@ class TestResetExecutor:
         result = json.loads(await reset_executor(test_dir=str(playground_dir)))
 
         assert result["success"] is True
-        assert ".agent_data" in result["preserved"]
-        assert "plans" in result["preserved"]
+        assert ".agent_data" in result["skipped"]
+        assert "plans" in result["skipped"]
         assert "output.txt" in result["deleted"]
         assert "temp_dir" in result["deleted"]
 
@@ -326,7 +336,6 @@ class TestMergeWorktree:
             (0, "PASS\n100 passed", ""),  # test-check
             (0, "", ""),  # git fetch
             (0, "", ""),  # git rebase
-            (0, "", ""),  # git diff (no-op rebase)
             (
                 0,
                 "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n"
@@ -339,6 +348,8 @@ class TestMergeWorktree:
         ]
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert result["success"] is True
+        assert result["worktree_removed"] is True
+        assert result["branch_deleted"] is True
 
     @pytest.mark.asyncio
     @patch("automation_mcp.server._run_subprocess")
@@ -939,7 +950,7 @@ class TestConfigDrivenBehavior:
 
         result = json.loads(await reset_executor(test_dir=str(playground_dir)))
 
-        assert "keep_me" in result["preserved"]
+        assert "keep_me" in result["skipped"]
         assert "delete_me" in result["deleted"]
         assert (playground_dir / "keep_me").exists()
         assert not (playground_dir / "delete_me").exists()
@@ -1013,3 +1024,381 @@ class TestConfigDrivenBehavior:
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
         assert "error" in result
         assert "not enabled" in result["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Step 1: CleanupResult contract and mid-loop failures
+# ---------------------------------------------------------------------------
+
+
+class TestCleanupResult:
+    """CleanupResult dataclass contract."""
+
+    def test_success_property_true_when_no_failures(self):
+        """1g: success is True iff failed is empty."""
+        result = CleanupResult(deleted=["a", "b"], failed=[], skipped=[])
+        assert result.success is True
+
+    def test_success_property_false_when_failures(self):
+        """1g: success is False when failed is non-empty."""
+        result = CleanupResult(deleted=["a"], failed=[("b", "PermissionError: ...")], skipped=[])
+        assert result.success is False
+
+    def test_to_dict_structure(self):
+        """to_dict returns well-formed dict with all fields."""
+        result = CleanupResult(
+            deleted=["a"],
+            failed=[("b", "PermissionError: denied")],
+            skipped=["c"],
+        )
+        d = result.to_dict()
+        assert d["success"] is False
+        assert d["deleted"] == ["a"]
+        assert d["failed"] == [{"path": "b", "error": "PermissionError: denied"}]
+        assert d["skipped"] == ["c"]
+
+
+class TestDeleteDirectoryContents:
+    """_delete_directory_contents never-raise contract."""
+
+    def test_continues_after_permission_error(self, tmp_path):
+        """1a: PermissionError on one item does not abort the loop."""
+        playground = tmp_path / "playground"
+        playground.mkdir()
+        (playground / "dir_a").mkdir()
+        (playground / "locked_dir").mkdir()
+        (playground / "file_c.txt").touch()
+
+        # Capture real rmtree before patching
+        real_rmtree = shutil.rmtree
+
+        def selective_rmtree(path, *args, **kwargs):
+            if Path(path).name == "locked_dir":
+                raise PermissionError("Permission denied")
+            real_rmtree(path, *args, **kwargs)
+
+        with patch("automation_mcp.server.shutil.rmtree", side_effect=selective_rmtree):
+            result = _delete_directory_contents(playground)
+
+        assert "dir_a" in result.deleted
+        assert "file_c.txt" in result.deleted
+        assert any(name == "locked_dir" for name, _ in result.failed)
+        assert result.success is False
+
+    def test_file_not_found_treated_as_success(self, tmp_path):
+        """1b: FileNotFoundError means item is gone = success."""
+        playground = tmp_path / "playground"
+        playground.mkdir()
+        (playground / "ghost.txt").touch()
+
+        # Delete the file before the cleanup function processes it
+        with patch.object(Path, "unlink", side_effect=FileNotFoundError("gone")):
+            with patch.object(Path, "is_dir", return_value=False):
+                result = _delete_directory_contents(playground)
+
+        assert "ghost.txt" in result.deleted
+        assert result.failed == []
+        assert result.success is True
+
+    def test_preserves_specified_dirs(self, tmp_path):
+        """1c: Preserved dirs are skipped, others deleted."""
+        playground = tmp_path / "playground"
+        playground.mkdir()
+        (playground / ".agent_data").mkdir()
+        (playground / "plans").mkdir()
+        (playground / "output.txt").touch()
+        (playground / "temp_dir").mkdir()
+
+        result = _delete_directory_contents(playground, preserve={".agent_data", "plans"})
+
+        assert ".agent_data" in result.skipped
+        assert "plans" in result.skipped
+        assert "output.txt" in result.deleted
+        assert "temp_dir" in result.deleted
+        assert (playground / ".agent_data").exists()
+        assert (playground / "plans").exists()
+        assert not (playground / "output.txt").exists()
+        assert not (playground / "temp_dir").exists()
+
+    def test_all_items_deleted_successfully(self, tmp_path):
+        """1d: All succeed with no failures."""
+        playground = tmp_path / "playground"
+        playground.mkdir()
+        (playground / "a").mkdir()
+        (playground / "b").touch()
+        (playground / "c").touch()
+
+        result = _delete_directory_contents(playground)
+
+        assert result.success is True
+        assert result.failed == []
+        assert len(result.deleted) == 3
+
+    @pytest.mark.asyncio
+    async def test_reset_test_dir_returns_partial_failure_json(self, tmp_path):
+        """1e: reset_test_dir returns structured JSON on partial failure."""
+        from automation_mcp import server
+
+        playground = tmp_path / "playground"
+        playground.mkdir()
+        (playground / "ok_file").touch()
+
+        mock_result = CleanupResult(
+            deleted=["ok_file"],
+            failed=[("bad_dir", "PermissionError: denied")],
+            skipped=[],
+        )
+        with patch.object(server, "_delete_directory_contents", return_value=mock_result):
+            result = json.loads(await reset_test_dir(test_dir=str(playground), force=False))
+
+        assert result["success"] is False
+        assert result["failed"] == [{"path": "bad_dir", "error": "PermissionError: denied"}]
+        assert "ok_file" in result["deleted"]
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_reset_executor_returns_partial_failure_json(
+        self, mock_run, monkeypatch, tmp_path
+    ):
+        """1f: reset_executor returns structured JSON on partial failure."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(reset_executor=ResetExecutorConfig(command=["true"]))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        playground = tmp_path / "playground" / "project"
+        playground.mkdir(parents=True)
+
+        mock_run.return_value = _make_result(0, "", "")
+
+        mock_result = CleanupResult(
+            deleted=["ok_file"],
+            failed=[("bad_dir", "PermissionError: denied")],
+            skipped=[".agent_data"],
+        )
+        with patch.object(server, "_delete_directory_contents", return_value=mock_result):
+            result = json.loads(await reset_executor(test_dir=str(playground)))
+
+        assert result["success"] is False
+        assert result["failed"] == [{"path": "bad_dir", "error": "PermissionError: denied"}]
+
+
+# ---------------------------------------------------------------------------
+# Step 2: Safety config wiring
+# ---------------------------------------------------------------------------
+
+
+class TestSafetyConfigWiring:
+    """Safety config fields are read at the point of enforcement."""
+
+    @pytest.mark.asyncio
+    async def test_reset_test_dir_skips_playground_guard_when_disabled(
+        self, monkeypatch, tmp_path
+    ):
+        """2a: playground_guard=False allows non-playground paths."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(safety=SafetyConfig(playground_guard=False))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        # Create a non-playground directory
+        non_playground = tmp_path / "my_project"
+        non_playground.mkdir()
+        (non_playground / "file.txt").touch()
+
+        result = json.loads(await reset_test_dir(test_dir=str(non_playground), force=False))
+        # Should NOT return the playground safety error
+        assert "error" not in result or "playground" not in result.get("error", "")
+        assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_reset_test_dir_enforces_playground_guard_when_enabled(self):
+        """2b: playground_guard=True (default) blocks non-playground paths."""
+        result = json.loads(await reset_test_dir(test_dir="/home/user/project"))
+        assert result["error"] == "Safety: only playground directories allowed"
+
+    @pytest.mark.asyncio
+    async def test_reset_executor_respects_playground_guard_config(self, monkeypatch, tmp_path):
+        """2c: reset_executor respects playground_guard config."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(
+            safety=SafetyConfig(playground_guard=False),
+            reset_executor=ResetExecutorConfig(command=None),
+        )
+        monkeypatch.setattr(server, "_config", cfg)
+
+        non_playground = tmp_path / "my_project"
+        non_playground.mkdir()
+
+        result = json.loads(await reset_executor(test_dir=str(non_playground)))
+        # Should pass playground guard but fail on "not configured"
+        assert result["error"] == "reset_executor not configured for this project"
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server._run_subprocess")
+    async def test_merge_worktree_skips_test_gate_when_disabled(
+        self, mock_run, monkeypatch, tmp_path
+    ):
+        """2d: test_gate_on_merge=False skips test execution."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(safety=SafetyConfig(test_gate_on_merge=False))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
+            (0, "impl-branch\n", ""),  # branch
+            # NO test-check call — skipped
+            (0, "", ""),  # git fetch
+            (0, "", ""),  # git rebase
+            (
+                0,
+                "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n",
+                "",
+            ),  # worktree list
+            (0, "", ""),  # git merge
+            (0, "", ""),  # worktree remove
+            (0, "", ""),  # branch -D
+        ]
+        result = json.loads(await merge_worktree(str(wt), "main"))
+        assert result["success"] is True
+
+        # Verify no test command was called — the 3rd call should be git fetch, not test
+        third_call_cmd = mock_run.call_args_list[2][0][0]
+        assert third_call_cmd == ["git", "fetch", "origin"]
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_run_skill_retry_skips_dry_walkthrough_when_disabled(
+        self, mock_run, monkeypatch, tmp_path
+    ):
+        """2e: require_dry_walkthrough=False bypasses dry-walkthrough gate."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(safety=SafetyConfig(require_dry_walkthrough=False))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        plan = tmp_path / "plan.md"
+        plan.write_text("# No marker plan")
+
+        mock_run.return_value = _make_result(0, '{"result": "done"}', "")
+        result = json.loads(await run_skill_retry(f"/implement-worktree {plan}", str(tmp_path)))
+        # Should NOT return dry-walkthrough error
+        assert "error" not in result
+        assert result["exit_code"] == 0
+
+    @pytest.mark.asyncio
+    async def test_run_skill_enforces_dry_walkthrough_when_enabled(self, tmp_path):
+        """2f: run_skill enforces dry-walkthrough gate when enabled (default)."""
+        plan = tmp_path / "plan.md"
+        plan.write_text("# No marker plan")
+
+        result = json.loads(await run_skill(f"/implement-worktree {plan}", str(tmp_path)))
+        assert "error" in result
+        assert "dry-walked" in result["error"].lower()
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server.run_managed_async")
+    async def test_run_skill_skips_dry_walkthrough_when_disabled(
+        self, mock_run, monkeypatch, tmp_path
+    ):
+        """2g: run_skill skips dry-walkthrough gate when disabled."""
+        from automation_mcp import server
+
+        cfg = AutomationConfig(safety=SafetyConfig(require_dry_walkthrough=False))
+        monkeypatch.setattr(server, "_config", cfg)
+
+        plan = tmp_path / "plan.md"
+        plan.write_text("# No marker plan")
+
+        mock_run.return_value = _make_result(0, '{"result": "done"}', "")
+        result = json.loads(await run_skill(f"/implement-worktree {plan}", str(tmp_path)))
+        # Should NOT return dry-walkthrough error
+        assert "error" not in result
+
+
+# ---------------------------------------------------------------------------
+# Step 3: merge_worktree cleanup reporting
+# ---------------------------------------------------------------------------
+
+
+class TestMergeWorktreeCleanupReporting:
+    """merge_worktree reports accurate cleanup results."""
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server._run_subprocess")
+    async def test_reports_worktree_remove_failure(self, mock_run, tmp_path):
+        """3a: worktree_removed reflects actual git worktree remove result."""
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
+            (0, "impl-branch\n", ""),  # branch
+            (0, "PASS\n100 passed", ""),  # test-check
+            (0, "", ""),  # git fetch
+            (0, "", ""),  # git rebase
+            (
+                0,
+                "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n",
+                "",
+            ),  # worktree list
+            (0, "", ""),  # git merge
+            (1, "", "error: untracked files"),  # worktree remove FAILS
+            (0, "", ""),  # branch -D
+        ]
+        result = json.loads(await merge_worktree(str(wt), "main"))
+        assert result["success"] is True
+        assert result["worktree_removed"] is False
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server._run_subprocess")
+    async def test_reports_branch_delete_failure(self, mock_run, tmp_path):
+        """3b: branch_deleted reflects actual git branch -D result."""
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
+            (0, "impl-branch\n", ""),  # branch
+            (0, "PASS\n100 passed", ""),  # test-check
+            (0, "", ""),  # git fetch
+            (0, "", ""),  # git rebase
+            (
+                0,
+                "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n",
+                "",
+            ),  # worktree list
+            (0, "", ""),  # git merge
+            (0, "", ""),  # worktree remove
+            (1, "", "error: branch not found"),  # branch -D FAILS
+        ]
+        result = json.loads(await merge_worktree(str(wt), "main"))
+        assert result["success"] is True
+        assert result["worktree_removed"] is True
+        assert result["branch_deleted"] is False
+
+    @pytest.mark.asyncio
+    @patch("automation_mcp.server._run_subprocess")
+    async def test_checks_fetch_result(self, mock_run, tmp_path):
+        """3c: git fetch failure returns error before rebase attempt."""
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
+            (0, "impl-branch\n", ""),  # branch
+            (0, "PASS\n100 passed", ""),  # test-check
+            (1, "", "fatal: could not connect to remote"),  # git fetch FAILS
+        ]
+        result = json.loads(await merge_worktree(str(wt), "main"))
+        assert "error" in result
+        assert result["failed_step"] == "fetch"

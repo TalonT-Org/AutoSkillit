@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,7 +18,7 @@ class TestCLI:
     # CL1
     def test_default_command_starts_server(self) -> None:
         mock_mcp = MagicMock()
-        with patch.object(cli, "serve", wraps=cli.serve) as mock_serve:
+        with patch.object(cli, "serve", wraps=cli.serve):
             with patch("automation_mcp.server.mcp", mock_mcp):
                 cli.serve()
         mock_mcp.run.assert_called_once()
@@ -174,3 +175,64 @@ class TestCLI:
         content = config_path.read_text()
         assert "# classify_fix:" in content
         assert "test_check:" in content
+
+    def test_prompt_delegates_to_questionary(self) -> None:
+        """_prompt calls questionary.text().unsafe_ask() when available."""
+        mock_q = ModuleType("questionary")
+        mock_question = MagicMock()
+        mock_question.unsafe_ask.return_value = "my answer"
+        mock_q.text = MagicMock(return_value=mock_question)
+
+        with patch.dict("sys.modules", {"questionary": mock_q}):
+            result = cli._prompt("Test command", "default_val")
+
+        mock_q.text.assert_called_once_with("Test command", default="default_val")
+        mock_question.unsafe_ask.assert_called_once()
+        assert result == "my answer"
+
+    def test_choose_delegates_to_questionary(self) -> None:
+        """_choose calls questionary.select().unsafe_ask() when available."""
+        mock_q = ModuleType("questionary")
+        mock_question = MagicMock()
+        mock_question.unsafe_ask.return_value = "Go"
+        mock_q.select = MagicMock(return_value=mock_question)
+
+        with patch.dict("sys.modules", {"questionary": mock_q}):
+            result = cli._choose("Project type", ["Python (pytest)", "Go", "Custom"])
+
+        mock_q.select.assert_called_once_with(
+            "Project type", choices=["Python (pytest)", "Go", "Custom"]
+        )
+        mock_question.unsafe_ask.assert_called_once()
+        assert result == "Go"
+
+    def test_init_test_command_flag_skips_prompts(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--test-command generates config without any interactive prompts."""
+        monkeypatch.chdir(tmp_path)
+
+        with patch.object(cli, "_prompt") as mock_prompt:
+            with patch.object(cli, "_choose") as mock_choose:
+                cli.init(test_command="pytest -v")
+
+        mock_prompt.assert_not_called()
+        mock_choose.assert_not_called()
+
+        config_path = tmp_path / ".automation-mcp" / "config.yaml"
+        data = yaml.safe_load(config_path.read_text())
+        assert data["test_check"]["command"] == ["pytest", "-v"]
+
+    def test_init_test_command_with_force(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--test-command combined with --force overwrites existing config."""
+        monkeypatch.chdir(tmp_path)
+        config_dir = tmp_path / ".automation-mcp"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("old: true\n")
+
+        cli.init(test_command="npm test", force=True)
+
+        data = yaml.safe_load((config_dir / "config.yaml").read_text())
+        assert data["test_check"]["command"] == ["npm", "test"]

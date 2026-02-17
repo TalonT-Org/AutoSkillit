@@ -20,7 +20,7 @@ dev = [
     "pytest-asyncio>=1.3.0",
     "ruff>=0.9.0",
 ]
-wizard = ["InquirerPy>=0.3.4"]
+wizard = ["questionary>=2.1.1"]
 
 [project.scripts]
 automation-mcp = "automation_mcp.cli:main"

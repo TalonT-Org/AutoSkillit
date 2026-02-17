@@ -39,7 +39,7 @@ def serve_explicit():
 
 
 @app.command
-def init(*, quick: bool = False, force: bool = False):
+def init(*, quick: bool = False, force: bool = False, test_command: str | None = None):
     """Initialize automation-mcp for a project.
 
     Parameters
@@ -48,6 +48,8 @@ def init(*, quick: bool = False, force: bool = False):
         Minimal questions: test command only.
     force
         Overwrite existing config without prompting.
+    test_command
+        Test command string for fully non-interactive init (e.g. "pytest -v").
     """
     project_dir = Path.cwd()
     config_dir = project_dir / ".automation-mcp"
@@ -59,12 +61,14 @@ def init(*, quick: bool = False, force: bool = False):
         print("Use --force to overwrite.")
         return
 
-    if quick:
-        test_command = _quick_init()
+    if test_command is not None:
+        cmd_parts = test_command.split()
+    elif quick:
+        cmd_parts = _quick_init()
     else:
-        test_command = _interactive_init()
+        cmd_parts = _interactive_init()
 
-    config_path.write_text(_generate_config_yaml(test_command))
+    config_path.write_text(_generate_config_yaml(cmd_parts))
     print(f"Config written to: {config_path}")
 
 
@@ -205,9 +209,9 @@ def _interactive_init() -> list[str]:
 
 def _prompt(message: str, default: str) -> str:
     try:
-        from InquirerPy import inquirer
+        import questionary
 
-        return inquirer.text(message=message, default=default).execute()
+        return questionary.text(message, default=default).unsafe_ask()
     except ImportError:
         suffix = f" [{default}]" if default else ""
         answer = input(f"{message}{suffix}: ").strip()
@@ -216,9 +220,9 @@ def _prompt(message: str, default: str) -> str:
 
 def _choose(message: str, choices: list[str]) -> str:
     try:
-        from InquirerPy import inquirer
+        import questionary
 
-        return inquirer.select(message=message, choices=choices).execute()
+        return questionary.select(message, choices=choices).unsafe_ask()
     except ImportError:
         print(f"{message}:")
         for i, c in enumerate(choices, 1):

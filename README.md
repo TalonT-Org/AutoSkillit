@@ -118,7 +118,24 @@ View resolved config: `automation-mcp config show`
 | `assess-and-merge` | Fix test failures and merge |
 | `mermaid` | Create mermaid diagrams |
 
-Resolution hierarchy: project (`.claude/skills/`) > user (`~/.claude/skills/`) > bundled. Project skills shadow bundled ones with the same name.
+### Resolution Order
+
+Skills are resolved by name using a first-match-wins hierarchy. The default order:
+
+1. **project** — `.claude/skills/<name>/SKILL.md` in the current repo
+2. **user** — `~/.claude/skills/<name>/SKILL.md` in your home directory
+3. **bundled** — skills shipped inside the automation-mcp package
+
+If the same skill name exists at multiple levels, the highest-priority source wins. For example, a project-level `rectify` skill shadows the bundled one.
+
+The order is configurable in `.automation-mcp/config.yaml`:
+
+```yaml
+skills:
+  resolution_order: ["project", "user", "bundled"]  # default
+```
+
+Use `automation-mcp skills list` to see which source won for each skill.
 
 Skills are also exposed as `skill://` MCP resources for protocol-level discovery and reading.
 

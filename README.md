@@ -5,9 +5,10 @@ MCP server that orchestrates automated workflows with Claude Code headless sessi
 ## Install
 
 ```bash
+# From cloned repo
 pip install -e .
 
-# Optional: interactive init wizard
+# With interactive init wizard (questionary-based prompts)
 pip install -e ".[wizard]"
 ```
 
@@ -15,27 +16,36 @@ Requires Python 3.11+.
 
 ## Quick Start
 
-### 1. Initialize a project
+### 1. Install and register with Claude Code
+
+```bash
+pip install -e /path/to/automation-mcp
+claude mcp add bugfix-loop -- automation-mcp
+```
+
+The `claude mcp add` command registers the server so Claude Code can discover it. Scope options:
+
+```bash
+# Default (local) — just you, just this project
+claude mcp add bugfix-loop -- automation-mcp
+
+# Project — writes .mcp.json, shared with team via git
+claude mcp add --scope project bugfix-loop -- automation-mcp
+
+# User — available across all your projects
+claude mcp add --scope user bugfix-loop -- automation-mcp
+```
+
+### 2. Configure for your project
 
 ```bash
 cd your-project
-automation-mcp init          # interactive wizard
-automation-mcp init --quick  # just test command + defaults
+automation-mcp init                              # interactive wizard
+automation-mcp init --quick                      # just test command + defaults
+automation-mcp init --test-command "pytest -v"   # fully non-interactive
 ```
 
-This creates `.automation-mcp/config.yaml`.
-
-### 2. Add to your MCP client config
-
-```json
-{
-  "mcpServers": {
-    "bugfix-loop": {
-      "command": "automation-mcp"
-    }
-  }
-}
-```
+This creates `.automation-mcp/config.yaml` with project-specific settings. Use `--force` to overwrite an existing config.
 
 ### 3. Enable tools in session
 
@@ -110,6 +120,8 @@ View resolved config: `automation-mcp config show`
 
 Resolution hierarchy: project (`.claude/skills/`) > user (`~/.claude/skills/`) > bundled. Project skills shadow bundled ones with the same name.
 
+Skills are also exposed as `skill://` MCP resources for protocol-level discovery and reading.
+
 ```bash
 automation-mcp skills list              # show all with sources
 automation-mcp skills install investigate  # copy bundled to project
@@ -161,7 +173,7 @@ pre-commit run --all-files       # format, lint, typecheck
 src/automation_mcp/
   cli.py               Cyclopts CLI (serve, init, config, skills, workflows, update)
   config.py            Dataclass config + layered YAML loading
-  server.py            FastMCP server with 8 tools + 2 prompts + 1 resource
+  server.py            FastMCP server with 8 tools + 2 prompts + resources
   process_lifecycle.py  Subprocess management (temp I/O, tree cleanup, timeouts)
   skill_resolver.py    Skill resolution hierarchy
   workflow_loader.py   Workflow YAML parsing + validation

@@ -30,22 +30,26 @@ class TestCLI:
         mock_mcp.run.assert_called_once()
 
     # CL3
-    def test_init_creates_config_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_init_creates_config_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.chdir(tmp_path)
-        with patch.object(cli, "_quick_init", return_value={"version": 1}):
+        with patch.object(cli, "_quick_init", return_value=["pytest", "-v"]):
             cli.init(quick=True, force=False)
         assert (tmp_path / ".automation-mcp").is_dir()
 
     # CL4
-    def test_init_writes_config_yaml(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_init_writes_config_yaml(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.chdir(tmp_path)
-        with patch.object(cli, "_quick_init", return_value={"version": 1, "test_check": {"command": ["pytest", "-v"]}}):
+        with patch.object(cli, "_quick_init", return_value=["pytest", "-v"]):
             cli.init(quick=True, force=False)
         config_path = tmp_path / ".automation-mcp" / "config.yaml"
         assert config_path.is_file()
         data = yaml.safe_load(config_path.read_text())
-        assert data["version"] == 1
         assert data["test_check"]["command"] == ["pytest", "-v"]
+        assert data["safety"]["playground_guard"] is True
 
     # CL5
     def test_init_quick_mode(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -111,17 +115,62 @@ class TestCLI:
         assert "bugfix-loop" in captured.out
         assert "Skipped (customized)" in captured.out
 
-    def test_init_force_overwrites(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_init_force_overwrites(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
         config_dir = tmp_path / ".automation-mcp"
         config_dir.mkdir()
         config_path = config_dir / "config.yaml"
         config_path.write_text("old: true\n")
 
-        with patch.object(cli, "_quick_init", return_value={"version": 1}):
+        with patch.object(cli, "_quick_init", return_value=["pytest", "-v"]):
             cli.init(quick=True, force=True)
 
         data = yaml.safe_load(config_path.read_text())
-        assert data == {"version": 1}
+        assert data["test_check"]["command"] == ["pytest", "-v"]
+
+    def test_generate_config_yaml_contains_test_command(self) -> None:
+        """_generate_config_yaml embeds the test command in active YAML."""
+        from automation_mcp.cli import _generate_config_yaml
+
+        yaml_str = _generate_config_yaml(["pytest", "-v"])
+        assert 'command: ["pytest", "-v"]' in yaml_str
+
+    def test_generate_config_yaml_has_commented_advanced_sections(self) -> None:
+        """Generated YAML includes commented-out advanced config sections."""
+        from automation_mcp.cli import _generate_config_yaml
+
+        yaml_str = _generate_config_yaml(["pytest", "-v"])
+        assert "# classify_fix:" in yaml_str
+        assert "# reset_executor:" in yaml_str
+        assert "# implement_gate:" in yaml_str
+        assert "# skills:" in yaml_str
+
+    def test_generate_config_yaml_uncommented_parts_are_valid(self) -> None:
+        """The uncommented portion of generated YAML parses as valid config."""
+        from automation_mcp.cli import _generate_config_yaml
+
+        yaml_str = _generate_config_yaml(["task", "test-all"])
+        parsed = yaml.safe_load(yaml_str)
+        assert parsed["test_check"]["command"] == ["task", "test-all"]
+        assert parsed["safety"]["playground_guard"] is True
+
+    def test_interactive_init_has_no_planner_questions(self) -> None:
+        """Interactive init does not ask about planner/executor systems."""
+        with patch.object(cli, "_choose", return_value="Python (pytest)"):
+            with patch.object(cli, "_prompt", return_value="pytest -v") as mock_prompt:
+                cli._interactive_init()
+
+        assert mock_prompt.call_count == 1
+
+    def test_init_writes_template_with_comments(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """init writes a config file containing commented advanced sections."""
+        monkeypatch.chdir(tmp_path)
+        with patch.object(cli, "_prompt", return_value="pytest -v"):
+            cli.init(quick=True)
+
+        config_path = tmp_path / ".automation-mcp" / "config.yaml"
+        content = config_path.read_text()
+        assert "# classify_fix:" in content
+        assert "test_check:" in content

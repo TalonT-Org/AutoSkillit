@@ -45,12 +45,10 @@ def init(*, quick: bool = False, force: bool = False):
     Parameters
     ----------
     quick
-        Minimal questions: test command and base branch only.
+        Minimal questions: test command only.
     force
         Overwrite existing config without prompting.
     """
-    import yaml
-
     project_dir = Path.cwd()
     config_dir = project_dir / ".automation-mcp"
     config_dir.mkdir(exist_ok=True)
@@ -62,11 +60,11 @@ def init(*, quick: bool = False, force: bool = False):
         return
 
     if quick:
-        answers = _quick_init()
+        test_command = _quick_init()
     else:
-        answers = _interactive_init()
+        test_command = _interactive_init()
 
-    config_path.write_text(yaml.dump(answers, default_flow_style=False, sort_keys=False))
+    config_path.write_text(_generate_config_yaml(test_command))
     print(f"Config written to: {config_path}")
 
 
@@ -185,20 +183,12 @@ def workflows_show(name: str):
 # --- Init helpers ---
 
 
-def _quick_init() -> dict:
+def _quick_init() -> list[str]:
     test_cmd = _prompt("Test command", "pytest -v")
-    return {
-        "version": 1,
-        "test_check": {"command": test_cmd.split()},
-        "safety": {
-            "playground_guard": True,
-            "require_dry_walkthrough": True,
-            "test_gate_on_merge": True,
-        },
-    }
+    return test_cmd.split()
 
 
-def _interactive_init() -> dict:
+def _interactive_init() -> list[str]:
     project_type = _choose(
         "Project type",
         ["Python (pytest)", "TypeScript", "Go", "Custom"],
@@ -210,31 +200,7 @@ def _interactive_init() -> dict:
         "Custom": "",
     }
     test_cmd = _prompt("Test command", test_defaults.get(project_type, ""))
-
-    config: dict = {
-        "version": 1,
-        "test_check": {"command": test_cmd.split()},
-    }
-
-    uses_planner = _confirm("Do you use a planner/executor system?", default=False)
-    if uses_planner:
-        prefixes = _prompt("Planner path prefixes (comma-separated)", "")
-        config["classify_fix"] = {
-            "path_prefixes": [p.strip() for p in prefixes.split(",") if p.strip()]
-        }
-        reset_cmd = _prompt("Executor reset command (blank for none)", "")
-        config["reset_executor"] = {
-            "command": reset_cmd.split() if reset_cmd else None,
-            "preserve_dirs": [".agent_data", "plans"],
-        }
-
-    config["safety"] = {
-        "playground_guard": True,
-        "require_dry_walkthrough": True,
-        "test_gate_on_merge": True,
-    }
-
-    return config
+    return test_cmd.split()
 
 
 def _prompt(message: str, default: str) -> str:
@@ -264,17 +230,35 @@ def _choose(message: str, choices: list[str]) -> str:
                 return choices[idx]
 
 
-def _confirm(message: str, *, default: bool = True) -> bool:
-    try:
-        from InquirerPy import inquirer
+def _generate_config_yaml(test_command: list[str]) -> str:
+    """Generate config YAML with active settings and commented advanced sections."""
+    cmd_str = json.dumps(test_command)
+    return f"""\
+test_check:
+  command: {cmd_str}
+  # timeout: 600
 
-        return inquirer.confirm(message=message, default=default).execute()
-    except ImportError:
-        suffix = " [Y/n]" if default else " [y/N]"
-        answer = input(f"{message}{suffix}: ").strip().lower()
-        if not answer:
-            return default
-        return answer in ("y", "yes")
+safety:
+  playground_guard: true
+  require_dry_walkthrough: true
+  test_gate_on_merge: true
+
+# --- Advanced settings (uncomment and configure as needed) ---
+#
+# classify_fix:
+#   path_prefixes: []
+#
+# reset_executor:
+#   command: null
+#   preserve_dirs: [".agent_data", "plans"]
+#
+# implement_gate:
+#   marker: "Dry-walkthrough verified = TRUE"
+#   skill_names: ["/implement-worktree", "/implement-worktree-no-merge"]
+#
+# skills:
+#   resolution_order: ["project", "user", "bundled"]
+"""
 
 
 def main() -> None:

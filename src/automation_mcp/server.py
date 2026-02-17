@@ -20,13 +20,22 @@ import sys
 from pathlib import Path
 
 from fastmcp import FastMCP
+from fastmcp.server.providers.skills import SkillsDirectoryProvider
 
 from automation_mcp.config import AutomationConfig, load_config
 from automation_mcp.process_lifecycle import run_managed_async
+from automation_mcp.skill_resolver import build_skill_roots
 
 mcp = FastMCP("bugfix-loop")
 
 _config: AutomationConfig = load_config(Path.cwd())
+
+_skill_roots = build_skill_roots(Path.cwd(), _config)
+mcp.add_provider(
+    SkillsDirectoryProvider(
+        roots=[path for _source, path in _skill_roots],
+    )
+)
 
 _tools_enabled = False
 

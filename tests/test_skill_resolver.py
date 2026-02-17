@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from automation_mcp.config import AutomationConfig, SkillsConfig
-from automation_mcp.skill_resolver import SkillResolver, bundled_skills_dir
+from automation_mcp.skill_resolver import SkillResolver, build_skill_roots, bundled_skills_dir
 
 BUNDLED_SKILLS = [
     "assess-and-merge",
@@ -159,3 +159,32 @@ class TestSkillResolver:
         resolver = SkillResolver(project, config)
         assert resolver.resolve("investigate") is None
         assert resolver.list_all() == []
+
+
+class TestBuildSkillRoots:
+    def test_returns_labeled_paths(self, tmp_path: Path) -> None:
+        """build_skill_roots() returns (source, Path) tuples in config order."""
+        config = AutomationConfig(
+            skills=SkillsConfig(resolution_order=["project", "user", "bundled"])
+        )
+        roots = build_skill_roots(tmp_path, config)
+        assert len(roots) == 3
+        assert roots[0][0] == "project"
+        assert roots[1][0] == "user"
+        assert roots[2][0] == "bundled"
+        assert roots[0][1] == tmp_path / ".claude" / "skills"
+
+    def test_respects_custom_order(self, tmp_path: Path) -> None:
+        """Custom resolution_order changes the root ordering."""
+        config = AutomationConfig(skills=SkillsConfig(resolution_order=["bundled", "project"]))
+        roots = build_skill_roots(tmp_path, config)
+        assert len(roots) == 2
+        assert roots[0][0] == "bundled"
+        assert roots[1][0] == "project"
+
+    def test_resolver_uses_build_skill_roots(self, tmp_path: Path) -> None:
+        """SkillResolver._dirs matches build_skill_roots() output."""
+        config = AutomationConfig()
+        resolver = SkillResolver(tmp_path, config)
+        roots = build_skill_roots(tmp_path, config)
+        assert resolver._dirs == roots

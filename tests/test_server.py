@@ -785,6 +785,57 @@ class TestGatedToolAccess:
             assert "bugfix" in tool.tags, f"{tool.name} missing 'bugfix' tag"
 
 
+class TestSkillsProvider:
+    """Verify SkillsDirectoryProvider is registered and exposes skill resources."""
+
+    def test_server_has_skills_provider(self):
+        """MCP server registers a SkillsDirectoryProvider."""
+        from fastmcp.server.providers.skills import SkillsDirectoryProvider
+
+        from automation_mcp.server import mcp
+
+        has_provider = any(isinstance(p, SkillsDirectoryProvider) for p in mcp.providers)
+        assert has_provider
+
+    @pytest.mark.asyncio
+    async def test_skill_resources_discoverable(self):
+        """Bundled skills appear as skill:// resources via MCP."""
+        from fastmcp import Client
+
+        from automation_mcp.server import mcp
+
+        async with Client(mcp) as client:
+            resources = await client.list_resources()
+
+        skill_uris = [r.uri for r in resources if str(r.uri).startswith("skill://")]
+        assert len(skill_uris) >= 10
+        assert any("investigate" in str(uri) for uri in skill_uris)
+
+    @pytest.mark.asyncio
+    async def test_skill_resource_content_readable(self):
+        """Reading a skill resource returns the SKILL.md content."""
+        from fastmcp import Client
+
+        from automation_mcp.server import mcp
+
+        async with Client(mcp) as client:
+            result = await client.read_resource("skill://investigate/SKILL.md")
+
+        content = result[0].text if hasattr(result[0], "text") else str(result[0])
+        assert "investigate" in content.lower() or "investigation" in content.lower()
+
+    def test_provider_roots_match_config_order(self):
+        """Provider roots are ordered per config.skills.resolution_order."""
+        from fastmcp.server.providers.skills import SkillsDirectoryProvider
+
+        from automation_mcp.server import mcp
+        from automation_mcp.skill_resolver import bundled_skills_dir
+
+        provider = next(p for p in mcp.providers if isinstance(p, SkillsDirectoryProvider))
+        root_strs = [str(r) for r in provider._roots]
+        assert str(bundled_skills_dir().resolve()) in root_strs
+
+
 class TestConfigDrivenBehavior:
     """S1-S10: Verify tools use config instead of hardcoded values."""
 

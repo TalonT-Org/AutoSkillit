@@ -15,11 +15,28 @@ class SkillInfo:
     path: Path
 
 
+def build_skill_roots(project_dir: Path, config: AutomationConfig) -> list[tuple[str, Path]]:
+    """Build ordered list of (source, directory) tuples for skill resolution.
+
+    Used by both SkillResolver (CLI) and SkillsDirectoryProvider (MCP).
+    """
+    source_map = {
+        "project": project_dir / ".claude" / "skills",
+        "user": Path.home() / ".claude" / "skills",
+        "bundled": Path(__file__).parent / "skills",
+    }
+    return [
+        (source, source_map[source])
+        for source in config.skills.resolution_order
+        if source in source_map
+    ]
+
+
 class SkillResolver:
     """Resolve skill names to SKILL.md paths using a configurable hierarchy."""
 
     def __init__(self, project_dir: Path, config: AutomationConfig):
-        self._dirs = self._build_search_dirs(project_dir, config)
+        self._dirs = build_skill_roots(project_dir, config)
 
     def resolve(self, name: str) -> SkillInfo | None:
         """Resolve a skill name to its path. First match in hierarchy wins."""
@@ -39,20 +56,6 @@ class SkillResolver:
                     seen.add(info.name)
                     skills.append(info)
         return sorted(skills, key=lambda s: s.name)
-
-    def _build_search_dirs(
-        self, project_dir: Path, config: AutomationConfig
-    ) -> list[tuple[str, Path]]:
-        source_map = {
-            "project": project_dir / ".claude" / "skills",
-            "user": Path.home() / ".claude" / "skills",
-            "bundled": Path(__file__).parent / "skills",
-        }
-        return [
-            (source, source_map[source])
-            for source in config.skills.resolution_order
-            if source in source_map
-        ]
 
 
 def bundled_skills_dir() -> Path:

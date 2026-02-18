@@ -16,7 +16,7 @@ import yaml
 
 @dataclass
 class TestCheckConfig:
-    command: list[str] = field(default_factory=lambda: ["task", "test-check"])
+    command: list[str] = field(default_factory=lambda: ["pytest", "-v"])
     timeout: int = 600
 
 
@@ -26,9 +26,9 @@ class ClassifyFixConfig:
 
 
 @dataclass
-class ResetExecutorConfig:
+class ResetWorkspaceConfig:
     command: list[str] | None = None
-    preserve_dirs: set[str] = field(default_factory=lambda: {".agent_data", "plans"})
+    preserve_dirs: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -55,7 +55,7 @@ class SkillsConfig:
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
-    reset_executor: ResetExecutorConfig = field(default_factory=ResetExecutorConfig)
+    reset_workspace: ResetWorkspaceConfig = field(default_factory=ResetWorkspaceConfig)
     implement_gate: ImplementGateConfig = field(default_factory=ImplementGateConfig)
     safety: SafetyConfig = field(default_factory=SafetyConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)

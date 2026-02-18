@@ -1,4 +1,4 @@
-"""CLI for automation-mcp: serve, init, config, skills, workflows, update."""
+"""CLI for autoskillit: serve, init, config, skills, workflows, update."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 from cyclopts import App
 
 app = App(
-    name="automation-mcp",
+    name="autoskillit",
     help="MCP server for orchestrating automated workflows with Claude Code.",
 )
 
@@ -27,7 +27,7 @@ app.command(workflows_app)
 @app.default
 def serve():
     """Start the MCP server (default command)."""
-    from automation_mcp.server import mcp
+    from autoskillit.server import mcp
 
     mcp.run()
 
@@ -40,7 +40,7 @@ def serve_explicit():
 
 @app.command
 def init(*, quick: bool = False, force: bool = False, test_command: str | None = None):
-    """Initialize automation-mcp for a project.
+    """Initialize autoskillit for a project.
 
     Parameters
     ----------
@@ -52,7 +52,7 @@ def init(*, quick: bool = False, force: bool = False, test_command: str | None =
         Test command string for fully non-interactive init (e.g. "pytest -v").
     """
     project_dir = Path.cwd()
-    config_dir = project_dir / ".automation-mcp"
+    config_dir = project_dir / ".autoskillit"
     config_dir.mkdir(exist_ok=True)
     config_path = config_dir / "config.yaml"
 
@@ -75,9 +75,9 @@ def init(*, quick: bool = False, force: bool = False, test_command: str | None =
 @app.command
 def update():
     """Refresh built-in workflows, preserving customized ones."""
-    from automation_mcp.workflow_loader import builtin_workflows_dir
+    from autoskillit.workflow_loader import builtin_workflows_dir
 
-    project_wf_dir = Path.cwd() / ".automation-mcp" / "workflows"
+    project_wf_dir = Path.cwd() / ".autoskillit" / "workflows"
     if not project_wf_dir.is_dir():
         print("No project workflows directory found. Nothing to update.")
         return
@@ -108,7 +108,7 @@ def update():
 @config_app.command(name="show")
 def config_show():
     """Show resolved configuration as JSON."""
-    from automation_mcp.config import load_config
+    from autoskillit.config import load_config
 
     cfg = load_config(Path.cwd())
     print(json.dumps(dataclasses.asdict(cfg), indent=2, default=list))
@@ -117,8 +117,8 @@ def config_show():
 @skills_app.command(name="list")
 def skills_list():
     """List available skills with their resolution source."""
-    from automation_mcp.config import load_config
-    from automation_mcp.skill_resolver import SkillResolver
+    from autoskillit.config import load_config
+    from autoskillit.skill_resolver import SkillResolver
 
     cfg = load_config(Path.cwd())
     resolver = SkillResolver(Path.cwd(), cfg)
@@ -139,7 +139,7 @@ def skills_list():
 @skills_app.command(name="install")
 def skills_install(name: str):
     """Install a bundled skill to the project's .claude/skills/ directory."""
-    from automation_mcp.skill_resolver import bundled_skills_dir
+    from autoskillit.skill_resolver import bundled_skills_dir
 
     src = bundled_skills_dir() / name / "SKILL.md"
     if not src.is_file():
@@ -156,7 +156,7 @@ def skills_install(name: str):
 @workflows_app.command(name="list")
 def workflows_list():
     """List available workflows with sources."""
-    from automation_mcp.workflow_loader import list_workflows
+    from autoskillit.workflow_loader import list_workflows
 
     workflows = list_workflows(Path.cwd())
     if not workflows:
@@ -174,7 +174,7 @@ def workflows_list():
 @workflows_app.command(name="show")
 def workflows_show(name: str):
     """Print the YAML content of a named workflow."""
-    from automation_mcp.workflow_loader import list_workflows
+    from autoskillit.workflow_loader import list_workflows
 
     workflows = list_workflows(Path.cwd())
     match = next((w for w in workflows if w.name == name), None)
@@ -266,5 +266,5 @@ safety:
 
 
 def main() -> None:
-    """Entry point for automation-mcp."""
+    """Entry point for autoskillit."""
     app()

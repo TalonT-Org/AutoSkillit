@@ -1,3 +1,3 @@
-"""Automation MCP server for orchestrating bug-fix loops."""
+"""AutoSkillit server for orchestrating skill-driven workflows."""
 
 __version__ = "0.1.0"

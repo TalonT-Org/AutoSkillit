@@ -1,3 +1,3 @@
-from automation_mcp.cli import main
+from autoskillit.cli import main
 
 main()

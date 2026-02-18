@@ -1,7 +1,7 @@
 """Configuration loading with layered YAML resolution.
 
-Resolution order: defaults > user (~/.automation-mcp/config.yaml)
-> project (.automation-mcp/config.yaml).
+Resolution order: defaults > user (~/.autoskillit/config.yaml)
+> project (.autoskillit/config.yaml).
 """
 
 from __future__ import annotations
@@ -65,12 +65,12 @@ def load_config(project_dir: Path | None = None) -> AutomationConfig:
     """Load layered config: defaults < user config < project config."""
     config = AutomationConfig()
 
-    user_path = Path.home() / ".automation-mcp" / "config.yaml"
+    user_path = Path.home() / ".autoskillit" / "config.yaml"
     if user_path.is_file():
         _merge_into(config, _load_yaml(user_path))
 
     if project_dir is not None:
-        project_path = project_dir / ".automation-mcp" / "config.yaml"
+        project_path = project_dir / ".autoskillit" / "config.yaml"
         if project_path.is_file():
             _merge_into(config, _load_yaml(project_path))
 

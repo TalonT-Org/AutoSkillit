@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from automation_mcp.config import AutomationConfig
+from autoskillit.config import AutomationConfig
 
 
 @dataclass

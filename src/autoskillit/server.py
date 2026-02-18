@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""MCP server for orchestrating automated bug-fix loops.
+"""MCP server for orchestrating automated skill-driven workflows.
 
 All tools are gated by default and require the user to type
-/mcp__bugfix-loop__enable_tools to activate. This uses MCP prompts
+/mcp__autoskillit__enable_tools to activate. This uses MCP prompts
 (user-controlled, model cannot invoke) to set an in-memory flag
 that each tool checks before executing. The gate survives
 --dangerously-skip-permissions.
@@ -23,11 +23,11 @@ from pathlib import Path
 from fastmcp import FastMCP
 from fastmcp.server.providers.skills import SkillsDirectoryProvider
 
-from automation_mcp.config import AutomationConfig, load_config
-from automation_mcp.process_lifecycle import run_managed_async
-from automation_mcp.skill_resolver import build_skill_roots
+from autoskillit.config import AutomationConfig, load_config
+from autoskillit.process_lifecycle import run_managed_async
+from autoskillit.skill_resolver import build_skill_roots
 
-mcp = FastMCP("bugfix-loop")
+mcp = FastMCP("autoskillit")
 
 _config: AutomationConfig = load_config(Path.cwd())
 
@@ -45,7 +45,7 @@ def _require_enabled() -> str | None:
     """Return error JSON if tools are not enabled, None if OK.
 
     All tools are gated by default and can only be activated by the user
-    typing /mcp__bugfix-loop__enable_tools. This survives
+    typing /mcp__autoskillit__enable_tools. This survives
     --dangerously-skip-permissions because MCP prompts are outside
     the permission system.
     """
@@ -53,8 +53,8 @@ def _require_enabled() -> str | None:
         return json.dumps(
             {
                 "error": (
-                    "Bugfix-loop tools are not enabled. "
-                    "User must type /mcp__bugfix-loop__enable_tools to activate."
+                    "AutoSkillit tools are not enabled. "
+                    "User must type /mcp__autoskillit__enable_tools to activate."
                 ),
             }
         )
@@ -667,7 +667,7 @@ def _disable_tools_handler() -> None:
 @mcp.resource("workflow://{name}")
 def get_workflow(name: str) -> str:
     """Return workflow YAML for the orchestrating agent to follow."""
-    from automation_mcp.workflow_loader import list_workflows
+    from autoskillit.workflow_loader import list_workflows
 
     workflows = list_workflows(Path.cwd())
     match = next((w for w in workflows if w.name == name), None)
@@ -678,23 +678,23 @@ def get_workflow(name: str) -> str:
 
 @mcp.prompt()
 def enable_tools() -> str:
-    """Enable all bugfix-loop tools for this session.
+    """Enable all AutoSkillit tools for this session.
 
     Tools are disabled by default to prevent accidental use by agents.
     Only a human can invoke this prompt — the model cannot.
     This survives --dangerously-skip-permissions.
 
-    Type /mcp__bugfix-loop__enable_tools to activate.
+    Type /mcp__autoskillit__enable_tools to activate.
     """
     _enable_tools_handler()
-    return "Bugfix-loop tools are now enabled for this session."
+    return "AutoSkillit tools are now enabled for this session."
 
 
 @mcp.prompt()
 def disable_tools() -> str:
-    """Disable all bugfix-loop tools for this session.
+    """Disable all AutoSkillit tools for this session.
 
-    Type /mcp__bugfix-loop__disable_tools to deactivate.
+    Type /mcp__autoskillit__disable_tools to deactivate.
     """
     _disable_tools_handler()
-    return "Bugfix-loop tools are now disabled."
+    return "AutoSkillit tools are now disabled."

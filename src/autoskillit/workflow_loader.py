@@ -109,7 +109,7 @@ def list_workflows(project_dir: Path) -> list[WorkflowInfo]:
     seen: set[str] = set()
     result: list[WorkflowInfo] = []
 
-    project_wf_dir = project_dir / ".automation-mcp" / "workflows"
+    project_wf_dir = project_dir / ".autoskillit" / "workflows"
     _collect_workflows("project", project_wf_dir, seen, result)
 
     builtin_dir = Path(__file__).parent / "workflows"

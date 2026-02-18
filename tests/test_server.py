@@ -903,7 +903,9 @@ class TestConfigDrivenBehavior:
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_reset_workspace_uses_config_preserve_dirs(self, mock_run, monkeypatch, tmp_path):
+    async def test_reset_workspace_uses_config_preserve_dirs(
+        self, mock_run, monkeypatch, tmp_path
+    ):
         """S6: Preserves _config.reset_workspace.preserve_dirs."""
         from autoskillit import server
 

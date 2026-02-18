@@ -159,7 +159,7 @@ autoskillit config show
 
 ## Skills
 
-10 pipeline skills are bundled with the package:
+Skills bundled with the package:
 
 | Skill | Purpose |
 |-------|---------|
@@ -173,6 +173,7 @@ autoskillit config show
 | `retry-worktree` | Continue after context exhaustion |
 | `assess-and-merge` | Fix test failures and merge |
 | `mermaid` | Create mermaid diagrams |
+| `setup-project` | Explore a project and generate a tailored skill script and config |
 
 ### Skill Resolution Order
 
@@ -295,7 +296,7 @@ src/autoskillit/
   process_lifecycle.py  Subprocess management (temp I/O, tree cleanup, timeouts)
   skill_resolver.py    Skill resolution hierarchy
   workflow_loader.py   Workflow YAML parsing + validation
-  skills/              10 bundled pipeline skills
+  skills/              11 bundled skills (10 pipeline + 1 utility)
   workflows/           3 built-in workflow definitions
 ```
 

@@ -12,7 +12,7 @@ import pytest
 from autoskillit.config import (
     AutomationConfig,
     ClassifyFixConfig,
-    ResetExecutorConfig,
+    ResetWorkspaceConfig,
     SafetyConfig,
 )
 from autoskillit.process_lifecycle import SubprocessResult
@@ -27,8 +27,8 @@ from autoskillit.server import (
     _run_subprocess,
     classify_fix,
     merge_worktree,
-    reset_executor,
     reset_test_dir,
+    reset_workspace,
     run_cmd,
     run_skill,
     run_skill_retry,
@@ -95,37 +95,20 @@ class TestRunCmd:
         assert call_kwargs["timeout"] == 30.0
 
 
-class TestRunPlannerRemoved:
-    """T3: run_planner tool no longer exists."""
-
-    def test_run_planner_not_importable(self):
-        from autoskillit import server
-
-        assert not hasattr(server, "run_planner")
-
-    def test_run_cmd_exists(self):
-        from autoskillit import server
-
-        assert hasattr(server, "run_cmd")
-
-
 class TestClassifyFix:
     """T4, T5: classify_fix returns correct restart scope based on changed files."""
 
     @pytest.fixture(autouse=True)
     def _set_prefixes(self, monkeypatch):
-        """Configure planner path prefixes for classify_fix tests."""
+        """Configure critical path prefixes for classify_fix tests."""
         from autoskillit import server
 
         cfg = AutomationConfig(
             classify_fix=ClassifyFixConfig(
                 path_prefixes=[
-                    "agents/graph/planner/",
-                    "agents/prompts/planner/",
-                    "apps/cli/planner/",
-                    "tests/agents/graph/planner/",
-                    "tests/integration/agents/planner/",
-                    "tests/apps/cli/planner/",
+                    "src/core/",
+                    "src/api/",
+                    "lib/handlers/",
                 ]
             )
         )
@@ -133,27 +116,27 @@ class TestClassifyFix:
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_planner_files_return_restart_plan(self, mock_run):
-        changed = "agents/graph/planner/nodes/create.py\npackages/sdk/core.py\n"
+    async def test_critical_files_return_full_restart(self, mock_run):
+        changed = "src/core/handler.py\nlib/utils/helpers.py\n"
         mock_run.return_value = _make_result(0, changed, "")
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert result["restart_scope"] == "restart_plan"
-        assert len(result["planner_files"]) == 1
-        assert result["planner_files"][0] == "agents/graph/planner/nodes/create.py"
+        assert result["restart_scope"] == "full_restart"
+        assert len(result["critical_files"]) == 1
+        assert result["critical_files"][0] == "src/core/handler.py"
         assert len(result["all_changed_files"]) == 2
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_executor_only_returns_restart_executor(self, mock_run):
-        changed = "agents/graph/executor/nodes/run.py\npackages/sdk/core.py\n"
+    async def test_non_critical_returns_partial_restart(self, mock_run):
+        changed = "src/workers/runner.py\nlib/utils/helpers.py\n"
         mock_run.return_value = _make_result(0, changed, "")
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert result["restart_scope"] == "restart_executor"
-        assert result["planner_files"] == []
+        assert result["restart_scope"] == "partial_restart"
+        assert result["critical_files"] == []
         assert len(result["all_changed_files"]) == 2
 
     @pytest.mark.asyncio
@@ -168,79 +151,80 @@ class TestClassifyFix:
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_planner_test_files_trigger_restart_plan(self, mock_run):
-        changed = "tests/agents/graph/planner/test_nodes.py\n"
+    async def test_critical_path_in_diff_triggers_full_restart(self, mock_run):
+        changed = "src/api/routes.py\n"
         mock_run.return_value = _make_result(0, changed, "")
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert result["restart_scope"] == "restart_plan"
+        assert result["restart_scope"] == "full_restart"
 
 
-class TestResetExecutor:
-    """T6, T7: reset_executor preserves .agent_data and plans, rejects non-playground."""
+class TestResetWorkspace:
+    """T6, T7: reset_workspace preserves configured dirs, rejects non-playground."""
 
     @pytest.fixture(autouse=True)
     def _set_reset_command(self, monkeypatch):
-        """Configure reset_executor with a command for these tests."""
+        """Configure reset_workspace with a command for these tests."""
         from autoskillit import server
 
         cfg = AutomationConfig(
-            reset_executor=ResetExecutorConfig(
-                command=["ai-executor", "reset-status", "--force", "--no-backup"]
+            reset_workspace=ResetWorkspaceConfig(
+                command=["make", "clean"],
+                preserve_dirs={".cache", "reports"},
             )
         )
         monkeypatch.setattr(server, "_config", cfg)
 
     @pytest.mark.asyncio
     async def test_rejects_non_playground_path(self):
-        result = json.loads(await reset_executor(test_dir="/home/talon/projects/helper_agents"))
+        result = json.loads(await reset_workspace(test_dir="/home/user/my-project"))
         assert result["error"] == "Safety: only playground directories allowed"
 
     @pytest.mark.asyncio
     async def test_rejects_nonexistent_directory(self, tmp_path):
         playground_dir = tmp_path / "playground" / "project"
-        result = json.loads(await reset_executor(test_dir=str(playground_dir)))
+        result = json.loads(await reset_workspace(test_dir=str(playground_dir)))
         assert "does not exist" in result["error"]
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_preserves_agent_data_and_plans(self, mock_run, tmp_path):
+    async def test_preserves_configured_dirs(self, mock_run, tmp_path):
         playground_dir = tmp_path / "playground" / "project"
         playground_dir.mkdir(parents=True)
 
-        (playground_dir / ".agent_data").mkdir()
-        (playground_dir / ".agent_data" / "agent_data.db").touch()
-        (playground_dir / "plans").mkdir()
-        (playground_dir / "plans" / "plan.json").touch()
+        (playground_dir / ".cache").mkdir()
+        (playground_dir / ".cache" / "data.db").touch()
+        (playground_dir / "reports").mkdir()
+        (playground_dir / "reports" / "report.json").touch()
         (playground_dir / "output.txt").touch()
         (playground_dir / "temp_dir").mkdir()
         (playground_dir / "temp_dir" / "file.txt").touch()
 
         mock_run.return_value = _make_result(0, "", "")
 
-        result = json.loads(await reset_executor(test_dir=str(playground_dir)))
+        result = json.loads(await reset_workspace(test_dir=str(playground_dir)))
 
         assert result["success"] is True
-        assert ".agent_data" in result["skipped"]
-        assert "plans" in result["skipped"]
+        assert ".cache" in result["skipped"]
+        assert "reports" in result["skipped"]
         assert "output.txt" in result["deleted"]
         assert "temp_dir" in result["deleted"]
 
-        assert (playground_dir / ".agent_data" / "agent_data.db").exists()
-        assert (playground_dir / "plans" / "plan.json").exists()
+        assert (playground_dir / ".cache" / "data.db").exists()
+        assert (playground_dir / "reports" / "report.json").exists()
         assert not (playground_dir / "output.txt").exists()
         assert not (playground_dir / "temp_dir").exists()
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_reset_status_failure(self, mock_run, tmp_path):
+    async def test_reset_command_failure(self, mock_run, tmp_path):
         playground_dir = tmp_path / "playground" / "project"
         playground_dir.mkdir(parents=True)
 
         mock_run.return_value = _make_result(1, "", "command not found")
 
-        result = json.loads(await reset_executor(test_dir=str(playground_dir)))
+        result = json.loads(await reset_workspace(test_dir=str(playground_dir)))
 
         assert "error" in result
         assert result["error"] == "reset command failed"
@@ -254,14 +238,12 @@ class TestResetExecutor:
 
         mock_run.return_value = _make_result(0, "", "")
 
-        await reset_executor(test_dir=str(playground_dir))
+        await reset_workspace(test_dir=str(playground_dir))
 
         call_args = mock_run.call_args[0][0]
         assert call_args == [
-            "ai-executor",
-            "reset-status",
-            "--force",
-            "--no-backup",
+            "make",
+            "clean",
         ]
 
 
@@ -418,19 +400,10 @@ class TestToolRegistration:
             "test_check",
             "reset_test_dir",
             "classify_fix",
-            "reset_executor",
+            "reset_workspace",
             "merge_worktree",
         }
         assert expected == tool_names
-
-    def test_run_planner_not_registered(self):
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp as server
-
-        tools = [c for c in server._local_provider._components.values() if isinstance(c, Tool)]
-        tool_names = {t.name for t in tools}
-        assert "run_planner" not in tool_names
 
 
 class TestResetTestDirUnchanged:
@@ -474,11 +447,11 @@ class TestConfigDefaults:
 
     def test_default_preserve_dirs(self):
         cfg = AutomationConfig()
-        assert cfg.reset_executor.preserve_dirs == {".agent_data", "plans"}
+        assert cfg.reset_workspace.preserve_dirs == set()
 
     def test_default_test_command(self):
         cfg = AutomationConfig()
-        assert cfg.test_check.command == ["task", "test-check"]
+        assert cfg.test_check.command == ["pytest", "-v"]
 
     def test_default_classify_fix_empty_prefixes(self):
         cfg = AutomationConfig()
@@ -773,7 +746,7 @@ class TestGatedToolAccess:
             "merge_worktree",
             "reset_test_dir",
             "classify_fix",
-            "reset_executor",
+            "reset_workspace",
         }
         assert expected == tool_names
 
@@ -785,15 +758,15 @@ class TestGatedToolAccess:
         assert "error" in parsed
         assert "mcp__autoskillit__enable_tools" in parsed["error"]
 
-    def test_all_tools_tagged_bugfix(self):
-        """All 8 tools have the 'bugfix' tag for future visibility control."""
+    def test_all_tools_tagged_automation(self):
+        """All 8 tools have the 'automation' tag for future visibility control."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
 
         tools = [c for c in mcp._local_provider._components.values() if isinstance(c, Tool)]
         for tool in tools:
-            assert "bugfix" in tool.tags, f"{tool.name} missing 'bugfix' tag"
+            assert "automation" in tool.tags, f"{tool.name} missing 'automation' tag"
 
 
 class TestSkillsProvider:
@@ -880,62 +853,62 @@ class TestConfigDrivenBehavior:
         mock_run.return_value = _make_result(0, changed, "")
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert result["restart_scope"] == "restart_plan"
-        assert "src/custom/handler.py" in result["planner_files"]
+        assert result["restart_scope"] == "full_restart"
+        assert "src/custom/handler.py" in result["critical_files"]
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_classify_fix_empty_prefixes_always_executor(self, mock_run, monkeypatch):
-        """S3: Empty prefix list -> always returns restart_executor."""
+    async def test_classify_fix_empty_prefixes_always_partial(self, mock_run, monkeypatch):
+        """S3: Empty prefix list -> always returns partial_restart."""
         from autoskillit import server
 
         cfg = AutomationConfig(classify_fix=ClassifyFixConfig(path_prefixes=[]))
         monkeypatch.setattr(server, "_config", cfg)
 
-        changed = "agents/graph/planner/nodes/create.py\n"
+        changed = "src/core/handler.py\n"
         mock_run.return_value = _make_result(0, changed, "")
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert result["restart_scope"] == "restart_executor"
+        assert result["restart_scope"] == "partial_restart"
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_reset_executor_uses_config_command(self, mock_run, monkeypatch, tmp_path):
-        """S4: reset_executor runs _config.reset_executor.command."""
+    async def test_reset_workspace_uses_config_command(self, mock_run, monkeypatch, tmp_path):
+        """S4: reset_workspace runs _config.reset_workspace.command."""
         from autoskillit import server
 
-        cfg = AutomationConfig(reset_executor=ResetExecutorConfig(command=["make", "reset"]))
+        cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["make", "reset"]))
         monkeypatch.setattr(server, "_config", cfg)
 
         playground_dir = tmp_path / "playground" / "project"
         playground_dir.mkdir(parents=True)
         mock_run.return_value = _make_result(0, "", "")
 
-        await reset_executor(test_dir=str(playground_dir))
+        await reset_workspace(test_dir=str(playground_dir))
         assert mock_run.call_args[0][0] == ["make", "reset"]
 
     @pytest.mark.asyncio
-    async def test_reset_executor_not_configured_returns_error(self, monkeypatch, tmp_path):
+    async def test_reset_workspace_not_configured_returns_error(self, monkeypatch, tmp_path):
         """S5: command=None -> returns not-configured error."""
         from autoskillit import server
 
-        cfg = AutomationConfig(reset_executor=ResetExecutorConfig(command=None))
+        cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
         monkeypatch.setattr(server, "_config", cfg)
 
         playground_dir = tmp_path / "playground" / "project"
         playground_dir.mkdir(parents=True)
-        result = json.loads(await reset_executor(test_dir=str(playground_dir)))
+        result = json.loads(await reset_workspace(test_dir=str(playground_dir)))
 
-        assert result["error"] == "reset_executor not configured for this project"
+        assert result["error"] == "reset_workspace not configured for this project"
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_reset_executor_uses_config_preserve_dirs(self, mock_run, monkeypatch, tmp_path):
-        """S6: Preserves _config.reset_executor.preserve_dirs."""
+    async def test_reset_workspace_uses_config_preserve_dirs(self, mock_run, monkeypatch, tmp_path):
+        """S6: Preserves _config.reset_workspace.preserve_dirs."""
         from autoskillit import server
 
         cfg = AutomationConfig(
-            reset_executor=ResetExecutorConfig(
+            reset_workspace=ResetWorkspaceConfig(
                 command=["true"],
                 preserve_dirs={"keep_me"},
             )
@@ -948,7 +921,7 @@ class TestConfigDrivenBehavior:
         (playground_dir / "delete_me").touch()
         mock_run.return_value = _make_result(0, "", "")
 
-        result = json.loads(await reset_executor(test_dir=str(playground_dir)))
+        result = json.loads(await reset_workspace(test_dir=str(playground_dir)))
 
         assert "keep_me" in result["skipped"]
         assert "delete_me" in result["deleted"]
@@ -1104,19 +1077,19 @@ class TestDeleteDirectoryContents:
         """1c: Preserved dirs are skipped, others deleted."""
         playground = tmp_path / "playground"
         playground.mkdir()
-        (playground / ".agent_data").mkdir()
-        (playground / "plans").mkdir()
+        (playground / ".cache").mkdir()
+        (playground / "reports").mkdir()
         (playground / "output.txt").touch()
         (playground / "temp_dir").mkdir()
 
-        result = _delete_directory_contents(playground, preserve={".agent_data", "plans"})
+        result = _delete_directory_contents(playground, preserve={".cache", "reports"})
 
-        assert ".agent_data" in result.skipped
-        assert "plans" in result.skipped
+        assert ".cache" in result.skipped
+        assert "reports" in result.skipped
         assert "output.txt" in result.deleted
         assert "temp_dir" in result.deleted
-        assert (playground / ".agent_data").exists()
-        assert (playground / "plans").exists()
+        assert (playground / ".cache").exists()
+        assert (playground / "reports").exists()
         assert not (playground / "output.txt").exists()
         assert not (playground / "temp_dir").exists()
 
@@ -1157,13 +1130,13 @@ class TestDeleteDirectoryContents:
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_reset_executor_returns_partial_failure_json(
+    async def test_reset_workspace_returns_partial_failure_json(
         self, mock_run, monkeypatch, tmp_path
     ):
-        """1f: reset_executor returns structured JSON on partial failure."""
+        """1f: reset_workspace returns structured JSON on partial failure."""
         from autoskillit import server
 
-        cfg = AutomationConfig(reset_executor=ResetExecutorConfig(command=["true"]))
+        cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
         monkeypatch.setattr(server, "_config", cfg)
 
         playground = tmp_path / "playground" / "project"
@@ -1174,10 +1147,10 @@ class TestDeleteDirectoryContents:
         mock_result = CleanupResult(
             deleted=["ok_file"],
             failed=[("bad_dir", "PermissionError: denied")],
-            skipped=[".agent_data"],
+            skipped=[".cache"],
         )
         with patch.object(server, "_delete_directory_contents", return_value=mock_result):
-            result = json.loads(await reset_executor(test_dir=str(playground)))
+            result = json.loads(await reset_workspace(test_dir=str(playground)))
 
         assert result["success"] is False
         assert result["failed"] == [{"path": "bad_dir", "error": "PermissionError: denied"}]
@@ -1218,22 +1191,22 @@ class TestSafetyConfigWiring:
         assert result["error"] == "Safety: only playground directories allowed"
 
     @pytest.mark.asyncio
-    async def test_reset_executor_respects_playground_guard_config(self, monkeypatch, tmp_path):
-        """2c: reset_executor respects playground_guard config."""
+    async def test_reset_workspace_respects_playground_guard_config(self, monkeypatch, tmp_path):
+        """2c: reset_workspace respects playground_guard config."""
         from autoskillit import server
 
         cfg = AutomationConfig(
             safety=SafetyConfig(playground_guard=False),
-            reset_executor=ResetExecutorConfig(command=None),
+            reset_workspace=ResetWorkspaceConfig(command=None),
         )
         monkeypatch.setattr(server, "_config", cfg)
 
         non_playground = tmp_path / "my_project"
         non_playground.mkdir()
 
-        result = json.loads(await reset_executor(test_dir=str(non_playground)))
+        result = json.loads(await reset_workspace(test_dir=str(non_playground)))
         # Should pass playground guard but fail on "not configured"
-        assert result["error"] == "reset_executor not configured for this project"
+        assert result["error"] == "reset_workspace not configured for this project"
 
     @pytest.mark.asyncio
     @patch("autoskillit.server._run_subprocess")

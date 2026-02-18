@@ -142,7 +142,7 @@ class TestCLI:
 
         yaml_str = _generate_config_yaml(["pytest", "-v"])
         assert "# classify_fix:" in yaml_str
-        assert "# reset_executor:" in yaml_str
+        assert "# reset_workspace:" in yaml_str
         assert "# implement_gate:" in yaml_str
         assert "# skills:" in yaml_str
 
@@ -155,8 +155,8 @@ class TestCLI:
         assert parsed["test_check"]["command"] == ["task", "test-all"]
         assert parsed["safety"]["playground_guard"] is True
 
-    def test_interactive_init_has_no_planner_questions(self) -> None:
-        """Interactive init does not ask about planner/executor systems."""
+    def test_interactive_init_asks_minimal_questions(self) -> None:
+        """Interactive init only asks about the test command."""
         with patch.object(cli, "_choose", return_value="Python (pytest)"):
             with patch.object(cli, "_prompt", return_value="pytest -v") as mock_prompt:
                 cli._interactive_init()

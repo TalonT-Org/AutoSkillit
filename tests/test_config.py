@@ -9,11 +9,11 @@ class TestDefaultConfig:
     def test_default_config_matches_current_constants(self):
         """C1: AutomationConfig() defaults reproduce current hardcoded values."""
         cfg = AutomationConfig()
-        assert cfg.test_check.command == ["task", "test-check"]
+        assert cfg.test_check.command == ["pytest", "-v"]
         assert cfg.test_check.timeout == 600
         assert cfg.classify_fix.path_prefixes == []
-        assert cfg.reset_executor.command is None
-        assert cfg.reset_executor.preserve_dirs == {".agent_data", "plans"}
+        assert cfg.reset_workspace.command is None
+        assert cfg.reset_workspace.preserve_dirs == set()
         assert cfg.implement_gate.marker == "Dry-walkthrough verified = TRUE"
         assert cfg.implement_gate.skill_names == {
             "/implement-worktree",
@@ -28,8 +28,8 @@ class TestLoadConfig:
     def test_load_config_no_files_returns_defaults(self, tmp_path):
         """C2: No YAML files on disk -> defaults returned."""
         cfg = load_config(tmp_path)
-        assert cfg.test_check.command == ["task", "test-check"]
-        assert cfg.reset_executor.command is None
+        assert cfg.test_check.command == ["pytest", "-v"]
+        assert cfg.reset_workspace.command is None
 
     def test_load_yaml_full_config(self, tmp_path):
         """C3: YAML with all fields -> all fields populated correctly."""
@@ -38,8 +38,8 @@ class TestLoadConfig:
         config_data = {
             "version": 1,
             "test_check": {"command": ["pytest", "-v"], "timeout": 300},
-            "classify_fix": {"path_prefixes": ["src/planner/", "tests/planner/"]},
-            "reset_executor": {
+            "classify_fix": {"path_prefixes": ["src/core/", "tests/core/"]},
+            "reset_workspace": {
                 "command": ["make", "reset"],
                 "preserve_dirs": [".data", "logs"],
             },
@@ -58,9 +58,9 @@ class TestLoadConfig:
 
         assert cfg.test_check.command == ["pytest", "-v"]
         assert cfg.test_check.timeout == 300
-        assert cfg.classify_fix.path_prefixes == ["src/planner/", "tests/planner/"]
-        assert cfg.reset_executor.command == ["make", "reset"]
-        assert cfg.reset_executor.preserve_dirs == {".data", "logs"}
+        assert cfg.classify_fix.path_prefixes == ["src/core/", "tests/core/"]
+        assert cfg.reset_workspace.command == ["make", "reset"]
+        assert cfg.reset_workspace.preserve_dirs == {".data", "logs"}
         assert cfg.implement_gate.marker == "VERIFIED"
         assert cfg.implement_gate.skill_names == {"/my-skill"}
         assert cfg.safety.playground_guard is False
@@ -77,7 +77,7 @@ class TestLoadConfig:
 
         assert cfg.test_check.command == ["pytest", "-v"]
         assert cfg.test_check.timeout == 600  # default preserved
-        assert cfg.reset_executor.command is None  # default preserved
+        assert cfg.reset_workspace.command is None  # default preserved
         assert cfg.implement_gate.marker == "Dry-walkthrough verified = TRUE"  # default preserved
 
     def test_project_overrides_user_config(self, tmp_path, monkeypatch):
@@ -123,7 +123,7 @@ class TestLoadConfig:
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text("")
         cfg = load_config(tmp_path)
-        assert cfg.test_check.command == ["task", "test-check"]
+        assert cfg.test_check.command == ["pytest", "-v"]
 
     def test_unknown_keys_ignored(self, tmp_path):
         """C8: Extra keys in YAML -> no crash, known keys loaded."""
@@ -142,9 +142,9 @@ class TestLoadConfig:
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_data = {
-            "reset_executor": {"preserve_dirs": ["cache", "state", "cache"]},  # dupe
+            "reset_workspace": {"preserve_dirs": ["cache", "state", "cache"]},  # dupe
         }
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)
-        assert cfg.reset_executor.preserve_dirs == {"cache", "state"}
-        assert isinstance(cfg.reset_executor.preserve_dirs, set)
+        assert cfg.reset_workspace.preserve_dirs == {"cache", "state"}
+        assert isinstance(cfg.reset_workspace.preserve_dirs, set)

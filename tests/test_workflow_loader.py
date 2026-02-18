@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from automation_mcp.workflow_loader import (
+from autoskillit.workflow_loader import (
     builtin_workflows_dir,
     list_workflows,
     load_workflow,
@@ -114,7 +114,7 @@ class TestWorkflowLoader:
 
     # WF8
     def test_project_workflow_overrides_builtin(self, tmp_path: Path) -> None:
-        wf_dir = tmp_path / ".automation-mcp" / "workflows"
+        wf_dir = tmp_path / ".autoskillit" / "workflows"
         wf_dir.mkdir(parents=True)
         override = {**VALID_WORKFLOW, "name": "bugfix-loop", "description": "Custom override"}
         _write_yaml(wf_dir / "bugfix-loop.yaml", override)

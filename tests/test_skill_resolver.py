@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from automation_mcp.config import AutomationConfig, SkillsConfig
-from automation_mcp.skill_resolver import SkillResolver, build_skill_roots, bundled_skills_dir
+from autoskillit.config import AutomationConfig, SkillsConfig
+from autoskillit.skill_resolver import SkillResolver, build_skill_roots, bundled_skills_dir
 
 BUNDLED_SKILLS = [
     "assess-and-merge",
@@ -66,7 +66,7 @@ class TestSkillResolver:
         _create_skill(user_skills, "investigate")
 
         config = AutomationConfig()
-        with patch("automation_mcp.skill_resolver.Path.home", return_value=user_home):
+        with patch("autoskillit.skill_resolver.Path.home", return_value=user_home):
             resolver = SkillResolver(project, config)
             info = resolver.resolve("investigate")
         assert info is not None
@@ -83,7 +83,7 @@ class TestSkillResolver:
         _create_skill(user_skills, "investigate")
 
         config = AutomationConfig()
-        with patch("automation_mcp.skill_resolver.Path.home", return_value=user_home):
+        with patch("autoskillit.skill_resolver.Path.home", return_value=user_home):
             resolver = SkillResolver(project, config)
             info = resolver.resolve("investigate")
         assert info is not None

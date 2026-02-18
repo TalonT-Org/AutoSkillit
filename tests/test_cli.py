@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from automation_mcp import cli
+from autoskillit import cli
 
 
 class TestCLI:
@@ -19,14 +19,14 @@ class TestCLI:
     def test_default_command_starts_server(self) -> None:
         mock_mcp = MagicMock()
         with patch.object(cli, "serve", wraps=cli.serve):
-            with patch("automation_mcp.server.mcp", mock_mcp):
+            with patch("autoskillit.server.mcp", mock_mcp):
                 cli.serve()
         mock_mcp.run.assert_called_once()
 
     # CL2
     def test_serve_command_starts_server(self) -> None:
         mock_mcp = MagicMock()
-        with patch("automation_mcp.server.mcp", mock_mcp):
+        with patch("autoskillit.server.mcp", mock_mcp):
             cli.serve_explicit()
         mock_mcp.run.assert_called_once()
 
@@ -37,7 +37,7 @@ class TestCLI:
         monkeypatch.chdir(tmp_path)
         with patch.object(cli, "_quick_init", return_value=["pytest", "-v"]):
             cli.init(quick=True, force=False)
-        assert (tmp_path / ".automation-mcp").is_dir()
+        assert (tmp_path / ".autoskillit").is_dir()
 
     # CL4
     def test_init_writes_config_yaml(
@@ -46,7 +46,7 @@ class TestCLI:
         monkeypatch.chdir(tmp_path)
         with patch.object(cli, "_quick_init", return_value=["pytest", "-v"]):
             cli.init(quick=True, force=False)
-        config_path = tmp_path / ".automation-mcp" / "config.yaml"
+        config_path = tmp_path / ".autoskillit" / "config.yaml"
         assert config_path.is_file()
         data = yaml.safe_load(config_path.read_text())
         assert data["test_check"]["command"] == ["pytest", "-v"]
@@ -57,7 +57,7 @@ class TestCLI:
         monkeypatch.chdir(tmp_path)
         with patch.object(cli, "_prompt", return_value="npm test"):
             cli.init(quick=True, force=False)
-        config_path = tmp_path / ".automation-mcp" / "config.yaml"
+        config_path = tmp_path / ".autoskillit" / "config.yaml"
         data = yaml.safe_load(config_path.read_text())
         assert data["test_check"]["command"] == ["npm", "test"]
 
@@ -66,7 +66,7 @@ class TestCLI:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        config_dir = tmp_path / ".automation-mcp"
+        config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_path = config_dir / "config.yaml"
         config_path.write_text("original: true\n")
@@ -91,7 +91,7 @@ class TestCLI:
     # CL8
     def test_unknown_command_exits_nonzero(self) -> None:
         with pytest.raises(SystemExit) as exc_info:
-            with patch("sys.argv", ["automation-mcp", "nonexistent"]):
+            with patch("sys.argv", ["autoskillit", "nonexistent"]):
                 cli.main()
         assert exc_info.value.code != 0
 
@@ -100,10 +100,10 @@ class TestCLI:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        wf_dir = tmp_path / ".automation-mcp" / "workflows"
+        wf_dir = tmp_path / ".autoskillit" / "workflows"
         wf_dir.mkdir(parents=True)
 
-        from automation_mcp.workflow_loader import builtin_workflows_dir
+        from autoskillit.workflow_loader import builtin_workflows_dir
 
         builtin_dir = builtin_workflows_dir()
         for f in builtin_dir.glob("*.yaml"):
@@ -118,7 +118,7 @@ class TestCLI:
 
     def test_init_force_overwrites(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
-        config_dir = tmp_path / ".automation-mcp"
+        config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_path = config_dir / "config.yaml"
         config_path.write_text("old: true\n")
@@ -131,14 +131,14 @@ class TestCLI:
 
     def test_generate_config_yaml_contains_test_command(self) -> None:
         """_generate_config_yaml embeds the test command in active YAML."""
-        from automation_mcp.cli import _generate_config_yaml
+        from autoskillit.cli import _generate_config_yaml
 
         yaml_str = _generate_config_yaml(["pytest", "-v"])
         assert 'command: ["pytest", "-v"]' in yaml_str
 
     def test_generate_config_yaml_has_commented_advanced_sections(self) -> None:
         """Generated YAML includes commented-out advanced config sections."""
-        from automation_mcp.cli import _generate_config_yaml
+        from autoskillit.cli import _generate_config_yaml
 
         yaml_str = _generate_config_yaml(["pytest", "-v"])
         assert "# classify_fix:" in yaml_str
@@ -148,7 +148,7 @@ class TestCLI:
 
     def test_generate_config_yaml_uncommented_parts_are_valid(self) -> None:
         """The uncommented portion of generated YAML parses as valid config."""
-        from automation_mcp.cli import _generate_config_yaml
+        from autoskillit.cli import _generate_config_yaml
 
         yaml_str = _generate_config_yaml(["task", "test-all"])
         parsed = yaml.safe_load(yaml_str)
@@ -171,7 +171,7 @@ class TestCLI:
         with patch.object(cli, "_prompt", return_value="pytest -v"):
             cli.init(quick=True)
 
-        config_path = tmp_path / ".automation-mcp" / "config.yaml"
+        config_path = tmp_path / ".autoskillit" / "config.yaml"
         content = config_path.read_text()
         assert "# classify_fix:" in content
         assert "test_check:" in content
@@ -219,7 +219,7 @@ class TestCLI:
         mock_prompt.assert_not_called()
         mock_choose.assert_not_called()
 
-        config_path = tmp_path / ".automation-mcp" / "config.yaml"
+        config_path = tmp_path / ".autoskillit" / "config.yaml"
         data = yaml.safe_load(config_path.read_text())
         assert data["test_check"]["command"] == ["pytest", "-v"]
 
@@ -228,7 +228,7 @@ class TestCLI:
     ) -> None:
         """--test-command combined with --force overwrites existing config."""
         monkeypatch.chdir(tmp_path)
-        config_dir = tmp_path / ".automation-mcp"
+        config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text("old: true\n")
 

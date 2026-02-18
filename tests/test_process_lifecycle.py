@@ -16,7 +16,7 @@ import time
 import psutil
 import pytest
 
-from automation_mcp.process_lifecycle import (
+from autoskillit.process_lifecycle import (
     kill_process_tree,
     run_managed_async,
     run_managed_sync,

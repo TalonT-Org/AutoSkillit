@@ -2,7 +2,7 @@
 
 import yaml
 
-from automation_mcp.config import AutomationConfig, load_config
+from autoskillit.config import AutomationConfig, load_config
 
 
 class TestDefaultConfig:
@@ -33,7 +33,7 @@ class TestLoadConfig:
 
     def test_load_yaml_full_config(self, tmp_path):
         """C3: YAML with all fields -> all fields populated correctly."""
-        config_dir = tmp_path / ".automation-mcp"
+        config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_data = {
             "version": 1,
@@ -69,7 +69,7 @@ class TestLoadConfig:
 
     def test_partial_yaml_preserves_defaults(self, tmp_path):
         """C4: YAML with only test_check.command -> other fields keep defaults."""
-        config_dir = tmp_path / ".automation-mcp"
+        config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_data = {"test_check": {"command": ["pytest", "-v"]}}
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
@@ -84,7 +84,7 @@ class TestLoadConfig:
         """C5: Both project and user YAML exist -> project values win."""
         # Set up user config
         user_home = tmp_path / "home"
-        user_config_dir = user_home / ".automation-mcp"
+        user_config_dir = user_home / ".autoskillit"
         user_config_dir.mkdir(parents=True)
         user_data = {"test_check": {"command": ["make", "test"], "timeout": 120}}
         (user_config_dir / "config.yaml").write_text(yaml.dump(user_data))
@@ -92,7 +92,7 @@ class TestLoadConfig:
 
         # Set up project config
         project_dir = tmp_path / "project"
-        project_config_dir = project_dir / ".automation-mcp"
+        project_config_dir = project_dir / ".autoskillit"
         project_config_dir.mkdir(parents=True)
         project_data = {"test_check": {"command": ["pytest", "-v"]}}
         (project_config_dir / "config.yaml").write_text(yaml.dump(project_data))
@@ -104,7 +104,7 @@ class TestLoadConfig:
     def test_user_overrides_defaults(self, tmp_path, monkeypatch):
         """C6: Only user YAML exists -> user values override defaults."""
         user_home = tmp_path / "home"
-        user_config_dir = user_home / ".automation-mcp"
+        user_config_dir = user_home / ".autoskillit"
         user_config_dir.mkdir(parents=True)
         user_data = {"test_check": {"command": ["make", "test"]}}
         (user_config_dir / "config.yaml").write_text(yaml.dump(user_data))
@@ -119,7 +119,7 @@ class TestLoadConfig:
 
     def test_empty_yaml_returns_defaults(self, tmp_path):
         """C7: Empty YAML file -> defaults returned (no crash)."""
-        config_dir = tmp_path / ".automation-mcp"
+        config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text("")
         cfg = load_config(tmp_path)
@@ -127,7 +127,7 @@ class TestLoadConfig:
 
     def test_unknown_keys_ignored(self, tmp_path):
         """C8: Extra keys in YAML -> no crash, known keys loaded."""
-        config_dir = tmp_path / ".automation-mcp"
+        config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_data = {
             "test_check": {"command": ["pytest"], "unknown_field": "ignored"},
@@ -139,7 +139,7 @@ class TestLoadConfig:
 
     def test_set_fields_roundtrip(self, tmp_path):
         """C9: preserve_dirs loaded from YAML list -> becomes set[str]."""
-        config_dir = tmp_path / ".automation-mcp"
+        config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_data = {
             "reset_executor": {"preserve_dirs": ["cache", "state", "cache"]},  # dupe

@@ -93,9 +93,9 @@ Tells `classify_fix` which file paths are critical. When a worktree diff touches
 ```yaml
 classify_fix:
   path_prefixes:
-    - "agents/graph/planner/"
-    - "agents/prompts/planner/"
-    - "src/core/"
+    - "src/schema/"
+    - "db/migrations/"
+    - "src/core/config/"
 ```
 
 Default: `[]` (empty — all changes return `partial_restart`). Only configure this if you use the `bugfix-loop` workflow or call `classify_fix` directly.
@@ -106,8 +106,8 @@ Configures the `reset_workspace` tool, which runs a reset command and then clear
 
 ```yaml
 reset_workspace:
-  command: ["ai-executor", "reset-status", "--force"]  # null = tool disabled
-  preserve_dirs: [".agent_data", "plans"]               # dirs to keep during cleanup
+  command: ["task", "clean"]                # null = tool disabled
+  preserve_dirs: ["data", ".cache"]         # dirs to keep during cleanup
 ```
 
 Default: `command: null` (disabled), `preserve_dirs: []` (empty). The tool returns an error if called without a configured command.
@@ -129,21 +129,21 @@ These defaults are usually fine. Override per-project if needed.
 
 ### Full Example
 
-A project using Taskfile for tests, with planner paths as critical and a custom workspace reset:
+A Python web service with schema/migration critical paths and Taskfile-based workspace reset:
 
 ```yaml
 test_check:
-  command: ["task", "test-all"]
+  command: ["pytest", "-v", "--tb=short"]
 
 classify_fix:
   path_prefixes:
-    - "agents/graph/planner/"
-    - "agents/prompts/planner/"
-    - "tests/agents/graph/planner/"
+    - "src/schema/"
+    - "db/migrations/"
+    - "tests/integration/"
 
 reset_workspace:
-  command: ["ai-executor", "reset-status", "--force", "--no-backup"]
-  preserve_dirs: [".agent_data", "plans"]
+  command: ["task", "clean"]
+  preserve_dirs: ["data", ".cache"]
 
 skills:
   resolution_order: ["project", "user", "bundled"]

@@ -252,9 +252,9 @@ safety:
 # classify_fix:
 #   path_prefixes: []
 #
-# reset_executor:
+# reset_workspace:
 #   command: null
-#   preserve_dirs: [".agent_data", "plans"]
+#   preserve_dirs: []
 #
 # implement_gate:
 #   marker: "Dry-walkthrough verified = TRUE"

@@ -167,12 +167,12 @@ def _delete_directory_contents(
     return result
 
 
-@mcp.tool(tags={"bugfix"})
+@mcp.tool(tags={"automation"})
 async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
     """Run an arbitrary shell command in the specified directory.
 
     Args:
-        cmd: The full command to run (e.g. "planner create -t 'my task' --debug").
+        cmd: The full command to run (e.g. "make build").
         cwd: Working directory for the command.
         timeout: Max seconds before killing the process (default 600).
     """
@@ -194,7 +194,7 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
     )
 
 
-@mcp.tool(tags={"bugfix"})
+@mcp.tool(tags={"automation"})
 async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
     """Run a Claude Code headless session with a skill command (no turn limit).
 
@@ -243,13 +243,12 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
 _MAX_API_CALLS = 200
 
 
-@mcp.tool(tags={"bugfix"})
+@mcp.tool(tags={"automation"})
 async def run_skill_retry(skill_command: str, cwd: str) -> str:
     """Run a Claude Code headless session with an API call limit.
 
-    Use this for /implement-worktree and /retry-worktree where context exhaustion
-    is expected. The hit_api_limit field indicates whether to continue with
-    /retry-worktree.
+    Use this for long-running skill sessions where context exhaustion is expected.
+    The hit_api_limit field indicates whether to continue with a retry invocation.
 
     Args:
         skill_command: The full prompt including skill invocation.
@@ -333,9 +332,9 @@ def _check_test_passed(returncode: int, stdout: str) -> bool:
     return True
 
 
-@mcp.tool(tags={"bugfix"})
+@mcp.tool(tags={"automation"})
 async def test_check(worktree_path: str) -> str:
-    """Run task test-check in a worktree directory. Returns unambiguous PASS/FAIL.
+    """Run the configured test command in a worktree directory. Returns unambiguous PASS/FAIL.
 
     Args:
         worktree_path: Path to the git worktree to run tests in.
@@ -354,11 +353,11 @@ async def test_check(worktree_path: str) -> str:
     return json.dumps({"passed": passed})
 
 
-@mcp.tool(tags={"bugfix"})
+@mcp.tool(tags={"automation"})
 async def merge_worktree(worktree_path: str, base_branch: str) -> str:
     """Merge a worktree branch into the base branch after verifying tests pass.
 
-    Programmatic gate: runs task test-check in the worktree before allowing merge.
+    Programmatic gate: runs the configured test command in the worktree before allowing merge.
     If tests fail, returns error without merging.
 
     Args:
@@ -510,7 +509,7 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
 PROJECT_MARKERS = [".claude", "CLAUDE.md", ".git", "pyproject.toml", "package.json"]
 
 
-@mcp.tool(tags={"bugfix"})
+@mcp.tool(tags={"automation"})
 async def reset_test_dir(test_dir: str, force: bool = False) -> str:
     """Remove all files from a test directory. Only works on playground directories.
 
@@ -556,14 +555,14 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
     )
 
 
-@mcp.tool(tags={"bugfix"})
+@mcp.tool(tags={"automation"})
 async def classify_fix(worktree_path: str, base_branch: str) -> str:
     """Analyze a worktree's changes to determine if the fix requires restarting
-    from plan creation or just re-running the executor.
+    from plan creation or just re-running the implementation.
 
     Inspects git diff between the worktree HEAD and the base branch merge-base.
-    If any changed files are in planner code paths, returns restart_plan.
-    Otherwise returns restart_executor.
+    If any changed files are in critical paths, returns full_restart.
+    Otherwise returns partial_restart.
 
     Args:
         worktree_path: Path to the git worktree with the implemented fix.
@@ -585,33 +584,32 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
     changed_files = [f.strip() for f in stdout.splitlines() if f.strip()]
 
     prefixes = _config.classify_fix.path_prefixes
-    planner_files = [f for f in changed_files if any(f.startswith(prefix) for prefix in prefixes)]
+    critical_files = [f for f in changed_files if any(f.startswith(prefix) for prefix in prefixes)]
 
-    if planner_files:
+    if critical_files:
         return json.dumps(
             {
-                "restart_scope": "restart_plan",
-                "reason": f"Fix touches planner code: {', '.join(planner_files[:5])}",
-                "planner_files": planner_files,
+                "restart_scope": "full_restart",
+                "reason": f"Fix touches critical paths: {', '.join(critical_files[:5])}",
+                "critical_files": critical_files,
                 "all_changed_files": changed_files,
             }
         )
 
     return json.dumps(
         {
-            "restart_scope": "restart_executor",
-            "reason": "Fix does not touch planner code — executor re-run is sufficient",
-            "planner_files": [],
+            "restart_scope": "partial_restart",
+            "reason": "Fix does not touch critical paths — partial restart is sufficient",
+            "critical_files": [],
             "all_changed_files": changed_files,
         }
     )
 
 
-@mcp.tool(tags={"bugfix"})
-async def reset_executor(test_dir: str) -> str:
-    """Reset executor status and clean the test directory while preserving
-    the plan and agent data. Runs ai-executor reset-status then deletes
-    everything except .agent_data/ and plans/.
+@mcp.tool(tags={"automation"})
+async def reset_workspace(test_dir: str) -> str:
+    """Runs a configured reset command then deletes directory contents,
+    preserving configured directories.
 
     Args:
         test_dir: Path to the test project directory. Must contain 'playground' in path.
@@ -619,7 +617,7 @@ async def reset_executor(test_dir: str) -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     resolved = os.path.realpath(test_dir)
-    _log(f"reset_executor: resolved={resolved}")
+    _log(f"reset_workspace: resolved={resolved}")
 
     if _config.safety.playground_guard and "playground" not in resolved:
         return json.dumps({"error": "Safety: only playground directories allowed"})
@@ -627,11 +625,11 @@ async def reset_executor(test_dir: str) -> str:
     if not os.path.isdir(resolved):
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
-    if _config.reset_executor.command is None:
-        return json.dumps({"error": "reset_executor not configured for this project"})
+    if _config.reset_workspace.command is None:
+        return json.dumps({"error": "reset_workspace not configured for this project"})
 
     returncode, stdout, stderr = await _run_subprocess(
-        _config.reset_executor.command,
+        _config.reset_workspace.command,
         cwd=resolved,
         timeout=60,
     )
@@ -647,7 +645,7 @@ async def reset_executor(test_dir: str) -> str:
 
     cleanup = _delete_directory_contents(
         Path(resolved),
-        preserve=set(_config.reset_executor.preserve_dirs),
+        preserve=set(_config.reset_workspace.preserve_dirs),
     )
     return json.dumps(cleanup.to_dict())
 

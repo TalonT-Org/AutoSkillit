@@ -74,32 +74,88 @@ This uses MCP prompts (user-only, model cannot invoke) and survives `--dangerous
 
 Layered YAML resolution: defaults < `~/.autoskillit/config.yaml` (user) < `.autoskillit/config.yaml` (project). Partial configs are fine — unset fields keep defaults.
 
+### Required: Test Command
+
+The only setting most projects need. Used by `test_check` and `merge_worktree`'s test gate.
+
 ```yaml
 test_check:
-  command: ["pytest", "-v"]
-  timeout: 600
+  command: ["task", "test-all"]   # your project's test command as a list
+  timeout: 600                    # seconds before killing (default: 600)
+```
 
+`autoskillit init` sets this for you. The default is `["pytest", "-v"]`.
+
+### Optional: classify_fix
+
+Tells `classify_fix` which file paths are critical. When a worktree diff touches files matching these prefixes, the tool returns `full_restart` (re-plan needed). Otherwise it returns `partial_restart` (just re-run implementation).
+
+```yaml
 classify_fix:
-  path_prefixes: ["src/core/"]
+  path_prefixes:
+    - "agents/graph/planner/"
+    - "agents/prompts/planner/"
+    - "src/core/"
+```
 
+Default: `[]` (empty — all changes return `partial_restart`). Only configure this if you use the `bugfix-loop` workflow or call `classify_fix` directly.
+
+### Optional: reset_workspace
+
+Configures the `reset_workspace` tool, which runs a reset command and then clears directory contents (preserving specified directories). Useful for test automation loops that need to reset a scratch directory between iterations.
+
+```yaml
 reset_workspace:
-  command: ["make", "clean"]
-  preserve_dirs: [".cache", "reports"]
+  command: ["ai-executor", "reset-status", "--force"]  # null = tool disabled
+  preserve_dirs: [".agent_data", "plans"]               # dirs to keep during cleanup
+```
 
+Default: `command: null` (disabled), `preserve_dirs: []` (empty). The tool returns an error if called without a configured command.
+
+### Optional: Safety and Gates
+
+```yaml
 implement_gate:
-  marker: "Dry-walkthrough verified = TRUE"
-  skill_names: ["/implement-worktree", "/implement-worktree-no-merge"]
+  marker: "Dry-walkthrough verified = TRUE"                        # required first line in plan files
+  skill_names: ["/implement-worktree", "/implement-worktree-no-merge"]  # skills subject to gate
 
 safety:
-  playground_guard: true
-  require_dry_walkthrough: true
-  test_gate_on_merge: true
+  playground_guard: true          # reset_test_dir/reset_workspace require "playground" in path
+  require_dry_walkthrough: true   # plans must be dry-walked before implementation
+  test_gate_on_merge: true        # merge_worktree runs test suite before merging
+```
+
+These defaults are usually fine. Override per-project if needed.
+
+### Full Example
+
+A project using Taskfile for tests, with planner paths as critical and a custom workspace reset:
+
+```yaml
+test_check:
+  command: ["task", "test-all"]
+
+classify_fix:
+  path_prefixes:
+    - "agents/graph/planner/"
+    - "agents/prompts/planner/"
+    - "tests/agents/graph/planner/"
+
+reset_workspace:
+  command: ["ai-executor", "reset-status", "--force", "--no-backup"]
+  preserve_dirs: [".agent_data", "plans"]
 
 skills:
   resolution_order: ["project", "user", "bundled"]
 ```
 
-View resolved config: `autoskillit config show`
+### Resolution Order
+
+Defaults < user (`~/.autoskillit/config.yaml`) < project (`.autoskillit/config.yaml`). Project overrides user, user overrides defaults. View resolved config:
+
+```bash
+autoskillit config show
+```
 
 ## Skills
 
@@ -118,7 +174,7 @@ View resolved config: `autoskillit config show`
 | `assess-and-merge` | Fix test failures and merge |
 | `mermaid` | Create mermaid diagrams |
 
-### Resolution Order
+### Skill Resolution Order
 
 Skills are resolved by name using a first-match-wins hierarchy. The default order:
 

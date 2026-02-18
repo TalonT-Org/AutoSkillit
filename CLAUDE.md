@@ -1,10 +1,10 @@
-# **Automation MCP: Development Guidelines**
+# **AutoSkillit: Development Guidelines**
 
 Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A standalone MCP server that orchestrates automated bug-fix loops using Claude Code headless sessions. It provides 8 tools (run_cmd, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_executor) gated behind MCP prompts for user-only activation, driving worktree-based fix-and-verify cycles.
+A standalone MCP server that orchestrates automated skill-driven workflows using Claude Code headless sessions. It provides 8 tools (run_cmd, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_executor) gated behind MCP prompts for user-only activation, driving worktree-based fix-and-verify cycles.
 
 ## **2. General Principles**
 
@@ -56,9 +56,9 @@ Configured hooks: ruff format (auto-fix), ruff check (auto-fix), mypy type check
 ## **6. Architecture**
 
 ```
-src/automation_mcp/
+src/autoskillit/
 ├── __init__.py              # Package version
-├── __main__.py              # python -m automation_mcp entry point (delegates to cli)
+├── __main__.py              # python -m autoskillit entry point (delegates to cli)
 ├── cli.py                   # CLI: serve, init, config show
 ├── config.py                # Dataclass config + YAML loading (layered resolution)
 ├── server.py                # FastMCP server with 8 gated MCP tools + 2 prompts
@@ -75,8 +75,8 @@ temp/                        # Temporary/working files (gitignored)
 
 ### **Key Components**
 
-  * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.automation-mcp/config.yaml`) → project (`.automation-mcp/config.yaml`). No config file = current hardcoded defaults.
-  * **cli.py**: Minimal CLI entry point. `automation-mcp` (no args) starts the MCP server. Also provides `init` (write template config) and `config show` (dump resolved config).
+  * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
+  * **cli.py**: Minimal CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (write template config) and `config show` (dump resolved config).
   * **server.py**: FastMCP server. All tools are gated by default (`_tools_enabled` flag) and require user activation via MCP prompts. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/implement-worktree` without a verified plan.
   * **process_lifecycle.py**: Self-contained subprocess utilities (no internal deps, only stdlib + psutil). Handles process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts.
 
@@ -92,20 +92,20 @@ temp/                        # Temporary/working files (gitignored)
 | `reset_test_dir` | Clear test directory (playground safety guard) |
 | `classify_fix` | Analyze worktree diff to determine restart scope (plan vs executor) |
 | `reset_executor` | Reset executor status preserving .agent_data and plans |
-| `enable_tools` (prompt) | User-only activation — type `/mcp__bugfix-loop__enable_tools` |
-| `disable_tools` (prompt) | User-only deactivation — type `/mcp__bugfix-loop__disable_tools` |
+| `enable_tools` (prompt) | User-only activation — type `/mcp__autoskillit__enable_tools` |
+| `disable_tools` (prompt) | User-only deactivation — type `/mcp__autoskillit__disable_tools` |
 
 ### **Tool Activation**
 
 All tools are gated by default. At the start of a session, the user must type
-`/mcp__bugfix-loop__enable_tools` to activate. This uses MCP prompts (user-only,
+`/mcp__autoskillit__enable_tools` to activate. This uses MCP prompts (user-only,
 model cannot invoke) and survives `--dangerously-skip-permissions`.
 
 ### **Configuration**
 
-All tool behavior is configurable via `.automation-mcp/config.yaml`. No config file = hardcoded defaults (backward compatible). Run `automation-mcp init` to generate a template.
+All tool behavior is configurable via `.autoskillit/config.yaml`. No config file = hardcoded defaults (backward compatible). Run `autoskillit init` to generate a template.
 
-**Resolution order:** defaults → `~/.automation-mcp/config.yaml` (user) → `.automation-mcp/config.yaml` (project). Project overrides user, user overrides defaults. Partial configs are fine — unset fields keep their defaults.
+**Resolution order:** defaults → `~/.autoskillit/config.yaml` (user) → `.autoskillit/config.yaml` (project). Project overrides user, user overrides defaults. Partial configs are fine — unset fields keep their defaults.
 
 **Available settings:**
 

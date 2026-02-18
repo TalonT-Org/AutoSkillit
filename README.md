@@ -1,4 +1,4 @@
-# automation-mcp
+# AutoSkillit
 
 MCP server that orchestrates automated workflows with Claude Code headless sessions. Provides 8 tools for running commands, executing skills, testing, merging worktrees, and classifying fixes — all gated behind user-only MCP prompts.
 
@@ -19,40 +19,40 @@ Requires Python 3.11+.
 ### 1. Install and register with Claude Code
 
 ```bash
-pip install -e /path/to/automation-mcp
-claude mcp add bugfix-loop -- automation-mcp
+pip install -e /path/to/autoskillit
+claude mcp add autoskillit -- autoskillit
 ```
 
 The `claude mcp add` command registers the server so Claude Code can discover it. Scope options:
 
 ```bash
 # Default (local) — just you, just this project
-claude mcp add bugfix-loop -- automation-mcp
+claude mcp add autoskillit -- autoskillit
 
 # Project — writes .mcp.json, shared with team via git
-claude mcp add --scope project bugfix-loop -- automation-mcp
+claude mcp add --scope project autoskillit -- autoskillit
 
 # User — available across all your projects
-claude mcp add --scope user bugfix-loop -- automation-mcp
+claude mcp add --scope user autoskillit -- autoskillit
 ```
 
 ### 2. Configure for your project
 
 ```bash
 cd your-project
-automation-mcp init                              # interactive wizard
-automation-mcp init --quick                      # just test command + defaults
-automation-mcp init --test-command "pytest -v"   # fully non-interactive
+autoskillit init                              # interactive wizard
+autoskillit init --quick                      # just test command + defaults
+autoskillit init --test-command "pytest -v"   # fully non-interactive
 ```
 
-This creates `.automation-mcp/config.yaml` with project-specific settings. Use `--force` to overwrite an existing config.
+This creates `.autoskillit/config.yaml` with project-specific settings. Use `--force` to overwrite an existing config.
 
 ### 3. Enable tools in session
 
 All tools are disabled by default. Activate them by typing:
 
 ```
-/mcp__bugfix-loop__enable_tools
+/mcp__autoskillit__enable_tools
 ```
 
 This uses MCP prompts (user-only, model cannot invoke) and survives `--dangerously-skip-permissions`.
@@ -72,7 +72,7 @@ This uses MCP prompts (user-only, model cannot invoke) and survives `--dangerous
 
 ## Configuration
 
-Layered YAML resolution: defaults < `~/.automation-mcp/config.yaml` (user) < `.automation-mcp/config.yaml` (project). Partial configs are fine — unset fields keep defaults.
+Layered YAML resolution: defaults < `~/.autoskillit/config.yaml` (user) < `.autoskillit/config.yaml` (project). Partial configs are fine — unset fields keep defaults.
 
 ```yaml
 test_check:
@@ -99,7 +99,7 @@ skills:
   resolution_order: ["project", "user", "bundled"]
 ```
 
-View resolved config: `automation-mcp config show`
+View resolved config: `autoskillit config show`
 
 ## Skills
 
@@ -124,24 +124,24 @@ Skills are resolved by name using a first-match-wins hierarchy. The default orde
 
 1. **project** — `.claude/skills/<name>/SKILL.md` in the current repo
 2. **user** — `~/.claude/skills/<name>/SKILL.md` in your home directory
-3. **bundled** — skills shipped inside the automation-mcp package
+3. **bundled** — skills shipped inside the autoskillit package
 
 If the same skill name exists at multiple levels, the highest-priority source wins. For example, a project-level `rectify` skill shadows the bundled one.
 
-The order is configurable in `.automation-mcp/config.yaml`:
+The order is configurable in `.autoskillit/config.yaml`:
 
 ```yaml
 skills:
   resolution_order: ["project", "user", "bundled"]  # default
 ```
 
-Use `automation-mcp skills list` to see which source won for each skill.
+Use `autoskillit skills list` to see which source won for each skill.
 
 Skills are also exposed as `skill://` MCP resources for protocol-level discovery and reading.
 
 ```bash
-automation-mcp skills list              # show all with sources
-automation-mcp skills install investigate  # copy bundled to project
+autoskillit skills list              # show all with sources
+autoskillit skills install investigate  # copy bundled to project
 ```
 
 ## Workflows
@@ -157,14 +157,14 @@ Declarative YAML workflow definitions guide the orchestrating agent through mult
 | `audit-and-fix` | Audit > investigate > plan > implement |
 
 ```bash
-automation-mcp workflows list          # show available workflows
-automation-mcp workflows show bugfix-loop  # print YAML
-automation-mcp update                  # refresh built-ins, preserve customizations
+autoskillit workflows list          # show available workflows
+autoskillit workflows show bugfix-loop  # print YAML
+autoskillit update                  # refresh built-ins, preserve customizations
 ```
 
 Agents access workflows via MCP resource: `workflow://bugfix-loop`
 
-Project workflows in `.automation-mcp/workflows/` override built-ins.
+Project workflows in `.autoskillit/workflows/` override built-ins.
 
 ## Safety
 
@@ -187,7 +187,7 @@ pre-commit run --all-files       # format, lint, typecheck
 ## Project Structure
 
 ```
-src/automation_mcp/
+src/autoskillit/
   cli.py               Cyclopts CLI (serve, init, config, skills, workflows, update)
   config.py            Dataclass config + layered YAML loading
   server.py            FastMCP server with 8 tools + 2 prompts + resources

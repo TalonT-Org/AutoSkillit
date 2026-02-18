@@ -371,7 +371,7 @@ Flag duplicates (same name in different agents).
 ### Step 0: Initialize Code Index
 
 ```
-mcp__code-index__set_project_path(path="/home/talon/projects/automation-mcp")
+mcp__code-index__set_project_path(path="/home/talon/projects/generic_automation_mcp")
 ```
 
 ### Step 1: Launch Parallel Subagents

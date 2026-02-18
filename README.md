@@ -222,6 +222,51 @@ Agents access workflows via MCP resource: `workflow://bugfix-loop`
 
 Project workflows in `.autoskillit/workflows/` override built-ins.
 
+## Skill Scripts
+
+A skill script is pseudocode that gives an orchestrating agent a complete loop to follow — which AutoSkillit tools and skills to call, in what order, with decision branches at each step. You paste a skill script into a Claude Code session (with AutoSkillit tools enabled), and the agent executes it step by step.
+
+Skill scripts use a two-directory model:
+- **`project_dir`** — the project being worked on
+- **`work_dir`** — where Claude Code sessions execute (can be `project_dir` itself, or a separate workspace)
+
+When `work_dir` differs from `project_dir`, skill calls use `add_dir=project_dir` so the agent can see the target project's files.
+
+### Example: Implementation Pipeline
+
+```
+SETUP:
+  - project_dir = /path/to/your-project
+  - work_dir = /path/to/workspace       # can be same as project_dir
+  - base_branch = main
+  - task = "description of what to implement"
+
+PIPELINE:
+1. run_skill("/make-plan {task}", cwd=work_dir, add_dir=project_dir)
+2. run_skill("/dry-walkthrough {plan_path}", cwd=work_dir)
+3. run_skill_retry("/implement-worktree-no-merge {plan_path}", cwd=work_dir)
+   - If context exhausted: run_skill_retry("/retry-worktree {plan_path} {worktree_path}", cwd=work_dir).
+     Repeat up to 3x, then ESCALATE.
+4. test_check(worktree_path)
+   - PASS: merge_worktree(worktree_path, base_branch). Done.
+   - FAIL: run_skill("/assess-and-merge {worktree_path} {plan_path} {base_branch}", cwd=work_dir)
+     - Still failing after 3 attempts: ESCALATE
+
+ESCALATE: Stop and report. Human intervention needed.
+```
+
+**Step breakdown:**
+
+| Step | Tool | What happens |
+|------|------|-------------|
+| 1 | `run_skill` | Creates an implementation plan via deep codebase exploration |
+| 2 | `run_skill` | Traces through the plan without implementing, catches gaps |
+| 3 | `run_skill_retry` | Implements the plan in an isolated git worktree |
+| 4 | `test_check` | Runs the project's test suite against the worktree |
+| 5 | `merge_worktree` | Merges the worktree branch after the test gate passes |
+
+`/setup-project` generates a skill script tailored to your project. Run `/setup-project /path/to/your-project` to get started.
+
 ## Safety
 
 - **Tool gating**: All tools disabled by default, require user activation via MCP prompt

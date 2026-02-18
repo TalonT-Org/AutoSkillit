@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A standalone MCP server that orchestrates automated skill-driven workflows using Claude Code headless sessions. It provides 8 tools (run_cmd, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_executor) gated behind MCP prompts for user-only activation, driving worktree-based fix-and-verify cycles.
+A standalone MCP server that orchestrates automated skill-driven workflows using Claude Code headless sessions. It provides 8 tools (run_cmd, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace) gated behind MCP prompts for user-only activation, driving worktree-based automation cycles.
 
 ## **2. General Principles**
 
@@ -90,8 +90,8 @@ temp/                        # Temporary/working files (gitignored)
 | `test_check` | Run test suite in a worktree, returns PASS/FAIL |
 | `merge_worktree` | Merge worktree branch after test gate passes |
 | `reset_test_dir` | Clear test directory (playground safety guard) |
-| `classify_fix` | Analyze worktree diff to determine restart scope (plan vs executor) |
-| `reset_executor` | Reset executor status preserving .agent_data and plans |
+| `classify_fix` | Analyze worktree diff to determine restart scope (full vs partial) |
+| `reset_workspace` | Reset workspace, preserving configured directories |
 | `enable_tools` (prompt) | User-only activation — type `/mcp__autoskillit__enable_tools` |
 | `disable_tools` (prompt) | User-only deactivation — type `/mcp__autoskillit__disable_tools` |
 
@@ -111,11 +111,11 @@ All tool behavior is configurable via `.autoskillit/config.yaml`. No config file
 
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
-| `test_check` | `command` | `["task", "test-check"]` | Test command for `test_check` and `merge_worktree` |
+| `test_check` | `command` | `["pytest", "-v"]` | Test command for `test_check` and `merge_worktree` |
 | `test_check` | `timeout` | `600` | Test command timeout in seconds |
-| `classify_fix` | `path_prefixes` | `[]` | File path prefixes that trigger `restart_plan` |
-| `reset_executor` | `command` | `null` | Reset command (`null` = not configured) |
-| `reset_executor` | `preserve_dirs` | `[".agent_data", "plans"]` | Directories preserved during reset |
+| `classify_fix` | `path_prefixes` | `[]` | File path prefixes that trigger `full_restart` |
+| `reset_workspace` | `command` | `null` | Reset command (`null` = not configured) |
+| `reset_workspace` | `preserve_dirs` | `[]` | Directories preserved during reset |
 | `implement_gate` | `marker` | `"Dry-walkthrough verified = TRUE"` | Required first line in plan files |
 | `implement_gate` | `skill_names` | `["/implement-worktree", "/implement-worktree-no-merge"]` | Skills subject to dry-walkthrough gate |
 | `safety` | `playground_guard` | `true` | Require "playground" in paths for destructive ops |

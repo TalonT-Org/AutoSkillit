@@ -67,8 +67,8 @@ This uses MCP prompts (user-only, model cannot invoke) and survives `--dangerous
 | `test_check` | Run test suite, returns unambiguous PASS/FAIL |
 | `merge_worktree` | Merge worktree branch after programmatic test gate |
 | `reset_test_dir` | Clear test directory (playground safety guard) |
-| `classify_fix` | Analyze diff to determine restart scope (plan vs executor) |
-| `reset_executor` | Reset executor state, preserving plans and agent data |
+| `classify_fix` | Analyze diff to determine restart scope (full vs partial) |
+| `reset_workspace` | Reset workspace directory, preserving configured paths |
 
 ## Configuration
 
@@ -80,11 +80,11 @@ test_check:
   timeout: 600
 
 classify_fix:
-  path_prefixes: ["src/planner/"]
+  path_prefixes: ["src/core/"]
 
-reset_executor:
-  command: ["ai-executor", "reset-status"]
-  preserve_dirs: [".agent_data", "plans"]
+reset_workspace:
+  command: ["make", "clean"]
+  preserve_dirs: [".cache", "reports"]
 
 implement_gate:
   marker: "Dry-walkthrough verified = TRUE"

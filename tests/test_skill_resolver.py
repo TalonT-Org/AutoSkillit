@@ -19,6 +19,7 @@ BUNDLED_SKILLS = [
     "rectify",
     "retry-worktree",
     "review-approach",
+    "setup-project",
 ]
 
 
@@ -134,11 +135,15 @@ class TestSkillResolver:
         assert "empty" not in names
 
     # SK8
-    def test_bundled_skills_all_present(self) -> None:
+    def test_bundled_skills_match_filesystem(self) -> None:
+        """BUNDLED_SKILLS list must exactly match what's on the filesystem."""
         bd = bundled_skills_dir()
-        for name in BUNDLED_SKILLS:
-            skill_md = bd / name / "SKILL.md"
-            assert skill_md.is_file(), f"Missing bundled skill: {name}"
+        actual = sorted(d.name for d in bd.iterdir() if d.is_dir() and (d / "SKILL.md").is_file())
+        assert actual == sorted(BUNDLED_SKILLS), (
+            f"BUNDLED_SKILLS out of sync.\n"
+            f"  On disk: {actual}\n"
+            f"  In test: {sorted(BUNDLED_SKILLS)}"
+        )
 
     # SK9
     def test_resolution_order_configurable(self, tmp_path: Path) -> None:

@@ -406,6 +406,32 @@ class TestToolRegistration:
         assert expected == tool_names
 
 
+class TestToolSchemas:
+    """Regression guard: tool descriptions must not contain legacy terminology."""
+
+    FORBIDDEN_TERMS = {
+        "executor",
+        "planner",
+        "bugfix-loop",
+        "automation-mcp",
+        "ai-executor",
+    }
+
+    def test_tool_descriptions_contain_no_legacy_terms(self):
+        """No registered tool should reference old package terminology."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = [c for c in server._local_provider._components.values() if isinstance(c, Tool)]
+        for tool in tools:
+            desc = (tool.description or "").lower()
+            for term in self.FORBIDDEN_TERMS:
+                assert term not in desc, (
+                    f"Tool '{tool.name}' description contains legacy term '{term}'"
+                )
+
+
 class TestResetTestDirUnchanged:
     """Verify existing reset_test_dir safety guards still work."""
 

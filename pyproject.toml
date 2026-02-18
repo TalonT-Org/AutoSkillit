@@ -31,6 +31,7 @@ packages = ["src/autoskillit"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+empty_parameter_set_mark = "fail_at_collect"
 
 [tool.ruff]
 target-version = "py311"

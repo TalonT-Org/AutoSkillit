@@ -39,7 +39,13 @@ def serve_explicit():
 
 
 @app.command
-def init(*, quick: bool = False, force: bool = False, test_command: str | None = None):
+def init(
+    *,
+    quick: bool = False,
+    force: bool = False,
+    test_command: str | None = None,
+    install_skills: bool = True,
+):
     """Initialize autoskillit for a project.
 
     Parameters
@@ -50,6 +56,8 @@ def init(*, quick: bool = False, force: bool = False, test_command: str | None =
         Overwrite existing config without prompting.
     test_command
         Test command string for fully non-interactive init (e.g. "pytest -v").
+    install_skills
+        Install all bundled skills to .claude/skills/. Use --no-install-skills to skip.
     """
     project_dir = Path.cwd()
     config_dir = project_dir / ".autoskillit"
@@ -59,17 +67,19 @@ def init(*, quick: bool = False, force: bool = False, test_command: str | None =
     if config_path.exists() and not force:
         print(f"Config already exists: {config_path}")
         print("Use --force to overwrite.")
-        return
-
-    if test_command is not None:
-        cmd_parts = test_command.split()
-    elif quick:
-        cmd_parts = _quick_init()
     else:
-        cmd_parts = _interactive_init()
+        if test_command is not None:
+            cmd_parts = test_command.split()
+        elif quick:
+            cmd_parts = _quick_init()
+        else:
+            cmd_parts = _interactive_init()
 
-    config_path.write_text(_generate_config_yaml(cmd_parts))
-    print(f"Config written to: {config_path}")
+        config_path.write_text(_generate_config_yaml(cmd_parts))
+        print(f"Config written to: {config_path}")
+
+    if install_skills:
+        skills_install_all()
 
 
 @app.command
@@ -105,6 +115,70 @@ def update():
         print("No built-in workflows found.")
 
 
+@app.command
+def doctor(*, output_json: bool = False):
+    """Check project setup for common issues.
+
+    Parameters
+    ----------
+    output_json
+        Output results as JSON instead of human-readable text.
+    """
+    warnings: list[str] = []
+
+    # Check 1: Stale MCP servers — dead binaries or nonexistent paths
+    claude_json = Path.home() / ".claude.json"
+    if claude_json.is_file():
+        data = json.loads(claude_json.read_text())
+        servers = data.get("mcpServers", {})
+        for name, entry in servers.items():
+            if name == "autoskillit":
+                continue
+            cmd = entry.get("command", "")
+            if not cmd:
+                continue
+            cmd_path = Path(cmd)
+            if cmd_path.is_absolute() and not cmd_path.exists():
+                warnings.append(
+                    f"WARNING: MCP server '{name}' has dead command path: {cmd}. "
+                    f"Remove with: claude mcp remove --scope user {name}"
+                )
+            elif not cmd_path.is_absolute() and shutil.which(cmd) is None:
+                warnings.append(
+                    f"WARNING: MCP server '{name}' command not found: {cmd}. "
+                    f"Remove with: claude mcp remove --scope user {name}"
+                )
+
+    # Check 2: Skills installed vs bundled
+    from autoskillit.skill_resolver import bundled_skills_dir
+
+    bd = bundled_skills_dir()
+    project_skills = Path.cwd() / ".claude" / "skills"
+    missing = []
+    for skill_dir in sorted(bd.iterdir()):
+        if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
+            if not (project_skills / skill_dir.name / "SKILL.md").is_file():
+                missing.append(skill_dir.name)
+    if missing:
+        warnings.append(
+            f"WARNING: {len(missing)} bundled skills not installed as slash commands: "
+            f"{', '.join(missing)}. Run: autoskillit skills install --all"
+        )
+
+    # Check 3: Config exists
+    if not (Path.cwd() / ".autoskillit" / "config.yaml").is_file():
+        warnings.append("WARNING: No project config found. Run: autoskillit init")
+
+    # Output
+    if output_json:
+        print(json.dumps({"warnings": warnings}, indent=2))
+    elif warnings:
+        for w in warnings:
+            print(w)
+    else:
+        print("All checks passed.")
+
+
 @config_app.command(name="show")
 def config_show():
     """Show resolved configuration as JSON."""
@@ -137,8 +211,22 @@ def skills_list():
 
 
 @skills_app.command(name="install")
-def skills_install(name: str):
-    """Install a bundled skill to the project's .claude/skills/ directory."""
+def skills_install(name: str = "", *, all: bool = False):
+    """Install a bundled skill to the project's .claude/skills/ directory.
+
+    Parameters
+    ----------
+    name
+        Name of the bundled skill to install.
+    all
+        Install all bundled skills.
+    """
+    if all:
+        return skills_install_all()
+    if not name:
+        print("Provide a skill name or use --all.", file=sys.stderr)
+        sys.exit(1)
+
     from autoskillit.skill_resolver import bundled_skills_dir
 
     src = bundled_skills_dir() / name / "SKILL.md"
@@ -151,6 +239,63 @@ def skills_install(name: str):
     dest = dest_dir / "SKILL.md"
     shutil.copy2(src, dest)
     print(f"Installed '{name}' to {dest}")
+
+
+def skills_install_all() -> None:
+    """Install all bundled skills to .claude/skills/."""
+    from autoskillit.skill_resolver import bundled_skills_dir
+
+    bd = bundled_skills_dir()
+    target_base = Path.cwd() / ".claude" / "skills"
+    installed = []
+    for skill_dir in sorted(bd.iterdir()):
+        if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
+            dest_dir = target_base / skill_dir.name
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(skill_dir / "SKILL.md", dest_dir / "SKILL.md")
+            installed.append(skill_dir.name)
+    print(f"Installed {len(installed)} skills: {', '.join(installed)}")
+
+
+@skills_app.command(name="update")
+def skills_update(*, force: bool = False):
+    """Sync bundled skills to project .claude/skills/, preserving customized ones.
+
+    Parameters
+    ----------
+    force
+        Overwrite customized skills with bundled versions.
+    """
+    from autoskillit.skill_resolver import bundled_skills_dir
+
+    bd = bundled_skills_dir()
+    project_skills = Path.cwd() / ".claude" / "skills"
+    updated = []
+    skipped = []
+
+    for skill_dir in sorted(bd.iterdir()):
+        if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").is_file():
+            continue
+        src = skill_dir / "SKILL.md"
+        dest_dir = project_skills / skill_dir.name
+        dest = dest_dir / "SKILL.md"
+
+        if not dest.exists():
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+            updated.append(skill_dir.name)
+        elif force or dest.read_text() == src.read_text():
+            shutil.copy2(src, dest)
+            updated.append(skill_dir.name)
+        else:
+            skipped.append(skill_dir.name)
+
+    if updated:
+        print(f"Updated: {', '.join(updated)}")
+    if skipped:
+        print(f"Skipped (customized): {', '.join(skipped)}")
+    if not updated and not skipped:
+        print("No bundled skills found.")
 
 
 @workflows_app.command(name="list")

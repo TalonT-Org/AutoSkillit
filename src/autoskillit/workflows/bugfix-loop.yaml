@@ -75,7 +75,7 @@ steps:
     with:
       worktree_path: ${{ inputs.test_dir }}
       base_branch: ${{ inputs.base_branch }}
-    note: If restart_plan, go back to investigate. If restart_executor, go back to implement.
+    note: If full_restart, go back to investigate. If partial_restart, go back to implement.
     on_success: merge
     on_failure: escalate
 

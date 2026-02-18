@@ -97,10 +97,10 @@ Each subagent MUST structure its response as:
 
 1. **Directory-level comparison** — produce a side-by-side table:
 
-| Directory/File | Planner Has? | Executor Has? | Symmetric? | Notes |
+| Directory/File | Module A Has? | Module B Has? | Symmetric? | Notes |
 |---------------|-------------|--------------|------------|-------|
-| `nodes/` | Yes | Yes | Yes | — |
-| `checkpointer.py` | Yes (single file) | Yes (directory/) | NO | Naming: PlannerCheckpointer vs HybridCheckpointer |
+| `handlers/` | Yes | Yes | Yes | — |
+| `config.py` | Yes (single file) | Yes (directory/) | NO | Naming: BaseConfig vs ConfigManager |
 
 List ALL directories and key files, not just divergent ones.
 
@@ -111,14 +111,14 @@ List ALL directories and key files, not just divergent ones.
 
 3. **Node implementation comparison** — for each node pattern:
 
-| Pattern | Planner Implementation | Executor Implementation | Consistent? |
+| Pattern | Module A Implementation | Module B Implementation | Consistent? |
 |---------|----------------------|------------------------|-------------|
-| Worker dispatch | Send API via prep node | Send API via prep node | Yes |
-| State wrapper | StatePropagatingWrapper | ... | ... |
+| Request dispatch | Send via handler chain | Send via handler chain | Yes |
+| State wrapper | StateManager | ... | ... |
 
 4. **Prompt template comparison:**
 
-| Template Type | Planner Path | Executor Path | Shared Partials | Divergence |
+| Template Type | Module A Path | Module B Path | Shared Partials | Divergence |
 |--------------|-------------|--------------|----------------|-----------|
 
 ---
@@ -131,7 +131,7 @@ List ALL directories and key files, not just divergent ones.
 
 1. **Adapter field coverage** — for each graph state field, verify adapter mapping:
 
-| State Field | In PersistenceAdapter? | Database Column | Bidirectional? |
+| State Field | In Adapter? | Database Column | Bidirectional? |
 |------------|----------------------|----------------|---------------|
 
 2. **Factory method coverage** — for each table model, verify factory access:
@@ -144,9 +144,9 @@ List ALL directories and key files, not just divergent ones.
 | Interface | Contract Test File | Tests Count | Full Surface Covered? |
 |-----------|-------------------|-------------|---------------------|
 
-4. **Type boundary audit** — find every place SQLModel instances cross boundaries:
+4. **Type boundary audit** — find every place ORM model instances cross boundaries:
 
-| Location (file:line) | SQLModel Type | Destination | Violation? |
+| Location (file:line) | ORM Model Type | Destination | Violation? |
 |---------------------|--------------|------------|-----------|
 
 ---
@@ -161,17 +161,17 @@ List ALL directories and key files, not just divergent ones.
 
 | Feature | File Path | Role in Feature | Package |
 |---------|----------|----------------|---------|
-| Checkpointing | `agents/graph/planner/checkpointer.py` | Planner checkpointing | agents |
-| Checkpointing | `agents/graph/executor/checkpointer/checkpointer.py` | Executor checkpointing | agents |
-| Checkpointing | `packages/sdk/graph/checkpointer.py` | Base abstraction | sdk |
+| Caching | `src/module_a/cache.py` | Module A caching | core |
+| Caching | `src/module_b/cache/manager.py` | Module B caching | core |
+| Caching | `lib/shared/cache_base.py` | Base abstraction | shared |
 
-Audit at minimum: checkpointing, work package execution, plan compilation, canvas sync, test framework detection.
+Audit the major cross-cutting features in the project.
 
 2. **SDK utility audit** — for each SDK module, count its importers by package:
 
-| SDK Module | Total Importers | Planner-Only | Executor-Only | Shared | Verdict |
+| Shared Module | Total Importers | Module A Only | Module B Only | Shared | Verdict |
 |-----------|----------------|-------------|--------------|--------|---------|
-| `sdk/execution/executor_scope.py` | 8 | 0 | 8 | 0 | Misplaced — executor-only |
+| `lib/shared/scope.py` | 8 | 0 | 8 | 0 | Misplaced — module B only |
 
 3. **Import fan-in** — list every module with 10+ importers:
 
@@ -191,7 +191,7 @@ Audit at minimum: checkpointing, work package execution, plan compilation, canva
 | Suffix | Count | Examples | Exceptions |
 |--------|-------|---------|-----------|
 | `*Repository` | 27 | PlanRepository, PhaseRepository | — |
-| `*Checkpointer` | 2 | PlannerCheckpointer, HybridCheckpointer | Mixed naming strategy |
+| `*Manager` | 2 | CacheManager, StateManager | Mixed naming strategy |
 
 2. **Method verb audit** — for each verb used in repository/node methods:
 
@@ -222,8 +222,8 @@ Audit at minimum: checkpointing, work package execution, plan compilation, canva
 
 | Source Module | Test File | Exists? | Test Count |
 |--------------|-----------|---------|-----------|
-| `agents/graph/executor/nodes/execute/worker.py` | `tests/agents/graph/executor/nodes/test_worker.py` | Yes | 12 |
-| `packages/sdk/code_intelligence/lens.py` | — | NO | 0 |
+| `src/module_a/handler.py` | `tests/module_a/test_handler.py` | Yes | 12 |
+| `lib/shared/utils.py` | — | NO | 0 |
 
 List ALL gaps — every source file without a corresponding test file.
 
@@ -294,7 +294,7 @@ List EVERY missing field.
 
 3. **Shared partial audit:**
 
-| Partial File | Used by Planner? | Used by Executor? | Truly Shared? |
+| Partial File | Used by Module A? | Used by Module B? | Truly Shared? |
 |-------------|-----------------|------------------|--------------|
 
 4. **Inline prompt detection** — nodes that bypass the template system:
@@ -312,10 +312,10 @@ List EVERY missing field.
 
 1. **Symbol accessibility audit** — for key public symbols, check import depth:
 
-| Symbol | Shallow Import (`from packages.X import Y`) | Deep Import Required? | Consumer Count |
+| Symbol | Shallow Import (`from lib.X import Y`) | Deep Import Required? | Consumer Count |
 |--------|---------------------------------------------|---------------------|---------------|
-| `Plan` | Yes | No | 45 |
-| `ExecutorGraphState` | No | `from packages.schema.state.executor_state import ...` | 23 |
+| `Config` | Yes | No | 45 |
+| `AppState` | No | `from lib.schema.state.app_state import ...` | 23 |
 
 List EVERY symbol that requires deep imports but has 5+ consumers.
 
@@ -351,7 +351,7 @@ Flag duplicates (same name in different agents).
 
 2. **Error state field comparison:**
 
-| Error Field | In Planner State? | In Executor State? | Same Semantics? |
+| Error Field | In Module A State? | In Module B State? | Same Semantics? |
 |------------|-------------------|-------------------|----------------|
 
 3. **Broad exception handler census** — list EVERY `except Exception` or `except BaseException`:
@@ -371,7 +371,7 @@ Flag duplicates (same name in different agents).
 ### Step 0: Initialize Code Index
 
 ```
-mcp__code-index__set_project_path(path="/home/talon/projects/generic_automation_mcp")
+mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
 ```
 
 ### Step 1: Launch Parallel Subagents
@@ -465,7 +465,7 @@ Each dimension section in the report MUST follow this structure:
 ## Exclusions
 
 Do NOT flag:
-- Generated files (Alembic migrations, PowerSync DDL)
+- Generated files (migrations, schema DDL)
 - Third-party vendored code
 - Test fixtures and cached LLM responses
 - Temporary/debug files in `temp/`

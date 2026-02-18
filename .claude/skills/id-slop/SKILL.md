@@ -80,8 +80,8 @@ Comments explaining what was removed without explaining what replaced it.
 
 **Example slop:**
 ```python
-# NOTE: test-and-log removed in Phase 4. Use simple 'test' task.
-# baseline_manager removed - now handled by executor
+# NOTE: csv_export removed in Phase 4. Use simple 'export' task.
+# auth_manager removed - now handled by middleware
 ```
 
 ### Category 4: Deprecation Notices (MEDIUM PRIORITY)

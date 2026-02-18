@@ -46,7 +46,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Use the provided worktree path (do NOT create a new one)
 - Start by assessing what has already been implemented
 - Continue from where the previous session left off
-- Run tests with `pytest -v` from the worktree directory
+- Run the project's test suite from the worktree directory
 - Rebase onto base branch before completion (ready for squash-and-merge)
 
 ## Workflow
@@ -61,7 +61,7 @@ If the worktree path does not exist:
 - Abort with error: "Worktree path does not exist. Use /implement-worktree to create a new worktree."
 
 If the `.venv` is missing or broken:
-- Re-create: `cd {WORKTREE_PATH} && uv venv .venv && uv pip install -e '.[dev]' --python .venv/bin/python`
+- Re-create the development environment. Example for Python: `cd {WORKTREE_PATH} && uv venv .venv && uv pip install -e '.[dev]' --python .venv/bin/python`
 
 ### Step 1: Assess Current State
 
@@ -109,6 +109,9 @@ Where practical, delegate test updates to subagents to keep main conversation co
 
 ### Step 4: Final Verification
 
+Run the project's code quality checks and test suite from the worktree.
+
+**Example for Python projects:**
 ```bash
 [[ -d "{WORKTREE_PATH}/.venv" ]] || { echo "ERROR: .venv missing in worktree"; exit 1; }
 cd {WORKTREE_PATH} && pre-commit run --all-files
@@ -145,7 +148,7 @@ Failure to do this leaves code-index pointing at a deleted worktree path, breaki
 
 ## Error Handling
 
-- **Worktree venv missing** — re-create: `uv venv .venv && uv pip install -e '.[dev]' --python .venv/bin/python`
+- **Worktree venv missing** — re-create the development environment. Example for Python: `uv venv .venv && uv pip install -e '.[dev]' --python .venv/bin/python`
 - **Phase fails** — report which phase and why, offer to fix/retry, skip (if optional), or abort and clean up
 - **Tests fail** — implementation is NOT complete. Fix the issue. If truly unfixable, report to user and ask for guidance. Do NOT proceed or mark as complete.
 - **Rebase conflicts** — resolve keeping implementation intent intact, re-run full test suite after

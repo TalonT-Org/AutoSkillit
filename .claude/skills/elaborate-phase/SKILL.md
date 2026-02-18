@@ -49,7 +49,7 @@ Elaborate a single phase from a high-level migration plan into a complete, self-
 All plans live in a dedicated directory:
 ```
 {plan_directory}/
-├── {master_plan_name}.md    # Unique name (e.g., cornering_refactor_plan.md)
+├── {master_plan_name}.md    # Unique name (e.g., feature_migration_plan.md)
 ├── Phase0.md                # Elaborated phase 0 (if exists)
 ├── Phase1.md                # Elaborated phase 1 (if exists)
 ├── Phase2.md                # etc.
@@ -317,7 +317,7 @@ Where `{N}` is replaced with the phase number (0, 1, 2, etc.).
 Example directory after elaborating phases 0 and 1:
 ```
 /path/to/plans/
-├── cornering_refactor_plan.md   # Master plan
+├── feature_migration_plan.md   # Master plan
 ├── Phase0.md                     # Elaborated phase 0
 └── Phase1.md                     # Elaborated phase 1
 ```
@@ -339,10 +339,10 @@ Example directory after elaborating phases 0 and 1:
 
 ### First Phase Example
 
-**User:** "Here's the plan directory: /path/to/plans/ with master plan cornering_refactor_plan.md. Elaborate phase 0."
+**User:** "Here's the plan directory: /path/to/plans/ with master plan feature_migration_plan.md. Elaborate phase 0."
 
 **Process:**
-1. Read master plan from `/path/to/plans/cornering_refactor_plan.md`
+1. Read master plan from `/path/to/plans/feature_migration_plan.md`
 2. No existing `Phase#.md` files (first phase)
 3. Launch subagents to assess current codebase state
 4. Write elaborated plan to `/path/to/plans/Phase0.md`
@@ -355,7 +355,7 @@ Example directory after elaborating phases 0 and 1:
 **User:** "Same directory. Phase 0 is implemented. Elaborate phase 1."
 
 **Process:**
-1. Read master plan from `/path/to/plans/cornering_refactor_plan.md`
+1. Read master plan from `/path/to/plans/feature_migration_plan.md`
 2. Launch subagents to assess:
    - Current state (post Phase 0 implementation)
    - Files touched by Phase 1

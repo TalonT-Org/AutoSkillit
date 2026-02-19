@@ -161,7 +161,7 @@ class TestClassifyFix:
 
 
 class TestResetWorkspace:
-    """T6, T7: reset_workspace preserves configured dirs, rejects non-playground."""
+    """T6, T7: reset_workspace preserves configured dirs, requires marker."""
 
     @pytest.fixture(autouse=True)
     def _set_reset_command(self, monkeypatch):
@@ -177,33 +177,38 @@ class TestResetWorkspace:
         monkeypatch.setattr(server, "_config", cfg)
 
     @pytest.mark.asyncio
-    async def test_rejects_non_playground_path(self):
-        result = json.loads(await reset_workspace(test_dir="/home/user/my-project"))
-        assert result["error"] == "Safety: only playground directories allowed"
+    async def test_rejects_without_marker(self, tmp_path):
+        """reset_workspace rejects directory without marker."""
+        workspace = tmp_path / "unmarked"
+        workspace.mkdir()
+        result = json.loads(await reset_workspace(test_dir=str(workspace)))
+        assert "error" in result
+        assert "marker" in result["error"].lower()
 
     @pytest.mark.asyncio
     async def test_rejects_nonexistent_directory(self, tmp_path):
-        playground_dir = tmp_path / "playground" / "project"
-        result = json.loads(await reset_workspace(test_dir=str(playground_dir)))
+        workspace = tmp_path / "workspace"
+        result = json.loads(await reset_workspace(test_dir=str(workspace)))
         assert "does not exist" in result["error"]
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
     async def test_preserves_configured_dirs(self, mock_run, tmp_path):
-        playground_dir = tmp_path / "playground" / "project"
-        playground_dir.mkdir(parents=True)
+        workspace = tmp_path / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / ".autoskillit-workspace").write_text("# marker\n")
 
-        (playground_dir / ".cache").mkdir()
-        (playground_dir / ".cache" / "data.db").touch()
-        (playground_dir / "reports").mkdir()
-        (playground_dir / "reports" / "report.json").touch()
-        (playground_dir / "output.txt").touch()
-        (playground_dir / "temp_dir").mkdir()
-        (playground_dir / "temp_dir" / "file.txt").touch()
+        (workspace / ".cache").mkdir()
+        (workspace / ".cache" / "data.db").touch()
+        (workspace / "reports").mkdir()
+        (workspace / "reports" / "report.json").touch()
+        (workspace / "output.txt").touch()
+        (workspace / "temp_dir").mkdir()
+        (workspace / "temp_dir" / "file.txt").touch()
 
         mock_run.return_value = _make_result(0, "", "")
 
-        result = json.loads(await reset_workspace(test_dir=str(playground_dir)))
+        result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
         assert result["success"] is True
         assert ".cache" in result["skipped"]
@@ -211,20 +216,21 @@ class TestResetWorkspace:
         assert "output.txt" in result["deleted"]
         assert "temp_dir" in result["deleted"]
 
-        assert (playground_dir / ".cache" / "data.db").exists()
-        assert (playground_dir / "reports" / "report.json").exists()
-        assert not (playground_dir / "output.txt").exists()
-        assert not (playground_dir / "temp_dir").exists()
+        assert (workspace / ".cache" / "data.db").exists()
+        assert (workspace / "reports" / "report.json").exists()
+        assert not (workspace / "output.txt").exists()
+        assert not (workspace / "temp_dir").exists()
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
     async def test_reset_command_failure(self, mock_run, tmp_path):
-        playground_dir = tmp_path / "playground" / "project"
-        playground_dir.mkdir(parents=True)
+        workspace = tmp_path / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / ".autoskillit-workspace").write_text("# marker\n")
 
         mock_run.return_value = _make_result(1, "", "command not found")
 
-        result = json.loads(await reset_workspace(test_dir=str(playground_dir)))
+        result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
         assert "error" in result
         assert result["error"] == "reset command failed"
@@ -233,12 +239,13 @@ class TestResetWorkspace:
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
     async def test_runs_correct_reset_command(self, mock_run, tmp_path):
-        playground_dir = tmp_path / "playground" / "project"
-        playground_dir.mkdir(parents=True)
+        workspace = tmp_path / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / ".autoskillit-workspace").write_text("# marker\n")
 
         mock_run.return_value = _make_result(0, "", "")
 
-        await reset_workspace(test_dir=str(playground_dir))
+        await reset_workspace(test_dir=str(workspace))
 
         call_args = mock_run.call_args[0][0]
         assert call_args == [
@@ -432,40 +439,104 @@ class TestToolSchemas:
                 )
 
 
-class TestResetTestDirUnchanged:
-    """Verify existing reset_test_dir safety guards still work."""
+class TestResetGuard:
+    """Marker-file-based reset guard replaces playground_guard."""
 
     @pytest.mark.asyncio
-    async def test_rejects_non_playground(self):
-        result = json.loads(await reset_test_dir(test_dir="/home/user/project"))
-        assert result["error"] == "Safety: only playground directories allowed"
+    async def test_reset_test_dir_refuses_without_marker(self, tmp_path):
+        """Directory without marker file is refused."""
+        target = tmp_path / "workspace"
+        target.mkdir()
+        (target / "some_file.txt").touch()
+        result = json.loads(await reset_test_dir(test_dir=str(target)))
+        assert "error" in result
+        assert "marker" in result["error"].lower() or "reset guard" in result["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_reset_test_dir_allows_with_marker(self, tmp_path):
+        """Directory with marker file is cleared."""
+        target = tmp_path / "workspace"
+        target.mkdir()
+        (target / ".autoskillit-workspace").write_text("# autoskillit workspace\n")
+        (target / "some_file.txt").touch()
+        result = json.loads(await reset_test_dir(test_dir=str(target)))
+        assert result["success"] is True
+        assert not (target / "some_file.txt").exists()
+
+    @pytest.mark.asyncio
+    async def test_reset_test_dir_preserves_marker(self, tmp_path):
+        """Reset preserves the marker file so the workspace is reusable."""
+        target = tmp_path / "workspace"
+        target.mkdir()
+        (target / ".autoskillit-workspace").write_text("# autoskillit workspace\n")
+        (target / "data.txt").touch()
+        result = json.loads(await reset_test_dir(test_dir=str(target)))
+        assert result["success"] is True
+        assert (target / ".autoskillit-workspace").is_file()
+
+    @pytest.mark.asyncio
+    async def test_reset_workspace_refuses_without_marker(self, monkeypatch, tmp_path):
+        """reset_workspace also checks for marker."""
+        from autoskillit import server
+
+        cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
+        monkeypatch.setattr(server, "_config", cfg)
+        target = tmp_path / "workspace"
+        target.mkdir()
+        result = json.loads(await reset_workspace(test_dir=str(target)))
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_reset_workspace_allows_with_marker(self, mock_run, monkeypatch, tmp_path):
+        """reset_workspace clears when marker is present."""
+        from autoskillit import server
+
+        cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
+        monkeypatch.setattr(server, "_config", cfg)
+        target = tmp_path / "workspace"
+        target.mkdir()
+        (target / ".autoskillit-workspace").write_text("# autoskillit workspace\n")
+        (target / "file.txt").touch()
+        mock_run.return_value = _make_result(0, "", "")
+        result = json.loads(await reset_workspace(test_dir=str(target)))
+        assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_custom_marker_name(self, monkeypatch, tmp_path):
+        """Config can override marker file name."""
+        from autoskillit import server
+
+        cfg = AutomationConfig(safety=SafetyConfig(reset_guard_marker=".my-workspace"))
+        monkeypatch.setattr(server, "_config", cfg)
+        target = tmp_path / "workspace"
+        target.mkdir()
+        (target / ".my-workspace").touch()
+        (target / "file.txt").touch()
+        result = json.loads(await reset_test_dir(test_dir=str(target)))
+        assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_force_overrides_marker_check(self, tmp_path):
+        """force=True on reset_test_dir bypasses marker requirement."""
+        target = tmp_path / "workspace"
+        target.mkdir()
+        (target / "file.txt").touch()
+        # No marker, but force=True
+        result = json.loads(await reset_test_dir(test_dir=str(target), force=True))
+        assert result["success"] is True
 
     @pytest.mark.asyncio
     async def test_rejects_nonexistent(self, tmp_path):
-        result = json.loads(await reset_test_dir(test_dir=str(tmp_path / "playground" / "nope")))
+        result = json.loads(await reset_test_dir(test_dir=str(tmp_path / "nope")))
         assert "does not exist" in result["error"]
 
-    @pytest.mark.asyncio
-    async def test_rejects_project_markers_without_force(self, tmp_path):
-        playground_dir = tmp_path / "playground" / "project"
-        playground_dir.mkdir(parents=True)
-        (playground_dir / ".git").mkdir()
-
-        result = json.loads(await reset_test_dir(test_dir=str(playground_dir)))
-        assert result["error"] == "Safety: directory contains project markers"
-        assert ".git" in result["markers_found"]
-
-    @pytest.mark.asyncio
-    async def test_accepts_project_markers_with_force(self, tmp_path):
-        playground_dir = tmp_path / "playground" / "project"
-        playground_dir.mkdir(parents=True)
-        (playground_dir / ".git").mkdir()
-        (playground_dir / "file.txt").touch()
-
-        result = json.loads(await reset_test_dir(test_dir=str(playground_dir), force=True))
-        assert result["success"] is True
-        assert not (playground_dir / ".git").exists()
-        assert not (playground_dir / "file.txt").exists()
+    def test_safety_config_has_reset_guard_marker(self):
+        """SafetyConfig has reset_guard_marker field, not playground_guard."""
+        cfg = SafetyConfig()
+        assert hasattr(cfg, "reset_guard_marker")
+        assert cfg.reset_guard_marker == ".autoskillit-workspace"
+        assert not hasattr(cfg, "playground_guard")
 
 
 class TestConfigDefaults:
@@ -906,11 +977,12 @@ class TestConfigDrivenBehavior:
         cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["make", "reset"]))
         monkeypatch.setattr(server, "_config", cfg)
 
-        playground_dir = tmp_path / "playground" / "project"
-        playground_dir.mkdir(parents=True)
+        workspace = tmp_path / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / ".autoskillit-workspace").write_text("# marker\n")
         mock_run.return_value = _make_result(0, "", "")
 
-        await reset_workspace(test_dir=str(playground_dir))
+        await reset_workspace(test_dir=str(workspace))
         assert mock_run.call_args[0][0] == ["make", "reset"]
 
     @pytest.mark.asyncio
@@ -921,9 +993,10 @@ class TestConfigDrivenBehavior:
         cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
         monkeypatch.setattr(server, "_config", cfg)
 
-        playground_dir = tmp_path / "playground" / "project"
-        playground_dir.mkdir(parents=True)
-        result = json.loads(await reset_workspace(test_dir=str(playground_dir)))
+        workspace = tmp_path / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / ".autoskillit-workspace").write_text("# marker\n")
+        result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
         assert result["error"] == "reset_workspace not configured for this project"
 
@@ -943,18 +1016,19 @@ class TestConfigDrivenBehavior:
         )
         monkeypatch.setattr(server, "_config", cfg)
 
-        playground_dir = tmp_path / "playground" / "project"
-        playground_dir.mkdir(parents=True)
-        (playground_dir / "keep_me").mkdir()
-        (playground_dir / "delete_me").touch()
+        workspace = tmp_path / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / ".autoskillit-workspace").write_text("# marker\n")
+        (workspace / "keep_me").mkdir()
+        (workspace / "delete_me").touch()
         mock_run.return_value = _make_result(0, "", "")
 
-        result = json.loads(await reset_workspace(test_dir=str(playground_dir)))
+        result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
         assert "keep_me" in result["skipped"]
         assert "delete_me" in result["deleted"]
-        assert (playground_dir / "keep_me").exists()
-        assert not (playground_dir / "delete_me").exists()
+        assert (workspace / "keep_me").exists()
+        assert not (workspace / "delete_me").exists()
 
     def test_dry_walkthrough_uses_config_marker(self, monkeypatch, tmp_path):
         """S7: Gate checks _config.implement_gate.marker."""
@@ -1140,9 +1214,10 @@ class TestDeleteDirectoryContents:
         """1e: reset_test_dir returns structured JSON on partial failure."""
         from autoskillit import server
 
-        playground = tmp_path / "playground"
-        playground.mkdir()
-        (playground / "ok_file").touch()
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / ".autoskillit-workspace").write_text("# marker\n")
+        (workspace / "ok_file").touch()
 
         mock_result = CleanupResult(
             deleted=["ok_file"],
@@ -1150,7 +1225,7 @@ class TestDeleteDirectoryContents:
             skipped=[],
         )
         with patch.object(server, "_delete_directory_contents", return_value=mock_result):
-            result = json.loads(await reset_test_dir(test_dir=str(playground), force=False))
+            result = json.loads(await reset_test_dir(test_dir=str(workspace), force=False))
 
         assert result["success"] is False
         assert result["failed"] == [{"path": "bad_dir", "error": "PermissionError: denied"}]
@@ -1167,8 +1242,9 @@ class TestDeleteDirectoryContents:
         cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
         monkeypatch.setattr(server, "_config", cfg)
 
-        playground = tmp_path / "playground" / "project"
-        playground.mkdir(parents=True)
+        workspace = tmp_path / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / ".autoskillit-workspace").write_text("# marker\n")
 
         mock_run.return_value = _make_result(0, "", "")
 
@@ -1178,7 +1254,7 @@ class TestDeleteDirectoryContents:
             skipped=[".cache"],
         )
         with patch.object(server, "_delete_directory_contents", return_value=mock_result):
-            result = json.loads(await reset_workspace(test_dir=str(playground)))
+            result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
         assert result["success"] is False
         assert result["failed"] == [{"path": "bad_dir", "error": "PermissionError: denied"}]
@@ -1193,47 +1269,39 @@ class TestSafetyConfigWiring:
     """Safety config fields are read at the point of enforcement."""
 
     @pytest.mark.asyncio
-    async def test_reset_test_dir_skips_playground_guard_when_disabled(
-        self, monkeypatch, tmp_path
-    ):
-        """2a: playground_guard=False allows non-playground paths."""
-        from autoskillit import server
+    async def test_reset_test_dir_allows_with_marker(self, tmp_path):
+        """2a: Directory with marker passes the reset guard."""
+        target = tmp_path / "my_project"
+        target.mkdir()
+        (target / ".autoskillit-workspace").write_text("# marker\n")
+        (target / "file.txt").touch()
 
-        cfg = AutomationConfig(safety=SafetyConfig(playground_guard=False))
-        monkeypatch.setattr(server, "_config", cfg)
-
-        # Create a non-playground directory
-        non_playground = tmp_path / "my_project"
-        non_playground.mkdir()
-        (non_playground / "file.txt").touch()
-
-        result = json.loads(await reset_test_dir(test_dir=str(non_playground), force=False))
-        # Should NOT return the playground safety error
-        assert "error" not in result or "playground" not in result.get("error", "")
+        result = json.loads(await reset_test_dir(test_dir=str(target), force=False))
         assert result["success"] is True
 
     @pytest.mark.asyncio
-    async def test_reset_test_dir_enforces_playground_guard_when_enabled(self):
-        """2b: playground_guard=True (default) blocks non-playground paths."""
-        result = json.loads(await reset_test_dir(test_dir="/home/user/project"))
-        assert result["error"] == "Safety: only playground directories allowed"
+    async def test_reset_test_dir_enforces_marker_when_missing(self, tmp_path):
+        """2b: Missing marker blocks reset_test_dir."""
+        target = tmp_path / "unmarked"
+        target.mkdir()
+        result = json.loads(await reset_test_dir(test_dir=str(target)))
+        assert "error" in result
+        assert "marker" in result["error"].lower()
 
     @pytest.mark.asyncio
-    async def test_reset_workspace_respects_playground_guard_config(self, monkeypatch, tmp_path):
-        """2c: reset_workspace respects playground_guard config."""
+    async def test_reset_workspace_enforces_marker(self, monkeypatch, tmp_path):
+        """2c: reset_workspace requires marker, then checks command config."""
         from autoskillit import server
 
-        cfg = AutomationConfig(
-            safety=SafetyConfig(playground_guard=False),
-            reset_workspace=ResetWorkspaceConfig(command=None),
-        )
+        cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
         monkeypatch.setattr(server, "_config", cfg)
 
-        non_playground = tmp_path / "my_project"
-        non_playground.mkdir()
+        target = tmp_path / "my_project"
+        target.mkdir()
+        (target / ".autoskillit-workspace").write_text("# marker\n")
 
-        result = json.loads(await reset_workspace(test_dir=str(non_playground)))
-        # Should pass playground guard but fail on "not configured"
+        result = json.loads(await reset_workspace(test_dir=str(target)))
+        # Should pass marker guard but fail on "not configured"
         assert result["error"] == "reset_workspace not configured for this project"
 
     @pytest.mark.asyncio

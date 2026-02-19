@@ -506,53 +506,39 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
     )
 
 
-PROJECT_MARKERS = [".claude", "CLAUDE.md", ".git", "pyproject.toml", "package.json"]
-
-
 @mcp.tool(tags={"automation"})
 async def reset_test_dir(test_dir: str, force: bool = False) -> str:
-    """Remove all files from a test directory. Only works on playground directories.
+    """Remove all files from a test directory. Only works on directories with a reset guard marker.
 
-    Refuses to wipe directories containing project markers (.claude, .git, etc.)
-    unless force=True is explicitly set.
+    The directory must contain the configured marker file (default: .autoskillit-workspace)
+    unless force=True is set. Use ``autoskillit workspace init <dir>`` to create the marker.
 
     Args:
-        test_dir: Path to the test directory to clear. Must contain 'playground' in path.
-        force: Override project marker safety check. Required if the directory
-               contains .claude, .git, pyproject.toml, or package.json.
+        test_dir: Path to the test directory to clear. Must contain the reset guard marker.
+        force: Override the marker check. When True, all contents are deleted
+               including the marker file itself.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     resolved = os.path.realpath(test_dir)
     _log(f"reset_test_dir: resolved={resolved} force={force}")
 
-    if _config.safety.playground_guard and "playground" not in resolved:
-        return json.dumps({"error": "Safety: only playground directories allowed"})
-
     if not os.path.isdir(resolved):
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
-    found_markers = [m for m in PROJECT_MARKERS if os.path.exists(os.path.join(resolved, m))]
-    if found_markers and not force:
+    marker_name = _config.safety.reset_guard_marker
+    marker_path = Path(resolved) / marker_name
+    if not force and not marker_path.is_file():
         return json.dumps(
             {
-                "error": "Safety: directory contains project markers",
-                "markers_found": found_markers,
-                "hint": (
-                    "Set force=True to override."
-                    " This looks like a real project, not a scratch directory."
-                ),
+                "error": f"Safety: directory missing reset guard marker ({marker_name})",
+                "hint": f"Create the marker with: autoskillit workspace init {resolved}",
             }
         )
 
-    cleanup = _delete_directory_contents(Path(resolved))
-    return json.dumps(
-        {
-            **cleanup.to_dict(),
-            "forced": force,
-            "markers_cleared": found_markers,
-        }
-    )
+    preserve = None if force else {marker_name}
+    cleanup = _delete_directory_contents(Path(resolved), preserve=preserve)
+    return json.dumps({**cleanup.to_dict(), "forced": force})
 
 
 @mcp.tool(tags={"automation"})
@@ -609,21 +595,28 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
 @mcp.tool(tags={"automation"})
 async def reset_workspace(test_dir: str) -> str:
     """Runs a configured reset command then deletes directory contents,
-    preserving configured directories.
+    preserving configured directories and the reset guard marker.
 
     Args:
-        test_dir: Path to the test project directory. Must contain 'playground' in path.
+        test_dir: Path to the test project directory. Must contain the reset guard marker.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     resolved = os.path.realpath(test_dir)
     _log(f"reset_workspace: resolved={resolved}")
 
-    if _config.safety.playground_guard and "playground" not in resolved:
-        return json.dumps({"error": "Safety: only playground directories allowed"})
-
     if not os.path.isdir(resolved):
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
+
+    marker_name = _config.safety.reset_guard_marker
+    marker_path = Path(resolved) / marker_name
+    if not marker_path.is_file():
+        return json.dumps(
+            {
+                "error": f"Safety: directory missing reset guard marker ({marker_name})",
+                "hint": f"Create the marker with: autoskillit workspace init {resolved}",
+            }
+        )
 
     if _config.reset_workspace.command is None:
         return json.dumps({"error": "reset_workspace not configured for this project"})
@@ -643,10 +636,8 @@ async def reset_workspace(test_dir: str) -> str:
             }
         )
 
-    cleanup = _delete_directory_contents(
-        Path(resolved),
-        preserve=set(_config.reset_workspace.preserve_dirs),
-    )
+    preserve = set(_config.reset_workspace.preserve_dirs) | {marker_name}
+    cleanup = _delete_directory_contents(Path(resolved), preserve=preserve)
     return json.dumps(cleanup.to_dict())
 
 

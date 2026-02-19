@@ -66,7 +66,7 @@ This uses MCP prompts (user-only, model cannot invoke) and survives `--dangerous
 | `run_skill_retry` | Run Claude Code headless with API call limit (for long-running skills) |
 | `test_check` | Run test suite, returns unambiguous PASS/FAIL |
 | `merge_worktree` | Merge worktree branch after programmatic test gate |
-| `reset_test_dir` | Clear test directory (playground safety guard) |
+| `reset_test_dir` | Clear test directory (reset guard marker) |
 | `classify_fix` | Analyze diff to determine restart scope (full vs partial) |
 | `reset_workspace` | Reset workspace directory, preserving configured paths |
 
@@ -120,9 +120,9 @@ implement_gate:
   skill_names: ["/implement-worktree", "/implement-worktree-no-merge"]  # skills subject to gate
 
 safety:
-  playground_guard: true          # reset_test_dir/reset_workspace require "playground" in path
-  require_dry_walkthrough: true   # plans must be dry-walked before implementation
-  test_gate_on_merge: true        # merge_worktree runs test suite before merging
+  reset_guard_marker: ".autoskillit-workspace"  # marker file required for reset operations
+  require_dry_walkthrough: true                 # plans must be dry-walked before implementation
+  test_gate_on_merge: true                      # merge_worktree runs test suite before merging
 ```
 
 These defaults are usually fine. Override per-project if needed.
@@ -271,7 +271,7 @@ ESCALATE: Stop and report. Human intervention needed.
 ## Safety
 
 - **Tool gating**: All tools disabled by default, require user activation via MCP prompt
-- **Playground guard**: Destructive operations require "playground" in path
+- **Reset guard**: Destructive operations require a marker file (`.autoskillit-workspace`) in the target directory. Create with `autoskillit workspace init <dir>`
 - **Dry-walkthrough gate**: Plans must be verified before implementation skills run
 - **Test gate**: Programmatic test validation before merge (no bypass parameter)
 - **Process tree cleanup**: psutil-based cleanup of all subprocess descendants

@@ -18,10 +18,12 @@ app = App(
 config_app = App(name="config", help="Configuration commands.")
 skills_app = App(name="skills", help="Skill management.")
 workflows_app = App(name="workflows", help="Workflow management.")
+workspace_app = App(name="workspace", help="Workspace management.")
 
 app.command(config_app)
 app.command(skills_app)
 app.command(workflows_app)
+app.command(workspace_app)
 
 
 @app.default
@@ -298,6 +300,53 @@ def skills_update(*, force: bool = False):
         print("No bundled skills found.")
 
 
+_MARKER_CONTENT = """\
+# autoskillit workspace - do not delete
+# This file authorizes reset_test_dir and reset_workspace to clear this directory.
+# Created: {timestamp}
+# Tool: autoskillit {version}
+"""
+
+
+@workspace_app.command(name="init")
+def workspace_init(path: str):
+    """Create a workspace directory with the reset guard marker.
+
+    The directory must not exist or must be empty (or contain only the marker).
+
+    Parameters
+    ----------
+    path
+        Path to the workspace directory to initialize.
+    """
+    from datetime import datetime, timezone
+
+    from autoskillit import __version__
+    from autoskillit.config import load_config
+
+    target = Path(path).resolve()
+    cfg = load_config(Path.cwd())
+    marker_name = cfg.safety.reset_guard_marker
+
+    if target.is_dir():
+        contents = [f for f in target.iterdir() if f.name != marker_name]
+        if contents:
+            print(f"Directory is not empty: {target}", file=sys.stderr)
+            print("workspace init only works on empty or new directories.", file=sys.stderr)
+            sys.exit(1)
+
+    target.mkdir(parents=True, exist_ok=True)
+    marker = target / marker_name
+    marker.write_text(
+        _MARKER_CONTENT.format(
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            version=__version__,
+        )
+    )
+    print(f"Workspace initialized: {target}")
+    print(f"Reset guard marker created: {marker}")
+
+
 @workflows_app.command(name="list")
 def workflows_list():
     """List available workflows with sources."""
@@ -388,7 +437,7 @@ test_check:
   # timeout: 600
 
 safety:
-  playground_guard: true
+  reset_guard_marker: ".autoskillit-workspace"
   require_dry_walkthrough: true
   test_gate_on_merge: true
 

@@ -50,7 +50,7 @@ class TestCLI:
         assert config_path.is_file()
         data = yaml.safe_load(config_path.read_text())
         assert data["test_check"]["command"] == ["pytest", "-v"]
-        assert data["safety"]["playground_guard"] is True
+        assert data["safety"]["reset_guard_marker"] == ".autoskillit-workspace"
 
     # CL5
     def test_init_quick_mode(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -153,7 +153,7 @@ class TestCLI:
         yaml_str = _generate_config_yaml(["task", "test-all"])
         parsed = yaml.safe_load(yaml_str)
         assert parsed["test_check"]["command"] == ["task", "test-all"]
-        assert parsed["safety"]["playground_guard"] is True
+        assert parsed["safety"]["reset_guard_marker"] == ".autoskillit-workspace"
 
     def test_interactive_init_asks_minimal_questions(self) -> None:
         """Interactive init only asks about the test command."""
@@ -387,6 +387,50 @@ class TestCLI:
         captured = capsys.readouterr()
         assert "investigate" in captured.out
         assert "Updated" in captured.out
+
+    # --- T5.5: workspace init ---
+
+    def test_workspace_init_creates_dir_with_marker(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """workspace init creates directory and drops marker file."""
+        monkeypatch.chdir(tmp_path)
+        target = tmp_path / "test-workspace"
+        cli.workspace_init(str(target))
+        assert target.is_dir()
+        assert (target / ".autoskillit-workspace").is_file()
+
+    def test_workspace_init_refuses_nonempty_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """workspace init refuses to initialize a non-empty directory."""
+        monkeypatch.chdir(tmp_path)
+        target = tmp_path / "existing"
+        target.mkdir()
+        (target / "important.txt").touch()
+        with pytest.raises(SystemExit):
+            cli.workspace_init(str(target))
+
+    def test_workspace_init_idempotent_on_empty_with_marker(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """workspace init is safe to re-run on a directory that only has the marker."""
+        monkeypatch.chdir(tmp_path)
+        target = tmp_path / "workspace"
+        cli.workspace_init(str(target))
+        cli.workspace_init(str(target))  # second run — should not fail
+        assert (target / ".autoskillit-workspace").is_file()
+
+    def test_workspace_init_marker_has_content(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Marker file contains human-readable identifying content."""
+        monkeypatch.chdir(tmp_path)
+        target = tmp_path / "workspace"
+        cli.workspace_init(str(target))
+        content = (target / ".autoskillit-workspace").read_text()
+        assert "autoskillit" in content
+        assert "do not delete" in content
 
     # --- T6: skills list CLI output ---
 

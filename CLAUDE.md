@@ -89,7 +89,7 @@ temp/                        # Temporary/working files (gitignored)
 | `run_skill_retry` | Run Claude Code headless with API call limit (for long-running skills) |
 | `test_check` | Run test suite in a worktree, returns PASS/FAIL |
 | `merge_worktree` | Merge worktree branch after test gate passes |
-| `reset_test_dir` | Clear test directory (playground safety guard) |
+| `reset_test_dir` | Clear test directory (reset guard marker) |
 | `classify_fix` | Analyze worktree diff to determine restart scope (full vs partial) |
 | `reset_workspace` | Reset workspace, preserving configured directories |
 | `enable_tools` (prompt) | User-only activation — type `/mcp__autoskillit__enable_tools` |
@@ -118,6 +118,6 @@ All tool behavior is configurable via `.autoskillit/config.yaml`. No config file
 | `reset_workspace` | `preserve_dirs` | `[]` | Directories preserved during reset |
 | `implement_gate` | `marker` | `"Dry-walkthrough verified = TRUE"` | Required first line in plan files |
 | `implement_gate` | `skill_names` | `["/implement-worktree", "/implement-worktree-no-merge"]` | Skills subject to dry-walkthrough gate |
-| `safety` | `playground_guard` | `true` | Require "playground" in paths for destructive ops |
+| `safety` | `reset_guard_marker` | `".autoskillit-workspace"` | Marker file required for destructive ops |
 | `safety` | `require_dry_walkthrough` | `true` | Enforce plan verification before implementation |
 | `safety` | `test_gate_on_merge` | `true` | Run tests before allowing merge |

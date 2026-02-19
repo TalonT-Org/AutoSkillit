@@ -19,7 +19,7 @@ class TestDefaultConfig:
             "/implement-worktree",
             "/implement-worktree-no-merge",
         }
-        assert cfg.safety.playground_guard is True
+        assert cfg.safety.reset_guard_marker == ".autoskillit-workspace"
         assert cfg.safety.require_dry_walkthrough is True
         assert cfg.safety.test_gate_on_merge is True
 
@@ -48,7 +48,7 @@ class TestLoadConfig:
                 "skill_names": ["/my-skill"],
             },
             "safety": {
-                "playground_guard": False,
+                "reset_guard_marker": ".custom-marker",
                 "require_dry_walkthrough": False,
                 "test_gate_on_merge": False,
             },
@@ -63,7 +63,7 @@ class TestLoadConfig:
         assert cfg.reset_workspace.preserve_dirs == {".data", "logs"}
         assert cfg.implement_gate.marker == "VERIFIED"
         assert cfg.implement_gate.skill_names == {"/my-skill"}
-        assert cfg.safety.playground_guard is False
+        assert cfg.safety.reset_guard_marker == ".custom-marker"
         assert cfg.safety.require_dry_walkthrough is False
         assert cfg.safety.test_gate_on_merge is False
 

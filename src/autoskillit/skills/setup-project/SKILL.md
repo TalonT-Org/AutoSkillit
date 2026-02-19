@@ -134,39 +134,19 @@ Tell the user: "Full analysis saved to {path} for your review."
 
 ### Step 4: Present Candidate Workflows
 
-Replace the old monolithic output with an interactive flow. For each candidate workflow discovered:
+Interactive flow. For each candidate workflow discovered:
 
-1. **Always offer the standard implementation pipeline first**, even if not discovered in history. This is the core AutoSkillit workflow:
-
-```
-SETUP:
-  - project_dir = {detected project path}
-  - work_dir = {project_dir or separate workspace}
-  - base_branch = {detected current branch}
-  - task = "description of what to implement"
-
-PIPELINE:
-1. run_skill("/make-plan {task}", cwd=work_dir, add_dir=project_dir)
-2. run_skill("/dry-walkthrough {plan_path}", cwd=work_dir)
-3. run_skill_retry("/implement-worktree-no-merge {plan_path}", cwd=work_dir)
-   - If context exhausted: run_skill_retry("/retry-worktree {plan_path} {worktree_path}", cwd=work_dir).
-     Repeat up to 3x, then ESCALATE.
-4. test_check(worktree_path)
-   - PASS: merge_worktree(worktree_path, base_branch). Done.
-   - FAIL: run_skill("/assess-and-merge {worktree_path} {plan_path} {base_branch}", cwd=work_dir)
-     - Still failing after 3 attempts: ESCALATE
-
-ESCALATE: Stop and report. Human intervention needed.
-```
+1. **Always offer the standard implementation pipeline first** (plan → dry-walkthrough → implement → test → merge), even if not discovered in history. This is the core AutoSkillit workflow.
 
 2. For each candidate workflow (including the standard one):
    - Present the workflow chain and explain what it automates
    - Ask the user: "Would you like me to generate a skill script for this workflow?"
-   - If yes: generate the script, explain what a skill script is (paste into a Claude Code session with AutoSkillit tools enabled, the agent follows it step by step), show the script content
+   - If yes: LOAD `/make-script-skill` using the Skill tool to generate the script. The agent already has full context from the exploration phases (workflow name, detected variables like project_dir/work_dir/base_branch, tool call sequence, routing logic) — no explicit parameter passing is needed. make-script-skill uses that context directly to produce a clean script.
+   - Explain what a skill script is (paste into a Claude Code session with AutoSkillit tools enabled, the agent follows it step by step), show the generated script content
    - Track the user's approval — do NOT write to disk yet
    - Move to the next candidate workflow
 
-Fill in detected values: test command, base branch, project-specific notes, any detected quirks. If `work_dir` equals `project_dir`, note that `add_dir` is not needed.
+Fill in detected values: test command, base branch, project-specific notes, any detected quirks. Use the two-directory model (project_dir + work_dir) in generated scripts. If `work_dir` equals `project_dir`, note that `add_dir` is not needed.
 
 ### Step 5: Config Updates
 
@@ -198,14 +178,17 @@ test_check:
 
 Following the Terraform plan→apply pattern, show a summary of everything approved before touching disk:
 
-1. List all approved skill scripts with their save paths (`.autoskillit/scripts/{name}.md`)
-2. List all approved config changes
-3. Ask one final question: "Write all of the above?"
-4. If confirmed:
-   - Create `.autoskillit/scripts/` directory if needed
-   - Write all approved skill scripts
+1. For each approved skill script, ask where to save it:
+   - `.autoskillit/scripts/{name}.md` — AutoSkillit script (used with `run_skill`)
+   - `.claude/skills/{name}/SKILL.md` — Claude Code skill (invokable as `/{name}`)
+2. List all approved skill scripts with their chosen save paths
+3. List all approved config changes
+4. Ask one final question: "Write all of the above?"
+5. If confirmed:
+   - Create target directories as needed
+   - Write all approved skill scripts to their chosen paths
    - Apply all approved config changes
-5. If declined: abort without writing anything
+6. If declined: abort without writing anything
 
 This prevents incremental approval fatigue and gives the user a single clear decision point.
 
@@ -225,5 +208,5 @@ Do NOT include:
 
 Artifacts created:
 - `temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
-- `.autoskillit/scripts/{name}.md` — approved skill scripts (if any)
+- `.autoskillit/scripts/{name}.md` or `.claude/skills/{name}/SKILL.md` — approved skill scripts (user chooses path)
 - `.autoskillit/config.yaml` — updated config (if changes approved)

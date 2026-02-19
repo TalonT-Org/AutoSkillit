@@ -132,7 +132,7 @@ class TestWorkflowLoader:
             "steps": {
                 "impl": {
                     "tool": "run_skill_retry",
-                    "retry": {"max_attempts": 5, "on": "hit_api_limit", "on_exhausted": "fail"},
+                    "retry": {"max_attempts": 5, "on": "needs_retry", "on_exhausted": "fail"},
                 },
                 "fail": {"action": "stop", "message": "Failed."},
             },
@@ -141,7 +141,7 @@ class TestWorkflowLoader:
         wf = load_workflow(f)
         assert wf.steps["impl"].retry is not None
         assert wf.steps["impl"].retry.max_attempts == 5
-        assert wf.steps["impl"].retry.on == "hit_api_limit"
+        assert wf.steps["impl"].retry.on == "needs_retry"
         assert wf.steps["impl"].retry.on_exhausted == "fail"
 
     # WF10

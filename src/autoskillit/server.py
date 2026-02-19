@@ -121,6 +121,80 @@ def _truncate(text: str, max_len: int = 5000) -> str:
 
 
 @dataclass
+class ClaudeSessionResult:
+    """Parsed result from a Claude Code headless session."""
+
+    subtype: str  # "success", "error_max_turns", "error_during_execution", etc.
+    is_error: bool
+    result: str
+    session_id: str
+    num_turns: int
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def needs_retry(self) -> bool:
+        """Whether this session outcome indicates the caller should retry."""
+        if self.subtype == "error_max_turns":
+            return True
+        if self.is_error and "prompt is too long" in self.result.lower():
+            return True
+        return False
+
+    @property
+    def retry_reason(self) -> str:
+        """Why retry is needed. Empty if needs_retry is False."""
+        if self.subtype == "error_max_turns":
+            return "max_turns"
+        if self.is_error and "prompt is too long" in self.result.lower():
+            return "context_exhaustion"
+        return ""
+
+
+def parse_session_result(stdout: str) -> ClaudeSessionResult:
+    """Parse Claude Code's --output-format json stdout into a typed result.
+
+    Handles multi-line NDJSON (Claude Code may emit multiple JSON objects;
+    the last 'result' type object is authoritative).
+    Falls back gracefully for non-JSON or missing fields.
+    """
+    if not stdout.strip():
+        return ClaudeSessionResult(
+            subtype="unknown", is_error=False, result="",
+            session_id="", num_turns=0, errors=[],
+        )
+
+    result_obj = None
+    for line in stdout.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+            if isinstance(obj, dict) and obj.get("type") == "result":
+                result_obj = obj
+        except json.JSONDecodeError:
+            continue
+
+    if result_obj is None:
+        try:
+            result_obj = json.loads(stdout)
+        except json.JSONDecodeError:
+            return ClaudeSessionResult(
+                subtype="unknown", is_error=False, result=stdout,
+                session_id="", num_turns=0, errors=[],
+            )
+
+    return ClaudeSessionResult(
+        subtype=result_obj.get("subtype", "unknown"),
+        is_error=result_obj.get("is_error", False),
+        result=result_obj.get("result", ""),
+        session_id=result_obj.get("session_id", ""),
+        num_turns=result_obj.get("num_turns", 0),
+        errors=result_obj.get("errors", []),
+    )
+
+
+@dataclass
 class CleanupResult:
     deleted: list[str] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list)
@@ -224,23 +298,19 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
 
     returncode, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=3600)
 
-    output: dict = {}
-    if stdout:
-        try:
-            output = json.loads(stdout)
-        except json.JSONDecodeError:
-            output = {"result": stdout}
-
+    session = parse_session_result(stdout)
     return json.dumps(
         {
-            "result": _truncate(output.get("result", "")),
-            "session_id": output.get("session_id", ""),
+            "result": _truncate(session.result),
+            "session_id": session.session_id,
+            "subtype": session.subtype,
+            "is_error": session.is_error,
             "exit_code": returncode,
         }
     )
 
 
-_MAX_API_CALLS = 200
+_MAX_TURNS = 200
 
 
 @mcp.tool(tags={"automation"})
@@ -248,7 +318,9 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
     """Run a Claude Code headless session with an API call limit.
 
     Use this for long-running skill sessions where context exhaustion is expected.
-    The hit_api_limit field indicates whether to continue with a retry invocation.
+    The needs_retry field indicates whether the session should be continued.
+    The retry_reason field disambiguates: "max_turns" (resume session) vs
+    "context_exhaustion" (reduce context before retrying).
 
     Args:
         skill_command: The full prompt including skill invocation.
@@ -270,26 +342,21 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
         "json",
         "--dangerously-skip-permissions",
         "--max-turns",
-        str(_MAX_API_CALLS),
+        str(_MAX_TURNS),
     ]
 
     returncode, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=7200)
 
-    output: dict = {}
-    if stdout:
-        try:
-            output = json.loads(stdout)
-        except json.JSONDecodeError:
-            output = {"result": stdout}
-
-    hit_api_limit = returncode != 0 and bool(re.search(r"\bturn", stderr, re.IGNORECASE))
-
+    session = parse_session_result(stdout)
     return json.dumps(
         {
-            "result": _truncate(output.get("result", "")),
-            "session_id": output.get("session_id", ""),
+            "result": _truncate(session.result),
+            "session_id": session.session_id,
+            "subtype": session.subtype,
+            "is_error": session.is_error,
             "exit_code": returncode,
-            "hit_api_limit": hit_api_limit,
+            "needs_retry": session.needs_retry,
+            "retry_reason": session.retry_reason,
         }
     )
 

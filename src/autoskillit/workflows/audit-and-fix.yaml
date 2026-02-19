@@ -41,7 +41,7 @@ steps:
       cwd: ${{ inputs.work_dir }}
     retry:
       max_attempts: 3
-      on: hit_api_limit
+      on: needs_retry
       on_exhausted: escalate
     on_success: done
     on_failure: escalate

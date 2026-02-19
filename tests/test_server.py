@@ -17,6 +17,7 @@ from autoskillit.config import (
 )
 from autoskillit.process_lifecycle import SubprocessResult
 from autoskillit.server import (
+    ClaudeSessionResult,
     CleanupResult,
     _check_dry_walkthrough,
     _delete_directory_contents,
@@ -27,6 +28,7 @@ from autoskillit.server import (
     _run_subprocess,
     classify_fix,
     merge_worktree,
+    parse_session_result,
     reset_test_dir,
     reset_workspace,
     run_cmd,
@@ -666,32 +668,173 @@ class TestTestCheck:
         assert result["passed"] is True
 
 
-class TestRunSkillRetryApiLimit:
-    """run_skill_retry correctly detects API call limit from stderr."""
+class TestClaudeSessionResult:
+    """ClaudeSessionResult correctly parses Claude Code JSON output."""
+
+    def test_parses_success_result(self):
+        """Normal completion extracts result and session_id."""
+        raw = {"type": "result", "subtype": "success", "is_error": False,
+               "result": "Done.", "session_id": "abc-123", "num_turns": 5}
+        parsed = parse_session_result(json.dumps(raw))
+        assert parsed.subtype == "success"
+        assert parsed.is_error is False
+        assert parsed.result == "Done."
+        assert parsed.session_id == "abc-123"
+        assert parsed.needs_retry is False
+        assert parsed.retry_reason == ""
+
+    def test_parses_error_max_turns(self):
+        """Turn limit produces needs_retry=True with reason='max_turns'."""
+        raw = {"type": "result", "subtype": "error_max_turns", "is_error": False,
+               "session_id": "abc-123", "num_turns": 200,
+               "errors": ["Max turns reached"]}
+        parsed = parse_session_result(json.dumps(raw))
+        assert parsed.subtype == "error_max_turns"
+        assert parsed.needs_retry is True
+        assert parsed.retry_reason == "max_turns"
+        assert parsed.result == ""
+
+    def test_parses_prompt_too_long(self):
+        """Context exhaustion produces needs_retry=True with reason='context_exhaustion'."""
+        raw = {"type": "result", "subtype": "success", "is_error": True,
+               "result": "Prompt is too long", "session_id": "abc-123",
+               "num_turns": 1, "duration_api_ms": 0}
+        parsed = parse_session_result(json.dumps(raw))
+        assert parsed.is_error is True
+        assert parsed.needs_retry is True
+        assert parsed.retry_reason == "context_exhaustion"
+
+    def test_parses_execution_error_not_retriable(self):
+        """Runtime errors are not automatically retriable."""
+        raw = {"type": "result", "subtype": "error_during_execution", "is_error": True,
+               "session_id": "abc-123", "errors": ["Tool execution failed"]}
+        parsed = parse_session_result(json.dumps(raw))
+        assert parsed.subtype == "error_during_execution"
+        assert parsed.needs_retry is False
+        assert parsed.retry_reason == ""
+
+    def test_handles_unparseable_stdout(self):
+        """Non-JSON stdout produces a fallback result."""
+        parsed = parse_session_result("not json at all")
+        assert parsed.subtype == "unknown"
+        assert parsed.result == "not json at all"
+        assert parsed.needs_retry is False
+
+    def test_handles_empty_stdout(self):
+        """Empty stdout produces empty fallback."""
+        parsed = parse_session_result("")
+        assert parsed.subtype == "unknown"
+        assert parsed.result == ""
+        assert parsed.needs_retry is False
+
+    def test_handles_ndjson_with_multiple_lines(self):
+        """Parser finds type=result in multi-line NDJSON output."""
+        lines = [
+            json.dumps({"type": "assistant", "message": "working..."}),
+            json.dumps({"type": "result", "subtype": "success", "is_error": False,
+                        "result": "Done.", "session_id": "s1", "num_turns": 10}),
+        ]
+        parsed = parse_session_result("\n".join(lines))
+        assert parsed.subtype == "success"
+        assert parsed.result == "Done."
+        assert parsed.session_id == "s1"
+
+
+class TestRunSkillRetrySessionOutcome:
+    """run_skill_retry correctly classifies all Claude Code session outcomes."""
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_detects_api_limit_on_turn_message(self, mock_run):
-        """Actual Claude Code API limit message triggers hit_api_limit."""
-        mock_run.return_value = _make_result(1, '{"result": ""}', "Max turns reached")
+    async def test_detects_max_turns_via_subtype(self, mock_run):
+        """error_max_turns in JSON output -> needs_retry=True, retry_reason=max_turns."""
+        stdout = json.dumps({"type": "result", "subtype": "error_max_turns",
+                             "is_error": False, "session_id": "s1", "num_turns": 200,
+                             "errors": ["Max turns reached"]})
+        mock_run.return_value = _make_result(1, stdout, "")
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
-        assert result["hit_api_limit"] is True
+        assert result["needs_retry"] is True
+        assert result["retry_reason"] == "max_turns"
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_no_false_positive_on_return_in_stderr(self, mock_run):
-        """'return' in stderr must NOT trigger hit_api_limit."""
-        mock_run.return_value = _make_result(1, '{"result": ""}', "return code error")
+    async def test_detects_context_exhaustion(self, mock_run):
+        """'Prompt is too long' with is_error=True -> needs_retry=True."""
+        stdout = json.dumps({"type": "result", "subtype": "success",
+                             "is_error": True, "result": "Prompt is too long",
+                             "session_id": "s1", "num_turns": 1})
+        mock_run.return_value = _make_result(1, stdout, "")
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
-        assert result["hit_api_limit"] is False
+        assert result["needs_retry"] is True
+        assert result["retry_reason"] == "context_exhaustion"
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_no_false_positive_on_nocturnal(self, mock_run):
-        """Compound words containing 'turn' must NOT trigger hit_api_limit."""
-        mock_run.return_value = _make_result(1, '{"result": ""}', "nocturnal process failed")
+    async def test_success_not_retriable(self, mock_run):
+        """Normal success -> needs_retry=False."""
+        stdout = json.dumps({"type": "result", "subtype": "success",
+                             "is_error": False, "result": "Done.",
+                             "session_id": "s1", "num_turns": 50})
+        mock_run.return_value = _make_result(0, stdout, "")
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
-        assert result["hit_api_limit"] is False
+        assert result["needs_retry"] is False
+        assert result["retry_reason"] == ""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_execution_error_not_retriable(self, mock_run):
+        """error_during_execution -> needs_retry=False."""
+        stdout = json.dumps({"type": "result", "subtype": "error_during_execution",
+                             "is_error": True, "session_id": "s1",
+                             "errors": ["crashed"]})
+        mock_run.return_value = _make_result(1, stdout, "")
+        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        assert result["needs_retry"] is False
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_unparseable_stdout_not_retriable(self, mock_run):
+        """Non-JSON stdout -> needs_retry=False."""
+        mock_run.return_value = _make_result(1, "crash dump", "segfault")
+        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        assert result["needs_retry"] is False
+
+
+class TestRunSkillFailurePaths:
+    """run_skill surfaces session outcome on failure."""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_returns_subtype_on_max_turns(self, mock_run):
+        """run_skill includes subtype when session hit turn limit."""
+        stdout = json.dumps({"type": "result", "subtype": "error_max_turns",
+                             "is_error": False, "session_id": "s1",
+                             "num_turns": 200})
+        mock_run.return_value = _make_result(1, stdout, "")
+        result = json.loads(await run_skill("/investigate error", "/tmp"))
+        assert result["session_id"] == "s1"
+        assert result["subtype"] == "error_max_turns"
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_returns_is_error_on_context_exhaustion(self, mock_run):
+        """run_skill includes is_error when context is exhausted."""
+        stdout = json.dumps({"type": "result", "subtype": "success",
+                             "is_error": True, "result": "Prompt is too long",
+                             "session_id": "s1"})
+        mock_run.return_value = _make_result(1, stdout, "")
+        result = json.loads(await run_skill("/investigate error", "/tmp"))
+        assert result["is_error"] is True
+        assert result["subtype"] == "success"
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_handles_empty_stdout(self, mock_run):
+        """run_skill returns graceful result when stdout is empty."""
+        mock_run.return_value = _make_result(1, "", "segfault")
+        result = json.loads(await run_skill("/investigate error", "/tmp"))
+        assert result["exit_code"] == 1
+        assert result["result"] == ""
+        assert result["subtype"] == "unknown"
 
 
 class TestParsePytestSummary:

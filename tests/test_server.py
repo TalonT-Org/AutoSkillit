@@ -17,7 +17,6 @@ from autoskillit.config import (
 )
 from autoskillit.process_lifecycle import SubprocessResult
 from autoskillit.server import (
-    ClaudeSessionResult,
     CleanupResult,
     _check_dry_walkthrough,
     _delete_directory_contents,
@@ -673,8 +672,14 @@ class TestClaudeSessionResult:
 
     def test_parses_success_result(self):
         """Normal completion extracts result and session_id."""
-        raw = {"type": "result", "subtype": "success", "is_error": False,
-               "result": "Done.", "session_id": "abc-123", "num_turns": 5}
+        raw = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "Done.",
+            "session_id": "abc-123",
+            "num_turns": 5,
+        }
         parsed = parse_session_result(json.dumps(raw))
         assert parsed.subtype == "success"
         assert parsed.is_error is False
@@ -685,9 +690,14 @@ class TestClaudeSessionResult:
 
     def test_parses_error_max_turns(self):
         """Turn limit produces needs_retry=True with reason='max_turns'."""
-        raw = {"type": "result", "subtype": "error_max_turns", "is_error": False,
-               "session_id": "abc-123", "num_turns": 200,
-               "errors": ["Max turns reached"]}
+        raw = {
+            "type": "result",
+            "subtype": "error_max_turns",
+            "is_error": False,
+            "session_id": "abc-123",
+            "num_turns": 200,
+            "errors": ["Max turns reached"],
+        }
         parsed = parse_session_result(json.dumps(raw))
         assert parsed.subtype == "error_max_turns"
         assert parsed.needs_retry is True
@@ -696,9 +706,15 @@ class TestClaudeSessionResult:
 
     def test_parses_prompt_too_long(self):
         """Context exhaustion produces needs_retry=True with reason='context_exhaustion'."""
-        raw = {"type": "result", "subtype": "success", "is_error": True,
-               "result": "Prompt is too long", "session_id": "abc-123",
-               "num_turns": 1, "duration_api_ms": 0}
+        raw = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": True,
+            "result": "Prompt is too long",
+            "session_id": "abc-123",
+            "num_turns": 1,
+            "duration_api_ms": 0,
+        }
         parsed = parse_session_result(json.dumps(raw))
         assert parsed.is_error is True
         assert parsed.needs_retry is True
@@ -706,8 +722,13 @@ class TestClaudeSessionResult:
 
     def test_parses_execution_error_not_retriable(self):
         """Runtime errors are not automatically retriable."""
-        raw = {"type": "result", "subtype": "error_during_execution", "is_error": True,
-               "session_id": "abc-123", "errors": ["Tool execution failed"]}
+        raw = {
+            "type": "result",
+            "subtype": "error_during_execution",
+            "is_error": True,
+            "session_id": "abc-123",
+            "errors": ["Tool execution failed"],
+        }
         parsed = parse_session_result(json.dumps(raw))
         assert parsed.subtype == "error_during_execution"
         assert parsed.needs_retry is False
@@ -731,8 +752,16 @@ class TestClaudeSessionResult:
         """Parser finds type=result in multi-line NDJSON output."""
         lines = [
             json.dumps({"type": "assistant", "message": "working..."}),
-            json.dumps({"type": "result", "subtype": "success", "is_error": False,
-                        "result": "Done.", "session_id": "s1", "num_turns": 10}),
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "Done.",
+                    "session_id": "s1",
+                    "num_turns": 10,
+                }
+            ),
         ]
         parsed = parse_session_result("\n".join(lines))
         assert parsed.subtype == "success"
@@ -747,9 +776,16 @@ class TestRunSkillRetrySessionOutcome:
     @patch("autoskillit.server.run_managed_async")
     async def test_detects_max_turns_via_subtype(self, mock_run):
         """error_max_turns in JSON output -> needs_retry=True, retry_reason=max_turns."""
-        stdout = json.dumps({"type": "result", "subtype": "error_max_turns",
-                             "is_error": False, "session_id": "s1", "num_turns": 200,
-                             "errors": ["Max turns reached"]})
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_max_turns",
+                "is_error": False,
+                "session_id": "s1",
+                "num_turns": 200,
+                "errors": ["Max turns reached"],
+            }
+        )
         mock_run.return_value = _make_result(1, stdout, "")
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is True
@@ -759,9 +795,16 @@ class TestRunSkillRetrySessionOutcome:
     @patch("autoskillit.server.run_managed_async")
     async def test_detects_context_exhaustion(self, mock_run):
         """'Prompt is too long' with is_error=True -> needs_retry=True."""
-        stdout = json.dumps({"type": "result", "subtype": "success",
-                             "is_error": True, "result": "Prompt is too long",
-                             "session_id": "s1", "num_turns": 1})
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": True,
+                "result": "Prompt is too long",
+                "session_id": "s1",
+                "num_turns": 1,
+            }
+        )
         mock_run.return_value = _make_result(1, stdout, "")
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is True
@@ -771,9 +814,16 @@ class TestRunSkillRetrySessionOutcome:
     @patch("autoskillit.server.run_managed_async")
     async def test_success_not_retriable(self, mock_run):
         """Normal success -> needs_retry=False."""
-        stdout = json.dumps({"type": "result", "subtype": "success",
-                             "is_error": False, "result": "Done.",
-                             "session_id": "s1", "num_turns": 50})
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+                "num_turns": 50,
+            }
+        )
         mock_run.return_value = _make_result(0, stdout, "")
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is False
@@ -783,9 +833,15 @@ class TestRunSkillRetrySessionOutcome:
     @patch("autoskillit.server.run_managed_async")
     async def test_execution_error_not_retriable(self, mock_run):
         """error_during_execution -> needs_retry=False."""
-        stdout = json.dumps({"type": "result", "subtype": "error_during_execution",
-                             "is_error": True, "session_id": "s1",
-                             "errors": ["crashed"]})
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "session_id": "s1",
+                "errors": ["crashed"],
+            }
+        )
         mock_run.return_value = _make_result(1, stdout, "")
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is False
@@ -806,9 +862,15 @@ class TestRunSkillFailurePaths:
     @patch("autoskillit.server.run_managed_async")
     async def test_returns_subtype_on_max_turns(self, mock_run):
         """run_skill includes subtype when session hit turn limit."""
-        stdout = json.dumps({"type": "result", "subtype": "error_max_turns",
-                             "is_error": False, "session_id": "s1",
-                             "num_turns": 200})
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_max_turns",
+                "is_error": False,
+                "session_id": "s1",
+                "num_turns": 200,
+            }
+        )
         mock_run.return_value = _make_result(1, stdout, "")
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["session_id"] == "s1"
@@ -818,9 +880,15 @@ class TestRunSkillFailurePaths:
     @patch("autoskillit.server.run_managed_async")
     async def test_returns_is_error_on_context_exhaustion(self, mock_run):
         """run_skill includes is_error when context is exhausted."""
-        stdout = json.dumps({"type": "result", "subtype": "success",
-                             "is_error": True, "result": "Prompt is too long",
-                             "session_id": "s1"})
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": True,
+                "result": "Prompt is too long",
+                "session_id": "s1",
+            }
+        )
         mock_run.return_value = _make_result(1, stdout, "")
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["is_error"] is True

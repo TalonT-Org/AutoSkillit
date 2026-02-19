@@ -159,8 +159,12 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
     """
     if not stdout.strip():
         return ClaudeSessionResult(
-            subtype="unknown", is_error=False, result="",
-            session_id="", num_turns=0, errors=[],
+            subtype="unknown",
+            is_error=False,
+            result="",
+            session_id="",
+            num_turns=0,
+            errors=[],
         )
 
     result_obj = None
@@ -180,8 +184,12 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
             result_obj = json.loads(stdout)
         except json.JSONDecodeError:
             return ClaudeSessionResult(
-                subtype="unknown", is_error=False, result=stdout,
-                session_id="", num_turns=0, errors=[],
+                subtype="unknown",
+                is_error=False,
+                result=stdout,
+                session_id="",
+                num_turns=0,
+                errors=[],
             )
 
     return ClaudeSessionResult(

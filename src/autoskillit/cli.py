@@ -6,6 +6,7 @@ import dataclasses
 import json
 import shutil
 import sys
+from datetime import UTC
 from pathlib import Path
 
 from cyclopts import App
@@ -319,7 +320,7 @@ def workspace_init(path: str):
     path
         Path to the workspace directory to initialize.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from autoskillit import __version__
     from autoskillit.config import load_config
@@ -339,7 +340,7 @@ def workspace_init(path: str):
     marker = target / marker_name
     marker.write_text(
         _MARKER_CONTENT.format(
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             version=__version__,
         )
     )

@@ -1,6 +1,6 @@
 ---
 name: setup-project
-description: Explore a target project and generate a tailored skill script and config. Use when user wants to onboard a new project to AutoSkillit, says "setup project", or wants a starting point config.
+description: Explore a target project and generate tailored skill scripts and config through an interactive workflow. Use when user wants to onboard a new project to AutoSkillit, says "setup project", or wants a starting point config.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -12,12 +12,12 @@ hooks:
 
 # Setup Project Skill
 
-Explore a target project and generate a tailored skill script and AutoSkillit config.
+Explore a target project and generate tailored skill scripts and AutoSkillit config through an interactive, workflow-first UX.
 
 ## When to Use
 
 - User wants to onboard a new project to AutoSkillit
-- User passes a project path and wants a ready-to-use skill script
+- User passes a project path and wants ready-to-use skill scripts
 - User has no `.autoskillit/config.yaml` and wants a starting point
 
 ## Arguments
@@ -31,19 +31,21 @@ Explore a target project and generate a tailored skill script and AutoSkillit co
 ## Critical Constraints
 
 **NEVER:**
-- Modify any files in the target project
-- Run commands that change the target project without explicit user confirmation
-- Create files outside `temp/setup-project/` directory
+- Modify any files in the target project without user confirmation at the summary gate
+- Run commands that change the target project
+- Create files outside `temp/setup-project/` directory (until the summary gate)
 - Assume test framework — detect it from evidence
 - Use Makefile or `make` in generated examples — use Taskfile/`task` if a task runner is needed
+- Suggest `reset_guard_marker` config — that's a workspace concern, not project setup
+- Include install instructions or "Getting Started" sections — user is already running the skill
+- Hardcode `base_branch = main` — detect the current branch
 
 **ALWAYS:**
 - Read the target project using Glob, Read, and Grep — no shell commands against target
 - Detect language, test framework, build system, and CI from actual files
-- Generate a skill script tailored to what was found, not a generic template
-- Output both the skill script and a suggested config in the same markdown file
+- Present candidate workflows one by one for user approval before generating scripts
+- Show a summary confirmation gate before writing anything to disk
 - Use the two-directory model (project_dir + work_dir) in generated skill scripts
-- Each invocation produces a new timestamped file — never overwrite previous output
 
 ## Workflow
 
@@ -86,7 +88,11 @@ Launch parallel Explore subagents against `project_dir`. If the user opted into 
 - Check for `CLAUDE.md` — extract project constraints
 - Check for `.autoskillit/workflows/` — list any custom workflows
 
-**Subagent E+ — Conversation History Mining (only if user opted in):**
+**Subagent E — Current Git Branch:**
+- Run `git -C {project_dir} branch --show-current`
+- This becomes the default `base_branch` in generated scripts
+
+**Subagent F+ — Conversation History Mining (only if user opted in):**
 
 Claude Code stores conversation history at `~/.claude/projects/<encoded-path>/` as JSONL files (one per session). The path encoding replaces `/` and `_` with `-` (e.g., `/home/user/my_project` -> `-home-user-my-project`).
 
@@ -113,17 +119,30 @@ Consolidate subagent findings into a structured profile:
 - Critical paths (for classify_fix)
 - Whether a reset mechanism exists (Taskfile `clean` target, npm script, etc.)
 - Existing config state (none / partial / complete)
+- Current git branch (for `base_branch` default)
 - Discovered workflow patterns from conversation history (if opted in) — recurring tool sequences and skill chains, ranked by frequency, with candidate skill script drafts
 
-### Step 3: Generate Skill Script
+### Step 3: Write Analysis to temp/
 
-Generate a tailored implementation pipeline skill script using the SETUP/PIPELINE/ESCALATE format:
+Before presenting anything interactively, write the full analysis (project profile, workflow patterns, candidate workflows, shell command patterns) to:
+
+```
+temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md
+```
+
+Tell the user: "Full analysis saved to {path} for your review."
+
+### Step 4: Present Candidate Workflows
+
+Replace the old monolithic output with an interactive flow. For each candidate workflow discovered:
+
+1. **Always offer the standard implementation pipeline first**, even if not discovered in history. This is the core AutoSkillit workflow:
 
 ```
 SETUP:
   - project_dir = {detected project path}
   - work_dir = {project_dir or separate workspace}
-  - base_branch = main
+  - base_branch = {detected current branch}
   - task = "description of what to implement"
 
 PIPELINE:
@@ -140,73 +159,71 @@ PIPELINE:
 ESCALATE: Stop and report. Human intervention needed.
 ```
 
-Fill in detected values: test command, project-specific notes, any detected quirks.
+2. For each candidate workflow (including the standard one):
+   - Present the workflow chain and explain what it automates
+   - Ask the user: "Would you like me to generate a skill script for this workflow?"
+   - If yes: generate the script, explain what a skill script is (paste into a Claude Code session with AutoSkillit tools enabled, the agent follows it step by step), show the script content
+   - Track the user's approval — do NOT write to disk yet
+   - Move to the next candidate workflow
 
-If `work_dir` equals `project_dir`, note that `add_dir` is not needed.
+Fill in detected values: test command, base branch, project-specific notes, any detected quirks. If `work_dir` equals `project_dir`, note that `add_dir` is not needed.
 
-### Step 4: Generate Config Suggestion
+### Step 5: Config Updates
 
-Write a suggested `.autoskillit/config.yaml` based on findings:
+Interactive config suggestion flow:
+
+1. Show the current config vs. suggested config diff
+2. For each suggested change, ask the user if they want to apply it
+3. Track approvals — do NOT write to disk yet
+4. Do NOT suggest `reset_guard_marker` — that's a workspace concern, not project setup
+
+If no config exists, present the suggested config in full. If config exists, only highlight missing or suboptimal settings.
+
+Suggested config template:
 ```yaml
 test_check:
   command: {detected test command as list}
   # timeout: 600
 
-# Uncomment and configure if using classify_fix:
 # classify_fix:
 #   path_prefixes:
 #     - {detected critical paths}
 
-# Uncomment if you have a workspace reset mechanism:
 # reset_workspace:
 #   command: {detected reset command}
 #   preserve_dirs: []
 ```
 
-If config already exists, show a comparison of current vs. suggested and only highlight missing or suboptimal settings.
+### Step 6: Summary Confirmation Gate
 
-### Step 5: Write Output
+Following the Terraform plan→apply pattern, show a summary of everything approved before touching disk:
 
-Write to: `temp/setup-project/setup_{project_name}_{YYYY-MM-DD_HHMMSS}.md`
+1. List all approved skill scripts with their save paths (`.autoskillit/scripts/{name}.md`)
+2. List all approved config changes
+3. Ask one final question: "Write all of the above?"
+4. If confirmed:
+   - Create `.autoskillit/scripts/` directory if needed
+   - Write all approved skill scripts
+   - Apply all approved config changes
+5. If declined: abort without writing anything
 
-Output structure:
-```markdown
-# AutoSkillit Setup: {Project Name}
+This prevents incremental approval fatigue and gives the user a single clear decision point.
 
-**Date:** {YYYY-MM-DD}
-**Target:** {absolute project path}
-**Detected:** {language}, {test framework}, {build system}
+### Step 7: Output Summary
 
-## Project Profile
-{Detected facts organized as a table}
+Write a concise summary to terminal:
+- Which scripts were saved and where
+- Which config changes were applied
+- Any notes or warnings (e.g., test timeout may need adjustment, critical paths are inferred)
 
-## Getting Started
-
-### 1. Install AutoSkillit
-pip install -e /path/to/autoskillit
-claude mcp add autoskillit -- autoskillit
-
-### 2. Initialize Config
-autoskillit init --test-command "{detected_test_command}"
-{Or: suggested config.yaml content to paste}
-
-### 3. Enable Tools in Session
-/mcp__autoskillit__enable_tools
-
-## Skill Script: Implementation Pipeline
-{The generated skill script from Step 3}
-
-## Step-by-Step Explanation
-{Brief explanation of each pipeline step}
-
-## Notes
-{Warnings: e.g., test timeout may need adjustment, critical paths are inferred}
-
-## Discovered Patterns from Conversation History
-{Only present if user opted in to history mining}
-{Pattern findings with candidate skill scripts}
-```
+Do NOT include:
+- Install instructions (user is already running the skill)
+- "Getting Started" sections
+- Repeated content from earlier steps
 
 ## Output
 
-`temp/setup-project/setup_{project_name}_{YYYY-MM-DD_HHMMSS}.md`
+Artifacts created:
+- `temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
+- `.autoskillit/scripts/{name}.md` — approved skill scripts (if any)
+- `.autoskillit/config.yaml` — updated config (if changes approved)

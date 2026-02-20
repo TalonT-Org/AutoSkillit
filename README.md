@@ -45,7 +45,7 @@ autoskillit init --quick                      # just test command + defaults
 autoskillit init --test-command "pytest -v"   # fully non-interactive
 ```
 
-This creates `.autoskillit/config.yaml` and installs all bundled skills to `.claude/skills/`. Use `--force` to overwrite an existing config, `--no-install-skills` to skip skill installation. Safe to re-run — preserves existing config and only adds missing skills.
+This creates `.autoskillit/config.yaml` and installs all bundled skills to `.autoskillit/skills/`. Use `--force` to overwrite an existing config, `--no-install-skills` to skip skill installation. Safe to re-run — preserves existing config and only adds missing skills.
 
 ### 3. Enable tools in session
 
@@ -172,15 +172,19 @@ Skills bundled with the package:
 | `implement-worktree-no-merge` | Implement without auto-merge (for MCP orchestration) |
 | `retry-worktree` | Continue after context exhaustion |
 | `assess-and-merge` | Fix test failures and merge |
+| `bugfix-loop` | Pipeline: reset → test → investigate → fix → merge |
+| `implementation-pipeline` | Pipeline: plan → verify → implement → test → merge |
+| `investigate-first` | Pipeline: investigate → rectify → implement → merge |
 | `mermaid` | Create mermaid diagrams |
+| `make-script-skill` | Generate script-style SKILL.md files from workflow descriptions |
 | `setup-project` | Explore a project and generate a tailored skill script and config |
 
 ### Skill Resolution Order
 
 Skills are resolved by name using a first-match-wins hierarchy. The default order:
 
-1. **project** — `.claude/skills/<name>/SKILL.md` in the current repo
-2. **user** — `~/.claude/skills/<name>/SKILL.md` in your home directory
+1. **project** — `.autoskillit/skills/<name>/SKILL.md` in the current repo
+2. **user** — `~/.autoskillit/skills/<name>/SKILL.md` in your home directory
 3. **bundled** — skills shipped inside the autoskillit package
 
 If the same skill name exists at multiple levels, the highest-priority source wins. For example, a project-level `rectify` skill shadows the bundled one.
@@ -214,6 +218,7 @@ Declarative YAML workflow definitions guide the orchestrating agent through mult
 |----------|-------------|
 | `bugfix-loop` | Reset > test > investigate > plan > implement > verify > merge |
 | `implementation` | Plan > review > dry-walkthrough > implement |
+| `investigate-first` | Investigate > rectify > dry-walkthrough > implement > verify > merge |
 | `audit-and-fix` | Audit > investigate > plan > implement |
 
 ```bash
@@ -308,8 +313,8 @@ src/autoskillit/
   process_lifecycle.py  Subprocess management (temp I/O, tree cleanup, timeouts)
   skill_resolver.py    Skill resolution hierarchy
   workflow_loader.py   Workflow YAML parsing + validation
-  skills/              11 bundled skills (10 pipeline + 1 utility)
-  workflows/           3 built-in workflow definitions
+  skills/              15 bundled skills (pipeline, workflow launchers, utilities)
+  workflows/           4 built-in workflow definitions
 ```
 
 ## License

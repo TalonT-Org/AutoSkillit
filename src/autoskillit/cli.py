@@ -70,6 +70,10 @@ def init(
         config_path.write_text(_generate_config_yaml(cmd_parts))
         print(f"Config written to: {config_path}")
 
+    plugin_dir = Path(__file__).parent
+    print(f"\nPlugin directory: {plugin_dir}")
+    print(f"Load with: claude --plugin-dir {plugin_dir}")
+
 
 @app.command
 def update():
@@ -138,7 +142,16 @@ def doctor(*, output_json: bool = False):
                     f"Remove with: claude mcp remove --scope user {name}"
                 )
 
-    # Check 2: Config exists
+    # Check 2: Plugin metadata exists in package
+    pkg_dir = Path(__file__).parent
+    if not (pkg_dir / ".claude-plugin" / "plugin.json").is_file():
+        warnings.append("WARNING: Plugin metadata missing. Reinstall autoskillit.")
+
+    # Check 3: autoskillit command on PATH
+    if shutil.which("autoskillit") is None:
+        warnings.append("WARNING: 'autoskillit' command not found on PATH.")
+
+    # Check 4: Config exists
     if not (Path.cwd() / ".autoskillit" / "config.yaml").is_file():
         warnings.append("WARNING: No project config found. Run: autoskillit init")
 
@@ -163,12 +176,10 @@ def config_show():
 
 @skills_app.command(name="list")
 def skills_list():
-    """List available skills with their resolution source."""
-    from autoskillit.config import load_config
+    """List bundled skills provided by the plugin."""
     from autoskillit.skill_resolver import SkillResolver
 
-    cfg = load_config(Path.cwd())
-    resolver = SkillResolver(Path.cwd(), cfg)
+    resolver = SkillResolver()
     skills = resolver.list_all()
 
     if not skills:

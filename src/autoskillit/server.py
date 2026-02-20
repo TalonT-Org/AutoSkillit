@@ -38,6 +38,8 @@ mcp.add_provider(
     )
 )
 
+_plugin_dir = str(Path(__file__).parent)
+
 _tools_enabled = False
 
 
@@ -297,6 +299,8 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
         "claude",
         "-p",
         skill_command,
+        "--plugin-dir",
+        _plugin_dir,
         "--output-format",
         "json",
         "--dangerously-skip-permissions",
@@ -346,6 +350,8 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
         "claude",
         "-p",
         skill_command,
+        "--plugin-dir",
+        _plugin_dir,
         "--output-format",
         "json",
         "--dangerously-skip-permissions",

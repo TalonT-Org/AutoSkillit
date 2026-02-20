@@ -59,16 +59,36 @@ Configured hooks: ruff format (auto-fix), ruff check (auto-fix), mypy type check
 src/autoskillit/
 ├── __init__.py              # Package version
 ├── __main__.py              # python -m autoskillit entry point (delegates to cli)
-├── cli.py                   # CLI: serve, init, config show
+├── cli.py                   # CLI: serve, init, config show, skills, workflows
 ├── config.py                # Dataclass config + YAML loading (layered resolution)
 ├── server.py                # FastMCP server with 8 gated MCP tools + 2 prompts
-└── process_lifecycle.py     # Subprocess management (kill trees, temp I/O, timeouts)
+├── skill_resolver.py        # Skill resolution hierarchy (project > user > bundled)
+├── workflow_loader.py       # Workflow YAML loading, validation, listing
+├── process_lifecycle.py     # Subprocess management (kill trees, temp I/O, timeouts)
+├── skills/                  # 15 bundled skills (SKILL.md per skill)
+│   ├── assess-and-merge/    │   ├── bugfix-loop/         # Pipeline: workflow://bugfix-loop launcher
+│   ├── dry-walkthrough/     │   ├── implement-worktree/
+│   ├── implement-worktree-no-merge/
+│   ├── implementation-pipeline/  # Pipeline: workflow://implementation launcher
+│   ├── investigate/         │   ├── investigate-first/    # Pipeline: workflow://investigate-first launcher
+│   ├── make-plan/           │   ├── make-script-skill/
+│   ├── mermaid/             │   ├── rectify/
+│   ├── retry-worktree/      │   ├── review-approach/
+│   └── setup-project/
+└── workflows/               # 4 bundled workflow YAML definitions
+    ├── audit-and-fix.yaml
+    ├── bugfix-loop.yaml
+    ├── implementation.yaml
+    └── investigate-first.yaml
 
 tests/
 ├── conftest.py              # Shared fixtures (tools enabled + default config)
+├── test_cli.py              # CLI command tests
 ├── test_config.py           # Config loading tests
+├── test_process_lifecycle.py # Subprocess integration tests
 ├── test_server.py           # Server unit tests
-└── test_process_lifecycle.py # Subprocess integration tests
+├── test_skill_resolver.py   # Skill resolution tests
+└── test_workflow_loader.py  # Workflow loading/validation tests
 
 temp/                        # Temporary/working files (gitignored)
 ```
@@ -76,9 +96,20 @@ temp/                        # Temporary/working files (gitignored)
 ### **Key Components**
 
   * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
-  * **cli.py**: Minimal CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (write template config) and `config show` (dump resolved config).
-  * **server.py**: FastMCP server. All tools are gated by default (`_tools_enabled` flag) and require user activation via MCP prompts. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/implement-worktree` without a verified plan.
+  * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init`, `config show`, `skills install/update/list`, `workflows list/show`, `workspace init`, `update`, and `doctor`.
+  * **server.py**: FastMCP server. All tools are gated by default (`_tools_enabled` flag) and require user activation via MCP prompts. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/implement-worktree` without a verified plan. Registers `SkillsDirectoryProvider` (serving `skill://` resources) and `workflow://` resource handler.
+  * **skill_resolver.py**: Skill resolution with project > user > bundled hierarchy. `build_skill_roots()` returns ordered `(source, Path)` tuples. Resolution paths: `.autoskillit/skills/` (project), `~/.autoskillit/skills/` (user), bundled package directory.
+  * **workflow_loader.py**: YAML workflow loading, validation, and listing. Discovers workflows from `.autoskillit/workflows/` (project) and bundled package directory.
   * **process_lifecycle.py**: Self-contained subprocess utilities (no internal deps, only stdlib + psutil). Handles process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts.
+
+### **Skills**
+
+15 bundled skills. Three are pipeline launchers that delegate to `workflow://` YAML resources via `ReadMcpResourceTool`:
+  * **bugfix-loop**: Reset → test → investigate → fix → merge cycle
+  * **implementation-pipeline**: Plan → verify → implement → test → merge
+  * **investigate-first**: Investigate → rectify → verify → implement → merge
+
+Skills are resolved from `.autoskillit/skills/` (project), `~/.autoskillit/skills/` (user), then bundled. Install with `autoskillit skills install --all`.
 
 ### **MCP Tools**
 
@@ -121,3 +152,4 @@ All tool behavior is configurable via `.autoskillit/config.yaml`. No config file
 | `safety` | `reset_guard_marker` | `".autoskillit-workspace"` | Marker file required for destructive ops |
 | `safety` | `require_dry_walkthrough` | `true` | Enforce plan verification before implementation |
 | `safety` | `test_gate_on_merge` | `true` | Run tests before allowing merge |
+| `skills` | `resolution_order` | `["project", "user", "bundled"]` | Skill lookup priority order |

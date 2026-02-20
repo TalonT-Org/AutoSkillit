@@ -60,7 +60,7 @@ def init(
     test_command
         Test command string for fully non-interactive init (e.g. "pytest -v").
     install_skills
-        Install all bundled skills to .claude/skills/. Use --no-install-skills to skip.
+        Install all bundled skills to .autoskillit/skills/. Use --no-install-skills to skip.
     """
     project_dir = Path.cwd()
     config_dir = project_dir / ".autoskillit"
@@ -156,7 +156,7 @@ def doctor(*, output_json: bool = False):
     from autoskillit.skill_resolver import bundled_skills_dir
 
     bd = bundled_skills_dir()
-    project_skills = Path.cwd() / ".claude" / "skills"
+    project_skills = Path.cwd() / ".autoskillit" / "skills"
     missing = []
     for skill_dir in sorted(bd.iterdir()):
         if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
@@ -215,7 +215,7 @@ def skills_list():
 
 @skills_app.command(name="install")
 def skills_install(name: str = "", *, all: bool = False):
-    """Install a bundled skill to the project's .claude/skills/ directory.
+    """Install a bundled skill to the project's .autoskillit/skills/ directory.
 
     Parameters
     ----------
@@ -237,7 +237,7 @@ def skills_install(name: str = "", *, all: bool = False):
         print(f"No bundled skill named '{name}'.", file=sys.stderr)
         sys.exit(1)
 
-    dest_dir = Path.cwd() / ".claude" / "skills" / name
+    dest_dir = Path.cwd() / ".autoskillit" / "skills" / name
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / "SKILL.md"
     shutil.copy2(src, dest)
@@ -245,11 +245,11 @@ def skills_install(name: str = "", *, all: bool = False):
 
 
 def skills_install_all() -> None:
-    """Install all bundled skills to .claude/skills/."""
+    """Install all bundled skills to .autoskillit/skills/."""
     from autoskillit.skill_resolver import bundled_skills_dir
 
     bd = bundled_skills_dir()
-    target_base = Path.cwd() / ".claude" / "skills"
+    target_base = Path.cwd() / ".autoskillit" / "skills"
     installed = []
     for skill_dir in sorted(bd.iterdir()):
         if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
@@ -262,7 +262,7 @@ def skills_install_all() -> None:
 
 @skills_app.command(name="update")
 def skills_update(*, force: bool = False):
-    """Sync bundled skills to project .claude/skills/, preserving customized ones.
+    """Sync bundled skills to project .autoskillit/skills/, preserving customized ones.
 
     Parameters
     ----------
@@ -272,7 +272,7 @@ def skills_update(*, force: bool = False):
     from autoskillit.skill_resolver import bundled_skills_dir
 
     bd = bundled_skills_dir()
-    project_skills = Path.cwd() / ".claude" / "skills"
+    project_skills = Path.cwd() / ".autoskillit" / "skills"
     updated = []
     skipped = []
 

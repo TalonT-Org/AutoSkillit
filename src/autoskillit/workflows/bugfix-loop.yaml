@@ -30,7 +30,7 @@ steps:
   investigate:
     tool: run_skill
     with:
-      skill_command: "/investigate the test failures"
+      skill_command: "/autoskillit:investigate the test failures"
       cwd: ${{ inputs.helper_dir }}
     on_success: plan
     on_failure: escalate
@@ -38,7 +38,7 @@ steps:
   plan:
     tool: run_skill
     with:
-      skill_command: "/rectify the investigation findings"
+      skill_command: "/autoskillit:rectify the investigation findings"
       cwd: ${{ inputs.helper_dir }}
     on_success: implement
     on_failure: escalate
@@ -46,7 +46,7 @@ steps:
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/implement-worktree-no-merge the plan"
+      skill_command: "/autoskillit:implement-worktree-no-merge the plan"
       cwd: ${{ inputs.helper_dir }}
     retry:
       max_attempts: 3
@@ -65,7 +65,7 @@ steps:
   assess:
     tool: run_skill
     with:
-      skill_command: "/assess-and-merge fix test failures"
+      skill_command: "/autoskillit:assess-and-merge fix test failures"
       cwd: ${{ inputs.helper_dir }}
     on_success: verify
     on_failure: classify

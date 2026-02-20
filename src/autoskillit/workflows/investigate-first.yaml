@@ -19,7 +19,7 @@ steps:
   investigate:
     tool: run_skill
     with:
-      skill_command: "/investigate ${{ inputs.problem }}"
+      skill_command: "/autoskillit:investigate ${{ inputs.problem }}"
       cwd: ${{ inputs.work_dir }}
     on_success: rectify
     on_failure: escalate
@@ -27,7 +27,7 @@ steps:
   rectify:
     tool: run_skill
     with:
-      skill_command: "/rectify"
+      skill_command: "/autoskillit:rectify"
       cwd: ${{ inputs.work_dir }}
     on_success: dry_walkthrough
     on_failure: escalate
@@ -35,7 +35,7 @@ steps:
   dry_walkthrough:
     tool: run_skill
     with:
-      skill_command: "/dry-walkthrough the plan"
+      skill_command: "/autoskillit:dry-walkthrough the plan"
       cwd: ${{ inputs.work_dir }}
     on_success: implement
     on_failure: rectify
@@ -44,7 +44,7 @@ steps:
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/implement-worktree the verified plan"
+      skill_command: "/autoskillit:implement-worktree the verified plan"
       cwd: ${{ inputs.work_dir }}
     retry:
       max_attempts: 3
@@ -63,7 +63,7 @@ steps:
   assess:
     tool: run_skill
     with:
-      skill_command: "/assess-and-merge fix test failures"
+      skill_command: "/autoskillit:assess-and-merge fix test failures"
       cwd: ${{ inputs.work_dir }}
     on_success: verify
     on_failure: escalate

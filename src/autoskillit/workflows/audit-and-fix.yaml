@@ -21,7 +21,7 @@ steps:
   investigate:
     tool: run_skill
     with:
-      skill_command: "/investigate the audit findings"
+      skill_command: "/autoskillit:investigate the audit findings"
       cwd: ${{ inputs.work_dir }}
     on_success: plan
     on_failure: escalate
@@ -29,7 +29,7 @@ steps:
   plan:
     tool: run_skill
     with:
-      skill_command: "/rectify the investigation"
+      skill_command: "/autoskillit:rectify the investigation"
       cwd: ${{ inputs.work_dir }}
     on_success: implement
     on_failure: escalate
@@ -37,7 +37,7 @@ steps:
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/implement-worktree the plan"
+      skill_command: "/autoskillit:implement-worktree the plan"
       cwd: ${{ inputs.work_dir }}
     retry:
       max_attempts: 3

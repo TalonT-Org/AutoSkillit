@@ -16,7 +16,7 @@ steps:
   plan:
     tool: run_skill
     with:
-      skill_command: "/make-plan ${{ inputs.task_description }}"
+      skill_command: "/autoskillit:make-plan ${{ inputs.task_description }}"
       cwd: ${{ inputs.work_dir }}
     on_success: review
     on_failure: escalate
@@ -24,7 +24,7 @@ steps:
   review:
     tool: run_skill
     with:
-      skill_command: "/review-approach the plan"
+      skill_command: "/autoskillit:review-approach the plan"
       cwd: ${{ inputs.work_dir }}
     on_success: dry_walkthrough
     on_failure: escalate
@@ -32,7 +32,7 @@ steps:
   dry_walkthrough:
     tool: run_skill
     with:
-      skill_command: "/dry-walkthrough the plan"
+      skill_command: "/autoskillit:dry-walkthrough the plan"
       cwd: ${{ inputs.work_dir }}
     on_success: implement
     on_failure: plan
@@ -41,7 +41,7 @@ steps:
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/implement-worktree the verified plan"
+      skill_command: "/autoskillit:implement-worktree the verified plan"
       cwd: ${{ inputs.work_dir }}
     retry:
       max_attempts: 3

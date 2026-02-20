@@ -172,158 +172,16 @@ class TestCLI:
         data = yaml.safe_load((config_dir / "config.yaml").read_text())
         assert data["test_check"]["command"] == ["npm", "test"]
 
-    # --- T2: skills install end-to-end ---
-
-    def test_skills_install_copies_to_autoskillit_skills(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """skills install copies bundled SKILL.md to .autoskillit/skills/<name>/."""
-        monkeypatch.chdir(tmp_path)
-        cli.skills_install("investigate")
-        dest = tmp_path / ".autoskillit" / "skills" / "investigate" / "SKILL.md"
-        assert dest.is_file()
-        from autoskillit.skill_resolver import bundled_skills_dir
-
-        expected = (bundled_skills_dir() / "investigate" / "SKILL.md").read_text()
-        assert dest.read_text() == expected
-
-    def test_skills_install_unknown_name_exits(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """skills install with unknown name prints error and exits 1."""
-        monkeypatch.chdir(tmp_path)
-        with pytest.raises(SystemExit) as exc_info:
-            cli.skills_install("nonexistent-skill")
-        assert exc_info.value.code == 1
-
-    def test_skills_install_overwrites_existing(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """skills install overwrites an existing installed skill."""
-        monkeypatch.chdir(tmp_path)
-        dest_dir = tmp_path / ".autoskillit" / "skills" / "investigate"
-        dest_dir.mkdir(parents=True)
-        (dest_dir / "SKILL.md").write_text("old content")
-        cli.skills_install("investigate")
-        assert "old content" not in (dest_dir / "SKILL.md").read_text()
-
-    # --- T3: skills install --all ---
-
-    def test_skills_install_all_copies_every_bundled_skill(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """skills install --all copies all bundled skills to .claude/skills/."""
-        monkeypatch.chdir(tmp_path)
-        cli.skills_install_all()
-        from autoskillit.skill_resolver import bundled_skills_dir
-
-        bd = bundled_skills_dir()
-        for skill_dir in bd.iterdir():
-            if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
-                dest = tmp_path / ".autoskillit" / "skills" / skill_dir.name / "SKILL.md"
-                assert dest.is_file(), f"Missing: {skill_dir.name}"
-
-    # --- T4: init installs skills + idempotency ---
-
-    def test_init_installs_bundled_skills(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """init copies all bundled skills to .claude/skills/ by default."""
-        monkeypatch.chdir(tmp_path)
-        cli.init(test_command="pytest -v")
-        from autoskillit.skill_resolver import bundled_skills_dir
-
-        bd = bundled_skills_dir()
-        for skill_dir in bd.iterdir():
-            if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
-                dest = tmp_path / ".autoskillit" / "skills" / skill_dir.name / "SKILL.md"
-                assert dest.is_file(), f"init did not install skill: {skill_dir.name}"
-
-    def test_init_no_skills_flag_skips_install(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """init --no-install-skills skips skill installation."""
-        monkeypatch.chdir(tmp_path)
-        cli.init(test_command="pytest -v", install_skills=False)
-        assert not (tmp_path / ".autoskillit" / "skills").exists()
-
     def test_init_idempotent_rerun(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Running init twice is safe — config preserved, missing skills added."""
+        """Running init twice is safe — config preserved on second run."""
         monkeypatch.chdir(tmp_path)
         cli.init(test_command="pytest -v")
         config_before = (tmp_path / ".autoskillit" / "config.yaml").read_text()
-        # Delete one skill to simulate incomplete state
-        investigate = tmp_path / ".autoskillit" / "skills" / "investigate"
-        if investigate.exists():
-            shutil.rmtree(investigate)
-        # Re-run init — should not fail, should restore missing skill
+        # Re-run init — should not overwrite without --force
         cli.init(test_command="pytest -v")
         assert (tmp_path / ".autoskillit" / "config.yaml").read_text() == config_before
-        assert (tmp_path / ".autoskillit" / "skills" / "investigate" / "SKILL.md").is_file()
 
-    # --- T5: skills update ---
-
-    def test_skills_update_copies_missing(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """skills update installs missing bundled skills."""
-        monkeypatch.chdir(tmp_path)
-        skills_dir = tmp_path / ".autoskillit" / "skills"
-        skills_dir.mkdir(parents=True)
-        cli.skills_update()
-        from autoskillit.skill_resolver import bundled_skills_dir
-
-        bd = bundled_skills_dir()
-        for skill_dir in bd.iterdir():
-            if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
-                assert (skills_dir / skill_dir.name / "SKILL.md").is_file()
-
-    def test_skills_update_skips_customized(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """skills update preserves skills that differ from bundled."""
-        monkeypatch.chdir(tmp_path)
-        skills_dir = tmp_path / ".autoskillit" / "skills" / "investigate"
-        skills_dir.mkdir(parents=True)
-        (skills_dir / "SKILL.md").write_text("customized content")
-        cli.skills_update()
-        assert (skills_dir / "SKILL.md").read_text() == "customized content"
-        captured = capsys.readouterr()
-        assert "investigate" in captured.out
-        assert "Skipped" in captured.out
-
-    def test_skills_update_refreshes_unchanged(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """skills update overwrites skills that match bundled content."""
-        monkeypatch.chdir(tmp_path)
-        from autoskillit.skill_resolver import bundled_skills_dir
-
-        bd = bundled_skills_dir()
-        src = bd / "mermaid" / "SKILL.md"
-        dest_dir = tmp_path / ".autoskillit" / "skills" / "mermaid"
-        dest_dir.mkdir(parents=True)
-        shutil.copy2(src, dest_dir / "SKILL.md")
-        cli.skills_update()
-        captured = capsys.readouterr()
-        assert "mermaid" in captured.out
-        assert "Updated" in captured.out
-
-    def test_skills_update_force_overwrites_customized(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """skills update --force overwrites even customized skills."""
-        monkeypatch.chdir(tmp_path)
-        skills_dir = tmp_path / ".autoskillit" / "skills" / "investigate"
-        skills_dir.mkdir(parents=True)
-        (skills_dir / "SKILL.md").write_text("customized content")
-        cli.skills_update(force=True)
-        assert (skills_dir / "SKILL.md").read_text() != "customized content"
-        captured = capsys.readouterr()
-        assert "investigate" in captured.out
-        assert "Updated" in captured.out
-
-    # --- T5.5: workspace init ---
+    # --- workspace init ---
 
     def test_workspace_init_creates_dir_with_marker(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -427,7 +285,6 @@ class TestCLI:
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        cli.skills_install_all()
         (tmp_path / ".autoskillit").mkdir(exist_ok=True)
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
             "test_check:\n  command: ['pytest']\n"
@@ -435,26 +292,6 @@ class TestCLI:
         cli.doctor()
         captured = capsys.readouterr()
         assert "WARNING" not in captured.out
-
-    def test_doctor_warns_missing_skills(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """doctor warns when bundled skills are not installed as slash commands."""
-        fake_claude_json = tmp_path / ".claude.json"
-        fake_claude_json.write_text(
-            json.dumps(
-                {"mcpServers": {"autoskillit": {"type": "stdio", "command": "autoskillit"}}}
-            )
-        )
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        (tmp_path / ".autoskillit").mkdir()
-        (tmp_path / ".autoskillit" / "config.yaml").write_text(
-            "test_check:\n  command: ['pytest']\n"
-        )
-        cli.doctor()
-        captured = capsys.readouterr()
-        assert "not installed as slash commands" in captured.out
 
     def test_doctor_warns_missing_config(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture

@@ -40,9 +40,11 @@ def init(
     *,
     force: bool = False,
     test_command: str | None = None,
-    install_skills: bool = True,
 ):
     """Initialize autoskillit for a project.
+
+    Creates .autoskillit/config.yaml. Bundled skills are served automatically
+    via the MCP server — no installation needed.
 
     Parameters
     ----------
@@ -50,8 +52,6 @@ def init(
         Overwrite existing config without prompting.
     test_command
         Test command string for non-interactive init (e.g. "pytest -v").
-    install_skills
-        Install all bundled skills to .autoskillit/skills/. Use --no-install-skills to skip.
     """
     project_dir = Path.cwd()
     config_dir = project_dir / ".autoskillit"
@@ -69,9 +69,6 @@ def init(
 
         config_path.write_text(_generate_config_yaml(cmd_parts))
         print(f"Config written to: {config_path}")
-
-    if install_skills:
-        skills_install_all()
 
 
 @app.command
@@ -141,23 +138,7 @@ def doctor(*, output_json: bool = False):
                     f"Remove with: claude mcp remove --scope user {name}"
                 )
 
-    # Check 2: Skills installed vs bundled
-    from autoskillit.skill_resolver import bundled_skills_dir
-
-    bd = bundled_skills_dir()
-    project_skills = Path.cwd() / ".autoskillit" / "skills"
-    missing = []
-    for skill_dir in sorted(bd.iterdir()):
-        if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
-            if not (project_skills / skill_dir.name / "SKILL.md").is_file():
-                missing.append(skill_dir.name)
-    if missing:
-        warnings.append(
-            f"WARNING: {len(missing)} bundled skills not installed as slash commands: "
-            f"{', '.join(missing)}. Run: autoskillit skills install --all"
-        )
-
-    # Check 3: Config exists
+    # Check 2: Config exists
     if not (Path.cwd() / ".autoskillit" / "config.yaml").is_file():
         warnings.append("WARNING: No project config found. Run: autoskillit init")
 
@@ -200,94 +181,6 @@ def skills_list():
     print(f"{'-' * name_w}  {'-' * src_w}  {'-' * 4}")
     for s in skills:
         print(f"{s.name:<{name_w}}  {s.source:<{src_w}}  {s.path}")
-
-
-@skills_app.command(name="install")
-def skills_install(name: str = "", *, all: bool = False):
-    """Install a bundled skill to the project's .autoskillit/skills/ directory.
-
-    Parameters
-    ----------
-    name
-        Name of the bundled skill to install.
-    all
-        Install all bundled skills.
-    """
-    if all:
-        return skills_install_all()
-    if not name:
-        print("Provide a skill name or use --all.", file=sys.stderr)
-        sys.exit(1)
-
-    from autoskillit.skill_resolver import bundled_skills_dir
-
-    src = bundled_skills_dir() / name / "SKILL.md"
-    if not src.is_file():
-        print(f"No bundled skill named '{name}'.", file=sys.stderr)
-        sys.exit(1)
-
-    dest_dir = Path.cwd() / ".autoskillit" / "skills" / name
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / "SKILL.md"
-    shutil.copy2(src, dest)
-    print(f"Installed '{name}' to {dest}")
-
-
-def skills_install_all() -> None:
-    """Install all bundled skills to .autoskillit/skills/."""
-    from autoskillit.skill_resolver import bundled_skills_dir
-
-    bd = bundled_skills_dir()
-    target_base = Path.cwd() / ".autoskillit" / "skills"
-    installed = []
-    for skill_dir in sorted(bd.iterdir()):
-        if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
-            dest_dir = target_base / skill_dir.name
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(skill_dir / "SKILL.md", dest_dir / "SKILL.md")
-            installed.append(skill_dir.name)
-    print(f"Installed {len(installed)} skills: {', '.join(installed)}")
-
-
-@skills_app.command(name="update")
-def skills_update(*, force: bool = False):
-    """Sync bundled skills to project .autoskillit/skills/, preserving customized ones.
-
-    Parameters
-    ----------
-    force
-        Overwrite customized skills with bundled versions.
-    """
-    from autoskillit.skill_resolver import bundled_skills_dir
-
-    bd = bundled_skills_dir()
-    project_skills = Path.cwd() / ".autoskillit" / "skills"
-    updated = []
-    skipped = []
-
-    for skill_dir in sorted(bd.iterdir()):
-        if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").is_file():
-            continue
-        src = skill_dir / "SKILL.md"
-        dest_dir = project_skills / skill_dir.name
-        dest = dest_dir / "SKILL.md"
-
-        if not dest.exists():
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dest)
-            updated.append(skill_dir.name)
-        elif force or dest.read_text() == src.read_text():
-            shutil.copy2(src, dest)
-            updated.append(skill_dir.name)
-        else:
-            skipped.append(skill_dir.name)
-
-    if updated:
-        print(f"Updated: {', '.join(updated)}")
-    if skipped:
-        print(f"Skipped (customized): {', '.join(skipped)}")
-    if not updated and not skipped:
-        print("No bundled skills found.")
 
 
 _MARKER_CONTENT = """\

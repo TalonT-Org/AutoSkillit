@@ -40,7 +40,7 @@ autoskillit init                              # prompts for test command
 autoskillit init --test-command "pytest -v"   # non-interactive
 ```
 
-This creates `.autoskillit/config.yaml` and installs all bundled skills to `.autoskillit/skills/`. Use `--force` to overwrite an existing config, `--no-install-skills` to skip skill installation. Safe to re-run — preserves existing config and only adds missing skills.
+This creates `.autoskillit/config.yaml`. Bundled skills are served automatically via the MCP server — no installation needed. Use `--force` to overwrite an existing config.
 
 ### 3. Enable tools in session
 
@@ -197,10 +197,6 @@ Skills are also exposed as `skill://` MCP resources for protocol-level discovery
 
 ```bash
 autoskillit skills list              # show all with sources
-autoskillit skills install investigate  # copy one bundled skill to project
-autoskillit skills install --all     # copy all bundled skills to project
-autoskillit skills update            # sync bundled skills (skip customized)
-autoskillit skills update --force    # overwrite even customized skills
 ```
 
 ## Workflows
@@ -274,11 +270,11 @@ ESCALATE: Stop and report. Human intervention needed.
 ## Diagnostics
 
 ```bash
-autoskillit doctor          # check for stale MCP servers, missing skills, missing config
+autoskillit doctor          # check for stale MCP servers, missing config
 autoskillit doctor --json   # structured JSON output
 ```
 
-Checks: dead MCP server binaries, bundled skills not installed as slash commands, missing project config.
+Checks: dead MCP server binaries, missing project config.
 
 ## Safety
 

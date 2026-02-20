@@ -96,7 +96,7 @@ temp/                        # Temporary/working files (gitignored)
 ### **Key Components**
 
   * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
-  * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init`, `config show`, `skills install/update/list`, `workflows list/show`, `workspace init`, `update`, and `doctor`.
+  * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init`, `config show`, `skills list`, `workflows list/show`, `workspace init`, `update`, and `doctor`.
   * **server.py**: FastMCP server. All tools are gated by default (`_tools_enabled` flag) and require user activation via MCP prompts. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/implement-worktree` without a verified plan. Registers `SkillsDirectoryProvider` (serving `skill://` resources) and `workflow://` resource handler.
   * **skill_resolver.py**: Skill resolution with project > user > bundled hierarchy. `build_skill_roots()` returns ordered `(source, Path)` tuples. Resolution paths: `.autoskillit/skills/` (project), `~/.autoskillit/skills/` (user), bundled package directory.
   * **workflow_loader.py**: YAML workflow loading, validation, and listing. Discovers workflows from `.autoskillit/workflows/` (project) and bundled package directory.
@@ -109,7 +109,7 @@ temp/                        # Temporary/working files (gitignored)
   * **implementation-pipeline**: Plan → verify → implement → test → merge
   * **investigate-first**: Investigate → rectify → verify → implement → merge
 
-Skills are resolved from `.autoskillit/skills/` (project), `~/.autoskillit/skills/` (user), then bundled. Install with `autoskillit skills install --all`.
+Skills are resolved from `.autoskillit/skills/` (project), `~/.autoskillit/skills/` (user), then bundled. Bundled skills are served automatically via the MCP server.
 
 ### **MCP Tools**
 

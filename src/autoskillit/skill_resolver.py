@@ -21,8 +21,8 @@ def build_skill_roots(project_dir: Path, config: AutomationConfig) -> list[tuple
     Used by both SkillResolver (CLI) and SkillsDirectoryProvider (MCP).
     """
     source_map = {
-        "project": project_dir / ".claude" / "skills",
-        "user": Path.home() / ".claude" / "skills",
+        "project": project_dir / ".autoskillit" / "skills",
+        "user": Path.home() / ".autoskillit" / "skills",
         "bundled": Path(__file__).parent / "skills",
     }
     return [

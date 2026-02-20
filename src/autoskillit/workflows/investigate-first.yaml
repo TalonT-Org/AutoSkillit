@@ -1,0 +1,85 @@
+name: investigate-first
+description: Investigate a problem deeply, plan architectural fix, implement and merge.
+
+inputs:
+  problem:
+    description: Description of the bug, error, or question to investigate
+    required: true
+  work_dir:
+    description: Working directory for agent sessions
+    required: true
+  target_dir:
+    description: Optional additional project directory for context
+    default: ""
+  base_branch:
+    description: Branch to merge fixes into
+    default: main
+
+steps:
+  investigate:
+    tool: run_skill
+    with:
+      skill_command: "/investigate ${{ inputs.problem }}"
+      cwd: ${{ inputs.work_dir }}
+    on_success: rectify
+    on_failure: escalate
+
+  rectify:
+    tool: run_skill
+    with:
+      skill_command: "/rectify"
+      cwd: ${{ inputs.work_dir }}
+    on_success: dry_walkthrough
+    on_failure: escalate
+
+  dry_walkthrough:
+    tool: run_skill
+    with:
+      skill_command: "/dry-walkthrough the plan"
+      cwd: ${{ inputs.work_dir }}
+    on_success: implement
+    on_failure: rectify
+    note: If walkthrough finds issues, re-plan via rectify.
+
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "/implement-worktree the verified plan"
+      cwd: ${{ inputs.work_dir }}
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: escalate
+    on_success: verify
+    on_failure: escalate
+
+  verify:
+    tool: test_check
+    with:
+      worktree_path: ${{ inputs.work_dir }}
+    on_success: merge
+    on_failure: assess
+
+  assess:
+    tool: run_skill
+    with:
+      skill_command: "/assess-and-merge fix test failures"
+      cwd: ${{ inputs.work_dir }}
+    on_success: verify
+    on_failure: escalate
+
+  merge:
+    tool: merge_worktree
+    with:
+      worktree_path: ${{ inputs.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+    on_success: done
+    on_failure: escalate
+
+  done:
+    action: stop
+    message: "Investigation complete. Fix implemented and merged."
+
+  escalate:
+    action: stop
+    message: "Human intervention needed. Review the latest output for details."

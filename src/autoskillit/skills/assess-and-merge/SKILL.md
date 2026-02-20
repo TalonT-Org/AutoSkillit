@@ -5,7 +5,7 @@ description: Fix test failures in a worktree and merge when green. Use when test
 
 # Assess and Merge Skill
 
-Fix test failures in a worktree implemented by `/implement-worktree-no-merge`, then merge when tests pass.
+Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-no-merge`, then merge when tests pass.
 
 ## When to Use
 
@@ -77,4 +77,4 @@ Output to terminal:
 - Total fix iterations attempted
 - Remaining test failures (summary)
 - Worktree path (left intact for manual inspection)
-- Suggestion: review failures manually or run `/rectify` for deeper analysis
+- Suggestion: review failures manually or run `/autoskillit:rectify` for deeper analysis

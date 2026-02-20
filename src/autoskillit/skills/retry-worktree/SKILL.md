@@ -12,18 +12,18 @@ hooks:
 
 # Retry Worktree Implementation Skill
 
-Continue implementing a plan in an **existing** git worktree. This skill is used when a previous `/implement-worktree` session hit context limits before completing.
+Continue implementing a plan in an **existing** git worktree. This skill is used when a previous `/autoskillit:implement-worktree` session hit context limits before completing.
 
 ## When to Use
 
-- A previous `/implement-worktree` session exhausted its context
+- A previous `/autoskillit:implement-worktree` session exhausted its context
 - The worktree already exists with partial implementation
 - User provides both the plan path and the existing worktree path
 
 ## Arguments
 
 ```
-/retry-worktree {plan_path} {worktree_path}
+/autoskillit:retry-worktree {plan_path} {worktree_path}
 ```
 
 - **plan_path** — Path to the plan file (relative or absolute)
@@ -58,7 +58,7 @@ Parse two positional arguments from the prompt:
 2. **Worktree path** — verify the directory exists, is a git worktree, and has a `.venv`
 
 If the worktree path does not exist:
-- Abort with error: "Worktree path does not exist. Use /implement-worktree to create a new worktree."
+- Abort with error: "Worktree path does not exist. Use /autoskillit:implement-worktree to create a new worktree."
 
 If the `.venv` is missing or broken:
 - Re-create the development environment. Example for Python: `cd {WORKTREE_PATH} && uv venv .venv && uv pip install -e '.[dev]' --python .venv/bin/python`

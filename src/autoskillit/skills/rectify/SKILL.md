@@ -26,7 +26,7 @@ Do not change any code.
 
 ## When to Use
 
-- After an investigation has been completed (usually via the `/investigate` skill)
+- After an investigation has been completed (usually via the `/autoskillit:investigate` skill)
 - User says "rectify", "rectify this", or "address root cause"
 - User wants to understand why tests missed something and how to prevent it architecturally
 

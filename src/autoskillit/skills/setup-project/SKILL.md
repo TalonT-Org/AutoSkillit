@@ -106,7 +106,7 @@ Each history-mining subagent:
   - **Skill invocations**: `type: "user"` messages where `content` contains `<command-name>/skill-name</command-name>`. Extract skill name and args.
   - **Tool call sequences**: `type: "assistant"` messages -> `message.content[]` items with `type: "tool_use"`. Extract `name` and `input`. Build ordered tool-call sequences per session.
   - **Repeated multi-step patterns**: Same tool sequence appearing across multiple sessions (e.g., always `Bash(git checkout) -> Edit -> Edit -> Bash(pytest) -> Bash(git commit)`).
-  - **Common skill chains**: Skill invocations that follow a consistent order (e.g., `/investigate` -> `/rectify` -> `/implement-worktree`).
+  - **Common skill chains**: Skill invocations that follow a consistent order (e.g., `/autoskillit:investigate` -> `/autoskillit:rectify` -> `/autoskillit:implement-worktree`).
   - **Repeated `run_cmd` commands**: Exact shell commands run frequently via Bash tool.
 - Returns structured findings: frequency-ranked tool sequences (min 3 occurrences), skill chains, and notable single-tool patterns
 
@@ -141,7 +141,7 @@ Interactive flow. For each candidate workflow discovered:
 2. For each candidate workflow (including the standard one):
    - Present the workflow chain and explain what it automates
    - Ask the user: "Would you like me to generate a skill script for this workflow?"
-   - If yes: LOAD `/make-script-skill` using the Skill tool to generate the script. The agent already has full context from the exploration phases (workflow name, detected variables like project_dir/work_dir/base_branch, tool call sequence, routing logic) — no explicit parameter passing is needed. make-script-skill uses that context directly to produce a clean script.
+   - If yes: LOAD `/autoskillit:make-script-skill` using the Skill tool to generate the script. The agent already has full context from the exploration phases (workflow name, detected variables like project_dir/work_dir/base_branch, tool call sequence, routing logic) — no explicit parameter passing is needed. make-script-skill uses that context directly to produce a clean script.
    - Explain what a skill script is (paste into a Claude Code session with AutoSkillit tools enabled, the agent follows it step by step), show the generated script content
    - Track the user's approval — do NOT write to disk yet
    - Move to the next candidate workflow

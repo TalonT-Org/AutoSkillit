@@ -49,7 +49,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 2. **Check for dry-walkthrough verification:** Read the first line of the plan file. If it does not contain exactly `Dry-walkthrough verified = TRUE`:
    - Display warning: "WARNING: This plan has NOT been validated with a dry-walkthrough. Implementation may encounter issues that could have been caught beforehand."
    - Use `AskUserQuestion` to prompt: "Do you want to continue without dry-walkthrough validation?"
-   - If user declines, abort and suggest running `/dry-walkthrough` first
+   - If user declines, abort and suggest running `/autoskillit:dry-walkthrough` first
 3. Check `git status --porcelain` — if dirty, warn user
 4. Parse plan: phases, files per phase, verification commands
 

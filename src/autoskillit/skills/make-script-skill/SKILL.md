@@ -101,14 +101,14 @@ SETUP:
 PIPELINE:
 0. Verify AutoSkillit tools are enabled. If not → tell user to run /mcp__autoskillit__enable_tools
 0.1. Prompt user for SETUP variables (use AskUserQuestion)
-1. run_skill("/make-plan ${task}", cwd=${work_dir}, add_dir=${project_dir}) → save ${plan_path}
-2. run_skill("/dry-walkthrough ${plan_path}", cwd=${work_dir})
-3. run_skill_retry("/implement-worktree-no-merge ${plan_path}", cwd=${work_dir})
-   - If context exhausted: run_skill_retry("/retry-worktree ${plan_path} ${worktree_path}", cwd=${work_dir})
+1. run_skill("/autoskillit:make-plan ${task}", cwd=${work_dir}, add_dir=${project_dir}) → save ${plan_path}
+2. run_skill("/autoskillit:dry-walkthrough ${plan_path}", cwd=${work_dir})
+3. run_skill_retry("/autoskillit:implement-worktree-no-merge ${plan_path}", cwd=${work_dir})
+   - If context exhausted: run_skill_retry("/autoskillit:retry-worktree ${plan_path} ${worktree_path}", cwd=${work_dir})
      Repeat up to 3x, then → ESCALATE
 4. test_check(${worktree_path})
    - PASS → merge_worktree(${worktree_path}, ${base_branch}). Done.
-   - FAIL → run_skill("/assess-and-merge ${worktree_path} ${plan_path} ${base_branch}", cwd=${work_dir})
+   - FAIL → run_skill("/autoskillit:assess-and-merge ${worktree_path} ${plan_path} ${base_branch}", cwd=${work_dir})
      Still failing after 3 attempts → ESCALATE
 
 ESCALATE: Stop and report what failed. Human intervention needed.

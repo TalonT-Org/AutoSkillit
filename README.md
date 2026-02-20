@@ -45,7 +45,7 @@ autoskillit init --quick                      # just test command + defaults
 autoskillit init --test-command "pytest -v"   # fully non-interactive
 ```
 
-This creates `.autoskillit/config.yaml` with project-specific settings. Use `--force` to overwrite an existing config.
+This creates `.autoskillit/config.yaml` and installs all bundled skills to `.claude/skills/`. Use `--force` to overwrite an existing config, `--no-install-skills` to skip skill installation. Safe to re-run — preserves existing config and only adds missing skills.
 
 ### 3. Enable tools in session
 
@@ -198,7 +198,10 @@ Skills are also exposed as `skill://` MCP resources for protocol-level discovery
 
 ```bash
 autoskillit skills list              # show all with sources
-autoskillit skills install investigate  # copy bundled to project
+autoskillit skills install investigate  # copy one bundled skill to project
+autoskillit skills install --all     # copy all bundled skills to project
+autoskillit skills update            # sync bundled skills (skip customized)
+autoskillit skills update --force    # overwrite even customized skills
 ```
 
 ## Workflows
@@ -268,6 +271,15 @@ ESCALATE: Stop and report. Human intervention needed.
 
 `/setup-project` generates a skill script tailored to your project. Run `/setup-project /path/to/your-project` to get started.
 
+## Diagnostics
+
+```bash
+autoskillit doctor          # check for stale MCP servers, missing skills, missing config
+autoskillit doctor --json   # structured JSON output
+```
+
+Checks: dead MCP server binaries, bundled skills not installed as slash commands, missing project config.
+
 ## Safety
 
 - **Tool gating**: All tools disabled by default, require user activation via MCP prompt
@@ -290,7 +302,7 @@ pre-commit run --all-files       # format, lint, typecheck
 
 ```
 src/autoskillit/
-  cli.py               Cyclopts CLI (serve, init, config, skills, workflows, update)
+  cli.py               Cyclopts CLI (serve, init, config, skills, workflows, update, doctor)
   config.py            Dataclass config + layered YAML loading
   server.py            FastMCP server with 8 tools + 2 prompts + resources
   process_lifecycle.py  Subprocess management (temp I/O, tree cleanup, timeouts)

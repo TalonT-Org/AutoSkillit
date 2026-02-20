@@ -441,7 +441,7 @@ class TestToolSchemas:
 
 
 class TestResetGuard:
-    """Marker-file-based reset guard replaces playground_guard."""
+    """Marker-file-based reset guard for destructive operations."""
 
     @pytest.mark.asyncio
     async def test_reset_test_dir_refuses_without_marker(self, tmp_path):
@@ -533,11 +533,9 @@ class TestResetGuard:
         assert "does not exist" in result["error"]
 
     def test_safety_config_has_reset_guard_marker(self):
-        """SafetyConfig has reset_guard_marker field, not playground_guard."""
+        """SafetyConfig has reset_guard_marker field."""
         cfg = SafetyConfig()
-        assert hasattr(cfg, "reset_guard_marker")
         assert cfg.reset_guard_marker == ".autoskillit-workspace"
-        assert not hasattr(cfg, "playground_guard")
 
 
 class TestConfigDefaults:
@@ -1256,7 +1254,7 @@ class TestConfigDrivenBehavior:
 
         plan.write_text("Dry-walkthrough verified = TRUE\n# Plan content")
         result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
-        assert result is not None  # fails with old default marker
+        assert result is not None  # fails — marker doesn't match
 
     def test_dry_walkthrough_uses_config_skill_names(self, monkeypatch, tmp_path):
         """S8: Gate checks _config.implement_gate.skill_names."""
@@ -1349,11 +1347,11 @@ class TestDeleteDirectoryContents:
 
     def test_continues_after_permission_error(self, tmp_path):
         """1a: PermissionError on one item does not abort the loop."""
-        playground = tmp_path / "playground"
-        playground.mkdir()
-        (playground / "dir_a").mkdir()
-        (playground / "locked_dir").mkdir()
-        (playground / "file_c.txt").touch()
+        target = tmp_path / "testdir"
+        target.mkdir()
+        (target / "dir_a").mkdir()
+        (target / "locked_dir").mkdir()
+        (target / "file_c.txt").touch()
 
         # Capture real rmtree before patching
         real_rmtree = shutil.rmtree
@@ -1364,7 +1362,7 @@ class TestDeleteDirectoryContents:
             real_rmtree(path, *args, **kwargs)
 
         with patch("autoskillit.server.shutil.rmtree", side_effect=selective_rmtree):
-            result = _delete_directory_contents(playground)
+            result = _delete_directory_contents(target)
 
         assert "dir_a" in result.deleted
         assert "file_c.txt" in result.deleted
@@ -1373,14 +1371,14 @@ class TestDeleteDirectoryContents:
 
     def test_file_not_found_treated_as_success(self, tmp_path):
         """1b: FileNotFoundError means item is gone = success."""
-        playground = tmp_path / "playground"
-        playground.mkdir()
-        (playground / "ghost.txt").touch()
+        target = tmp_path / "testdir"
+        target.mkdir()
+        (target / "ghost.txt").touch()
 
         # Delete the file before the cleanup function processes it
         with patch.object(Path, "unlink", side_effect=FileNotFoundError("gone")):
             with patch.object(Path, "is_dir", return_value=False):
-                result = _delete_directory_contents(playground)
+                result = _delete_directory_contents(target)
 
         assert "ghost.txt" in result.deleted
         assert result.failed == []
@@ -1388,33 +1386,33 @@ class TestDeleteDirectoryContents:
 
     def test_preserves_specified_dirs(self, tmp_path):
         """1c: Preserved dirs are skipped, others deleted."""
-        playground = tmp_path / "playground"
-        playground.mkdir()
-        (playground / ".cache").mkdir()
-        (playground / "reports").mkdir()
-        (playground / "output.txt").touch()
-        (playground / "temp_dir").mkdir()
+        target = tmp_path / "testdir"
+        target.mkdir()
+        (target / ".cache").mkdir()
+        (target / "reports").mkdir()
+        (target / "output.txt").touch()
+        (target / "temp_dir").mkdir()
 
-        result = _delete_directory_contents(playground, preserve={".cache", "reports"})
+        result = _delete_directory_contents(target, preserve={".cache", "reports"})
 
         assert ".cache" in result.skipped
         assert "reports" in result.skipped
         assert "output.txt" in result.deleted
         assert "temp_dir" in result.deleted
-        assert (playground / ".cache").exists()
-        assert (playground / "reports").exists()
-        assert not (playground / "output.txt").exists()
-        assert not (playground / "temp_dir").exists()
+        assert (target / ".cache").exists()
+        assert (target / "reports").exists()
+        assert not (target / "output.txt").exists()
+        assert not (target / "temp_dir").exists()
 
     def test_all_items_deleted_successfully(self, tmp_path):
         """1d: All succeed with no failures."""
-        playground = tmp_path / "playground"
-        playground.mkdir()
-        (playground / "a").mkdir()
-        (playground / "b").touch()
-        (playground / "c").touch()
+        target = tmp_path / "testdir"
+        target.mkdir()
+        (target / "a").mkdir()
+        (target / "b").touch()
+        (target / "c").touch()
 
-        result = _delete_directory_contents(playground)
+        result = _delete_directory_contents(target)
 
         assert result.success is True
         assert result.failed == []

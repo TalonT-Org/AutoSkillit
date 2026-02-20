@@ -289,7 +289,12 @@ class TestCLI:
             "test_check:\n  command: ['pytest']\n"
         )
         # Ensure autoskillit appears to be on PATH so the PATH check does not warn
-        with patch("autoskillit.cli.shutil.which", side_effect=lambda cmd: "/usr/local/bin/autoskillit" if cmd == "autoskillit" else shutil.which(cmd)):
+        with patch(
+            "autoskillit.cli.shutil.which",
+            side_effect=lambda cmd: (
+                "/usr/local/bin/autoskillit" if cmd == "autoskillit" else shutil.which(cmd)
+            ),
+        ):
             cli.doctor()
         captured = capsys.readouterr()
         assert "WARNING" not in captured.out

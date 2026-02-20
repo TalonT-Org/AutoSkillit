@@ -71,7 +71,7 @@ class TestSkillResolver:
         skills_dir = Path(autoskillit.__file__).parent / "skills"
         for skill_md in skills_dir.rglob("SKILL.md"):
             content = skill_md.read_text()
-            for match in re.finditer(r'(?<!\w)/([a-z][\w-]+)', content):
+            for match in re.finditer(r"(?<!\w)/([a-z][\w-]+)", content):
                 name = match.group(1)
                 if name.startswith("autoskillit:") or name.startswith("mcp__"):
                     continue
@@ -81,6 +81,5 @@ class TestSkillResolver:
                     continue
                 if name in BUNDLED_SKILL_NAMES:
                     assert False, (
-                        f"{skill_md.parent.name}/SKILL.md: "
-                        f"/{name} should be /autoskillit:{name}"
+                        f"{skill_md.parent.name}/SKILL.md: /{name} should be /autoskillit:{name}"
                     )

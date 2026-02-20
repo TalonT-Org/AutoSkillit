@@ -127,7 +127,7 @@ When called directly as `/make-script-skill`:
 3. Ask for the tool calls and routing (which MCP tools, what order, what conditions)
 4. Ask for SETUP variables (what's configurable)
 5. Generate the script in the format above
-6. Ask where to save: suggest `.claude/skills/{name}/SKILL.md`
+6. Ask where to save: suggest `.autoskillit/skills/{name}/SKILL.md`
 7. Write to disk after confirmation
 
 ## Loaded by Another Skill

@@ -84,7 +84,7 @@ Launch parallel Explore subagents against `project_dir`. If the user opted into 
 
 **Subagent D — Existing AutoSkillit Config:**
 - Check for `.autoskillit/config.yaml` — read if present
-- Check for `.claude/skills/` — list any custom skills
+- Check for `.autoskillit/skills/` and `.claude/skills/` — list any custom skills
 - Check for `CLAUDE.md` — extract project constraints
 - Check for `.autoskillit/workflows/` — list any custom workflows
 
@@ -179,8 +179,8 @@ test_check:
 Following the Terraform plan→apply pattern, show a summary of everything approved before touching disk:
 
 1. For each approved skill script, ask where to save it:
-   - `.autoskillit/scripts/{name}.md` — AutoSkillit script (used with `run_skill`)
-   - `.claude/skills/{name}/SKILL.md` — Claude Code skill (invokable as `/{name}`)
+   - `.autoskillit/skill_scripts/{name}.md` — AutoSkillit script (used with `run_skill`)
+   - `.autoskillit/skills/{name}/SKILL.md` — Claude Code skill (invokable as `/{name}`)
 2. List all approved skill scripts with their chosen save paths
 3. List all approved config changes
 4. Ask one final question: "Write all of the above?"
@@ -208,5 +208,5 @@ Do NOT include:
 
 Artifacts created:
 - `temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
-- `.autoskillit/scripts/{name}.md` or `.claude/skills/{name}/SKILL.md` — approved skill scripts (user chooses path)
+- `.autoskillit/skill_scripts/{name}.md` or `.autoskillit/skills/{name}/SKILL.md` — approved skill scripts (user chooses path)
 - `.autoskillit/config.yaml` — updated config (if changes approved)

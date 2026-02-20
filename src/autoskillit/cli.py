@@ -35,16 +35,9 @@ def serve():
     mcp.run()
 
 
-@app.command(name="serve")
-def serve_explicit():
-    """Start the MCP server."""
-    serve()
-
-
 @app.command
 def init(
     *,
-    quick: bool = False,
     force: bool = False,
     test_command: str | None = None,
     install_skills: bool = True,
@@ -53,12 +46,10 @@ def init(
 
     Parameters
     ----------
-    quick
-        Minimal questions: test command only.
     force
         Overwrite existing config without prompting.
     test_command
-        Test command string for fully non-interactive init (e.g. "pytest -v").
+        Test command string for non-interactive init (e.g. "pytest -v").
     install_skills
         Install all bundled skills to .autoskillit/skills/. Use --no-install-skills to skip.
     """
@@ -73,10 +64,8 @@ def init(
     else:
         if test_command is not None:
             cmd_parts = test_command.split()
-        elif quick:
-            cmd_parts = _quick_init()
         else:
-            cmd_parts = _interactive_init()
+            cmd_parts = _prompt_test_command()
 
         config_path.write_text(_generate_config_yaml(cmd_parts))
         print(f"Config written to: {config_path}")
@@ -382,51 +371,10 @@ def workflows_show(name: str):
 # --- Init helpers ---
 
 
-def _quick_init() -> list[str]:
-    test_cmd = _prompt("Test command", "pytest -v")
-    return test_cmd.split()
-
-
-def _interactive_init() -> list[str]:
-    project_type = _choose(
-        "Project type",
-        ["Python (pytest)", "TypeScript", "Go", "Custom"],
-    )
-    test_defaults = {
-        "Python (pytest)": "pytest -v",
-        "TypeScript": "npm test",
-        "Go": "go test ./...",
-        "Custom": "",
-    }
-    test_cmd = _prompt("Test command", test_defaults.get(project_type, ""))
-    return test_cmd.split()
-
-
-def _prompt(message: str, default: str) -> str:
-    try:
-        import questionary
-
-        return questionary.text(message, default=default).unsafe_ask()
-    except ImportError:
-        suffix = f" [{default}]" if default else ""
-        answer = input(f"{message}{suffix}: ").strip()
-        return answer if answer else default
-
-
-def _choose(message: str, choices: list[str]) -> str:
-    try:
-        import questionary
-
-        return questionary.select(message, choices=choices).unsafe_ask()
-    except ImportError:
-        print(f"{message}:")
-        for i, c in enumerate(choices, 1):
-            print(f"  {i}. {c}")
-        while True:
-            raw = input("Choice [1]: ").strip()
-            idx = int(raw) - 1 if raw else 0
-            if 0 <= idx < len(choices):
-                return choices[idx]
+def _prompt_test_command() -> list[str]:
+    default = "pytest -v"
+    answer = input(f"Test command [{default}]: ").strip()
+    return (answer if answer else default).split()
 
 
 def _generate_config_yaml(test_command: list[str]) -> str:

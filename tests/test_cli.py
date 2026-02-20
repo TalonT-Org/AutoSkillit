@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,20 +22,12 @@ class TestCLI:
                 cli.serve()
         mock_mcp.run.assert_called_once()
 
-    # CL2
-    def test_serve_command_starts_server(self) -> None:
-        mock_mcp = MagicMock()
-        with patch("autoskillit.server.mcp", mock_mcp):
-            cli.serve_explicit()
-        mock_mcp.run.assert_called_once()
-
     # CL3
     def test_init_creates_config_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        with patch.object(cli, "_quick_init", return_value=["pytest", "-v"]):
-            cli.init(quick=True, force=False)
+        cli.init(test_command="pytest -v")
         assert (tmp_path / ".autoskillit").is_dir()
 
     # CL4
@@ -44,8 +35,7 @@ class TestCLI:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        with patch.object(cli, "_quick_init", return_value=["pytest", "-v"]):
-            cli.init(quick=True, force=False)
+        cli.init(test_command="pytest -v")
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         assert config_path.is_file()
         data = yaml.safe_load(config_path.read_text())
@@ -53,10 +43,12 @@ class TestCLI:
         assert data["safety"]["reset_guard_marker"] == ".autoskillit-workspace"
 
     # CL5
-    def test_init_quick_mode(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_init_interactive_prompts_for_test_command(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.chdir(tmp_path)
-        with patch.object(cli, "_prompt", return_value="npm test"):
-            cli.init(quick=True, force=False)
+        with patch.object(cli, "_prompt_test_command", return_value=["npm", "test"]):
+            cli.init()
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         data = yaml.safe_load(config_path.read_text())
         assert data["test_check"]["command"] == ["npm", "test"]
@@ -71,7 +63,7 @@ class TestCLI:
         config_path = config_dir / "config.yaml"
         config_path.write_text("original: true\n")
 
-        cli.init(quick=False, force=False)
+        cli.init(force=False)
 
         assert config_path.read_text() == "original: true\n"
         captured = capsys.readouterr()
@@ -123,8 +115,7 @@ class TestCLI:
         config_path = config_dir / "config.yaml"
         config_path.write_text("old: true\n")
 
-        with patch.object(cli, "_quick_init", return_value=["pytest", "-v"]):
-            cli.init(quick=True, force=True)
+        cli.init(test_command="pytest -v", force=True)
 
         data = yaml.safe_load(config_path.read_text())
         assert data["test_check"]["command"] == ["pytest", "-v"]
@@ -155,73 +146,17 @@ class TestCLI:
         assert parsed["test_check"]["command"] == ["task", "test-all"]
         assert parsed["safety"]["reset_guard_marker"] == ".autoskillit-workspace"
 
-    def test_interactive_init_asks_minimal_questions(self) -> None:
-        """Interactive init only asks about the test command."""
-        with patch.object(cli, "_choose", return_value="Python (pytest)"):
-            with patch.object(cli, "_prompt", return_value="pytest -v") as mock_prompt:
-                cli._interactive_init()
-
-        assert mock_prompt.call_count == 1
-
     def test_init_writes_template_with_comments(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """init writes a config file containing commented advanced sections."""
         monkeypatch.chdir(tmp_path)
-        with patch.object(cli, "_prompt", return_value="pytest -v"):
-            cli.init(quick=True)
+        cli.init(test_command="pytest -v")
 
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         content = config_path.read_text()
         assert "# classify_fix:" in content
         assert "test_check:" in content
-
-    def test_prompt_delegates_to_questionary(self) -> None:
-        """_prompt calls questionary.text().unsafe_ask() when available."""
-        mock_q = ModuleType("questionary")
-        mock_question = MagicMock()
-        mock_question.unsafe_ask.return_value = "my answer"
-        mock_q.text = MagicMock(return_value=mock_question)
-
-        with patch.dict("sys.modules", {"questionary": mock_q}):
-            result = cli._prompt("Test command", "default_val")
-
-        mock_q.text.assert_called_once_with("Test command", default="default_val")
-        mock_question.unsafe_ask.assert_called_once()
-        assert result == "my answer"
-
-    def test_choose_delegates_to_questionary(self) -> None:
-        """_choose calls questionary.select().unsafe_ask() when available."""
-        mock_q = ModuleType("questionary")
-        mock_question = MagicMock()
-        mock_question.unsafe_ask.return_value = "Go"
-        mock_q.select = MagicMock(return_value=mock_question)
-
-        with patch.dict("sys.modules", {"questionary": mock_q}):
-            result = cli._choose("Project type", ["Python (pytest)", "Go", "Custom"])
-
-        mock_q.select.assert_called_once_with(
-            "Project type", choices=["Python (pytest)", "Go", "Custom"]
-        )
-        mock_question.unsafe_ask.assert_called_once()
-        assert result == "Go"
-
-    def test_init_test_command_flag_skips_prompts(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """--test-command generates config without any interactive prompts."""
-        monkeypatch.chdir(tmp_path)
-
-        with patch.object(cli, "_prompt") as mock_prompt:
-            with patch.object(cli, "_choose") as mock_choose:
-                cli.init(test_command="pytest -v")
-
-        mock_prompt.assert_not_called()
-        mock_choose.assert_not_called()
-
-        config_path = tmp_path / ".autoskillit" / "config.yaml"
-        data = yaml.safe_load(config_path.read_text())
-        assert data["test_check"]["command"] == ["pytest", "-v"]
 
     def test_init_test_command_with_force(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

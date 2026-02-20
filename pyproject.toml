@@ -20,7 +20,6 @@ dev = [
     "pytest-asyncio>=1.3.0",
     "ruff>=0.9.0",
 ]
-wizard = ["questionary>=2.1.1"]
 
 [project.scripts]
 autoskillit = "autoskillit.cli:main"

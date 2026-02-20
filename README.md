@@ -5,11 +5,7 @@ MCP server that orchestrates automated workflows with Claude Code headless sessi
 ## Install
 
 ```bash
-# From cloned repo
 pip install -e .
-
-# With interactive init wizard (questionary-based prompts)
-pip install -e ".[wizard]"
 ```
 
 Requires Python 3.11+.
@@ -40,9 +36,8 @@ claude mcp add --scope user autoskillit -- autoskillit
 
 ```bash
 cd your-project
-autoskillit init                              # interactive wizard
-autoskillit init --quick                      # just test command + defaults
-autoskillit init --test-command "pytest -v"   # fully non-interactive
+autoskillit init                              # prompts for test command
+autoskillit init --test-command "pytest -v"   # non-interactive
 ```
 
 This creates `.autoskillit/config.yaml` and installs all bundled skills to `.autoskillit/skills/`. Use `--force` to overwrite an existing config, `--no-install-skills` to skip skill installation. Safe to re-run — preserves existing config and only adds missing skills.

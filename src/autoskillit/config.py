@@ -35,7 +35,10 @@ class ResetWorkspaceConfig:
 class ImplementGateConfig:
     marker: str = "Dry-walkthrough verified = TRUE"
     skill_names: set[str] = field(
-        default_factory=lambda: {"/implement-worktree", "/implement-worktree-no-merge"}
+        default_factory=lambda: {
+            "/autoskillit:implement-worktree",
+            "/autoskillit:implement-worktree-no-merge",
+        }
     )
 
 

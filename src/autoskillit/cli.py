@@ -294,7 +294,7 @@ safety:
 #
 # implement_gate:
 #   marker: "Dry-walkthrough verified = TRUE"
-#   skill_names: ["/implement-worktree", "/implement-worktree-no-merge"]
+#   skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
 #
 # skills:
 #   resolution_order: ["project", "user", "bundled"]

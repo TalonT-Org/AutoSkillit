@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -185,3 +186,20 @@ class TestWorkflowLoader:
         wf = load_workflow(f)
         errors = validate_workflow(wf)
         assert any("missing_input" in e for e in errors)
+
+    # T4
+    def test_workflow_skill_commands_are_namespaced(self) -> None:
+        """All skill_command values in workflow YAMLs use /autoskillit: namespace."""
+        import autoskillit
+
+        wf_dir = Path(autoskillit.__file__).parent / "workflows"
+        for wf_path in wf_dir.glob("*.yaml"):
+            content = wf_path.read_text()
+            for match in re.finditer(r'skill_command:\s*"(/\S+)', content):
+                ref = match.group(1)
+                # Allow template expressions like /audit-${{ inputs.audit_type }}
+                if "${{" in ref:
+                    continue
+                assert ref.startswith("/autoskillit:"), (
+                    f"{wf_path.name}: {ref} should use /autoskillit: namespace"
+                )

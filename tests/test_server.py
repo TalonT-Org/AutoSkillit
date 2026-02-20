@@ -142,6 +142,32 @@ class TestRunSkillPluginDir:
         assert server._plugin_dir == str(Path(autoskillit.__file__).parent)
 
 
+class TestPluginMetadataExists:
+    """T1: Plugin metadata files are shipped in the package."""
+
+    def test_plugin_json_exists(self):
+        """Package contains .claude-plugin/plugin.json with correct fields."""
+        import autoskillit
+
+        pkg = Path(autoskillit.__file__).parent
+        manifest = pkg / ".claude-plugin" / "plugin.json"
+        assert manifest.is_file()
+        data = json.loads(manifest.read_text())
+        assert data["name"] == "autoskillit"
+        assert "version" in data
+
+    def test_mcp_json_exists(self):
+        """Package contains .mcp.json with autoskillit server entry."""
+        import autoskillit
+
+        pkg = Path(autoskillit.__file__).parent
+        mcp_cfg = pkg / ".mcp.json"
+        assert mcp_cfg.is_file()
+        data = json.loads(mcp_cfg.read_text())
+        assert "autoskillit" in data["mcpServers"]
+        assert data["mcpServers"]["autoskillit"]["command"] == "autoskillit"
+
+
 class TestNoSkillsDirectoryProvider:
     """T3: SkillsDirectoryProvider is not used in the new plugin architecture."""
 

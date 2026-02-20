@@ -21,22 +21,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastmcp import FastMCP
-from fastmcp.server.providers.skills import SkillsDirectoryProvider
 
 from autoskillit.config import AutomationConfig, load_config
 from autoskillit.process_lifecycle import run_managed_async
-from autoskillit.skill_resolver import build_skill_roots
 
 mcp = FastMCP("autoskillit")
 
 _config: AutomationConfig = load_config(Path.cwd())
-
-_skill_roots = build_skill_roots(Path.cwd(), _config)
-mcp.add_provider(
-    SkillsDirectoryProvider(
-        roots=[path for _source, path in _skill_roots],
-    )
-)
 
 _plugin_dir = str(Path(__file__).parent)
 

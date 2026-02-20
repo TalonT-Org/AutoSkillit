@@ -1,6 +1,6 @@
 # AutoSkillit
 
-MCP server that orchestrates automated workflows with Claude Code headless sessions. Provides 8 tools for running commands, executing skills, testing, merging worktrees, and classifying fixes — all gated behind user-only MCP prompts.
+Claude Code plugin that orchestrates automated workflows using headless sessions. Provides 8 MCP tools for running commands, executing skills, testing, merging worktrees, and classifying fixes — all gated behind user-only MCP prompts. Skills are registered as first-class slash commands (`/autoskillit:investigate`, etc.).
 
 ## Install
 
@@ -12,25 +12,14 @@ Requires Python 3.11+.
 
 ## Quick Start
 
-### 1. Install and register with Claude Code
+### 1. Install and load as a plugin
 
 ```bash
 pip install -e /path/to/autoskillit
-claude mcp add autoskillit -- autoskillit
+claude --plugin-dir $(python -c "import autoskillit; print(autoskillit.__path__[0])")
 ```
 
-The `claude mcp add` command registers the server so Claude Code can discover it. Scope options:
-
-```bash
-# Default (local) — just you, just this project
-claude mcp add autoskillit -- autoskillit
-
-# Project — writes .mcp.json, shared with team via git
-claude mcp add --scope project autoskillit -- autoskillit
-
-# User — available across all your projects
-claude mcp add --scope user autoskillit -- autoskillit
-```
+The `--plugin-dir` flag loads the plugin, which registers both skills (as `/autoskillit:*` slash commands) and MCP tools (via the bundled `.mcp.json`).
 
 ### 2. Configure for your project
 
@@ -40,7 +29,7 @@ autoskillit init                              # prompts for test command
 autoskillit init --test-command "pytest -v"   # non-interactive
 ```
 
-This creates `.autoskillit/config.yaml`. Bundled skills are served automatically via the MCP server — no installation needed. Use `--force` to overwrite an existing config.
+This creates `.autoskillit/config.yaml` and prints the plugin directory path. Use `--force` to overwrite an existing config.
 
 ### 3. Enable tools in session
 
@@ -111,8 +100,8 @@ Default: `command: null` (disabled), `preserve_dirs: []` (empty). The tool retur
 
 ```yaml
 implement_gate:
-  marker: "Dry-walkthrough verified = TRUE"                        # required first line in plan files
-  skill_names: ["/implement-worktree", "/implement-worktree-no-merge"]  # skills subject to gate
+  marker: "Dry-walkthrough verified = TRUE"                                            # required first line in plan files
+  skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]  # skills subject to gate
 
 safety:
   reset_guard_marker: ".autoskillit-workspace"  # marker file required for reset operations
@@ -139,9 +128,6 @@ classify_fix:
 reset_workspace:
   command: ["task", "clean"]
   preserve_dirs: ["data", ".cache"]
-
-skills:
-  resolution_order: ["project", "user", "bundled"]
 ```
 
 ### Resolution Order
@@ -154,7 +140,7 @@ autoskillit config show
 
 ## Skills
 
-Skills bundled with the package:
+Skills bundled with the plugin, invoked as `/autoskillit:<name>`:
 
 | Skill | Purpose |
 |-------|---------|
@@ -167,37 +153,14 @@ Skills bundled with the package:
 | `implement-worktree-no-merge` | Implement without auto-merge (for MCP orchestration) |
 | `retry-worktree` | Continue after context exhaustion |
 | `assess-and-merge` | Fix test failures and merge |
-| `bugfix-loop` | Pipeline: reset → test → investigate → fix → merge |
-| `implementation-pipeline` | Pipeline: plan → verify → implement → test → merge |
-| `investigate-first` | Pipeline: investigate → rectify → implement → merge |
+| `bugfix-loop` | Pipeline: reset > test > investigate > fix > merge |
+| `implementation-pipeline` | Pipeline: plan > verify > implement > test > merge |
+| `investigate-first` | Pipeline: investigate > rectify > implement > merge |
 | `mermaid` | Create mermaid diagrams |
 | `make-script-skill` | Generate script-style SKILL.md files from workflow descriptions |
 | `setup-project` | Explore a project and generate a tailored skill script and config |
 
-### Skill Resolution Order
-
-Skills are resolved by name using a first-match-wins hierarchy. The default order:
-
-1. **project** — `.autoskillit/skills/<name>/SKILL.md` in the current repo
-2. **user** — `~/.autoskillit/skills/<name>/SKILL.md` in your home directory
-3. **bundled** — skills shipped inside the autoskillit package
-
-If the same skill name exists at multiple levels, the highest-priority source wins. For example, a project-level `rectify` skill shadows the bundled one.
-
-The order is configurable in `.autoskillit/config.yaml`:
-
-```yaml
-skills:
-  resolution_order: ["project", "user", "bundled"]  # default
-```
-
-Use `autoskillit skills list` to see which source won for each skill.
-
-Skills are also exposed as `skill://` MCP resources for protocol-level discovery and reading.
-
-```bash
-autoskillit skills list              # show all with sources
-```
+Skills are discovered by Claude Code via the plugin structure. Use `autoskillit skills list` to see bundled skills.
 
 ## Workflows
 
@@ -242,14 +205,14 @@ SETUP:
   - task = "description of what to implement"
 
 PIPELINE:
-1. run_skill("/make-plan {task}", cwd=work_dir, add_dir=project_dir)
-2. run_skill("/dry-walkthrough {plan_path}", cwd=work_dir)
-3. run_skill_retry("/implement-worktree-no-merge {plan_path}", cwd=work_dir)
-   - If context exhausted: run_skill_retry("/retry-worktree {plan_path} {worktree_path}", cwd=work_dir).
+1. run_skill("/autoskillit:make-plan {task}", cwd=work_dir, add_dir=project_dir)
+2. run_skill("/autoskillit:dry-walkthrough {plan_path}", cwd=work_dir)
+3. run_skill_retry("/autoskillit:implement-worktree-no-merge {plan_path}", cwd=work_dir)
+   - If context exhausted: run_skill_retry("/autoskillit:retry-worktree {plan_path} {worktree_path}", cwd=work_dir).
      Repeat up to 3x, then ESCALATE.
 4. test_check(worktree_path)
    - PASS: merge_worktree(worktree_path, base_branch). Done.
-   - FAIL: run_skill("/assess-and-merge {worktree_path} {plan_path} {base_branch}", cwd=work_dir)
+   - FAIL: run_skill("/autoskillit:assess-and-merge {worktree_path} {plan_path} {base_branch}", cwd=work_dir)
      - Still failing after 3 attempts: ESCALATE
 
 ESCALATE: Stop and report. Human intervention needed.
@@ -265,16 +228,16 @@ ESCALATE: Stop and report. Human intervention needed.
 | 4 | `test_check` | Runs the project's test suite against the worktree |
 | 5 | `merge_worktree` | Merges the worktree branch after the test gate passes |
 
-`/setup-project` generates a skill script tailored to your project. Run `/setup-project /path/to/your-project` to get started.
+`/autoskillit:setup-project` generates a skill script tailored to your project. Run `/autoskillit:setup-project /path/to/your-project` to get started.
 
 ## Diagnostics
 
 ```bash
-autoskillit doctor          # check for stale MCP servers, missing config
+autoskillit doctor          # check for stale MCP servers, missing config, plugin metadata
 autoskillit doctor --json   # structured JSON output
 ```
 
-Checks: dead MCP server binaries, missing project config.
+Checks: dead MCP server binaries, plugin metadata, `autoskillit` command on PATH, missing project config.
 
 ## Safety
 
@@ -298,11 +261,13 @@ pre-commit run --all-files       # format, lint, typecheck
 
 ```
 src/autoskillit/
+  .claude-plugin/      Plugin metadata (plugin.json)
+  .mcp.json            MCP server configuration for the plugin
   cli.py               Cyclopts CLI (serve, init, config, skills, workflows, update, doctor)
   config.py            Dataclass config + layered YAML loading
   server.py            FastMCP server with 8 tools + 2 prompts + resources
   process_lifecycle.py  Subprocess management (temp I/O, tree cleanup, timeouts)
-  skill_resolver.py    Skill resolution hierarchy
+  skill_resolver.py    Bundled skill listing
   workflow_loader.py   Workflow YAML parsing + validation
   skills/              15 bundled skills (pipeline, workflow launchers, utilities)
   workflows/           4 built-in workflow definitions

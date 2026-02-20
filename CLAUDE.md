@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A standalone MCP server that orchestrates automated skill-driven workflows using Claude Code headless sessions. It provides 8 tools (run_cmd, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace) gated behind MCP prompts for user-only activation, driving worktree-based automation cycles.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 8 MCP tools (run_cmd, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace) gated behind MCP prompts for user-only activation, and 15 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -59,10 +59,12 @@ Configured hooks: ruff format (auto-fix), ruff check (auto-fix), mypy type check
 src/autoskillit/
 ├── __init__.py              # Package version
 ├── __main__.py              # python -m autoskillit entry point (delegates to cli)
+├── .claude-plugin/          # Plugin metadata (plugin.json)
+├── .mcp.json                # MCP server config for plugin loading
 ├── cli.py                   # CLI: serve, init, config show, skills, workflows
 ├── config.py                # Dataclass config + YAML loading (layered resolution)
 ├── server.py                # FastMCP server with 8 gated MCP tools + 2 prompts
-├── skill_resolver.py        # Skill resolution hierarchy (project > user > bundled)
+├── skill_resolver.py        # Bundled skill listing
 ├── workflow_loader.py       # Workflow YAML loading, validation, listing
 ├── process_lifecycle.py     # Subprocess management (kill trees, temp I/O, timeouts)
 ├── skills/                  # 15 bundled skills (SKILL.md per skill)
@@ -96,28 +98,36 @@ temp/                        # Temporary/working files (gitignored)
 ### **Key Components**
 
   * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
-  * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init`, `config show`, `skills list`, `workflows list/show`, `workspace init`, `update`, and `doctor`.
-  * **server.py**: FastMCP server. All tools are gated by default (`_tools_enabled` flag) and require user activation via MCP prompts. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/implement-worktree` without a verified plan. Registers `SkillsDirectoryProvider` (serving `skill://` resources) and `workflow://` resource handler.
-  * **skill_resolver.py**: Skill resolution with project > user > bundled hierarchy. `build_skill_roots()` returns ordered `(source, Path)` tuples. Resolution paths: `.autoskillit/skills/` (project), `~/.autoskillit/skills/` (user), bundled package directory.
+  * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `skills list`, `workflows list/show`, `workspace init`, `update`, and `doctor`.
+  * **server.py**: FastMCP server. All tools are gated by default (`_tools_enabled` flag) and require user activation via MCP prompts. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/autoskillit:implement-worktree` without a verified plan. `_plugin_dir` is passed to headless sessions via `--plugin-dir`. Registers `workflow://` resource handler.
+  * **skill_resolver.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
   * **workflow_loader.py**: YAML workflow loading, validation, and listing. Discovers workflows from `.autoskillit/workflows/` (project) and bundled package directory.
   * **process_lifecycle.py**: Self-contained subprocess utilities (no internal deps, only stdlib + psutil). Handles process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts.
 
+### **Plugin Structure**
+
+The Python package directory (`src/autoskillit/`) is the plugin root:
+  * `.claude-plugin/plugin.json` — plugin manifest (name, version, description)
+  * `.mcp.json` — MCP server config (command: `autoskillit`)
+  * `skills/` — 15 bundled skills discovered by Claude Code as `/autoskillit:*` slash commands
+  * `pyproject.toml` declares `artifacts` to include dotfiles in the wheel
+
 ### **Skills**
 
-15 bundled skills. Three are pipeline launchers that delegate to `workflow://` YAML resources via `ReadMcpResourceTool`:
+15 bundled skills, invoked as `/autoskillit:<name>`. Three are pipeline launchers that delegate to `workflow://` YAML resources via `ReadMcpResourceTool`:
   * **bugfix-loop**: Reset → test → investigate → fix → merge cycle
   * **implementation-pipeline**: Plan → verify → implement → test → merge
   * **investigate-first**: Investigate → rectify → verify → implement → merge
 
-Skills are resolved from `.autoskillit/skills/` (project), `~/.autoskillit/skills/` (user), then bundled. Bundled skills are served automatically via the MCP server.
+Skills are discovered by Claude Code via the plugin structure. Headless sessions receive `--plugin-dir` automatically via `run_skill` and `run_skill_retry`.
 
 ### **MCP Tools**
 
 | Tool | Purpose |
 |------|---------|
 | `run_cmd` | Execute shell commands with timeout |
-| `run_skill` | Run Claude Code headless with a skill command |
-| `run_skill_retry` | Run Claude Code headless with API call limit (for long-running skills) |
+| `run_skill` | Run Claude Code headless with a skill command (passes `--plugin-dir`) |
+| `run_skill_retry` | Run Claude Code headless with API call limit (passes `--plugin-dir`) |
 | `test_check` | Run test suite in a worktree, returns PASS/FAIL |
 | `merge_worktree` | Merge worktree branch after test gate passes |
 | `reset_test_dir` | Clear test directory (reset guard marker) |
@@ -148,8 +158,7 @@ All tool behavior is configurable via `.autoskillit/config.yaml`. No config file
 | `reset_workspace` | `command` | `null` | Reset command (`null` = not configured) |
 | `reset_workspace` | `preserve_dirs` | `[]` | Directories preserved during reset |
 | `implement_gate` | `marker` | `"Dry-walkthrough verified = TRUE"` | Required first line in plan files |
-| `implement_gate` | `skill_names` | `["/implement-worktree", "/implement-worktree-no-merge"]` | Skills subject to dry-walkthrough gate |
+| `implement_gate` | `skill_names` | `["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]` | Skills subject to dry-walkthrough gate |
 | `safety` | `reset_guard_marker` | `".autoskillit-workspace"` | Marker file required for destructive ops |
 | `safety` | `require_dry_walkthrough` | `true` | Enforce plan verification before implementation |
 | `safety` | `test_gate_on_merge` | `true` | Run tests before allowing merge |
-| `skills` | `resolution_order` | `["project", "user", "bundled"]` | Skill lookup priority order |

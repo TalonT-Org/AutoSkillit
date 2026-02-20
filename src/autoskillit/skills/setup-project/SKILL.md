@@ -23,7 +23,7 @@ Explore a target project and generate tailored skill scripts and AutoSkillit con
 ## Arguments
 
 ```
-/setup-project {project_dir}
+/autoskillit:setup-project {project_dir}
 ```
 
 - `project_dir` — Absolute path to the target project to onboard
@@ -51,7 +51,7 @@ Explore a target project and generate tailored skill scripts and AutoSkillit con
 
 ### Step 0: Parse Arguments and Prompt
 
-Extract `project_dir` from the prompt. Invocation: `/setup-project {project_dir}`. If missing, abort: "Usage: `/setup-project /absolute/path/to/project`". Resolve to absolute path. Verify the directory exists.
+Extract `project_dir` from the prompt. Invocation: `/autoskillit:setup-project {project_dir}`. If missing, abort: "Usage: `/autoskillit:setup-project /absolute/path/to/project`". Resolve to absolute path. Verify the directory exists.
 
 Then prompt the user:
 

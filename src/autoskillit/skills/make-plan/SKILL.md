@@ -115,7 +115,7 @@ Before writing the final plan, verify:
 
 - [ ] Determined which architecture lens best fits the proposed changes
 - [ ] LOADED the corresponding `/arch-lens-*` skill using the Skill tool
-- [ ] The arch-lens skill LOADED the `/mermaid` skill for styling
+- [ ] The arch-lens skill LOADED the `/autoskillit:mermaid` skill for styling
 - [ ] Diagram uses ONLY the classDef styles from the mermaid skill (no invented colors)
 - [ ] Diagram includes a color legend table
 - [ ] Every new component, class, or function is wired into the call chain — nothing is created but left unconnected

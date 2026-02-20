@@ -15,7 +15,7 @@ Format a workflow into a concise, scannable skill script following the strict sc
 ## Arguments (standalone mode)
 
 ```
-/make-script-skill
+/autoskillit:make-script-skill
 ```
 
 No positional arguments. The skill prompts interactively for workflow details.
@@ -76,7 +76,7 @@ ESCALATE: Stop and report what failed. Human intervention needed.
 - Paragraphs of explanation between tool calls
 - Install instructions or "Getting Started" guidance
 
-The tool call line is self-documenting. `run_skill("/make-plan ${task}", cwd=${work_dir})` needs no paragraph explaining that it creates a plan.
+The tool call line is self-documenting. `run_skill("/autoskillit:make-plan ${task}", cwd=${work_dir})` needs no paragraph explaining that it creates a plan.
 
 ## Example: Standard Implementation Pipeline
 
@@ -120,7 +120,7 @@ Notes:
 
 ## Standalone Invocation Flow
 
-When called directly as `/make-script-skill`:
+When called directly as `/autoskillit:make-script-skill`:
 
 1. Ask the user what workflow they want to script (name, what it does)
 2. Ask whether it's a linear PIPELINE or a LOOP with a FIX step

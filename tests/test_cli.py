@@ -135,7 +135,6 @@ class TestCLI:
         assert "# classify_fix:" in yaml_str
         assert "# reset_workspace:" in yaml_str
         assert "# implement_gate:" in yaml_str
-        assert "# skills:" in yaml_str
 
     def test_generate_config_yaml_uncommented_parts_are_valid(self) -> None:
         """The uncommented portion of generated YAML parses as valid config."""
@@ -289,7 +288,9 @@ class TestCLI:
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
             "test_check:\n  command: ['pytest']\n"
         )
-        cli.doctor()
+        # Ensure autoskillit appears to be on PATH so the PATH check does not warn
+        with patch("autoskillit.cli.shutil.which", side_effect=lambda cmd: "/usr/local/bin/autoskillit" if cmd == "autoskillit" else shutil.which(cmd)):
+            cli.doctor()
         captured = capsys.readouterr()
         assert "WARNING" not in captured.out
 

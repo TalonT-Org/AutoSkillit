@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 from unittest.mock import patch
@@ -94,6 +95,67 @@ class TestRunCmd:
 
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["timeout"] == 30.0
+
+
+class TestRunSkillPluginDir:
+    """T2: run_skill and run_skill_retry pass --plugin-dir to the claude command."""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_passes_plugin_dir(self, mock_run):
+        """run_skill includes --plugin-dir and the package path in the command."""
+        import autoskillit
+
+        from autoskillit import server
+
+        mock_run.return_value = _make_result(0, '{"type": "result", "subtype": "success", "is_error": false, "result": "done", "session_id": "s1", "num_turns": 1}', "")
+        await run_skill("/investigate some-error", "/tmp")
+
+        cmd = mock_run.call_args[0][0]
+        assert "--plugin-dir" in cmd
+        plugin_dir_idx = cmd.index("--plugin-dir")
+        assert cmd[plugin_dir_idx + 1] == server._plugin_dir
+        assert server._plugin_dir == str(Path(autoskillit.__file__).parent)
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_retry_passes_plugin_dir(self, mock_run):
+        """run_skill_retry includes --plugin-dir and the package path in the command."""
+        import autoskillit
+
+        from autoskillit import server
+
+        mock_run.return_value = _make_result(0, '{"type": "result", "subtype": "success", "is_error": false, "result": "done", "session_id": "s1", "num_turns": 1}', "")
+        await run_skill_retry("/investigate some-error", "/tmp")
+
+        cmd = mock_run.call_args[0][0]
+        assert "--plugin-dir" in cmd
+        plugin_dir_idx = cmd.index("--plugin-dir")
+        assert cmd[plugin_dir_idx + 1] == server._plugin_dir
+        assert server._plugin_dir == str(Path(autoskillit.__file__).parent)
+
+
+class TestNoSkillsDirectoryProvider:
+    """T3: SkillsDirectoryProvider is not used in the new plugin architecture."""
+
+    def test_no_skills_directory_provider(self):
+        """server.py must not reference SkillsDirectoryProvider."""
+        import autoskillit.server as server_module
+
+        source = Path(server_module.__file__).read_text()
+        assert "SkillsDirectoryProvider" not in source
+
+
+class TestPluginDirConstant:
+    """T6: _plugin_dir points to the package root directory."""
+
+    def test_plugin_dir_returns_package_root(self):
+        """_plugin_dir equals the autoskillit package directory."""
+        import autoskillit
+
+        from autoskillit.server import _plugin_dir
+
+        assert _plugin_dir == str(Path(autoskillit.__file__).parent)
 
 
 class TestClassifyFix:
@@ -256,37 +318,37 @@ class TestResetWorkspace:
 
 
 class TestCheckDryWalkthrough:
-    """Dry-walkthrough gate blocks both /implement-worktree variants."""
+    """Dry-walkthrough gate blocks both /autoskillit:implement-worktree variants."""
 
     def test_dry_walkthrough_gate_blocks_implement_no_merge(self, tmp_path):
-        """Gate blocks /implement-worktree-no-merge when plan lacks marker."""
+        """Gate blocks /autoskillit:implement-worktree-no-merge when plan lacks marker."""
         plan = tmp_path / "plan.md"
         plan.write_text("# My Plan\n\nSome content")
-        result = _check_dry_walkthrough(f"/implement-worktree-no-merge {plan}", str(tmp_path))
+        result = _check_dry_walkthrough(f"/autoskillit:implement-worktree-no-merge {plan}", str(tmp_path))
         assert result is not None
         parsed = json.loads(result)
         assert "error" in parsed
         assert "dry-walked" in parsed["error"].lower()
 
     def test_dry_walkthrough_gate_passes_implement_no_merge(self, tmp_path):
-        """Gate allows /implement-worktree-no-merge when plan has marker."""
+        """Gate allows /autoskillit:implement-worktree-no-merge when plan has marker."""
         plan = tmp_path / "plan.md"
         plan.write_text("Dry-walkthrough verified = TRUE\n# My Plan")
-        result = _check_dry_walkthrough(f"/implement-worktree-no-merge {plan}", str(tmp_path))
+        result = _check_dry_walkthrough(f"/autoskillit:implement-worktree-no-merge {plan}", str(tmp_path))
         assert result is None
 
     def test_dry_walkthrough_gate_still_works_for_implement_worktree(self, tmp_path):
-        """Original /implement-worktree gating is not broken."""
+        """Original /autoskillit:implement-worktree gating is not broken."""
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
-        result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
+        result = _check_dry_walkthrough(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         assert result is not None
         parsed = json.loads(result)
         assert "error" in parsed
 
     def test_dry_walkthrough_gate_ignores_unrelated_skills(self):
         """Gate ignores skills that are not implement-worktree variants."""
-        result = _check_dry_walkthrough("/investigate some-error", "/tmp")
+        result = _check_dry_walkthrough("/autoskillit:investigate some-error", "/tmp")
         assert result is None
 
 
@@ -380,11 +442,11 @@ class TestRunSkillRetryGate:
 
     @pytest.mark.asyncio
     async def test_run_skill_retry_gates_implement_no_merge(self, tmp_path):
-        """run_skill_retry applies dry-walkthrough gate to /implement-worktree-no-merge."""
+        """run_skill_retry applies dry-walkthrough gate to /autoskillit:implement-worktree-no-merge."""
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
         result = json.loads(
-            await run_skill_retry(f"/implement-worktree-no-merge {plan}", str(tmp_path))
+            await run_skill_retry(f"/autoskillit:implement-worktree-no-merge {plan}", str(tmp_path))
         )
         assert "error" in result
         assert "dry-walked" in result["error"].lower()
@@ -1075,57 +1137,6 @@ class TestGatedToolAccess:
             assert "automation" in tool.tags, f"{tool.name} missing 'automation' tag"
 
 
-class TestSkillsProvider:
-    """Verify SkillsDirectoryProvider is registered and exposes skill resources."""
-
-    def test_server_has_skills_provider(self):
-        """MCP server registers a SkillsDirectoryProvider."""
-        from fastmcp.server.providers.skills import SkillsDirectoryProvider
-
-        from autoskillit.server import mcp
-
-        has_provider = any(isinstance(p, SkillsDirectoryProvider) for p in mcp.providers)
-        assert has_provider
-
-    @pytest.mark.asyncio
-    async def test_skill_resources_discoverable(self):
-        """Bundled skills appear as skill:// resources via MCP."""
-        from fastmcp import Client
-
-        from autoskillit.server import mcp
-
-        async with Client(mcp) as client:
-            resources = await client.list_resources()
-
-        skill_uris = [r.uri for r in resources if str(r.uri).startswith("skill://")]
-        assert len(skill_uris) >= 10
-        assert any("investigate" in str(uri) for uri in skill_uris)
-
-    @pytest.mark.asyncio
-    async def test_skill_resource_content_readable(self):
-        """Reading a skill resource returns the SKILL.md content."""
-        from fastmcp import Client
-
-        from autoskillit.server import mcp
-
-        async with Client(mcp) as client:
-            result = await client.read_resource("skill://investigate/SKILL.md")
-
-        content = result[0].text if hasattr(result[0], "text") else str(result[0])
-        assert "investigate" in content.lower() or "investigation" in content.lower()
-
-    def test_provider_roots_match_config_order(self):
-        """Provider roots are ordered per config.skills.resolution_order."""
-        from fastmcp.server.providers.skills import SkillsDirectoryProvider
-
-        from autoskillit.server import mcp
-        from autoskillit.skill_resolver import bundled_skills_dir
-
-        provider = next(p for p in mcp.providers if isinstance(p, SkillsDirectoryProvider))
-        root_strs = [str(r) for r in provider._roots]
-        assert str(bundled_skills_dir().resolve()) in root_strs
-
-
 class TestConfigDrivenBehavior:
     """S1-S10: Verify tools use config instead of hardcoded values."""
 
@@ -1249,11 +1260,11 @@ class TestConfigDrivenBehavior:
 
         plan = tmp_path / "plan.md"
         plan.write_text("CUSTOM MARKER\n# Plan content")
-        result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
+        result = _check_dry_walkthrough(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         assert result is None  # passes with custom marker
 
         plan.write_text("Dry-walkthrough verified = TRUE\n# Plan content")
-        result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
+        result = _check_dry_walkthrough(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         assert result is not None  # fails — marker doesn't match
 
     def test_dry_walkthrough_uses_config_skill_names(self, monkeypatch, tmp_path):
@@ -1270,8 +1281,8 @@ class TestConfigDrivenBehavior:
         result = _check_dry_walkthrough(f"/custom-impl {plan}", str(tmp_path))
         assert result is not None  # /custom-impl is gated
 
-        result = _check_dry_walkthrough(f"/implement-worktree {plan}", str(tmp_path))
-        assert result is None  # /implement-worktree is NOT gated (not in skill_names)
+        result = _check_dry_walkthrough(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
+        assert result is None  # /autoskillit:implement-worktree is NOT gated (not in skill_names)
 
     @pytest.mark.asyncio
     @patch("autoskillit.server._run_subprocess")
@@ -1565,7 +1576,7 @@ class TestSafetyConfigWiring:
         plan.write_text("# No marker plan")
 
         mock_run.return_value = _make_result(0, '{"result": "done"}', "")
-        result = json.loads(await run_skill_retry(f"/implement-worktree {plan}", str(tmp_path)))
+        result = json.loads(await run_skill_retry(f"/autoskillit:implement-worktree {plan}", str(tmp_path)))
         # Should NOT return dry-walkthrough error
         assert "error" not in result
         assert result["exit_code"] == 0
@@ -1576,7 +1587,7 @@ class TestSafetyConfigWiring:
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
 
-        result = json.loads(await run_skill(f"/implement-worktree {plan}", str(tmp_path)))
+        result = json.loads(await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path)))
         assert "error" in result
         assert "dry-walked" in result["error"].lower()
 
@@ -1595,7 +1606,7 @@ class TestSafetyConfigWiring:
         plan.write_text("# No marker plan")
 
         mock_run.return_value = _make_result(0, '{"result": "done"}', "")
-        result = json.loads(await run_skill(f"/implement-worktree {plan}", str(tmp_path)))
+        result = json.loads(await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path)))
         # Should NOT return dry-walkthrough error
         assert "error" not in result
 

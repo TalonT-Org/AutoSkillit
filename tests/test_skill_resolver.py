@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from unittest.mock import patch
 
-from autoskillit.config import AutomationConfig, SkillsConfig
-from autoskillit.skill_resolver import SkillResolver, build_skill_roots, bundled_skills_dir
+from autoskillit.skill_resolver import SkillResolver, bundled_skills_dir
 
 BUNDLED_SKILLS = [
     "assess-and-merge",
@@ -26,117 +25,23 @@ BUNDLED_SKILLS = [
     "setup-project",
 ]
 
-
-def _create_skill(base: Path, name: str) -> Path:
-    """Create a minimal SKILL.md in base/name/."""
-    d = base / name
-    d.mkdir(parents=True, exist_ok=True)
-    md = d / "SKILL.md"
-    md.write_text(f"---\nname: {name}\n---\n")
-    return md
+BUNDLED_SKILL_NAMES = set(BUNDLED_SKILLS)
 
 
 class TestSkillResolver:
     # SK1
-    def test_bundled_skill_found(self, tmp_path: Path) -> None:
-        project = tmp_path / "project"
-        project.mkdir()
-        config = AutomationConfig()
-        resolver = SkillResolver(project, config)
+    def test_bundled_skill_found(self) -> None:
+        resolver = SkillResolver()
         info = resolver.resolve("investigate")
         assert info is not None
         assert info.name == "investigate"
         assert info.source == "bundled"
         assert info.path.name == "SKILL.md"
 
-    # SK2
-    def test_project_overrides_bundled(self, tmp_path: Path) -> None:
-        project = tmp_path / "project"
-        project_skills = project / ".autoskillit" / "skills"
-        _create_skill(project_skills, "investigate")
-
-        config = AutomationConfig()
-        resolver = SkillResolver(project, config)
-        info = resolver.resolve("investigate")
-        assert info is not None
-        assert info.source == "project"
-        assert info.path == project_skills / "investigate" / "SKILL.md"
-
-    # SK3
-    def test_user_overrides_bundled(self, tmp_path: Path) -> None:
-        project = tmp_path / "project"
-        project.mkdir()
-        user_home = tmp_path / "home"
-        user_skills = user_home / ".autoskillit" / "skills"
-        _create_skill(user_skills, "investigate")
-
-        config = AutomationConfig()
-        with patch("autoskillit.skill_resolver.Path.home", return_value=user_home):
-            resolver = SkillResolver(project, config)
-            info = resolver.resolve("investigate")
-        assert info is not None
-        assert info.source == "user"
-
-    # SK4
-    def test_project_overrides_user(self, tmp_path: Path) -> None:
-        project = tmp_path / "project"
-        project_skills = project / ".autoskillit" / "skills"
-        _create_skill(project_skills, "investigate")
-
-        user_home = tmp_path / "home"
-        user_skills = user_home / ".autoskillit" / "skills"
-        _create_skill(user_skills, "investigate")
-
-        config = AutomationConfig()
-        with patch("autoskillit.skill_resolver.Path.home", return_value=user_home):
-            resolver = SkillResolver(project, config)
-            info = resolver.resolve("investigate")
-        assert info is not None
-        assert info.source == "project"
-
-    # SK5
-    def test_list_all_shows_sources(self, tmp_path: Path) -> None:
-        project = tmp_path / "project"
-        project_skills = project / ".autoskillit" / "skills"
-        _create_skill(project_skills, "investigate")
-        _create_skill(project_skills, "custom-skill")
-
-        config = AutomationConfig()
-        resolver = SkillResolver(project, config)
-        skills = resolver.list_all()
-
-        names = {s.name for s in skills}
-        assert "investigate" in names
-        assert "custom-skill" in names
-
-        sources = {s.name: s.source for s in skills}
-        assert sources["investigate"] == "project"
-        assert sources["custom-skill"] == "project"
-        assert sources["mermaid"] == "bundled"
-
     # SK6
-    def test_unknown_skill_returns_none(self, tmp_path: Path) -> None:
-        project = tmp_path / "project"
-        project.mkdir()
-        config = AutomationConfig()
-        resolver = SkillResolver(project, config)
+    def test_unknown_skill_returns_none(self) -> None:
+        resolver = SkillResolver()
         assert resolver.resolve("nonexistent") is None
-
-    # SK7
-    def test_scan_finds_skill_md(self, tmp_path: Path) -> None:
-        project = tmp_path / "project"
-        skill_dir = project / ".autoskillit" / "skills"
-        _create_skill(skill_dir, "alpha")
-        _create_skill(skill_dir, "beta")
-        # Directory without SKILL.md should be ignored
-        (skill_dir / "empty").mkdir()
-
-        config = AutomationConfig()
-        resolver = SkillResolver(project, config)
-        names = {s.name for s in resolver.list_all() if s.source == "project"}
-        assert "alpha" in names
-        assert "beta" in names
-        assert "empty" not in names
 
     # SK8
     def test_bundled_skills_match_filesystem(self) -> None:
@@ -149,51 +54,33 @@ class TestSkillResolver:
             f"  In test: {sorted(BUNDLED_SKILLS)}"
         )
 
-    # SK9
-    def test_resolution_order_configurable(self, tmp_path: Path) -> None:
-        project = tmp_path / "project"
-        project_skills = project / ".autoskillit" / "skills"
-        _create_skill(project_skills, "investigate")
+    def test_list_all_returns_bundled_skills(self) -> None:
+        """list_all returns all bundled skills with source='bundled'."""
+        resolver = SkillResolver()
+        skills = resolver.list_all()
+        names = {s.name for s in skills}
+        assert "investigate" in names
+        assert "make-plan" in names
+        sources = {s.source for s in skills}
+        assert sources == {"bundled"}
 
-        config = AutomationConfig(skills=SkillsConfig(resolution_order=["bundled", "project"]))
-        resolver = SkillResolver(project, config)
-        info = resolver.resolve("investigate")
-        assert info is not None
-        assert info.source == "bundled"
+    def test_skill_md_cross_references_are_namespaced(self) -> None:
+        """All /skill-name references in SKILL.md files use /autoskillit: prefix."""
+        import autoskillit
 
-    def test_empty_resolution_order(self, tmp_path: Path) -> None:
-        project = tmp_path / "project"
-        project.mkdir()
-        config = AutomationConfig(skills=SkillsConfig(resolution_order=[]))
-        resolver = SkillResolver(project, config)
-        assert resolver.resolve("investigate") is None
-        assert resolver.list_all() == []
-
-
-class TestBuildSkillRoots:
-    def test_returns_labeled_paths(self, tmp_path: Path) -> None:
-        """build_skill_roots() returns (source, Path) tuples in config order."""
-        config = AutomationConfig(
-            skills=SkillsConfig(resolution_order=["project", "user", "bundled"])
-        )
-        roots = build_skill_roots(tmp_path, config)
-        assert len(roots) == 3
-        assert roots[0][0] == "project"
-        assert roots[1][0] == "user"
-        assert roots[2][0] == "bundled"
-        assert roots[0][1] == tmp_path / ".autoskillit" / "skills"
-
-    def test_respects_custom_order(self, tmp_path: Path) -> None:
-        """Custom resolution_order changes the root ordering."""
-        config = AutomationConfig(skills=SkillsConfig(resolution_order=["bundled", "project"]))
-        roots = build_skill_roots(tmp_path, config)
-        assert len(roots) == 2
-        assert roots[0][0] == "bundled"
-        assert roots[1][0] == "project"
-
-    def test_resolver_uses_build_skill_roots(self, tmp_path: Path) -> None:
-        """SkillResolver._dirs matches build_skill_roots() output."""
-        config = AutomationConfig()
-        resolver = SkillResolver(tmp_path, config)
-        roots = build_skill_roots(tmp_path, config)
-        assert resolver._dirs == roots
+        skills_dir = Path(autoskillit.__file__).parent / "skills"
+        for skill_md in skills_dir.rglob("SKILL.md"):
+            content = skill_md.read_text()
+            for match in re.finditer(r'(?<!\w)/([a-z][\w-]+)', content):
+                name = match.group(1)
+                if name.startswith("autoskillit:") or name.startswith("mcp__"):
+                    continue
+                # Skip URI paths like workflow://bugfix-loop — not skill invocations
+                start = match.start()
+                if start >= 1 and content[start - 1] == "/":
+                    continue
+                if name in BUNDLED_SKILL_NAMES:
+                    assert False, (
+                        f"{skill_md.parent.name}/SKILL.md: "
+                        f"/{name} should be /autoskillit:{name}"
+                    )

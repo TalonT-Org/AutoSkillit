@@ -239,13 +239,13 @@ class TestCLI:
 
     # --- T2: skills install end-to-end ---
 
-    def test_skills_install_copies_to_claude_skills(
+    def test_skills_install_copies_to_autoskillit_skills(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """skills install copies bundled SKILL.md to .claude/skills/<name>/."""
+        """skills install copies bundled SKILL.md to .autoskillit/skills/<name>/."""
         monkeypatch.chdir(tmp_path)
         cli.skills_install("investigate")
-        dest = tmp_path / ".claude" / "skills" / "investigate" / "SKILL.md"
+        dest = tmp_path / ".autoskillit" / "skills" / "investigate" / "SKILL.md"
         assert dest.is_file()
         from autoskillit.skill_resolver import bundled_skills_dir
 
@@ -266,7 +266,7 @@ class TestCLI:
     ) -> None:
         """skills install overwrites an existing installed skill."""
         monkeypatch.chdir(tmp_path)
-        dest_dir = tmp_path / ".claude" / "skills" / "investigate"
+        dest_dir = tmp_path / ".autoskillit" / "skills" / "investigate"
         dest_dir.mkdir(parents=True)
         (dest_dir / "SKILL.md").write_text("old content")
         cli.skills_install("investigate")
@@ -285,7 +285,7 @@ class TestCLI:
         bd = bundled_skills_dir()
         for skill_dir in bd.iterdir():
             if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
-                dest = tmp_path / ".claude" / "skills" / skill_dir.name / "SKILL.md"
+                dest = tmp_path / ".autoskillit" / "skills" / skill_dir.name / "SKILL.md"
                 assert dest.is_file(), f"Missing: {skill_dir.name}"
 
     # --- T4: init installs skills + idempotency ---
@@ -301,7 +301,7 @@ class TestCLI:
         bd = bundled_skills_dir()
         for skill_dir in bd.iterdir():
             if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
-                dest = tmp_path / ".claude" / "skills" / skill_dir.name / "SKILL.md"
+                dest = tmp_path / ".autoskillit" / "skills" / skill_dir.name / "SKILL.md"
                 assert dest.is_file(), f"init did not install skill: {skill_dir.name}"
 
     def test_init_no_skills_flag_skips_install(
@@ -310,7 +310,7 @@ class TestCLI:
         """init --no-install-skills skips skill installation."""
         monkeypatch.chdir(tmp_path)
         cli.init(test_command="pytest -v", install_skills=False)
-        assert not (tmp_path / ".claude" / "skills").exists()
+        assert not (tmp_path / ".autoskillit" / "skills").exists()
 
     def test_init_idempotent_rerun(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Running init twice is safe — config preserved, missing skills added."""
@@ -318,13 +318,13 @@ class TestCLI:
         cli.init(test_command="pytest -v")
         config_before = (tmp_path / ".autoskillit" / "config.yaml").read_text()
         # Delete one skill to simulate incomplete state
-        investigate = tmp_path / ".claude" / "skills" / "investigate"
+        investigate = tmp_path / ".autoskillit" / "skills" / "investigate"
         if investigate.exists():
             shutil.rmtree(investigate)
         # Re-run init — should not fail, should restore missing skill
         cli.init(test_command="pytest -v")
         assert (tmp_path / ".autoskillit" / "config.yaml").read_text() == config_before
-        assert (tmp_path / ".claude" / "skills" / "investigate" / "SKILL.md").is_file()
+        assert (tmp_path / ".autoskillit" / "skills" / "investigate" / "SKILL.md").is_file()
 
     # --- T5: skills update ---
 
@@ -333,7 +333,7 @@ class TestCLI:
     ) -> None:
         """skills update installs missing bundled skills."""
         monkeypatch.chdir(tmp_path)
-        skills_dir = tmp_path / ".claude" / "skills"
+        skills_dir = tmp_path / ".autoskillit" / "skills"
         skills_dir.mkdir(parents=True)
         cli.skills_update()
         from autoskillit.skill_resolver import bundled_skills_dir
@@ -348,7 +348,7 @@ class TestCLI:
     ) -> None:
         """skills update preserves skills that differ from bundled."""
         monkeypatch.chdir(tmp_path)
-        skills_dir = tmp_path / ".claude" / "skills" / "investigate"
+        skills_dir = tmp_path / ".autoskillit" / "skills" / "investigate"
         skills_dir.mkdir(parents=True)
         (skills_dir / "SKILL.md").write_text("customized content")
         cli.skills_update()
@@ -366,7 +366,7 @@ class TestCLI:
 
         bd = bundled_skills_dir()
         src = bd / "mermaid" / "SKILL.md"
-        dest_dir = tmp_path / ".claude" / "skills" / "mermaid"
+        dest_dir = tmp_path / ".autoskillit" / "skills" / "mermaid"
         dest_dir.mkdir(parents=True)
         shutil.copy2(src, dest_dir / "SKILL.md")
         cli.skills_update()
@@ -379,7 +379,7 @@ class TestCLI:
     ) -> None:
         """skills update --force overwrites even customized skills."""
         monkeypatch.chdir(tmp_path)
-        skills_dir = tmp_path / ".claude" / "skills" / "investigate"
+        skills_dir = tmp_path / ".autoskillit" / "skills" / "investigate"
         skills_dir.mkdir(parents=True)
         (skills_dir / "SKILL.md").write_text("customized content")
         cli.skills_update(force=True)

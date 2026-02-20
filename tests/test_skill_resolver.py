@@ -10,10 +10,13 @@ from autoskillit.skill_resolver import SkillResolver, build_skill_roots, bundled
 
 BUNDLED_SKILLS = [
     "assess-and-merge",
+    "bugfix-loop",
     "dry-walkthrough",
     "implement-worktree",
     "implement-worktree-no-merge",
+    "implementation-pipeline",
     "investigate",
+    "investigate-first",
     "make-plan",
     "make-script-skill",
     "mermaid",
@@ -49,7 +52,7 @@ class TestSkillResolver:
     # SK2
     def test_project_overrides_bundled(self, tmp_path: Path) -> None:
         project = tmp_path / "project"
-        project_skills = project / ".claude" / "skills"
+        project_skills = project / ".autoskillit" / "skills"
         _create_skill(project_skills, "investigate")
 
         config = AutomationConfig()
@@ -64,7 +67,7 @@ class TestSkillResolver:
         project = tmp_path / "project"
         project.mkdir()
         user_home = tmp_path / "home"
-        user_skills = user_home / ".claude" / "skills"
+        user_skills = user_home / ".autoskillit" / "skills"
         _create_skill(user_skills, "investigate")
 
         config = AutomationConfig()
@@ -77,11 +80,11 @@ class TestSkillResolver:
     # SK4
     def test_project_overrides_user(self, tmp_path: Path) -> None:
         project = tmp_path / "project"
-        project_skills = project / ".claude" / "skills"
+        project_skills = project / ".autoskillit" / "skills"
         _create_skill(project_skills, "investigate")
 
         user_home = tmp_path / "home"
-        user_skills = user_home / ".claude" / "skills"
+        user_skills = user_home / ".autoskillit" / "skills"
         _create_skill(user_skills, "investigate")
 
         config = AutomationConfig()
@@ -94,7 +97,7 @@ class TestSkillResolver:
     # SK5
     def test_list_all_shows_sources(self, tmp_path: Path) -> None:
         project = tmp_path / "project"
-        project_skills = project / ".claude" / "skills"
+        project_skills = project / ".autoskillit" / "skills"
         _create_skill(project_skills, "investigate")
         _create_skill(project_skills, "custom-skill")
 
@@ -122,7 +125,7 @@ class TestSkillResolver:
     # SK7
     def test_scan_finds_skill_md(self, tmp_path: Path) -> None:
         project = tmp_path / "project"
-        skill_dir = project / ".claude" / "skills"
+        skill_dir = project / ".autoskillit" / "skills"
         _create_skill(skill_dir, "alpha")
         _create_skill(skill_dir, "beta")
         # Directory without SKILL.md should be ignored
@@ -149,7 +152,7 @@ class TestSkillResolver:
     # SK9
     def test_resolution_order_configurable(self, tmp_path: Path) -> None:
         project = tmp_path / "project"
-        project_skills = project / ".claude" / "skills"
+        project_skills = project / ".autoskillit" / "skills"
         _create_skill(project_skills, "investigate")
 
         config = AutomationConfig(skills=SkillsConfig(resolution_order=["bundled", "project"]))
@@ -178,7 +181,7 @@ class TestBuildSkillRoots:
         assert roots[0][0] == "project"
         assert roots[1][0] == "user"
         assert roots[2][0] == "bundled"
-        assert roots[0][1] == tmp_path / ".claude" / "skills"
+        assert roots[0][1] == tmp_path / ".autoskillit" / "skills"
 
     def test_respects_custom_order(self, tmp_path: Path) -> None:
         """Custom resolution_order changes the root ordering."""

@@ -98,7 +98,7 @@ class TestWorkflowLoader:
     def test_builtin_workflows_valid(self) -> None:
         bd = builtin_workflows_dir()
         yamls = list(bd.glob("*.yaml"))
-        assert len(yamls) >= 3
+        assert len(yamls) >= 4
         for f in yamls:
             wf = load_workflow(f)
             errors = validate_workflow(wf)
@@ -111,6 +111,7 @@ class TestWorkflowLoader:
         assert "bugfix-loop" in names
         assert "implementation" in names
         assert "audit-and-fix" in names
+        assert "investigate-first" in names
 
     # WF8
     def test_project_workflow_overrides_builtin(self, tmp_path: Path) -> None:

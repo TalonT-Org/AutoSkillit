@@ -50,18 +50,12 @@ class SafetyConfig:
 
 
 @dataclass
-class SkillsConfig:
-    resolution_order: list[str] = field(default_factory=lambda: ["project", "user", "bundled"])
-
-
-@dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
     reset_workspace: ResetWorkspaceConfig = field(default_factory=ResetWorkspaceConfig)
     implement_gate: ImplementGateConfig = field(default_factory=ImplementGateConfig)
     safety: SafetyConfig = field(default_factory=SafetyConfig)
-    skills: SkillsConfig = field(default_factory=SkillsConfig)
 
 
 def load_config(project_dir: Path | None = None) -> AutomationConfig:

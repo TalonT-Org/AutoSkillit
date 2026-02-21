@@ -713,6 +713,54 @@ async def reset_workspace(test_dir: str) -> str:
     return json.dumps(cleanup.to_dict())
 
 
+@mcp.tool(tags={"automation"})
+async def list_skill_scripts() -> str:
+    """List available pipeline scripts from .autoskillit/scripts/.
+
+    Returns a JSON array of scripts with name, description, and summary.
+    Scripts are YAML workflow definitions that agents follow as orchestration
+    instructions. Use load_skill_script to load a specific script.
+
+    This tool is always available (not gated by enable_tools).
+    """
+    from autoskillit.script_loader import list_scripts
+
+    scripts = list_scripts(Path.cwd())
+    return json.dumps(
+        [
+            {"name": s.name, "description": s.description, "summary": s.summary}
+            for s in scripts
+        ]
+    )
+
+
+@mcp.tool(tags={"automation"})
+async def load_skill_script(name: str) -> str:
+    """Load a pipeline script by name and return its raw YAML content.
+
+    The YAML follows the workflow schema (inputs, steps with tool/action,
+    on_success/on_failure routing, retry blocks). The agent should interpret
+    the YAML and execute the steps using the appropriate MCP tools.
+
+    After loading:
+    1. Present the script to the user for review
+    2. If the user requests changes, apply them, then ask whether to:
+       - Save changes to the original file
+       - Save as a new script (prompt for name)
+       - Use temporarily without saving
+    3. Prompt for input values using AskUserQuestion
+    4. Execute the pipeline steps in order
+
+    This tool is always available (not gated by enable_tools).
+    """
+    from autoskillit.script_loader import load_script
+
+    content = load_script(Path.cwd(), name)
+    if content is None:
+        return json.dumps({"error": f"No script named '{name}' in .autoskillit/scripts/"})
+    return content
+
+
 def _enable_tools_handler() -> None:
     """Set the tools-enabled flag. Extracted for testability."""
     global _tools_enabled

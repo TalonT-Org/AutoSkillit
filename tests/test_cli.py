@@ -396,11 +396,7 @@ class TestCLI:
         plugin_dir.mkdir(parents=True)
         (plugin_dir / "marketplace.json").write_text(
             json.dumps(
-                {
-                    "plugins": [
-                        {"name": "autoskillit", "version": "0.0.0-stale", "source": "."}
-                    ]
-                }
+                {"plugins": [{"name": "autoskillit", "version": "0.0.0-stale", "source": "."}]}
             )
         )
         link_dir = mkt_dir / "plugins"

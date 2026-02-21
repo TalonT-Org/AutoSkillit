@@ -23,9 +23,7 @@ class TestVersionConsistency:
         assert pyproject_version == autoskillit.__version__
 
     def test_plugin_json_version_matches_init_version(self):
-        plugin_json = (
-            Path(autoskillit.__file__).parent / ".claude-plugin" / "plugin.json"
-        )
+        plugin_json = Path(autoskillit.__file__).parent / ".claude-plugin" / "plugin.json"
         data = json.loads(plugin_json.read_text())
         assert data["version"] == autoskillit.__version__
 
@@ -34,7 +32,9 @@ class TestVersionConsistency:
         from autoskillit.cli import _ensure_marketplace
 
         _ensure_marketplace()
-        manifest = tmp_path / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
+        manifest = (
+            tmp_path / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
+        )
         data = json.loads(manifest.read_text())
         plugins = data.get("plugins", [])
         assert len(plugins) > 0

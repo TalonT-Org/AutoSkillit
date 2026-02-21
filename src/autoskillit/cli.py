@@ -28,6 +28,7 @@ class DoctorResult:
     check: str
     message: str
 
+
 app = App(
     name="autoskillit",
     help="MCP server for orchestrating automated workflows with Claude Code.",
@@ -284,9 +285,7 @@ def doctor(*, output_json: bool = False):
             )
         )
     else:
-        results.append(
-            DoctorResult(Severity.OK, "plugin_metadata", "Plugin metadata exists")
-        )
+        results.append(DoctorResult(Severity.OK, "plugin_metadata", "Plugin metadata exists"))
 
     # Check 3: autoskillit command on PATH
     if shutil.which("autoskillit") is None:
@@ -312,9 +311,7 @@ def doctor(*, output_json: bool = False):
             )
         )
     else:
-        results.append(
-            DoctorResult(Severity.OK, "project_config", "Project config exists")
-        )
+        results.append(DoctorResult(Severity.OK, "project_config", "Project config exists"))
 
     # Check 5: Version consistency — plugin.json vs package version
     from autoskillit.server import _version_info
@@ -363,9 +360,7 @@ def doctor(*, output_json: bool = False):
                 )
             )
         else:
-            mkt_json = (
-                marketplace_link.parent.parent / ".claude-plugin" / "marketplace.json"
-            )
+            mkt_json = marketplace_link.parent.parent / ".claude-plugin" / "marketplace.json"
             if mkt_json.is_file():
                 mkt_data = json.loads(mkt_json.read_text())
                 plugins = mkt_data.get("plugins", [])

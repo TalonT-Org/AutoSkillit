@@ -621,21 +621,26 @@ class TestSkillScriptTools:
     # SS1
     @pytest.mark.asyncio
     @patch("autoskillit.script_loader.list_scripts")
-    async def test_list_returns_json_array(self, mock_list):
-        """list_skill_scripts returns JSON array (not gated)."""
+    async def test_list_returns_json_object(self, mock_list):
+        """list_skill_scripts returns JSON object with scripts array (not gated)."""
         from autoskillit.script_loader import ScriptInfo
+        from autoskillit.types import LoadResult
 
-        mock_list.return_value = [
-            ScriptInfo(
-                name="impl", description="Implement", summary="plan > impl", path=Path("/x")
-            ),
-        ]
+        mock_list.return_value = LoadResult(
+            items=[
+                ScriptInfo(
+                    name="impl", description="Implement", summary="plan > impl", path=Path("/x")
+                ),
+            ],
+            errors=[],
+        )
         result = json.loads(await list_skill_scripts())
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert result[0]["name"] == "impl"
-        assert result[0]["description"] == "Implement"
-        assert result[0]["summary"] == "plan > impl"
+        assert isinstance(result, dict)
+        assert len(result["scripts"]) == 1
+        assert result["scripts"][0]["name"] == "impl"
+        assert result["scripts"][0]["description"] == "Implement"
+        assert result["scripts"][0]["summary"] == "plan > impl"
+        assert "errors" not in result
 
     # SS2
     @pytest.mark.asyncio
@@ -656,6 +661,49 @@ class TestSkillScriptTools:
         result = json.loads(await load_skill_script(name="nonexistent"))
         assert "error" in result
         assert "nonexistent" in result["error"]
+
+    # SS4
+    @pytest.mark.asyncio
+    @patch("autoskillit.script_loader.list_scripts")
+    async def test_list_reports_errors_in_response(self, mock_list):
+        """list_skill_scripts includes errors in JSON when scripts fail to parse."""
+        from autoskillit.types import LoadReport, LoadResult
+
+        mock_list.return_value = LoadResult(
+            items=[],
+            errors=[LoadReport(path=Path("/scripts/broken.yaml"), error="bad yaml")],
+        )
+        result = json.loads(await list_skill_scripts())
+        assert "errors" in result
+        assert len(result["errors"]) == 1
+        assert result["errors"][0]["file"] == "broken.yaml"
+        assert "bad yaml" in result["errors"][0]["error"]
+
+    # SS5
+    @pytest.mark.asyncio
+    async def test_list_integration_discovers_frontmatter(self, tmp_path, monkeypatch):
+        """Server tool discovers scripts from real files on disk (frontmatter format)."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "pipeline.yaml").write_text(
+            "---\nname: test-pipe\ndescription: Test\nsummary: a > b\n---\n# Body\n"
+        )
+        result = json.loads(await list_skill_scripts())
+        assert len(result["scripts"]) == 1
+        assert result["scripts"][0]["name"] == "test-pipe"
+
+    # SS6
+    @pytest.mark.asyncio
+    async def test_list_integration_reports_errors(self, tmp_path, monkeypatch):
+        """Server tool reports parse errors to the caller from real files."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "broken.yaml").write_text(":: bad yaml {{[\n")
+        result = json.loads(await list_skill_scripts())
+        assert "errors" in result
+        assert len(result["errors"]) == 1
 
 
 class TestToolSchemas:

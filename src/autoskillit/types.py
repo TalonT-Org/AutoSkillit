@@ -8,7 +8,12 @@ misclassification from string typos or unhandled values.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
+from typing import Generic, TypeVar
+
+T = TypeVar("T")
 
 
 class RetryReason(StrEnum):
@@ -41,6 +46,22 @@ class SkillSource(StrEnum):
 class WorkflowSource(StrEnum):
     PROJECT = "project"
     BUILTIN = "builtin"
+
+
+@dataclass
+class LoadReport:
+    """A single file that failed to load, with the reason."""
+
+    path: Path
+    error: str
+
+
+@dataclass
+class LoadResult(Generic[T]):
+    """Discovery result: successfully loaded items + error reports."""
+
+    items: list[T]
+    errors: list[LoadReport] = field(default_factory=list)
 
 
 # Known field names in run_skill_retry response — used by workflow validation

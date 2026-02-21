@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from autoskillit.types import RETRY_RESPONSE_FIELDS, WorkflowSource
+from autoskillit.types import RETRY_RESPONSE_FIELDS, LoadReport, LoadResult, WorkflowSource
 
 
 @dataclass
@@ -112,18 +112,19 @@ def validate_workflow(wf: Workflow) -> list[str]:
     return errors
 
 
-def list_workflows(project_dir: Path) -> list[WorkflowInfo]:
+def list_workflows(project_dir: Path) -> LoadResult[WorkflowInfo]:
     """Find available workflows from project and built-in sources."""
     seen: set[str] = set()
-    result: list[WorkflowInfo] = []
+    items: list[WorkflowInfo] = []
+    errors: list[LoadReport] = []
 
     project_wf_dir = project_dir / ".autoskillit" / "workflows"
-    _collect_workflows(WorkflowSource.PROJECT, project_wf_dir, seen, result)
+    _collect_workflows(WorkflowSource.PROJECT, project_wf_dir, seen, items, errors)
 
     builtin_dir = Path(__file__).parent / "workflows"
-    _collect_workflows(WorkflowSource.BUILTIN, builtin_dir, seen, result)
+    _collect_workflows(WorkflowSource.BUILTIN, builtin_dir, seen, items, errors)
 
-    return sorted(result, key=lambda w: w.name)
+    return LoadResult(items=sorted(items, key=lambda w: w.name), errors=errors)
 
 
 def builtin_workflows_dir() -> Path:
@@ -193,7 +194,11 @@ def _extract_refs(value: str) -> list[str]:
 
 
 def _collect_workflows(
-    source: WorkflowSource, directory: Path, seen: set[str], result: list[WorkflowInfo]
+    source: WorkflowSource,
+    directory: Path,
+    seen: set[str],
+    result: list[WorkflowInfo],
+    errors: list[LoadReport],
 ) -> None:
     if not directory.is_dir():
         return
@@ -211,5 +216,5 @@ def _collect_workflows(
                             path=f,
                         )
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                errors.append(LoadReport(path=f, error=str(exc)))

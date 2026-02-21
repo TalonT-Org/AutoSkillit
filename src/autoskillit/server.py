@@ -769,10 +769,16 @@ async def list_skill_scripts() -> str:
     """
     from autoskillit.script_loader import list_scripts
 
-    scripts = list_scripts(Path.cwd())
-    return json.dumps(
-        [{"name": s.name, "description": s.description, "summary": s.summary} for s in scripts]
-    )
+    result = list_scripts(Path.cwd())
+    response: dict[str, object] = {
+        "scripts": [
+            {"name": s.name, "description": s.description, "summary": s.summary}
+            for s in result.items
+        ],
+    }
+    if result.errors:
+        response["errors"] = [{"file": e.path.name, "error": e.error} for e in result.errors]
+    return json.dumps(response)
 
 
 @mcp.tool(tags={"automation"})
@@ -824,8 +830,8 @@ def get_workflow(name: str) -> str:
     """Return workflow YAML for the orchestrating agent to follow."""
     from autoskillit.workflow_loader import list_workflows
 
-    workflows = list_workflows(Path.cwd())
-    match = next((w for w in workflows if w.name == name), None)
+    result = list_workflows(Path.cwd())
+    match = next((w for w in result.items if w.name == name), None)
     if match is None:
         return json.dumps({"error": f"No workflow named '{name}'."})
     return match.path.read_text()

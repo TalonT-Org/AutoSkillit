@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
-from autoskillit.script_loader import list_scripts, load_script
+from autoskillit.script_loader import _parse_script_metadata, list_scripts, load_script
 
 SCRIPT_A = {
     "name": "implementation",
@@ -62,35 +63,39 @@ def _make_scripts_dir(tmp_path: Path) -> Path:
 class TestListScripts:
     # SL1
     def test_empty_when_dir_missing(self, tmp_path: Path) -> None:
-        """list_scripts returns empty list when .autoskillit/scripts/ doesn't exist."""
-        assert list_scripts(tmp_path) == []
+        """list_scripts returns empty result when .autoskillit/scripts/ doesn't exist."""
+        result = list_scripts(tmp_path)
+        assert result.items == []
+        assert result.errors == []
 
     # SL2
     def test_discovers_yaml_files(self, tmp_path: Path) -> None:
         """list_scripts discovers .yaml files in .autoskillit/scripts/."""
         _make_scripts_dir(tmp_path)
-        scripts = list_scripts(tmp_path)
+        scripts = list_scripts(tmp_path).items
         names = {s.name for s in scripts}
         assert "implementation" in names
         assert "investigate-fix" in names
 
     # SL3
-    def test_ignores_non_yaml_and_malformed(self, tmp_path: Path) -> None:
-        """list_scripts ignores non-yaml files and malformed yaml."""
+    def test_ignores_non_yaml_and_reports_malformed(self, tmp_path: Path) -> None:
+        """list_scripts ignores non-yaml files and reports malformed yaml as errors."""
         scripts_dir = _make_scripts_dir(tmp_path)
         (scripts_dir / "readme.txt").write_text("not a yaml script")
         (scripts_dir / "broken.yaml").write_text(":: invalid yaml {{[")
-        scripts = list_scripts(tmp_path)
-        names = {s.name for s in scripts}
+        result = list_scripts(tmp_path)
+        names = {s.name for s in result.items}
         assert "readme" not in names
         assert "broken" not in names
-        assert len(scripts) == 2  # only the two valid ones
+        assert len(result.items) == 2  # only the two valid ones
+        assert len(result.errors) == 1  # broken.yaml reported
+        assert "broken.yaml" in result.errors[0].path.name
 
     # SL4
     def test_extracts_summary_field(self, tmp_path: Path) -> None:
         """list_scripts extracts summary field from YAML."""
         _make_scripts_dir(tmp_path)
-        scripts = list_scripts(tmp_path)
+        scripts = list_scripts(tmp_path).items
         impl = next(s for s in scripts if s.name == "implementation")
         assert impl.summary == SCRIPT_A["summary"]
 
@@ -98,7 +103,7 @@ class TestListScripts:
     def test_empty_summary_when_absent(self, tmp_path: Path) -> None:
         """list_scripts returns empty summary when field absent."""
         _make_scripts_dir(tmp_path)
-        scripts = list_scripts(tmp_path)
+        scripts = list_scripts(tmp_path).items
         inv = next(s for s in scripts if s.name == "investigate-fix")
         assert inv.summary == ""
 
@@ -106,9 +111,83 @@ class TestListScripts:
     def test_sorted_by_name(self, tmp_path: Path) -> None:
         """list_scripts sorts results by name."""
         _make_scripts_dir(tmp_path)
-        scripts = list_scripts(tmp_path)
+        scripts = list_scripts(tmp_path).items
         names = [s.name for s in scripts]
         assert names == sorted(names)
+
+    def test_discovers_frontmatter_format(self, tmp_path: Path) -> None:
+        """Scripts in YAML frontmatter format must be discovered."""
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "pipeline.yaml").write_text(
+            "---\nname: my-pipeline\ndescription: A pipeline\n"
+            "summary: plan > implement\n---\n\n# Pipeline\nDo stuff.\n"
+        )
+        result = list_scripts(tmp_path)
+        assert len(result.items) == 1
+        assert result.items[0].name == "my-pipeline"
+        assert result.items[0].summary == "plan > implement"
+
+    def test_reports_errors(self, tmp_path: Path) -> None:
+        """Malformed scripts must produce error reports, not silent skips."""
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "good.yaml").write_text("name: good\ndescription: Valid\n")
+        (scripts_dir / "bad.yaml").write_text(":: invalid {{[\n")
+        result = list_scripts(tmp_path)
+        assert len(result.items) == 1
+        assert len(result.errors) == 1
+        assert "bad.yaml" in result.errors[0].path.name
+
+
+class TestParseScriptMetadata:
+    def test_single_document(self, tmp_path: Path) -> None:
+        """Standard YAML without frontmatter."""
+        path = tmp_path / "script.yaml"
+        path.write_text("name: my-script\ndescription: A script\nsummary: do stuff\n")
+        info = _parse_script_metadata(path)
+        assert info.name == "my-script"
+        assert info.description == "A script"
+        assert info.summary == "do stuff"
+
+    def test_frontmatter_format(self, tmp_path: Path) -> None:
+        """YAML frontmatter with --- delimiters and Markdown body."""
+        path = tmp_path / "script.yaml"
+        path.write_text("---\nname: fm-script\ndescription: Frontmatter\n---\n\n# Title\nProse.\n")
+        info = _parse_script_metadata(path)
+        assert info.name == "fm-script"
+        assert info.description == "Frontmatter"
+
+    def test_frontmatter_with_steps(self, tmp_path: Path) -> None:
+        """YAML frontmatter where metadata block includes steps."""
+        path = tmp_path / "script.yaml"
+        path.write_text(
+            "---\nname: step-script\ndescription: Has steps\n"
+            "steps:\n  plan:\n    tool: run_skill\n---\n"
+        )
+        info = _parse_script_metadata(path)
+        assert info.name == "step-script"
+
+    def test_rejects_empty_file(self, tmp_path: Path) -> None:
+        """Empty file raises ValueError."""
+        path = tmp_path / "empty.yaml"
+        path.write_text("")
+        with pytest.raises(ValueError, match="Empty YAML"):
+            _parse_script_metadata(path)
+
+    def test_rejects_non_mapping(self, tmp_path: Path) -> None:
+        """File with YAML list raises ValueError."""
+        path = tmp_path / "list.yaml"
+        path.write_text("- item1\n- item2\n")
+        with pytest.raises(ValueError, match="mapping"):
+            _parse_script_metadata(path)
+
+    def test_rejects_missing_name(self, tmp_path: Path) -> None:
+        """File without name field raises ValueError."""
+        path = tmp_path / "noname.yaml"
+        path.write_text("description: No name here\n")
+        with pytest.raises(ValueError, match="name"):
+            _parse_script_metadata(path)
 
 
 class TestLoadScript:

@@ -497,7 +497,7 @@ def workflows_list():
     """List available workflows with sources."""
     from autoskillit.workflow_loader import list_workflows
 
-    workflows = list_workflows(Path.cwd())
+    workflows = list_workflows(Path.cwd()).items
     if not workflows:
         print("No workflows found.")
         return
@@ -515,7 +515,7 @@ def workflows_show(name: str):
     """Print the YAML content of a named workflow."""
     from autoskillit.workflow_loader import list_workflows
 
-    workflows = list_workflows(Path.cwd())
+    workflows = list_workflows(Path.cwd()).items
     match = next((w for w in workflows if w.name == name), None)
     if match is None:
         print(f"No workflow named '{name}'.", file=sys.stderr)

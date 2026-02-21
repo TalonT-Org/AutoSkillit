@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 from autoskillit.types import RETRY_RESPONSE_FIELDS, WorkflowSource
@@ -109,7 +110,7 @@ class TestWorkflowLoader:
 
     # WF7
     def test_list_workflows_finds_builtins(self, tmp_path: Path) -> None:
-        workflows = list_workflows(tmp_path)
+        workflows = list_workflows(tmp_path).items
         names = {w.name for w in workflows}
         assert "bugfix-loop" in names
         assert "implementation" in names
@@ -123,7 +124,7 @@ class TestWorkflowLoader:
         override = {**VALID_WORKFLOW, "name": "bugfix-loop", "description": "Custom override"}
         _write_yaml(wf_dir / "bugfix-loop.yaml", override)
 
-        workflows = list_workflows(tmp_path)
+        workflows = list_workflows(tmp_path).items
         match = next(w for w in workflows if w.name == "bugfix-loop")
         assert match.source == WorkflowSource.PROJECT
         assert match.description == "Custom override"
@@ -189,6 +190,21 @@ class TestWorkflowLoader:
         errors = validate_workflow(wf)
         assert any("missing_input" in e for e in errors)
 
+    def test_load_workflow_rejects_non_dict(self, tmp_path: Path) -> None:
+        """YAML that parses to a non-dict must raise ValueError."""
+        path = tmp_path / "list.yaml"
+        path.write_text("- item1\n- item2\n")
+        with pytest.raises(ValueError, match="YAML mapping"):
+            load_workflow(path)
+
+    def test_list_workflows_reports_malformed_files(self, tmp_path: Path) -> None:
+        """Malformed workflow files must produce error reports."""
+        wf_dir = tmp_path / ".autoskillit" / "workflows"
+        wf_dir.mkdir(parents=True)
+        (wf_dir / "broken.yaml").write_text("{invalid: [unclosed\n")
+        result = list_workflows(tmp_path)
+        assert len(result.errors) >= 1
+
     # WF_SUM1
     def test_workflow_summary_defaults_to_empty(self) -> None:
         """Workflow dataclass has summary field defaulting to empty string."""
@@ -213,7 +229,7 @@ class TestWorkflowLoader:
 
     def test_retry_on_field_is_valid_response_key(self, tmp_path: Path) -> None:
         """retry.on must reference a field that run_skill_retry actually returns."""
-        for wf_info in list_workflows(tmp_path):
+        for wf_info in list_workflows(tmp_path).items:
             wf = load_workflow(wf_info.path)
             for step_name, step in wf.steps.items():
                 if step.retry and step.retry.on:

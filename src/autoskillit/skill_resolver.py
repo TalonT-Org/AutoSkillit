@@ -5,11 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from autoskillit.types import SkillSource
+
 
 @dataclass
 class SkillInfo:
     name: str
-    source: str  # "bundled"
+    source: SkillSource
     path: Path
 
 
@@ -23,12 +25,14 @@ class SkillResolver:
         """Resolve a skill name to its path."""
         skill_path = self._dir / name / "SKILL.md"
         if skill_path.is_file():
-            return SkillInfo(name=name, source="bundled", path=skill_path)
+            return SkillInfo(name=name, source=SkillSource.BUNDLED, path=skill_path)
         return None
 
     def list_all(self) -> list[SkillInfo]:
         """List all bundled skills."""
-        return sorted(_scan_directory("bundled", self._dir), key=lambda s: s.name)
+        return sorted(
+            _scan_directory(SkillSource.BUNDLED, self._dir), key=lambda s: s.name
+        )
 
 
 def bundled_skills_dir() -> Path:
@@ -36,7 +40,7 @@ def bundled_skills_dir() -> Path:
     return Path(__file__).parent / "skills"
 
 
-def _scan_directory(source: str, directory: Path) -> list[SkillInfo]:
+def _scan_directory(source: SkillSource, directory: Path) -> list[SkillInfo]:
     """Find all SKILL.md files in immediate subdirectories."""
     if not directory.is_dir():
         return []

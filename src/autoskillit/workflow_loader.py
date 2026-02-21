@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+from autoskillit.types import RETRY_RESPONSE_FIELDS, WorkflowSource
+
 
 @dataclass
 class WorkflowInput:
@@ -48,7 +50,7 @@ class Workflow:
 class WorkflowInfo:
     name: str
     description: str
-    source: str  # "project" | "builtin"
+    source: WorkflowSource
     path: Path
 
 
@@ -89,6 +91,11 @@ def validate_workflow(wf: Workflow) -> list[str]:
                 f"Step '{step_name}'.retry.on_exhausted references "
                 f"unknown step '{step.retry.on_exhausted}'."
             )
+        if step.retry and step.retry.on and step.retry.on not in RETRY_RESPONSE_FIELDS:
+            errors.append(
+                f"Step '{step_name}'.retry.on references unknown response field "
+                f"'{step.retry.on}'. Valid fields: {sorted(RETRY_RESPONSE_FIELDS)}"
+            )
 
     input_names = set(wf.inputs.keys())
     for step_name, step in wf.steps.items():
@@ -111,10 +118,10 @@ def list_workflows(project_dir: Path) -> list[WorkflowInfo]:
     result: list[WorkflowInfo] = []
 
     project_wf_dir = project_dir / ".autoskillit" / "workflows"
-    _collect_workflows("project", project_wf_dir, seen, result)
+    _collect_workflows(WorkflowSource.PROJECT, project_wf_dir, seen, result)
 
     builtin_dir = Path(__file__).parent / "workflows"
-    _collect_workflows("builtin", builtin_dir, seen, result)
+    _collect_workflows(WorkflowSource.BUILTIN, builtin_dir, seen, result)
 
     return sorted(result, key=lambda w: w.name)
 
@@ -186,7 +193,7 @@ def _extract_refs(value: str) -> list[str]:
 
 
 def _collect_workflows(
-    source: str, directory: Path, seen: set[str], result: list[WorkflowInfo]
+    source: WorkflowSource, directory: Path, seen: set[str], result: list[WorkflowInfo]
 ) -> None:
     if not directory.is_dir():
         return

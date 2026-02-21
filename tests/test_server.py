@@ -158,7 +158,7 @@ class TestPluginMetadataExists:
         assert manifest.is_file()
         data = json.loads(manifest.read_text())
         assert data["name"] == "autoskillit"
-        assert "version" in data
+        assert data["version"] == autoskillit.__version__
 
     def test_mcp_json_exists(self):
         """Package contains .mcp.json with autoskillit server entry."""

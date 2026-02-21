@@ -30,9 +30,7 @@ class SkillResolver:
 
     def list_all(self) -> list[SkillInfo]:
         """List all bundled skills."""
-        return sorted(
-            _scan_directory(SkillSource.BUNDLED, self._dir), key=lambda s: s.name
-        )
+        return sorted(_scan_directory(SkillSource.BUNDLED, self._dir), key=lambda s: s.name)
 
 
 def bundled_skills_dir() -> Path:

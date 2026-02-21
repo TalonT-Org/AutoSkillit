@@ -16,7 +16,6 @@ from autoskillit.config import (
     SafetyConfig,
 )
 from autoskillit.process_lifecycle import SubprocessResult
-from autoskillit.types import MergeFailedStep, MergeState, RestartScope, RetryReason
 from autoskillit.server import (
     ClaudeSessionResult,
     CleanupResult,
@@ -39,6 +38,7 @@ from autoskillit.server import (
     run_skill_retry,
     test_check,
 )
+from autoskillit.types import MergeFailedStep, MergeState, RestartScope, RetryReason
 
 test_check.__test__ = False  # type: ignore[attr-defined]
 
@@ -918,7 +918,6 @@ class TestClaudeSessionResult:
         assert parsed.subtype == "success"
         assert parsed.result == "Done."
         assert parsed.session_id == "s1"
-
 
     def test_needs_retry_and_retry_reason_are_consistent(self):
         """retry_reason is RESUME iff needs_retry is True, NONE otherwise."""

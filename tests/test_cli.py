@@ -263,7 +263,7 @@ class TestCLI:
         cli.doctor()
         captured = capsys.readouterr()
         assert "bugfix-loop" in captured.out
-        assert "WARNING" in captured.out
+        assert "ERROR" in captured.out
 
     def test_doctor_ignores_healthy_coregistered_servers(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -289,7 +289,6 @@ class TestCLI:
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
             "test_check:\n  command: ['pytest']\n"
         )
-        # Ensure autoskillit appears to be on PATH so the PATH check does not warn
         with patch(
             "autoskillit.cli.shutil.which",
             side_effect=lambda cmd: (
@@ -299,6 +298,7 @@ class TestCLI:
             cli.doctor()
         captured = capsys.readouterr()
         assert "WARNING" not in captured.out
+        assert "ERROR" not in captured.out
 
     def test_doctor_warns_missing_config(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -319,7 +319,7 @@ class TestCLI:
     def test_doctor_json_output(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """doctor --json outputs structured JSON."""
+        """doctor --json outputs structured results JSON."""
         fake_claude_json = tmp_path / ".claude.json"
         fake_claude_json.write_text(
             json.dumps(
@@ -331,8 +331,126 @@ class TestCLI:
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
-        assert "warnings" in data
-        assert isinstance(data["warnings"], list)
+        assert "results" in data
+        assert isinstance(data["results"], list)
+        for entry in data["results"]:
+            assert "severity" in entry
+            assert "check" in entry
+            assert "message" in entry
+
+    def test_doctor_result_has_severity_tiers(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """doctor JSON output uses ok/warning/error severity tiers."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        severities = {r["severity"] for r in data["results"]}
+        assert severities <= {"ok", "warning", "error"}
+
+    def test_doctor_warns_version_mismatch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """doctor reports error when plugin.json version differs from package."""
+        from autoskillit import server
+
+        plugin_dir = tmp_path / "fake_plugin" / ".claude-plugin"
+        plugin_dir.mkdir(parents=True)
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps({"name": "autoskillit", "version": "0.0.0"})
+        )
+        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path / "fake_plugin"))
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        version_checks = [r for r in data["results"] if r["check"] == "version_consistency"]
+        assert len(version_checks) == 1
+        assert version_checks[0]["severity"] == "error"
+
+    def test_doctor_passes_when_versions_match(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """doctor reports ok when plugin.json version matches package."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        version_checks = [r for r in data["results"] if r["check"] == "version_consistency"]
+        assert len(version_checks) == 1
+        assert version_checks[0]["severity"] == "ok"
+
+    def test_doctor_warns_marketplace_staleness(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """doctor warns when marketplace manifest has stale version."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        mkt_dir = tmp_path / ".autoskillit" / "marketplace"
+        plugin_dir = mkt_dir / ".claude-plugin"
+        plugin_dir.mkdir(parents=True)
+        (plugin_dir / "marketplace.json").write_text(
+            json.dumps(
+                {
+                    "plugins": [
+                        {"name": "autoskillit", "version": "0.0.0-stale", "source": "."}
+                    ]
+                }
+            )
+        )
+        link_dir = mkt_dir / "plugins"
+        link_dir.mkdir(parents=True)
+        link = link_dir / "autoskillit"
+        link.symlink_to(Path(cli.__file__).parent)
+
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        mkt_checks = [r for r in data["results"] if r["check"] == "marketplace_freshness"]
+        assert len(mkt_checks) == 1
+        assert mkt_checks[0]["severity"] == "warning"
+
+    def test_doctor_json_output_includes_all_checks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """doctor JSON includes entries for all core check names."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        check_names = {r["check"] for r in data["results"]}
+        expected = {
+            "stale_mcp_servers",
+            "plugin_metadata",
+            "autoskillit_on_path",
+            "project_config",
+            "version_consistency",
+        }
+        assert expected <= check_names
+
+    def test_doctor_human_output_shows_severity(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """doctor human output includes severity prefixes for problems."""
+        from autoskillit import server
+
+        plugin_dir = tmp_path / "fake_plugin" / ".claude-plugin"
+        plugin_dir.mkdir(parents=True)
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps({"name": "autoskillit", "version": "0.0.0"})
+        )
+        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path / "fake_plugin"))
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor()
+        captured = capsys.readouterr()
+        assert "ERROR:" in captured.out
 
     # --- install ---
 

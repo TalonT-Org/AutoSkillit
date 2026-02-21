@@ -8,10 +8,25 @@ import os
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import UTC
+from enum import StrEnum
 from pathlib import Path
 
 from cyclopts import App
+
+
+class Severity(StrEnum):
+    OK = "ok"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+@dataclass
+class DoctorResult:
+    severity: Severity
+    check: str
+    message: str
 
 app = App(
     name="autoskillit",
@@ -225,9 +240,10 @@ def doctor(*, output_json: bool = False):
     output_json
         Output results as JSON instead of human-readable text.
     """
-    warnings: list[str] = []
+    results: list[DoctorResult] = []
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
+    stale_servers: list[str] = []
     claude_json = Path.home() / ".claude.json"
     if claude_json.is_file():
         data = json.loads(claude_json.read_text())
@@ -240,37 +256,169 @@ def doctor(*, output_json: bool = False):
                 continue
             cmd_path = Path(cmd)
             if cmd_path.is_absolute() and not cmd_path.exists():
-                warnings.append(
-                    f"WARNING: MCP server '{name}' has dead command path: {cmd}. "
+                stale_servers.append(
+                    f"MCP server '{name}' has dead command path: {cmd}. "
                     f"Remove with: claude mcp remove --scope user {name}"
                 )
             elif not cmd_path.is_absolute() and shutil.which(cmd) is None:
-                warnings.append(
-                    f"WARNING: MCP server '{name}' command not found: {cmd}. "
+                stale_servers.append(
+                    f"MCP server '{name}' command not found: {cmd}. "
                     f"Remove with: claude mcp remove --scope user {name}"
                 )
+    if stale_servers:
+        for msg in stale_servers:
+            results.append(DoctorResult(Severity.ERROR, "stale_mcp_servers", msg))
+    else:
+        results.append(
+            DoctorResult(Severity.OK, "stale_mcp_servers", "No stale MCP servers detected")
+        )
 
     # Check 2: Plugin metadata exists in package
     pkg_dir = Path(__file__).parent
     if not (pkg_dir / ".claude-plugin" / "plugin.json").is_file():
-        warnings.append("WARNING: Plugin metadata missing. Reinstall autoskillit.")
+        results.append(
+            DoctorResult(
+                Severity.ERROR,
+                "plugin_metadata",
+                "Plugin metadata missing. Reinstall autoskillit.",
+            )
+        )
+    else:
+        results.append(
+            DoctorResult(Severity.OK, "plugin_metadata", "Plugin metadata exists")
+        )
 
     # Check 3: autoskillit command on PATH
     if shutil.which("autoskillit") is None:
-        warnings.append("WARNING: 'autoskillit' command not found on PATH.")
+        results.append(
+            DoctorResult(
+                Severity.WARNING,
+                "autoskillit_on_path",
+                "'autoskillit' command not found on PATH.",
+            )
+        )
+    else:
+        results.append(
+            DoctorResult(Severity.OK, "autoskillit_on_path", "autoskillit command found on PATH")
+        )
 
     # Check 4: Config exists
     if not (Path.cwd() / ".autoskillit" / "config.yaml").is_file():
-        warnings.append("WARNING: No project config found. Run: autoskillit init")
+        results.append(
+            DoctorResult(
+                Severity.WARNING,
+                "project_config",
+                "No project config found. Run: autoskillit init",
+            )
+        )
+    else:
+        results.append(
+            DoctorResult(Severity.OK, "project_config", "Project config exists")
+        )
+
+    # Check 5: Version consistency — plugin.json vs package version
+    from autoskillit.server import _version_info
+
+    info = _version_info()
+    if info["plugin_json_version"] is None:
+        results.append(
+            DoctorResult(
+                Severity.ERROR,
+                "version_consistency",
+                "Cannot verify version consistency: plugin.json not found. "
+                "Reinstall: autoskillit install",
+            )
+        )
+    elif not info["match"]:
+        results.append(
+            DoctorResult(
+                Severity.ERROR,
+                "version_consistency",
+                f"Package version is {info['package_version']} but plugin.json "
+                f"reports {info['plugin_json_version']}. "
+                f"Update plugin.json or reinstall: autoskillit install",
+            )
+        )
+    else:
+        results.append(
+            DoctorResult(
+                Severity.OK,
+                "version_consistency",
+                f"Version {info['package_version']} consistent across package and plugin.json",
+            )
+        )
+
+    # Check 6: Marketplace symlink freshness
+    pkg_version = info["package_version"]
+    marketplace_link = Path.home() / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
+    if marketplace_link.is_symlink():
+        target = marketplace_link.resolve()
+        if not target.is_dir():
+            results.append(
+                DoctorResult(
+                    Severity.ERROR,
+                    "marketplace_freshness",
+                    f"Marketplace symlink points to missing directory: {target}. "
+                    f"Re-run: autoskillit install",
+                )
+            )
+        else:
+            mkt_json = (
+                marketplace_link.parent.parent / ".claude-plugin" / "marketplace.json"
+            )
+            if mkt_json.is_file():
+                mkt_data = json.loads(mkt_json.read_text())
+                plugins = mkt_data.get("plugins", [])
+                mkt_version = plugins[0].get("version", "") if plugins else ""
+                if mkt_version != pkg_version:
+                    results.append(
+                        DoctorResult(
+                            Severity.WARNING,
+                            "marketplace_freshness",
+                            f"Marketplace manifest version ({mkt_version}) "
+                            f"differs from installed version ({pkg_version}). "
+                            f"Re-run: autoskillit install",
+                        )
+                    )
+                else:
+                    results.append(
+                        DoctorResult(
+                            Severity.OK,
+                            "marketplace_freshness",
+                            "Marketplace manifest version matches installed version",
+                        )
+                    )
+    elif (Path.home() / ".autoskillit" / "marketplace").is_dir():
+        results.append(
+            DoctorResult(
+                Severity.WARNING,
+                "marketplace_freshness",
+                "Marketplace symlink missing. Re-run: autoskillit install",
+            )
+        )
 
     # Output
     if output_json:
-        print(json.dumps({"warnings": warnings}, indent=2))
-    elif warnings:
-        for w in warnings:
-            print(w)
+        print(
+            json.dumps(
+                {
+                    "results": [
+                        {"severity": r.severity, "check": r.check, "message": r.message}
+                        for r in results
+                    ]
+                },
+                indent=2,
+            )
+        )
     else:
-        print("All checks passed.")
+        has_problems = any(r.severity != Severity.OK for r in results)
+        if has_problems:
+            for r in results:
+                if r.severity != Severity.OK:
+                    print(f"{r.severity.upper()}: {r.message}")
+        else:
+            for r in results:
+                print(f"{r.severity}: {r.message}")
 
 
 @config_app.command(name="show")

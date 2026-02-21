@@ -39,6 +39,7 @@ class WorkflowStep:
 class Workflow:
     name: str
     description: str
+    summary: str = ""
     inputs: dict[str, WorkflowInput] = field(default_factory=dict)
     steps: dict[str, WorkflowStep] = field(default_factory=dict)
 
@@ -129,6 +130,7 @@ def builtin_workflows_dir() -> Path:
 def _parse_workflow(data: dict[str, Any]) -> Workflow:
     name = data.get("name", "")
     description = data.get("description", "")
+    summary = data.get("summary", "")
 
     inputs: dict[str, WorkflowInput] = {}
     for inp_name, inp_data in (data.get("inputs") or {}).items():
@@ -144,7 +146,9 @@ def _parse_workflow(data: dict[str, Any]) -> Workflow:
         if isinstance(step_data, dict):
             steps[step_name] = _parse_step(step_data)
 
-    return Workflow(name=name, description=description, inputs=inputs, steps=steps)
+    return Workflow(
+        name=name, description=description, summary=summary, inputs=inputs, steps=steps
+    )
 
 
 def _parse_step(data: dict[str, Any]) -> WorkflowStep:

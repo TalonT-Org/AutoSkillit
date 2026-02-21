@@ -9,13 +9,10 @@ from autoskillit.skill_resolver import SkillResolver, bundled_skills_dir
 
 BUNDLED_SKILLS = [
     "assess-and-merge",
-    "bugfix-loop",
     "dry-walkthrough",
     "implement-worktree",
     "implement-worktree-no-merge",
-    "implementation-pipeline",
     "investigate",
-    "investigate-first",
     "make-plan",
     "make-script-skill",
     "mermaid",

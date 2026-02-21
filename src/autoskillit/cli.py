@@ -1,10 +1,12 @@
-"""CLI for autoskillit: serve, init, config, skills, workflows, update."""
+"""CLI for autoskillit: serve, init, install, config, skills, workflows, update."""
 
 from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import shutil
+import subprocess
 import sys
 from datetime import UTC
 from pathlib import Path
@@ -73,6 +75,112 @@ def init(
     plugin_dir = Path(__file__).parent
     print(f"\nPlugin directory: {plugin_dir}")
     print(f"Load with: claude --plugin-dir {plugin_dir}")
+
+
+_VALID_SCOPES = {"user", "project", "local"}
+_MARKETPLACE_NAME = "autoskillit-local"
+
+
+@app.command
+def install(*, scope: str = "user"):
+    """Install the plugin persistently for Claude Code.
+
+    Sets up a local marketplace and installs the plugin so it loads
+    automatically in every Claude Code session (no --plugin-dir needed).
+
+    After updating autoskillit, re-run this command to refresh the cache.
+
+    Parameters
+    ----------
+    scope
+        Where to enable: "user" (all projects), "project" (shared via repo),
+        or "local" (this project, gitignored).
+    """
+    if scope not in _VALID_SCOPES:
+        print(f"Invalid scope: {scope!r}. Must be one of: {', '.join(sorted(_VALID_SCOPES))}")
+        sys.exit(1)
+
+    marketplace_dir = _ensure_marketplace()
+    plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
+    print(f"Marketplace prepared: {marketplace_dir}")
+
+    # Cannot run `claude plugin` commands from inside a Claude Code session
+    if os.environ.get("CLAUDECODE"):
+        print("\nRun these commands in a regular terminal to complete installation:")
+        print(f"  claude plugin marketplace add {marketplace_dir}")
+        print(f"  claude plugin install {plugin_ref} --scope {scope}")
+        return
+
+    if shutil.which("claude") is None:
+        print("\nERROR: 'claude' command not found on PATH.")
+        print("Install Claude Code, then run:")
+        print(f"  claude plugin marketplace add {marketplace_dir}")
+        print(f"  claude plugin install {plugin_ref} --scope {scope}")
+        sys.exit(1)
+
+    # Register the marketplace (idempotent)
+    result = subprocess.run(
+        ["claude", "plugin", "marketplace", "add", str(marketplace_dir)],
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        print(f"Failed to register marketplace: {result.stderr.strip()}")
+        sys.exit(1)
+    print("Marketplace registered.")
+
+    # Install the plugin
+    result = subprocess.run(
+        ["claude", "plugin", "install", plugin_ref, "--scope", scope],
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        print(f"Failed to install plugin: {result.stderr.strip()}")
+        sys.exit(1)
+
+    print(f"Plugin installed: {plugin_ref} (scope: {scope})")
+    print("\nUsage: just run 'claude' — skills and MCP tools load automatically.")
+    print("Enable tools with: /mcp__autoskillit__enable_tools")
+
+
+def _ensure_marketplace() -> Path:
+    """Create or update the local marketplace directory."""
+    from autoskillit import __version__
+
+    pkg_dir = Path(__file__).parent
+    marketplace_dir = Path.home() / ".autoskillit" / "marketplace"
+    plugin_dir = marketplace_dir / ".claude-plugin"
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write marketplace manifest
+    manifest = {
+        "name": _MARKETPLACE_NAME,
+        "owner": {"name": "autoskillit"},
+        "plugins": [
+            {
+                "name": "autoskillit",
+                "source": "./plugins/autoskillit",
+                "description": "Orchestrated skill-driven workflows"
+                " using Claude Code headless sessions",
+                "version": __version__,
+            }
+        ],
+    }
+    (plugin_dir / "marketplace.json").write_text(json.dumps(manifest, indent=2) + "\n")
+
+    # Symlink to the live package directory
+    link_path = marketplace_dir / "plugins" / "autoskillit"
+    link_path.parent.mkdir(parents=True, exist_ok=True)
+    if link_path.is_symlink() or link_path.exists():
+        link_path.unlink()
+    link_path.symlink_to(pkg_dir)
+
+    return marketplace_dir
 
 
 @app.command

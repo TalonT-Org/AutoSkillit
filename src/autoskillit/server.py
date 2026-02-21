@@ -121,12 +121,11 @@ class ClaudeSessionResult:
     is_error: bool
     result: str
     session_id: str
-    num_turns: int
     errors: list[str] = field(default_factory=list)
 
     @property
     def needs_retry(self) -> bool:
-        """Whether this session outcome indicates the caller should retry."""
+        """Whether the session didn't finish and should be retried."""
         if self.subtype == "error_max_turns":
             return True
         if self.is_error and "prompt is too long" in self.result.lower():
@@ -136,10 +135,8 @@ class ClaudeSessionResult:
     @property
     def retry_reason(self) -> str:
         """Why retry is needed. Empty if needs_retry is False."""
-        if self.subtype == "error_max_turns":
-            return "max_turns"
-        if self.is_error and "prompt is too long" in self.result.lower():
-            return "context_exhaustion"
+        if self.needs_retry:
+            return "retry"
         return ""
 
 
@@ -156,7 +153,6 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
             is_error=False,
             result="",
             session_id="",
-            num_turns=0,
             errors=[],
         )
 
@@ -181,7 +177,6 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                 is_error=False,
                 result=stdout,
                 session_id="",
-                num_turns=0,
                 errors=[],
             )
 
@@ -190,7 +185,6 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         is_error=result_obj.get("is_error", False),
         result=result_obj.get("result", ""),
         session_id=result_obj.get("session_id", ""),
-        num_turns=result_obj.get("num_turns", 0),
         errors=result_obj.get("errors", []),
     )
 
@@ -271,7 +265,7 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
 
 @mcp.tool(tags={"automation"})
 async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
-    """Run a Claude Code headless session with a skill command (no turn limit).
+    """Run a Claude Code headless session with a skill command.
 
     Args:
         skill_command: The full prompt including skill invocation (e.g. "/investigate ...").
@@ -313,17 +307,14 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
     )
 
 
-_MAX_TURNS = 200
-
-
 @mcp.tool(tags={"automation"})
 async def run_skill_retry(skill_command: str, cwd: str) -> str:
-    """Run a Claude Code headless session with an API call limit.
+    """Run a Claude Code headless session with retry detection.
 
-    Use this for long-running skill sessions where context exhaustion is expected.
-    The needs_retry field indicates whether the session should be continued.
-    The retry_reason field disambiguates: "max_turns" (resume session) vs
-    "context_exhaustion" (reduce context before retrying).
+    Use this for long-running skill sessions that may hit the context limit.
+    The needs_retry field indicates whether the session didn't finish.
+    When needs_retry is true, retry_reason is "retry" — the session should
+    be retried to continue from where it left off.
 
     Args:
         skill_command: The full prompt including skill invocation.
@@ -346,8 +337,6 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
         "--output-format",
         "json",
         "--dangerously-skip-permissions",
-        "--max-turns",
-        str(_MAX_TURNS),
     ]
 
     returncode, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=7200)

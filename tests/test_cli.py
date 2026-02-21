@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -332,3 +333,115 @@ class TestCLI:
         data = json.loads(captured.out)
         assert "warnings" in data
         assert isinstance(data["warnings"], list)
+
+    # --- install ---
+
+    def test_install_validates_scope(self, capsys: pytest.CaptureFixture) -> None:
+        """install rejects invalid scope values."""
+        with pytest.raises(SystemExit) as exc_info:
+            cli.install(scope="invalid")
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Invalid scope" in captured.out
+
+    def test_install_errors_without_claude(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """install prints manual instructions when claude is not on PATH."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(shutil, "which", lambda cmd: None)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        with pytest.raises(SystemExit) as exc_info:
+            cli.install()
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "claude plugin marketplace add" in captured.out
+
+    def test_install_creates_marketplace_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """install creates the marketplace directory structure."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        marketplace_dir = cli._ensure_marketplace()
+        assert (marketplace_dir / ".claude-plugin" / "marketplace.json").is_file()
+        assert (marketplace_dir / "plugins" / "autoskillit").is_symlink()
+
+    def test_install_symlink_points_to_package(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Marketplace symlink resolves to the autoskillit package directory."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        marketplace_dir = cli._ensure_marketplace()
+        link = marketplace_dir / "plugins" / "autoskillit"
+        assert link.resolve() == Path(cli.__file__).parent.resolve()
+
+    def test_install_marketplace_json_content(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Marketplace manifest has correct structure and plugin name."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        marketplace_dir = cli._ensure_marketplace()
+        data = json.loads((marketplace_dir / ".claude-plugin" / "marketplace.json").read_text())
+        assert data["name"] == "autoskillit-local"
+        assert len(data["plugins"]) == 1
+        assert data["plugins"][0]["name"] == "autoskillit"
+        assert data["plugins"][0]["source"] == "./plugins/autoskillit"
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_install_calls_claude_cli(
+        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """install calls claude plugin marketplace add + claude plugin install."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.install(scope="user")
+
+        assert mock_run.call_count == 2
+        marketplace_call = mock_run.call_args_list[0]
+        install_call = mock_run.call_args_list[1]
+        assert "marketplace" in marketplace_call[0][0]
+        assert "add" in marketplace_call[0][0]
+        assert "install" in install_call[0][0]
+        assert "autoskillit@autoskillit-local" in install_call[0][0]
+        assert "--scope" in install_call[0][0]
+        assert "user" in install_call[0][0]
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_install_passes_scope_to_claude(
+        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """install forwards the scope argument to claude plugin install."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.install(scope="project")
+
+        install_call = mock_run.call_args_list[1][0][0]
+        scope_idx = install_call.index("--scope")
+        assert install_call[scope_idx + 1] == "project"
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_install_idempotent_marketplace(
+        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Running install twice recreates the symlink without error."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.install()
+        cli.install()  # second run should not fail
+
+        assert (tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit").is_symlink()

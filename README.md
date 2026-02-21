@@ -1,6 +1,6 @@
 # AutoSkillit
 
-Claude Code plugin that orchestrates automated workflows using headless sessions. Provides 8 MCP tools for running commands, executing skills, testing, merging worktrees, and classifying fixes — all gated behind user-only MCP prompts. Skills are registered as first-class slash commands (`/autoskillit:investigate`, etc.).
+Claude Code plugin that orchestrates automated workflows using headless sessions. Provides 10 MCP tools for running commands, executing skills, testing, merging worktrees, classifying fixes, and discovering pipeline scripts — 8 gated behind user-only MCP prompts, 2 ungated for script discovery. Skills are registered as first-class slash commands (`/autoskillit:investigate`, etc.).
 
 ## Install
 
@@ -53,6 +53,8 @@ This uses MCP prompts (user-only, model cannot invoke) and survives `--dangerous
 | `reset_test_dir` | Clear test directory (reset guard marker) |
 | `classify_fix` | Analyze diff to determine restart scope (full vs partial) |
 | `reset_workspace` | Reset workspace directory, preserving configured paths |
+| `list_skill_scripts` | List pipeline scripts from .autoskillit/scripts/ (ungated) |
+| `load_skill_script` | Load a pipeline script by name as raw YAML (ungated) |
 
 ## Configuration
 
@@ -153,12 +155,9 @@ Skills bundled with the plugin, invoked as `/autoskillit:<name>`:
 | `implement-worktree-no-merge` | Implement without auto-merge (for MCP orchestration) |
 | `retry-worktree` | Continue after context exhaustion |
 | `assess-and-merge` | Fix test failures and merge |
-| `bugfix-loop` | Pipeline: reset > test > investigate > fix > merge |
-| `implementation-pipeline` | Pipeline: plan > verify > implement > test > merge |
-| `investigate-first` | Pipeline: investigate > rectify > implement > merge |
 | `mermaid` | Create mermaid diagrams |
-| `make-script-skill` | Generate script-style SKILL.md files from workflow descriptions |
-| `setup-project` | Explore a project and generate a tailored skill script and config |
+| `make-script-skill` | Generate YAML pipeline scripts from workflow descriptions |
+| `setup-project` | Explore a project and generate tailored pipeline scripts and config |
 
 Skills are discovered by Claude Code via the plugin structure. Use `autoskillit skills list` to see bundled skills.
 
@@ -185,50 +184,67 @@ Agents access workflows via MCP resource: `workflow://bugfix-loop`
 
 Project workflows in `.autoskillit/workflows/` override built-ins.
 
-## Skill Scripts
+## Pipeline Scripts
 
-A skill script is pseudocode that gives an orchestrating agent a complete loop to follow — which AutoSkillit tools and skills to call, in what order, with decision branches at each step. You paste a skill script into a Claude Code session (with AutoSkillit tools enabled), and the agent executes it step by step.
+Pipeline scripts are YAML workflow definitions stored in `.autoskillit/scripts/` that give an orchestrating agent a complete loop to follow — which MCP tools and skills to call, in what order, with decision branches at each step. Agents discover scripts via the `list_skill_scripts` MCP tool and load them via `load_skill_script`.
 
-Skill scripts use a two-directory model:
-- **`project_dir`** — the project being worked on
-- **`work_dir`** — where Claude Code sessions execute (can be `project_dir` itself, or a separate workspace)
+Scripts use the same YAML schema as workflows (name, description, inputs, steps with tool/action, on_success/on_failure routing, retry blocks) with an added `summary` field for concise pipeline descriptions.
 
-When `work_dir` differs from `project_dir`, skill calls use `add_dir=project_dir` so the agent can see the target project's files.
-
-### Example: Implementation Pipeline
+### Discovery and Loading
 
 ```
-SETUP:
-  - project_dir = /path/to/your-project
-  - work_dir = /path/to/workspace       # can be same as project_dir
-  - base_branch = main
-  - task = "description of what to implement"
-
-PIPELINE:
-1. run_skill("/autoskillit:make-plan {task}", cwd=work_dir, add_dir=project_dir)
-2. run_skill("/autoskillit:dry-walkthrough {plan_path}", cwd=work_dir)
-3. run_skill_retry("/autoskillit:implement-worktree-no-merge {plan_path}", cwd=work_dir)
-   - If context exhausted: run_skill_retry("/autoskillit:retry-worktree {plan_path} {worktree_path}", cwd=work_dir).
-     Repeat up to 3x, then ESCALATE.
-4. test_check(worktree_path)
-   - PASS: merge_worktree(worktree_path, base_branch). Done.
-   - FAIL: run_skill("/autoskillit:assess-and-merge {worktree_path} {plan_path} {base_branch}", cwd=work_dir)
-     - Still failing after 3 attempts: ESCALATE
-
-ESCALATE: Stop and report. Human intervention needed.
+list_skill_scripts()          → JSON array of {name, description, summary}
+load_skill_script("impl")    → raw YAML content for agent to interpret
 ```
 
-**Step breakdown:**
+Both tools are ungated — available without calling `enable_tools`.
 
-| Step | Tool | What happens |
-|------|------|-------------|
-| 1 | `run_skill` | Creates an implementation plan via deep codebase exploration |
-| 2 | `run_skill` | Traces through the plan without implementing, catches gaps |
-| 3 | `run_skill_retry` | Implements the plan in an isolated git worktree |
-| 4 | `test_check` | Runs the project's test suite against the worktree |
-| 5 | `merge_worktree` | Merges the worktree branch after the test gate passes |
+### Example Script
 
-`/autoskillit:setup-project` generates a skill script tailored to your project. Run `/autoskillit:setup-project /path/to/your-project` to get started.
+```yaml
+name: implementation
+description: Plan and implement a task end-to-end.
+summary: make-plan > dry-walk > implement > test > merge
+
+inputs:
+  task:
+    description: What to implement
+    required: true
+  base_branch:
+    description: Branch to merge into
+    default: main
+
+steps:
+  plan:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
+      cwd: "."
+    on_success: verify
+    on_failure: escalate
+  verify:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:dry-walkthrough ${{ inputs.plan_path }}"
+      cwd: "."
+    on_success: implement
+    on_failure: escalate
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ inputs.plan_path }}"
+      cwd: "."
+    on_success: done
+    on_failure: escalate
+  done:
+    action: stop
+    message: "Implementation complete."
+  escalate:
+    action: stop
+    message: "Failed — human intervention needed."
+```
+
+`/autoskillit:setup-project` generates pipeline scripts tailored to your project. Run `/autoskillit:setup-project /path/to/your-project` to get started.
 
 ## Diagnostics
 
@@ -265,11 +281,12 @@ src/autoskillit/
   .mcp.json            MCP server configuration for the plugin
   cli.py               Cyclopts CLI (serve, init, config, skills, workflows, update, doctor)
   config.py            Dataclass config + layered YAML loading
-  server.py            FastMCP server with 8 tools + 2 prompts + resources
+  script_loader.py     Pipeline script discovery from .autoskillit/scripts/
+  server.py            FastMCP server with 10 tools + 2 prompts + resources
   process_lifecycle.py  Subprocess management (temp I/O, tree cleanup, timeouts)
   skill_resolver.py    Bundled skill listing
   workflow_loader.py   Workflow YAML parsing + validation
-  skills/              15 bundled skills (pipeline, workflow launchers, utilities)
+  skills/              12 bundled skills (utilities and building blocks)
   workflows/           4 built-in workflow definitions
 ```
 

@@ -1,15 +1,15 @@
 ---
 name: make-script-skill
-description: Generate clean, script-style SKILL.md files from workflow descriptions. Use when user says "make script skill", "generate script", "script a workflow", or when loaded by other skills for script formatting.
+description: Generate YAML pipeline scripts for .autoskillit/scripts/. Use when user says "make script skill", "generate script", "script a workflow", or when loaded by other skills for script formatting.
 ---
 
 # Make Script Skill
 
-Format a workflow into a concise, scannable skill script following the strict script format.
+Format a workflow into a YAML pipeline script following the workflow schema.
 
 ## When to Use
 
-- **Standalone**: User wants to create a new script-style skill from scratch
+- **Standalone**: User wants to create a new pipeline script from scratch
 - **Loaded by another skill**: Another skill (e.g., setup-project) loads this via the Skill tool to format a workflow it has already discovered
 
 ## Arguments (standalone mode)
@@ -22,100 +22,131 @@ No positional arguments. The skill prompts interactively for workflow details.
 
 ## The Script Format
 
-Every generated script MUST follow this exact structure:
+Every generated script MUST follow the workflow YAML schema:
 
-```markdown
----
-name: {skill-name}
-description: {One line}. Use when user says "{triggers}".
----
+```yaml
+name: {script-name}
+description: {One line description.}
+summary: {Concise pipeline chain, e.g. "plan > verify > implement > test > merge"}
 
-# {Title}
+inputs:
+  var_name:
+    description: {What this input is for}
+    required: true          # or false
+    default: {value}        # optional
 
-{One sentence description.}
-
-SETUP:
-  - var1 = {value or description}
-  - var2 = {value or description}
-
-{PIPELINE: | LOOP:}
-0. Verify AutoSkillit tools are enabled. If not → tell user to run /mcp__autoskillit__enable_tools
-0.1. Prompt user for SETUP variables (use AskUserQuestion)
-1. tool_call(args) → routing
-2. tool_call(args) → routing
-
-{FIX: (only if LOOP)}
-N. tool_call(args) → routing
-
-ESCALATE: Stop and report what failed. Human intervention needed.
-
-{Notes: (optional, max 3 bullets)}
+steps:
+  step_name:
+    tool: {mcp_tool_name}
+    with:
+      arg1: "${{ inputs.var_name }}"
+      arg2: "literal value"
+    on_success: next_step
+    on_failure: escalate
+    retry:                  # optional
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: escalate
+  done:
+    action: stop
+    message: "Pipeline complete."
+  escalate:
+    action: stop
+    message: "Failed — human intervention needed."
 ```
 
 ## Format Rules
 
-- **Frontmatter**: only `name` and `description`. No hooks.
-- **Body**: one `#` title, one sentence description, then pure script blocks
-- **Variables** in SETUP use `${var}` syntax for substitution in tool calls
-- **Tool calls** are written as function calls: `tool_name(arg1, arg2)`
-- **Routing** uses `→` arrows: `→ if error, go to FIX` or `→ PASS: next step`
-- **Conditional branches** use indented bullets under the step
-- **Step 0** is always the AutoSkillit tools check + SETUP variable prompting (auto-included)
-- **No markdown headers** inside the script body (no `##`, `###`)
-- **No prose paragraphs** explaining what each step does — the tool call IS the explanation
-- **Notes section** (if present) is max 3 bullet points for non-obvious things only
-
-## Anti-patterns — Do NOT Include in Generated Scripts
-
-- "When to Use" sections
-- "Critical Constraints" blocks
-- "Output" sections describing what gets created
-- Verbose step-by-step prose descriptions
-- Headed subsections within steps (`### Step N: Title`)
-- "Important Notes" or "Error Handling" blocks
-- Paragraphs of explanation between tool calls
-- Install instructions or "Getting Started" guidance
-
-The tool call line is self-documenting. `run_skill("/autoskillit:make-plan ${task}", cwd=${work_dir})` needs no paragraph explaining that it creates a plan.
+- **Top-level fields**: `name`, `description`, `summary` (required), `inputs`, `steps`
+- **Inputs**: each with `description`, optional `required` (default false) and `default`
+- **Steps**: each has either `tool` (MCP tool call) or `action` (terminal: `stop`)
+- **Tool steps**: use `with:` for arguments, `on_success`/`on_failure` for routing
+- **Terminal steps**: have `action: stop` and a `message:`
+- **Routing targets**: must reference other step names defined in the same file
+- **Variable substitution**: use `${{ inputs.var_name }}` in `with:` values
+- **Retry blocks**: optional, specify `max_attempts`, `on` (condition field), `on_exhausted` (step name)
+- **Summary**: one line, use `>` to chain steps (e.g., "plan > verify > implement > test > merge")
 
 ## Example: Standard Implementation Pipeline
 
 This is the reference format. All generated scripts should match this style:
 
-```markdown
----
-name: implement-pipeline
-description: Plan, verify, implement, test, and merge a task. Use when user says "run pipeline", "implement task", or "auto implement".
----
+```yaml
+name: implementation
+description: Plan, verify, implement, test, and merge a task.
+summary: make-plan > dry-walk > implement > test > merge
 
-# Implementation Pipeline
+inputs:
+  task:
+    description: What to implement
+    required: true
+  project_dir:
+    description: Path to the project
+    required: true
+  work_dir:
+    description: Working directory (can be same as project_dir)
+    default: "."
+  base_branch:
+    description: Branch to merge into
+    default: main
 
-Automated plan-to-merge pipeline for a single task.
-
-SETUP:
-  - project_dir = /path/to/project
-  - work_dir = /path/to/workspace (or same as project_dir)
-  - base_branch = main
-  - task = "description of what to implement"
-
-PIPELINE:
-0. Verify AutoSkillit tools are enabled. If not → tell user to run /mcp__autoskillit__enable_tools
-0.1. Prompt user for SETUP variables (use AskUserQuestion)
-1. run_skill("/autoskillit:make-plan ${task}", cwd=${work_dir}, add_dir=${project_dir}) → save ${plan_path}
-2. run_skill("/autoskillit:dry-walkthrough ${plan_path}", cwd=${work_dir})
-3. run_skill_retry("/autoskillit:implement-worktree-no-merge ${plan_path}", cwd=${work_dir})
-   - If context exhausted: run_skill_retry("/autoskillit:retry-worktree ${plan_path} ${worktree_path}", cwd=${work_dir})
-     Repeat up to 3x, then → ESCALATE
-4. test_check(${worktree_path})
-   - PASS → merge_worktree(${worktree_path}, ${base_branch}). Done.
-   - FAIL → run_skill("/autoskillit:assess-and-merge ${worktree_path} ${plan_path} ${base_branch}", cwd=${work_dir})
-     Still failing after 3 attempts → ESCALATE
-
-ESCALATE: Stop and report what failed. Human intervention needed.
-
-Notes:
-- If work_dir equals project_dir, omit add_dir from run_skill calls
-- Monitor test_check output for flaky tests vs real failures
+steps:
+  plan:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
+      cwd: "${{ inputs.work_dir }}"
+      add_dir: "${{ inputs.project_dir }}"
+    on_success: verify
+    on_failure: escalate
+  verify:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:dry-walkthrough ${{ inputs.plan_path }}"
+      cwd: "${{ inputs.work_dir }}"
+    on_success: implement
+    on_failure: escalate
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ inputs.plan_path }}"
+      cwd: "${{ inputs.work_dir }}"
+    on_success: test
+    on_failure: escalate
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: escalate
+  test:
+    tool: test_check
+    with:
+      worktree_path: "${{ inputs.worktree_path }}"
+    on_success: merge
+    on_failure: fix
+  merge:
+    tool: merge_worktree
+    with:
+      worktree_path: "${{ inputs.worktree_path }}"
+      base_branch: "${{ inputs.base_branch }}"
+    on_success: done
+    on_failure: escalate
+  fix:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:assess-and-merge ${{ inputs.worktree_path }} ${{ inputs.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ inputs.work_dir }}"
+    on_success: done
+    on_failure: escalate
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: escalate
+  done:
+    action: stop
+    message: "Implementation complete."
+  escalate:
+    action: stop
+    message: "Failed — human intervention needed."
 ```
 
 ## Standalone Invocation Flow
@@ -123,11 +154,11 @@ Notes:
 When called directly as `/autoskillit:make-script-skill`:
 
 1. Ask the user what workflow they want to script (name, what it does)
-2. Ask whether it's a linear PIPELINE or a LOOP with a FIX step
+2. Ask whether it's a linear pipeline or a loop with a fix step
 3. Ask for the tool calls and routing (which MCP tools, what order, what conditions)
-4. Ask for SETUP variables (what's configurable)
-5. Generate the script in the format above
-6. Ask where to save: suggest `.autoskillit/skills/{name}/SKILL.md`
+4. Ask for inputs (what's configurable)
+5. Generate the script in the YAML format above
+6. Ask where to save: suggest `.autoskillit/scripts/{name}.yaml`
 7. Write to disk after confirmation
 
 ## Loaded by Another Skill
@@ -136,6 +167,6 @@ When loaded via the Skill tool by another skill (e.g., setup-project), the calli
 
 - Workflow name and description are already known
 - Tool calls and routing are already determined
-- SETUP variables are already identified
+- Inputs are already identified
 
-Apply the format rules above to produce the script. Do not re-ask for information the calling agent has already gathered.
+Apply the format rules above to produce the YAML script. Do not re-ask for information the calling agent has already gathered.

@@ -84,7 +84,7 @@ Launch parallel Explore subagents against `project_dir`. If the user opted into 
 
 **Subagent D — Existing AutoSkillit Config:**
 - Check for `.autoskillit/config.yaml` — read if present
-- Check for `.autoskillit/skills/` and `.claude/skills/` — list any custom skills
+- Check for `.autoskillit/scripts/` — list any pipeline scripts
 - Check for `CLAUDE.md` — extract project constraints
 - Check for `.autoskillit/workflows/` — list any custom workflows
 
@@ -142,7 +142,7 @@ Interactive flow. For each candidate workflow discovered:
    - Present the workflow chain and explain what it automates
    - Ask the user: "Would you like me to generate a skill script for this workflow?"
    - If yes: LOAD `/autoskillit:make-script-skill` using the Skill tool to generate the script. The agent already has full context from the exploration phases (workflow name, detected variables like project_dir/work_dir/base_branch, tool call sequence, routing logic) — no explicit parameter passing is needed. make-script-skill uses that context directly to produce a clean script.
-   - Explain what a skill script is (paste into a Claude Code session with AutoSkillit tools enabled, the agent follows it step by step), show the generated script content
+   - Explain what a pipeline script is (discovered via `list_skill_scripts` MCP tool, loaded via `load_skill_script`, the agent interprets the YAML and executes the steps), show the generated script content
    - Track the user's approval — do NOT write to disk yet
    - Move to the next candidate workflow
 
@@ -178,10 +178,8 @@ test_check:
 
 Following the Terraform plan→apply pattern, show a summary of everything approved before touching disk:
 
-1. For each approved skill script, ask where to save it:
-   - `.autoskillit/skill_scripts/{name}.md` — AutoSkillit script (used with `run_skill`)
-   - `.autoskillit/skills/{name}/SKILL.md` — Claude Code skill (invokable as `/{name}`)
-2. List all approved skill scripts with their chosen save paths
+1. For each approved pipeline script, save to `.autoskillit/scripts/{name}.yaml`
+2. List all approved pipeline scripts with their save paths
 3. List all approved config changes
 4. Ask one final question: "Write all of the above?"
 5. If confirmed:
@@ -208,5 +206,5 @@ Do NOT include:
 
 Artifacts created:
 - `temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
-- `.autoskillit/skill_scripts/{name}.md` or `.autoskillit/skills/{name}/SKILL.md` — approved skill scripts (user chooses path)
+- `.autoskillit/scripts/{name}.yaml` — approved pipeline scripts
 - `.autoskillit/config.yaml` — updated config (if changes approved)

@@ -18,19 +18,33 @@ class ScriptInfo:
     path: Path
 
 
+def _extract_frontmatter(text: str) -> str:
+    """Extract YAML metadata text from a frontmatter document.
+
+    If the text starts with ``---``, returns only the text between
+    the opening and closing ``---`` delimiters.  Otherwise returns
+    the full text unchanged (plain YAML, no frontmatter).
+    """
+    if not text.startswith("---"):
+        return text
+    # Skip the opening "---\n"
+    after_open = text.index("\n", 0) + 1
+    # Find the closing "---"
+    close = text.index("\n---", after_open)
+    return text[after_open:close]
+
+
 def _parse_script_metadata(path: Path) -> ScriptInfo:
     """Extract script metadata from a YAML file.
 
     Handles both single-document YAML and frontmatter format
-    (multi-document YAML with --- delimiters).
+    (YAML between --- delimiters, followed by arbitrary content).
     """
     text = path.read_text()
-    docs = list(yaml.safe_load_all(text))
-    if not docs:
-        raise ValueError(f"Empty YAML file: {path}")
-    data = docs[0]
+    metadata_text = _extract_frontmatter(text)
+    data = yaml.safe_load(metadata_text)
     if not isinstance(data, dict):
-        raise ValueError(f"First YAML document must be a mapping: {path}")
+        raise ValueError(f"YAML metadata must be a mapping: {path}")
     name = data.get("name", "")
     if not name:
         raise ValueError(f"Script missing required 'name' field: {path}")

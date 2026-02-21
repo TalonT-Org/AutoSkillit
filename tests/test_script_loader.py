@@ -7,7 +7,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autoskillit.script_loader import _parse_script_metadata, list_scripts, load_script
+from autoskillit.script_loader import (
+    _extract_frontmatter,
+    _parse_script_metadata,
+    list_scripts,
+    load_script,
+)
 
 SCRIPT_A = {
     "name": "implementation",
@@ -128,6 +133,19 @@ class TestListScripts:
         assert result.items[0].name == "my-pipeline"
         assert result.items[0].summary == "plan > implement"
 
+    def test_discovers_frontmatter_with_adversarial_body(self, tmp_path: Path) -> None:
+        """Scripts with YAML-like Markdown bodies must be discovered, not errored."""
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "pipeline.yaml").write_text(
+            "---\nname: adv-pipeline\ndescription: Test\n---\n\n"
+            "# Steps\n\nSETUP:\n  - item: value\n  - key: other\n"
+        )
+        result = list_scripts(tmp_path)
+        assert len(result.items) == 1
+        assert len(result.errors) == 0
+        assert result.items[0].name == "adv-pipeline"
+
     def test_reports_errors(self, tmp_path: Path) -> None:
         """Malformed scripts must produce error reports, not silent skips."""
         scripts_dir = tmp_path / ".autoskillit" / "scripts"
@@ -153,7 +171,10 @@ class TestParseScriptMetadata:
     def test_frontmatter_format(self, tmp_path: Path) -> None:
         """YAML frontmatter with --- delimiters and Markdown body."""
         path = tmp_path / "script.yaml"
-        path.write_text("---\nname: fm-script\ndescription: Frontmatter\n---\n\n# Title\nProse.\n")
+        path.write_text(
+            "---\nname: fm-script\ndescription: Frontmatter\n---\n\n"
+            "# Title\n\nKey: value\n- list item\n"
+        )
         info = _parse_script_metadata(path)
         assert info.name == "fm-script"
         assert info.description == "Frontmatter"
@@ -168,11 +189,32 @@ class TestParseScriptMetadata:
         info = _parse_script_metadata(path)
         assert info.name == "step-script"
 
+    def test_frontmatter_with_yaml_like_body(self, tmp_path: Path) -> None:
+        """Frontmatter parsing must succeed even when body has YAML-like syntax."""
+        path = tmp_path / "script.yaml"
+        path.write_text(
+            "---\n"
+            "name: pipeline\n"
+            "description: A pipeline\n"
+            "---\n\n"
+            "# Implementation Pipeline\n\n"
+            "## Phase 1: Planning\n"
+            "SETUP:\n"
+            "  - project_dir = /home/user/project\n"
+            "  - work_dir = /home/user/work\n\n"
+            "PIPELINE:\n"
+            "0. Run make-plan with the task:\n"
+            "   task: ${{ inputs.task }}\n"
+        )
+        info = _parse_script_metadata(path)
+        assert info.name == "pipeline"
+        assert info.description == "A pipeline"
+
     def test_rejects_empty_file(self, tmp_path: Path) -> None:
         """Empty file raises ValueError."""
         path = tmp_path / "empty.yaml"
         path.write_text("")
-        with pytest.raises(ValueError, match="Empty YAML"):
+        with pytest.raises(ValueError, match="mapping"):
             _parse_script_metadata(path)
 
     def test_rejects_non_mapping(self, tmp_path: Path) -> None:
@@ -188,6 +230,31 @@ class TestParseScriptMetadata:
         path.write_text("description: No name here\n")
         with pytest.raises(ValueError, match="name"):
             _parse_script_metadata(path)
+
+
+class TestExtractFrontmatter:
+    def test_plain_yaml_passthrough(self) -> None:
+        """Text without --- prefix is returned unchanged."""
+        text = "name: foo\ndescription: bar\n"
+        assert _extract_frontmatter(text) == text
+
+    def test_frontmatter_extracts_metadata(self) -> None:
+        """Text between --- delimiters is extracted."""
+        text = "---\nname: foo\n---\n\n# Body\n"
+        assert _extract_frontmatter(text) == "name: foo"
+
+    def test_frontmatter_discards_body(self) -> None:
+        """Everything after closing --- is discarded."""
+        text = "---\nname: foo\n---\n\nSETUP:\n  - bad: yaml\n"
+        result = _extract_frontmatter(text)
+        assert "SETUP" not in result
+        assert "bad" not in result
+
+    def test_frontmatter_missing_close_raises(self) -> None:
+        """Missing closing --- raises ValueError."""
+        text = "---\nname: foo\nno closing delimiter\n"
+        with pytest.raises(ValueError):
+            _extract_frontmatter(text)
 
 
 class TestLoadScript:

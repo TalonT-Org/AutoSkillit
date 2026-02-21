@@ -682,12 +682,13 @@ class TestSkillScriptTools:
     # SS5
     @pytest.mark.asyncio
     async def test_list_integration_discovers_frontmatter(self, tmp_path, monkeypatch):
-        """Server tool discovers scripts from real files on disk (frontmatter format)."""
+        """Server tool discovers scripts even when body has YAML-like syntax."""
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "pipeline.yaml").write_text(
-            "---\nname: test-pipe\ndescription: Test\nsummary: a > b\n---\n# Body\n"
+            "---\nname: test-pipe\ndescription: Test\nsummary: a > b\n---\n\n"
+            "# Pipeline\n\nSETUP:\n  - project_dir = /path/to/project\n"
         )
         result = json.loads(await list_skill_scripts())
         assert len(result["scripts"]) == 1

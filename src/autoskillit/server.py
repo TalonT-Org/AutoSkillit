@@ -804,7 +804,23 @@ def enable_tools() -> str:
     Type /mcp__autoskillit__enable_tools to activate.
     """
     _enable_tools_handler()
-    return "AutoSkillit tools are now enabled for this session."
+
+    info = _version_info()
+    version_line = f"Version: {info['package_version']}"
+
+    if not info["match"]:
+        return (
+            f"AutoSkillit tools are now enabled for this session.\n\n"
+            f"{version_line}\n"
+            f"WARNING: Version mismatch detected. "
+            f"Package version is {info['package_version']} but "
+            f"plugin.json reports {info['plugin_json_version']}.\n"
+            f"Run `autoskillit doctor` for details or "
+            f"`autoskillit install` to refresh the plugin cache.\n"
+            f"Would you like me to run `autoskillit doctor` to diagnose?"
+        )
+
+    return f"AutoSkillit tools are now enabled for this session. {version_line}"
 
 
 @mcp.prompt()

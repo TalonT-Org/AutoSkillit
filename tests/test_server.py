@@ -1347,6 +1347,52 @@ class TestGatedToolAccess:
             assert "automation" in tool.tags, f"{tool.name} missing 'automation' tag"
 
 
+class TestEnableToolsVersionReporting:
+    """enable_tools returns version info and warns on mismatch."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_tools(self):
+        from autoskillit import server
+
+        server._tools_enabled = False
+        yield
+        server._tools_enabled = False
+
+    def test_enable_tools_returns_version_in_message(self):
+        from autoskillit import __version__
+        from autoskillit.server import enable_tools
+
+        msg = enable_tools()
+        assert __version__ in msg
+
+    def test_enable_tools_warns_on_version_mismatch(self, tmp_path, monkeypatch):
+        from autoskillit import server
+        from autoskillit.server import enable_tools
+
+        plugin_dir = tmp_path / ".claude-plugin"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps({"name": "autoskillit", "version": "0.0.0"})
+        )
+        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
+        msg = enable_tools()
+        assert "mismatch" in msg.lower() or "WARNING" in msg
+        assert "doctor" in msg.lower() or "install" in msg.lower()
+
+    def test_enable_tools_still_enables_on_mismatch(self, tmp_path, monkeypatch):
+        from autoskillit import server
+        from autoskillit.server import enable_tools
+
+        plugin_dir = tmp_path / ".claude-plugin"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps({"name": "autoskillit", "version": "0.0.0"})
+        )
+        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
+        enable_tools()
+        assert server._tools_enabled is True
+
+
 class TestConfigDrivenBehavior:
     """S1-S10: Verify tools use config instead of hardcoded values."""
 

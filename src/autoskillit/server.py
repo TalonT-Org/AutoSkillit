@@ -35,6 +35,23 @@ _plugin_dir = str(Path(__file__).parent)
 _tools_enabled = False
 
 
+def _version_info() -> dict:
+    """Return version health information for the running server."""
+    from autoskillit import __version__
+
+    plugin_json_path = Path(_plugin_dir) / ".claude-plugin" / "plugin.json"
+    plugin_version = None
+    if plugin_json_path.is_file():
+        data = json.loads(plugin_json_path.read_text())
+        plugin_version = data.get("version")
+
+    return {
+        "package_version": __version__,
+        "plugin_json_version": plugin_version,
+        "match": __version__ == plugin_version,
+    }
+
+
 def _require_enabled() -> str | None:
     """Return error JSON if tools are not enabled, None if OK.
 

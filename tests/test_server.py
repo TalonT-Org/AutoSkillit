@@ -194,6 +194,44 @@ class TestPluginDirConstant:
         assert _plugin_dir == str(Path(autoskillit.__file__).parent)
 
 
+class TestVersionInfo:
+    """_version_info() returns package and plugin.json versions."""
+
+    def test_version_info_returns_package_and_plugin_versions(self):
+        from autoskillit import __version__
+        from autoskillit.server import _version_info
+
+        info = _version_info()
+        assert isinstance(info["package_version"], str)
+        assert isinstance(info["plugin_json_version"], str)
+        assert info["package_version"] == __version__
+        assert info["match"] is True
+
+    def test_version_info_detects_mismatch(self, tmp_path, monkeypatch):
+        from autoskillit import server
+        from autoskillit.server import _version_info
+
+        plugin_dir = tmp_path / ".claude-plugin"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps({"name": "autoskillit", "version": "0.0.0"})
+        )
+        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
+        info = _version_info()
+        assert info["match"] is False
+        assert info["package_version"] != info["plugin_json_version"]
+        assert info["plugin_json_version"] == "0.0.0"
+
+    def test_version_info_handles_missing_plugin_json(self, tmp_path, monkeypatch):
+        from autoskillit import server
+        from autoskillit.server import _version_info
+
+        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
+        info = _version_info()
+        assert info["plugin_json_version"] is None
+        assert info["match"] is False
+
+
 class TestClassifyFix:
     """T4, T5: classify_fix returns correct restart scope based on changed files."""
 

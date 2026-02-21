@@ -19,7 +19,7 @@ SCRIPT_A = {
     "steps": {
         "plan": {
             "tool": "run_skill",
-            "with": {"skill_command": '/autoskillit:make-plan ${{ inputs.task }}', "cwd": "."},
+            "with": {"skill_command": "/autoskillit:make-plan ${{ inputs.task }}", "cwd": "."},
             "on_success": "done",
             "on_failure": "escalate",
         },
@@ -38,7 +38,7 @@ SCRIPT_B = {
         "investigate": {
             "tool": "run_skill",
             "with": {
-                "skill_command": '/autoskillit:investigate ${{ inputs.problem }}',
+                "skill_command": "/autoskillit:investigate ${{ inputs.problem }}",
                 "cwd": ".",
             },
             "on_success": "done",
@@ -54,12 +54,8 @@ def _make_scripts_dir(tmp_path: Path) -> Path:
     """Create .autoskillit/scripts/ with two test YAML files."""
     scripts_dir = tmp_path / ".autoskillit" / "scripts"
     scripts_dir.mkdir(parents=True)
-    (scripts_dir / "implementation.yaml").write_text(
-        yaml.dump(SCRIPT_A, default_flow_style=False)
-    )
-    (scripts_dir / "investigate.yaml").write_text(
-        yaml.dump(SCRIPT_B, default_flow_style=False)
-    )
+    (scripts_dir / "implementation.yaml").write_text(yaml.dump(SCRIPT_A, default_flow_style=False))
+    (scripts_dir / "investigate.yaml").write_text(yaml.dump(SCRIPT_B, default_flow_style=False))
     return scripts_dir
 
 

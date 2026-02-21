@@ -727,10 +727,7 @@ async def list_skill_scripts() -> str:
 
     scripts = list_scripts(Path.cwd())
     return json.dumps(
-        [
-            {"name": s.name, "description": s.description, "summary": s.summary}
-            for s in scripts
-        ]
+        [{"name": s.name, "description": s.description, "summary": s.summary} for s in scripts]
     )
 
 

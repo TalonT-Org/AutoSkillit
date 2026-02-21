@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from autoskillit.workflow_loader import (
+    Workflow,
     builtin_workflows_dir,
     list_workflows,
     load_workflow,
@@ -186,6 +187,28 @@ class TestWorkflowLoader:
         wf = load_workflow(f)
         errors = validate_workflow(wf)
         assert any("missing_input" in e for e in errors)
+
+    # WF_SUM1
+    def test_workflow_summary_defaults_to_empty(self) -> None:
+        """Workflow dataclass has summary field defaulting to empty string."""
+        wf = Workflow(name="test", description="desc")
+        assert wf.summary == ""
+
+    # WF_SUM2
+    def test_parse_workflow_extracts_summary(self, tmp_path: Path) -> None:
+        """_parse_workflow extracts summary from YAML data."""
+        data = {**VALID_WORKFLOW, "summary": "run tests then merge"}
+        f = _write_yaml(tmp_path / "wf.yaml", data)
+        wf = load_workflow(f)
+        assert wf.summary == "run tests then merge"
+
+    # WF_SUM3
+    def test_builtin_workflows_summary_is_str(self) -> None:
+        """All builtin workflows have summary as str (empty string when absent)."""
+        bd = builtin_workflows_dir()
+        for f in bd.glob("*.yaml"):
+            wf = load_workflow(f)
+            assert isinstance(wf.summary, str), f"{f.name}: summary is not str"
 
     # T4
     def test_workflow_skill_commands_are_namespaced(self) -> None:

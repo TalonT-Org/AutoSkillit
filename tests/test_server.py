@@ -26,6 +26,8 @@ from autoskillit.server import (
     _require_enabled,
     _run_subprocess,
     classify_fix,
+    list_skill_scripts,
+    load_skill_script,
     merge_worktree,
     parse_session_result,
     reset_test_dir,
@@ -491,9 +493,9 @@ class TestRunSkillRetryGate:
 
 
 class TestToolRegistration:
-    """All 8 tools are registered on the MCP server."""
+    """All 10 tools are registered on the MCP server."""
 
-    def test_all_eight_tools_exist(self):
+    def test_all_ten_tools_exist(self):
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -510,8 +512,62 @@ class TestToolRegistration:
             "classify_fix",
             "reset_workspace",
             "merge_worktree",
+            "list_skill_scripts",
+            "load_skill_script",
         }
         assert expected == tool_names
+
+
+class TestSkillScriptTools:
+    """Tests for ungated list_skill_scripts and load_skill_script tools."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_tools(self):
+        """Verify these tools work WITHOUT tool activation."""
+        from autoskillit import server
+
+        server._tools_enabled = False
+        yield
+        server._tools_enabled = False
+
+    # SS1
+    @pytest.mark.asyncio
+    @patch("autoskillit.script_loader.list_scripts")
+    async def test_list_returns_json_array(self, mock_list):
+        """list_skill_scripts returns JSON array (not gated)."""
+        from autoskillit.script_loader import ScriptInfo
+
+        mock_list.return_value = [
+            ScriptInfo(
+                name="impl", description="Implement", summary="plan > impl", path=Path("/x")
+            ),
+        ]
+        result = json.loads(await list_skill_scripts())
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["name"] == "impl"
+        assert result[0]["description"] == "Implement"
+        assert result[0]["summary"] == "plan > impl"
+
+    # SS2
+    @pytest.mark.asyncio
+    @patch("autoskillit.script_loader.load_script")
+    async def test_load_returns_raw_yaml(self, mock_load):
+        """load_skill_script returns raw YAML content (not gated)."""
+        mock_load.return_value = "name: test\ndescription: Test script\n"
+        result = await load_skill_script(name="test")
+        assert "name: test" in result
+        assert "description: Test script" in result
+
+    # SS3
+    @pytest.mark.asyncio
+    @patch("autoskillit.script_loader.load_script")
+    async def test_load_unknown_returns_error(self, mock_load):
+        """load_skill_script returns error JSON for unknown script name."""
+        mock_load.return_value = None
+        result = json.loads(await load_skill_script(name="nonexistent"))
+        assert "error" in result
+        assert "nonexistent" in result["error"]
 
 
 class TestToolSchemas:
@@ -1137,7 +1193,7 @@ class TestGatedToolAccess:
         assert prompt_names == {"enable_tools", "disable_tools"}
 
     def test_all_tools_still_registered(self):
-        """All 8 operational tools remain registered (gated, not removed)."""
+        """All 10 tools remain registered (gated + ungated)."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -1153,6 +1209,8 @@ class TestGatedToolAccess:
             "reset_test_dir",
             "classify_fix",
             "reset_workspace",
+            "list_skill_scripts",
+            "load_skill_script",
         }
         assert expected == tool_names
 

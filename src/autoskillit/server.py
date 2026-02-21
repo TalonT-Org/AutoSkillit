@@ -24,6 +24,7 @@ from fastmcp import FastMCP
 
 from autoskillit.config import AutomationConfig, load_config
 from autoskillit.process_lifecycle import run_managed_async
+from autoskillit.types import MergeFailedStep, MergeState, RestartScope, RetryReason
 
 mcp = FastMCP("autoskillit")
 
@@ -123,21 +124,25 @@ class ClaudeSessionResult:
     session_id: str
     errors: list[str] = field(default_factory=list)
 
+    def _is_context_exhausted(self) -> bool:
+        """Detect context window exhaustion from Claude's error output."""
+        return self.is_error and "prompt is too long" in self.result.lower()
+
     @property
     def needs_retry(self) -> bool:
         """Whether the session didn't finish and should be retried."""
         if self.subtype == "error_max_turns":
             return True
-        if self.is_error and "prompt is too long" in self.result.lower():
+        if self._is_context_exhausted():
             return True
         return False
 
     @property
-    def retry_reason(self) -> str:
-        """Why retry is needed. Empty if needs_retry is False."""
+    def retry_reason(self) -> RetryReason:
+        """Why retry is needed. NONE if needs_retry is False."""
         if self.needs_retry:
-            return "retry"
-        return ""
+            return RetryReason.RESUME
+        return RetryReason.NONE
 
 
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
@@ -463,8 +468,8 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
             return json.dumps(
                 {
                     "error": "Tests failed in worktree — merge blocked",
-                    "failed_step": "test_gate",
-                    "state": "worktree_intact",
+                    "failed_step": MergeFailedStep.TEST_GATE,
+                    "state": MergeState.WORKTREE_INTACT,
                     "worktree_path": worktree_path,
                 }
             )
@@ -479,8 +484,8 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         return json.dumps(
             {
                 "error": "git fetch origin failed",
-                "failed_step": "fetch",
-                "state": "worktree_intact",
+                "failed_step": MergeFailedStep.FETCH,
+                "state": MergeState.WORKTREE_INTACT,
                 "stderr": _truncate(fetch_stderr),
                 "worktree_path": worktree_path,
             }
@@ -500,8 +505,8 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         return json.dumps(
             {
                 "error": "Rebase failed — aborted to clean state",
-                "failed_step": "rebase",
-                "state": "worktree_intact_rebase_aborted",
+                "failed_step": MergeFailedStep.REBASE,
+                "state": MergeState.WORKTREE_INTACT_REBASE_ABORTED,
                 "stderr": rebase_stderr,
                 "worktree_path": worktree_path,
             }
@@ -537,8 +542,8 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         return json.dumps(
             {
                 "error": "Merge failed — aborted to clean state",
-                "failed_step": "merge",
-                "state": "main_repo_merge_aborted",
+                "failed_step": MergeFailedStep.MERGE,
+                "state": MergeState.MAIN_REPO_MERGE_ABORTED,
                 "stderr": merge_stderr,
                 "worktree_path": worktree_path,
             }
@@ -636,7 +641,7 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
     if critical_files:
         return json.dumps(
             {
-                "restart_scope": "full_restart",
+                "restart_scope": RestartScope.FULL_RESTART,
                 "reason": f"Fix touches critical paths: {', '.join(critical_files[:5])}",
                 "critical_files": critical_files,
                 "all_changed_files": changed_files,
@@ -645,7 +650,7 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
 
     return json.dumps(
         {
-            "restart_scope": "partial_restart",
+            "restart_scope": RestartScope.PARTIAL_RESTART,
             "reason": "Fix does not touch critical paths — partial restart is sufficient",
             "critical_files": [],
             "all_changed_files": changed_files,

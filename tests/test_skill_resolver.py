@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from autoskillit.skill_resolver import SkillResolver, bundled_skills_dir
+from autoskillit.types import SkillSource
 
 BUNDLED_SKILLS = [
     "assess-and-merge",
@@ -32,7 +33,7 @@ class TestSkillResolver:
         info = resolver.resolve("investigate")
         assert info is not None
         assert info.name == "investigate"
-        assert info.source == "bundled"
+        assert info.source == SkillSource.BUNDLED
         assert info.path.name == "SKILL.md"
 
     # SK6
@@ -59,7 +60,7 @@ class TestSkillResolver:
         assert "investigate" in names
         assert "make-plan" in names
         sources = {s.source for s in skills}
-        assert sources == {"bundled"}
+        assert sources == {SkillSource.BUNDLED}
 
     def test_skill_md_cross_references_are_namespaced(self) -> None:
         """All /skill-name references in SKILL.md files use /autoskillit: prefix."""

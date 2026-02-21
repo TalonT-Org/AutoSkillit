@@ -16,7 +16,9 @@ from autoskillit.config import (
     SafetyConfig,
 )
 from autoskillit.process_lifecycle import SubprocessResult
+from autoskillit.types import MergeFailedStep, MergeState, RestartScope, RetryReason
 from autoskillit.server import (
+    ClaudeSessionResult,
     CleanupResult,
     _check_dry_walkthrough,
     _delete_directory_contents,
@@ -219,7 +221,7 @@ class TestClassifyFix:
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert result["restart_scope"] == "full_restart"
+        assert result["restart_scope"] == RestartScope.FULL_RESTART
         assert len(result["critical_files"]) == 1
         assert result["critical_files"][0] == "src/core/handler.py"
         assert len(result["all_changed_files"]) == 2
@@ -232,7 +234,7 @@ class TestClassifyFix:
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert result["restart_scope"] == "partial_restart"
+        assert result["restart_scope"] == RestartScope.PARTIAL_RESTART
         assert result["critical_files"] == []
         assert len(result["all_changed_files"]) == 2
 
@@ -254,7 +256,7 @@ class TestClassifyFix:
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert result["restart_scope"] == "full_restart"
+        assert result["restart_scope"] == RestartScope.FULL_RESTART
 
 
 class TestResetWorkspace:
@@ -408,8 +410,8 @@ class TestMergeWorktree:
         ]
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
-        assert result["failed_step"] == "test_gate"
-        assert result["state"] == "worktree_intact"
+        assert result["failed_step"] == MergeFailedStep.TEST_GATE
+        assert result["state"] == MergeState.WORKTREE_INTACT
         assert "test_summary" not in result
 
     @pytest.mark.asyncio
@@ -459,8 +461,8 @@ class TestMergeWorktree:
         ]
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
-        assert result["failed_step"] == "rebase"
-        assert "aborted" in result["state"]
+        assert result["failed_step"] == MergeFailedStep.REBASE
+        assert result["state"] == MergeState.WORKTREE_INTACT_REBASE_ABORTED
 
     @pytest.mark.asyncio
     async def test_merge_worktree_rejects_nonexistent_path(self):
@@ -839,10 +841,10 @@ class TestClaudeSessionResult:
         assert parsed.result == "Done."
         assert parsed.session_id == "abc-123"
         assert parsed.needs_retry is False
-        assert parsed.retry_reason == ""
+        assert parsed.retry_reason == RetryReason.NONE
 
-    def test_parses_error_max_turns_subtype(self):
-        """error_max_turns subtype -> needs_retry=True, retry_reason='retry'."""
+    def test_parses_error_max_turns(self):
+        """Turn limit produces needs_retry=True with reason=RESUME."""
         raw = {
             "type": "result",
             "subtype": "error_max_turns",
@@ -853,11 +855,11 @@ class TestClaudeSessionResult:
         parsed = parse_session_result(json.dumps(raw))
         assert parsed.subtype == "error_max_turns"
         assert parsed.needs_retry is True
-        assert parsed.retry_reason == "retry"
+        assert parsed.retry_reason == RetryReason.RESUME
         assert parsed.result == ""
 
     def test_parses_prompt_too_long(self):
-        """Context limit hit -> needs_retry=True, retry_reason='retry'."""
+        """Context exhaustion produces needs_retry=True with reason=RESUME."""
         raw = {
             "type": "result",
             "subtype": "success",
@@ -868,7 +870,7 @@ class TestClaudeSessionResult:
         parsed = parse_session_result(json.dumps(raw))
         assert parsed.is_error is True
         assert parsed.needs_retry is True
-        assert parsed.retry_reason == "retry"
+        assert parsed.retry_reason == RetryReason.RESUME
 
     def test_parses_execution_error_not_retriable(self):
         """Runtime errors are not automatically retriable."""
@@ -882,7 +884,7 @@ class TestClaudeSessionResult:
         parsed = parse_session_result(json.dumps(raw))
         assert parsed.subtype == "error_during_execution"
         assert parsed.needs_retry is False
-        assert parsed.retry_reason == ""
+        assert parsed.retry_reason == RetryReason.NONE
 
     def test_handles_unparseable_stdout(self):
         """Non-JSON stdout produces a fallback result."""
@@ -918,13 +920,97 @@ class TestClaudeSessionResult:
         assert parsed.session_id == "s1"
 
 
+    def test_needs_retry_and_retry_reason_are_consistent(self):
+        """retry_reason is RESUME iff needs_retry is True, NONE otherwise."""
+        cases = [
+            ("success", False, "Done."),
+            ("error_max_turns", False, ""),
+            ("success", True, "Prompt is too long"),
+            ("error_during_execution", True, "crashed"),
+            ("unknown", False, ""),
+        ]
+        for subtype, is_error, result_text in cases:
+            session = ClaudeSessionResult(
+                subtype=subtype,
+                is_error=is_error,
+                result=result_text,
+                session_id="s1",
+            )
+            if session.needs_retry:
+                assert session.retry_reason == RetryReason.RESUME, (
+                    f"needs_retry=True but retry_reason={session.retry_reason!r} "
+                    f"for subtype={subtype}, is_error={is_error}"
+                )
+            else:
+                assert session.retry_reason == RetryReason.NONE, (
+                    f"needs_retry=False but retry_reason={session.retry_reason!r} "
+                    f"for subtype={subtype}, is_error={is_error}"
+                )
+
+    def test_all_retriable_cases_produce_same_retry_reason(self):
+        """Every condition that triggers needs_retry must produce the same retry_reason."""
+        max_turns_case = ClaudeSessionResult(
+            subtype="error_max_turns",
+            is_error=False,
+            result="",
+            session_id="s1",
+        )
+        context_case = ClaudeSessionResult(
+            subtype="success",
+            is_error=True,
+            result="Prompt is too long",
+            session_id="s2",
+        )
+        assert max_turns_case.needs_retry is True
+        assert context_case.needs_retry is True
+        assert max_turns_case.retry_reason == context_case.retry_reason
+
+
+class TestResponseFieldsAreTypeSafe:
+    """Every discriminator field in MCP tool responses uses enum values."""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_retry_reason_is_enum_value(self, mock_run):
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_max_turns",
+                "is_error": False,
+                "session_id": "s1",
+                "num_turns": 200,
+                "errors": [],
+            }
+        )
+        mock_run.return_value = _make_result(1, stdout, "")
+        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        assert result["retry_reason"] in {e.value for e in RetryReason}
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_retry_reason_none_is_enum_value(self, mock_run):
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+                "num_turns": 50,
+            }
+        )
+        mock_run.return_value = _make_result(0, stdout, "")
+        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        assert result["retry_reason"] in {e.value for e in RetryReason}
+
+
 class TestRunSkillRetrySessionOutcome:
     """run_skill_retry correctly classifies all Claude Code session outcomes."""
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
-    async def test_detects_error_max_turns_subtype(self, mock_run):
-        """error_max_turns subtype -> needs_retry=True, retry_reason='retry'."""
+    async def test_detects_max_turns_via_subtype(self, mock_run):
+        """error_max_turns in JSON output -> needs_retry=True, retry_reason=RESUME."""
         stdout = json.dumps(
             {
                 "type": "result",
@@ -937,7 +1023,7 @@ class TestRunSkillRetrySessionOutcome:
         mock_run.return_value = _make_result(1, stdout, "")
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is True
-        assert result["retry_reason"] == "retry"
+        assert result["retry_reason"] == RetryReason.RESUME
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
@@ -955,7 +1041,7 @@ class TestRunSkillRetrySessionOutcome:
         mock_run.return_value = _make_result(1, stdout, "")
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is True
-        assert result["retry_reason"] == "retry"
+        assert result["retry_reason"] == RetryReason.RESUME
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
@@ -973,7 +1059,7 @@ class TestRunSkillRetrySessionOutcome:
         mock_run.return_value = _make_result(0, stdout, "")
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is False
-        assert result["retry_reason"] == ""
+        assert result["retry_reason"] == RetryReason.NONE
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
@@ -1111,7 +1197,7 @@ class TestMergeWorktreeNoBypass:
         ]
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
-        assert result["failed_step"] == "test_gate"
+        assert result["failed_step"] == MergeFailedStep.TEST_GATE
 
     @pytest.mark.asyncio
     @patch("autoskillit.server._run_subprocess")
@@ -1257,7 +1343,7 @@ class TestConfigDrivenBehavior:
         mock_run.return_value = _make_result(0, changed, "")
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert result["restart_scope"] == "full_restart"
+        assert result["restart_scope"] == RestartScope.FULL_RESTART
         assert "src/custom/handler.py" in result["critical_files"]
 
     @pytest.mark.asyncio
@@ -1273,7 +1359,7 @@ class TestConfigDrivenBehavior:
         mock_run.return_value = _make_result(0, changed, "")
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert result["restart_scope"] == "partial_restart"
+        assert result["restart_scope"] == RestartScope.PARTIAL_RESTART
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
@@ -1391,7 +1477,7 @@ class TestConfigDrivenBehavior:
             (1, "FAIL", ""),  # test gate fails
         ]
         result = json.loads(await merge_worktree(str(wt), "main"))
-        assert result["failed_step"] == "test_gate"
+        assert result["failed_step"] == MergeFailedStep.TEST_GATE
 
         # Verify the test command was ["make", "test"]
         test_call = mock_run.call_args_list[2]
@@ -1783,4 +1869,4 @@ class TestMergeWorktreeCleanupReporting:
         ]
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
-        assert result["failed_step"] == "fetch"
+        assert result["failed_step"] == MergeFailedStep.FETCH

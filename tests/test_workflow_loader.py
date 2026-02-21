@@ -7,6 +7,7 @@ from pathlib import Path
 
 import yaml
 
+from autoskillit.types import RETRY_RESPONSE_FIELDS, WorkflowSource
 from autoskillit.workflow_loader import (
     Workflow,
     builtin_workflows_dir,
@@ -124,7 +125,7 @@ class TestWorkflowLoader:
 
         workflows = list_workflows(tmp_path)
         match = next(w for w in workflows if w.name == "bugfix-loop")
-        assert match.source == "project"
+        assert match.source == WorkflowSource.PROJECT
         assert match.description == "Custom override"
 
     # WF9
@@ -209,6 +210,39 @@ class TestWorkflowLoader:
         for f in bd.glob("*.yaml"):
             wf = load_workflow(f)
             assert isinstance(wf.summary, str), f"{f.name}: summary is not str"
+
+    def test_retry_on_field_is_valid_response_key(self, tmp_path: Path) -> None:
+        """retry.on must reference a field that run_skill_retry actually returns."""
+        for wf_info in list_workflows(tmp_path):
+            wf = load_workflow(wf_info.path)
+            for step_name, step in wf.steps.items():
+                if step.retry and step.retry.on:
+                    assert step.retry.on in RETRY_RESPONSE_FIELDS, (
+                        f"Workflow '{wf.name}' step '{step_name}' retry.on='{step.retry.on}' "
+                        f"is not a known response field: {RETRY_RESPONSE_FIELDS}"
+                    )
+
+    def test_retry_on_unknown_field_fails_validation(self, tmp_path: Path) -> None:
+        """validate_workflow rejects retry.on that references unknown response field."""
+        data = {
+            "name": "bad-retry-on",
+            "description": "Unknown retry.on field",
+            "steps": {
+                "impl": {
+                    "tool": "run_skill_retry",
+                    "retry": {
+                        "max_attempts": 3,
+                        "on": "nonexistent_field",
+                        "on_exhausted": "fail",
+                    },
+                },
+                "fail": {"action": "stop", "message": "Failed."},
+            },
+        }
+        f = _write_yaml(tmp_path / "wf.yaml", data)
+        wf = load_workflow(f)
+        errors = validate_workflow(wf)
+        assert any("nonexistent_field" in e for e in errors)
 
     # T4
     def test_workflow_skill_commands_are_namespaced(self) -> None:

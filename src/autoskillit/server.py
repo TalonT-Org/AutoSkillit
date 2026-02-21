@@ -318,7 +318,7 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
 
     Use this for long-running skill sessions that may hit the context limit.
     The needs_retry field indicates whether the session didn't finish.
-    When needs_retry is true, retry_reason is "retry" — the session should
+    When needs_retry is true, retry_reason is "resume" — the session should
     be retried to continue from where it left off.
 
     Args:

@@ -26,6 +26,7 @@ from autoskillit.server import (
     _parse_pytest_summary,
     _require_enabled,
     _run_subprocess,
+    autoskillit_status,
     classify_fix,
     list_skill_scripts,
     load_skill_script,
@@ -535,7 +536,7 @@ class TestRunSkillRetryGate:
 class TestToolRegistration:
     """All 10 tools are registered on the MCP server."""
 
-    def test_all_ten_tools_exist(self):
+    def test_all_tools_exist(self):
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -554,8 +555,55 @@ class TestToolRegistration:
             "merge_worktree",
             "list_skill_scripts",
             "load_skill_script",
+            "autoskillit_status",
         }
         assert expected == tool_names
+
+
+class TestAutoskillitStatus:
+    """autoskillit_status tool returns version health info (ungated)."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_tools(self):
+        from autoskillit import server
+
+        server._tools_enabled = False
+        yield
+        server._tools_enabled = False
+
+    @pytest.mark.asyncio
+    async def test_status_returns_version_info(self):
+        from autoskillit import __version__
+
+        result = json.loads(await autoskillit_status())
+        assert result["package_version"] == __version__
+        assert result["plugin_json_version"] == __version__
+        assert result["versions_match"] is True
+        assert "warning" not in result
+
+    @pytest.mark.asyncio
+    async def test_status_reports_mismatch(self, tmp_path, monkeypatch):
+        from autoskillit import server
+
+        plugin_dir = tmp_path / ".claude-plugin"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps({"name": "autoskillit", "version": "0.0.0"})
+        )
+        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
+        result = json.loads(await autoskillit_status())
+        assert result["versions_match"] is False
+        assert "warning" in result
+        assert "mismatch" in result["warning"].lower()
+
+    @pytest.mark.asyncio
+    async def test_status_works_without_enable(self):
+        from autoskillit import server
+
+        assert server._tools_enabled is False
+        result = json.loads(await autoskillit_status())
+        assert result["tools_enabled"] is False
+        assert "package_version" in result
 
 
 class TestSkillScriptTools:
@@ -1307,7 +1355,7 @@ class TestGatedToolAccess:
         assert prompt_names == {"enable_tools", "disable_tools"}
 
     def test_all_tools_still_registered(self):
-        """All 10 tools remain registered (gated + ungated)."""
+        """All 11 tools remain registered (gated + ungated)."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -1322,6 +1370,7 @@ class TestGatedToolAccess:
             "merge_worktree",
             "reset_test_dir",
             "classify_fix",
+            "autoskillit_status",
             "reset_workspace",
             "list_skill_scripts",
             "load_skill_script",
@@ -1358,26 +1407,18 @@ class TestEnableToolsVersionReporting:
         yield
         server._tools_enabled = False
 
-    def test_enable_tools_returns_version_in_message(self):
-        from autoskillit import __version__
+    @staticmethod
+    def _prompt_text(result) -> str:
+        """Extract the text content from a PromptResult."""
+        content = result.messages[0].content
+        return content.text if hasattr(content, "text") else str(content)
+
+    def test_enable_tools_instructs_status_call(self):
         from autoskillit.server import enable_tools
 
-        msg = enable_tools()
-        assert __version__ in msg
-
-    def test_enable_tools_warns_on_version_mismatch(self, tmp_path, monkeypatch):
-        from autoskillit import server
-        from autoskillit.server import enable_tools
-
-        plugin_dir = tmp_path / ".claude-plugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "plugin.json").write_text(
-            json.dumps({"name": "autoskillit", "version": "0.0.0"})
-        )
-        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
-        msg = enable_tools()
-        assert "mismatch" in msg.lower() or "WARNING" in msg
-        assert "doctor" in msg.lower() or "install" in msg.lower()
+        result = enable_tools()
+        msg = self._prompt_text(result)
+        assert "autoskillit_status" in msg
 
     def test_enable_tools_still_enables_on_mismatch(self, tmp_path, monkeypatch):
         from autoskillit import server

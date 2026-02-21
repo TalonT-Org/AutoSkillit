@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastmcp import FastMCP
+from fastmcp.prompts.prompt import Message, PromptResult
 
 from autoskillit.config import AutomationConfig, load_config
 from autoskillit.process_lifecycle import run_managed_async
@@ -725,12 +726,44 @@ async def reset_workspace(test_dir: str) -> str:
 
 
 @mcp.tool(tags={"automation"})
+async def autoskillit_status() -> str:
+    """Return version health and configuration status for the running server.
+
+    Reports package version, plugin.json version, version match status,
+    tools enabled state, and active configuration summary. Call this after
+    enabling tools or anytime you need to verify the server is healthy.
+
+    This tool is always available (not gated by enable_tools).
+    """
+    info = _version_info()
+    status = {
+        "package_version": info["package_version"],
+        "plugin_json_version": info["plugin_json_version"],
+        "versions_match": info["match"],
+        "tools_enabled": _tools_enabled,
+    }
+    if not info["match"]:
+        status["warning"] = (
+            f"Version mismatch: package is {info['package_version']} but "
+            f"plugin.json reports {info['plugin_json_version']}. "
+            f"Run `autoskillit doctor` for details or "
+            f"`autoskillit install` to refresh the plugin cache."
+        )
+    return json.dumps(status)
+
+
+@mcp.tool(tags={"automation"})
 async def list_skill_scripts() -> str:
     """List available pipeline scripts from .autoskillit/scripts/.
 
     Returns a JSON array of scripts with name, description, and summary.
     Scripts are YAML workflow definitions that agents follow as orchestration
     instructions. Use load_skill_script to load a specific script.
+
+    IMPORTANT: Pipeline scripts are NOT slash commands. They cannot be invoked
+    as /autoskillit:<name>. They are loaded via load_skill_script and executed
+    step-by-step by the agent. Scripts live in .autoskillit/scripts/ (NOT in
+    .autoskillit/skills/ or any other directory).
 
     This tool is always available (not gated by enable_tools).
     """
@@ -758,6 +791,11 @@ async def load_skill_script(name: str) -> str:
        - Use temporarily without saving
     3. Prompt for input values using AskUserQuestion
     4. Execute the pipeline steps in order
+
+    IMPORTANT: Pipeline scripts are NOT slash commands. They cannot be invoked
+    as /autoskillit:<name>. The correct way to run a script is to call this
+    tool, then follow the YAML steps. Scripts live in .autoskillit/scripts/
+    as .yaml files (NOT in .autoskillit/skills/ or any other directory).
 
     This tool is always available (not gated by enable_tools).
     """
@@ -794,7 +832,7 @@ def get_workflow(name: str) -> str:
 
 
 @mcp.prompt()
-def enable_tools() -> str:
+def enable_tools() -> PromptResult:
     """Enable all AutoSkillit tools for this session.
 
     Tools are disabled by default to prevent accidental use by agents.
@@ -805,29 +843,20 @@ def enable_tools() -> str:
     """
     _enable_tools_handler()
 
-    info = _version_info()
-    version_line = f"Version: {info['package_version']}"
+    text = (
+        "AutoSkillit tools are now enabled for this session. "
+        "Call the autoskillit_status tool now to display version "
+        "and health information to the user."
+    )
 
-    if not info["match"]:
-        return (
-            f"AutoSkillit tools are now enabled for this session.\n\n"
-            f"{version_line}\n"
-            f"WARNING: Version mismatch detected. "
-            f"Package version is {info['package_version']} but "
-            f"plugin.json reports {info['plugin_json_version']}.\n"
-            f"Run `autoskillit doctor` for details or "
-            f"`autoskillit install` to refresh the plugin cache.\n"
-            f"Would you like me to run `autoskillit doctor` to diagnose?"
-        )
-
-    return f"AutoSkillit tools are now enabled for this session. {version_line}"
+    return PromptResult([Message(text, role="user")])
 
 
 @mcp.prompt()
-def disable_tools() -> str:
+def disable_tools() -> PromptResult:
     """Disable all AutoSkillit tools for this session.
 
     Type /mcp__autoskillit__disable_tools to deactivate.
     """
     _disable_tools_handler()
-    return "AutoSkillit tools are now disabled."
+    return PromptResult([Message("AutoSkillit tools are now disabled.", role="assistant")])

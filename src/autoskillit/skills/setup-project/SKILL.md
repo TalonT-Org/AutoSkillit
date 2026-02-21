@@ -140,7 +140,7 @@ Interactive flow. For each candidate workflow discovered:
 
 2. For each candidate workflow (including the standard one):
    - Present the workflow chain and explain what it automates
-   - Ask the user: "Would you like me to generate a skill script for this workflow?"
+   - Ask the user: "Would you like me to generate a pipeline script for this workflow?"
    - If yes: LOAD `/autoskillit:make-script-skill` using the Skill tool to generate the script. The agent already has full context from the exploration phases (workflow name, detected variables like project_dir/work_dir/base_branch, tool call sequence, routing logic) — no explicit parameter passing is needed. make-script-skill uses that context directly to produce a clean script.
    - Explain what a pipeline script is (discovered via `list_skill_scripts` MCP tool, loaded via `load_skill_script`, the agent interprets the YAML and executes the steps), show the generated script content
    - Track the user's approval — do NOT write to disk yet

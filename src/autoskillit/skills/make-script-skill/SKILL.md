@@ -158,8 +158,22 @@ When called directly as `/autoskillit:make-script-skill`:
 3. Ask for the tool calls and routing (which MCP tools, what order, what conditions)
 4. Ask for inputs (what's configurable)
 5. Generate the script in the YAML format above
-6. Ask where to save: suggest `.autoskillit/scripts/{name}.yaml`
-7. Write to disk after confirmation
+6. Save to `.autoskillit/scripts/{name}.yaml` (create the directory if needed)
+7. Tell the user: "Saved to `.autoskillit/scripts/{name}.yaml`. Load it with `load_skill_script("{name}")` via the MCP tool."
+
+## CRITICAL: Scripts Are NOT Skills
+
+Pipeline scripts are YAML workflow files in `.autoskillit/scripts/`. They are:
+- **Loaded** via the `load_skill_script` MCP tool
+- **Executed** by the agent interpreting the YAML steps
+
+They are NOT:
+- Slash commands (cannot be invoked as `/autoskillit:<name>`)
+- Stored in `.autoskillit/skills/` or any other directory
+- Markdown files (they are `.yaml` files)
+
+Never tell the user to run a script with `/autoskillit:<name>`. The correct
+invocation is always via `load_skill_script("<name>")`.
 
 ## Loaded by Another Skill
 

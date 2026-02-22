@@ -50,12 +50,19 @@ class SafetyConfig:
 
 
 @dataclass
+class ReadDbConfig:
+    timeout: int = 30
+    max_rows: int = 10000
+
+
+@dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
     reset_workspace: ResetWorkspaceConfig = field(default_factory=ResetWorkspaceConfig)
     implement_gate: ImplementGateConfig = field(default_factory=ImplementGateConfig)
     safety: SafetyConfig = field(default_factory=SafetyConfig)
+    read_db: ReadDbConfig = field(default_factory=ReadDbConfig)
 
 
 def load_config(project_dir: Path | None = None) -> AutomationConfig:

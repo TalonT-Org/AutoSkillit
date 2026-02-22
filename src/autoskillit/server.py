@@ -12,6 +12,9 @@ Transport: stdio (default for FastMCP).
 
 from __future__ import annotations
 
+import asyncio
+import importlib
+import inspect
 import json
 import os
 import re
@@ -284,6 +287,83 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
             "stderr": _truncate(stderr),
         }
     )
+
+
+async def _import_and_call(
+    dotted_path: str,
+    args: dict[str, object] | None = None,
+    timeout: float = 30,
+) -> dict[str, object]:
+    """Import a Python callable by dotted path and invoke it.
+
+    Returns dict with 'success', 'result' (or 'error').
+    Handles sync and async callables, with timeout protection.
+    """
+    if args is None:
+        args = {}
+
+    if "." not in dotted_path:
+        return {"success": False, "error": f"Invalid dotted path: {dotted_path!r}"}
+
+    module_path, attr_name = dotted_path.rsplit(".", 1)
+
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as exc:
+        return {"success": False, "error": f"Import failed for {module_path!r}: {exc}"}
+
+    try:
+        func = getattr(module, attr_name)
+    except AttributeError:
+        return {
+            "success": False,
+            "error": f"Module {module_path!r} has no attribute {attr_name!r}",
+        }
+
+    if not callable(func):
+        return {"success": False, "error": f"{dotted_path!r} is not callable"}
+
+    try:
+        if inspect.iscoroutinefunction(func):
+            result = await asyncio.wait_for(func(**args), timeout=timeout)
+        else:
+            result = await asyncio.wait_for(asyncio.to_thread(func, **args), timeout=timeout)
+    except TimeoutError:
+        return {"success": False, "error": f"Timeout after {timeout}s calling {dotted_path}"}
+    except Exception as exc:
+        return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
+
+    try:
+        json.dumps(result)
+        return {"success": True, "result": result}
+    except (TypeError, ValueError):
+        return {"success": True, "result": str(result)}
+
+
+@mcp.tool(tags={"automation"})
+async def run_python(
+    callable: str, args: dict[str, object] | None = None, timeout: int = 30
+) -> str:
+    """Call a Python function directly by dotted module path.
+
+    Imports the module, resolves the function, and calls it with the
+    provided arguments. Use for lightweight decision logic that does
+    not need an LLM session (counter checks, status lookups, eligibility
+    decisions).
+
+    Both sync and async functions are supported. Async functions are
+    awaited directly; sync functions run in a thread pool.
+
+    Args:
+        callable: Dotted path to the function (e.g. "mypackage.module.function").
+        args: Keyword arguments to pass to the function.
+        timeout: Max seconds before aborting the call (default 30).
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    _log(f"run_python: callable={callable} timeout={timeout}")
+    result = await _import_and_call(callable, args=args, timeout=float(timeout))
+    return json.dumps(result)
 
 
 @mcp.tool(tags={"automation"})

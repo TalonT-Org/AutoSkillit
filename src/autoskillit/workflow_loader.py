@@ -29,6 +29,7 @@ class StepRetry:
 class WorkflowStep:
     tool: str | None = None
     action: str | None = None
+    python: str | None = None
     with_args: dict[str, str] = field(default_factory=dict)
     on_success: str | None = None
     on_failure: str | None = None
@@ -74,10 +75,19 @@ def validate_workflow(wf: Workflow) -> list[str]:
     step_names = set(wf.steps.keys())
 
     for step_name, step in wf.steps.items():
-        if step.tool is None and step.action is None:
-            errors.append(f"Step '{step_name}' must have either 'tool' or 'action'.")
-        if step.tool is not None and step.action is not None:
-            errors.append(f"Step '{step_name}' has both 'tool' and 'action'; pick one.")
+        discriminators = [d for d in ("tool", "action", "python") if getattr(step, d) is not None]
+        if len(discriminators) == 0:
+            errors.append(f"Step '{step_name}' must have 'tool', 'action', or 'python'.")
+        if len(discriminators) > 1:
+            errors.append(
+                f"Step '{step_name}' has multiple discriminators "
+                f"({', '.join(discriminators)}); pick one."
+            )
+        if step.python is not None and "." not in step.python:
+            errors.append(
+                f"Step '{step_name}'.python must be a dotted path "
+                f"(module.function), got '{step.python}'."
+            )
         if step.action == "stop" and not step.message:
             errors.append(f"Terminal step '{step_name}' (action: stop) must have a 'message'.")
         for goto_field in ("on_success", "on_failure"):
@@ -172,6 +182,7 @@ def _parse_step(data: dict[str, Any]) -> WorkflowStep:
     return WorkflowStep(
         tool=data.get("tool"),
         action=data.get("action"),
+        python=data.get("python"),
         with_args=data.get("with", {}),
         on_success=data.get("on_success"),
         on_failure=data.get("on_failure"),

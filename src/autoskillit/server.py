@@ -31,7 +31,7 @@ from fastmcp import FastMCP
 from fastmcp.prompts.prompt import Message, PromptResult
 
 from autoskillit.config import AutomationConfig, load_config
-from autoskillit.process_lifecycle import run_managed_async
+from autoskillit.process_lifecycle import SubprocessResult, run_managed_async
 from autoskillit.types import (
     CONTEXT_EXHAUSTION_MARKER,
     MergeFailedStep,
@@ -153,6 +153,60 @@ def _truncate(text: str, max_len: int = 5000) -> str:
     if len(text) <= max_len:
         return text
     return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]
+
+
+def _session_log_dir(cwd: str) -> Path:
+    """Derive Claude Code session log directory from project cwd."""
+    project_hash = cwd.replace("/", "-")
+    return Path.home() / ".claude" / "projects" / project_hash
+
+
+def _inject_completion_directive(skill_command: str, marker: str) -> str:
+    """Append an orchestration directive to make the session write a completion marker."""
+    directive = (
+        f"\n\nORCHESTRATION DIRECTIVE: When your task is complete, "
+        f"your final text output MUST end with: {marker}"
+    )
+    return skill_command + directive
+
+
+def _build_skill_result(result: SubprocessResult, timeout: float) -> str:
+    """Route SubprocessResult fields into the standard run_skill JSON response."""
+    if result.stale:
+        return json.dumps(
+            {
+                "result": "Session went stale (no activity for configured threshold). "
+                "Partial progress may have been made. Retry to continue.",
+                "session_id": "",
+                "subtype": "stale",
+                "is_error": False,
+                "exit_code": -1,
+                "needs_retry": True,
+                "retry_reason": RetryReason.RESUME,
+            }
+        )
+
+    if result.timed_out:
+        stdout = result.stdout
+        stderr = f"Process timed out after {timeout}s"
+        returncode = -1
+    else:
+        stdout = result.stdout
+        stderr = result.stderr
+        returncode = result.returncode if result.returncode is not None else -1
+
+    session = parse_session_result(stdout)
+    return json.dumps(
+        {
+            "result": _truncate(session.agent_result),
+            "session_id": session.session_id,
+            "subtype": session.subtype,
+            "is_error": session.is_error,
+            "exit_code": returncode,
+            "needs_retry": session.needs_retry,
+            "retry_reason": session.retry_reason,
+        }
+    )
 
 
 @dataclass
@@ -589,7 +643,10 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
-    skill_command = _ensure_skill_prefix(skill_command)
+    cfg = _config.run_skill
+    skill_command = _inject_completion_directive(
+        _ensure_skill_prefix(skill_command), cfg.completion_marker
+    )
 
     cmd = [
         "claude",
@@ -604,20 +661,18 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
     if add_dir:
         cmd.extend(["--add-dir", add_dir])
 
-    returncode, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=3600)
-
-    session = parse_session_result(stdout)
-    return json.dumps(
-        {
-            "result": _truncate(session.agent_result),
-            "session_id": session.session_id,
-            "subtype": session.subtype,
-            "is_error": session.is_error,
-            "exit_code": returncode,
-            "needs_retry": session.needs_retry,
-            "retry_reason": session.retry_reason,
-        }
+    result = await run_managed_async(
+        cmd,
+        cwd=Path(cwd),
+        timeout=cfg.timeout,
+        pty_mode=True,
+        heartbeat_marker=cfg.heartbeat_marker,
+        session_log_dir=_session_log_dir(cwd),
+        completion_marker=cfg.completion_marker,
+        stale_threshold=cfg.stale_threshold,
     )
+
+    return _build_skill_result(result, cfg.timeout)
 
 
 @mcp.tool(tags={"automation"})
@@ -646,7 +701,10 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
-    skill_command = _ensure_skill_prefix(skill_command)
+    cfg = _config.run_skill_retry
+    skill_command = _inject_completion_directive(
+        _ensure_skill_prefix(skill_command), cfg.completion_marker
+    )
 
     cmd = [
         "claude",
@@ -659,20 +717,18 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
         "--dangerously-skip-permissions",
     ]
 
-    returncode, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=7200)
-
-    session = parse_session_result(stdout)
-    return json.dumps(
-        {
-            "result": _truncate(session.agent_result),
-            "session_id": session.session_id,
-            "subtype": session.subtype,
-            "is_error": session.is_error,
-            "exit_code": returncode,
-            "needs_retry": session.needs_retry,
-            "retry_reason": session.retry_reason,
-        }
+    result = await run_managed_async(
+        cmd,
+        cwd=Path(cwd),
+        timeout=cfg.timeout,
+        pty_mode=True,
+        heartbeat_marker=cfg.heartbeat_marker,
+        session_log_dir=_session_log_dir(cwd),
+        completion_marker=cfg.completion_marker,
+        stale_threshold=cfg.stale_threshold,
     )
+
+    return _build_skill_result(result, cfg.timeout)
 
 
 _OUTCOME_PATTERN = re.compile(

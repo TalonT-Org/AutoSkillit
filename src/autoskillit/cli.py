@@ -610,6 +610,18 @@ safety:
 # implement_gate:
 #   marker: "Dry-walkthrough verified = TRUE"
 #   skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
+#
+# run_skill:
+#   timeout: 3600
+#   heartbeat_marker: '"type":"result"'
+#   stale_threshold: 1200
+#   completion_marker: "%%AUTOSKILLIT_COMPLETE%%"
+#
+# run_skill_retry:
+#   timeout: 7200
+#   heartbeat_marker: '"type":"result"'
+#   stale_threshold: 1200
+#   completion_marker: "%%AUTOSKILLIT_COMPLETE%%"
 """
 
 

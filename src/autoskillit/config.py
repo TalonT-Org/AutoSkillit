@@ -56,6 +56,22 @@ class ReadDbConfig:
 
 
 @dataclass
+class RunSkillConfig:
+    timeout: int = 3600
+    heartbeat_marker: str = '"type":"result"'
+    stale_threshold: int = 1200  # 20 minutes
+    completion_marker: str = "%%AUTOSKILLIT_COMPLETE%%"
+
+
+@dataclass
+class RunSkillRetryConfig:
+    timeout: int = 7200
+    heartbeat_marker: str = '"type":"result"'
+    stale_threshold: int = 1200
+    completion_marker: str = "%%AUTOSKILLIT_COMPLETE%%"
+
+
+@dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
@@ -63,6 +79,8 @@ class AutomationConfig:
     implement_gate: ImplementGateConfig = field(default_factory=ImplementGateConfig)
     safety: SafetyConfig = field(default_factory=SafetyConfig)
     read_db: ReadDbConfig = field(default_factory=ReadDbConfig)
+    run_skill: RunSkillConfig = field(default_factory=RunSkillConfig)
+    run_skill_retry: RunSkillRetryConfig = field(default_factory=RunSkillRetryConfig)
 
 
 def load_config(project_dir: Path | None = None) -> AutomationConfig:

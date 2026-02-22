@@ -64,6 +64,11 @@ class LoadResult(Generic[T]):
     errors: list[LoadReport] = field(default_factory=list)
 
 
+# The substring Claude CLI emits when the context window is full.
+# Used by ClaudeSessionResult._is_context_exhausted() for detection.
+# Centralized here so tests can reference the canonical value.
+CONTEXT_EXHAUSTION_MARKER = "prompt is too long"
+
 # Known field names in run_skill_retry response — used by workflow validation
 RETRY_RESPONSE_FIELDS: frozenset[str] = frozenset(
     {

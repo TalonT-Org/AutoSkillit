@@ -31,7 +31,13 @@ from fastmcp.prompts.prompt import Message, PromptResult
 
 from autoskillit.config import AutomationConfig, load_config
 from autoskillit.process_lifecycle import run_managed_async
-from autoskillit.types import MergeFailedStep, MergeState, RestartScope, RetryReason
+from autoskillit.types import (
+    CONTEXT_EXHAUSTION_MARKER,
+    MergeFailedStep,
+    MergeState,
+    RestartScope,
+    RetryReason,
+)
 
 mcp = FastMCP("autoskillit")
 
@@ -158,7 +164,30 @@ class ClaudeSessionResult:
 
     def _is_context_exhausted(self) -> bool:
         """Detect context window exhaustion from Claude's error output."""
-        return self.is_error and "prompt is too long" in self.result.lower()
+        return self.is_error and CONTEXT_EXHAUSTION_MARKER in self.result.lower()
+
+    @property
+    def agent_result(self) -> str:
+        """Result text rewritten for LLM agent consumption.
+
+        When the session ended due to a retriable condition (context exhaustion,
+        max turns), the raw result text from Claude CLI can be misleading to
+        LLM callers. This property returns semantically correct, actionable text.
+        The raw result is preserved in self.result for debugging.
+        """
+        if self._is_context_exhausted():
+            return (
+                "Context limit reached during session execution. "
+                "The session made partial progress. "
+                "Use needs_retry and retry_reason to continue from where it left off."
+            )
+        if self.subtype == "error_max_turns":
+            return (
+                "Turn limit reached during session execution. "
+                "The session made partial progress. "
+                "Use needs_retry and retry_reason to continue from where it left off."
+            )
+        return self.result
 
     @property
     def needs_retry(self) -> bool:
@@ -540,6 +569,10 @@ async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0
 async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
     """Run a Claude Code headless session with a skill command.
 
+    Returns JSON with: result, session_id, subtype, is_error, exit_code,
+    needs_retry, retry_reason. When needs_retry is true, retry_reason is
+    "resume" — the session should be retried to continue from where it left off.
+
     Args:
         skill_command: The full prompt including skill invocation (e.g. "/investigate ...").
         cwd: Working directory for the claude session.
@@ -573,11 +606,13 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
     session = parse_session_result(stdout)
     return json.dumps(
         {
-            "result": _truncate(session.result),
+            "result": _truncate(session.agent_result),
             "session_id": session.session_id,
             "subtype": session.subtype,
             "is_error": session.is_error,
             "exit_code": returncode,
+            "needs_retry": session.needs_retry,
+            "retry_reason": session.retry_reason,
         }
     )
 
@@ -590,6 +625,11 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
     The needs_retry field indicates whether the session didn't finish.
     When needs_retry is true, retry_reason is "resume" — the session should
     be retried to continue from where it left off.
+
+    IMPORTANT: When needs_retry is true, the result field contains an actionable
+    summary, not the raw CLI error. Do NOT interpret the result text as indicating
+    the input was too large — it means the session's context window filled during
+    execution. The correct action is always to resume the session.
 
     Args:
         skill_command: The full prompt including skill invocation.
@@ -621,7 +661,7 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
     session = parse_session_result(stdout)
     return json.dumps(
         {
-            "result": _truncate(session.result),
+            "result": _truncate(session.agent_result),
             "session_id": session.session_id,
             "subtype": session.subtype,
             "is_error": session.is_error,

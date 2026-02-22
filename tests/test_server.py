@@ -47,7 +47,13 @@ from autoskillit.server import (
     test_check,
     validate_script,
 )
-from autoskillit.types import MergeFailedStep, MergeState, RestartScope, RetryReason
+from autoskillit.types import (
+    CONTEXT_EXHAUSTION_MARKER,
+    MergeFailedStep,
+    MergeState,
+    RestartScope,
+    RetryReason,
+)
 
 test_check.__test__ = False  # type: ignore[attr-defined]
 
@@ -1193,6 +1199,66 @@ class TestClaudeSessionResult:
         assert max_turns_case.retry_reason == context_case.retry_reason
 
 
+class TestAgentResult:
+    """agent_result produces actionable text for LLM callers."""
+
+    def test_rewrites_context_exhaustion(self):
+        """Context exhaustion result must NOT contain 'Prompt is too long'."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=True,
+            result="Prompt is too long",
+            session_id="s1",
+        )
+        assert "prompt is too long" not in session.agent_result.lower()
+        assert "context" in session.agent_result.lower()
+        assert "continue" in session.agent_result.lower()
+
+    def test_rewrites_max_turns(self):
+        """Max turns result must describe the situation, not pass through empty string."""
+        session = ClaudeSessionResult(
+            subtype="error_max_turns",
+            is_error=False,
+            result="",
+            session_id="s1",
+        )
+        assert (
+            "turn limit" in session.agent_result.lower()
+            or "resume" in session.agent_result.lower()
+        )
+
+    def test_preserves_normal_result(self):
+        """Normal success result passes through unchanged."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Task completed. Created 3 files.",
+            session_id="s1",
+        )
+        assert session.agent_result == "Task completed. Created 3 files."
+
+    def test_preserves_error_result_when_not_retriable(self):
+        """Non-retriable errors pass through unchanged."""
+        session = ClaudeSessionResult(
+            subtype="error_during_execution",
+            is_error=True,
+            result="Tool execution failed: permission denied",
+            session_id="s1",
+        )
+        assert session.agent_result == "Tool execution failed: permission denied"
+
+
+def test_context_exhaustion_marker_is_used_in_detection():
+    """_is_context_exhausted() uses the CONTEXT_EXHAUSTION_MARKER constant."""
+    session = ClaudeSessionResult(
+        subtype="success",
+        is_error=True,
+        result=CONTEXT_EXHAUSTION_MARKER,
+        session_id="s1",
+    )
+    assert session._is_context_exhausted() is True
+
+
 class TestResponseFieldsAreTypeSafe:
     """Every discriminator field in MCP tool responses uses enum values."""
 
@@ -1312,6 +1378,86 @@ class TestRunSkillRetrySessionOutcome:
         mock_run.return_value = _make_result(1, "crash dump", "segfault")
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is False
+
+
+class TestRunSkillRetryAgentResult:
+    """run_skill_retry result field contains actionable text."""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_context_limit_result_is_actionable(self, mock_run):
+        """When context is exhausted, result text must NOT say 'Prompt is too long'."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": True,
+                "result": "Prompt is too long",
+                "session_id": "s1",
+            }
+        )
+        mock_run.return_value = _make_result(1, stdout, "")
+        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        assert "prompt is too long" not in result["result"].lower()
+        assert result["needs_retry"] is True
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_normal_success_result_passes_through(self, mock_run):
+        """Normal success result text is preserved."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        mock_run.return_value = _make_result(0, stdout, "")
+        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        assert result["result"] == "Done."
+
+
+class TestRunSkillRetryFields:
+    """run_skill includes needs_retry and retry_reason for parity."""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_includes_needs_retry_false(self, mock_run):
+        """run_skill response includes needs_retry=False on normal success."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        mock_run.return_value = _make_result(0, stdout, "")
+        result = json.loads(await run_skill("/investigate error", "/tmp"))
+        assert result["needs_retry"] is False
+        assert result["retry_reason"] == RetryReason.NONE
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_includes_needs_retry_true_on_context_limit(self, mock_run):
+        """run_skill response includes needs_retry=True when context is exhausted."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": True,
+                "result": "Prompt is too long",
+                "session_id": "s1",
+            }
+        )
+        mock_run.return_value = _make_result(1, stdout, "")
+        result = json.loads(await run_skill("/investigate error", "/tmp"))
+        assert result["needs_retry"] is True
+        assert result["retry_reason"] == RetryReason.RESUME
+        assert "prompt is too long" not in result["result"].lower()
 
 
 class TestRunSkillFailurePaths:

@@ -141,6 +141,16 @@ Interactive flow. For each candidate workflow discovered:
 2. For each candidate workflow (including the standard one):
    - Present the workflow chain and explain what it automates
    - Ask the user: "Would you like me to generate a pipeline script for this workflow?"
+   - Before generating, resolve skill references in the workflow:
+     - For each skill in the detected chain, check if it exists both locally
+       (`.claude/skills/<name>/SKILL.md`) and as a bundled autoskillit skill
+     - If any skill exists in both, present the conflicts to the user as a batch:
+       > "These skills exist in both your project and AutoSkillit's bundled set:
+       > - `<name>` → local (bare `/<name>`) or bundled (`/autoskillit:<name>`)?
+       > Local versions are recommended. Should I use local for all, or do you want
+       > to pick individually?"
+       List each conflicting skill name on its own line in the prompt.
+     - Record the user's preferences and pass them as context to make-script-skill
    - If yes: LOAD `/autoskillit:make-script-skill` using the Skill tool to generate the script. The agent already has full context from the exploration phases (workflow name, detected variables like project_dir/work_dir/base_branch, tool call sequence, routing logic) — no explicit parameter passing is needed. make-script-skill uses that context directly to produce a clean script.
    - Explain what a pipeline script is (discovered via `list_skill_scripts` MCP tool, loaded via `load_skill_script`, the agent interprets the YAML and executes the steps), show the generated script content
    - Track the user's approval — do NOT write to disk yet

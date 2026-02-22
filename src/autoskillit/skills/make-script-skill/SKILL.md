@@ -178,6 +178,41 @@ Available tools for use in `tool:` fields:
 | `run_cmd` | `cmd`, `cwd`, `timeout` (optional) | Execute arbitrary shell command |
 | `validate_script` | `script_path` | Validate a script file against the workflow schema |
 
+## Bundled AutoSkillit Skills
+
+These skills ship with the autoskillit plugin and are invoked as `/autoskillit:<name>`:
+
+assess-and-merge, dry-walkthrough, implement-worktree, implement-worktree-no-merge,
+investigate, make-plan, make-script-skill, mermaid, rectify, retry-worktree,
+review-approach, setup-project
+
+## Skill Reference Disambiguation
+
+When the user describes a workflow using bare skill names (e.g., "use make-plan",
+"then run investigate"), you MUST resolve each name before writing it into the YAML.
+
+### Resolution procedure
+
+For each bare skill name the user mentions:
+
+1. **Check local**: Does `.claude/skills/<name>/SKILL.md` exist in the project directory?
+2. **Check bundled**: Is `<name>` in the Bundled AutoSkillit Skills list above?
+3. **Resolve**:
+   - **Local only** → use `/<name>` (bare slash command)
+   - **Bundled only** → use `/autoskillit:<name>`
+   - **Both exist** → prompt the user:
+     > "I see `<name>` exists as both a local project skill (`/<name>`) and a
+     > bundled AutoSkillit skill (`/autoskillit:<name>`). Which should this script
+     > use? The local version is recommended since it's tailored to your project."
+   - **Neither exists** → warn the user that the skill wasn't found and ask them
+     to clarify the correct name or path
+
+### Defaults
+
+- **Local always takes priority** when the user doesn't express a preference.
+- Only prompt when both sources provide the same name. Don't prompt for names
+  that exist in only one source.
+
 ## Example: Standard Implementation Pipeline
 
 This is the reference format. All generated scripts should match this style:
@@ -376,7 +411,7 @@ When converting old `.claude/commands/` or `.claude/skills/` Markdown pipeline s
 | Prose `Notes:` section | `note:` field on individual steps, or comments in YAML |
 | `AskUserQuestion` prompts | Not in schema — the agent handles prompting before executing the script |
 | `review_approach = false (optional)` | Input with `required: false` and `default: "false"` |
-| Local skill refs (bare `skill-name`) | Use `/autoskillit:make-plan` (namespaced) if calling bundled skills |
+| Local skill refs (bare `skill-name`) | Follow the **Skill Reference Disambiguation** procedure above to resolve |
 
 ### What Cannot Be Directly Represented
 
@@ -389,12 +424,13 @@ Some Markdown patterns require agent interpretation rather than YAML structure:
 
 1. Extract inputs from `SETUP:` block — remove hardcoded paths, make them `required: true`
 2. Map each numbered pipeline step to a named YAML step
-3. Identify which MCP tool each step calls (see Tool Reference above)
-4. Set `on_success` / `on_failure` routing for every tool step
-5. Add `retry:` blocks where the Markdown says "repeat" or "retry"
-6. Add terminal `done` and `escalate` steps
-7. Write a `summary:` line capturing the pipeline chain
-8. Add `note:` fields for agent-interpreted logic (loops, conditionals)
+3. Resolve skill references — for each skill name, follow the Skill Reference Disambiguation procedure
+4. Identify which MCP tool each step calls (see Tool Reference above)
+5. Set `on_success` / `on_failure` routing for every tool step
+6. Add `retry:` blocks where the Markdown says "repeat" or "retry"
+7. Add terminal `done` and `escalate` steps
+8. Write a `summary:` line capturing the pipeline chain
+9. Add `note:` fields for agent-interpreted logic (loops, conditionals)
 
 ## Standalone Invocation Flow
 

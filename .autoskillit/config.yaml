@@ -1,0 +1,21 @@
+test_check:
+  command: ["task", "test-all"]
+  # timeout: 600
+
+safety:
+  reset_guard_marker: ".autoskillit-workspace"
+  require_dry_walkthrough: true
+  test_gate_on_merge: true
+
+# --- Advanced settings (uncomment and configure as needed) ---
+#
+# classify_fix:
+#   path_prefixes: []
+#
+# reset_workspace:
+#   command: null
+#   preserve_dirs: []
+#
+# implement_gate:
+#   marker: "Dry-walkthrough verified = TRUE"
+#   skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]

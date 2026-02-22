@@ -1,0 +1,58 @@
+version: '3'
+
+tasks:
+  test-all:
+    desc: Run all tests with parallel workers
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      TMPDIR: /dev/shm/pytest-tmp
+      OMP_NUM_THREADS: "1"
+    cmds:
+      - |
+        mkdir -p temp
+        TEST_OUTPUT="temp/test-$(date +%Y-%m-%d_%H%M%S).txt"
+        echo "Running all tests with -n 4"
+        echo "Output: $TEST_OUTPUT"
+        if [[ -d ".venv" ]]; then
+          .venv/bin/python -m pytest tests/ -q --tb=short -n 4 --disable-warnings -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+        else
+          pytest tests/ -q --tb=short -n 4 --disable-warnings -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+        fi
+        echo ""
+        echo "Test output saved to: $TEST_OUTPUT"
+
+  test-check:
+    desc: Run all tests and return unambiguous PASS/FAIL (for automation)
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      TMPDIR: /dev/shm/pytest-tmp
+      OMP_NUM_THREADS: "1"
+    cmds:
+      - |
+        mkdir -p temp
+        TEST_OUTPUT="temp/test-$(date +%Y-%m-%d_%H%M%S).txt"
+
+        if [[ -d ".venv" ]]; then
+          PYTEST_CMD=".venv/bin/python -m pytest"
+        else
+          PYTEST_CMD="pytest"
+        fi
+
+        set +e
+        $PYTEST_CMD tests/ -q --tb=short -n 4 --disable-warnings -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+        PYTEST_EXIT=${PIPESTATUS[0]}
+        set -e
+
+        echo ""
+        echo "Test output saved to: $TEST_OUTPUT"
+
+        if [ "$PYTEST_EXIT" -ne 0 ]; then
+          echo ""
+          echo "TEST_RESULT=FAIL"
+          echo "PYTEST_EXIT_CODE=$PYTEST_EXIT"
+          exit 1
+        else
+          echo ""
+          echo "TEST_RESULT=PASS"
+          exit 0
+        fi

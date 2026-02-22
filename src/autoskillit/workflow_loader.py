@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -30,7 +31,7 @@ class StepResultRoute:
     """Multi-way routing based on a named field in a tool's JSON response."""
 
     field: str
-    routes: dict[str, str] = field(default_factory=dict)
+    routes: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 @dataclass
@@ -122,13 +123,9 @@ def validate_workflow(wf: Workflow) -> list[str]:
                     f"they are mutually exclusive."
                 )
             if not step.on_result.field:
-                errors.append(
-                    f"Step '{step_name}'.on_result.field must be non-empty."
-                )
+                errors.append(f"Step '{step_name}'.on_result.field must be non-empty.")
             if not step.on_result.routes:
-                errors.append(
-                    f"Step '{step_name}'.on_result.routes must be non-empty."
-                )
+                errors.append(f"Step '{step_name}'.on_result.routes must be non-empty.")
             for value, target in step.on_result.routes.items():
                 if target not in step_names and target != "done":
                     errors.append(

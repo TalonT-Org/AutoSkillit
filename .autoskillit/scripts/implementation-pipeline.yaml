@@ -1,0 +1,119 @@
+name: implementation-pipeline
+description: Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
+summary: make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part)
+
+inputs:
+  task:
+    description: Description of what to implement
+    required: true
+  project_dir:
+    description: Path to the project
+    default: /home/talon/projects/generic_automation_mcp
+  work_dir:
+    description: Working directory (can be same as project_dir)
+    default: /home/talon/projects/generic_automation_mcp
+  base_branch:
+    description: Branch to merge into (defaults to current branch)
+    default: main
+  review_approach:
+    description: Run /review-approach before implementation? (true/false)
+    default: "false"
+  plan_path:
+    description: Path to the plan file (set by agent after plan step)
+    default: ""
+  plan_part:
+    description: Current plan part path (set by agent during iteration)
+    default: ""
+  worktree_path:
+    description: Path to the worktree (set by agent after implement step)
+    default: ""
+
+steps:
+  plan:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
+      cwd: "${{ inputs.work_dir }}"
+    on_success: verify
+    on_failure: escalate
+    note: "Produces plan in temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically into plan_parts[]."
+
+  review:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:review-approach ${{ inputs.plan_path }}"
+      cwd: "${{ inputs.work_dir }}"
+    on_success: verify
+    on_failure: escalate
+    note: "Only execute this step if review_approach input is 'true'. Review covers ALL plan parts together before any implementation begins."
+
+  verify:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:dry-walkthrough ${{ inputs.plan_part }}"
+      cwd: "${{ inputs.work_dir }}"
+    on_success: implement
+    on_failure: escalate
+    note: "Run for each plan_part sequentially. If review_report exists, pass it as additional arg."
+
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ inputs.plan_part }}"
+      cwd: "${{ inputs.work_dir }}"
+    on_success: test
+    on_failure: escalate
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: retry_worktree
+    note: "Extracts worktree_path from result for use in subsequent steps."
+
+  retry_worktree:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:retry-worktree ${{ inputs.plan_part }} ${{ inputs.worktree_path }}"
+      cwd: "${{ inputs.work_dir }}"
+    on_success: test
+    on_failure: escalate
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: escalate
+
+  test:
+    tool: test_check
+    with:
+      worktree_path: "${{ inputs.worktree_path }}"
+    on_success: merge
+    on_failure: fix
+
+  merge:
+    tool: merge_worktree
+    with:
+      worktree_path: "${{ inputs.worktree_path }}"
+      base_branch: "${{ inputs.base_branch }}"
+    on_success: done
+    on_failure: escalate
+    note: "After merge, continue to next plan_part (back to verify step) if more parts remain."
+
+  fix:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:assess-and-merge ${{ inputs.worktree_path }} ${{ inputs.plan_part }} ${{ inputs.base_branch }}"
+      cwd: "${{ inputs.work_dir }}"
+    on_success: done
+    on_failure: escalate
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: escalate
+    note: "Attempts to fix test failures and merge. After 3 failed attempts, escalates."
+
+  done:
+    action: stop
+    message: "Implementation pipeline complete. All plan parts have been implemented, tested, and merged."
+
+  escalate:
+    action: stop
+    message: "Pipeline failed — human intervention needed. Check the worktree and plan for details."

@@ -796,7 +796,15 @@ async def load_skill_script(name: str) -> str:
        - Save as a new script (prompt for name)
        - Use temporarily without saving
     3. Prompt for input values using AskUserQuestion
-    4. Execute the pipeline steps in order
+    4. Execute the pipeline steps by calling MCP tools directly
+
+    EXECUTION RULES:
+    - Call MCP tools (run_skill, run_skill_retry, test_check, merge_worktree,
+      etc.) DIRECTLY. Do NOT delegate pipeline execution to subagents.
+    - The MCP tools themselves spawn headless sessions — no extra wrapping needed.
+    - For parallel pipelines, call multiple MCP tools in parallel directly.
+    - Thread outputs from each step into the next (e.g. worktree_path from
+      implement into test_check).
 
     IMPORTANT: Pipeline scripts are NOT slash commands. They cannot be invoked
     as /autoskillit:<name>. The correct way to run a script is to call this

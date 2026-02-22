@@ -500,6 +500,14 @@ def _check_test_passed(returncode: int, stdout: str) -> bool:
 async def test_check(worktree_path: str) -> str:
     """Run the configured test command in a worktree directory. Returns unambiguous PASS/FAIL.
 
+    CRITICAL: This tool is a pipeline gate, not a diagnostic tool. When it
+    returns {"passed": false}, follow the pipeline script's on_failure routing
+    (e.g. call assess-and-merge via run_skill). Do NOT:
+    - Run tests yourself (pytest, make test, etc.) to investigate
+    - Read test output or try to diagnose failures
+    - Attempt to fix code directly
+    The on_failure step handles all diagnosis and remediation.
+
     Args:
         worktree_path: Path to the git worktree to run tests in.
     """
@@ -885,6 +893,15 @@ async def load_skill_script(name: str) -> str:
     - For parallel pipelines, call multiple MCP tools in parallel directly.
     - Thread outputs from each step into the next (e.g. worktree_path from
       implement into test_check).
+
+    ROUTING RULES — MANDATORY:
+    - When a tool returns a failure result (e.g. test_check returns
+      {"passed": false}), you MUST follow the step's on_failure route.
+    - Do NOT investigate, diagnose, or attempt to fix failures yourself.
+    - Do NOT run shell commands (pytest, git diff, etc.) to understand
+      what went wrong — the on_failure step handles all remediation.
+    - Your ONLY job is to route to the correct next step and pass the
+      required arguments. The downstream skill does the actual work.
 
     IMPORTANT: Pipeline scripts are NOT slash commands. They cannot be invoked
     as /autoskillit:<name>. The correct way to run a script is to call this

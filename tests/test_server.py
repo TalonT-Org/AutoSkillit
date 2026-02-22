@@ -35,6 +35,7 @@ from autoskillit.server import (
     reset_test_dir,
     reset_workspace,
     run_cmd,
+    run_python,
     run_skill,
     run_skill_retry,
     test_check,
@@ -535,7 +536,7 @@ class TestRunSkillRetryGate:
 
 
 class TestToolRegistration:
-    """All 12 tools are registered on the MCP server."""
+    """All 13 tools are registered on the MCP server."""
 
     def test_all_tools_exist(self):
         from fastmcp.tools import Tool
@@ -547,6 +548,7 @@ class TestToolRegistration:
 
         expected = {
             "run_cmd",
+            "run_python",
             "run_skill",
             "run_skill_retry",
             "test_check",
@@ -1471,7 +1473,7 @@ class TestGatedToolAccess:
         assert prompt_names == {"enable_tools", "disable_tools"}
 
     def test_all_tools_still_registered(self):
-        """All 12 tools remain registered (gated + ungated)."""
+        """All 13 tools remain registered (gated + ungated)."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -1480,6 +1482,7 @@ class TestGatedToolAccess:
         tool_names = {t.name for t in tools}
         expected = {
             "run_cmd",
+            "run_python",
             "run_skill",
             "run_skill_retry",
             "test_check",
@@ -1493,6 +1496,13 @@ class TestGatedToolAccess:
             "validate_script",
         }
         assert expected == tool_names
+
+    @pytest.mark.asyncio
+    async def test_run_python_gated(self):
+        """run_python requires tools to be enabled."""
+        result = json.loads(await run_python(callable="json.dumps", args={"obj": 1}))
+        assert "error" in result
+        assert "not enabled" in result["error"].lower()
 
     def test_gate_error_structure(self):
         """_require_enabled returns well-formed error JSON with activation instructions."""
@@ -2111,3 +2121,83 @@ class TestMergeWorktreeCleanupReporting:
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.FETCH
+
+
+# ---------------------------------------------------------------------------
+# run_python tool
+# ---------------------------------------------------------------------------
+
+
+class TestRunPython:
+    """run_python tool: import, call, timeout, async support."""
+
+    @pytest.mark.asyncio
+    async def test_calls_function(self):
+        """run_python imports module, calls function, returns JSON result."""
+        result = json.loads(
+            await run_python(
+                callable="json.dumps",
+                args={"obj": {"key": "value"}},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"] == '{"key": "value"}'
+
+    @pytest.mark.asyncio
+    async def test_import_error(self):
+        """run_python returns error for non-existent module."""
+        result = json.loads(
+            await run_python(
+                callable="nonexistent_module.some_func",
+                timeout=10,
+            )
+        )
+        assert result["success"] is False
+        assert "import" in result["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_not_callable(self):
+        """run_python returns error when target is not callable."""
+        result = json.loads(
+            await run_python(
+                callable="json.decoder",
+                timeout=10,
+            )
+        )
+        assert result["success"] is False
+        assert "callable" in result["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_timeout(self):
+        """run_python returns error on timeout."""
+        import asyncio as _aio
+        from unittest.mock import MagicMock, patch
+
+        async def _hang(**_kw: object) -> None:
+            await _aio.sleep(300)
+
+        mock_module = MagicMock()
+        mock_module.hang_fn = _hang
+
+        with patch("autoskillit.server.importlib.import_module", return_value=mock_module):
+            result = json.loads(
+                await run_python(
+                    callable="fake_mod.hang_fn",
+                    timeout=1,
+                )
+            )
+        assert result["success"] is False
+        assert "timeout" in result["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_async_function(self):
+        """run_python correctly awaits async functions."""
+        result = json.loads(
+            await run_python(
+                callable="asyncio.sleep",
+                args={"delay": 0},
+                timeout=5,
+            )
+        )
+        assert result["success"] is True

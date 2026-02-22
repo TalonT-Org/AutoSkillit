@@ -260,6 +260,81 @@ class TestWorkflowLoader:
         errors = validate_workflow(wf)
         assert any("nonexistent_field" in e for e in errors)
 
+    def test_python_step_parsed(self, tmp_path: Path) -> None:
+        """WorkflowStep.python is populated from YAML data."""
+        data = {
+            "name": "py-wf",
+            "description": "Has python step",
+            "steps": {
+                "check": {
+                    "python": "mymod.check_fn",
+                    "on_success": "done",
+                    "on_failure": "fail",
+                },
+                "done": {"action": "stop", "message": "OK"},
+                "fail": {"action": "stop", "message": "Failed"},
+            },
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        assert wf.steps["check"].python == "mymod.check_fn"
+        assert wf.steps["check"].tool is None
+        assert wf.steps["check"].action is None
+
+    def test_step_rejects_both_python_and_tool(self, tmp_path: Path) -> None:
+        """Step with both python and tool is invalid."""
+        data = {
+            "name": "bad",
+            "description": "Both python and tool",
+            "steps": {"run": {"python": "mod.fn", "tool": "run_cmd"}},
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        errors = validate_workflow(wf)
+        assert any("python" in e and "tool" in e for e in errors)
+
+    def test_step_accepts_python_alone(self, tmp_path: Path) -> None:
+        """Step with only python discriminator is valid."""
+        data = {
+            "name": "ok",
+            "description": "Python only",
+            "steps": {
+                "check": {"python": "mod.fn", "on_success": "done"},
+                "done": {"action": "stop", "message": "OK"},
+            },
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        errors = validate_workflow(wf)
+        assert errors == []
+
+    def test_python_step_requires_dotted_path(self, tmp_path: Path) -> None:
+        """python: value must contain at least one dot (module.function)."""
+        data = {
+            "name": "bad-path",
+            "description": "No dot",
+            "steps": {"check": {"python": "bare_name"}},
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        errors = validate_workflow(wf)
+        assert any("dotted" in e.lower() or "module" in e.lower() for e in errors)
+
+    def test_python_step_with_args_validated(self, tmp_path: Path) -> None:
+        """python step's with: args have input references validated."""
+        data = {
+            "name": "ref-wf",
+            "description": "Python with refs",
+            "inputs": {"plan_id": {"description": "Plan ID"}},
+            "steps": {
+                "check": {
+                    "python": "mod.fn",
+                    "with": {"plan_id": "${{ inputs.plan_id }}"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "OK"},
+            },
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        errors = validate_workflow(wf)
+        assert errors == []
+
     # T4
     def test_workflow_skill_commands_are_namespaced(self) -> None:
         """All skill_command values in workflow YAMLs use /autoskillit: namespace."""

@@ -1053,6 +1053,9 @@ async def load_skill_script(name: str) -> str:
       etc.) DIRECTLY. Do NOT delegate pipeline execution to subagents.
     - The MCP tools themselves spawn headless sessions — no extra wrapping needed.
     - For parallel pipelines, call multiple MCP tools in parallel directly.
+    - Steps with `capture:` fields extract values from tool results into a
+      pipeline context dict. Use captured values in subsequent steps via
+      ${{ context.var_name }} in `with:` arguments.
     - Thread outputs from each step into the next (e.g. worktree_path from
       implement into test_check).
 

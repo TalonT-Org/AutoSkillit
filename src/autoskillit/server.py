@@ -441,9 +441,7 @@ def _execute_readonly_query(
             cursor = conn.cursor()
             cursor.execute(query, params)
 
-            column_names = (
-                [desc[0] for desc in cursor.description] if cursor.description else []
-            )
+            column_names = [desc[0] for desc in cursor.description] if cursor.description else []
             rows: list[dict] = []  # type: ignore[type-arg]
             truncated = False
             for i, row in enumerate(cursor):
@@ -469,10 +467,8 @@ def _execute_readonly_query(
 
 
 @mcp.tool(tags={"automation"})
-async def read_db(
-    db_path: str, query: str, params: str = "[]", timeout: int = 0
-) -> str:
-    """Run a parameterized read-only SQL query against a SQLite database and return results as JSON.
+async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0) -> str:
+    """Run a read-only SQL query against a SQLite database, return JSON.
 
     Defense-in-depth: regex pre-validation rejects non-SELECT queries, the connection
     is opened with mode=ro (OS-level read-only), and a set_authorizer callback blocks

@@ -2337,33 +2337,25 @@ class TestSelectOnlyAuthorizer:
 
     def test_denies_sqlite_create_table(self):
         assert (
-            _select_only_authorizer(
-                sqlite3.SQLITE_CREATE_TABLE, "evil", None, "main", None
-            )
+            _select_only_authorizer(sqlite3.SQLITE_CREATE_TABLE, "evil", None, "main", None)
             == sqlite3.SQLITE_DENY
         )
 
     def test_denies_sqlite_drop_table(self):
         assert (
-            _select_only_authorizer(
-                sqlite3.SQLITE_DROP_TABLE, "users", None, "main", None
-            )
+            _select_only_authorizer(sqlite3.SQLITE_DROP_TABLE, "users", None, "main", None)
             == sqlite3.SQLITE_DENY
         )
 
     def test_denies_sqlite_attach(self):
         assert (
-            _select_only_authorizer(
-                sqlite3.SQLITE_ATTACH, "other.db", None, None, None
-            )
+            _select_only_authorizer(sqlite3.SQLITE_ATTACH, "other.db", None, None, None)
             == sqlite3.SQLITE_DENY
         )
 
     def test_denies_sqlite_pragma(self):
         assert (
-            _select_only_authorizer(
-                sqlite3.SQLITE_PRAGMA, "table_info", None, None, None
-            )
+            _select_only_authorizer(sqlite3.SQLITE_PRAGMA, "table_info", None, None, None)
             == sqlite3.SQLITE_DENY
         )
 
@@ -2514,7 +2506,7 @@ class TestReadDb:
     @pytest.mark.asyncio
     async def test_max_rows_truncation(self, sample_db, monkeypatch):
         from autoskillit import server
-        from autoskillit.config import AutomationConfig, ReadDbConfig
+        from autoskillit.config import AutomationConfig
 
         cfg = AutomationConfig(read_db=ReadDbConfig(max_rows=2))
         monkeypatch.setattr(server, "_config", cfg)
@@ -2548,7 +2540,7 @@ class TestReadDb:
     @pytest.mark.asyncio
     async def test_query_timeout(self, sample_db, monkeypatch):
         from autoskillit import server
-        from autoskillit.config import AutomationConfig, ReadDbConfig
+        from autoskillit.config import AutomationConfig
 
         cfg = AutomationConfig(read_db=ReadDbConfig(timeout=1))
         monkeypatch.setattr(server, "_config", cfg)

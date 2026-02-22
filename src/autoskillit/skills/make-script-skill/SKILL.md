@@ -41,6 +41,8 @@ steps:
     with:
       arg1: "${{ inputs.var_name }}"
       arg2: "literal value"
+    capture:                # optional — extract values for later steps
+      var_name: "${{ result.field_name }}"
     on_success: next_step
     on_failure: escalate
     retry:                  # optional
@@ -63,7 +65,7 @@ steps:
 - **Tool steps**: use `with:` for arguments, `on_success`/`on_failure` for routing
 - **Terminal steps**: have `action: stop` and a `message:`
 - **Routing targets**: must reference other step names defined in the same file
-- **Variable substitution**: use `${{ inputs.var_name }}` in `with:` values
+- **Variable substitution**: use `${{ inputs.var_name }}` for declared inputs and `${{ context.var_name }}` for values captured by preceding steps
 - **Retry blocks**: optional, specify `max_attempts`, `on` (condition field), `on_exhausted` (step name)
 - **Summary**: one line, use `>` to chain steps (e.g., "plan > verify > implement > test > merge")
 
@@ -92,9 +94,10 @@ steps:
 | Field | Required | Notes |
 |-------|----------|-------|
 | `tool` | Yes (xor `action`) | MCP tool name (see Tool Reference below) |
-| `with` | No | Arguments passed to the tool; values support `${{ inputs.X }}` |
+| `with` | No | Arguments passed to the tool; values support `${{ inputs.X }}` and `${{ context.X }}` |
 | `on_success` | No | Step name to route to on success, or `"done"` |
 | `on_failure` | No | Step name to route to on failure |
+| `capture` | No | Map of `context_var` → `${{ result.field }}` expressions. Captured values available to later steps via `${{ context.var }}` |
 | `retry` | No | Retry block (see below) |
 | `note` | No | Human-readable annotation for the agent; not executed |
 
@@ -113,6 +116,37 @@ steps:
 | `on` | `null` | Response field to check. Valid values: `exit_code`, `is_error`, `needs_retry`, `result`, `retry_reason`, `session_id`, `subtype` |
 | `on_exhausted` | `"escalate"` | Step name to jump to when retries run out |
 
+### Capture Field
+
+Extracts values from tool results into a pipeline-scoped context dict. Subsequent steps reference captured values via `${{ context.var_name }}`.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `capture` | mapping | Keys are context variable names; values must be `${{ result.field }}` expressions |
+
+**Rules:**
+- Values must contain `${{ result.* }}` expressions (literals and other namespaces are rejected)
+- Dotted result paths are valid (e.g., `${{ result.data.path }}`)
+- Captured variables become available to steps that appear *after* the capturing step
+- A step cannot reference its own capture — only preceding steps' captures
+
+**Example:**
+```yaml
+steps:
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+      cwd: "."
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    on_success: test
+  test:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+```
+
 ### Validation Rules
 
 The system validates scripts against these rules:
@@ -124,6 +158,9 @@ The system validates scripts against these rules:
 6. `retry.on_exhausted` must reference a defined step name
 7. `retry.on` must be one of the valid response fields listed above
 8. All `${{ inputs.X }}` references must match a declared input name
+9. `capture` values must contain `${{ result.* }}` expressions
+10. `capture` values must only use the `result.*` namespace
+11. `${{ context.X }}` references must point to a variable captured by a preceding step
 
 ## MCP Tool Reference
 
@@ -163,12 +200,6 @@ inputs:
   base_branch:
     description: Branch to merge into
     default: main
-  plan_path:
-    description: Path to the plan file (set by orchestrator after plan step)
-    required: true
-  worktree_path:
-    description: Path to the worktree (set by orchestrator after implement step)
-    required: true
 
 steps:
   plan:
@@ -177,20 +208,24 @@ steps:
       skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
       cwd: "${{ inputs.work_dir }}"
       add_dir: "${{ inputs.project_dir }}"
+    capture:
+      plan_path: "${{ result.plan_path }}"
     on_success: verify
     on_failure: escalate
   verify:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:dry-walkthrough ${{ inputs.plan_path }}"
+      skill_command: "/autoskillit:dry-walkthrough ${{ context.plan_path }}"
       cwd: "${{ inputs.work_dir }}"
     on_success: implement
     on_failure: escalate
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:implement-worktree-no-merge ${{ inputs.plan_path }}"
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
       cwd: "${{ inputs.work_dir }}"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
     on_success: test
     on_failure: escalate
     retry:
@@ -200,20 +235,20 @@ steps:
   test:
     tool: test_check
     with:
-      worktree_path: "${{ inputs.worktree_path }}"
+      worktree_path: "${{ context.worktree_path }}"
     on_success: merge
     on_failure: fix
   merge:
     tool: merge_worktree
     with:
-      worktree_path: "${{ inputs.worktree_path }}"
+      worktree_path: "${{ context.worktree_path }}"
       base_branch: "${{ inputs.base_branch }}"
     on_success: done
     on_failure: escalate
   fix:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:assess-and-merge ${{ inputs.worktree_path }} ${{ inputs.plan_path }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:assess-and-merge ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.work_dir }}"
     on_success: done
     on_failure: escalate
@@ -349,7 +384,6 @@ Some Markdown patterns require agent interpretation rather than YAML structure:
 
 - **Multi-part plan loops** (`FOR each plan_part`): Add a `note:` to the implement step explaining that the agent should glob for plan parts and iterate
 - **Conditional steps** (`IF review_approach == true`): Use an input with a default and add a `note:` explaining the conditional
-- **Dynamic paths** (`${worktree_path}` extracted from tool output): The agent tracks these at runtime; use descriptive `note:` fields
 
 ### Conversion Checklist
 

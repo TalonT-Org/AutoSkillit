@@ -745,6 +745,8 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
 
     Programmatic gate: runs the configured test command in the worktree before allowing merge.
     If tests fail, returns error without merging.
+    On failure, consider using /autoskillit:assess-and-merge via run_skill
+    for automated diagnosis and remediation.
 
     Args:
         worktree_path: Absolute path to the git worktree.
@@ -936,6 +938,12 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
     If any changed files are in critical paths, returns full_restart.
     Otherwise returns partial_restart.
 
+    Routing guidance:
+    - full_restart: The fix touches critical paths. Re-run investigation and
+      plan creation (e.g. call /autoskillit:investigate via run_skill).
+    - partial_restart: The fix is localized. Re-run implementation only
+      (e.g. call /autoskillit:implement-worktree-no-merge via run_skill_retry).
+
     Args:
         worktree_path: Path to the git worktree with the implemented fix.
         base_branch: The branch the worktree was created from (for merge-base).
@@ -1061,6 +1069,8 @@ async def list_skill_scripts() -> str:
     Returns a JSON array of scripts with name, description, and summary.
     Scripts are YAML workflow definitions that agents follow as orchestration
     instructions. Use load_skill_script to load a specific script.
+    To create a new script, use the /autoskillit:make-script-skill skill.
+    To generate scripts as part of project onboarding, use /autoskillit:setup-project.
 
     IMPORTANT: Pipeline scripts are NOT slash commands. They cannot be invoked
     as /autoskillit:<name>. They are loaded via load_skill_script and executed
@@ -1120,6 +1130,9 @@ async def load_skill_script(name: str) -> str:
     - Your ONLY job is to route to the correct next step and pass the
       required arguments. The downstream skill does the actual work.
 
+    To CREATE a new script, use the /autoskillit:make-script-skill skill.
+    This tool is for loading and executing existing scripts.
+
     IMPORTANT: Pipeline scripts are NOT slash commands. They cannot be invoked
     as /autoskillit:<name>. The correct way to run a script is to call this
     tool, then follow the YAML steps. Scripts live in .autoskillit/scripts/
@@ -1142,6 +1155,8 @@ async def validate_script(script_path: str) -> str:
     Parses the file, checks all validation rules (name, steps, routing,
     retry fields, input references), and returns structured results.
     Use after generating or editing a script to confirm it is valid.
+    The /autoskillit:make-script-skill skill calls this tool automatically
+    after generating a script.
 
     This tool is always available (not gated by enable_tools).
 

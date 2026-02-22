@@ -1,6 +1,6 @@
 ---
 name: make-script-skill
-description: Generate YAML pipeline scripts for .autoskillit/scripts/. Use when user says "make script skill", "generate script", "script a workflow", or when loaded by other skills for script formatting.
+description: Generate YAML pipeline scripts for .autoskillit/scripts/. Use when user says "make script skill", "generate script", "script a workflow", "write a script", "create a script", "new pipeline script", "write a pipeline", or when loaded by other skills for script formatting.
 ---
 
 # Make Script Skill

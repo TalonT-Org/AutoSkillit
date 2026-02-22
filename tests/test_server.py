@@ -817,6 +817,18 @@ class TestToolSchemas:
         "ai-executor",
     }
 
+    REQUIRED_CROSS_REFS: dict[str, list[str]] = {
+        "list_skill_scripts": [
+            "make-script-skill",
+        ],
+        "load_skill_script": [
+            "make-script-skill",
+        ],
+        "validate_script": [
+            "make-script-skill",
+        ],
+    }
+
     def test_tool_descriptions_contain_no_legacy_terms(self):
         """No registered tool should reference old package terminology."""
         from fastmcp.tools import Tool
@@ -830,6 +842,44 @@ class TestToolSchemas:
                 assert term not in desc, (
                     f"Tool '{tool.name}' description contains legacy term '{term}'"
                 )
+
+    def test_tool_docstrings_contain_required_cross_refs(self):
+        """Tool docstrings must contain required cross-references."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c
+            for c in server._local_provider._components.values()
+            if isinstance(c, Tool)
+        }
+        for tool_name, required_terms in self.REQUIRED_CROSS_REFS.items():
+            tool = tools.get(tool_name)
+            assert tool is not None, f"Tool '{tool_name}' not found in server"
+            desc = tool.description or ""
+            for term in required_terms:
+                assert term in desc, (
+                    f"Tool '{tool_name}' description must reference '{term}'"
+                )
+
+    def test_classify_fix_docstring_has_routing_guidance(self):
+        """classify_fix must explain what to do with each return value."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c
+            for c in server._local_provider._components.values()
+            if isinstance(c, Tool)
+        }
+        desc = tools["classify_fix"].description or ""
+        # Must mention both routing outcomes
+        assert "full_restart" in desc
+        assert "partial_restart" in desc
+        # Must mention at least one skill as routing target
+        assert "investigate" in desc or "implement" in desc
 
 
 class TestResetGuard:

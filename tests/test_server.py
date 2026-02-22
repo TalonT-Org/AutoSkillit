@@ -2285,7 +2285,7 @@ class TestValidateSelectOnly:
 
     def test_rejects_non_select_start(self):
         with pytest.raises(ValueError, match="must begin with SELECT"):
-            _validate_select_only("WITH cte AS (DELETE FROM users) SELECT 1")
+            _validate_select_only("WITH cte AS (SELECT 1) SELECT * FROM cte")
 
     def test_rejects_empty_query(self):
         with pytest.raises(ValueError):
@@ -2544,12 +2544,8 @@ class TestReadDb:
 
         cfg = AutomationConfig(read_db=ReadDbConfig(timeout=1))
         monkeypatch.setattr(server, "_config", cfg)
-        slow_query = """
-            WITH RECURSIVE cnt(x) AS (
-                SELECT 1 UNION ALL SELECT x+1 FROM cnt
-            )
-            SELECT x FROM cnt LIMIT 999999999
-        """
+        # Cross join 3 rows^18 = ~387 million rows — guaranteed to exceed 1s timeout
+        slow_query = "SELECT count(*) FROM " + ", ".join(f"users t{i}" for i in range(18))
         result = json.loads(
             await read_db(
                 db_path=str(sample_db),

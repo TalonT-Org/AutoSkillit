@@ -132,6 +132,14 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
     return None
 
 
+def _ensure_skill_prefix(skill_command: str) -> str:
+    """Ensure skill commands start with 'Use' for headless session loading."""
+    stripped = skill_command.strip()
+    if stripped.startswith("/"):
+        return f"Use {stripped}"
+    return skill_command
+
+
 def _truncate(text: str, max_len: int = 5000) -> str:
     if len(text) <= max_len:
         return text
@@ -545,6 +553,8 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
+    skill_command = _ensure_skill_prefix(skill_command)
+
     cmd = [
         "claude",
         "-p",
@@ -592,6 +602,8 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
     if _config.safety.require_dry_walkthrough:
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
+
+    skill_command = _ensure_skill_prefix(skill_command)
 
     cmd = [
         "claude",

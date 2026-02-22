@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,6 +13,7 @@ import pytest
 from autoskillit.config import (
     AutomationConfig,
     ClassifyFixConfig,
+    ReadDbConfig,
     ResetWorkspaceConfig,
     SafetyConfig,
 )
@@ -26,12 +28,15 @@ from autoskillit.server import (
     _parse_pytest_summary,
     _require_enabled,
     _run_subprocess,
+    _select_only_authorizer,
+    _validate_select_only,
     autoskillit_status,
     classify_fix,
     list_skill_scripts,
     load_skill_script,
     merge_worktree,
     parse_session_result,
+    read_db,
     reset_test_dir,
     reset_workspace,
     run_cmd,
@@ -536,7 +541,7 @@ class TestRunSkillRetryGate:
 
 
 class TestToolRegistration:
-    """All 13 tools are registered on the MCP server."""
+    """All 14 tools are registered on the MCP server."""
 
     def test_all_tools_exist(self):
         from fastmcp.tools import Tool
@@ -556,6 +561,7 @@ class TestToolRegistration:
             "classify_fix",
             "reset_workspace",
             "merge_worktree",
+            "read_db",
             "list_skill_scripts",
             "load_skill_script",
             "autoskillit_status",
@@ -1473,7 +1479,7 @@ class TestGatedToolAccess:
         assert prompt_names == {"enable_tools", "disable_tools"}
 
     def test_all_tools_still_registered(self):
-        """All 13 tools remain registered (gated + ungated)."""
+        """All 14 tools remain registered (gated + ungated)."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -1491,6 +1497,7 @@ class TestGatedToolAccess:
             "classify_fix",
             "autoskillit_status",
             "reset_workspace",
+            "read_db",
             "list_skill_scripts",
             "load_skill_script",
             "validate_script",
@@ -2201,3 +2208,366 @@ class TestRunPython:
             )
         )
         assert result["success"] is True
+
+
+class TestValidateSelectOnly:
+    """SQL validation: pure function _validate_select_only."""
+
+    def test_accepts_simple_select(self):
+        _validate_select_only("SELECT * FROM users")
+
+    def test_accepts_select_with_where(self):
+        _validate_select_only("SELECT id, name FROM users WHERE age > ?")
+
+    def test_accepts_select_with_join(self):
+        _validate_select_only("SELECT a.id FROM a JOIN b ON a.id = b.id")
+
+    def test_accepts_select_with_subquery(self):
+        _validate_select_only("SELECT * FROM (SELECT id FROM users)")
+
+    def test_accepts_leading_whitespace(self):
+        _validate_select_only("  \n  SELECT 1")
+
+    def test_rejects_insert(self):
+        with pytest.raises(ValueError, match="forbidden"):
+            _validate_select_only("INSERT INTO users VALUES (1, 'a')")
+
+    def test_rejects_update(self):
+        with pytest.raises(ValueError, match="forbidden"):
+            _validate_select_only("UPDATE users SET name = 'x'")
+
+    def test_rejects_delete(self):
+        with pytest.raises(ValueError, match="forbidden"):
+            _validate_select_only("DELETE FROM users")
+
+    def test_rejects_drop(self):
+        with pytest.raises(ValueError, match="forbidden"):
+            _validate_select_only("DROP TABLE users")
+
+    def test_rejects_alter(self):
+        with pytest.raises(ValueError, match="forbidden"):
+            _validate_select_only("ALTER TABLE users ADD COLUMN x")
+
+    def test_rejects_attach(self):
+        with pytest.raises(ValueError, match="forbidden"):
+            _validate_select_only("ATTACH DATABASE 'other.db' AS other")
+
+    def test_rejects_create(self):
+        with pytest.raises(ValueError, match="forbidden"):
+            _validate_select_only("CREATE TABLE evil (id INT)")
+
+    def test_rejects_pragma(self):
+        with pytest.raises(ValueError, match="forbidden"):
+            _validate_select_only("PRAGMA table_info(users)")
+
+    def test_rejects_non_select_start(self):
+        with pytest.raises(ValueError, match="must begin with SELECT"):
+            _validate_select_only("WITH cte AS (DELETE FROM users) SELECT 1")
+
+    def test_rejects_empty_query(self):
+        with pytest.raises(ValueError):
+            _validate_select_only("")
+
+    def test_rejects_comment_hiding_write(self):
+        with pytest.raises(ValueError, match="forbidden"):
+            _validate_select_only("SELECT 1; -- \nDROP TABLE users")
+
+
+class TestSelectOnlyAuthorizer:
+    """SQLite authorizer callback tests."""
+
+    def test_allows_sqlite_select(self):
+        assert (
+            _select_only_authorizer(sqlite3.SQLITE_SELECT, None, None, None, None)
+            == sqlite3.SQLITE_OK
+        )
+
+    def test_allows_sqlite_read(self):
+        assert (
+            _select_only_authorizer(sqlite3.SQLITE_READ, "users", "id", "main", None)
+            == sqlite3.SQLITE_OK
+        )
+
+    def test_allows_sqlite_function(self):
+        assert (
+            _select_only_authorizer(sqlite3.SQLITE_FUNCTION, None, "count", None, None)
+            == sqlite3.SQLITE_OK
+        )
+
+    def test_denies_sqlite_insert(self):
+        assert (
+            _select_only_authorizer(sqlite3.SQLITE_INSERT, "users", None, "main", None)
+            == sqlite3.SQLITE_DENY
+        )
+
+    def test_denies_sqlite_delete(self):
+        assert (
+            _select_only_authorizer(sqlite3.SQLITE_DELETE, "users", None, "main", None)
+            == sqlite3.SQLITE_DENY
+        )
+
+    def test_denies_sqlite_update(self):
+        assert (
+            _select_only_authorizer(sqlite3.SQLITE_UPDATE, "users", "name", "main", None)
+            == sqlite3.SQLITE_DENY
+        )
+
+    def test_denies_sqlite_create_table(self):
+        assert (
+            _select_only_authorizer(
+                sqlite3.SQLITE_CREATE_TABLE, "evil", None, "main", None
+            )
+            == sqlite3.SQLITE_DENY
+        )
+
+    def test_denies_sqlite_drop_table(self):
+        assert (
+            _select_only_authorizer(
+                sqlite3.SQLITE_DROP_TABLE, "users", None, "main", None
+            )
+            == sqlite3.SQLITE_DENY
+        )
+
+    def test_denies_sqlite_attach(self):
+        assert (
+            _select_only_authorizer(
+                sqlite3.SQLITE_ATTACH, "other.db", None, None, None
+            )
+            == sqlite3.SQLITE_DENY
+        )
+
+    def test_denies_sqlite_pragma(self):
+        assert (
+            _select_only_authorizer(
+                sqlite3.SQLITE_PRAGMA, "table_info", None, None, None
+            )
+            == sqlite3.SQLITE_DENY
+        )
+
+
+class TestReadDb:
+    """Integration tests for read_db tool with real SQLite databases."""
+
+    @pytest.fixture
+    def sample_db(self, tmp_path):
+        """Create a sample SQLite database for testing."""
+        db = tmp_path / "test.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE users (id INTEGER, name TEXT, age INTEGER)")
+        conn.execute("INSERT INTO users VALUES (1, 'Alice', 30)")
+        conn.execute("INSERT INTO users VALUES (2, 'Bob', 25)")
+        conn.execute("INSERT INTO users VALUES (3, 'Charlie', 35)")
+        conn.commit()
+        conn.close()
+        return db
+
+    @pytest.mark.asyncio
+    async def test_simple_select(self, sample_db):
+        result = json.loads(await read_db(db_path=str(sample_db), query="SELECT * FROM users"))
+        assert result["row_count"] == 3
+        assert result["column_names"] == ["id", "name", "age"]
+        assert len(result["rows"]) == 3
+        assert result["truncated"] is False
+
+    @pytest.mark.asyncio
+    async def test_parameterized_query(self, sample_db):
+        result = json.loads(
+            await read_db(
+                db_path=str(sample_db),
+                query="SELECT name FROM users WHERE age > ?",
+                params="[28]",
+            )
+        )
+        assert result["row_count"] == 2
+        names = [r["name"] for r in result["rows"]]
+        assert "Alice" in names
+        assert "Charlie" in names
+
+    @pytest.mark.asyncio
+    async def test_named_params(self, sample_db):
+        result = json.loads(
+            await read_db(
+                db_path=str(sample_db),
+                query="SELECT name FROM users WHERE age = :age",
+                params='{"age": 25}',
+            )
+        )
+        assert result["row_count"] == 1
+        assert result["rows"][0]["name"] == "Bob"
+
+    @pytest.mark.asyncio
+    async def test_empty_result(self, sample_db):
+        result = json.loads(
+            await read_db(
+                db_path=str(sample_db),
+                query="SELECT * FROM users WHERE age > 100",
+            )
+        )
+        assert result["row_count"] == 0
+        assert result["rows"] == []
+        assert result["column_names"] == ["id", "name", "age"]
+
+    @pytest.mark.asyncio
+    async def test_rejects_insert(self, sample_db):
+        result = json.loads(
+            await read_db(
+                db_path=str(sample_db),
+                query="INSERT INTO users VALUES (4, 'Dave', 40)",
+            )
+        )
+        assert "error" in result
+        assert "forbidden" in result["error"].lower() or "SELECT" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_rejects_drop(self, sample_db):
+        result = json.loads(
+            await read_db(
+                db_path=str(sample_db),
+                query="DROP TABLE users",
+            )
+        )
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_rejects_attach(self, sample_db):
+        result = json.loads(
+            await read_db(
+                db_path=str(sample_db),
+                query="ATTACH DATABASE ':memory:' AS other",
+            )
+        )
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_nonexistent_db(self, tmp_path):
+        result = json.loads(
+            await read_db(
+                db_path=str(tmp_path / "nonexistent.db"),
+                query="SELECT 1",
+            )
+        )
+        assert "error" in result
+        assert "does not exist" in result["error"] or "not found" in result["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_not_a_file(self, tmp_path):
+        result = json.loads(
+            await read_db(
+                db_path=str(tmp_path),
+                query="SELECT 1",
+            )
+        )
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_invalid_params_json(self, sample_db):
+        result = json.loads(
+            await read_db(
+                db_path=str(sample_db),
+                query="SELECT * FROM users",
+                params="not json",
+            )
+        )
+        assert "error" in result
+        assert "params" in result["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_gated_when_disabled(self, sample_db):
+        from autoskillit import server
+
+        server._tools_enabled = False
+        try:
+            result = json.loads(
+                await read_db(
+                    db_path=str(sample_db),
+                    query="SELECT 1",
+                )
+            )
+            assert "error" in result
+            assert "not enabled" in result["error"].lower()
+        finally:
+            server._tools_enabled = True
+
+    @pytest.mark.asyncio
+    async def test_max_rows_truncation(self, sample_db, monkeypatch):
+        from autoskillit import server
+        from autoskillit.config import AutomationConfig, ReadDbConfig
+
+        cfg = AutomationConfig(read_db=ReadDbConfig(max_rows=2))
+        monkeypatch.setattr(server, "_config", cfg)
+        result = json.loads(
+            await read_db(
+                db_path=str(sample_db),
+                query="SELECT * FROM users",
+            )
+        )
+        assert result["row_count"] == 2
+        assert result["truncated"] is True
+
+    @pytest.mark.asyncio
+    async def test_blob_base64_encoding(self, tmp_path):
+        import base64
+
+        db = tmp_path / "blob.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE data (id INTEGER, content BLOB)")
+        conn.execute("INSERT INTO data VALUES (1, ?)", (b"\x00\x01\x02\xff",))
+        conn.commit()
+        conn.close()
+        result = json.loads(
+            await read_db(
+                db_path=str(db),
+                query="SELECT * FROM data",
+            )
+        )
+        assert base64.b64decode(result["rows"][0]["content"]) == b"\x00\x01\x02\xff"
+
+    @pytest.mark.asyncio
+    async def test_query_timeout(self, sample_db, monkeypatch):
+        from autoskillit import server
+        from autoskillit.config import AutomationConfig, ReadDbConfig
+
+        cfg = AutomationConfig(read_db=ReadDbConfig(timeout=1))
+        monkeypatch.setattr(server, "_config", cfg)
+        slow_query = """
+            WITH RECURSIVE cnt(x) AS (
+                SELECT 1 UNION ALL SELECT x+1 FROM cnt
+            )
+            SELECT x FROM cnt LIMIT 999999999
+        """
+        result = json.loads(
+            await read_db(
+                db_path=str(sample_db),
+                query=slow_query,
+            )
+        )
+        assert "error" in result
+        assert "timeout" in result["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_sql_error_returns_error(self, sample_db):
+        result = json.loads(
+            await read_db(
+                db_path=str(sample_db),
+                query="SELECT nonexistent_column FROM users",
+            )
+        )
+        assert "error" in result
+
+
+class TestReadDbGating:
+    """read_db gating test in disabled-tools context."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_tools(self):
+        from autoskillit import server
+
+        server._tools_enabled = False
+        yield
+        server._tools_enabled = False
+
+    @pytest.mark.asyncio
+    async def test_read_db_gated(self):
+        result = json.loads(await read_db(db_path="/tmp/x.db", query="SELECT 1"))
+        assert "error" in result
+        assert "not enabled" in result["error"]

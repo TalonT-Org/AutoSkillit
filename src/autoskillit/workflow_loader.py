@@ -46,6 +46,7 @@ class WorkflowStep:
     retry: StepRetry | None = None
     message: str | None = None
     note: str | None = None
+    capture: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -133,7 +134,26 @@ def validate_workflow(wf: Workflow) -> list[str]:
                         f"unknown step '{target}'."
                     )
 
+    # Validate capture values: must contain ${{ result.* }} expressions
+    for step_name, step in wf.steps.items():
+        for cap_key, cap_val in step.capture.items():
+            refs = _extract_refs(cap_val)
+            if not refs:
+                errors.append(
+                    f"Step '{step_name}'.capture.{cap_key} must contain "
+                    f"a ${{{{ result.* }}}} expression."
+                )
+            for ref in refs:
+                if not ref.startswith("result."):
+                    errors.append(
+                        f"Step '{step_name}'.capture.{cap_key} references "
+                        f"'{ref}'; capture values must use the 'result.' namespace."
+                    )
+
+    # Validate input and context references in with_args
     input_names = set(wf.inputs.keys())
+    available_context: set[str] = set()
+
     for step_name, step in wf.steps.items():
         for arg_key, arg_val in step.with_args.items():
             for ref in _extract_refs(arg_val):
@@ -144,6 +164,17 @@ def validate_workflow(wf: Workflow) -> list[str]:
                             f"Step '{step_name}'.with.{arg_key} references "
                             f"undeclared input '{input_name}'."
                         )
+                elif ref.startswith("context."):
+                    ctx_var = ref[len("context.") :]
+                    if ctx_var not in available_context:
+                        errors.append(
+                            f"Step '{step_name}'.with.{arg_key} references "
+                            f"context variable '{ctx_var}' which has not been "
+                            f"captured by a preceding step."
+                        )
+
+        # After validating this step's with_args, add its captures for subsequent steps
+        available_context.update(step.capture.keys())
 
     return errors
 
@@ -224,6 +255,7 @@ def _parse_step(data: dict[str, Any]) -> WorkflowStep:
         retry=retry,
         message=data.get("message"),
         note=data.get("note"),
+        capture=data.get("capture", {}),
     )
 
 

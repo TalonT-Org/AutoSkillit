@@ -336,6 +336,221 @@ class TestWorkflowLoader:
         errors = validate_workflow(wf)
         assert errors == []
 
+    # CAP1
+    def test_capture_field_parsed(self, tmp_path: Path) -> None:
+        """CAP1: capture dict is parsed from step YAML."""
+        data = {
+            "name": "cap-wf",
+            "description": "Capture test",
+            "steps": {
+                "run": {
+                    "tool": "run_skill",
+                    "with": {"cwd": "/tmp"},
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        assert wf.steps["run"].capture == {
+            "worktree_path": "${{ result.worktree_path }}"
+        }
+
+    # CAP2
+    def test_capture_defaults_empty(self, tmp_path: Path) -> None:
+        """CAP2: step without capture has empty capture dict."""
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", VALID_WORKFLOW))
+        for step in wf.steps.values():
+            assert step.capture == {}
+
+    # CAP3
+    def test_capture_result_refs_valid(self, tmp_path: Path) -> None:
+        """CAP3: capture values using result.* namespace produce no errors."""
+        data = {
+            "name": "cap-valid",
+            "description": "Valid captures",
+            "steps": {
+                "run": {
+                    "tool": "run_skill",
+                    "capture": {
+                        "wp": "${{ result.worktree_path }}",
+                        "ctx": "${{ result.failure_context }}",
+                    },
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        errors = validate_workflow(wf)
+        assert not any("capture" in e for e in errors)
+
+    # CAP4
+    def test_capture_non_result_namespace_rejected(self, tmp_path: Path) -> None:
+        """CAP4: capture values must use result.* namespace."""
+        data = {
+            "name": "cap-bad-ns",
+            "description": "Bad namespace",
+            "steps": {
+                "run": {
+                    "tool": "run_cmd",
+                    "capture": {"foo": "${{ inputs.bar }}"},
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        errors = validate_workflow(wf)
+        assert any("result" in e and "capture" in e for e in errors)
+
+        # Also reject context.* namespace in capture values
+        data["steps"]["run"]["capture"] = {"foo": "${{ context.bar }}"}
+        wf = load_workflow(_write_yaml(tmp_path / "wf2.yaml", data))
+        errors = validate_workflow(wf)
+        assert any("result" in e and "capture" in e for e in errors)
+
+    # CAP5
+    def test_capture_literal_value_rejected(self, tmp_path: Path) -> None:
+        """CAP5: capture values must contain ${{ result.X }} expression."""
+        data = {
+            "name": "cap-literal",
+            "description": "Literal capture",
+            "steps": {
+                "run": {
+                    "tool": "run_cmd",
+                    "capture": {"foo": "literal string"},
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        errors = validate_workflow(wf)
+        assert any("capture" in e and "result" in e for e in errors)
+
+    # CAP6
+    def test_context_ref_to_captured_var_valid(self, tmp_path: Path) -> None:
+        """CAP6: ${{ context.X }} referencing a preceding capture is valid."""
+        data = {
+            "name": "ctx-valid",
+            "description": "Valid context ref",
+            "steps": {
+                "impl": {
+                    "tool": "run_skill",
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                    "on_success": "test",
+                },
+                "test": {
+                    "tool": "test_check",
+                    "with": {"worktree_path": "${{ context.worktree_path }}"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        errors = validate_workflow(wf)
+        assert not any("context" in e for e in errors)
+
+    # CAP7
+    def test_context_ref_to_uncaptured_var_rejected(self, tmp_path: Path) -> None:
+        """CAP7: ${{ context.X }} where X is never captured is an error."""
+        data = {
+            "name": "ctx-bad",
+            "description": "Uncaptured ref",
+            "steps": {
+                "test": {
+                    "tool": "test_check",
+                    "with": {"worktree_path": "${{ context.nonexistent }}"},
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        errors = validate_workflow(wf)
+        assert any("nonexistent" in e and "context" in e for e in errors)
+
+    # CAP8
+    def test_context_forward_reference_rejected(self, tmp_path: Path) -> None:
+        """CAP8: ${{ context.X }} referencing a variable captured by a later step is an error."""
+        # Step names chosen so alphabetical order (yaml.dump sorts keys)
+        # puts "check" (consumer) before "produce" (capturer)
+        data = {
+            "name": "ctx-fwd",
+            "description": "Forward ref",
+            "steps": {
+                "check": {
+                    "tool": "test_check",
+                    "with": {"worktree_path": "${{ context.wp }}"},
+                    "on_success": "done",
+                },
+                "produce": {
+                    "tool": "run_skill",
+                    "capture": {"wp": "${{ result.worktree_path }}"},
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        errors = validate_workflow(wf)
+        assert any("wp" in e and "context" in e for e in errors)
+
+    # CAP9
+    def test_bundled_workflows_still_valid(self) -> None:
+        """CAP9: existing bundled workflows pass validation with new capture rules."""
+        bd = builtin_workflows_dir()
+        for f in bd.glob("*.yaml"):
+            wf = load_workflow(f)
+            errors = validate_workflow(wf)
+            assert errors == [], f"Regression in {f.name}: {errors}"
+
+    # CAP10
+    def test_multiple_captures_cumulative(self, tmp_path: Path) -> None:
+        """CAP10: context.X can reference captures from any preceding step."""
+        data = {
+            "name": "cumulative",
+            "description": "Multi-capture",
+            "steps": {
+                "step_a": {
+                    "tool": "run_skill",
+                    "capture": {"var_a": "${{ result.a }}"},
+                    "on_success": "step_b",
+                },
+                "step_b": {
+                    "tool": "run_skill",
+                    "capture": {"var_b": "${{ result.b }}"},
+                    "on_success": "step_c",
+                },
+                "step_c": {
+                    "tool": "run_cmd",
+                    "with": {
+                        "cmd": "${{ context.var_a }} ${{ context.var_b }}",
+                    },
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        errors = validate_workflow(wf)
+        assert not any("context" in e for e in errors)
+
+    # CAP11
+    def test_capture_dotted_result_path_valid(self, tmp_path: Path) -> None:
+        """CAP11: result.nested.path in capture values is valid."""
+        data = {
+            "name": "dotted",
+            "description": "Dotted result path",
+            "steps": {
+                "run": {
+                    "tool": "run_cmd",
+                    "capture": {"foo": "${{ result.data.worktree_path }}"},
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        errors = validate_workflow(wf)
+        assert not any("capture" in e for e in errors)
+
     # T4
     def test_workflow_skill_commands_are_namespaced(self) -> None:
         """All skill_command values in workflow YAMLs use /autoskillit: namespace."""

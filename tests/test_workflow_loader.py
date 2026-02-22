@@ -10,6 +10,7 @@ import yaml
 
 from autoskillit.types import RETRY_RESPONSE_FIELDS, WorkflowSource
 from autoskillit.workflow_loader import (
+    StepResultRoute,
     Workflow,
     builtin_workflows_dir,
     list_workflows,
@@ -351,3 +352,191 @@ class TestWorkflowLoader:
                 assert ref.startswith("/autoskillit:"), (
                     f"{wf_path.name}: {ref} should use /autoskillit: namespace"
                 )
+
+    # T_OR1
+    def test_on_result_parsed(self, tmp_path: Path) -> None:
+        """on_result block is parsed into StepResultRoute."""
+        data = {
+            "name": "result-wf",
+            "description": "Has on_result",
+            "steps": {
+                "classify": {
+                    "tool": "classify_fix",
+                    "on_result": {
+                        "field": "restart_scope",
+                        "routes": {
+                            "full_restart": "investigate",
+                            "partial_restart": "implement",
+                        },
+                    },
+                    "on_failure": "escalate",
+                },
+                "investigate": {"action": "stop", "message": "Investigating."},
+                "implement": {"action": "stop", "message": "Implementing."},
+                "escalate": {"action": "stop", "message": "Escalating."},
+            },
+        }
+        f = _write_yaml(tmp_path / "wf.yaml", data)
+        wf = load_workflow(f)
+        assert wf.steps["classify"].on_result is not None
+        assert isinstance(wf.steps["classify"].on_result, StepResultRoute)
+        assert wf.steps["classify"].on_result.field == "restart_scope"
+        assert wf.steps["classify"].on_result.routes == {
+            "full_restart": "investigate",
+            "partial_restart": "implement",
+        }
+
+    # T_OR2
+    def test_on_result_and_on_success_mutually_exclusive(self, tmp_path: Path) -> None:
+        """Having both on_result and on_success is a validation error."""
+        data = {
+            "name": "conflict-wf",
+            "description": "Both on_result and on_success",
+            "steps": {
+                "classify": {
+                    "tool": "classify_fix",
+                    "on_result": {
+                        "field": "restart_scope",
+                        "routes": {"full_restart": "done"},
+                    },
+                    "on_success": "done",
+                    "on_failure": "escalate",
+                },
+                "done": {"action": "stop", "message": "Done."},
+                "escalate": {"action": "stop", "message": "Escalating."},
+            },
+        }
+        f = _write_yaml(tmp_path / "wf.yaml", data)
+        wf = load_workflow(f)
+        errors = validate_workflow(wf)
+        assert any("on_result" in e and "on_success" in e for e in errors)
+
+    # T_OR3
+    def test_on_result_empty_field_rejected(self, tmp_path: Path) -> None:
+        """on_result.field must be non-empty."""
+        data = {
+            "name": "empty-field-wf",
+            "description": "Empty on_result field",
+            "steps": {
+                "classify": {
+                    "tool": "classify_fix",
+                    "on_result": {
+                        "field": "",
+                        "routes": {"a": "done"},
+                    },
+                },
+                "done": {"action": "stop", "message": "Done."},
+            },
+        }
+        f = _write_yaml(tmp_path / "wf.yaml", data)
+        wf = load_workflow(f)
+        errors = validate_workflow(wf)
+        assert any("field" in e.lower() for e in errors)
+
+    # T_OR4
+    def test_on_result_empty_routes_rejected(self, tmp_path: Path) -> None:
+        """on_result.routes must be non-empty."""
+        data = {
+            "name": "empty-routes-wf",
+            "description": "Empty on_result routes",
+            "steps": {
+                "classify": {
+                    "tool": "classify_fix",
+                    "on_result": {
+                        "field": "restart_scope",
+                        "routes": {},
+                    },
+                },
+                "done": {"action": "stop", "message": "Done."},
+            },
+        }
+        f = _write_yaml(tmp_path / "wf.yaml", data)
+        wf = load_workflow(f)
+        errors = validate_workflow(wf)
+        assert any("routes" in e.lower() for e in errors)
+
+    # T_OR5
+    def test_on_result_route_targets_validated(self, tmp_path: Path) -> None:
+        """on_result route targets must reference existing steps or 'done'."""
+        data = {
+            "name": "bad-route-wf",
+            "description": "Bad on_result route target",
+            "steps": {
+                "classify": {
+                    "tool": "classify_fix",
+                    "on_result": {
+                        "field": "restart_scope",
+                        "routes": {
+                            "full_restart": "nonexistent",
+                            "partial_restart": "done",
+                        },
+                    },
+                },
+                "escalate": {"action": "stop", "message": "Escalating."},
+            },
+        }
+        f = _write_yaml(tmp_path / "wf.yaml", data)
+        wf = load_workflow(f)
+        errors = validate_workflow(wf)
+        assert any("nonexistent" in e for e in errors)
+
+    # T_OR6
+    def test_on_result_route_done_is_valid(self, tmp_path: Path) -> None:
+        """on_result route target 'done' is accepted."""
+        data = {
+            "name": "done-route-wf",
+            "description": "Route to done",
+            "steps": {
+                "classify": {
+                    "tool": "classify_fix",
+                    "on_result": {
+                        "field": "restart_scope",
+                        "routes": {
+                            "full_restart": "done",
+                            "partial_restart": "done",
+                        },
+                    },
+                    "on_failure": "escalate",
+                },
+                "escalate": {"action": "stop", "message": "Escalating."},
+            },
+        }
+        f = _write_yaml(tmp_path / "wf.yaml", data)
+        wf = load_workflow(f)
+        errors = validate_workflow(wf)
+        assert errors == []
+
+    # T_OR7
+    def test_on_result_with_on_failure_valid(self, tmp_path: Path) -> None:
+        """on_result + on_failure together is valid (on_failure is the fallback)."""
+        data = {
+            "name": "valid-combo-wf",
+            "description": "on_result with on_failure",
+            "steps": {
+                "classify": {
+                    "tool": "classify_fix",
+                    "on_result": {
+                        "field": "restart_scope",
+                        "routes": {
+                            "full_restart": "investigate",
+                            "partial_restart": "implement",
+                        },
+                    },
+                    "on_failure": "escalate",
+                },
+                "investigate": {"action": "stop", "message": "Investigating."},
+                "implement": {"action": "stop", "message": "Implementing."},
+                "escalate": {"action": "stop", "message": "Escalating."},
+            },
+        }
+        f = _write_yaml(tmp_path / "wf.yaml", data)
+        wf = load_workflow(f)
+        errors = validate_workflow(wf)
+        assert errors == []
+
+    # T_OR9
+    def test_on_result_defaults_to_none(self, tmp_path: Path) -> None:
+        """Steps without on_result have on_result=None."""
+        f = _write_yaml(tmp_path / "wf.yaml", VALID_WORKFLOW)
+        wf = load_workflow(f)
+        assert wf.steps["run_tests"].on_result is None

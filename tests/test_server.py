@@ -775,6 +775,29 @@ class TestValidateScript:
         assert "error" in result
         assert "yaml" in result["error"].lower() or "YAML" in result["error"]
 
+    # T_OR10
+    @pytest.mark.asyncio
+    async def test_validate_script_with_on_result(self, tmp_path):
+        """validate_script correctly validates on_result blocks."""
+        script = tmp_path / "good.yaml"
+        script.write_text(
+            "name: result-script\n"
+            "description: Uses on_result\n"
+            "steps:\n"
+            "  classify:\n"
+            "    tool: classify_fix\n"
+            "    on_result:\n"
+            "      field: restart_scope\n"
+            "      routes:\n"
+            "        full_restart: done\n"
+            "        partial_restart: done\n"
+            "  done:\n"
+            "    action: stop\n"
+            '    message: "Done."\n'
+        )
+        result = json.loads(await validate_script(script_path=str(script)))
+        assert result["valid"] is True
+
 
 class TestToolSchemas:
     """Regression guard: tool descriptions must not contain legacy terminology."""

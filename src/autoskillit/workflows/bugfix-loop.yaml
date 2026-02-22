@@ -75,8 +75,11 @@ steps:
     with:
       worktree_path: ${{ inputs.test_dir }}
       base_branch: ${{ inputs.base_branch }}
-    note: If full_restart, go back to investigate. If partial_restart, go back to implement.
-    on_success: merge
+    on_result:
+      field: restart_scope
+      routes:
+        full_restart: investigate
+        partial_restart: implement
     on_failure: escalate
 
   merge:

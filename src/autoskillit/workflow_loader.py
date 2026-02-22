@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,14 @@ class StepRetry:
 
 
 @dataclass
+class StepResultRoute:
+    """Multi-way routing based on a named field in a tool's JSON response."""
+
+    field: str
+    routes: dict[str, str] = dataclasses.field(default_factory=dict)
+
+
+@dataclass
 class WorkflowStep:
     tool: str | None = None
     action: str | None = None
@@ -33,6 +42,7 @@ class WorkflowStep:
     with_args: dict[str, str] = field(default_factory=dict)
     on_success: str | None = None
     on_failure: str | None = None
+    on_result: StepResultRoute | None = None
     retry: StepRetry | None = None
     message: str | None = None
     note: str | None = None
@@ -106,6 +116,22 @@ def validate_workflow(wf: Workflow) -> list[str]:
                 f"Step '{step_name}'.retry.on references unknown response field "
                 f"'{step.retry.on}'. Valid fields: {sorted(RETRY_RESPONSE_FIELDS)}"
             )
+        if step.on_result is not None:
+            if step.on_success is not None:
+                errors.append(
+                    f"Step '{step_name}' has both 'on_result' and 'on_success'; "
+                    f"they are mutually exclusive."
+                )
+            if not step.on_result.field:
+                errors.append(f"Step '{step_name}'.on_result.field must be non-empty.")
+            if not step.on_result.routes:
+                errors.append(f"Step '{step_name}'.on_result.routes must be non-empty.")
+            for value, target in step.on_result.routes.items():
+                if target not in step_names and target != "done":
+                    errors.append(
+                        f"Step '{step_name}'.on_result.routes.{value} references "
+                        f"unknown step '{target}'."
+                    )
 
     input_names = set(wf.inputs.keys())
     for step_name, step in wf.steps.items():
@@ -179,6 +205,14 @@ def _parse_step(data: dict[str, Any]) -> WorkflowStep:
             on_exhausted=retry_data.get("on_exhausted", "escalate"),
         )
 
+    on_result = None
+    on_result_data = data.get("on_result")
+    if isinstance(on_result_data, dict):
+        on_result = StepResultRoute(
+            field=on_result_data.get("field", ""),
+            routes=on_result_data.get("routes", {}),
+        )
+
     return WorkflowStep(
         tool=data.get("tool"),
         action=data.get("action"),
@@ -186,6 +220,7 @@ def _parse_step(data: dict[str, Any]) -> WorkflowStep:
         with_args=data.get("with", {}),
         on_success=data.get("on_success"),
         on_failure=data.get("on_failure"),
+        on_result=on_result,
         retry=retry,
         message=data.get("message"),
         note=data.get("note"),

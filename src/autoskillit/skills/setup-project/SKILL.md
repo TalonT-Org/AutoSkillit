@@ -1,6 +1,6 @@
 ---
 name: setup-project
-description: Explore a target project and generate tailored skill scripts and config through an interactive workflow. Use when user wants to onboard a new project to AutoSkillit, says "setup project", or wants a starting point config.
+description: Explore a target project and generate tailored pipeline scripts and config through an interactive workflow. Use when user wants to onboard a new project to AutoSkillit, says "setup project", or wants a starting point config.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -12,12 +12,12 @@ hooks:
 
 # Setup Project Skill
 
-Explore a target project and generate tailored skill scripts and AutoSkillit config through an interactive, workflow-first UX.
+Explore a target project and generate tailored pipeline scripts and AutoSkillit config through an interactive, workflow-first UX.
 
 ## When to Use
 
 - User wants to onboard a new project to AutoSkillit
-- User passes a project path and wants ready-to-use skill scripts
+- User passes a project path and wants ready-to-use pipeline scripts
 - User has no `.autoskillit/config.yaml` and wants a starting point
 
 ## Arguments
@@ -45,7 +45,7 @@ Explore a target project and generate tailored skill scripts and AutoSkillit con
 - Detect language, test framework, build system, and CI from actual files
 - Present candidate workflows one by one for user approval before generating scripts
 - Show a summary confirmation gate before writing anything to disk
-- Use the two-directory model (project_dir + work_dir) in generated skill scripts
+- Use the two-directory model (project_dir + work_dir) in generated pipeline scripts
 
 ## Workflow
 
@@ -55,7 +55,7 @@ Extract `project_dir` from the prompt. Invocation: `/autoskillit:setup-project {
 
 Then prompt the user:
 
-> "Would you like me to also scan your Claude Code conversation history for this project to identify recurring patterns that could become skill scripts?"
+> "Would you like me to also scan your Claude Code conversation history for this project to identify recurring patterns that could become pipeline scripts?"
 
 Store the answer for Step 1.
 
@@ -120,7 +120,7 @@ Consolidate subagent findings into a structured profile:
 - Whether a reset mechanism exists (Taskfile `clean` target, npm script, etc.)
 - Existing config state (none / partial / complete)
 - Current git branch (for `base_branch` default)
-- Discovered workflow patterns from conversation history (if opted in) — recurring tool sequences and skill chains, ranked by frequency, with candidate skill script drafts
+- Discovered workflow patterns from conversation history (if opted in) — recurring tool sequences and skill chains, ranked by frequency, with candidate pipeline script drafts
 
 ### Step 3: Write Analysis to temp/
 
@@ -194,7 +194,7 @@ Following the Terraform plan→apply pattern, show a summary of everything appro
 4. Ask one final question: "Write all of the above?"
 5. If confirmed:
    - Create target directories as needed
-   - Write all approved skill scripts to their chosen paths
+   - Write all approved pipeline scripts to their chosen paths
    - Apply all approved config changes
 6. If declined: abort without writing anything
 

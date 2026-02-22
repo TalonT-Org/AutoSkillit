@@ -1161,6 +1161,11 @@ async def validate_script(script_path: str) -> str:
     The /autoskillit:make-script-skill skill calls this tool automatically
     after generating a script.
 
+    IMPORTANT: Pipeline scripts are NOT slash commands. They cannot be invoked
+    as /autoskillit:<name>. They are loaded via load_skill_script and executed
+    step-by-step by the agent. Scripts live in .autoskillit/scripts/
+    as .yaml files.
+
     This tool is always available (not gated by enable_tools).
 
     Args:

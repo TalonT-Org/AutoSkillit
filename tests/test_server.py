@@ -850,18 +850,14 @@ class TestToolSchemas:
         from autoskillit.server import mcp as server
 
         tools = {
-            c.name: c
-            for c in server._local_provider._components.values()
-            if isinstance(c, Tool)
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
         }
         for tool_name, required_terms in self.REQUIRED_CROSS_REFS.items():
             tool = tools.get(tool_name)
             assert tool is not None, f"Tool '{tool_name}' not found in server"
             desc = tool.description or ""
             for term in required_terms:
-                assert term in desc, (
-                    f"Tool '{tool_name}' description must reference '{term}'"
-                )
+                assert term in desc, f"Tool '{tool_name}' description must reference '{term}'"
 
     def test_classify_fix_docstring_has_routing_guidance(self):
         """classify_fix must explain what to do with each return value."""
@@ -870,9 +866,7 @@ class TestToolSchemas:
         from autoskillit.server import mcp as server
 
         tools = {
-            c.name: c
-            for c in server._local_provider._components.values()
-            if isinstance(c, Tool)
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
         }
         desc = tools["classify_fix"].description or ""
         # Must mention both routing outcomes
@@ -888,9 +882,7 @@ class TestToolSchemas:
         from autoskillit.server import mcp as server
 
         tools = {
-            c.name: c
-            for c in server._local_provider._components.values()
-            if isinstance(c, Tool)
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
         }
         script_tools = ["list_skill_scripts", "load_skill_script", "validate_script"]
         for tool_name in script_tools:

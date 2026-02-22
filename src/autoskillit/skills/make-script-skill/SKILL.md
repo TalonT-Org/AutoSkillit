@@ -20,6 +20,33 @@ Format a workflow into a YAML pipeline script following the workflow schema.
 
 No positional arguments. The skill prompts interactively for workflow details.
 
+## Critical Constraints
+
+**NEVER:**
+- Create SKILL.md files (not in `.claude/commands/`, `.claude/skills/`, or anywhere else)
+- Create Markdown companion files alongside the YAML script
+- Create files outside `.autoskillit/scripts/` directory
+- Tell the user to run a script with `/autoskillit:<name>` syntax
+
+**ALWAYS:**
+- Save the script to `.autoskillit/scripts/{name}.yaml` as the ONLY output
+- Call `validate_script` after saving and fix any errors
+- Use "pipeline script" terminology (not "skill script")
+
+## How Scripts Are Loaded
+
+Pipeline scripts have their own discovery and invocation mechanism — completely
+separate from the skill system. You do not need to create anything else for the
+script to be usable. The lifecycle is:
+
+1. **You save** the YAML file to `.autoskillit/scripts/{name}.yaml`
+2. **The user discovers it** via `list_skill_scripts` MCP tool (lists all scripts in that directory)
+3. **The user loads it** via `load_skill_script("{name}")` MCP tool (returns raw YAML)
+4. **An agent executes it** by interpreting the YAML steps and calling MCP tools directly
+
+No SKILL.md, no slash command registration, no Markdown companion file — the YAML file
+in `.autoskillit/scripts/` is the only artifact needed. The MCP tools handle everything else.
+
 ## The Script Format
 
 Every generated script MUST follow the workflow YAML schema:
@@ -389,7 +416,7 @@ steps:
     message: "Human intervention needed. Review the latest output for details."
 ```
 
-## Converting Markdown Pipeline Scripts
+## Converting Legacy Markdown Commands to YAML
 
 When converting old `.claude/commands/` or `.claude/skills/` Markdown pipeline scripts to YAML:
 

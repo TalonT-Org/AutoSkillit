@@ -129,9 +129,7 @@ class TestSkillResolver:
                 missing.append("**ALWAYS:** block")
             if missing:
                 failures.append(f"  {skill_name}: missing {', '.join(missing)}")
-        assert not failures, (
-            "SKILL.md structural contract violated:\n" + "\n".join(failures)
-        )
+        assert not failures, "SKILL.md structural contract violated:\n" + "\n".join(failures)
 
     def test_file_producing_skills_have_output_guard(self) -> None:
         """File-producing skills must have a negative output constraint in NEVER block."""
@@ -149,9 +147,7 @@ class TestSkillResolver:
             skill_md = bd / skill_name / "SKILL.md"
             content = skill_md.read_text()
             # Extract NEVER block: from **NEVER:** to the next ** or ## heading
-            never_match = re.search(
-                r"\*\*NEVER:\*\*(.*?)(?=\n\*\*|\n##)", content, re.DOTALL
-            )
+            never_match = re.search(r"\*\*NEVER:\*\*(.*?)(?=\n\*\*|\n##)", content, re.DOTALL)
             if never_match is None:
                 failures.append(f"  {skill_name}: no **NEVER:** block found")
                 continue
@@ -161,9 +157,7 @@ class TestSkillResolver:
                     f"  {skill_name}: NEVER block missing "
                     f"'Create files outside' constraint for {output_dir}"
                 )
-        assert not failures, (
-            "File-producing skills missing output guard:\n" + "\n".join(failures)
-        )
+        assert not failures, "File-producing skills missing output guard:\n" + "\n".join(failures)
 
     def test_skill_md_frontmatter_matches_directory(self) -> None:
         """SKILL.md frontmatter name: field must match its directory name."""
@@ -186,6 +180,4 @@ class TestSkillResolver:
                     f"  {skill_name}: frontmatter name '{data['name']}' "
                     f"!= directory name '{skill_name}'"
                 )
-        assert not failures, (
-            "SKILL.md frontmatter/directory mismatch:\n" + "\n".join(failures)
-        )
+        assert not failures, "SKILL.md frontmatter/directory mismatch:\n" + "\n".join(failures)

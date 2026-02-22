@@ -136,6 +136,7 @@ Before writing the final plan, verify:
 - Change any code
 - Choose an approach because it's easier
 - Reject an approach because it's harder
+- Create files outside `temp/make-plan/` directory
 
 **ALWAYS:**
 - Write to `temp/make-plan/` directory

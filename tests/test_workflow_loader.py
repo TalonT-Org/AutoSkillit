@@ -351,9 +351,7 @@ class TestWorkflowLoader:
             },
         }
         wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
-        assert wf.steps["run"].capture == {
-            "worktree_path": "${{ result.worktree_path }}"
-        }
+        assert wf.steps["run"].capture == {"worktree_path": "${{ result.worktree_path }}"}
 
     # CAP2
     def test_capture_defaults_empty(self, tmp_path: Path) -> None:

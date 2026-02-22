@@ -527,7 +527,7 @@ def workflows_show(name: str):
 
 
 def _prompt_test_command() -> list[str]:
-    default = "pytest -v"
+    default = "task test-all"
     answer = input(f"Test command [{default}]: ").strip()
     return (answer if answer else default).split()
 

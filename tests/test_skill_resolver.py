@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import yaml
+
 from autoskillit.skill_resolver import SkillResolver, bundled_skills_dir
 from autoskillit.types import SkillSource
 
@@ -84,7 +86,7 @@ class TestSkillResolver:
 
     def test_skill_md_yaml_examples_are_valid_workflows(self) -> None:
         """YAML workflow examples embedded in SKILL.md files must pass validation."""
-        import yaml
+        import yaml as _yaml
 
         import autoskillit
         from autoskillit.workflow_loader import _parse_workflow, validate_workflow
@@ -102,7 +104,7 @@ class TestSkillResolver:
                 # Skip format templates that use {placeholder} syntax
                 if "{script-name}" in block or "{mcp_tool_name}" in block:
                     continue
-                data = yaml.safe_load(block)
+                data = _yaml.safe_load(block)
                 if not isinstance(data, dict) or "steps" not in data:
                     continue
                 wf = _parse_workflow(data)
@@ -110,3 +112,80 @@ class TestSkillResolver:
                 assert not errors, (
                     f"{skill_md.parent.name}/SKILL.md has invalid YAML example:\n  {errors}"
                 )
+
+    def test_skill_md_has_critical_constraints(self) -> None:
+        """Every SKILL.md must have Critical Constraints with NEVER and ALWAYS blocks."""
+        bd = bundled_skills_dir()
+        failures: list[str] = []
+        for skill_md in bd.rglob("SKILL.md"):
+            skill_name = skill_md.parent.name
+            content = skill_md.read_text()
+            missing: list[str] = []
+            if not re.search(r"^##\s+.*Critical Constraints", content, re.MULTILINE):
+                missing.append("## Critical Constraints heading")
+            if "**NEVER:**" not in content:
+                missing.append("**NEVER:** block")
+            if "**ALWAYS:**" not in content:
+                missing.append("**ALWAYS:** block")
+            if missing:
+                failures.append(f"  {skill_name}: missing {', '.join(missing)}")
+        assert not failures, (
+            "SKILL.md structural contract violated:\n" + "\n".join(failures)
+        )
+
+    def test_file_producing_skills_have_output_guard(self) -> None:
+        """File-producing skills must have a negative output constraint in NEVER block."""
+        FILE_PRODUCING_SKILLS = {
+            "investigate": "temp/investigate/",
+            "make-plan": "temp/make-plan/",
+            "make-script-skill": ".autoskillit/scripts/",
+            "rectify": "temp/rectify/",
+            "review-approach": "temp/review-approach/",
+            "setup-project": "temp/setup-project/",
+        }
+        bd = bundled_skills_dir()
+        failures: list[str] = []
+        for skill_name, output_dir in FILE_PRODUCING_SKILLS.items():
+            skill_md = bd / skill_name / "SKILL.md"
+            content = skill_md.read_text()
+            # Extract NEVER block: from **NEVER:** to the next ** or ## heading
+            never_match = re.search(
+                r"\*\*NEVER:\*\*(.*?)(?=\n\*\*|\n##)", content, re.DOTALL
+            )
+            if never_match is None:
+                failures.append(f"  {skill_name}: no **NEVER:** block found")
+                continue
+            never_block = never_match.group(1).lower()
+            if "create files outside" not in never_block:
+                failures.append(
+                    f"  {skill_name}: NEVER block missing "
+                    f"'Create files outside' constraint for {output_dir}"
+                )
+        assert not failures, (
+            "File-producing skills missing output guard:\n" + "\n".join(failures)
+        )
+
+    def test_skill_md_frontmatter_matches_directory(self) -> None:
+        """SKILL.md frontmatter name: field must match its directory name."""
+        bd = bundled_skills_dir()
+        failures: list[str] = []
+        for skill_md in bd.rglob("SKILL.md"):
+            skill_name = skill_md.parent.name
+            content = skill_md.read_text()
+            # Parse YAML frontmatter between --- delimiters
+            fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
+            if fm_match is None:
+                failures.append(f"  {skill_name}: no YAML frontmatter found")
+                continue
+            data = yaml.safe_load(fm_match.group(1))
+            if not isinstance(data, dict) or "name" not in data:
+                failures.append(f"  {skill_name}: frontmatter missing 'name' field")
+                continue
+            if data["name"] != skill_name:
+                failures.append(
+                    f"  {skill_name}: frontmatter name '{data['name']}' "
+                    f"!= directory name '{skill_name}'"
+                )
+        assert not failures, (
+            "SKILL.md frontmatter/directory mismatch:\n" + "\n".join(failures)
+        )

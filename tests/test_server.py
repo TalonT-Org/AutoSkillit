@@ -881,6 +881,26 @@ class TestToolSchemas:
         # Must mention at least one skill as routing target
         assert "investigate" in desc or "implement" in desc
 
+    def test_script_tools_have_disambiguation(self):
+        """All script-related tools must carry the 'NOT slash commands' disclaimer."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c
+            for c in server._local_provider._components.values()
+            if isinstance(c, Tool)
+        }
+        script_tools = ["list_skill_scripts", "load_skill_script", "validate_script"]
+        for tool_name in script_tools:
+            tool = tools.get(tool_name)
+            assert tool is not None, f"Tool '{tool_name}' not found"
+            desc = tool.description or ""
+            assert "NOT slash commands" in desc, (
+                f"Tool '{tool_name}' must contain 'NOT slash commands' disclaimer"
+            )
+
 
 class TestResetGuard:
     """Marker-file-based reset guard for destructive operations."""

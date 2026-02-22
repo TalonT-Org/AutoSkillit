@@ -67,6 +67,80 @@ steps:
 - **Retry blocks**: optional, specify `max_attempts`, `on` (condition field), `on_exhausted` (step name)
 - **Summary**: one line, use `>` to chain steps (e.g., "plan > verify > implement > test > merge")
 
+## Complete Schema Reference
+
+### Top-Level Fields
+
+| Field | Required | Type | Notes |
+|-------|----------|------|-------|
+| `name` | Yes | string | Unique identifier; validation fails if empty |
+| `description` | Yes | string | Human-readable, shown in listings |
+| `summary` | Yes | string | Pipeline chain shown in `list_skill_scripts` output |
+| `inputs` | No | mapping | Omit if the script has no configurable values |
+| `steps` | Yes | mapping | At least one step required |
+
+### Input Fields
+
+| Field | Required | Default | Notes |
+|-------|----------|---------|-------|
+| `description` | No | `""` | What this input is for |
+| `required` | No | `false` | Whether the agent must prompt for it |
+| `default` | No | `null` | Value used when not provided |
+
+### Tool Step Fields
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `tool` | Yes (xor `action`) | MCP tool name (see Tool Reference below) |
+| `with` | No | Arguments passed to the tool; values support `${{ inputs.X }}` |
+| `on_success` | No | Step name to route to on success, or `"done"` |
+| `on_failure` | No | Step name to route to on failure |
+| `retry` | No | Retry block (see below) |
+| `note` | No | Human-readable annotation for the agent; not executed |
+
+### Terminal Step Fields
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `action` | Yes (xor `tool`) | Must be `"stop"` |
+| `message` | Yes | Displayed to the agent when this step is reached |
+
+### Retry Block Fields
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `max_attempts` | `3` | How many times to retry before giving up |
+| `on` | `null` | Response field to check. Valid values: `exit_code`, `is_error`, `needs_retry`, `result`, `retry_reason`, `session_id`, `subtype` |
+| `on_exhausted` | `"escalate"` | Step name to jump to when retries run out |
+
+### Validation Rules
+
+The system validates scripts against these rules:
+1. `name` must be non-empty
+2. `steps` must contain at least one step
+3. Each step must have exactly one of `tool` or `action` (not both, not neither)
+4. Terminal steps (`action: stop`) must have a `message`
+5. `on_success` and `on_failure` targets must reference a step name defined in the file, or the literal `"done"`
+6. `retry.on_exhausted` must reference a defined step name
+7. `retry.on` must be one of the valid response fields listed above
+8. All `${{ inputs.X }}` references must match a declared input name
+
+## MCP Tool Reference
+
+Available tools for use in `tool:` fields:
+
+| Tool | Arguments (`with:`) | Purpose |
+|------|---------------------|---------|
+| `run_skill` | `skill_command`, `cwd`, `add_dir` (optional) | Run a Claude Code headless session with a skill |
+| `run_skill_retry` | `skill_command`, `cwd` | Run headless with retry detection (`needs_retry` field) |
+| `test_check` | `worktree_path` | Run test suite, returns PASS/FAIL |
+| `merge_worktree` | `worktree_path`, `base_branch` | Merge after test gate |
+| `reset_test_dir` | `test_dir`, `force` (optional, default false) | Clear test directory (requires reset guard marker) |
+| `classify_fix` | `worktree_path`, `base_branch` | Analyze diff for restart scope (full vs partial) |
+| `reset_workspace` | `test_dir` | Reset workspace, preserving configured directories |
+| `run_cmd` | `cmd`, `cwd`, `timeout` (optional) | Execute arbitrary shell command |
+| `validate_script` | `script_path` | Validate a script file against the workflow schema |
+
 ## Example: Standard Implementation Pipeline
 
 This is the reference format. All generated scripts should match this style:
@@ -89,6 +163,12 @@ inputs:
   base_branch:
     description: Branch to merge into
     default: main
+  plan_path:
+    description: Path to the plan file (set by orchestrator after plan step)
+    required: true
+  worktree_path:
+    description: Path to the worktree (set by orchestrator after implement step)
+    required: true
 
 steps:
   plan:
@@ -149,6 +229,139 @@ steps:
     message: "Failed — human intervention needed."
 ```
 
+## Example: Loop with Fix Step
+
+A condensed bugfix loop showing retry, classify, and routing patterns:
+
+```yaml
+name: bugfix-loop
+description: Test, fix, and merge with automatic retry.
+summary: test > investigate > plan > implement > verify > merge
+
+inputs:
+  test_dir:
+    description: Directory containing the project to test
+    required: true
+  base_branch:
+    description: Branch to merge fixes into
+    default: main
+  helper_dir:
+    description: Directory for helper agent sessions
+    required: true
+
+steps:
+  test:
+    tool: test_check
+    with:
+      worktree_path: "${{ inputs.test_dir }}"
+    on_success: done
+    on_failure: investigate
+
+  investigate:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:investigate the test failures"
+      cwd: "${{ inputs.helper_dir }}"
+    on_success: plan
+    on_failure: escalate
+
+  plan:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:rectify the investigation findings"
+      cwd: "${{ inputs.helper_dir }}"
+    on_success: implement
+    on_failure: escalate
+
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:implement-worktree-no-merge the plan"
+      cwd: "${{ inputs.helper_dir }}"
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: escalate
+    on_success: verify
+    on_failure: escalate
+
+  verify:
+    tool: test_check
+    with:
+      worktree_path: "${{ inputs.test_dir }}"
+    on_success: merge
+    on_failure: classify
+    note: Re-test after implementation. If still failing, classify the fix scope.
+
+  classify:
+    tool: classify_fix
+    with:
+      worktree_path: "${{ inputs.test_dir }}"
+      base_branch: "${{ inputs.base_branch }}"
+    note: If full_restart, go back to investigate. If partial_restart, go back to implement.
+    on_success: merge
+    on_failure: escalate
+
+  merge:
+    tool: merge_worktree
+    with:
+      worktree_path: "${{ inputs.test_dir }}"
+      base_branch: "${{ inputs.base_branch }}"
+    on_success: done
+    on_failure: escalate
+
+  done:
+    action: stop
+    message: "All tests passing. Fix merged successfully."
+
+  escalate:
+    action: stop
+    message: "Human intervention needed. Review the latest output for details."
+```
+
+## Converting Markdown Pipeline Scripts
+
+When converting old `.claude/commands/` or `.claude/skills/` Markdown pipeline scripts to YAML:
+
+### Mapping Table
+
+| Markdown Pattern | YAML Equivalent |
+|------------------|-----------------|
+| `SETUP:` block with `var = value` | `inputs:` block with `description`, `required`, `default` |
+| Hardcoded paths in SETUP | `required: true` inputs (never hardcode paths) |
+| `PIPELINE:` numbered steps | `steps:` keyed by descriptive name |
+| `run_skill("/skill-name ...", cwd=...)` | `tool: run_skill` with `with: {skill_command: "...", cwd: "..."}` |
+| `run_skill_retry(...)` | `tool: run_skill_retry` with `retry:` block |
+| `→ ESCALATE` / prose failure routing | `on_failure: escalate` |
+| `PASS → next step` | `on_success: next_step` |
+| `FAIL → fix attempt` | `on_failure: fix` |
+| `Repeat up to 3x, then ESCALATE` | `retry: {max_attempts: 3, on: needs_retry, on_exhausted: escalate}` |
+| `IF condition:` branching | Multiple steps with `on_success`/`on_failure` routing |
+| `FOR each part:` loops | Not representable in YAML schema — add a `note:` explaining the loop for the agent |
+| Prose `Notes:` section | `note:` field on individual steps, or comments in YAML |
+| `AskUserQuestion` prompts | Not in schema — the agent handles prompting before executing the script |
+| `review_approach = false (optional)` | Input with `required: false` and `default: "false"` |
+| Local skill refs (bare `skill-name`) | Use `/autoskillit:make-plan` (namespaced) if calling bundled skills |
+
+### What Cannot Be Directly Represented
+
+Some Markdown patterns require agent interpretation rather than YAML structure:
+
+- **Multi-part plan loops** (`FOR each plan_part`): Add a `note:` to the implement step explaining that the agent should glob for plan parts and iterate
+- **Conditional steps** (`IF review_approach == true`): Use an input with a default and add a `note:` explaining the conditional
+- **Dynamic paths** (`${worktree_path}` extracted from tool output): The agent tracks these at runtime; use descriptive `note:` fields
+
+### Conversion Checklist
+
+1. Extract inputs from `SETUP:` block — remove hardcoded paths, make them `required: true`
+2. Map each numbered pipeline step to a named YAML step
+3. Identify which MCP tool each step calls (see Tool Reference above)
+4. Set `on_success` / `on_failure` routing for every tool step
+5. Add `retry:` blocks where the Markdown says "repeat" or "retry"
+6. Add terminal `done` and `escalate` steps
+7. Write a `summary:` line capturing the pipeline chain
+8. Add `note:` fields for agent-interpreted logic (loops, conditionals)
+
 ## Standalone Invocation Flow
 
 When called directly as `/autoskillit:make-script-skill`:
@@ -159,7 +372,8 @@ When called directly as `/autoskillit:make-script-skill`:
 4. Ask for inputs (what's configurable)
 5. Generate the script in the YAML format above
 6. Save to `.autoskillit/scripts/{name}.yaml` (create the directory if needed)
-7. Tell the user: "Saved to `.autoskillit/scripts/{name}.yaml`. Load it with `load_skill_script("{name}")` via the MCP tool."
+7. Call `validate_script` with the saved file path. If errors are returned, fix them and re-validate until clean.
+8. Tell the user: "Saved to `.autoskillit/scripts/{name}.yaml`. Load it with `load_skill_script("{name}")` via the MCP tool."
 
 ## CRITICAL: Scripts Are NOT Skills
 

@@ -81,3 +81,32 @@ class TestSkillResolver:
                     assert False, (
                         f"{skill_md.parent.name}/SKILL.md: /{name} should be /autoskillit:{name}"
                     )
+
+    def test_skill_md_yaml_examples_are_valid_workflows(self) -> None:
+        """YAML workflow examples embedded in SKILL.md files must pass validation."""
+        import yaml
+
+        import autoskillit
+        from autoskillit.workflow_loader import _parse_workflow, validate_workflow
+
+        skills_dir = Path(autoskillit.__file__).parent / "skills"
+        yaml_block_re = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
+
+        for skill_md in skills_dir.rglob("SKILL.md"):
+            content = skill_md.read_text()
+            for match in yaml_block_re.finditer(content):
+                block = match.group(1)
+                # Only validate blocks that look like full workflow definitions
+                if "steps:" not in block or "name:" not in block:
+                    continue
+                # Skip format templates that use {placeholder} syntax
+                if "{script-name}" in block or "{mcp_tool_name}" in block:
+                    continue
+                data = yaml.safe_load(block)
+                if not isinstance(data, dict) or "steps" not in data:
+                    continue
+                wf = _parse_workflow(data)
+                errors = validate_workflow(wf)
+                assert not errors, (
+                    f"{skill_md.parent.name}/SKILL.md has invalid YAML example:\n  {errors}"
+                )

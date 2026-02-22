@@ -813,6 +813,43 @@ async def load_skill_script(name: str) -> str:
     return content
 
 
+@mcp.tool(tags={"automation"})
+async def validate_script(script_path: str) -> str:
+    """Validate a pipeline script YAML file against the workflow schema.
+
+    Parses the file, checks all validation rules (name, steps, routing,
+    retry fields, input references), and returns structured results.
+    Use after generating or editing a script to confirm it is valid.
+
+    This tool is always available (not gated by enable_tools).
+
+    Args:
+        script_path: Absolute path to the .yaml script file to validate.
+    """
+    import yaml
+
+    from autoskillit.workflow_loader import _parse_workflow, validate_workflow
+
+    path = Path(script_path)
+    if not path.is_file():
+        return json.dumps({"error": f"File not found: {script_path}"})
+
+    try:
+        data = yaml.safe_load(path.read_text())
+    except yaml.YAMLError as exc:
+        return json.dumps({"error": f"YAML parse error: {exc}"})
+
+    if not isinstance(data, dict):
+        return json.dumps({"error": "File must contain a YAML mapping"})
+
+    wf = _parse_workflow(data)
+    errors = validate_workflow(wf)
+
+    if errors:
+        return json.dumps({"valid": False, "errors": errors})
+    return json.dumps({"valid": True, "errors": []})
+
+
 def _enable_tools_handler() -> None:
     """Set the tools-enabled flag. Extracted for testability."""
     global _tools_enabled

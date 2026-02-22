@@ -38,6 +38,7 @@ from autoskillit.server import (
     run_skill,
     run_skill_retry,
     test_check,
+    validate_script,
 )
 from autoskillit.types import MergeFailedStep, MergeState, RestartScope, RetryReason
 
@@ -534,7 +535,7 @@ class TestRunSkillRetryGate:
 
 
 class TestToolRegistration:
-    """All 10 tools are registered on the MCP server."""
+    """All 12 tools are registered on the MCP server."""
 
     def test_all_tools_exist(self):
         from fastmcp.tools import Tool
@@ -556,6 +557,7 @@ class TestToolRegistration:
             "list_skill_scripts",
             "load_skill_script",
             "autoskillit_status",
+            "validate_script",
         }
         assert expected == tool_names
 
@@ -705,6 +707,71 @@ class TestSkillScriptTools:
         result = json.loads(await list_skill_scripts())
         assert "errors" in result
         assert len(result["errors"]) == 1
+
+
+class TestValidateScript:
+    """Tests for ungated validate_script tool."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_tools(self):
+        """Verify this tool works WITHOUT tool activation."""
+        from autoskillit import server
+
+        server._tools_enabled = False
+        yield
+        server._tools_enabled = False
+
+    # VS1
+    @pytest.mark.asyncio
+    async def test_valid_script_returns_success(self, tmp_path):
+        """validate_script returns valid=true for a correct script."""
+        script = tmp_path / "good.yaml"
+        script.write_text(
+            "name: test\n"
+            "description: A test script\n"
+            "summary: a > b\n"
+            "steps:\n"
+            "  do_thing:\n"
+            "    tool: run_cmd\n"
+            "    with:\n"
+            "      cmd: echo hello\n"
+            "      cwd: .\n"
+            "    on_success: done\n"
+            "  done:\n"
+            "    action: stop\n"
+            '    message: "Done."\n'
+        )
+        result = json.loads(await validate_script(script_path=str(script)))
+        assert result["valid"] is True
+        assert result["errors"] == []
+
+    # VS2
+    @pytest.mark.asyncio
+    async def test_invalid_script_returns_errors(self, tmp_path):
+        """validate_script returns valid=false with errors for missing name."""
+        script = tmp_path / "bad.yaml"
+        script.write_text("description: Missing name\nsteps:\n  do_thing:\n    tool: run_cmd\n")
+        result = json.loads(await validate_script(script_path=str(script)))
+        assert result["valid"] is False
+        assert any("name" in e for e in result["errors"])
+
+    # VS3
+    @pytest.mark.asyncio
+    async def test_nonexistent_file_returns_error(self):
+        """validate_script returns error for nonexistent file."""
+        result = json.loads(await validate_script(script_path="/nonexistent/path.yaml"))
+        assert "error" in result
+        assert "not found" in result["error"].lower() or "File not found" in result["error"]
+
+    # VS4
+    @pytest.mark.asyncio
+    async def test_malformed_yaml_returns_error(self, tmp_path):
+        """validate_script returns error for unparseable YAML."""
+        script = tmp_path / "broken.yaml"
+        script.write_text("key: [\n  unclosed\n")
+        result = json.loads(await validate_script(script_path=str(script)))
+        assert "error" in result
+        assert "yaml" in result["error"].lower() or "YAML" in result["error"]
 
 
 class TestToolSchemas:
@@ -1404,7 +1471,7 @@ class TestGatedToolAccess:
         assert prompt_names == {"enable_tools", "disable_tools"}
 
     def test_all_tools_still_registered(self):
-        """All 11 tools remain registered (gated + ungated)."""
+        """All 12 tools remain registered (gated + ungated)."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -1423,6 +1490,7 @@ class TestGatedToolAccess:
             "reset_workspace",
             "list_skill_scripts",
             "load_skill_script",
+            "validate_script",
         }
         assert expected == tool_names
 

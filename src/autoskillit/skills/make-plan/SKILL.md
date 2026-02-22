@@ -122,6 +122,8 @@ Before writing the final plan, verify:
 
 ## Critical Constraints
 
+**NEVER use EnterPlanMode.** This skill IS the planning process. Execute the planning steps directly — explore with subagents, design the approach, write the plan file to `temp/make-plan/`. Do not enter plan mode, do not call ExitPlanMode. Just do the work and deliver the plan.
+
 **NEVER include:**
 - Multiple alternative approaches (recommend ONE only)
 - Stakeholder sections

@@ -12,16 +12,29 @@ Requires Python 3.11+.
 
 ## Quick Start
 
-### 1. Install and load as a plugin
+### 1. Install the package
 
 ```bash
 pip install -e /path/to/autoskillit
+```
+
+### 2. Register the plugin
+
+```bash
+autoskillit install              # persistent plugin (recommended)
+```
+
+This registers a local marketplace and installs the plugin via `claude plugin install`. The plugin loads automatically in every Claude Code session — no `--plugin-dir` flag needed. After updating autoskillit, re-run `autoskillit install` to refresh the cache.
+
+> **Note:** Do **not** also run `claude mcp add autoskillit ...` — the plugin already registers the MCP server. Adding a standalone entry creates a duplicate server process.
+
+For one-off sessions without persistent installation, you can use:
+
+```bash
 claude --plugin-dir $(python -c "import autoskillit; print(autoskillit.__path__[0])")
 ```
 
-The `--plugin-dir` flag loads the plugin, which registers both skills (as `/autoskillit:*` slash commands) and MCP tools (via the bundled `.mcp.json`).
-
-### 2. Configure for your project
+### 3. Configure for your project
 
 ```bash
 cd your-project
@@ -29,15 +42,14 @@ autoskillit init                              # prompts for test command
 autoskillit init --test-command "pytest -v"   # non-interactive
 ```
 
-This creates `.autoskillit/config.yaml` and prints the plugin directory path. Use `--force` to overwrite an existing config.
+This creates `.autoskillit/config.yaml`. Use `--force` to overwrite an existing config.
 
-### 3. Enable tools in session
+### 4. Enable tools in session
 
-All tools are disabled by default. Activate them by typing:
+All tools are disabled by default. Activate them by typing the enable prompt shown by `autoskillit doctor` or in the MCP tool list. The prompt name depends on how the plugin was loaded:
 
-```
-/mcp__autoskillit__enable_tools
-```
+- Plugin install: `/mcp__plugin_autoskillit_autoskillit__enable_tools`
+- `--plugin-dir`: `/mcp__autoskillit__enable_tools`
 
 This uses MCP prompts (user-only, model cannot invoke) and survives `--dangerously-skip-permissions`.
 

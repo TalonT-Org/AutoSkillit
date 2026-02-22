@@ -90,7 +90,10 @@ def init(
 
     print("\nReady! Start Claude Code and enable tools:")
     print("  claude")
-    print("  /mcp__autoskillit__enable_tools")
+    if _is_plugin_installed():
+        print("  /mcp__plugin_autoskillit_autoskillit__enable_tools")
+    else:
+        print("  /mcp__autoskillit__enable_tools")
 
 
 _VALID_SCOPES = {"user", "project", "local"}
@@ -233,6 +236,19 @@ def update():
         print("No built-in workflows found.")
 
 
+def _is_plugin_installed() -> bool:
+    """Check if autoskillit is installed as a Claude Code plugin."""
+    settings_path = Path.home() / ".claude" / "settings.json"
+    if not settings_path.is_file():
+        return False
+    try:
+        data = json.loads(settings_path.read_text())
+        enabled = data.get("enabledPlugins", {})
+        return any(key.startswith("autoskillit@") for key in enabled if enabled[key])
+    except (json.JSONDecodeError, AttributeError):
+        return False
+
+
 @app.command
 def doctor(*, output_json: bool = False):
     """Check project setup for common issues.
@@ -246,12 +262,14 @@ def doctor(*, output_json: bool = False):
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
     stale_servers: list[str] = []
+    has_standalone_autoskillit = False
     claude_json = Path.home() / ".claude.json"
     if claude_json.is_file():
         data = json.loads(claude_json.read_text())
         servers = data.get("mcpServers", {})
         for name, entry in servers.items():
             if name == "autoskillit":
+                has_standalone_autoskillit = True
                 continue
             cmd = entry.get("command", "")
             if not cmd:
@@ -273,6 +291,32 @@ def doctor(*, output_json: bool = False):
     else:
         results.append(
             DoctorResult(Severity.OK, "stale_mcp_servers", "No stale MCP servers detected")
+        )
+
+    # Check 1b: Duplicate autoskillit — standalone entry alongside plugin install
+    plugin_installed = _is_plugin_installed()
+    if has_standalone_autoskillit and plugin_installed:
+        results.append(
+            DoctorResult(
+                Severity.ERROR,
+                "duplicate_mcp_server",
+                "Standalone 'autoskillit' MCP server in ~/.claude.json duplicates "
+                "the plugin registration. This spawns two server processes per session. "
+                "Remove with: claude mcp remove autoskillit",
+            )
+        )
+    elif has_standalone_autoskillit and not plugin_installed:
+        results.append(
+            DoctorResult(
+                Severity.WARNING,
+                "duplicate_mcp_server",
+                "Standalone 'autoskillit' MCP server found in ~/.claude.json. "
+                "Consider using 'autoskillit install' for persistent plugin registration instead.",
+            )
+        )
+    else:
+        results.append(
+            DoctorResult(Severity.OK, "duplicate_mcp_server", "No duplicate MCP registrations")
         )
 
     # Check 2: Plugin metadata exists in package
@@ -529,7 +573,7 @@ def _print_next_steps() -> None:
     print("\nNext steps:")
     print("  1. cd into your project and run: autoskillit init")
     print("  2. Start Claude Code: claude")
-    print("  3. Enable tools: /mcp__autoskillit__enable_tools")
+    print("  3. Enable tools: /mcp__plugin_autoskillit_autoskillit__enable_tools")
 
 
 # --- Init helpers ---

@@ -268,7 +268,7 @@ class TestCLI:
     def test_doctor_ignores_healthy_coregistered_servers(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """doctor does not warn about legitimate co-registered MCP servers."""
+        """doctor does not warn about legitimate co-registered MCP servers (no standalone autoskillit)."""
         fake_claude_json = tmp_path / ".claude.json"
         fake_bin = tmp_path / "legit-server"
         fake_bin.write_text("#!/bin/sh\n")
@@ -278,7 +278,6 @@ class TestCLI:
                 {
                     "mcpServers": {
                         "other-server": {"type": "stdio", "command": str(fake_bin)},
-                        "autoskillit": {"type": "stdio", "command": "autoskillit"},
                     }
                 }
             )
@@ -423,6 +422,7 @@ class TestCLI:
         check_names = {r["check"] for r in data["results"]}
         expected = {
             "stale_mcp_servers",
+            "duplicate_mcp_server",
             "plugin_metadata",
             "autoskillit_on_path",
             "project_config",
@@ -447,6 +447,52 @@ class TestCLI:
         cli.doctor()
         captured = capsys.readouterr()
         assert "ERROR:" in captured.out
+
+    def test_doctor_detects_duplicate_with_plugin_installed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """doctor errors when standalone MCP entry exists alongside plugin installation."""
+        # Standalone entry in ~/.claude.json
+        fake_claude_json = tmp_path / ".claude.json"
+        fake_claude_json.write_text(
+            json.dumps(
+                {"mcpServers": {"autoskillit": {"type": "stdio", "command": "autoskillit"}}}
+            )
+        )
+        # Plugin enabled in ~/.claude/settings.json
+        settings_dir = tmp_path / ".claude"
+        settings_dir.mkdir(parents=True)
+        (settings_dir / "settings.json").write_text(
+            json.dumps({"enabledPlugins": {"autoskillit@autoskillit-local": True}})
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        dup_checks = [r for r in data["results"] if r["check"] == "duplicate_mcp_server"]
+        assert len(dup_checks) == 1
+        assert dup_checks[0]["severity"] == "error"
+        assert "duplicate" in dup_checks[0]["message"].lower()
+
+    def test_doctor_warns_standalone_without_plugin(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """doctor warns when standalone entry exists but no plugin is installed."""
+        fake_claude_json = tmp_path / ".claude.json"
+        fake_claude_json.write_text(
+            json.dumps(
+                {"mcpServers": {"autoskillit": {"type": "stdio", "command": "autoskillit"}}}
+            )
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        dup_checks = [r for r in data["results"] if r["check"] == "duplicate_mcp_server"]
+        assert len(dup_checks) == 1
+        assert dup_checks[0]["severity"] == "warning"
 
     # --- install ---
 

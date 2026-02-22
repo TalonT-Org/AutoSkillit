@@ -136,14 +136,16 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 | `list_skill_scripts` | List pipeline scripts from .autoskillit/scripts/ (ungated) |
 | `load_skill_script` | Load a script by name as raw YAML (ungated) |
 | `validate_script` | Validate a pipeline script against the workflow schema (ungated) |
-| `enable_tools` (prompt) | User-only activation — type `/mcp__autoskillit__enable_tools` |
-| `disable_tools` (prompt) | User-only deactivation — type `/mcp__autoskillit__disable_tools` |
+| `enable_tools` (prompt) | User-only activation — type the enable_tools prompt from the MCP prompt list |
+| `disable_tools` (prompt) | User-only deactivation — type the disable_tools prompt from the MCP prompt list |
 
 ### **Tool Activation**
 
 10 tools are gated by default. At the start of a session, the user must type
-`/mcp__autoskillit__enable_tools` to activate. This uses MCP prompts (user-only,
-model cannot invoke) and survives `--dangerously-skip-permissions`.
+the `enable_tools` prompt to activate. The exact prompt name is prefixed by
+Claude Code based on how the server was loaded (e.g. `plugin_autoskillit_autoskillit`
+for plugin installs). This uses MCP prompts (user-only, model cannot invoke)
+and survives `--dangerously-skip-permissions`.
 
 `autoskillit_status`, `list_skill_scripts`, `load_skill_script`, and `validate_script` are ungated — available without calling `enable_tools`.
 

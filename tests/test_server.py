@@ -1729,7 +1729,7 @@ class TestGatedToolAccess:
         assert error is not None
         parsed = json.loads(error)
         assert "error" in parsed
-        assert "mcp__autoskillit__enable_tools" in parsed["error"]
+        assert "enable_tools" in parsed["error"]
 
     def test_all_tools_tagged_automation(self):
         """All 8 tools have the 'automation' tag for future visibility control."""

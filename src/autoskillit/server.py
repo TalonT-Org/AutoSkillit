@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """MCP server for orchestrating automated skill-driven workflows.
 
-All tools are gated by default and require the user to type
-/mcp__autoskillit__enable_tools to activate. This uses MCP prompts
+All tools are gated by default and require the user to type the
+enable_tools prompt to activate. The prompt name depends on how the
+server is loaded (plugin vs --plugin-dir). This uses MCP prompts
 (user-controlled, model cannot invoke) to set an in-memory flag
 that each tool checks before executing. The gate survives
 --dangerously-skip-permissions.
@@ -69,16 +70,18 @@ def _require_enabled() -> str | None:
     """Return error JSON if tools are not enabled, None if OK.
 
     All tools are gated by default and can only be activated by the user
-    typing /mcp__autoskillit__enable_tools. This survives
-    --dangerously-skip-permissions because MCP prompts are outside
-    the permission system.
+    typing the enable_tools prompt. The prompt name is prefixed by Claude
+    Code based on how the server was loaded (plugin vs --plugin-dir).
+    This survives --dangerously-skip-permissions because MCP prompts are
+    outside the permission system.
     """
     if not _tools_enabled:
         return json.dumps(
             {
                 "error": (
                     "AutoSkillit tools are not enabled. "
-                    "User must type /mcp__autoskillit__enable_tools to activate."
+                    "User must type the enable_tools prompt to activate. "
+                    "Check the MCP prompt list for the exact name."
                 ),
             }
         )

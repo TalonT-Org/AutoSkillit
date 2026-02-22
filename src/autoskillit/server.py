@@ -13,13 +13,16 @@ Transport: stdio (default for FastMCP).
 from __future__ import annotations
 
 import asyncio
+import base64
 import importlib
 import inspect
 import json
 import os
 import re
 import shutil
+import sqlite3
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -364,6 +367,169 @@ async def run_python(
     _log(f"run_python: callable={callable} timeout={timeout}")
     result = await _import_and_call(callable, args=args, timeout=float(timeout))
     return json.dumps(result)
+
+
+_FORBIDDEN_SQL = re.compile(
+    r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE|ATTACH|DETACH|PRAGMA|VACUUM|REINDEX)\b",
+    re.IGNORECASE,
+)
+_STRIP_SQL_COMMENTS = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
+
+
+def _validate_select_only(sql: str) -> None:
+    """Raise ValueError if the query is not a valid SELECT statement."""
+    if not sql or not sql.strip():
+        raise ValueError("Query must not be empty")
+    cleaned = _STRIP_SQL_COMMENTS.sub("", sql).strip()
+    if not re.match(r"(?i)^\s*SELECT\b", cleaned):
+        raise ValueError("Query must begin with SELECT")
+    if _FORBIDDEN_SQL.search(cleaned):
+        raise ValueError(
+            f"Query contains forbidden keyword: {_FORBIDDEN_SQL.search(cleaned).group()}"  # type: ignore[union-attr]
+        )
+
+
+_ALLOWED_ACTIONS: frozenset[int] = frozenset(
+    {
+        sqlite3.SQLITE_SELECT,
+        sqlite3.SQLITE_READ,
+        sqlite3.SQLITE_FUNCTION,
+    }
+)
+
+
+def _select_only_authorizer(
+    action: int,
+    arg1: str | None,
+    arg2: str | None,
+    db_name: str | None,
+    trigger_name: str | None,
+) -> int:
+    """SQLite authorizer callback allowing only SELECT, READ, and FUNCTION."""
+    if action in _ALLOWED_ACTIONS:
+        return sqlite3.SQLITE_OK
+    return sqlite3.SQLITE_DENY
+
+
+def _row_to_dict(columns: list[str], row: tuple) -> dict:  # type: ignore[type-arg]
+    """Convert a SQLite row tuple to a dict, base64-encoding bytes values."""
+    result: dict[str, object] = {}
+    for col, val in zip(columns, row):
+        if isinstance(val, bytes):
+            result[col] = base64.b64encode(val).decode("ascii")
+        else:
+            result[col] = val
+    return result
+
+
+def _execute_readonly_query(
+    db_path: str,
+    query: str,
+    params: list | dict,  # type: ignore[type-arg]
+    timeout_sec: int,
+    max_rows: int,
+) -> dict:  # type: ignore[type-arg]
+    """Execute a read-only query against a SQLite database (synchronous)."""
+    uri = f"file:{db_path}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    try:
+        conn.set_authorizer(_select_only_authorizer)
+
+        timer = threading.Timer(timeout_sec, conn.interrupt)
+        timer.start()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+
+            column_names = (
+                [desc[0] for desc in cursor.description] if cursor.description else []
+            )
+            rows: list[dict] = []  # type: ignore[type-arg]
+            truncated = False
+            for i, row in enumerate(cursor):
+                if i >= max_rows:
+                    truncated = True
+                    break
+                rows.append(_row_to_dict(column_names, row))
+
+            return {
+                "column_names": column_names,
+                "rows": rows,
+                "row_count": len(rows),
+                "truncated": truncated,
+            }
+        except sqlite3.OperationalError as exc:
+            if "interrupted" in str(exc):
+                raise TimeoutError from exc
+            raise
+        finally:
+            timer.cancel()
+    finally:
+        conn.close()
+
+
+@mcp.tool(tags={"automation"})
+async def read_db(
+    db_path: str, query: str, params: str = "[]", timeout: int = 0
+) -> str:
+    """Run a parameterized read-only SQL query against a SQLite database and return results as JSON.
+
+    Defense-in-depth: regex pre-validation rejects non-SELECT queries, the connection
+    is opened with mode=ro (OS-level read-only), and a set_authorizer callback blocks
+    any operation other than SELECT/READ/FUNCTION at the engine level.
+
+    Args:
+        db_path: Absolute path to the SQLite database file.
+        query: SQL SELECT query. Use ? for positional or :name for named placeholders.
+        params: JSON-encoded array or object of query parameter values (default "[]").
+        timeout: Query timeout in seconds. 0 uses the configured default.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    _log(f"read_db: db_path={db_path} query={query[:80]}")
+
+    # Parse params
+    try:
+        parsed_params = json.loads(params)
+    except json.JSONDecodeError as exc:
+        return json.dumps({"error": f"Invalid params JSON: {exc}"})
+    if not isinstance(parsed_params, (list, dict)):
+        return json.dumps({"error": "params must be a JSON array or object"})
+
+    # Validate db_path
+    db = Path(db_path).resolve()
+    if not db.exists():
+        return json.dumps({"error": f"Database does not exist: {db}"})
+    if not db.is_file():
+        return json.dumps({"error": f"Path is not a file: {db}"})
+
+    # SQL validation (regex pre-check)
+    try:
+        _validate_select_only(query)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc), "hint": "Only SELECT queries are allowed"})
+
+    # Resolve timeout
+    effective_timeout = timeout if timeout > 0 else _config.read_db.timeout
+    max_rows = _config.read_db.max_rows
+
+    # Execute in thread (sqlite3 is blocking)
+    loop = asyncio.get_running_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            _execute_readonly_query,
+            str(db),
+            query,
+            parsed_params,
+            effective_timeout,
+            max_rows,
+        )
+        return json.dumps(result)
+    except TimeoutError:
+        return json.dumps({"error": f"Query exceeded {effective_timeout}s timeout"})
+    except Exception as exc:
+        return json.dumps({"error": f"Query failed: {exc}"})
 
 
 @mcp.tool(tags={"automation"})

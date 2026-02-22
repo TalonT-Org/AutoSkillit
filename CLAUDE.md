@@ -37,9 +37,9 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
 
 ## **4. Testing Guidelines**
 
-The project uses pytest with pytest-asyncio for async test support.
+The project uses pytest with pytest-asyncio for async test support. Tests run in parallel via pytest-xdist (`-n 4`). All tests must be safe for parallel execution.
 
-  * **Run tests**: `pytest -v` from the project root (venv must be activated)
+  * **Run tests**: `task test-all` from the project root
   * **Always run tests at end of task**
   * **Fix failing tests immediately**
   * **Add tests for new features**
@@ -157,7 +157,7 @@ All tool behavior is configurable via `.autoskillit/config.yaml`. No config file
 
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
-| `test_check` | `command` | `["pytest", "-v"]` | Test command for `test_check` and `merge_worktree` |
+| `test_check` | `command` | `["task", "test-all"]` | Test command for `test_check` and `merge_worktree` |
 | `test_check` | `timeout` | `600` | Test command timeout in seconds |
 | `classify_fix` | `path_prefixes` | `[]` | File path prefixes that trigger `full_restart` |
 | `reset_workspace` | `command` | `null` | Reset command (`null` = not configured) |

@@ -188,11 +188,9 @@ def _build_skill_result(result: SubprocessResult, timeout: float) -> str:
 
     if result.timed_out:
         stdout = result.stdout
-        stderr = f"Process timed out after {timeout}s"
         returncode = -1
     else:
         stdout = result.stdout
-        stderr = result.stderr
         returncode = result.returncode if result.returncode is not None else -1
 
     session = parse_session_result(stdout)

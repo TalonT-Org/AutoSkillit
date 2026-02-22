@@ -326,9 +326,7 @@ async def run_managed_async(
 
             heartbeat_task = None
             if heartbeat_marker:
-                heartbeat_task = asyncio.create_task(
-                    _heartbeat(stdout_path, heartbeat_marker)
-                )
+                heartbeat_task = asyncio.create_task(_heartbeat(stdout_path, heartbeat_marker))
                 tasks.add(heartbeat_task)
 
             session_monitor_task = None
@@ -363,9 +361,7 @@ async def run_managed_async(
                     await async_kill_process_tree(proc.pid)
             except TimeoutError:
                 timed_out = True
-                logger.warning(
-                    "Process %d timed out after %ss, killing tree", proc.pid, timeout
-                )
+                logger.warning("Process %d timed out after %ss, killing tree", proc.pid, timeout)
                 await async_kill_process_tree(proc.pid)
             finally:
                 for t in tasks:

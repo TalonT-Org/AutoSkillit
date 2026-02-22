@@ -15,12 +15,14 @@ from autoskillit.config import (
     ClassifyFixConfig,
     ReadDbConfig,
     ResetWorkspaceConfig,
+    RunSkillConfig,
     SafetyConfig,
 )
 from autoskillit.process_lifecycle import SubprocessResult
 from autoskillit.server import (
     ClaudeSessionResult,
     CleanupResult,
+    _build_skill_result,
     _check_dry_walkthrough,
     _delete_directory_contents,
     _disable_tools_handler,
@@ -30,6 +32,7 @@ from autoskillit.server import (
     _require_enabled,
     _run_subprocess,
     _select_only_authorizer,
+    _session_log_dir,
     _validate_select_only,
     autoskillit_status,
     classify_fix,
@@ -2814,7 +2817,7 @@ class TestRunSkillPrefix:
         )
         await run_skill("/investigate error", "/tmp")
         cmd = mock_run.call_args[0][0]
-        assert cmd[2] == "Use /investigate error"
+        assert cmd[2].startswith("Use /investigate error")
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
@@ -2827,7 +2830,20 @@ class TestRunSkillPrefix:
         )
         await run_skill("Fix the bug in main.py", "/tmp")
         cmd = mock_run.call_args[0][0]
-        assert cmd[2] == "Fix the bug in main.py"
+        assert cmd[2].startswith("Fix the bug in main.py")
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_includes_completion_directive(self, mock_run):
+        mock_run.return_value = _make_result(
+            0,
+            '{"type": "result", "subtype": "success", "is_error": false, '
+            '"result": "done", "session_id": "s1"}',
+            "",
+        )
+        await run_skill("/investigate error", "/tmp")
+        cmd = mock_run.call_args[0][0]
+        assert "%%AUTOSKILLIT_COMPLETE%%" in cmd[2]
 
 
 class TestRunSkillRetryPrefix:
@@ -2844,7 +2860,7 @@ class TestRunSkillRetryPrefix:
         )
         await run_skill_retry("/investigate error", "/tmp")
         cmd = mock_run.call_args[0][0]
-        assert cmd[2] == "Use /investigate error"
+        assert cmd[2].startswith("Use /investigate error")
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
@@ -2857,7 +2873,7 @@ class TestRunSkillRetryPrefix:
         )
         await run_skill_retry("Fix the bug in main.py", "/tmp")
         cmd = mock_run.call_args[0][0]
-        assert cmd[2] == "Fix the bug in main.py"
+        assert cmd[2].startswith("Fix the bug in main.py")
 
 
 class TestDryWalkthroughGateWithPrefix:
@@ -2872,3 +2888,103 @@ class TestDryWalkthroughGateWithPrefix:
         )
         assert "error" in result
         assert "dry-walked" in result["error"].lower()
+
+
+class TestRunSkillTimeoutFromConfig:
+    """run_skill and run_skill_retry use configurable timeouts."""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_timeout_from_config(self, mock_run, monkeypatch):
+        """run_skill uses _config.run_skill.timeout instead of hardcoded value."""
+        from autoskillit import server
+
+        cfg = AutomationConfig()
+        cfg.run_skill = RunSkillConfig(timeout=120)
+        cfg.safety.require_dry_walkthrough = False
+        monkeypatch.setattr(server, "_config", cfg)
+
+        mock_run.return_value = _make_result(
+            0,
+            '{"type": "result", "subtype": "success", "is_error": false,'
+            ' "result": "done", "session_id": "s1"}',
+            "",
+        )
+        await run_skill("/investigate foo", "/tmp")
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["timeout"] == 120
+
+
+class TestRunSkillInjectsCompletionDirective:
+    """run_skill injects completion directive into the skill command."""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_injects_completion_directive(self, mock_run, monkeypatch):
+        """Skill command passed to claude -p contains the completion marker instruction."""
+        from autoskillit import server
+
+        cfg = AutomationConfig()
+        cfg.safety.require_dry_walkthrough = False
+        monkeypatch.setattr(server, "_config", cfg)
+
+        mock_run.return_value = _make_result(
+            0,
+            '{"type": "result", "subtype": "success", "is_error": false,'
+            ' "result": "done", "session_id": "s1"}',
+            "",
+        )
+        await run_skill("/investigate foo", "/tmp")
+
+        cmd = mock_run.call_args[0][0]
+        # The -p argument is at index 2
+        skill_arg = cmd[2]
+        assert "%%AUTOSKILLIT_COMPLETE%%" in skill_arg
+        assert "ORCHESTRATION DIRECTIVE" in skill_arg
+
+
+class TestRunSkillPassesSessionLogDir:
+    """run_skill passes session_log_dir derived from cwd."""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_passes_session_log_dir(self, mock_run, monkeypatch):
+        """run_managed_async receives session_log_dir derived from cwd."""
+        from autoskillit import server
+
+        cfg = AutomationConfig()
+        cfg.safety.require_dry_walkthrough = False
+        monkeypatch.setattr(server, "_config", cfg)
+
+        mock_run.return_value = _make_result(
+            0,
+            '{"type": "result", "subtype": "success", "is_error": false,'
+            ' "result": "done", "session_id": "s1"}',
+            "",
+        )
+        await run_skill("/investigate foo", "/some/project")
+
+        call_kwargs = mock_run.call_args[1]
+        expected_dir = _session_log_dir("/some/project")
+        assert call_kwargs["session_log_dir"] == expected_dir
+        assert "-some-project" in str(expected_dir)
+
+
+class TestStalenessReturnsNeedsRetry:
+    """Stale SubprocessResult triggers needs_retry response."""
+
+    def test_staleness_returns_needs_retry(self):
+        """A stale result produces needs_retry=True, retry_reason='resume'."""
+        stale_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            timed_out=False,
+            pid=12345,
+            stale=True,
+        )
+        response = json.loads(_build_skill_result(stale_result, timeout=3600))
+        assert response["needs_retry"] is True
+        assert response["retry_reason"] == "resume"
+        assert response["subtype"] == "stale"

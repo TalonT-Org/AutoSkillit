@@ -16,7 +16,7 @@ import yaml
 
 @dataclass
 class TestCheckConfig:
-    command: list[str] = field(default_factory=lambda: ["pytest", "-v"])
+    command: list[str] = field(default_factory=lambda: ["task", "test-all"])
     timeout: int = 600
 
 

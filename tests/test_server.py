@@ -2675,9 +2675,7 @@ class TestDryWalkthroughGateWithPrefix:
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
         result = json.loads(
-            await run_skill(
-                f"/autoskillit:implement-worktree {plan}", str(tmp_path)
-            )
+            await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         )
         assert "error" in result
         assert "dry-walked" in result["error"].lower()

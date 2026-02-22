@@ -88,9 +88,9 @@ def init(
         config_path.write_text(_generate_config_yaml(cmd_parts))
         print(f"Config written to: {config_path}")
 
-    plugin_dir = Path(__file__).parent
-    print(f"\nPlugin directory: {plugin_dir}")
-    print(f"Load with: claude --plugin-dir {plugin_dir}")
+    print("\nReady! Start Claude Code and enable tools:")
+    print("  claude")
+    print("  /mcp__autoskillit__enable_tools")
 
 
 _VALID_SCOPES = {"user", "project", "local"}
@@ -125,6 +125,7 @@ def install(*, scope: str = "user"):
         print("\nRun these commands in a regular terminal to complete installation:")
         print(f"  claude plugin marketplace add {marketplace_dir}")
         print(f"  claude plugin install {plugin_ref} --scope {scope}")
+        print("\nThen run: autoskillit init (in your project directory)")
         return
 
     if shutil.which("claude") is None:
@@ -132,6 +133,7 @@ def install(*, scope: str = "user"):
         print("Install Claude Code, then run:")
         print(f"  claude plugin marketplace add {marketplace_dir}")
         print(f"  claude plugin install {plugin_ref} --scope {scope}")
+        print("\nThen run: autoskillit init (in your project directory)")
         sys.exit(1)
 
     # Register the marketplace (idempotent)
@@ -160,8 +162,7 @@ def install(*, scope: str = "user"):
         sys.exit(1)
 
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
-    print("\nUsage: just run 'claude' — skills and MCP tools load automatically.")
-    print("Enable tools with: /mcp__autoskillit__enable_tools")
+    _print_next_steps()
 
 
 def _ensure_marketplace() -> Path:
@@ -521,6 +522,14 @@ def workflows_show(name: str):
         print(f"No workflow named '{name}'.", file=sys.stderr)
         sys.exit(1)
     print(match.path.read_text())
+
+
+def _print_next_steps() -> None:
+    """Print concise post-install getting started instructions."""
+    print("\nNext steps:")
+    print("  1. cd into your project and run: autoskillit init")
+    print("  2. Start Claude Code: claude")
+    print("  3. Enable tools: /mcp__autoskillit__enable_tools")
 
 
 # --- Init helpers ---

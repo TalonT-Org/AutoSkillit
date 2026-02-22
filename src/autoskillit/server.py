@@ -1198,14 +1198,7 @@ def get_workflow(name: str) -> str:
 
 @mcp.prompt()
 def enable_tools() -> PromptResult:
-    """Enable all AutoSkillit tools for this session.
-
-    Tools are disabled by default to prevent accidental use by agents.
-    Only a human can invoke this prompt — the model cannot.
-    This survives --dangerously-skip-permissions.
-
-    Type /mcp__autoskillit__enable_tools to activate.
-    """
+    """Enable AutoSkillit MCP tools for this session."""
     _enable_tools_handler()
 
     text = (
@@ -1219,9 +1212,6 @@ def enable_tools() -> PromptResult:
 
 @mcp.prompt()
 def disable_tools() -> PromptResult:
-    """Disable all AutoSkillit tools for this session.
-
-    Type /mcp__autoskillit__disable_tools to deactivate.
-    """
+    """Disable AutoSkillit MCP tools for this session."""
     _disable_tools_handler()
     return PromptResult([Message("AutoSkillit tools are now disabled.", role="assistant")])

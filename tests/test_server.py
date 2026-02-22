@@ -933,7 +933,7 @@ class TestConfigDefaults:
 
     def test_default_test_command(self):
         cfg = AutomationConfig()
-        assert cfg.test_check.command == ["pytest", "-v"]
+        assert cfg.test_check.command == ["task", "test-all"]
 
     def test_default_classify_fix_empty_prefixes(self):
         cfg = AutomationConfig()

@@ -575,12 +575,10 @@ class TestAutoskillitStatus:
     """autoskillit_status tool returns version health info (ungated)."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self):
+    def _disable_tools(self, monkeypatch):
         from autoskillit import server
 
-        server._tools_enabled = False
-        yield
-        server._tools_enabled = False
+        monkeypatch.setattr(server, "_tools_enabled", False)
 
     @pytest.mark.asyncio
     async def test_status_returns_version_info(self):
@@ -621,13 +619,11 @@ class TestSkillScriptTools:
     """Tests for ungated list_skill_scripts and load_skill_script tools."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self):
+    def _disable_tools(self, monkeypatch):
         """Verify these tools work WITHOUT tool activation."""
         from autoskillit import server
 
-        server._tools_enabled = False
-        yield
-        server._tools_enabled = False
+        monkeypatch.setattr(server, "_tools_enabled", False)
 
     # SS1
     @pytest.mark.asyncio
@@ -722,13 +718,11 @@ class TestValidateScript:
     """Tests for ungated validate_script tool."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self):
+    def _disable_tools(self, monkeypatch):
         """Verify this tool works WITHOUT tool activation."""
         from autoskillit import server
 
-        server._tools_enabled = False
-        yield
-        server._tools_enabled = False
+        monkeypatch.setattr(server, "_tools_enabled", False)
 
     # VS1
     @pytest.mark.asyncio
@@ -1454,13 +1448,11 @@ class TestGatedToolAccess:
     """Prompt-gated tool access: tools disabled by default, user-only activation."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self):
+    def _disable_tools(self, monkeypatch):
         """Override the global autouse fixture — start disabled for gate tests."""
         from autoskillit import server
 
-        server._tools_enabled = False
-        yield
-        server._tools_enabled = False
+        monkeypatch.setattr(server, "_tools_enabled", False)
 
     @pytest.mark.asyncio
     async def test_tools_return_error_when_disabled(self):
@@ -1558,12 +1550,10 @@ class TestEnableToolsVersionReporting:
     """enable_tools returns version info and warns on mismatch."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self):
+    def _disable_tools(self, monkeypatch):
         from autoskillit import server
 
-        server._tools_enabled = False
-        yield
-        server._tools_enabled = False
+        monkeypatch.setattr(server, "_tools_enabled", False)
 
     @staticmethod
     def _prompt_text(result) -> str:
@@ -1770,7 +1760,7 @@ class TestConfigDrivenBehavior:
         """S10: _require_enabled() defense-in-depth still works with config."""
         from autoskillit import server
 
-        server._tools_enabled = False
+        monkeypatch.setattr(server, "_tools_enabled", False)
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
         assert "error" in result
         assert "not enabled" in result["error"].lower()
@@ -2488,21 +2478,18 @@ class TestReadDb:
         assert "params" in result["error"].lower()
 
     @pytest.mark.asyncio
-    async def test_gated_when_disabled(self, sample_db):
+    async def test_gated_when_disabled(self, sample_db, monkeypatch):
         from autoskillit import server
 
-        server._tools_enabled = False
-        try:
-            result = json.loads(
-                await read_db(
-                    db_path=str(sample_db),
-                    query="SELECT 1",
-                )
+        monkeypatch.setattr(server, "_tools_enabled", False)
+        result = json.loads(
+            await read_db(
+                db_path=str(sample_db),
+                query="SELECT 1",
             )
-            assert "error" in result
-            assert "not enabled" in result["error"].lower()
-        finally:
-            server._tools_enabled = True
+        )
+        assert "error" in result
+        assert "not enabled" in result["error"].lower()
 
     @pytest.mark.asyncio
     async def test_max_rows_truncation(self, sample_db, monkeypatch):
@@ -2571,12 +2558,10 @@ class TestReadDbGating:
     """read_db gating test in disabled-tools context."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self):
+    def _disable_tools(self, monkeypatch):
         from autoskillit import server
 
-        server._tools_enabled = False
-        yield
-        server._tools_enabled = False
+        monkeypatch.setattr(server, "_tools_enabled", False)
 
     @pytest.mark.asyncio
     async def test_read_db_gated(self):

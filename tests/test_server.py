@@ -25,6 +25,7 @@ from autoskillit.server import (
     _delete_directory_contents,
     _disable_tools_handler,
     _enable_tools_handler,
+    _ensure_skill_prefix,
     _parse_pytest_summary,
     _require_enabled,
     _run_subprocess,
@@ -2582,3 +2583,101 @@ class TestReadDbGating:
         result = json.loads(await read_db(db_path="/tmp/x.db", query="SELECT 1"))
         assert "error" in result
         assert "not enabled" in result["error"]
+
+
+class TestEnsureSkillPrefix:
+    """Unit tests for _ensure_skill_prefix helper."""
+
+    def test_adds_use_to_slash_command(self):
+        assert _ensure_skill_prefix("/investigate error") == "Use /investigate error"
+
+    def test_adds_use_to_namespaced_skill(self):
+        assert (
+            _ensure_skill_prefix("/autoskillit:investigate error")
+            == "Use /autoskillit:investigate error"
+        )
+
+    def test_no_double_prefix(self):
+        assert _ensure_skill_prefix("Use /investigate error") == "Use /investigate error"
+
+    def test_ignores_plain_prompts(self):
+        assert _ensure_skill_prefix("Fix the bug in main.py") == "Fix the bug in main.py"
+
+    def test_handles_leading_whitespace(self):
+        assert _ensure_skill_prefix("  /investigate error") == "Use /investigate error"
+
+
+class TestRunSkillPrefix:
+    """run_skill passes prefixed command to subprocess."""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_prefixes_skill_command(self, mock_run):
+        mock_run.return_value = _make_result(
+            0,
+            '{"type": "result", "subtype": "success", "is_error": false, '
+            '"result": "done", "session_id": "s1"}',
+            "",
+        )
+        await run_skill("/investigate error", "/tmp")
+        cmd = mock_run.call_args[0][0]
+        assert cmd[2] == "Use /investigate error"
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_no_prefix_for_plain_prompt(self, mock_run):
+        mock_run.return_value = _make_result(
+            0,
+            '{"type": "result", "subtype": "success", "is_error": false, '
+            '"result": "done", "session_id": "s1"}',
+            "",
+        )
+        await run_skill("Fix the bug in main.py", "/tmp")
+        cmd = mock_run.call_args[0][0]
+        assert cmd[2] == "Fix the bug in main.py"
+
+
+class TestRunSkillRetryPrefix:
+    """run_skill_retry passes prefixed command to subprocess."""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_retry_prefixes_skill_command(self, mock_run):
+        mock_run.return_value = _make_result(
+            0,
+            '{"type": "result", "subtype": "success", "is_error": false, '
+            '"result": "done", "session_id": "s1"}',
+            "",
+        )
+        await run_skill_retry("/investigate error", "/tmp")
+        cmd = mock_run.call_args[0][0]
+        assert cmd[2] == "Use /investigate error"
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_retry_no_prefix_for_plain_prompt(self, mock_run):
+        mock_run.return_value = _make_result(
+            0,
+            '{"type": "result", "subtype": "success", "is_error": false, '
+            '"result": "done", "session_id": "s1"}',
+            "",
+        )
+        await run_skill_retry("Fix the bug in main.py", "/tmp")
+        cmd = mock_run.call_args[0][0]
+        assert cmd[2] == "Fix the bug in main.py"
+
+
+class TestDryWalkthroughGateWithPrefix:
+    """Dry-walkthrough gate still receives raw command before prefix is applied."""
+
+    @pytest.mark.asyncio
+    async def test_gate_still_fires_for_implement_skill(self, tmp_path):
+        plan = tmp_path / "plan.md"
+        plan.write_text("# No marker plan")
+        result = json.loads(
+            await run_skill(
+                f"/autoskillit:implement-worktree {plan}", str(tmp_path)
+            )
+        )
+        assert "error" in result
+        assert "dry-walked" in result["error"].lower()

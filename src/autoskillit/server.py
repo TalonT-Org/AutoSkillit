@@ -381,12 +381,12 @@ def _validate_select_only(sql: str) -> None:
     if not sql or not sql.strip():
         raise ValueError("Query must not be empty")
     cleaned = _STRIP_SQL_COMMENTS.sub("", sql).strip()
-    if not re.match(r"(?i)^\s*SELECT\b", cleaned):
-        raise ValueError("Query must begin with SELECT")
     if _FORBIDDEN_SQL.search(cleaned):
         raise ValueError(
             f"Query contains forbidden keyword: {_FORBIDDEN_SQL.search(cleaned).group()}"  # type: ignore[union-attr]
         )
+    if not re.match(r"(?i)^\s*SELECT\b", cleaned):
+        raise ValueError("Query must begin with SELECT")
 
 
 _ALLOWED_ACTIONS: frozenset[int] = frozenset(

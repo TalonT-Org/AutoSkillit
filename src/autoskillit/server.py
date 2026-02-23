@@ -1355,6 +1355,7 @@ async def load_skill_script(name: str) -> str:
         - If retry block exists: retries Nx on {condition}, then → {on_exhausted}
         - If note exists, show it (notes contain critical agent instructions)
         - If capture exists, show what values are extracted
+        - If model: show the model value (e.g., "Model: sonnet")
 
         ### Constraints
         If present, list all constraint strings.
@@ -1378,6 +1379,8 @@ async def load_skill_script(name: str) -> str:
       ${{ context.var_name }} in `with:` arguments.
     - Thread outputs from each step into the next (e.g. worktree_path from
       implement into test_check).
+    - Steps with a `model:` field: when calling `run_skill` or `run_skill_retry`,
+      pass the step's `model` value as the `model` parameter to the tool.
 
     ROUTING RULES — MANDATORY:
     - When a tool returns a failure result, you MUST follow the step's on_failure route.

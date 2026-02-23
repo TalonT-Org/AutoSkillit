@@ -605,3 +605,173 @@ class TestCLI:
         cli.install()  # second run should not fail
 
         assert (tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit").is_symlink()
+
+    # --- orchestrate ---
+
+    _SCRIPT_YAML = """\
+name: test-script
+description: A test script
+summary: Test flow
+inputs:
+  - name: target
+    description: Target path
+    required: true
+steps:
+  - name: do-something
+    tool: run_cmd
+    with:
+      cmd: echo hello
+    on_success: done
+    on_failure: done
+  - name: done
+    action: finish
+"""
+
+    def test_orchestrate_script_not_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """orchestrate exits 1 when script name doesn't match any entry."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.orchestrate("nonexistent")
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "nonexistent" in captured.out
+
+    def test_orchestrate_no_scripts_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """orchestrate exits 1 when no .autoskillit/scripts/ directory exists."""
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.orchestrate("anything")
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "No scripts found" in captured.out
+
+    def test_orchestrate_claude_not_on_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """orchestrate exits 1 when claude command is not found."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: None)
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.orchestrate("test-script")
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "claude" in captured.out.lower()
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_orchestrate_builds_correct_command(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """orchestrate passes correct flags to subprocess.run."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.orchestrate("test-script")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "claude"
+        assert "--plugin-dir" in cmd
+        assert "--tools" in cmd
+        tools_idx = cmd.index("--tools")
+        assert cmd[tools_idx + 1] == "AskUserQuestion"
+        assert "--append-system-prompt" in cmd
+        # Interactive: no -p, no --dangerously-skip-permissions
+        assert "-p" not in cmd
+        assert "--dangerously-skip-permissions" not in cmd
+        # Interactive passthrough: no capture_output, no stdin
+        kwargs = mock_run.call_args[1] if mock_run.call_args[1] else {}
+        assert "capture_output" not in kwargs
+        assert "stdin" not in kwargs
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_orchestrate_system_prompt_contains_script(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """orchestrate injects script YAML and orchestrator contract into system prompt."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.orchestrate("test-script")
+
+        cmd = mock_run.call_args[0][0]
+        prompt_idx = cmd.index("--append-system-prompt")
+        system_prompt = cmd[prompt_idx + 1]
+        # Contains the script YAML content
+        assert "test-script" in system_prompt
+        assert "do-something" in system_prompt
+        # Contains routing rules
+        assert "ROUTING RULES" in system_prompt
+        # Contains failure predicates
+        assert "FAILURE PREDICATES" in system_prompt
+        # Contains enable_tools reference
+        assert "enable_tools" in system_prompt
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_orchestrate_propagates_exit_code(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """orchestrate does not raise SystemExit on returncode 0."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.orchestrate("test-script")  # should not raise
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_orchestrate_subprocess_failure_propagates(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """orchestrate propagates non-zero subprocess exit codes."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr=""
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.orchestrate("test-script")
+        assert exc_info.value.code == 1

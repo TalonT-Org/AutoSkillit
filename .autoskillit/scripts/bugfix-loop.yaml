@@ -1,0 +1,40 @@
+---
+name: bugfix-loop
+description: Investigate, fix, and merge test failures in an isolated worktree. Use when user says "bugfix loop", "fix tests", or "auto bugfix".
+summary: investigate > rectify > implement > test > assess/classify loop > merge
+---
+
+# Bugfix Loop
+
+End-to-end test failure investigation with automatic fixing in isolated worktrees.
+
+SETUP:
+  - project_dir = path to the project under test
+  - work_dir = working directory for helper agent sessions (can be same as project_dir)
+  - base_branch = main
+
+LOOP:
+0. Verify AutoSkillit tools are enabled. If not → tell user to run /mcp__autoskillit__enable_tools
+0.1. Prompt user for SETUP variables (use AskUserQuestion)
+1. run_skill("/autoskillit:investigate the test failures", cwd=${work_dir}, add_dir=${project_dir}) → save investigation output
+2. run_skill("/autoskillit:rectify the investigation findings", cwd=${work_dir}, add_dir=${project_dir}) → save ${plan_path}
+3. run_skill("/autoskillit:dry-walkthrough ${plan_path}", cwd=${work_dir})
+4. run_skill_retry("/autoskillit:implement-worktree-no-merge ${plan_path}", cwd=${work_dir}) → save ${worktree_path}
+   - If context exhausted: run_skill_retry("/autoskillit:retry-worktree ${plan_path} ${worktree_path}", cwd=${work_dir})
+     Repeat up to 3x, then → ESCALATE
+5. test_check(${worktree_path})
+   - PASS → merge_worktree(${worktree_path}, ${base_branch}). Done.
+   - FAIL → go to FIX
+
+FIX:
+6. run_skill("/autoskillit:assess-and-merge ${worktree_path} ${plan_path} ${base_branch}", cwd=${work_dir})
+   - PASS → Done.
+   - FAIL → classify_fix(${worktree_path}, ${base_branch})
+     - full_restart → back to step 1 (re-investigate)
+     - partial_restart → back to step 4 (re-implement)
+
+ESCALATE: Stop and report what failed. Human intervention needed.
+
+Notes:
+- If work_dir equals project_dir, omit add_dir from run_skill calls
+- classify_fix routes based on whether the fix touched critical paths

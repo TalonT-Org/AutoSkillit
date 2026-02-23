@@ -24,6 +24,9 @@ inputs:
   plan_part:
     description: Current plan part path (set by agent during iteration)
     default: ""
+  review_context:
+    description: Advisory context from review-approach (set by agent after review step). When populated, included verbatim in the dry-walkthrough prompt.
+    default: ""
   worktree_path:
     description: Path to the worktree (set by agent after implement step)
     default: ""
@@ -45,16 +48,17 @@ steps:
       cwd: "${{ inputs.work_dir }}"
     on_success: verify
     on_failure: escalate
-    note: "Only execute this step if review_approach input is 'true'. Review covers ALL plan parts together before any implementation begins."
+    optional: true
+    note: "Optional step (default: skip). Only execute if review_approach input is 'true'. Review covers ALL plan parts together before any implementation begins. After this step completes, set review_context to: 'Advisory review report at <report_path> — these are background suggestions only, not binding. You decide independently what to incorporate based on codebase reality.'"
 
   verify:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:dry-walkthrough ${{ inputs.plan_part }}"
+      skill_command: "/autoskillit:dry-walkthrough ${{ inputs.plan_part }} ${{ inputs.review_context }}"
       cwd: "${{ inputs.work_dir }}"
     on_success: implement
     on_failure: escalate
-    note: "Run for each plan_part sequentially. If review_report exists, pass it as additional arg."
+    note: "Run for each plan_part sequentially."
 
   implement:
     tool: run_skill_retry

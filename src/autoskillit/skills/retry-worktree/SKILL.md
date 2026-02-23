@@ -33,7 +33,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 
 **NEVER:**
 - Create a new worktree — the worktree already exists
-- Re-run `uv venv` or `uv pip install` unless the venv is missing/broken
+- Re-run worktree setup (e.g. `task install-worktree`) unless the environment is missing/broken
 - Re-explore systems that were already explored (skip Step 2 of implement-worktree)
 - Implement in the main working directory (always use the worktree)
 - Force push or perform destructive git operations
@@ -55,13 +55,13 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 
 Parse two positional arguments from the prompt:
 1. **Plan path** — verify the plan file exists and read it
-2. **Worktree path** — verify the directory exists, is a git worktree, and has a `.venv`
+2. **Worktree path** — verify the directory exists and is a git worktree. Check that the development environment is set up (e.g. `.venv` exists for Python projects)
 
 If the worktree path does not exist:
 - Abort with error: "Worktree path does not exist. Use /autoskillit:implement-worktree to create a new worktree."
 
-If the `.venv` is missing or broken:
-- Re-create the development environment. Example for Python: `cd {WORKTREE_PATH} && uv venv .venv && uv pip install -e '.[dev]' --python .venv/bin/python`
+If the environment is missing or broken:
+- Re-create the development environment using the project's configured `worktree_setup.command`, or: `cd {WORKTREE_PATH} && task install-worktree`
 
 ### Step 1: Assess Current State
 
@@ -111,11 +111,9 @@ Where practical, delegate test updates to subagents to keep main conversation co
 
 Run the project's code quality checks and test suite from the worktree.
 
-**Example for Python projects:**
 ```bash
-[[ -d "{WORKTREE_PATH}/.venv" ]] || { echo "ERROR: .venv missing in worktree"; exit 1; }
 cd {WORKTREE_PATH} && pre-commit run --all-files
-cd {WORKTREE_PATH} && .venv/bin/pytest -v
+cd {WORKTREE_PATH} && task test-all
 ```
 
 If tests fail, fix the issue and re-run.
@@ -148,7 +146,7 @@ Failure to do this leaves code-index pointing at a deleted worktree path, breaki
 
 ## Error Handling
 
-- **Worktree venv missing** — re-create the development environment. Example for Python: `uv venv .venv && uv pip install -e '.[dev]' --python .venv/bin/python`
+- **Worktree environment missing** — re-create using the project's configured `worktree_setup.command`, or: `task install-worktree`
 - **Phase fails** — report which phase and why, offer to fix/retry, skip (if optional), or abort and clean up
 - **Tests fail** — implementation is NOT complete. Fix the issue. If truly unfixable, report to user and ask for guidance. Do NOT proceed or mark as complete.
 - **Rebase conflicts** — resolve keeping implementation intent intact, re-run full test suite after

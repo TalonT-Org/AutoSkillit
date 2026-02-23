@@ -81,16 +81,15 @@ Before implementing ANY code, launch parallel Explore subagents to understand af
 
 ### Step 3: Set Up Worktree Environment
 
-Set up the project's development environment following its README or CONTRIBUTING guide.
+Set up the project's development environment in the worktree. Use the project's configured `worktree_setup.command` from `.autoskillit/config.yaml` if available. If not configured, check for a Taskfile with `install-worktree` task, or detect the project type and run appropriate setup.
 
-**Example for Python projects:**
 ```bash
 cd "${WORKTREE_PATH}"
-uv venv .venv
-uv pip install -e '.[dev]' --python .venv/bin/python
+# If worktree_setup.command is configured, run it. Otherwise:
+task install-worktree   # or equivalent for the project type
 ```
 
-**Why isolated venv matters (Python):** Running `uv pip install -e .` without a venv overwrites the global `.pth` file. When the worktree is deleted, CLI commands break with `ModuleNotFoundError`.
+**Why isolated env matters:** Installing packages without isolation overwrites the global state. When the worktree is deleted, CLI commands break with import errors.
 
 **All commands in Steps 4–5 must run from `${WORKTREE_PATH}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
 

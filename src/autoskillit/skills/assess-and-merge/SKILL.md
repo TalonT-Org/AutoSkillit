@@ -36,11 +36,9 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 2. Verify worktree exists and is a valid git worktree
 3. Verify plan file exists and is readable
 4. Check for development environment in worktree, recreate if missing.
-   Example for Python projects:
+   Use the project's configured `worktree_setup.command`, or:
    ```bash
-   cd "${worktree_path}"
-   uv venv .venv
-   uv pip install -e '.[dev]' --python .venv/bin/python
+   cd "${worktree_path}" && task install-worktree
    ```
 
 ### Step 1: Understand Context
@@ -51,7 +49,7 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 
 ### Step 2: Run Tests
 
-1. Run the project's test suite from the worktree (e.g. `cd {worktree_path} && .venv/bin/pytest -v`)
+1. Run the project's test suite from the worktree: `cd {worktree_path} && task test-all`
 2. If tests pass: go to Step 4 (Merge)
 3. If tests fail: go to Step 3 (Fix Loop)
 
@@ -60,7 +58,7 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 1. Analyze test failures against the plan to understand root cause
 2. Apply targeted fixes — only change what's needed to make tests pass
 3. Commit each fix with a descriptive message: `fix: {what was wrong and why}`
-4. Re-run the project's test suite (e.g. `cd {worktree_path} && .venv/bin/pytest -v`)
+4. Re-run the project's test suite: `cd {worktree_path} && task test-all`
 5. If green: go to Step 4
 6. If red and iterations < 3: repeat Step 3
 7. If red and iterations >= 3: go to Step 5 (Report Failure)

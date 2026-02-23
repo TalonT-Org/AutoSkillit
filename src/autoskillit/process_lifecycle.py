@@ -21,12 +21,26 @@ import tempfile
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import IO
 
 import psutil
 
 logger = logging.getLogger(__name__)
+
+
+class TerminationReason(StrEnum):
+    """How a managed subprocess ended.
+
+    Propagates termination provenance from run_managed_async to consumers,
+    replacing implicit inference from exit codes.
+    """
+
+    NATURAL_EXIT = "natural_exit"
+    COMPLETED = "completed"
+    STALE = "stale"
+    TIMED_OUT = "timed_out"
 
 
 @dataclass
@@ -36,9 +50,8 @@ class SubprocessResult:
     returncode: int
     stdout: str
     stderr: str
-    timed_out: bool
+    termination: TerminationReason
     pid: int
-    stale: bool = False
 
 
 def kill_process_tree(pid: int, timeout: float = 2.0) -> None:
@@ -103,6 +116,14 @@ def pty_wrap_command(cmd: list[str]) -> list[str]:
     return [script_path, "-qefc", escaped, "/dev/null"]
 
 
+def _marker_is_standalone(text: str, marker: str) -> bool:
+    """Check if the marker appears as a standalone line, not embedded in prose."""
+    for text_line in text.splitlines():
+        if text_line.strip() == marker:
+            return True
+    return False
+
+
 def _jsonl_contains_marker(
     content: str,
     marker: str,
@@ -110,13 +131,13 @@ def _jsonl_contains_marker(
 ) -> bool:
     """Check if any JSONL record of an allowed type contains the marker.
 
-    Parses each line as JSON and only checks for the marker in lines whose
-    ``"type"`` field is in *record_types*. Lines that fail JSON parsing or
-    have a non-matching type are silently skipped.
+    Parses each line as JSON and extracts the content field based on the
+    record type — ``message.content`` for assistant records, ``result`` for
+    result records. The marker must appear as a standalone line within the
+    extracted text, not embedded in surrounding prose.
 
-    This is the structural alternative to ``marker in content`` — it prevents
-    false-fires when the marker text appears in records authored by a source
-    other than the expected one (e.g. user prompt vs assistant output).
+    This prevents false-fires when the model quotes the marker directive
+    in discussion (e.g. ``"I will emit %%AUTOSKILLIT_COMPLETE%% when done"``).
     """
     import json as _json
 
@@ -130,7 +151,40 @@ def _jsonl_contains_marker(
             continue
         if not isinstance(obj, dict):
             continue
-        if obj.get("type") in record_types and marker in line:
+        record_type = obj.get("type")
+        if record_type not in record_types:
+            continue
+
+        if record_type == "assistant":
+            text = obj.get("message", {}).get("content", "")
+        elif record_type == "result":
+            text = obj.get("result", "")
+        else:
+            text = " ".join(v for v in obj.values() if isinstance(v, str))
+
+        if _marker_is_standalone(text, marker):
+            return True
+    return False
+
+
+def _jsonl_has_record_type(content: str, record_types: frozenset[str]) -> bool:
+    """Check if any JSONL record of an allowed type exists in content.
+
+    Used by the heartbeat to detect when Claude CLI emits a result record
+    to stdout. No content matching — presence of a record of the right type
+    is sufficient.
+    """
+    import json as _json
+
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = _json.loads(line)
+        except (ValueError, _json.JSONDecodeError):
+            continue
+        if isinstance(obj, dict) and obj.get("type") in record_types:
             return True
     return False
 
@@ -140,12 +194,11 @@ async def _heartbeat(
     marker: str,
     record_types: frozenset[str] = frozenset({"result"}),
 ) -> str:
-    """Poll session NDJSON output for a completion event.
+    """Poll session NDJSON output for a result-type record.
 
-    Only fires when the marker appears in a JSONL record whose ``"type"``
-    field is in *record_types*.  This prevents false-fires when the marker
-    text appears in non-result records (e.g. assistant messages discussing
-    JSON formats).
+    Fires when any JSONL record whose ``"type"`` field is in *record_types*
+    appears in stdout. The *marker* parameter is accepted for API compatibility
+    but is not used — the heartbeat detects record type presence, not content.
     """
     scan_pos = 0
     os_error_count = 0
@@ -161,7 +214,7 @@ async def _heartbeat(
             continue
         new_content = content[scan_pos:]
         scan_pos = len(content)
-        if _jsonl_contains_marker(new_content, marker, record_types):
+        if _jsonl_has_record_type(new_content, record_types):
             return "completion"
 
 
@@ -385,8 +438,7 @@ async def run_managed_async(
                 process_group=0,
             )
 
-            timed_out = False
-            stale = False
+            termination = TerminationReason.NATURAL_EXIT
 
             # Build the race participants
             wait_task = asyncio.create_task(proc.wait())
@@ -424,15 +476,16 @@ async def run_managed_async(
                 # If the process exited on its own, its result is authoritative
                 # regardless of what the monitor detected.
                 if wait_task in done:
-                    pass
+                    termination = TerminationReason.NATURAL_EXIT
                 elif session_monitor_task in done and session_monitor_task.result() == "stale":
-                    stale = True
+                    termination = TerminationReason.STALE
                     logger.warning("Session stale for %ss, killing tree", stale_threshold)
                     await async_kill_process_tree(proc.pid)
                 else:
+                    termination = TerminationReason.COMPLETED
                     await async_kill_process_tree(proc.pid)
             except TimeoutError:
-                timed_out = True
+                termination = TerminationReason.TIMED_OUT
                 logger.warning("Process %d timed out after %ss, killing tree", proc.pid, timeout)
                 await async_kill_process_tree(proc.pid)
             finally:
@@ -450,9 +503,8 @@ async def run_managed_async(
                 returncode=proc.returncode if proc.returncode is not None else -1,
                 stdout=stdout,
                 stderr=stderr,
-                timed_out=timed_out,
+                termination=termination,
                 pid=proc.pid,
-                stale=stale,
             )
         except BaseException:
             # Ensure cleanup on unexpected errors (including CancelledError)
@@ -509,11 +561,11 @@ def run_managed_sync(
                 start_new_session=True,
             )
 
-            timed_out = False
+            termination = TerminationReason.NATURAL_EXIT
             try:
                 process.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
-                timed_out = True
+                termination = TerminationReason.TIMED_OUT
                 logger.warning(
                     "Process %d timed out after %ss, killing tree",
                     process.pid,
@@ -531,7 +583,7 @@ def run_managed_sync(
                 returncode=process.returncode if process.returncode is not None else -1,
                 stdout=stdout,
                 stderr=stderr,
-                timed_out=timed_out,
+                termination=termination,
                 pid=process.pid,
             )
         except Exception:

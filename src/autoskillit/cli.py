@@ -1,4 +1,4 @@
-"""CLI for autoskillit: serve, init, install, config, skills, workflows, update."""
+"""CLI for autoskillit: serve, init, install, orchestrate, config, skills, workflows, update."""
 
 from __future__ import annotations
 
@@ -566,6 +566,170 @@ def workflows_show(name: str):
         print(f"No workflow named '{name}'.", file=sys.stderr)
         sys.exit(1)
     print(match.path.read_text())
+
+
+def _build_orchestrator_prompt(script_yaml: str) -> str:
+    """Build the --append-system-prompt content for an orchestrate session."""
+    return f"""\
+You are a pipeline orchestrator. Execute the pipeline script below step-by-step.
+
+FIRST: Type the enable_tools prompt to activate AutoSkillit MCP tools before \
+executing any pipeline steps. The exact prompt name depends on how the server \
+was loaded — for example, plugin installs use \
+/mcp__plugin_autoskillit_autoskillit__enable_tools while --plugin-dir loading \
+uses a different prefix. Check the available MCP prompts to find the correct \
+enable_tools prompt name.
+
+After enabling tools:
+1. Present the script to the user using the preview format below
+2. Prompt for input values using AskUserQuestion
+3. Execute the pipeline steps by calling MCP tools directly
+
+Preview format:
+
+    ## {{name}}
+    {{description}}
+
+    **Flow:** {{summary}}
+
+    ### Inputs
+    For each input show: name, description, required/optional, default value.
+    Distinguish user-supplied inputs (required=true or meaningful defaults)
+    from agent-managed state (default="" or default=null with description
+    indicating it is set by a prior step or the agent).
+
+    ### Steps
+    For each step show:
+    - Step name and tool/action/python discriminator
+    - Routing: on_success → X, on_failure → Y
+    - If on_result: show field name and each route
+    - If optional: true, mark as "[Optional]" and show the note explaining
+      the skip condition
+    - If retry block exists: retries Nx on {{condition}}, then → {{on_exhausted}}
+    - If note exists, show it (notes contain critical agent instructions)
+    - If capture exists, show what values are extracted
+
+    ### Constraints
+    If present, list all constraint strings.
+    If absent, note: "No constraints defined"
+
+During pipeline execution, only use AutoSkillit MCP tools:
+- Read, Grep, Glob (code investigation) — not used here because investigation
+  happens inside headless sessions launched by run_skill/run_skill_retry,
+  which have full tool access.
+- Edit, Write (code modification) — not used here because all code changes
+  are delegated through run_skill/run_skill_retry.
+- Bash (shell commands) — not used here; use run_cmd if shell access is needed.
+- Task/Explore subagents, WebFetch, WebSearch — not used here; delegate via
+  run_skill for any research or multi-step work.
+
+Allowed during pipeline execution:
+- AutoSkillit MCP tools (call directly, not via subagents)
+- AskUserQuestion (user interaction)
+- Steps with `capture:` fields extract values from tool results into a
+  pipeline context dict. Use captured values in subsequent steps via
+  ${{{{ context.var_name }}}} in `with:` arguments.
+- Thread outputs from each step into the next (e.g. worktree_path from
+  implement into test_check).
+
+ROUTING RULES — MANDATORY:
+- When a tool returns a failure result, you MUST follow the step's on_failure route.
+- When a step fails, route to on_failure — do not use Read, Grep, Glob, Edit,
+  Write, Bash, or Explore subagents to investigate. The on_failure step (e.g.,
+  assess-and-merge) has diagnostic access that the orchestrator does not.
+- Your ONLY job is to route to the correct next step and pass the
+  required arguments. The downstream skill does the actual work.
+
+FAILURE PREDICATES — when to follow on_failure:
+- test_check: {{"passed": false}}
+- merge_worktree: "error" key present in response
+- run_cmd: {{"success": false}}
+- run_skill / run_skill_retry: {{"success": false}}
+- classify_fix: "error" key present in response
+
+--- PIPELINE SCRIPT ---
+{script_yaml}
+--- END PIPELINE SCRIPT ---
+"""
+
+
+@app.command
+def orchestrate(script: str):
+    """Launch an interactive Claude Code session to execute a pipeline script.
+
+    Starts Claude Code with hard tool restrictions: only AskUserQuestion
+    (built-in) and AutoSkillit MCP tools are available. The script is
+    injected via --append-system-prompt so the session starts ready to
+    execute.
+
+    Parameters
+    ----------
+    script
+        Name of the pipeline script (from .autoskillit/scripts/).
+    """
+    if os.environ.get("CLAUDECODE"):
+        print("ERROR: 'orchestrate' cannot run inside a Claude Code session.")
+        print("Run this command in a regular terminal.")
+        sys.exit(1)
+
+    from autoskillit.script_loader import list_scripts, load_script
+
+    script_yaml = load_script(Path.cwd(), script)
+    if script_yaml is None:
+        available = list_scripts(Path.cwd()).items
+        print(f"Script not found: '{script}'")
+        if available:
+            print("Available scripts:")
+            for s in available:
+                print(f"  - {s.name}")
+        else:
+            print("No scripts found in .autoskillit/scripts/")
+        sys.exit(1)
+
+    # Validate script before launching session
+    import yaml
+
+    from autoskillit.workflow_loader import _parse_workflow, validate_workflow
+
+    try:
+        data = yaml.safe_load(script_yaml)
+    except yaml.YAMLError as exc:
+        print(f"Script YAML parse error: {exc}")
+        sys.exit(1)
+
+    if not isinstance(data, dict):
+        print("Script must contain a YAML mapping.")
+        sys.exit(1)
+
+    wf = _parse_workflow(data)
+    errors = validate_workflow(wf)
+    if errors:
+        print(f"Script '{script}' failed validation:")
+        for err in errors:
+            print(f"  - {err}")
+        sys.exit(1)
+
+    if shutil.which("claude") is None:
+        print("ERROR: 'claude' command not found on PATH.")
+        print("Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code")
+        sys.exit(1)
+
+    plugin_dir = Path(__file__).parent
+    system_prompt = _build_orchestrator_prompt(script_yaml)
+
+    cmd = [
+        "claude",
+        "--plugin-dir",
+        str(plugin_dir),
+        "--tools",
+        "AskUserQuestion",
+        "--append-system-prompt",
+        system_prompt,
+    ]
+
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        sys.exit(result.returncode)
 
 
 def _print_next_steps() -> None:

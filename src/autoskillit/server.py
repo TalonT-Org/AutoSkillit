@@ -31,7 +31,7 @@ from fastmcp import FastMCP
 from fastmcp.prompts.prompt import Message, PromptResult
 
 from autoskillit.config import AutomationConfig, load_config
-from autoskillit.process_lifecycle import SubprocessResult, run_managed_async
+from autoskillit.process_lifecycle import SubprocessResult, TerminationReason, run_managed_async
 from autoskillit.types import (
     CONTEXT_EXHAUSTION_MARKER,
     MergeFailedStep,
@@ -117,7 +117,7 @@ async def _run_subprocess(
     pipe-blocking from child FD inheritance) and psutil process tree cleanup.
     """
     result = await run_managed_async(cmd, cwd=Path(cwd), timeout=timeout)
-    if result.timed_out:
+    if result.termination == TerminationReason.TIMED_OUT:
         return -1, result.stdout, f"Process timed out after {timeout}s"
     return result.returncode, result.stdout, result.stderr
 
@@ -186,18 +186,22 @@ _FAILURE_SUBTYPES = frozenset({"unknown", "empty_output", "unparseable", "timeou
 def _compute_success(
     session: ClaudeSessionResult,
     returncode: int,
-    timed_out: bool,
-    stale: bool,
+    termination: TerminationReason,
+    completion_marker: str = "",
 ) -> bool:
     """Cross-validate all signals to determine unambiguous success/failure."""
-    if timed_out or stale:
+    if termination in (TerminationReason.TIMED_OUT, TerminationReason.STALE):
         return False
     if returncode != 0:
         # Monitor-completion path: when the session monitor or heartbeat
         # detects completion and kills the process, returncode is a negative
-        # signal code (e.g. -15 for SIGTERM).  Trust the session's own
-        # result envelope over the kill signal code in that case.
-        if returncode < 0 and session.subtype == "success" and session.result.strip():
+        # signal code (e.g. -15 for SIGTERM) or 0 through PTY masking.
+        # Trust the session envelope when termination is COMPLETED.
+        if (
+            termination == TerminationReason.COMPLETED
+            and session.subtype == "success"
+            and session.result.strip()
+        ):
             pass  # fall through to remaining checks
         else:
             return False
@@ -207,14 +211,22 @@ def _compute_success(
         return False
     if session.subtype in _FAILURE_SUBTYPES:
         return False
+
+    if completion_marker:
+        result_text = session.result.strip()
+        marker_stripped = result_text.replace(completion_marker, "").strip()
+        if not marker_stripped:
+            return False
+        if completion_marker not in result_text:
+            return False
+
     return True
 
 
 def _compute_retry(
     session: ClaudeSessionResult,
     returncode: int,
-    timed_out: bool,
-    stale: bool,
+    termination: TerminationReason,
 ) -> tuple[bool, RetryReason]:
     """Cross-validate all signals to determine retry eligibility."""
     # API-level retries (session knew it should be retried)
@@ -228,9 +240,9 @@ def _compute_retry(
     return False, RetryReason.NONE
 
 
-def _build_skill_result(result: SubprocessResult) -> str:
+def _build_skill_result(result: SubprocessResult, completion_marker: str = "") -> str:
     """Route SubprocessResult fields into the standard run_skill JSON response."""
-    if result.stale:
+    if result.termination == TerminationReason.STALE:
         return json.dumps(
             {
                 "success": False,
@@ -246,7 +258,7 @@ def _build_skill_result(result: SubprocessResult) -> str:
             }
         )
 
-    if result.timed_out:
+    if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
         session = ClaudeSessionResult(
             subtype="timeout",
@@ -259,12 +271,17 @@ def _build_skill_result(result: SubprocessResult) -> str:
         returncode = result.returncode if result.returncode is not None else -1
         session = parse_session_result(result.stdout)
 
-    success = _compute_success(session, returncode, result.timed_out, result.stale)
-    needs_retry, retry_reason = _compute_retry(session, returncode, result.timed_out, result.stale)
+    success = _compute_success(session, returncode, result.termination, completion_marker)
+    needs_retry, retry_reason = _compute_retry(session, returncode, result.termination)
+
+    result_text = _truncate(session.agent_result)
+    if completion_marker:
+        result_text = result_text.replace(completion_marker, "").strip()
+
     return json.dumps(
         {
             "success": success,
-            "result": _truncate(session.agent_result),
+            "result": result_text,
             "session_id": session.session_id,
             "subtype": session.subtype,
             "is_error": session.is_error,
@@ -772,7 +789,7 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
         stale_threshold=cfg.stale_threshold,
     )
 
-    return _build_skill_result(result)
+    return _build_skill_result(result, completion_marker=cfg.completion_marker)
 
 
 @mcp.tool(tags={"automation"})
@@ -834,7 +851,7 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
         stale_threshold=cfg.stale_threshold,
     )
 
-    return _build_skill_result(result)
+    return _build_skill_result(result, completion_marker=cfg.completion_marker)
 
 
 _OUTCOME_PATTERN = re.compile(

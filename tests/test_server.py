@@ -19,7 +19,7 @@ from autoskillit.config import (
     RunSkillConfig,
     SafetyConfig,
 )
-from autoskillit.process_lifecycle import SubprocessResult
+from autoskillit.process_lifecycle import SubprocessResult, TerminationReason
 from autoskillit.server import (
     ClaudeSessionResult,
     CleanupResult,
@@ -71,7 +71,7 @@ def _make_result(returncode: int = 0, stdout: str = "", stderr: str = ""):
         returncode=returncode,
         stdout=stdout,
         stderr=stderr,
-        timed_out=False,
+        termination=TerminationReason.NATURAL_EXIT,
         pid=12345,
     )
 
@@ -82,7 +82,7 @@ def _make_timeout_result(stdout: str = "", stderr: str = ""):
         returncode=-1,
         stdout=stdout,
         stderr=stderr,
-        timed_out=True,
+        termination=TerminationReason.TIMED_OUT,
         pid=12345,
     )
 
@@ -3384,9 +3384,8 @@ class TestStalenessReturnsNeedsRetry:
             returncode=-1,
             stdout="",
             stderr="",
-            timed_out=False,
+            termination=TerminationReason.STALE,
             pid=12345,
-            stale=True,
         )
         response = json.loads(_build_skill_result(stale_result))
         assert response["needs_retry"] is True
@@ -3413,7 +3412,7 @@ class TestBuildSkillResultCrossValidation:
     def test_empty_stdout_exit_zero_is_failure(self):
         """Exit 0 with empty stdout is NOT success — output was lost."""
         result_obj = SubprocessResult(
-            returncode=0, stdout="", stderr="", timed_out=False, pid=1, stale=False
+            returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT, pid=1
         )
         response = json.loads(_build_skill_result(result_obj))
         assert response["success"] is False
@@ -3422,7 +3421,7 @@ class TestBuildSkillResultCrossValidation:
     def test_timed_out_session_is_failure(self):
         """Timed-out sessions are always failures, regardless of partial stdout."""
         result_obj = SubprocessResult(
-            returncode=-1, stdout="", stderr="", timed_out=True, pid=1, stale=False
+            returncode=-1, stdout="", stderr="", termination=TerminationReason.TIMED_OUT, pid=1
         )
         response = json.loads(_build_skill_result(result_obj))
         assert response["success"] is False
@@ -3432,7 +3431,7 @@ class TestBuildSkillResultCrossValidation:
     def test_stale_session_is_failure(self):
         """Stale sessions are failures (even though retriable)."""
         result_obj = SubprocessResult(
-            returncode=-1, stdout="", stderr="", timed_out=False, pid=1, stale=True
+            returncode=-1, stdout="", stderr="", termination=TerminationReason.STALE, pid=1
         )
         response = json.loads(_build_skill_result(result_obj))
         assert response["success"] is False
@@ -3450,7 +3449,11 @@ class TestBuildSkillResultCrossValidation:
             }
         )
         result_obj = SubprocessResult(
-            returncode=0, stdout=valid_json, stderr="", timed_out=False, pid=1, stale=False
+            returncode=0,
+            stdout=valid_json,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
         )
         response = json.loads(_build_skill_result(result_obj))
         assert response["success"] is True
@@ -3469,7 +3472,11 @@ class TestBuildSkillResultCrossValidation:
             }
         )
         result_obj = SubprocessResult(
-            returncode=1, stdout=valid_json, stderr="", timed_out=False, pid=1, stale=False
+            returncode=1,
+            stdout=valid_json,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
         )
         response = json.loads(_build_skill_result(result_obj))
         assert response["success"] is False
@@ -3489,7 +3496,7 @@ class TestBuildSkillResultCrossValidation:
     def test_stale_schema(self):
         """Stale response has standard keys."""
         result_obj = SubprocessResult(
-            returncode=-1, stdout="", stderr="", timed_out=False, pid=1, stale=True
+            returncode=-1, stdout="", stderr="", termination=TerminationReason.STALE, pid=1
         )
         response = json.loads(_build_skill_result(result_obj))
         assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
@@ -3497,7 +3504,7 @@ class TestBuildSkillResultCrossValidation:
     def test_timeout_schema(self):
         """Timeout response has standard keys."""
         result_obj = SubprocessResult(
-            returncode=-1, stdout="", stderr="", timed_out=True, pid=1, stale=False
+            returncode=-1, stdout="", stderr="", termination=TerminationReason.TIMED_OUT, pid=1
         )
         response = json.loads(_build_skill_result(result_obj))
         assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
@@ -3514,7 +3521,11 @@ class TestBuildSkillResultCrossValidation:
             }
         )
         result_obj = SubprocessResult(
-            returncode=0, stdout=valid_json, stderr="", timed_out=False, pid=1, stale=False
+            returncode=0,
+            stdout=valid_json,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
         )
         response = json.loads(_build_skill_result(result_obj))
         assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
@@ -3522,7 +3533,7 @@ class TestBuildSkillResultCrossValidation:
     def test_empty_stdout_schema(self):
         """Empty stdout response has standard keys."""
         result_obj = SubprocessResult(
-            returncode=0, stdout="", stderr="", timed_out=False, pid=1, stale=False
+            returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT, pid=1
         )
         response = json.loads(_build_skill_result(result_obj))
         assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
@@ -3568,43 +3579,63 @@ class TestComputeSuccess:
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="Done.", session_id="s1"
         )
-        assert _compute_success(session, returncode=0, timed_out=False, stale=False) is True
+        assert (
+            _compute_success(session, returncode=0, termination=TerminationReason.NATURAL_EXIT)
+            is True
+        )
 
     def test_empty_result_is_failure(self):
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="", session_id="s1"
         )
-        assert _compute_success(session, returncode=0, timed_out=False, stale=False) is False
+        assert (
+            _compute_success(session, returncode=0, termination=TerminationReason.NATURAL_EXIT)
+            is False
+        )
 
     def test_nonzero_exit_is_failure(self):
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="Done.", session_id="s1"
         )
-        assert _compute_success(session, returncode=1, timed_out=False, stale=False) is False
+        assert (
+            _compute_success(session, returncode=1, termination=TerminationReason.NATURAL_EXIT)
+            is False
+        )
 
     def test_is_error_true_is_failure(self):
         session = ClaudeSessionResult(
             subtype="success", is_error=True, result="Error occurred", session_id="s1"
         )
-        assert _compute_success(session, returncode=0, timed_out=False, stale=False) is False
+        assert (
+            _compute_success(session, returncode=0, termination=TerminationReason.NATURAL_EXIT)
+            is False
+        )
 
     def test_timed_out_is_failure(self):
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="Done.", session_id="s1"
         )
-        assert _compute_success(session, returncode=0, timed_out=True, stale=False) is False
+        assert (
+            _compute_success(session, returncode=0, termination=TerminationReason.TIMED_OUT)
+            is False
+        )
 
     def test_stale_is_failure(self):
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="Done.", session_id="s1"
         )
-        assert _compute_success(session, returncode=0, timed_out=False, stale=True) is False
+        assert (
+            _compute_success(session, returncode=0, termination=TerminationReason.STALE) is False
+        )
 
     def test_unknown_subtype_is_failure(self):
         session = ClaudeSessionResult(
             subtype="unknown", is_error=False, result="Done.", session_id="s1"
         )
-        assert _compute_success(session, returncode=0, timed_out=False, stale=False) is False
+        assert (
+            _compute_success(session, returncode=0, termination=TerminationReason.NATURAL_EXIT)
+            is False
+        )
 
 
 class TestComputeRetry:
@@ -3614,7 +3645,9 @@ class TestComputeRetry:
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="Done.", session_id="s1"
         )
-        needs, reason = _compute_retry(session, returncode=0, timed_out=False, stale=False)
+        needs, reason = _compute_retry(
+            session, returncode=0, termination=TerminationReason.NATURAL_EXIT
+        )
         assert needs is False
         assert reason == RetryReason.NONE
 
@@ -3622,7 +3655,9 @@ class TestComputeRetry:
         session = ClaudeSessionResult(
             subtype="error_max_turns", is_error=False, result="", session_id="s1"
         )
-        needs, reason = _compute_retry(session, returncode=1, timed_out=False, stale=False)
+        needs, reason = _compute_retry(
+            session, returncode=1, termination=TerminationReason.NATURAL_EXIT
+        )
         assert needs is True
         assert reason == RetryReason.RESUME
 
@@ -3630,7 +3665,9 @@ class TestComputeRetry:
         session = ClaudeSessionResult(
             subtype="success", is_error=True, result="Prompt is too long", session_id="s1"
         )
-        needs, reason = _compute_retry(session, returncode=1, timed_out=False, stale=False)
+        needs, reason = _compute_retry(
+            session, returncode=1, termination=TerminationReason.NATURAL_EXIT
+        )
         assert needs is True
         assert reason == RetryReason.RESUME
 
@@ -3639,7 +3676,9 @@ class TestComputeRetry:
         session = ClaudeSessionResult(
             subtype="empty_output", is_error=True, result="", session_id=""
         )
-        needs, reason = _compute_retry(session, returncode=0, timed_out=False, stale=False)
+        needs, reason = _compute_retry(
+            session, returncode=0, termination=TerminationReason.NATURAL_EXIT
+        )
         assert needs is True
         assert reason == RetryReason.RESUME
 
@@ -3648,13 +3687,17 @@ class TestComputeRetry:
         session = ClaudeSessionResult(
             subtype="empty_output", is_error=True, result="", session_id=""
         )
-        needs, reason = _compute_retry(session, returncode=1, timed_out=False, stale=False)
+        needs, reason = _compute_retry(
+            session, returncode=1, termination=TerminationReason.NATURAL_EXIT
+        )
         assert needs is False
         assert reason == RetryReason.NONE
 
     def test_timeout_not_retriable(self):
         session = ClaudeSessionResult(subtype="timeout", is_error=True, result="", session_id="")
-        needs, reason = _compute_retry(session, returncode=-1, timed_out=True, stale=False)
+        needs, reason = _compute_retry(
+            session, returncode=-1, termination=TerminationReason.TIMED_OUT
+        )
         assert needs is False
         assert reason == RetryReason.NONE
 
@@ -3662,7 +3705,9 @@ class TestComputeRetry:
         session = ClaudeSessionResult(
             subtype="unparseable", is_error=True, result="crash", session_id=""
         )
-        needs, reason = _compute_retry(session, returncode=1, timed_out=False, stale=False)
+        needs, reason = _compute_retry(
+            session, returncode=1, termination=TerminationReason.NATURAL_EXIT
+        )
         assert needs is False
         assert reason == RetryReason.NONE
 
@@ -3673,7 +3718,9 @@ class TestComputeRetry:
             result="tool error",
             session_id="s1",
         )
-        needs, reason = _compute_retry(session, returncode=1, timed_out=False, stale=False)
+        needs, reason = _compute_retry(
+            session, returncode=1, termination=TerminationReason.NATURAL_EXIT
+        )
         assert needs is False
         assert reason == RetryReason.NONE
 
@@ -3696,9 +3743,8 @@ class TestBuildSkillResultStderr:
             returncode=0,
             stdout=valid_json,
             stderr="queue contention",
-            timed_out=False,
+            termination=TerminationReason.NATURAL_EXIT,
             pid=1,
-            stale=False,
         )
         response = json.loads(_build_skill_result(result_obj))
         assert response["stderr"] == "queue contention"
@@ -3719,9 +3765,8 @@ class TestBuildSkillResultStderr:
             returncode=0,
             stdout=valid_json,
             stderr=long_stderr,
-            timed_out=False,
+            termination=TerminationReason.NATURAL_EXIT,
             pid=1,
-            stale=False,
         )
         response = json.loads(_build_skill_result(result_obj))
         assert len(response["stderr"]) < len(long_stderr)
@@ -3742,9 +3787,8 @@ class TestBuildSkillResultStderr:
             returncode=0,
             stdout=valid_json,
             stderr="",
-            timed_out=False,
+            termination=TerminationReason.NATURAL_EXIT,
             pid=1,
-            stale=False,
         )
         response = json.loads(_build_skill_result(result_obj))
         assert response["stderr"] == ""
@@ -3752,7 +3796,7 @@ class TestBuildSkillResultStderr:
     def test_stale_branch_has_empty_stderr(self):
         """Stale branch produces empty stderr (process killed before output)."""
         result_obj = SubprocessResult(
-            returncode=-1, stdout="", stderr="", timed_out=False, pid=1, stale=True
+            returncode=-1, stdout="", stderr="", termination=TerminationReason.STALE, pid=1
         )
         response = json.loads(_build_skill_result(result_obj))
         assert response["stderr"] == ""
@@ -3854,6 +3898,8 @@ class TestParseFallbackRejectsUntypedJson:
 class TestCompletionViaMonitorKill:
     """Completion detected by monitor + kill returncode is not failure."""
 
+    MARKER = "%%AUTOSKILLIT_COMPLETE%%"
+
     def test_completion_via_monitor_kill_is_not_failure(self):
         """When the session monitor detects completion and kills the process,
         returncode is -15 (SIGTERM). _compute_success should treat this as
@@ -3862,8 +3908,192 @@ class TestCompletionViaMonitorKill:
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
-            result="Task completed successfully.",
+            result=f"Task completed successfully.\n\n{self.MARKER}",
             session_id="s1",
         )
-        # returncode=-15 from SIGTERM kill after monitor detected completion
-        assert _compute_success(session, returncode=-15, timed_out=False, stale=False) is True
+        assert (
+            _compute_success(
+                session,
+                returncode=-15,
+                termination=TerminationReason.COMPLETED,
+                completion_marker=self.MARKER,
+            )
+            is True
+        )
+
+    def test_completion_via_monitor_kill_returncode_zero(self):
+        """PTY may mask signal codes to returncode=0 — COMPLETED still works."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=f"Task completed successfully.\n\n{self.MARKER}",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=0,
+                termination=TerminationReason.COMPLETED,
+                completion_marker=self.MARKER,
+            )
+            is True
+        )
+
+
+class TestMarkerCrossValidation:
+    """Completion marker cross-validation catches misclassified sessions."""
+
+    MARKER = "%%AUTOSKILLIT_COMPLETE%%"
+
+    def test_marker_only_result_is_not_success(self):
+        """Result containing only the marker with no real content is failure."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=self.MARKER,
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker=self.MARKER,
+            )
+            is False
+        )
+
+    def test_marker_stripped_from_result(self):
+        """_build_skill_result strips the completion marker from result text."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": f"Task completed.\n\n{self.MARKER}",
+                "session_id": "s1",
+            }
+        )
+        result_obj = SubprocessResult(
+            returncode=0,
+            stdout=valid_json,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        )
+        response = json.loads(_build_skill_result(result_obj, completion_marker=self.MARKER))
+        assert self.MARKER not in response["result"]
+        assert "Task completed." in response["result"]
+
+    def test_natural_exit_without_marker_not_success(self):
+        """Session claims success but never wrote the marker — not success."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Some partial output",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker=self.MARKER,
+            )
+            is False
+        )
+
+    def test_termination_reason_natural_exit(self):
+        """NATURAL_EXIT with marker in result is success."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=f"Done.\n\n{self.MARKER}",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker=self.MARKER,
+            )
+            is True
+        )
+
+    def test_termination_reason_completed(self):
+        """COMPLETED termination with marker in result is success."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=f"Done.\n\n{self.MARKER}",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=0,
+                termination=TerminationReason.COMPLETED,
+                completion_marker=self.MARKER,
+            )
+            is True
+        )
+
+    def test_termination_reason_completed_without_marker_fails(self):
+        """COMPLETED but result doesn't contain marker — not success."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Some output without marker",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=0,
+                termination=TerminationReason.COMPLETED,
+                completion_marker=self.MARKER,
+            )
+            is False
+        )
+
+    @pytest.mark.parametrize(
+        "termination,returncode,result_text,expected",
+        [
+            (TerminationReason.NATURAL_EXIT, 0, f"Done.\n\n{MARKER}", True),
+            (TerminationReason.NATURAL_EXIT, 0, "No marker here", False),
+            (TerminationReason.NATURAL_EXIT, 0, MARKER, False),  # marker-only
+            (TerminationReason.COMPLETED, 0, f"Done.\n\n{MARKER}", True),
+            (TerminationReason.COMPLETED, -15, f"Done.\n\n{MARKER}", True),
+            (TerminationReason.COMPLETED, 0, "No marker here", False),
+            (TerminationReason.STALE, -15, f"Done.\n\n{MARKER}", False),
+            (TerminationReason.TIMED_OUT, -1, f"Done.\n\n{MARKER}", False),
+        ],
+        ids=[
+            "natural_exit+marker=success",
+            "natural_exit+no_marker=failure",
+            "natural_exit+marker_only=failure",
+            "completed+marker=success",
+            "completed_sigterm+marker=success",
+            "completed+no_marker=failure",
+            "stale+marker=failure",
+            "timed_out+marker=failure",
+        ],
+    )
+    def test_cross_validation_matrix(self, termination, returncode, result_text, expected):
+        """Full cross-validation matrix for termination x marker presence."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=result_text,
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=returncode,
+                termination=termination,
+                completion_marker=self.MARKER,
+            )
+            is expected
+        )

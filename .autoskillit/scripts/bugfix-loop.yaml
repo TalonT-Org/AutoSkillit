@@ -27,7 +27,7 @@ LOOP:
    - FAIL → go to FIX
 
 FIX:
-6. run_skill("/autoskillit:assess-and-merge ${worktree_path} ${plan_path} ${base_branch}", cwd=${work_dir})
+6. run_skill("/autoskillit:assess-and-merge ${worktree_path} ${plan_path} ${base_branch}", cwd=${work_dir}, model="sonnet")
    - PASS → Done.
    - FAIL → classify_fix(${worktree_path}, ${base_branch})
      - full_restart → back to step 1 (re-investigate)

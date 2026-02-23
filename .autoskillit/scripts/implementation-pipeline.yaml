@@ -103,6 +103,7 @@ steps:
 
   fix:
     tool: run_skill
+    model: sonnet
     with:
       skill_command: "/autoskillit:assess-and-merge ${{ inputs.worktree_path }} ${{ inputs.plan_part }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.work_dir }}"

@@ -18,8 +18,10 @@ import psutil
 import pytest
 
 from autoskillit.process_lifecycle import (
+    TerminationReason,
     _heartbeat,
     _jsonl_contains_marker,
+    _marker_is_standalone,
     _session_log_monitor,
     async_kill_process_tree,
     kill_process_tree,
@@ -128,7 +130,9 @@ class TestTempFileIOEliminatesPipeBlocking:
             timeout=10,
         )
 
-        assert not result.timed_out, "Read should not block even though child holds FD"
+        assert result.termination != TerminationReason.TIMED_OUT, (
+            "Read should not block even though child holds FD"
+        )
         assert result.returncode == 0
         assert "parent output line" in result.stdout
 
@@ -143,7 +147,7 @@ class TestTempFileIOEliminatesPipeBlocking:
             timeout=10,
         )
 
-        assert not result.timed_out
+        assert result.termination != TerminationReason.TIMED_OUT
         assert result.returncode == 0
         assert "parent output line" in result.stdout
 
@@ -164,7 +168,7 @@ class TestProcessTreeKill:
         )
 
         # Process should have been killed by timeout
-        assert result.timed_out
+        assert result.termination == TerminationReason.TIMED_OUT
 
         # Parse PIDs from output
         pids = []
@@ -195,7 +199,7 @@ class TestTimeoutKillsHangingProcess:
         )
         elapsed = time.monotonic() - start
 
-        assert result.timed_out
+        assert result.termination == TerminationReason.TIMED_OUT
         assert elapsed < 8, f"Should return within ~2s timeout, took {elapsed:.1f}s"
         assert "before hang" in result.stdout  # Partial output captured
         # Process should be dead
@@ -218,7 +222,7 @@ class TestNormalCompletion:
             timeout=10,
         )
 
-        assert not result.timed_out
+        assert result.termination != TerminationReason.TIMED_OUT
         assert result.returncode == 0
         for i in range(10):
             assert f"line {i}" in result.stdout
@@ -234,7 +238,7 @@ class TestNormalCompletion:
             timeout=10,
         )
 
-        assert not result.timed_out
+        assert result.termination != TerminationReason.TIMED_OUT
         assert result.returncode == 0
         for i in range(10):
             assert f"line {i}" in result.stdout
@@ -256,7 +260,7 @@ class TestStdinInput:
             input_data="hello world",
         )
 
-        assert not result.timed_out
+        assert result.termination != TerminationReason.TIMED_OUT
         assert result.returncode == 0
         assert "echo: hello world" in result.stdout
 
@@ -272,7 +276,7 @@ class TestStdinInput:
             input_data="hello world",
         )
 
-        assert not result.timed_out
+        assert result.termination != TerminationReason.TIMED_OUT
         assert result.returncode == 0
         assert "echo: hello world" in result.stdout
 
@@ -319,7 +323,9 @@ class TestHeartbeatDetectsCompletion:
         )
         elapsed = time.monotonic() - start
 
-        assert not result.timed_out, "Heartbeat should fire before wall-clock timeout"
+        assert result.termination != TerminationReason.TIMED_OUT, (
+            "Heartbeat should fire before wall-clock timeout"
+        )
         assert elapsed < 10, f"Heartbeat should detect within ~5s, took {elapsed:.1f}s"
         assert '"type": "result"' in result.stdout or '"type":"result"' in result.stdout
 
@@ -336,7 +342,9 @@ class TestHeartbeatDetectsCompletion:
             heartbeat_marker='"type":"result"',
         )
 
-        assert result.timed_out, "Non-matching output should not trigger heartbeat"
+        assert result.termination == TerminationReason.TIMED_OUT, (
+            "Non-matching output should not trigger heartbeat"
+        )
 
 
 class TestNoHeartbeatPreservesExistingBehavior:
@@ -355,7 +363,7 @@ class TestNoHeartbeatPreservesExistingBehavior:
             heartbeat_marker=None,
         )
 
-        assert result.timed_out
+        assert result.termination == TerminationReason.TIMED_OUT
 
 
 class TestSessionLogMonitor:
@@ -388,7 +396,7 @@ class TestSessionLogMonitor:
                             "type": "assistant",
                             "message": {
                                 "role": "assistant",
-                                "content": "Done %%AUTOSKILLIT_COMPLETE%%",
+                                "content": "Done\n\n%%AUTOSKILLIT_COMPLETE%%",
                             },
                         }
                     )
@@ -510,7 +518,7 @@ class TestSessionLogMonitor:
         assistant_record = json.dumps(
             {
                 "type": "assistant",
-                "message": {"role": "assistant", "content": f"Done {marker}"},
+                "message": {"role": "assistant", "content": f"Done\n\n{marker}"},
             }
         )
         with session_file.open("a") as f:
@@ -568,11 +576,11 @@ class TestSessionLogMonitor:
         await asyncio.sleep(4.0)
         assert not monitor_task.done(), "Monitor fired on user/enqueue records"
 
-        # Write record 3 (assistant with marker)
+        # Write record 3 (assistant with marker as standalone line)
         assistant_record = json.dumps(
             {
                 "type": "assistant",
-                "message": {"role": "assistant", "content": f"All done {marker}"},
+                "message": {"role": "assistant", "content": f"All done\n\n{marker}"},
             }
         )
         with session_file.open("a") as f:
@@ -588,13 +596,13 @@ class TestJsonlContainsMarker:
     def test_matches_in_allowed_record_type(self):
         import json
 
-        content = json.dumps({"type": "assistant", "message": {"content": "Done MARKER"}})
+        content = json.dumps({"type": "assistant", "message": {"content": "Done\nMARKER"}})
         assert _jsonl_contains_marker(content, "MARKER", frozenset({"assistant"}))
 
     def test_ignores_disallowed_record_type(self):
         import json
 
-        content = json.dumps({"type": "queue-operation", "content": "prompt MARKER"})
+        content = json.dumps({"type": "queue-operation", "content": "prompt\nMARKER"})
         assert not _jsonl_contains_marker(content, "MARKER", frozenset({"assistant"}))
 
     def test_ignores_unparseable_lines(self):
@@ -605,18 +613,34 @@ class TestJsonlContainsMarker:
         import json
 
         lines = [
-            json.dumps({"type": "user", "content": "hello MARKER"}),
-            json.dumps({"type": "assistant", "content": "world"}),
-            json.dumps({"type": "assistant", "content": "found MARKER"}),
+            json.dumps({"type": "user", "message": {"content": "hello\nMARKER"}}),
+            json.dumps({"type": "assistant", "message": {"content": "world"}}),
+            json.dumps({"type": "assistant", "message": {"content": "found it\nMARKER"}}),
         ]
         content = "\n".join(lines)
-        # Marker in user record should not match; marker in assistant should
         assert _jsonl_contains_marker(content, "MARKER", frozenset({"assistant"}))
 
     def test_no_match_when_marker_absent(self):
         import json
 
-        content = json.dumps({"type": "assistant", "content": "no marker here"})
+        content = json.dumps({"type": "assistant", "message": {"content": "no marker here"}})
+        assert not _jsonl_contains_marker(content, "MARKER", frozenset({"assistant"}))
+
+    def test_marker_in_result_record(self):
+        import json
+
+        content = json.dumps({"type": "result", "result": "MARKER", "subtype": "success"})
+        assert _jsonl_contains_marker(content, "MARKER", frozenset({"result"}))
+
+    def test_marker_embedded_in_prose_no_match(self):
+        import json
+
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": "I will emit MARKER when done"},
+            }
+        )
         assert not _jsonl_contains_marker(content, "MARKER", frozenset({"assistant"}))
 
 
@@ -685,7 +709,7 @@ class TestPtyWrapper:
             pty_mode=True,
         )
 
-        assert not result.timed_out
+        assert result.termination != TerminationReason.TIMED_OUT
         assert "True" in result.stdout
 
     @pytest.mark.asyncio
@@ -701,7 +725,7 @@ class TestPtyWrapper:
             pty_mode=False,
         )
 
-        assert not result.timed_out
+        assert result.termination != TerminationReason.TIMED_OUT
         assert "False" in result.stdout
 
 
@@ -787,7 +811,7 @@ class TestDualWinnerRace:
             stale_threshold=0.001,  # fires immediately once file is found
             completion_marker="NONEXISTENT",
         )
-        assert result.stale is False
+        assert result.termination != TerminationReason.STALE
         assert result.returncode == 0
 
     @pytest.mark.asyncio
@@ -798,8 +822,8 @@ class TestDualWinnerRace:
             cwd=tmp_path,
             timeout=10,
         )
-        assert result.stale is False
-        assert result.timed_out is False
+        assert result.termination != TerminationReason.STALE
+        assert result.termination != TerminationReason.TIMED_OUT
 
 
 class TestReadTempOutputLogging:
@@ -817,3 +841,95 @@ class TestReadTempOutputLogging:
         assert stdout == ""
         assert stderr == ""
         assert "Failed to read" in caplog.text
+
+
+class TestMarkerIsStandalone:
+    """_marker_is_standalone validates standalone line matching."""
+
+    def test_standalone_marker(self):
+        assert _marker_is_standalone(
+            "Done\n\n%%AUTOSKILLIT_COMPLETE%%", "%%AUTOSKILLIT_COMPLETE%%"
+        )
+
+    def test_embedded_marker_rejected(self):
+        assert not _marker_is_standalone(
+            "I will emit %%AUTOSKILLIT_COMPLETE%% when done", "%%AUTOSKILLIT_COMPLETE%%"
+        )
+
+    def test_marker_as_sole_content(self):
+        assert _marker_is_standalone("%%AUTOSKILLIT_COMPLETE%%", "%%AUTOSKILLIT_COMPLETE%%")
+
+    def test_marker_with_trailing_whitespace(self):
+        assert _marker_is_standalone(
+            "Done\n%%AUTOSKILLIT_COMPLETE%%  ", "%%AUTOSKILLIT_COMPLETE%%"
+        )
+
+
+class TestJsonlFieldLevelMarkerMatching:
+    """_jsonl_contains_marker extracts field values, not raw JSON lines."""
+
+    def test_marker_quoted_in_assistant_prose_no_match(self):
+        """Marker text quoted in prose should NOT trigger detection."""
+        import json
+
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": "I see %%AUTOSKILLIT_COMPLETE%% in the prompt",
+                },
+            }
+        )
+        assert not _jsonl_contains_marker(
+            content, "%%AUTOSKILLIT_COMPLETE%%", frozenset({"assistant"})
+        )
+
+    def test_marker_as_standalone_final_line_matches(self):
+        """Marker as standalone final line in content should trigger detection."""
+        import json
+
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": "Task done.\n\n%%AUTOSKILLIT_COMPLETE%%",
+                },
+            }
+        )
+        assert _jsonl_contains_marker(
+            content, "%%AUTOSKILLIT_COMPLETE%%", frozenset({"assistant"})
+        )
+
+    def test_marker_in_result_record_matches(self):
+        """Marker in result record's result field should trigger detection."""
+        import json
+
+        content = json.dumps(
+            {
+                "type": "result",
+                "result": "%%AUTOSKILLIT_COMPLETE%%",
+                "subtype": "success",
+            }
+        )
+        assert _jsonl_contains_marker(content, "%%AUTOSKILLIT_COMPLETE%%", frozenset({"result"}))
+
+
+class TestHeartbeatTerminationReason:
+    """Heartbeat kill produces COMPLETED termination reason."""
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_kill_sets_completed_termination(self, tmp_path):
+        """When heartbeat detects result and kills the process, termination is COMPLETED."""
+        script = tmp_path / "result_hang.py"
+        script.write_text(WRITE_RESULT_THEN_HANG_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker='"type":"result"',
+        )
+
+        assert result.termination == TerminationReason.COMPLETED

@@ -268,7 +268,7 @@ class TestCLI:
     def test_doctor_ignores_healthy_coregistered_servers(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """doctor does not warn about legitimate co-registered MCP servers (no standalone autoskillit)."""
+        """doctor ignores legitimate co-registered MCP servers (no standalone autoskillit)."""
         fake_claude_json = tmp_path / ".claude.json"
         fake_bin = tmp_path / "legit-server"
         fake_bin.write_text("#!/bin/sh\n")

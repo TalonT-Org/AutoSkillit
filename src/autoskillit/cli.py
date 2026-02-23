@@ -1,4 +1,4 @@
-"""CLI for autoskillit: serve, init, install, config, skills, workflows, update."""
+"""CLI for autoskillit: serve, init, install, orchestrate, config, skills, workflows, update."""
 
 from __future__ import annotations
 
@@ -566,6 +566,120 @@ def workflows_show(name: str):
         print(f"No workflow named '{name}'.", file=sys.stderr)
         sys.exit(1)
     print(match.path.read_text())
+
+
+def _build_orchestrator_prompt(script_yaml: str) -> str:
+    """Build the --append-system-prompt content for an orchestrate session."""
+    return f"""\
+You are a pipeline orchestrator. Execute the pipeline script below step-by-step.
+
+FIRST: Type the enable_tools prompt to activate AutoSkillit MCP tools before \
+executing any pipeline steps. The prompt name depends on how the server was \
+loaded (e.g. /mcp__plugin_autoskillit_autoskillit__enable_tools for plugin installs).
+
+After enabling tools:
+1. Present the script to the user using the preview format below
+2. Prompt for input values using AskUserQuestion
+3. Execute the pipeline steps by calling MCP tools directly
+
+Preview format:
+
+    ## {{name}}
+    {{description}}
+
+    **Flow:** {{summary}}
+
+    ### Inputs
+    For each input show: name, description, required/optional, default value.
+    Distinguish user-supplied inputs (required=true or meaningful defaults)
+    from agent-managed state (default="" or default=null with description
+    indicating it is set by a prior step or the agent).
+
+    ### Steps
+    For each step show:
+    - Step name and tool/action/python discriminator
+    - Routing: on_success → X, on_failure → Y
+    - If on_result: show field name and each route
+    - If optional: true, mark as "[Optional]" and show the note explaining
+      the skip condition
+    - If retry block exists: retries Nx on {{condition}}, then → {{on_exhausted}}
+    - If note exists, show it (notes contain critical agent instructions)
+    - If capture exists, show what values are extracted
+
+    ### Constraints
+    If present, list all constraint strings.
+    If absent, note: "No constraints defined"
+
+ROUTING RULES — MANDATORY:
+- When a tool returns a failure result, you MUST follow the step's on_failure route.
+- When a step fails, route to on_failure — do not use Read, Grep, Glob, Edit,
+  Write, Bash, or Explore subagents to investigate. The on_failure step (e.g.,
+  assess-and-merge) has diagnostic access that the orchestrator does not.
+- Your ONLY job is to route to the correct next step and pass the
+  required arguments. The downstream skill does the actual work.
+
+FAILURE PREDICATES — when to follow on_failure:
+- test_check: {{"passed": false}}
+- merge_worktree: "error" key present in response
+- run_cmd: {{"success": false}}
+- run_skill / run_skill_retry: {{"success": false}}
+- classify_fix: "error" key present in response
+
+--- PIPELINE SCRIPT ---
+{script_yaml}
+--- END PIPELINE SCRIPT ---
+"""
+
+
+@app.command
+def orchestrate(script: str):
+    """Launch an interactive Claude Code session to execute a pipeline script.
+
+    Starts Claude Code with hard tool restrictions: only AskUserQuestion
+    (built-in) and AutoSkillit MCP tools are available. The script is
+    injected via --append-system-prompt so the session starts ready to
+    execute.
+
+    Parameters
+    ----------
+    script
+        Name of the pipeline script (from .autoskillit/scripts/).
+    """
+    from autoskillit.script_loader import list_scripts, load_script
+
+    script_yaml = load_script(Path.cwd(), script)
+    if script_yaml is None:
+        available = list_scripts(Path.cwd()).items
+        print(f"Script not found: '{script}'")
+        if available:
+            print("Available scripts:")
+            for s in available:
+                print(f"  - {s.name}")
+        else:
+            print("No scripts found in .autoskillit/scripts/")
+        sys.exit(1)
+
+    if shutil.which("claude") is None:
+        print("ERROR: 'claude' command not found on PATH.")
+        print("Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code")
+        sys.exit(1)
+
+    plugin_dir = Path(__file__).parent
+    system_prompt = _build_orchestrator_prompt(script_yaml)
+
+    cmd = [
+        "claude",
+        "--plugin-dir",
+        str(plugin_dir),
+        "--tools",
+        "AskUserQuestion",
+        "--append-system-prompt",
+        system_prompt,
+    ]
+
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        sys.exit(result.returncode)
 
 
 def _print_next_steps() -> None:

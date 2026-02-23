@@ -12,6 +12,8 @@ from autoskillit.types import RETRY_RESPONSE_FIELDS, WorkflowSource
 from autoskillit.workflow_loader import (
     StepResultRoute,
     Workflow,
+    WorkflowStep,
+    _parse_step,
     builtin_workflows_dir,
     list_workflows,
     load_workflow,
@@ -805,3 +807,24 @@ class TestWorkflowLoader:
         assert not failures, "Bundled workflows missing constraints:\n" + "\n".join(
             f"  - {f}" for f in failures
         )
+
+    # OPT1
+    def test_workflow_step_has_optional_field(self):
+        """WorkflowStep must have an optional field of type bool defaulting to False."""
+        import dataclasses
+
+        fields = {f.name: f for f in dataclasses.fields(WorkflowStep)}
+        assert "optional" in fields, "WorkflowStep must have an 'optional' field"
+        assert fields["optional"].type == "bool", (
+            f"WorkflowStep.optional must be bool, got {fields['optional'].type}"
+        )
+        assert fields["optional"].default is False, "WorkflowStep.optional must default to False"
+
+    # OPT2
+    def test_parse_step_preserves_optional(self):
+        """_parse_step must preserve optional=True and default to False."""
+        step_with = _parse_step({"tool": "test_check", "optional": True})
+        assert step_with.optional is True, "_parse_step must preserve optional=True"
+
+        step_without = _parse_step({"tool": "test_check"})
+        assert step_without.optional is False, "_parse_step must default optional to False"

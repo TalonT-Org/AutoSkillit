@@ -190,3 +190,42 @@ class TestSkillResolver:
         content = skill_path.read_text()
         assert "per-group" in content.lower() or "groupA_" in content
         assert "manifest" in content.lower()
+
+    def test_bundled_skills_list_matches_filesystem(self) -> None:
+        """make-script-skill SKILL.md bundled skills list must match filesystem."""
+        skill_md = bundled_skills_dir() / "make-script-skill" / "SKILL.md"
+        content = skill_md.read_text()
+
+        # Extract the bundled skills list section
+        in_section = False
+        skills_text = ""
+        for line in content.splitlines():
+            if "## Bundled AutoSkillit Skills" in line:
+                in_section = True
+                continue
+            if in_section and line.startswith("## "):
+                break
+            if in_section:
+                skills_text += line + "\n"
+
+        # Parse comma-separated skill names from the section body
+        # Skip lines that are empty or start with "These skills"
+        listed_skills = sorted(
+            name.strip()
+            for line in skills_text.splitlines()
+            if line.strip() and not line.strip().startswith("These skills")
+            for name in line.split(",")
+            if name.strip()
+        )
+
+        # Get actual filesystem skills
+        bd = bundled_skills_dir()
+        actual_skills = sorted(
+            d.name for d in bd.iterdir() if d.is_dir() and (d / "SKILL.md").is_file()
+        )
+
+        assert listed_skills == actual_skills, (
+            f"make-script-skill bundled skills list doesn't match filesystem.\n"
+            f"  Listed:  {listed_skills}\n"
+            f"  On disk: {actual_skills}"
+        )

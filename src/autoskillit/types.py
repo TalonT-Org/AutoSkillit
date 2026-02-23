@@ -80,5 +80,6 @@ RETRY_RESPONSE_FIELDS: frozenset[str] = frozenset(
         "exit_code",
         "needs_retry",
         "retry_reason",
+        "stderr",
     }
 )

@@ -24,6 +24,7 @@ from autoskillit.server import (
     CleanupResult,
     _build_skill_result,
     _check_dry_walkthrough,
+    _compute_retry,
     _compute_success,
     _delete_directory_contents,
     _disable_tools_handler,
@@ -53,6 +54,7 @@ from autoskillit.server import (
 )
 from autoskillit.types import (
     CONTEXT_EXHAUSTION_MARKER,
+    RETRY_RESPONSE_FIELDS,
     MergeFailedStep,
     MergeState,
     RestartScope,
@@ -1644,6 +1646,18 @@ class TestRunSkillFailurePaths:
         assert result["subtype"] == "empty_output"
         assert result["success"] is False
 
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_empty_stdout_exit_zero_is_retriable(self, mock_run):
+        """Infrastructure failure (empty stdout, exit 0) is retriable with stderr."""
+        mock_run.return_value = _make_result(0, "", "session dropped")
+        result = json.loads(await run_skill("/investigate error", "/tmp"))
+        assert result["subtype"] == "empty_output"
+        assert result["success"] is False
+        assert result["needs_retry"] is True
+        assert result["retry_reason"] == RetryReason.RESUME
+        assert result["stderr"] == "session dropped"
+
 
 class TestParsePytestSummary:
     """_parse_pytest_summary extracts structured counts from pytest output."""
@@ -3147,6 +3161,7 @@ class TestBuildSkillResultCrossValidation:
         "exit_code",
         "needs_retry",
         "retry_reason",
+        "stderr",
     }
 
     def test_empty_stdout_exit_zero_is_failure(self):
@@ -3268,7 +3283,7 @@ class TestBuildSkillResultCrossValidation:
 
 
 class TestGateErrorSchemaNormalization:
-    """Gate errors use the standard 8-field response schema."""
+    """Gate errors use the standard 9-field response schema."""
 
     def test_require_enabled_gate_returns_standard_schema(self):
         """Gate errors must use the same schema as normal responses."""
@@ -3344,6 +3359,167 @@ class TestComputeSuccess:
             subtype="unknown", is_error=False, result="Done.", session_id="s1"
         )
         assert _compute_success(session, returncode=0, timed_out=False, stale=False) is False
+
+
+class TestComputeRetry:
+    """_compute_retry cross-validates all signals for retry eligibility."""
+
+    def test_success_not_retriable(self):
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="Done.", session_id="s1"
+        )
+        needs, reason = _compute_retry(session, returncode=0, timed_out=False, stale=False)
+        assert needs is False
+        assert reason == RetryReason.NONE
+
+    def test_max_turns_is_retriable(self):
+        session = ClaudeSessionResult(
+            subtype="error_max_turns", is_error=False, result="", session_id="s1"
+        )
+        needs, reason = _compute_retry(session, returncode=1, timed_out=False, stale=False)
+        assert needs is True
+        assert reason == RetryReason.RESUME
+
+    def test_context_exhaustion_is_retriable(self):
+        session = ClaudeSessionResult(
+            subtype="success", is_error=True, result="Prompt is too long", session_id="s1"
+        )
+        needs, reason = _compute_retry(session, returncode=1, timed_out=False, stale=False)
+        assert needs is True
+        assert reason == RetryReason.RESUME
+
+    def test_empty_output_exit_zero_is_retriable(self):
+        """Infrastructure failure: session never ran, CLI exited cleanly."""
+        session = ClaudeSessionResult(
+            subtype="empty_output", is_error=True, result="", session_id=""
+        )
+        needs, reason = _compute_retry(session, returncode=0, timed_out=False, stale=False)
+        assert needs is True
+        assert reason == RetryReason.RESUME
+
+    def test_empty_output_exit_one_not_retriable(self):
+        """Real failure: CLI crashed with empty output."""
+        session = ClaudeSessionResult(
+            subtype="empty_output", is_error=True, result="", session_id=""
+        )
+        needs, reason = _compute_retry(session, returncode=1, timed_out=False, stale=False)
+        assert needs is False
+        assert reason == RetryReason.NONE
+
+    def test_timeout_not_retriable(self):
+        session = ClaudeSessionResult(subtype="timeout", is_error=True, result="", session_id="")
+        needs, reason = _compute_retry(session, returncode=-1, timed_out=True, stale=False)
+        assert needs is False
+        assert reason == RetryReason.NONE
+
+    def test_unparseable_not_retriable(self):
+        session = ClaudeSessionResult(
+            subtype="unparseable", is_error=True, result="crash", session_id=""
+        )
+        needs, reason = _compute_retry(session, returncode=1, timed_out=False, stale=False)
+        assert needs is False
+        assert reason == RetryReason.NONE
+
+    def test_execution_error_not_retriable(self):
+        session = ClaudeSessionResult(
+            subtype="error_during_execution",
+            is_error=True,
+            result="tool error",
+            session_id="s1",
+        )
+        needs, reason = _compute_retry(session, returncode=1, timed_out=False, stale=False)
+        assert needs is False
+        assert reason == RetryReason.NONE
+
+
+class TestBuildSkillResultStderr:
+    """_build_skill_result includes stderr in responses."""
+
+    def test_stderr_included_in_response(self):
+        """Subprocess stderr is surfaced in the response."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        result_obj = SubprocessResult(
+            returncode=0,
+            stdout=valid_json,
+            stderr="queue contention",
+            timed_out=False,
+            pid=1,
+            stale=False,
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert response["stderr"] == "queue contention"
+
+    def test_stderr_truncated(self):
+        """Stderr exceeding 5000 chars is truncated."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        long_stderr = "x" * 6000
+        result_obj = SubprocessResult(
+            returncode=0,
+            stdout=valid_json,
+            stderr=long_stderr,
+            timed_out=False,
+            pid=1,
+            stale=False,
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert len(response["stderr"]) < len(long_stderr)
+        assert "truncated" in response["stderr"]
+
+    def test_empty_stderr_is_empty_string(self):
+        """Empty stderr produces empty string, not omitted."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        result_obj = SubprocessResult(
+            returncode=0,
+            stdout=valid_json,
+            stderr="",
+            timed_out=False,
+            pid=1,
+            stale=False,
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert response["stderr"] == ""
+
+    def test_stale_branch_has_empty_stderr(self):
+        """Stale branch produces empty stderr (process killed before output)."""
+        result_obj = SubprocessResult(
+            returncode=-1, stdout="", stderr="", timed_out=False, pid=1, stale=True
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert response["stderr"] == ""
+
+
+class TestRetryResponseFieldsIncludesStderr:
+    """RETRY_RESPONSE_FIELDS schema includes stderr."""
+
+    def test_stderr_in_fields(self):
+        assert "stderr" in RETRY_RESPONSE_FIELDS
+
+    def test_field_count(self):
+        assert len(RETRY_RESPONSE_FIELDS) == 9
 
 
 class TestLoadSkillScriptFailurePredicates:

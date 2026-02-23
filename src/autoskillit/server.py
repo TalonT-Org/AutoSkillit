@@ -78,6 +78,7 @@ def _gate_error_result(error_message: str) -> str:
             "exit_code": -1,
             "needs_retry": False,
             "retry_reason": RetryReason.NONE,
+            "stderr": "",
         }
     )
 
@@ -202,6 +203,24 @@ def _compute_success(
     return True
 
 
+def _compute_retry(
+    session: ClaudeSessionResult,
+    returncode: int,
+    timed_out: bool,
+    stale: bool,
+) -> tuple[bool, RetryReason]:
+    """Cross-validate all signals to determine retry eligibility."""
+    # API-level retries (session knew it should be retried)
+    if session.needs_retry:
+        return True, RetryReason.RESUME
+
+    # Infrastructure failure: session never ran (empty stdout, clean exit)
+    if session.subtype == "empty_output" and returncode == 0:
+        return True, RetryReason.RESUME
+
+    return False, RetryReason.NONE
+
+
 def _build_skill_result(result: SubprocessResult) -> str:
     """Route SubprocessResult fields into the standard run_skill JSON response."""
     if result.stale:
@@ -216,6 +235,7 @@ def _build_skill_result(result: SubprocessResult) -> str:
                 "exit_code": -1,
                 "needs_retry": True,
                 "retry_reason": RetryReason.RESUME,
+                "stderr": "",
             }
         )
 
@@ -233,6 +253,7 @@ def _build_skill_result(result: SubprocessResult) -> str:
         session = parse_session_result(result.stdout)
 
     success = _compute_success(session, returncode, result.timed_out, result.stale)
+    needs_retry, retry_reason = _compute_retry(session, returncode, result.timed_out, result.stale)
     return json.dumps(
         {
             "success": success,
@@ -241,8 +262,9 @@ def _build_skill_result(result: SubprocessResult) -> str:
             "subtype": session.subtype,
             "is_error": session.is_error,
             "exit_code": returncode,
-            "needs_retry": session.needs_retry,
-            "retry_reason": session.retry_reason,
+            "needs_retry": needs_retry,
+            "retry_reason": retry_reason,
+            "stderr": _truncate(result.stderr),
         }
     )
 

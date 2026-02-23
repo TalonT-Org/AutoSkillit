@@ -72,6 +72,7 @@ CONTEXT_EXHAUSTION_MARKER = "prompt is too long"
 # Known field names in run_skill_retry response — used by workflow validation
 RETRY_RESPONSE_FIELDS: frozenset[str] = frozenset(
     {
+        "success",
         "result",
         "session_id",
         "subtype",

@@ -1230,13 +1230,19 @@ async def load_skill_script(name: str) -> str:
       implement into test_check).
 
     ROUTING RULES — MANDATORY:
-    - When a tool returns a failure result (e.g. test_check returns
-      {"passed": false}), you MUST follow the step's on_failure route.
+    - When a tool returns a failure result, you MUST follow the step's on_failure route.
     - Do NOT investigate, diagnose, or attempt to fix failures yourself.
     - Do NOT run shell commands (pytest, git diff, etc.) to understand
       what went wrong — the on_failure step handles all remediation.
     - Your ONLY job is to route to the correct next step and pass the
       required arguments. The downstream skill does the actual work.
+
+    FAILURE PREDICATES — when to follow on_failure:
+    - test_check: {"passed": false}
+    - merge_worktree: "error" key present in response
+    - run_cmd: {"success": false}
+    - run_skill / run_skill_retry: {"success": false}
+    - classify_fix: "error" key present in response
 
     To CREATE a new script, use the /autoskillit:make-script-skill skill.
     This tool is for loading and executing existing scripts.

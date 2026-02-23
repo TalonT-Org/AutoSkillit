@@ -71,9 +71,11 @@ Name each group with a short descriptive label and assign suffix groupA through 
 
 Sort groups so that each group's dependencies are satisfied by earlier groups. Document the dependency chain explicitly.
 
-### Step 5: Write the Groups Document
+### Step 5: Write the Groups Documents
 
-Save to: `temp/make-groups/groups_{topic}_{YYYY-MM-DD_HHMMSS}.md`
+Produce three outputs in `temp/make-groups/`:
+
+**5a. Index file (consolidated):** `groups_{topic}_{YYYY-MM-DD_HHMMSS}.md`
 
 ```markdown
 # Implementation Groups: {Topic}
@@ -81,6 +83,16 @@ Save to: `temp/make-groups/groups_{topic}_{YYYY-MM-DD_HHMMSS}.md`
 **Date:** {YYYY-MM-DD}
 **Source:** {Document path or description}
 **Groups:** {count}
+
+## Per-Group Files
+
+- `groupA_{topic}_{ts}.md`
+- `groupB_{topic}_{ts}.md`
+- ...
+
+## Manifest
+
+`manifest_{topic}_{ts}.json`
 
 ## Dependency Chain
 
@@ -124,6 +136,51 @@ Save to: `temp/make-groups/groups_{topic}_{YYYY-MM-DD_HHMMSS}.md`
 | ... | ... |
 ```
 
+**5b. Per-group files:** `groupA_{topic}_{ts}.md`, `groupB_{topic}_{ts}.md`, etc.
+
+Each per-group file contains the group's section extracted from the index — one self-contained file per group for pipeline consumption:
+
+```markdown
+# {Group Label} (groupA)
+
+## Purpose
+{What this group delivers}
+
+## Dependencies
+{None, or list of group IDs}
+
+## Requirements
+- **REQ-XXX-001:** {text}
+- **REQ-XXX-002:** {text}
+
+## Planning Context
+{What make-plan needs to know}
+```
+
+**5c. Manifest file:** `manifest_{topic}_{ts}.json`
+
+Machine-readable manifest for pipeline orchestration:
+
+```json
+{
+    "topic": "{topic}",
+    "date": "{YYYY-MM-DD}",
+    "source": "{document path}",
+    "group_count": 7,
+    "dependency_chain": ["groupA", "groupB", "groupC"],
+    "groups": [
+        {
+            "id": "groupA",
+            "label": "{Group Label}",
+            "file": "groupA_{topic}_{ts}.md",
+            "dependencies": [],
+            "requirements": ["REQ-XXX-001", "REQ-XXX-002"]
+        }
+    ],
+    "index_file": "groups_{topic}_{ts}.md"
+}
+```
+
 ### Step 6: Verify Completeness
 
 Before finalizing, check:
@@ -132,13 +189,20 @@ Before finalizing, check:
 - No requirement appears in more than one group
 - No group depends on a group that comes after it in the sequence
 - Each group is self-contained enough to be a `/autoskillit:make-plan` input
+- Per-group file count matches group count in manifest
+- All per-group files are written to disk
 
-Report the summary to terminal.
+Report to terminal: index file path, manifest file path, per-group file count, and the dependency chain.
 
 ## Output Location
 
 ```
-temp/make-groups/groups_{topic}_{YYYY-MM-DD_HHMMSS}.md
+temp/make-groups/
+├── groups_{topic}_{ts}.md           # Consolidated index (all groups)
+├── manifest_{topic}_{ts}.json       # Machine-readable manifest
+├── groupA_{topic}_{ts}.md           # Individual per-group file
+├── groupB_{topic}_{ts}.md
+└── ...
 ```
 
 ## Related Skills

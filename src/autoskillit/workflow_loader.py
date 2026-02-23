@@ -11,6 +11,8 @@ import yaml
 
 from autoskillit.types import RETRY_RESPONSE_FIELDS, LoadReport, LoadResult, WorkflowSource
 
+_SKILL_TOOLS: frozenset[str] = frozenset({"run_skill", "run_skill_retry"})
+
 
 @dataclass
 class WorkflowInput:
@@ -66,6 +68,24 @@ class WorkflowInfo:
     description: str
     source: WorkflowSource
     path: Path
+
+
+@dataclass
+class DataFlowWarning:
+    """A non-blocking quality finding about pipeline data flow."""
+
+    code: str  # DEAD_OUTPUT, IMPLICIT_HANDOFF
+    step_name: str  # Step where the issue originates
+    field: str  # Capture key or tool name
+    message: str  # Human-readable explanation
+
+
+@dataclass
+class DataFlowReport:
+    """Quality analysis of pipeline data flow (non-blocking)."""
+
+    warnings: list[DataFlowWarning] = field(default_factory=list)
+    summary: str = ""
 
 
 def load_workflow(path: Path) -> Workflow:
@@ -287,6 +307,124 @@ def _extract_refs(value: str) -> list[str]:
         refs.append(rest[start:end].strip())
         rest = rest[end + 2 :]
     return refs
+
+
+def _build_step_graph(wf: Workflow) -> dict[str, set[str]]:
+    """Build a routing adjacency list from all step routing fields.
+
+    Each key is a step name, each value is the set of step names
+    reachable in one hop (successors). Terminal targets like "done"
+    are excluded since they are not real steps.
+    """
+    step_names = set(wf.steps.keys())
+    graph: dict[str, set[str]] = {name: set() for name in step_names}
+
+    for name, step in wf.steps.items():
+        for target in (step.on_success, step.on_failure):
+            if target and target in step_names:
+                graph[name].add(target)
+        if step.on_result:
+            for target in step.on_result.routes.values():
+                if target in step_names:
+                    graph[name].add(target)
+        if step.retry and step.retry.on_exhausted in step_names:
+            graph[name].add(step.retry.on_exhausted)
+
+    return graph
+
+
+def _detect_dead_outputs(wf: Workflow, graph: dict[str, set[str]]) -> list[DataFlowWarning]:
+    """Detect captured variables that are never consumed downstream."""
+    warnings: list[DataFlowWarning] = []
+
+    for step_name, step in wf.steps.items():
+        if not step.capture:
+            continue
+
+        # BFS: collect all steps reachable from this step's successors
+        reachable: set[str] = set()
+        frontier = list(graph.get(step_name, set()))
+        while frontier:
+            current = frontier.pop()
+            if current in reachable:
+                continue
+            reachable.add(current)
+            frontier.extend(graph.get(current, set()))
+
+        # Collect all context.X references in reachable steps' with_args
+        consumed: set[str] = set()
+        for reachable_name in reachable:
+            reachable_step = wf.steps[reachable_name]
+            for arg_val in reachable_step.with_args.values():
+                for ref in _extract_refs(arg_val):
+                    if ref.startswith("context."):
+                        consumed.add(ref[len("context.") :])
+
+        # Flag captured vars not consumed on any path
+        for cap_key in step.capture:
+            if cap_key not in consumed:
+                warnings.append(
+                    DataFlowWarning(
+                        code="DEAD_OUTPUT",
+                        step_name=step_name,
+                        field=cap_key,
+                        message=(
+                            f"Step '{step_name}' captures '{cap_key}' but no "
+                            f"reachable downstream step references "
+                            f"${{{{ context.{cap_key} }}}}."
+                        ),
+                    )
+                )
+
+    return warnings
+
+
+def _detect_implicit_handoffs(wf: Workflow) -> list[DataFlowWarning]:
+    """Detect skill-invoking steps with no capture block."""
+    warnings: list[DataFlowWarning] = []
+
+    for step_name, step in wf.steps.items():
+        if step.tool in _SKILL_TOOLS and not step.capture:
+            warnings.append(
+                DataFlowWarning(
+                    code="IMPLICIT_HANDOFF",
+                    step_name=step_name,
+                    field=step.tool,
+                    message=(
+                        f"Step '{step_name}' calls '{step.tool}' but has no "
+                        f"capture: block. Data flows to subsequent steps "
+                        f"implicitly through agent context rather than "
+                        f"explicit ${{{{ context.X }}}} wiring."
+                    ),
+                )
+            )
+
+    return warnings
+
+
+def analyze_dataflow(wf: Workflow) -> DataFlowReport:
+    """Analyze pipeline data flow quality (non-blocking warnings).
+
+    Unlike validate_workflow() which returns blocking errors for
+    structural problems, this function returns advisory warnings
+    about data-flow quality: dead outputs, implicit hand-offs,
+    and a summary.
+    """
+    graph = _build_step_graph(wf)
+
+    warnings: list[DataFlowWarning] = []
+    warnings.extend(_detect_dead_outputs(wf, graph))
+    warnings.extend(_detect_implicit_handoffs(wf))
+
+    if warnings:
+        summary = f"{len(warnings)} data-flow warning{'s' if len(warnings) != 1 else ''} found."
+    else:
+        summary = (
+            "No data-flow warnings. All captures are consumed"
+            " and skill outputs are explicitly wired."
+        )
+
+    return DataFlowReport(warnings=warnings, summary=summary)
 
 
 def _collect_workflows(

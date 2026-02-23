@@ -166,7 +166,7 @@ def _truncate(text: str, max_len: int = 5000) -> str:
 
 def _session_log_dir(cwd: str) -> Path:
     """Derive Claude Code session log directory from project cwd."""
-    project_hash = cwd.replace("/", "-")
+    project_hash = cwd.replace("/", "-").replace("_", "-")
     return Path.home() / ".claude" / "projects" / project_hash
 
 

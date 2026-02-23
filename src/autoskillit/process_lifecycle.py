@@ -106,11 +106,16 @@ def pty_wrap_command(cmd: list[str]) -> list[str]:
 async def _heartbeat(stdout_path: Path, marker: str) -> str:
     """Poll session NDJSON output for a completion event."""
     scan_pos = 0
+    os_error_count = 0
     while True:
         await asyncio.sleep(0.5)
         try:
             content = stdout_path.read_text(errors="replace")
+            os_error_count = 0
         except OSError:
+            os_error_count += 1
+            if os_error_count == 10:
+                logger.warning("Heartbeat: 10 consecutive read failures on %s", stdout_path)
             continue
         new_content = content[scan_pos:]
         scan_pos = len(content)
@@ -133,6 +138,7 @@ async def _session_log_monitor(
     """
     # Phase 1: Find the session log file
     session_file = None
+    os_error_count = 0
     while session_file is None:
         await asyncio.sleep(1.0)
         try:
@@ -143,19 +149,32 @@ async def _session_log_monitor(
             ]
             if candidates:
                 session_file = max(candidates, key=lambda f: f.stat().st_ctime)
+            os_error_count = 0
         except OSError:
+            os_error_count += 1
+            if os_error_count == 10:
+                logger.warning(
+                    "Session monitor: 10 consecutive failures reading %s", session_log_dir
+                )
             continue
 
     # Phase 2: Monitor the session log
     last_size = 0
     last_change = asyncio.get_event_loop().time()
     scan_pos = 0
+    os_error_count = 0
 
     while True:
         await asyncio.sleep(2.0)
         try:
             current_size = session_file.stat().st_size
+            os_error_count = 0
         except OSError:
+            os_error_count += 1
+            if os_error_count == 10:
+                logger.warning(
+                    "Session monitor: 10 consecutive stat failures on %s", session_file
+                )
             continue
 
         if current_size > last_size:
@@ -248,11 +267,11 @@ def read_temp_output(stdout_path: Path, stderr_path: Path) -> tuple[str, str]:
     try:
         stdout = stdout_path.read_text(errors="replace")
     except OSError:
-        pass
+        logger.warning("Failed to read stdout temp file: %s", stdout_path)
     try:
         stderr = stderr_path.read_text(errors="replace")
     except OSError:
-        pass
+        logger.warning("Failed to read stderr temp file: %s", stderr_path)
     return stdout, stderr
 
 
@@ -306,7 +325,6 @@ async def run_managed_async(
             stdin_handle = open(stdin_path)  # noqa: SIM115
 
         try:
-            spawn_time = asyncio.get_event_loop().time()
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=stdout_file,
@@ -349,15 +367,16 @@ async def run_managed_async(
                     timeout=timeout,
                 )
 
-                # Route based on which channel won
-                if session_monitor_task in done and session_monitor_task.result() == "stale":
+                # Priority: wait_task > heartbeat/monitor
+                # If the process exited on its own, its result is authoritative
+                # regardless of what the monitor detected.
+                if wait_task in done:
+                    pass
+                elif session_monitor_task in done and session_monitor_task.result() == "stale":
                     stale = True
                     logger.warning("Session stale for %ss, killing tree", stale_threshold)
-
-                if wait_task not in done:
-                    # Process didn't exit on its own — a monitor detected completion or staleness
-                    if not stale:
-                        timed_out = False
+                    await async_kill_process_tree(proc.pid)
+                else:
                     await async_kill_process_tree(proc.pid)
             except TimeoutError:
                 timed_out = True

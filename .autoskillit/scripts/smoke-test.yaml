@@ -1,0 +1,111 @@
+name: smoke-test
+description: End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
+summary: setup > seed_task > investigate > rectify > implement > test > merge > done (assess/classify loop on failure)
+
+inputs:
+  workspace:
+    description: Absolute path to temp workspace directory (must be a git repo with initial commit)
+    required: true
+  base_branch:
+    description: Branch to merge into
+    default: "main"
+
+constraints:
+  - "Route to on_failure — never investigate or fix directly from the orchestrator."
+  - "Only use AutoSkillit MCP tools during pipeline execution."
+
+steps:
+  setup:
+    tool: run_cmd
+    with:
+      cmd: "git init -b main && git commit --allow-empty -m 'initial' && touch .autoskillit-workspace"
+      cwd: "${{ inputs.workspace }}"
+    on_success: seed_task
+    on_failure: escalate
+
+  seed_task:
+    tool: run_cmd
+    with:
+      cmd: "echo 'Create ok.txt with content OK' > task.txt"
+      cwd: "${{ inputs.workspace }}"
+    on_success: investigate
+    on_failure: escalate
+
+  investigate:
+    tool: run_skill
+    with:
+      skill_command: "Create investigation.txt in the current directory with the text 'No critical issues found.' Then output exactly this line on its own: investigation_path=investigation.txt"
+      cwd: "${{ inputs.workspace }}"
+    on_success: rectify
+    on_failure: escalate
+
+  rectify:
+    tool: run_skill
+    with:
+      skill_command: "Create plan.md in the current directory at ${{ inputs.workspace }}/plan.md. The file MUST have this exact first line: Dry-walkthrough verified = TRUE followed by a blank line, then # Plan and Create ok.txt with content OK. Then output exactly this line on its own: plan_path=${{ inputs.workspace }}/plan.md"
+      cwd: "${{ inputs.workspace }}"
+    capture:
+      plan_path: "${{ result.plan_path }}"
+    on_success: implement
+    on_failure: escalate
+
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "In the git repo at ${{ inputs.workspace }}, run: git worktree add ${{ inputs.workspace }}/.claude/worktrees/smoke-impl -b smoke-impl. Then in that worktree directory, write ok.txt with content OK. Run git add ok.txt && git commit -m 'smoke: add ok.txt'. Then output exactly this line on its own: worktree_path=${{ inputs.workspace }}/.claude/worktrees/smoke-impl"
+      cwd: "${{ inputs.workspace }}"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    on_success: test
+    on_failure: escalate
+    retry:
+      max_attempts: 2
+      on: needs_retry
+      on_exhausted: escalate
+
+  test:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: merge
+    on_failure: assess
+
+  assess:
+    tool: run_skill
+    with:
+      skill_command: "In the git worktree at ${{ context.worktree_path }}, check what file is expected by the test and create/fix it. Commit any changes. Then output: fixed=true"
+      cwd: "${{ context.worktree_path }}"
+    on_success: test
+    on_failure: classify
+    retry:
+      max_attempts: 2
+      on: needs_retry
+      on_exhausted: classify
+
+  classify:
+    tool: classify_fix
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+      base_branch: "${{ inputs.base_branch }}"
+    on_result:
+      field: restart_scope
+      routes:
+        full_restart: investigate
+        partial_restart: implement
+    on_failure: escalate
+
+  merge:
+    tool: merge_worktree
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+      base_branch: "${{ inputs.base_branch }}"
+    on_success: done
+    on_failure: escalate
+
+  done:
+    action: stop
+    message: "Smoke pipeline completed successfully."
+
+  escalate:
+    action: stop
+    message: "Smoke pipeline failed — check step output for details."

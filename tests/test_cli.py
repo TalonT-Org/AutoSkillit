@@ -613,19 +613,34 @@ name: test-script
 description: A test script
 summary: Test flow
 inputs:
-  - name: target
+  target:
     description: Target path
     required: true
 steps:
-  - name: do-something
+  do-something:
     tool: run_cmd
     with:
       cmd: echo hello
     on_success: done
     on_failure: done
-  - name: done
-    action: finish
+  done:
+    action: stop
+    message: Finished
+constraints:
+  - Only use AutoSkillit MCP tools during pipeline execution
 """
+
+    def test_orchestrate_blocked_inside_claude_session(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """orchestrate exits 1 when CLAUDECODE env var is set."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("CLAUDECODE", "1")
+        with pytest.raises(SystemExit) as exc_info:
+            cli.orchestrate("any-script")
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "regular terminal" in captured.out.lower()
 
     def test_orchestrate_script_not_found(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -653,6 +668,22 @@ steps:
         captured = capsys.readouterr()
         assert "No scripts found" in captured.out
 
+    def test_orchestrate_available_scripts_listed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """orchestrate lists available scripts when name doesn't match."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.orchestrate("nonexistent")
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Available scripts:" in captured.out
+        assert "test-script" in captured.out
+
     def test_orchestrate_claude_not_on_path(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
@@ -668,6 +699,22 @@ steps:
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "claude" in captured.out.lower()
+
+    def test_orchestrate_invalid_script_exits(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """orchestrate exits 1 when script YAML fails validation."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        # Script with no steps (empty mapping) — will fail validation
+        (scripts_dir / "bad-script.yaml").write_text("name: bad-script\nsteps: {}\n")
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.orchestrate("bad-script")
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "validation" in captured.out.lower() or "error" in captured.out.lower()
 
     @patch("autoskillit.cli.subprocess.run")
     def test_orchestrate_builds_correct_command(
@@ -692,6 +739,10 @@ steps:
         cmd = mock_run.call_args[0][0]
         assert cmd[0] == "claude"
         assert "--plugin-dir" in cmd
+        plugin_dir_idx = cmd.index("--plugin-dir")
+        plugin_dir_val = Path(cmd[plugin_dir_idx + 1])
+        assert plugin_dir_val.is_dir()
+        assert (plugin_dir_val / ".claude-plugin" / "plugin.json").is_file()
         assert "--tools" in cmd
         tools_idx = cmd.index("--tools")
         assert cmd[tools_idx + 1] == "AskUserQuestion"
@@ -735,6 +786,12 @@ steps:
         assert "FAILURE PREDICATES" in system_prompt
         # Contains enable_tools reference
         assert "enable_tools" in system_prompt
+        # Contains tool discipline block
+        assert "capture:" in system_prompt
+        assert "${{ context." in system_prompt
+        assert "AutoSkillit MCP tools" in system_prompt
+        # Mentions both plugin and --plugin-dir loading methods
+        assert "--plugin-dir" in system_prompt
 
     @patch("autoskillit.cli.subprocess.run")
     def test_orchestrate_propagates_exit_code(
@@ -754,6 +811,7 @@ steps:
         )
 
         cli.orchestrate("test-script")  # should not raise
+        mock_run.assert_called_once()
 
     @patch("autoskillit.cli.subprocess.run")
     def test_orchestrate_subprocess_failure_propagates(
@@ -769,9 +827,9 @@ steps:
         (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=1, stdout="", stderr=""
+            args=[], returncode=42, stdout="", stderr=""
         )
 
         with pytest.raises(SystemExit) as exc_info:
             cli.orchestrate("test-script")
-        assert exc_info.value.code == 1
+        assert exc_info.value.code == 42

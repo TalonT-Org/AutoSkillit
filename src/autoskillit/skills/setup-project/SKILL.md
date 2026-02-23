@@ -67,6 +67,7 @@ Launch parallel Explore subagents against `project_dir`. If the user opted into 
 - Read `pyproject.toml`, `setup.py`, `package.json`, `go.mod`, `Cargo.toml`, `build.gradle`, `pom.xml`
 - Check for `Taskfile.yml`, `justfile`
 - Detect primary language(s) and package manager
+- Detect worktree setup command: if `Taskfile.yml` has `install-worktree` task use `["task", "install-worktree"]`; for Python+uv use `["uv", "venv", ".venv", "&&", "uv", "pip", "install", "-e", ".[dev]", "--python", ".venv/bin/python"]`; for Python+pip use `["python", "-m", "venv", ".venv", "&&", ".venv/bin/pip", "install", "-e", ".[dev]"]`; for Node npm use `["npm", "install"]`; for Node pnpm use `["pnpm", "install"]`; for Rust use `["cargo", "fetch"]`; for Go use `["go", "mod", "download"]`
 
 **Subagent B — Test Framework:**
 - Python: `pytest.ini`, `pyproject.toml [tool.pytest]`, `conftest.py`, `tests/`
@@ -118,6 +119,7 @@ Consolidate subagent findings into a structured profile:
 - Build/lint tools
 - Critical paths (for classify_fix)
 - Whether a reset mechanism exists (Taskfile `clean` target, npm script, etc.)
+- Worktree setup command (command to run after `git worktree add`)
 - Existing config state (none / partial / complete)
 - Current git branch (for `base_branch` default)
 - Discovered workflow patterns from conversation history (if opted in) — recurring tool sequences and skill chains, ranked by frequency, with candidate pipeline script drafts
@@ -182,6 +184,9 @@ test_check:
 # reset_workspace:
 #   command: {detected reset command}
 #   preserve_dirs: []
+
+# worktree_setup:
+#   command: {detected worktree setup command}
 ```
 
 ### Step 6: Summary Confirmation Gate

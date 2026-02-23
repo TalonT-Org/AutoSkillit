@@ -193,7 +193,14 @@ def _compute_success(
     if timed_out or stale:
         return False
     if returncode != 0:
-        return False
+        # Monitor-completion path: when the session monitor or heartbeat
+        # detects completion and kills the process, returncode is a negative
+        # signal code (e.g. -15 for SIGTERM).  Trust the session's own
+        # result envelope over the kill signal code in that case.
+        if returncode < 0 and session.subtype == "success" and session.result.strip():
+            pass  # fall through to remaining checks
+        else:
+            return False
     if session.is_error:
         return False
     if not session.result.strip():
@@ -280,8 +287,25 @@ class ClaudeSessionResult:
     errors: list[str] = field(default_factory=list)
 
     def _is_context_exhausted(self) -> bool:
-        """Detect context window exhaustion from Claude's error output."""
-        return self.is_error and CONTEXT_EXHAUSTION_MARKER in self.result.lower()
+        """Detect context window exhaustion from Claude's error output.
+
+        Requires both ``is_error=True`` AND the marker to appear in the
+        ``errors`` list (structured CLI signal).  Falls back to checking
+        ``result`` only when the subtype is a known error subtype, to
+        narrow false-positives from model prose that happens to contain
+        the marker phrase.
+        """
+        if not self.is_error:
+            return False
+        # Primary: check the structured errors list from Claude CLI
+        marker = CONTEXT_EXHAUSTION_MARKER
+        if any(marker in e.lower() for e in self.errors):
+            return True
+        # Fallback: only trust result text for error subtypes, not execution errors
+        # where the model's own output could contain the marker phrase
+        if self.subtype in ("success", "error_max_turns") and marker in self.result.lower():
+            return True
+        return False
 
     @property
     def agent_result(self) -> str:
@@ -354,7 +378,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
     if result_obj is None:
         try:
             fallback = json.loads(stdout)
-            if isinstance(fallback, dict):
+            if isinstance(fallback, dict) and fallback.get("type") == "result":
                 result_obj = fallback
             else:
                 return ClaudeSessionResult(
@@ -819,14 +843,20 @@ _OUTCOME_PATTERN = re.compile(
 
 
 def _parse_pytest_summary(stdout: str) -> dict[str, int]:
-    """Extract pytest outcome counts from the last summary-like line.
+    """Extract pytest outcome counts from the last ``=``-delimited summary line.
 
-    Scans stdout in reverse for a line containing recognizable pytest
-    outcome words (e.g. "passed", "failed") and extracts all "N outcome"
-    pairs into a dict. Returns empty dict if no summary line found.
+    Pytest's summary line is always delimited by ``=`` characters, e.g.
+    ``= 5 passed, 1 warning in 2.31s =``.  Only lines that start and end
+    with ``=`` are considered, preventing false matches on log output
+    containing phrases like ``"3 failed connections"``.
+
+    Returns empty dict if no summary line found.
     """
     for line in reversed(stdout.splitlines()):
-        matches = _OUTCOME_PATTERN.findall(line)
+        stripped = line.strip()
+        if not (stripped.startswith("=") and stripped.endswith("=")):
+            continue
+        matches = _OUTCOME_PATTERN.findall(stripped)
         if matches:
             counts: dict[str, int] = {}
             for count_str, outcome in matches:

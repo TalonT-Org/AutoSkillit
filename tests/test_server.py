@@ -467,7 +467,7 @@ class TestMergeWorktree:
         mock_run.side_effect = [
             (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse --git-dir
             (0, "impl-branch\n", ""),  # branch --show-current
-            (1, "FAIL\n3 failed, 97 passed", ""),  # test-check
+            (1, "FAIL\n= 3 failed, 97 passed =", ""),  # test-check
         ]
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
@@ -486,7 +486,7 @@ class TestMergeWorktree:
         mock_run.side_effect = [
             (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
             (0, "impl-branch\n", ""),  # branch
-            (0, "PASS\n100 passed", ""),  # test-check
+            (0, "PASS\n= 100 passed =", ""),  # test-check
             (0, "", ""),  # git fetch
             (0, "", ""),  # git rebase
             (
@@ -515,7 +515,7 @@ class TestMergeWorktree:
         mock_run.side_effect = [
             (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
             (0, "impl-branch\n", ""),  # branch
-            (0, "PASS\n100 passed", ""),  # test-check
+            (0, "PASS\n= 100 passed =", ""),  # test-check
             (0, "", ""),  # git fetch
             (1, "", "CONFLICT (content): ..."),  # git rebase FAILS
             (0, "", ""),  # git rebase --abort
@@ -1091,7 +1091,7 @@ class TestTestCheck:
     @patch("autoskillit.server.run_managed_async")
     async def test_passes_on_clean_run(self, mock_run):
         """returncode=0 with passing summary -> passed=True."""
-        mock_run.return_value = _make_result(0, "100 passed\n", "")
+        mock_run.return_value = _make_result(0, "= 100 passed =\n", "")
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is True
 
@@ -1099,7 +1099,7 @@ class TestTestCheck:
     @patch("autoskillit.server.run_managed_async")
     async def test_fails_on_nonzero_exit(self, mock_run):
         """returncode=1 -> passed=False regardless of output."""
-        mock_run.return_value = _make_result(1, "3 failed, 97 passed\n", "")
+        mock_run.return_value = _make_result(1, "= 3 failed, 97 passed =\n", "")
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is False
 
@@ -1109,7 +1109,7 @@ class TestTestCheck:
         """returncode=0 but output contains 'failed' -> passed=False.
         This is THE bug: Taskfile PIPESTATUS fails silently, exit code is 0,
         but output clearly shows test failures."""
-        mock_run.return_value = _make_result(0, "3 failed, 8538 passed\n", "")
+        mock_run.return_value = _make_result(0, "= 3 failed, 8538 passed =\n", "")
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is False
 
@@ -1118,7 +1118,7 @@ class TestTestCheck:
     async def test_does_not_expose_summary(self, mock_run):
         """test_check returns ONLY passed boolean — no summary, no output_file."""
         mock_run.return_value = _make_result(
-            0, "100 passed\nTest output saved to: /tmp/out.txt\n", ""
+            0, "= 100 passed =\nTest output saved to: /tmp/out.txt\n", ""
         )
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert "summary" not in result
@@ -1129,7 +1129,7 @@ class TestTestCheck:
     @patch("autoskillit.server.run_managed_async")
     async def test_cross_validates_error_in_output(self, mock_run):
         """returncode=0 but output contains 'error' -> passed=False."""
-        mock_run.return_value = _make_result(0, "1 error, 99 passed\n", "")
+        mock_run.return_value = _make_result(0, "= 1 error, 99 passed =\n", "")
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is False
 
@@ -1137,7 +1137,7 @@ class TestTestCheck:
     @patch("autoskillit.server.run_managed_async")
     async def test_xfailed_not_treated_as_failure(self, mock_run):
         """xfailed tests are expected failures — exit code 0, should pass."""
-        mock_run.return_value = _make_result(0, "8552 passed, 3 xfailed\n", "")
+        mock_run.return_value = _make_result(0, "= 8552 passed, 3 xfailed =\n", "")
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is True
 
@@ -1145,7 +1145,7 @@ class TestTestCheck:
     @patch("autoskillit.server.run_managed_async")
     async def test_xpassed_not_treated_as_failure(self, mock_run):
         """xpassed tests are unexpected passes — exit code 0, should pass."""
-        mock_run.return_value = _make_result(0, "99 passed, 1 xpassed\n", "")
+        mock_run.return_value = _make_result(0, "= 99 passed, 1 xpassed =\n", "")
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is True
 
@@ -1153,7 +1153,7 @@ class TestTestCheck:
     @patch("autoskillit.server.run_managed_async")
     async def test_mixed_xfail_with_real_failure(self, mock_run):
         """Real failure + xfailed — should still fail on the real failure."""
-        mock_run.return_value = _make_result(0, "1 failed, 2 xfailed, 97 passed\n", "")
+        mock_run.return_value = _make_result(0, "= 1 failed, 2 xfailed, 97 passed =\n", "")
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is False
 
@@ -1161,7 +1161,7 @@ class TestTestCheck:
     @patch("autoskillit.server.run_managed_async")
     async def test_skipped_with_exit_zero_passes(self, mock_run):
         """Skipped tests with exit 0 — parser trusts exit code."""
-        mock_run.return_value = _make_result(0, "97 passed, 3 skipped\n", "")
+        mock_run.return_value = _make_result(0, "= 97 passed, 3 skipped =\n", "")
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is True
 
@@ -1169,7 +1169,7 @@ class TestTestCheck:
     @patch("autoskillit.server.run_managed_async")
     async def test_warnings_not_treated_as_failure(self, mock_run):
         """Warnings with exit 0 — should pass."""
-        mock_run.return_value = _make_result(0, "100 passed, 5 warnings\n", "")
+        mock_run.return_value = _make_result(0, "= 100 passed, 5 warnings =\n", "")
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is True
 
@@ -1260,10 +1260,10 @@ class TestClaudeSessionResult:
         assert parsed.subtype == "empty_output"
 
     def test_json_without_type_result_is_error(self):
-        """JSON that isn't a Claude result object is an error."""
+        """JSON that isn't a Claude result object is rejected by fallback."""
         parsed = parse_session_result('{"some": "random", "json": true}')
-        assert parsed.is_error is False
-        assert parsed.subtype == "unknown"
+        assert parsed.is_error is True
+        assert parsed.subtype == "unparseable"
 
     def test_non_dict_json_is_error(self):
         """Non-dict JSON (list, string, number) is unparseable."""
@@ -1663,18 +1663,23 @@ class TestParsePytestSummary:
     """_parse_pytest_summary extracts structured counts from pytest output."""
 
     def test_simple_pass(self):
-        assert _parse_pytest_summary("100 passed\n") == {"passed": 100}
+        assert _parse_pytest_summary("= 100 passed =\n") == {"passed": 100}
 
     def test_failed_and_passed(self):
-        assert _parse_pytest_summary("3 failed, 97 passed\n") == {"failed": 3, "passed": 97}
+        assert _parse_pytest_summary("= 3 failed, 97 passed =\n") == {
+            "failed": 3,
+            "passed": 97,
+        }
 
     def test_xfailed_parsed_separately(self):
-        counts = _parse_pytest_summary("8552 passed, 3 xfailed\n")
+        counts = _parse_pytest_summary("= 8552 passed, 3 xfailed =\n")
         assert counts == {"passed": 8552, "xfailed": 3}
         assert "failed" not in counts
 
     def test_mixed_all_outcomes(self):
-        counts = _parse_pytest_summary("1 failed, 2 xfailed, 1 xpassed, 3 skipped, 93 passed\n")
+        counts = _parse_pytest_summary(
+            "= 1 failed, 2 xfailed, 1 xpassed, 3 skipped, 93 passed =\n"
+        )
         assert counts["failed"] == 1
         assert counts["xfailed"] == 2
         assert counts["xpassed"] == 1
@@ -1682,10 +1687,13 @@ class TestParsePytestSummary:
         assert counts["passed"] == 93
 
     def test_error_outcome(self):
-        assert _parse_pytest_summary("1 error, 99 passed\n") == {"error": 1, "passed": 99}
+        assert _parse_pytest_summary("= 1 error, 99 passed =\n") == {
+            "error": 1,
+            "passed": 99,
+        }
 
     def test_multiline_finds_summary(self):
-        output = "some log output\nERROR in setup\n100 passed in 2.5s\n"
+        output = "some log output\nERROR in setup\n=== 100 passed in 2.5s ===\n"
         counts = _parse_pytest_summary(output)
         assert counts == {"passed": 100}
 
@@ -1716,7 +1724,7 @@ class TestMergeWorktreeNoBypass:
         mock_run.side_effect = [
             (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
             (0, "impl-branch\n", ""),  # branch
-            (0, "3 failed, 97 passed", ""),  # test-check: rc=0 but failed text
+            (0, "= 3 failed, 97 passed =", ""),  # test-check: rc=0 but failed text
         ]
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
@@ -1733,7 +1741,7 @@ class TestMergeWorktreeNoBypass:
         mock_run.side_effect = [
             (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
             (0, "impl-branch\n", ""),  # branch
-            (1, "3 failed, 97 passed", ""),  # test-check
+            (1, "= 3 failed, 97 passed =", ""),  # test-check
         ]
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
@@ -1916,7 +1924,7 @@ class TestConfigDrivenBehavior:
         cfg = AutomationConfig(test_check=TestCheckConfig(command=["pytest", "-x"], timeout=300))
         monkeypatch.setattr(server, "_config", cfg)
 
-        mock_run.return_value = _make_result(0, "100 passed\n", "")
+        mock_run.return_value = _make_result(0, "= 100 passed =\n", "")
         await test_check(worktree_path="/tmp/wt")
 
         call_args = mock_run.call_args
@@ -2402,7 +2410,7 @@ class TestMergeWorktreeCleanupReporting:
         mock_run.side_effect = [
             (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
             (0, "impl-branch\n", ""),  # branch
-            (0, "PASS\n100 passed", ""),  # test-check
+            (0, "PASS\n= 100 passed =", ""),  # test-check
             (0, "", ""),  # git fetch
             (0, "", ""),  # git rebase
             (
@@ -2429,7 +2437,7 @@ class TestMergeWorktreeCleanupReporting:
         mock_run.side_effect = [
             (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
             (0, "impl-branch\n", ""),  # branch
-            (0, "PASS\n100 passed", ""),  # test-check
+            (0, "PASS\n= 100 passed =", ""),  # test-check
             (0, "", ""),  # git fetch
             (0, "", ""),  # git rebase
             (
@@ -2457,7 +2465,7 @@ class TestMergeWorktreeCleanupReporting:
         mock_run.side_effect = [
             (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
             (0, "impl-branch\n", ""),  # branch
-            (0, "PASS\n100 passed", ""),  # test-check
+            (0, "PASS\n= 100 passed =", ""),  # test-check
             (1, "", "fatal: could not connect to remote"),  # git fetch FAILS
         ]
         result = json.loads(await merge_worktree(str(wt), "main"))
@@ -3537,3 +3545,87 @@ class TestLoadSkillScriptFailurePredicates:
         desc = tools["load_skill_script"].description or ""
         assert "run_skill" in desc
         assert "success" in desc.lower()
+
+
+class TestContextExhaustionStructured:
+    """_is_context_exhausted uses structured detection, not substring on result."""
+
+    def test_context_exhaustion_not_triggered_by_model_prose(self):
+        """Model output discussing prompt length must NOT trigger context exhaustion.
+
+        The phrase 'prompt is too long' appearing in the model's result text
+        (not as a CLI structural signal) should not cause needs_retry=True.
+        """
+        session = ClaudeSessionResult(
+            subtype="error_during_execution",
+            is_error=True,
+            result="The user said: prompt is too long for this task",
+            session_id="s1",
+        )
+        assert session.needs_retry is False
+        assert session._is_context_exhausted() is False
+
+    def test_real_context_exhaustion_still_detected(self):
+        """Genuine context exhaustion (specific subtype) is still detected."""
+        session = ClaudeSessionResult(
+            subtype="error_during_execution",
+            is_error=True,
+            result="prompt is too long",
+            session_id="s1",
+            errors=["prompt is too long"],
+        )
+        assert session._is_context_exhausted() is True
+        assert session.needs_retry is True
+
+
+class TestParsePytestSummaryAnchored:
+    """_parse_pytest_summary only matches lines in the === delimited section."""
+
+    def test_pytest_summary_ignores_non_summary_lines(self):
+        """Log output with 'N failed' must not be confused with the summary.
+
+        Test output can contain lines like '3 failed connections reestablished'
+        which match the outcome pattern. Only the === delimited summary line
+        should be matched.
+        """
+        stdout = (
+            "test_network.py::test_reconnect PASSED\n"
+            "3 failed connections reestablished\n"
+            "1 error in config reloaded successfully\n"
+            "=== 5 passed in 2.1s ===\n"
+        )
+        counts = _parse_pytest_summary(stdout)
+        assert counts == {"passed": 5}
+        assert "failed" not in counts
+        assert "error" not in counts
+
+
+class TestParseFallbackRejectsUntypedJson:
+    """parse_session_result fallback path requires type == result."""
+
+    def test_parse_fallback_rejects_untyped_json(self):
+        """Single JSON object without type=result must be rejected.
+
+        The fallback path should not accept arbitrary dict objects as results.
+        """
+        parsed = parse_session_result('{"error": "something broke"}')
+        assert parsed.subtype == "unparseable"
+        assert parsed.is_error is True
+
+
+class TestCompletionViaMonitorKill:
+    """Completion detected by monitor + kill returncode is not failure."""
+
+    def test_completion_via_monitor_kill_is_not_failure(self):
+        """When the session monitor detects completion and kills the process,
+        returncode is -15 (SIGTERM). _compute_success should treat this as
+        success when the session result envelope says success.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Task completed successfully.",
+            session_id="s1",
+        )
+        # returncode=-15 from SIGTERM kill after monitor detected completion
+        assert _compute_success(session, returncode=-15, timed_out=False, stale=False) is True

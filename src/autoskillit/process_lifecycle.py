@@ -103,8 +103,50 @@ def pty_wrap_command(cmd: list[str]) -> list[str]:
     return [script_path, "-qefc", escaped, "/dev/null"]
 
 
-async def _heartbeat(stdout_path: Path, marker: str) -> str:
-    """Poll session NDJSON output for a completion event."""
+def _jsonl_contains_marker(
+    content: str,
+    marker: str,
+    record_types: frozenset[str],
+) -> bool:
+    """Check if any JSONL record of an allowed type contains the marker.
+
+    Parses each line as JSON and only checks for the marker in lines whose
+    ``"type"`` field is in *record_types*. Lines that fail JSON parsing or
+    have a non-matching type are silently skipped.
+
+    This is the structural alternative to ``marker in content`` — it prevents
+    false-fires when the marker text appears in records authored by a source
+    other than the expected one (e.g. user prompt vs assistant output).
+    """
+    import json as _json
+
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = _json.loads(line)
+        except (ValueError, _json.JSONDecodeError):
+            continue
+        if not isinstance(obj, dict):
+            continue
+        if obj.get("type") in record_types and marker in line:
+            return True
+    return False
+
+
+async def _heartbeat(
+    stdout_path: Path,
+    marker: str,
+    record_types: frozenset[str] = frozenset({"result"}),
+) -> str:
+    """Poll session NDJSON output for a completion event.
+
+    Only fires when the marker appears in a JSONL record whose ``"type"``
+    field is in *record_types*.  This prevents false-fires when the marker
+    text appears in non-result records (e.g. assistant messages discussing
+    JSON formats).
+    """
     scan_pos = 0
     os_error_count = 0
     while True:
@@ -119,7 +161,7 @@ async def _heartbeat(stdout_path: Path, marker: str) -> str:
             continue
         new_content = content[scan_pos:]
         scan_pos = len(content)
-        if marker in new_content:
+        if _jsonl_contains_marker(new_content, marker, record_types):
             return "completion"
 
 
@@ -128,13 +170,19 @@ async def _session_log_monitor(
     completion_marker: str,
     stale_threshold: float,
     spawn_time: float,
+    record_types: frozenset[str] = frozenset({"assistant"}),
 ) -> str:
     """Watch Claude Code session log for completion or staleness.
 
     Finds the session JSONL file (newest in session_log_dir created after
     spawn_time), then monitors it for:
-    - completion_marker in new content -> return "completion"
+    - completion_marker in a JSONL record of an allowed type -> return "completion"
     - No mtime change for stale_threshold seconds -> return "stale"
+
+    The *record_types* parameter specifies which JSONL record types may
+    contain the completion marker.  Defaults to ``{"assistant"}`` so that
+    markers appearing in user prompts, queue-operation records, or tool
+    results are ignored.
     """
     # Phase 1: Find the session log file
     session_file = None
@@ -179,12 +227,12 @@ async def _session_log_monitor(
             last_size = current_size
             last_change = asyncio.get_event_loop().time()
 
-            # Check new content for completion marker
+            # Check new content for completion marker (structured)
             try:
                 content = session_file.read_text(errors="replace")
                 new_content = content[scan_pos:]
                 scan_pos = len(content)
-                if completion_marker in new_content:
+                if _jsonl_contains_marker(new_content, completion_marker, record_types):
                     return "completion"
             except OSError:
                 pass
@@ -282,9 +330,11 @@ async def run_managed_async(
     env: dict[str, str] | None = None,
     pty_mode: bool = False,
     heartbeat_marker: str | None = None,
+    heartbeat_record_types: frozenset[str] = frozenset({"result"}),
     session_log_dir: Path | None = None,
     completion_marker: str = "",
     stale_threshold: float = 1200,
+    session_record_types: frozenset[str] = frozenset({"assistant"}),
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -305,9 +355,11 @@ async def run_managed_async(
         env: Optional environment variables (defaults to os.environ).
         pty_mode: Wrap command with ``script`` to provide a PTY.
         heartbeat_marker: Substring to watch for in stdout NDJSON output.
+        heartbeat_record_types: JSONL record types to scan for heartbeat marker.
         session_log_dir: Directory to watch for Claude session JSONL files.
         completion_marker: Marker to watch for in session log content.
         stale_threshold: Seconds of session log inactivity before "stale".
+        session_record_types: JSONL record types to scan for completion marker.
     """
     if pty_mode:
         cmd = pty_wrap_command(cmd)
@@ -342,7 +394,9 @@ async def run_managed_async(
 
             heartbeat_task = None
             if heartbeat_marker:
-                heartbeat_task = asyncio.create_task(_heartbeat(stdout_path, heartbeat_marker))
+                heartbeat_task = asyncio.create_task(
+                    _heartbeat(stdout_path, heartbeat_marker, heartbeat_record_types)
+                )
                 tasks.add(heartbeat_task)
 
             session_monitor_task = None
@@ -355,6 +409,7 @@ async def run_managed_async(
                         completion_marker,
                         stale_threshold,
                         time.time(),
+                        session_record_types,
                     )
                 )
                 tasks.add(session_monitor_task)

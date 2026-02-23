@@ -112,8 +112,10 @@ Where practical, delegate test updates to subagents to keep main conversation co
 ```bash
 [[ -d "${WORKTREE_PATH}/.venv" ]] || { echo "ERROR: .venv missing in worktree"; exit 1; }
 cd "${WORKTREE_PATH}" && pre-commit run --all-files
-cd "${WORKTREE_PATH}" && .venv/bin/pytest -v
+cd "${WORKTREE_PATH}" && task test-all
 ```
+
+**IMPORTANT:** Always use `task test-all` — never invoke `pytest` or `python -m pytest` directly. This is the project's only sanctioned test command.
 
 If tests fail, fix the issue and re-run.
 

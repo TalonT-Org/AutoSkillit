@@ -18,6 +18,8 @@ import psutil
 import pytest
 
 from autoskillit.process_lifecycle import (
+    _heartbeat,
+    _jsonl_contains_marker,
     _session_log_monitor,
     async_kill_process_tree,
     kill_process_tree,
@@ -361,20 +363,37 @@ class TestSessionLogMonitor:
 
     @pytest.mark.asyncio
     async def test_session_log_monitor_detects_completion(self, tmp_path):
-        """Session log with completion marker returns 'completion'."""
+        """Session log with completion marker in assistant record returns 'completion'."""
         import asyncio
+        import json
 
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()
         spawn_time = time.time() - 1  # slightly in the past
 
         session_file = log_dir / "abc123.jsonl"
-        session_file.write_text('{"role":"assistant","content":"working..."}\n')
+        session_file.write_text(
+            json.dumps(
+                {"type": "assistant", "message": {"role": "assistant", "content": "working..."}}
+            )
+            + "\n"
+        )
 
         async def append_marker():
             await asyncio.sleep(1.0)
             with session_file.open("a") as f:
-                f.write('{"role":"assistant","content":"Done %%AUTOSKILLIT_COMPLETE%%"}\n')
+                f.write(
+                    json.dumps(
+                        {
+                            "type": "assistant",
+                            "message": {
+                                "role": "assistant",
+                                "content": "Done %%AUTOSKILLIT_COMPLETE%%",
+                            },
+                        }
+                    )
+                    + "\n"
+                )
 
         task = asyncio.create_task(append_marker())
         result = await _session_log_monitor(
@@ -387,12 +406,17 @@ class TestSessionLogMonitor:
     @pytest.mark.asyncio
     async def test_session_log_monitor_detects_staleness(self, tmp_path):
         """Session log that stops being written to returns 'stale'."""
+        import json
+
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()
         spawn_time = time.time() - 1
 
         session_file = log_dir / "abc123.jsonl"
-        session_file.write_text('{"role":"assistant","content":"hello"}\n')
+        session_file.write_text(
+            json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "hello"}})
+            + "\n"
+        )
 
         start = time.monotonic()
         result = await _session_log_monitor(
@@ -407,19 +431,31 @@ class TestSessionLogMonitor:
     async def test_staleness_resets_on_activity(self, tmp_path):
         """Session log that keeps getting written to does not fire staleness."""
         import asyncio
+        import json
 
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()
         spawn_time = time.time() - 1
 
         session_file = log_dir / "abc123.jsonl"
-        session_file.write_text('{"role":"assistant","content":"start"}\n')
+        session_file.write_text(
+            json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "start"}})
+            + "\n"
+        )
 
         async def keep_writing():
             for i in range(5):
                 await asyncio.sleep(1.0)
                 with session_file.open("a") as f:
-                    f.write(f'{{"role":"assistant","content":"msg {i}"}}\n')
+                    f.write(
+                        json.dumps(
+                            {
+                                "type": "assistant",
+                                "message": {"role": "assistant", "content": f"msg {i}"},
+                            }
+                        )
+                        + "\n"
+                    )
             # After writing stops, staleness should eventually fire
             await asyncio.sleep(5.0)
 
@@ -432,6 +468,205 @@ class TestSessionLogMonitor:
 
         # Staleness should have fired AFTER the writing stopped, not during
         assert result == "stale"
+
+    @pytest.mark.asyncio
+    async def test_monitor_ignores_marker_in_non_assistant_records(self, tmp_path):
+        """Monitor must NOT fire on completion marker in non-assistant records.
+
+        Reproduces the false-fire: Claude Code writes the prompt (containing
+        the completion marker) into a queue-operation/enqueue record at byte 0.
+        The monitor should ignore it. Only an assistant-type record triggers.
+        """
+        import asyncio
+
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        spawn_time = time.time() - 1
+
+        marker = "%%AUTOSKILLIT_COMPLETE%%"
+        # Pre-populate with a queue-operation record containing the marker
+        # (this is what Claude Code writes immediately from the injected prompt)
+        session_file = log_dir / "abc123.jsonl"
+        import json
+
+        enqueue_record = json.dumps(
+            {
+                "type": "queue-operation",
+                "operation": "enqueue",
+                "content": f"Do the task\n\nORCHESTRATION DIRECTIVE: {marker}",
+            }
+        )
+        session_file.write_text(enqueue_record + "\n")
+
+        monitor_task = asyncio.create_task(
+            _session_log_monitor(log_dir, marker, stale_threshold=30, spawn_time=spawn_time)
+        )
+
+        # Monitor should NOT fire on the enqueue record — wait 4s to confirm
+        await asyncio.sleep(4.0)
+        assert not monitor_task.done(), "Monitor fired on non-assistant record — false-fire bug"
+
+        # Now append an assistant record with the marker — should fire
+        assistant_record = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"role": "assistant", "content": f"Done {marker}"},
+            }
+        )
+        with session_file.open("a") as f:
+            f.write(assistant_record + "\n")
+
+        result = await asyncio.wait_for(monitor_task, timeout=10)
+        assert result == "completion"
+
+    @pytest.mark.asyncio
+    async def test_monitor_realistic_jsonl_sequence(self, tmp_path):
+        """Monitor correctly handles the realistic 3-record JSONL sequence.
+
+        Claude Code writes:
+        1. queue-operation/enqueue (immediate, contains marker in prompt)
+        2. user message (immediate, contains marker in prompt)
+        3. assistant message (after delay, contains marker in response)
+
+        Only record 3 should trigger completion.
+        """
+        import asyncio
+        import json
+
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        spawn_time = time.time() - 1
+
+        marker = "%%AUTOSKILLIT_COMPLETE%%"
+
+        # Write records 1 and 2 immediately (both contain the marker)
+        session_file = log_dir / "abc123.jsonl"
+        records_12 = (
+            json.dumps(
+                {
+                    "type": "queue-operation",
+                    "operation": "enqueue",
+                    "content": f"Task prompt {marker}",
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "type": "user",
+                    "message": {"role": "user", "content": f"Task prompt {marker}"},
+                }
+            )
+            + "\n"
+        )
+        session_file.write_text(records_12)
+
+        monitor_task = asyncio.create_task(
+            _session_log_monitor(log_dir, marker, stale_threshold=30, spawn_time=spawn_time)
+        )
+
+        # Wait and confirm no early fire
+        await asyncio.sleep(4.0)
+        assert not monitor_task.done(), "Monitor fired on user/enqueue records"
+
+        # Write record 3 (assistant with marker)
+        assistant_record = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"role": "assistant", "content": f"All done {marker}"},
+            }
+        )
+        with session_file.open("a") as f:
+            f.write(assistant_record + "\n")
+
+        result = await asyncio.wait_for(monitor_task, timeout=10)
+        assert result == "completion"
+
+
+class TestJsonlContainsMarker:
+    """_jsonl_contains_marker performs structured record filtering."""
+
+    def test_matches_in_allowed_record_type(self):
+        import json
+
+        content = json.dumps({"type": "assistant", "message": {"content": "Done MARKER"}})
+        assert _jsonl_contains_marker(content, "MARKER", frozenset({"assistant"}))
+
+    def test_ignores_disallowed_record_type(self):
+        import json
+
+        content = json.dumps({"type": "queue-operation", "content": "prompt MARKER"})
+        assert not _jsonl_contains_marker(content, "MARKER", frozenset({"assistant"}))
+
+    def test_ignores_unparseable_lines(self):
+        content = "not valid json MARKER\n"
+        assert not _jsonl_contains_marker(content, "MARKER", frozenset({"assistant"}))
+
+    def test_multiline_mixed_records(self):
+        import json
+
+        lines = [
+            json.dumps({"type": "user", "content": "hello MARKER"}),
+            json.dumps({"type": "assistant", "content": "world"}),
+            json.dumps({"type": "assistant", "content": "found MARKER"}),
+        ]
+        content = "\n".join(lines)
+        # Marker in user record should not match; marker in assistant should
+        assert _jsonl_contains_marker(content, "MARKER", frozenset({"assistant"}))
+
+    def test_no_match_when_marker_absent(self):
+        import json
+
+        content = json.dumps({"type": "assistant", "content": "no marker here"})
+        assert not _jsonl_contains_marker(content, "MARKER", frozenset({"assistant"}))
+
+
+class TestHeartbeatStructuredParsing:
+    """Heartbeat uses structured parsing to avoid false-fires."""
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_ignores_marker_in_string_values(self, tmp_path):
+        """Heartbeat must not fire when the marker text appears as a string
+        value inside a non-result record (e.g., model discussing JSON formats).
+        """
+        import asyncio
+        import json
+
+        stdout_path = tmp_path / "stdout.tmp"
+        # Write an assistant message that CONTAINS the marker text as a value.
+        # Use separators=(",", ":") to match Claude CLI's compact JSON format.
+        assistant_msg = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": 'The output format uses "type":"result" for completion'},
+            },
+            separators=(",", ":"),
+        )
+        stdout_path.write_text(assistant_msg + "\n")
+
+        heartbeat_task = asyncio.create_task(_heartbeat(stdout_path, '"type":"result"'))
+
+        # Wait to confirm it doesn't fire on the assistant record
+        await asyncio.sleep(2.0)
+        assert not heartbeat_task.done(), (
+            "Heartbeat fired on non-result record containing marker text"
+        )
+
+        # Now write an actual result record (compact format matching Claude CLI)
+        result_record = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+            },
+            separators=(",", ":"),
+        )
+        with stdout_path.open("a") as f:
+            f.write(result_record + "\n")
+
+        result = await asyncio.wait_for(heartbeat_task, timeout=10)
+        assert result == "completion"
 
 
 class TestPtyWrapper:

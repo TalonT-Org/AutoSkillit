@@ -2992,8 +2992,7 @@ class TestSessionLogDir:
     def test_replaces_both_slashes_and_underscores(self):
         result = _session_log_dir("/home/user_name/my_project/sub_dir")
         assert (
-            result
-            == Path.home() / ".claude" / "projects" / "-home-user-name-my-project-sub-dir"
+            result == Path.home() / ".claude" / "projects" / "-home-user-name-my-project-sub-dir"
         )
 
 

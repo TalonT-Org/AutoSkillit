@@ -172,9 +172,7 @@ async def _session_log_monitor(
         except OSError:
             os_error_count += 1
             if os_error_count == 10:
-                logger.warning(
-                    "Session monitor: 10 consecutive stat failures on %s", session_file
-                )
+                logger.warning("Session monitor: 10 consecutive stat failures on %s", session_file)
             continue
 
         if current_size > last_size:

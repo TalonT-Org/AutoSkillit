@@ -136,6 +136,7 @@ class TestSkillResolver:
         """File-producing skills must have a negative output constraint in NEVER block."""
         FILE_PRODUCING_SKILLS = {
             "investigate": "temp/investigate/",
+            "make-groups": "temp/make-groups/",
             "make-plan": "temp/make-plan/",
             "make-script-skill": ".autoskillit/scripts/",
             "rectify": "temp/rectify/",
@@ -182,3 +183,10 @@ class TestSkillResolver:
                     f"!= directory name '{skill_name}'"
                 )
         assert not failures, "SKILL.md frontmatter/directory mismatch:\n" + "\n".join(failures)
+
+    def test_make_groups_skill_documents_per_group_output(self) -> None:
+        """make-groups SKILL.md must document per-group file output for pipeline consumption."""
+        skill_path = bundled_skills_dir() / "make-groups" / "SKILL.md"
+        content = skill_path.read_text()
+        assert "per-group" in content.lower() or "groupA_" in content
+        assert "manifest" in content.lower()

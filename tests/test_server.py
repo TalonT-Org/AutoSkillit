@@ -2977,6 +2977,26 @@ class TestRunSkillInjectsCompletionDirective:
         assert "ORCHESTRATION DIRECTIVE" in skill_arg
 
 
+class TestSessionLogDir:
+    """Unit tests for _session_log_dir path derivation."""
+
+    def test_replaces_slashes(self):
+        result = _session_log_dir("/home/user/project")
+        assert result == Path.home() / ".claude" / "projects" / "-home-user-project"
+
+    def test_replaces_underscores(self):
+        """Underscores must be replaced with dashes to match Claude Code's encoding."""
+        result = _session_log_dir("/home/user/my_project")
+        assert result == Path.home() / ".claude" / "projects" / "-home-user-my-project"
+
+    def test_replaces_both_slashes_and_underscores(self):
+        result = _session_log_dir("/home/user_name/my_project/sub_dir")
+        assert (
+            result
+            == Path.home() / ".claude" / "projects" / "-home-user-name-my-project-sub-dir"
+        )
+
+
 class TestRunSkillPassesSessionLogDir:
     """run_skill passes session_log_dir derived from cwd."""
 
@@ -3002,6 +3022,32 @@ class TestRunSkillPassesSessionLogDir:
         expected_dir = _session_log_dir("/some/project")
         assert call_kwargs["session_log_dir"] == expected_dir
         assert "-some-project" in str(expected_dir)
+
+
+class TestRunSkillRetryPassesSessionLogDir:
+    """run_skill_retry passes session_log_dir derived from cwd."""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_retry_passes_session_log_dir(self, mock_run, monkeypatch):
+        """run_skill_retry must pass session_log_dir just like run_skill."""
+        from autoskillit import server
+
+        cfg = AutomationConfig()
+        cfg.safety.require_dry_walkthrough = False
+        monkeypatch.setattr(server, "_config", cfg)
+
+        mock_run.return_value = _make_result(
+            0,
+            '{"type": "result", "subtype": "success", "is_error": false,'
+            ' "result": "done", "session_id": "s1"}',
+            "",
+        )
+        await run_skill_retry("/investigate foo", "/some/project")
+
+        call_kwargs = mock_run.call_args[1]
+        expected_dir = _session_log_dir("/some/project")
+        assert call_kwargs["session_log_dir"] == expected_dir
 
 
 class TestStalenessReturnsNeedsRetry:

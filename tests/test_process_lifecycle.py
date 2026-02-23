@@ -12,6 +12,7 @@ from __future__ import annotations
 import sys
 import textwrap
 import time
+from pathlib import Path
 
 import psutil
 import pytest
@@ -20,6 +21,7 @@ from autoskillit.process_lifecycle import (
     _session_log_monitor,
     async_kill_process_tree,
     kill_process_tree,
+    read_temp_output,
     run_managed_async,
     run_managed_sync,
 )
@@ -526,3 +528,57 @@ class TestAsyncKillDoesNotBlockLoop:
 
         assert concurrent_ran, "Concurrent coroutine should run during async kill"
         proc.wait()
+
+
+class TestDualWinnerRace:
+    """When wait_task and session_monitor both complete, process exit wins."""
+
+    @pytest.mark.asyncio
+    async def test_wait_task_wins_over_stale_monitor(self, tmp_path):
+        """When process exits AND monitor reports stale simultaneously,
+        the process exit takes priority — stale must be False."""
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        # Create a stale .jsonl file (exists before spawn_time, so monitor
+        # enters phase-1 polling then finds it and sees no activity → stale)
+        stale_log = session_dir / "session.jsonl"
+        stale_log.write_text('{"type":"init"}\n')
+
+        result = await run_managed_async(
+            [sys.executable, "-c", "print('done')"],
+            cwd=tmp_path,
+            timeout=10,
+            session_log_dir=session_dir,
+            stale_threshold=0.001,  # fires immediately once file is found
+            completion_marker="NONEXISTENT",
+        )
+        assert result.stale is False
+        assert result.returncode == 0
+
+    @pytest.mark.asyncio
+    async def test_wait_task_wins_over_completion_monitor(self, tmp_path):
+        """Process exit + monitor completion simultaneously — use process exit."""
+        result = await run_managed_async(
+            [sys.executable, "-c", "print('done')"],
+            cwd=tmp_path,
+            timeout=10,
+        )
+        assert result.stale is False
+        assert result.timed_out is False
+
+
+class TestReadTempOutputLogging:
+    """OSError during temp file read should produce a warning log."""
+
+    def test_oserror_logs_warning(self, caplog):
+        """OSError during temp file read should produce a warning log."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            stdout, stderr = read_temp_output(
+                Path("/nonexistent/stdout.tmp"),
+                Path("/nonexistent/stderr.tmp"),
+            )
+        assert stdout == ""
+        assert stderr == ""
+        assert "Failed to read" in caplog.text

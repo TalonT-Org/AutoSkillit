@@ -92,7 +92,10 @@ PROJECT RULES CHECKLIST:
 [ ] No PR breakdown sections
 [ ] Follows existing architectural patterns
 [ ] Uses existing utilities (not reinventing) unless refactoring is part of plan or provides major improvement
+[ ] Test command is `task test-all` — no other test commands (pytest, python -m pytest, etc.) appear in the plan
 ```
+
+**Test command enforcement:** Scan the entire plan for any test invocation. The only acceptable test command is `task test-all`. If the plan contains `pytest`, `python -m pytest`, `make test`, or any other direct test runner, replace it with `task test-all`. This project uses a Taskfile and all testing must go through it.
 
 ### Step 5: Fix the Plan
 

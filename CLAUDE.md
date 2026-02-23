@@ -39,7 +39,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
 
 The project uses pytest with pytest-asyncio for async test support. Tests run in parallel via pytest-xdist (`-n 4`). All tests must be safe for parallel execution.
 
-  * **Run tests**: `task test-all` from the project root
+  * **Run tests**: `task test-all` from the project root. This is the **only** test command. Never use `pytest`, `python -m pytest`, or any other test runner directly.
   * **Always run tests at end of task**
   * **Fix failing tests immediately**
   * **Add tests for new features**

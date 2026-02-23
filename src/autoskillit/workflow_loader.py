@@ -56,6 +56,7 @@ class Workflow:
     summary: str = ""
     inputs: dict[str, WorkflowInput] = field(default_factory=dict)
     steps: dict[str, WorkflowStep] = field(default_factory=dict)
+    constraints: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -176,6 +177,12 @@ def validate_workflow(wf: Workflow) -> list[str]:
         # After validating this step's with_args, add its captures for subsequent steps
         available_context.update(step.capture.keys())
 
+    if not wf.constraints:
+        errors.append(
+            "Workflow has no 'constraints' field. Pipeline scripts should include "
+            "orchestrator discipline constraints."
+        )
+
     return errors
 
 
@@ -221,8 +228,17 @@ def _parse_workflow(data: dict[str, Any]) -> Workflow:
         if isinstance(step_data, dict):
             steps[step_name] = _parse_step(step_data)
 
+    constraints = data.get("constraints", [])
+    if not isinstance(constraints, list):
+        constraints = []
+
     return Workflow(
-        name=name, description=description, summary=summary, inputs=inputs, steps=steps
+        name=name,
+        description=description,
+        summary=summary,
+        inputs=inputs,
+        steps=steps,
+        constraints=constraints,
     )
 
 

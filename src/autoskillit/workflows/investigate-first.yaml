@@ -1,6 +1,15 @@
 name: investigate-first
 description: Investigate a problem deeply, plan architectural fix, implement and merge.
 
+constraints:
+  - "During pipeline execution, only use AutoSkillit MCP tools. Native tools
+    (Read, Grep, Glob, Edit, Write, Bash) are not available in this context —
+    all code changes and investigation happen through headless sessions via
+    run_skill/run_skill_retry, which have full tool access."
+  - "Route to on_failure when a step fails — the downstream skill (e.g.,
+    assess-and-merge) has diagnostic access that the orchestrator does not.
+    Do not investigate or attempt to fix failures directly."
+
 inputs:
   problem:
     description: Description of the bug, error, or question to investigate

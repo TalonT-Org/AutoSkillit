@@ -297,6 +297,7 @@ class TestWorkflowLoader:
         data = {
             "name": "ok",
             "description": "Python only",
+            "constraints": ["test"],
             "steps": {
                 "check": {"python": "mod.fn", "on_success": "done"},
                 "done": {"action": "stop", "message": "OK"},
@@ -322,6 +323,7 @@ class TestWorkflowLoader:
         data = {
             "name": "ref-wf",
             "description": "Python with refs",
+            "constraints": ["test"],
             "inputs": {"plan_id": {"description": "Plan ID"}},
             "steps": {
                 "check": {
@@ -699,6 +701,7 @@ class TestWorkflowLoader:
         data = {
             "name": "done-route-wf",
             "description": "Route to done",
+            "constraints": ["test"],
             "steps": {
                 "classify": {
                     "tool": "classify_fix",
@@ -725,6 +728,7 @@ class TestWorkflowLoader:
         data = {
             "name": "valid-combo-wf",
             "description": "on_result with on_failure",
+            "constraints": ["test"],
             "steps": {
                 "classify": {
                     "tool": "classify_fix",
@@ -753,3 +757,51 @@ class TestWorkflowLoader:
         f = _write_yaml(tmp_path / "wf.yaml", VALID_WORKFLOW)
         wf = load_workflow(f)
         assert wf.steps["run_tests"].on_result is None
+
+    # CON1
+    def test_workflow_schema_supports_constraints(self):
+        """Workflow dataclass must have a constraints field."""
+        import dataclasses
+
+        field_names = {f.name for f in dataclasses.fields(Workflow)}
+        assert "constraints" in field_names, (
+            "Workflow dataclass must have a 'constraints' field "
+            "for pipeline orchestrator discipline"
+        )
+
+    # CON2
+    def test_parse_workflow_extracts_constraints(self, tmp_path):
+        """_parse_workflow must extract constraints from YAML."""
+        data = {
+            **VALID_WORKFLOW,
+            "constraints": [
+                "ONLY use AutoSkillit MCP tools",
+                "NEVER use Edit, Write, Read",
+            ],
+        }
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", data))
+        assert wf.constraints == [
+            "ONLY use AutoSkillit MCP tools",
+            "NEVER use Edit, Write, Read",
+        ]
+
+    # CON3
+    def test_validate_workflow_warns_missing_constraints(self, tmp_path):
+        """validate_workflow should warn when constraints are empty."""
+        wf = load_workflow(_write_yaml(tmp_path / "wf.yaml", VALID_WORKFLOW))
+        errors = validate_workflow(wf)
+        warnings = [e for e in errors if "constraints" in e.lower()]
+        assert warnings, "validate_workflow must warn when constraints are empty"
+
+    # CON4
+    def test_bundled_workflows_have_constraints(self):
+        """All bundled workflows must have a non-empty constraints field."""
+        wf_dir = builtin_workflows_dir()
+        failures = []
+        for path in sorted(wf_dir.glob("*.yaml")):
+            wf = load_workflow(path)
+            if not wf.constraints:
+                failures.append(f"{path.name}: missing constraints")
+        assert not failures, "Bundled workflows missing constraints:\n" + "\n".join(
+            f"  - {f}" for f in failures
+        )

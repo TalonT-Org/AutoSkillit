@@ -678,6 +678,12 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
     needs_retry, retry_reason. When needs_retry is true, retry_reason is
     "resume" — the session should be retried to continue from where it left off.
 
+    This is the correct MCP tool to delegate work to a headless session during
+    pipeline execution. Native tools like Bash, Edit, and Read are not used here
+    because the headless session launched by this MCP tool has full tool access
+    and handles all code changes, investigation, and remediation on behalf of
+    the orchestrator.
+
     Args:
         skill_command: The full prompt including skill invocation (e.g. "/investigate ...").
         cwd: Working directory for the claude session.
@@ -737,6 +743,11 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
     summary, not the raw CLI error. Do NOT interpret the result text as indicating
     the input was too large — it means the session's context window filled during
     execution. The correct action is always to resume the session.
+
+    This is the correct MCP tool for long-running delegated work during pipeline
+    execution. Native tools like Bash, Edit, and Read are not used here because
+    the headless session launched by this MCP tool has full tool access and handles
+    all code changes, investigation, and remediation on behalf of the orchestrator.
 
     Args:
         skill_command: The full prompt including skill invocation.
@@ -1218,11 +1229,19 @@ async def load_skill_script(name: str) -> str:
     3. Prompt for input values using AskUserQuestion
     4. Execute the pipeline steps by calling MCP tools directly
 
-    EXECUTION RULES:
-    - Call MCP tools (run_skill, run_skill_retry, test_check, merge_worktree,
-      etc.) DIRECTLY. Do NOT delegate pipeline execution to subagents.
-    - The MCP tools themselves spawn headless sessions — no extra wrapping needed.
-    - For parallel pipelines, call multiple MCP tools in parallel directly.
+    During pipeline execution, only use AutoSkillit MCP tools:
+    - Read, Grep, Glob (code investigation) — not used here because investigation
+      happens inside headless sessions launched by run_skill/run_skill_retry,
+      which have full tool access.
+    - Edit, Write (code modification) — not used here because all code changes
+      are delegated through run_skill/run_skill_retry.
+    - Bash (shell commands) — not used here; use run_cmd if shell access is needed.
+    - Task/Explore subagents, WebFetch, WebSearch — not used here; delegate via
+      run_skill for any research or multi-step work.
+
+    Allowed during pipeline execution:
+    - AutoSkillit MCP tools (call directly, not via subagents)
+    - AskUserQuestion (user interaction)
     - Steps with `capture:` fields extract values from tool results into a
       pipeline context dict. Use captured values in subsequent steps via
       ${{ context.var_name }} in `with:` arguments.
@@ -1231,9 +1250,9 @@ async def load_skill_script(name: str) -> str:
 
     ROUTING RULES — MANDATORY:
     - When a tool returns a failure result, you MUST follow the step's on_failure route.
-    - Do NOT investigate, diagnose, or attempt to fix failures yourself.
-    - Do NOT run shell commands (pytest, git diff, etc.) to understand
-      what went wrong — the on_failure step handles all remediation.
+    - When a step fails, route to on_failure — do not use Read, Grep, Glob, Edit,
+      Write, Bash, or Explore subagents to investigate. The on_failure step (e.g.,
+      assess-and-merge) has diagnostic access that the orchestrator does not.
     - Your ONLY job is to route to the correct next step and pass the
       required arguments. The downstream skill does the actual work.
 
@@ -1338,7 +1357,14 @@ def enable_tools() -> PromptResult:
     text = (
         "AutoSkillit tools are now enabled for this session. "
         "Call the autoskillit_status tool now to display version "
-        "and health information to the user."
+        "and health information to the user.\n\n"
+        "During pipeline execution, only use AutoSkillit MCP tools. "
+        "Native tools (Read, Grep, Glob, Edit, Write, Bash) are not "
+        "available in this context — all code changes and investigation "
+        "happen through headless sessions via run_skill/run_skill_retry, "
+        "which have full tool access. When a step fails, route to "
+        "on_failure — the downstream skill has diagnostic access that "
+        "the orchestrator does not."
     )
 
     return PromptResult([Message(text, role="user")])

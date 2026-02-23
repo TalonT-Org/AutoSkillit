@@ -746,6 +746,8 @@ class TestValidateScript:
             "name: test\n"
             "description: A test script\n"
             "summary: a > b\n"
+            "constraints:\n"
+            "  - test\n"
             "steps:\n"
             "  do_thing:\n"
             "    tool: run_cmd\n"
@@ -797,6 +799,8 @@ class TestValidateScript:
         script.write_text(
             "name: result-script\n"
             "description: Uses on_result\n"
+            "constraints:\n"
+            "  - test\n"
             "steps:\n"
             "  classify:\n"
             "    tool: classify_fix\n"
@@ -834,6 +838,13 @@ class TestToolSchemas:
         "validate_script": [
             "make-script-skill",
         ],
+    }
+
+    FORBIDDEN_NATIVE_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
+
+    PIPELINE_TOOLS_WITH_GUIDANCE: dict[str, list[str]] = {
+        "run_skill": ["MCP tool", "delegate"],
+        "run_skill_retry": ["MCP tool", "delegate"],
     }
 
     def test_tool_descriptions_contain_no_legacy_terms(self):
@@ -899,6 +910,41 @@ class TestToolSchemas:
             assert "NOT slash commands" in desc, (
                 f"Tool '{tool_name}' must contain 'NOT slash commands' disclaimer"
             )
+
+    def test_load_skill_script_names_all_forbidden_tools(self):
+        """load_skill_script must enumerate all forbidden native tools."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
+        }
+        desc = tools["load_skill_script"].description or ""
+
+        missing = [t for t in self.FORBIDDEN_NATIVE_TOOLS if t not in desc]
+        assert not missing, (
+            f"load_skill_script docstring must name all forbidden tools. Missing: {missing}"
+        )
+
+    def test_pipeline_tools_have_orchestrator_guidance(self):
+        """run_skill and run_skill_retry must reinforce MCP-only delegation."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
+        }
+        failures = []
+        for tool_name, required_terms in self.PIPELINE_TOOLS_WITH_GUIDANCE.items():
+            desc = tools[tool_name].description or ""
+            for term in required_terms:
+                if term.lower() not in desc.lower():
+                    failures.append(f"Tool '{tool_name}' missing orchestrator term '{term}'")
+        assert not failures, "Pipeline tools missing orchestrator guidance:\n" + "\n".join(
+            f"  - {f}" for f in failures
+        )
 
 
 class TestResetGuard:
@@ -1808,6 +1854,26 @@ class TestEnableToolsVersionReporting:
         result = enable_tools()
         msg = self._prompt_text(result)
         assert "autoskillit_status" in msg
+
+    def test_enable_tools_carries_orchestrator_contract(self):
+        """enable_tools prompt must establish orchestrator discipline contract."""
+        from autoskillit.server import enable_tools
+
+        result = enable_tools()
+        msg = self._prompt_text(result)
+
+        required_terms = [
+            "Read",
+            "Grep",
+            "Glob",
+            "Edit",
+            "Write",
+            "Bash",
+            "pipeline execution",
+            "MCP tools",
+        ]
+        missing = [t for t in required_terms if t not in msg]
+        assert not missing, f"enable_tools prompt missing orchestrator contract terms: {missing}"
 
     def test_enable_tools_still_enables_on_mismatch(self, tmp_path, monkeypatch):
         from autoskillit import server

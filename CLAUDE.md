@@ -102,7 +102,7 @@ temp/                        # Temporary/working files (gitignored)
   * **script_loader.py**: Discovers and loads pipeline scripts from `.autoskillit/scripts/`. Scripts use the workflow YAML schema (inputs, steps, routing, retry) with an added `summary` field. `list_scripts` returns `ScriptInfo` records for listing. `load_script` returns raw YAML for agent consumption.
   * **server.py**: FastMCP server. 10 gated tools require user activation via MCP prompts. 4 ungated tools (`autoskillit_status`, `list_skill_scripts`, `load_skill_script`, `validate_script`) are always available. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/autoskillit:implement-worktree` without a verified plan. `_plugin_dir` is passed to headless sessions via `--plugin-dir`. Registers `workflow://` resource handler.
   * **skill_resolver.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
-  * **workflow_loader.py**: YAML workflow loading, validation, and listing. Discovers workflows from `.autoskillit/workflows/` (project) and bundled package directory.
+  * **workflow_loader.py**: YAML workflow loading, validation, and listing. Discovers workflows from `.autoskillit/workflows/` (project) and bundled package directory. `WorkflowStep` supports an optional `model` field for per-step model selection.
   * **process_lifecycle.py**: Self-contained subprocess utilities (no internal deps, only stdlib + psutil). Handles process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts.
 
 ### **Plugin Structure**
@@ -125,8 +125,8 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 |------|---------|
 | `run_cmd` | Execute shell commands with timeout |
 | `run_python` | Call a Python function by dotted module path (in-process) |
-| `run_skill` | Run Claude Code headless with a skill command (passes `--plugin-dir`) |
-| `run_skill_retry` | Run Claude Code headless with API call limit (passes `--plugin-dir`) |
+| `run_skill` | Run Claude Code headless with a skill command (passes `--plugin-dir`, optional `model` param) |
+| `run_skill_retry` | Run Claude Code headless with API call limit (passes `--plugin-dir`, optional `model` param) |
 | `test_check` | Run test suite in a worktree, returns PASS/FAIL |
 | `merge_worktree` | Merge worktree branch after test gate passes |
 | `reset_test_dir` | Clear test directory (reset guard marker) |
@@ -172,3 +172,5 @@ All tool behavior is configurable via `.autoskillit/config.yaml`. No config file
 | `safety` | `test_gate_on_merge` | `true` | Run tests before allowing merge |
 | `read_db` | `timeout` | `30` | Query timeout in seconds |
 | `read_db` | `max_rows` | `10000` | Maximum rows returned per query |
+| `model` | `default` | `null` | Default model for run_skill/run_skill_retry when step has no model field |
+| `model` | `override` | `null` | Force all run_skill/run_skill_retry to use this model (overrides step YAML) |

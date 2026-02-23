@@ -1273,13 +1273,41 @@ async def load_skill_script(name: str) -> str:
     the YAML and execute the steps using the appropriate MCP tools.
 
     After loading:
-    1. Present the script to the user for review
-    2. If the user requests changes, apply them, then ask whether to:
-       - Save changes to the original file
-       - Save as a new script (prompt for name)
-       - Use temporarily without saving
+    1. Present the script to the user using the preview format below
+    2. If the user requests changes, use the /autoskillit:make-script-skill skill
+       to apply modifications. That skill has the complete schema, validation rules,
+       and formatting constraints needed for correct changes. Do NOT edit the YAML
+       file directly — always delegate modifications to make-script-skill.
     3. Prompt for input values using AskUserQuestion
     4. Execute the pipeline steps by calling MCP tools directly
+
+    Preview format for step 1:
+
+        ## {name}
+        {description}
+
+        **Flow:** {summary}
+
+        ### Inputs
+        For each input show: name, description, required/optional, default value.
+        Distinguish user-supplied inputs (required=true or meaningful defaults)
+        from agent-managed state (default="" or default=null with description
+        indicating it is set by a prior step or the agent).
+
+        ### Steps
+        For each step show:
+        - Step name and tool/action/python discriminator
+        - Routing: on_success → X, on_failure → Y
+        - If on_result: show field name and each route
+        - If optional: true, mark as "[Optional]" and show the note explaining
+          the skip condition
+        - If retry block exists: retries Nx on {condition}, then → {on_exhausted}
+        - If note exists, show it (notes contain critical agent instructions)
+        - If capture exists, show what values are extracted
+
+        ### Constraints
+        If present, list all constraint strings.
+        If absent, note: "No constraints defined"
 
     During pipeline execution, only use AutoSkillit MCP tools:
     - Read, Grep, Glob (code investigation) — not used here because investigation
@@ -1339,9 +1367,14 @@ async def validate_script(script_path: str) -> str:
 
     Parses the file, checks all validation rules (name, steps, routing,
     retry fields, input references), and returns structured results.
-    Use after generating or editing a script to confirm it is valid.
-    The /autoskillit:make-script-skill skill calls this tool automatically
-    after generating a script.
+    Use after generating or modifying a script (via make-script-skill)
+    to confirm it is valid. The /autoskillit:make-script-skill skill
+    calls this tool automatically after generating a script.
+
+    When validation fails ({"valid": false}), do NOT edit the YAML file
+    directly to fix errors. Use the /autoskillit:make-script-skill skill
+    to apply corrections — it has the complete schema, validation rules,
+    and formatting constraints needed for correct modifications.
 
     IMPORTANT: Pipeline scripts are NOT slash commands. They cannot be invoked
     as /autoskillit:<name>. They are loaded via load_skill_script and executed

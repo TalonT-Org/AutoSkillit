@@ -1,6 +1,6 @@
 # AutoSkillit
 
-Claude Code plugin that orchestrates automated workflows using headless sessions. Provides 10 MCP tools for running commands, executing skills, testing, merging worktrees, classifying fixes, and discovering pipeline scripts — 8 gated behind user-only MCP prompts, 2 ungated for script discovery. Skills are registered as first-class slash commands (`/autoskillit:investigate`, etc.).
+Claude Code plugin that orchestrates automated workflows using headless sessions. Provides 14 MCP tools (10 gated behind user-only MCP prompts, 4 ungated) and 13 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## Install
 
@@ -24,11 +24,11 @@ pip install -e /path/to/autoskillit
 autoskillit install              # persistent plugin (recommended)
 ```
 
-This registers a local marketplace and installs the plugin via `claude plugin install`. The plugin loads automatically in every Claude Code session — no `--plugin-dir` flag needed. After updating autoskillit, re-run `autoskillit install` to refresh the cache.
+This registers a local marketplace and installs the plugin via `claude plugin install`. The plugin loads automatically in every Claude Code session. After updating, re-run `autoskillit install` to refresh the cache.
 
 > **Note:** Do **not** also run `claude mcp add autoskillit ...` — the plugin already registers the MCP server. Adding a standalone entry creates a duplicate server process.
 
-For one-off sessions without persistent installation, you can use:
+For one-off sessions without persistent installation:
 
 ```bash
 claude --plugin-dir $(python -c "import autoskillit; print(autoskillit.__path__[0])")
@@ -46,121 +46,65 @@ This creates `.autoskillit/config.yaml`. Use `--force` to overwrite an existing 
 
 ### 4. Enable tools in session
 
-All tools are disabled by default. Activate them by typing the enable prompt shown by `autoskillit doctor` or in the MCP tool list. The prompt name depends on how the plugin was loaded:
+10 tools are gated by default. Activate them by typing the enable prompt shown by `autoskillit doctor` or in the MCP tool list. The prompt name depends on how the plugin was loaded:
 
 - Plugin install: `/mcp__plugin_autoskillit_autoskillit__enable_tools`
 - `--plugin-dir`: `/mcp__autoskillit__enable_tools`
 
 This uses MCP prompts (user-only, model cannot invoke) and survives `--dangerously-skip-permissions`.
 
-## MCP Tools
+## Running Pipelines
 
-| Tool | Purpose |
-|------|---------|
-| `run_cmd` | Execute shell commands with timeout |
-| `run_skill` | Run Claude Code headless with a skill command |
-| `run_skill_retry` | Run Claude Code headless with API call limit (for long-running skills) |
-| `test_check` | Run test suite, returns unambiguous PASS/FAIL |
-| `merge_worktree` | Merge worktree branch after programmatic test gate |
-| `reset_test_dir` | Clear test directory (reset guard marker) |
-| `classify_fix` | Analyze diff to determine restart scope (full vs partial) |
-| `reset_workspace` | Reset workspace directory, preserving configured paths |
-| `list_skill_scripts` | List pipeline scripts from .autoskillit/scripts/ (ungated) |
-| `load_skill_script` | Load a pipeline script by name as raw YAML (ungated) |
-
-## Configuration
-
-Layered YAML resolution: defaults < `~/.autoskillit/config.yaml` (user) < `.autoskillit/config.yaml` (project). Partial configs are fine — unset fields keep defaults.
-
-### Required: Test Command
-
-The only setting most projects need. Used by `test_check` and `merge_worktree`'s test gate.
-
-```yaml
-test_check:
-  command: ["task", "test-all"]   # your project's test command as a list
-  timeout: 600                    # seconds before killing (default: 600)
-```
-
-`autoskillit init` sets this for you. The default is `["pytest", "-v"]`.
-
-### Optional: classify_fix
-
-Tells `classify_fix` which file paths are critical. When a worktree diff touches files matching these prefixes, the tool returns `full_restart` (re-plan needed). Otherwise it returns `partial_restart` (just re-run implementation).
-
-```yaml
-classify_fix:
-  path_prefixes:
-    - "src/schema/"
-    - "db/migrations/"
-    - "src/core/config/"
-```
-
-Default: `[]` (empty — all changes return `partial_restart`). Only configure this if you use the `bugfix-loop` workflow or call `classify_fix` directly.
-
-### Optional: reset_workspace
-
-Configures the `reset_workspace` tool, which runs a reset command and then clears directory contents (preserving specified directories). Useful for test automation loops that need to reset a scratch directory between iterations.
-
-```yaml
-reset_workspace:
-  command: ["task", "clean"]                # null = tool disabled
-  preserve_dirs: ["data", ".cache"]         # dirs to keep during cleanup
-```
-
-Default: `command: null` (disabled), `preserve_dirs: []` (empty). The tool returns an error if called without a configured command.
-
-### Optional: Safety and Gates
-
-```yaml
-implement_gate:
-  marker: "Dry-walkthrough verified = TRUE"                                            # required first line in plan files
-  skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]  # skills subject to gate
-
-safety:
-  reset_guard_marker: ".autoskillit-workspace"  # marker file required for reset operations
-  require_dry_walkthrough: true                 # plans must be dry-walked before implementation
-  test_gate_on_merge: true                      # merge_worktree runs test suite before merging
-```
-
-These defaults are usually fine. Override per-project if needed.
-
-### Full Example
-
-A Python web service with schema/migration critical paths and Taskfile-based workspace reset:
-
-```yaml
-test_check:
-  command: ["pytest", "-v", "--tb=short"]
-
-classify_fix:
-  path_prefixes:
-    - "src/schema/"
-    - "db/migrations/"
-    - "tests/integration/"
-
-reset_workspace:
-  command: ["task", "clean"]
-  preserve_dirs: ["data", ".cache"]
-```
-
-### Resolution Order
-
-Defaults < user (`~/.autoskillit/config.yaml`) < project (`.autoskillit/config.yaml`). Project overrides user, user overrides defaults. View resolved config:
+### From the terminal
 
 ```bash
-autoskillit config show
+autoskillit orchestrate <script-name>
 ```
+
+Launches a constrained Claude Code session that runs the named pipeline script from `.autoskillit/scripts/`. The session is restricted to `AskUserQuestion` and AutoSkillit MCP tools only — no direct file system or shell access. The script YAML is validated before launch, and the orchestrator instructions are injected automatically.
+
+Cannot be run inside an existing Claude Code session.
+
+### From within Claude Code
+
+Load a pipeline script via the `load_skill_script` MCP tool, then follow the YAML steps:
+
+```
+list_skill_scripts()          -> JSON array of {name, description, summary}
+load_skill_script("impl")    -> raw YAML content for agent to interpret
+```
+
+Both tools are ungated — available without calling `enable_tools`.
+
+## MCP Tools
+
+| Tool | Gated | Purpose |
+|------|-------|---------|
+| `run_cmd` | Yes | Execute shell commands with timeout |
+| `run_python` | Yes | Call a Python function by dotted module path (in-process) |
+| `run_skill` | Yes | Run Claude Code headless with a skill command (optional `model` param) |
+| `run_skill_retry` | Yes | Run Claude Code headless with API call limit (optional `model` param) |
+| `test_check` | Yes | Run test suite, returns unambiguous PASS/FAIL |
+| `merge_worktree` | Yes | Merge worktree branch after programmatic test gate |
+| `reset_test_dir` | Yes | Clear test directory (reset guard marker) |
+| `classify_fix` | Yes | Analyze diff to determine restart scope (full vs partial) |
+| `reset_workspace` | Yes | Reset workspace directory, preserving configured paths |
+| `read_db` | Yes | Run read-only SQL queries against SQLite databases |
+| `autoskillit_status` | No | Return version health and config status |
+| `list_skill_scripts` | No | List pipeline scripts from .autoskillit/scripts/ |
+| `load_skill_script` | No | Load a pipeline script by name as raw YAML |
+| `validate_script` | No | Validate a pipeline script against the workflow schema |
 
 ## Skills
 
-Skills bundled with the plugin, invoked as `/autoskillit:<name>`:
+Bundled skills invoked as `/autoskillit:<name>`:
 
 | Skill | Purpose |
 |-------|---------|
 | `investigate` | Deep investigation without code changes |
 | `rectify` | Investigation-to-plan bridge |
 | `make-plan` | Create implementation plans |
+| `make-groups` | Break a large plan into sequenced implementation groups |
 | `dry-walkthrough` | Validate plans before implementation |
 | `review-approach` | Research modern solutions for a plan |
 | `implement-worktree` | Implement in isolated worktree |
@@ -168,16 +112,97 @@ Skills bundled with the plugin, invoked as `/autoskillit:<name>`:
 | `retry-worktree` | Continue after context exhaustion |
 | `assess-and-merge` | Fix test failures and merge |
 | `mermaid` | Create mermaid diagrams |
-| `make-script-skill` | Generate YAML pipeline scripts from workflow descriptions |
-| `setup-project` | Explore a project and generate tailored pipeline scripts and config |
+| `make-script-skill` | Generate YAML pipeline scripts |
+| `setup-project` | Generate tailored pipeline scripts and config for a project |
 
-Skills are discovered by Claude Code via the plugin structure. Use `autoskillit skills list` to see bundled skills.
+Use `autoskillit skills list` to see all bundled skills.
+
+## Configuration
+
+Layered YAML resolution: defaults < `~/.autoskillit/config.yaml` (user) < `.autoskillit/config.yaml` (project). Partial configs are fine — unset fields keep defaults. View resolved config with `autoskillit config show`.
+
+### Test Command
+
+Used by `test_check` and `merge_worktree`. The only setting most projects need.
+
+```yaml
+test_check:
+  command: ["task", "test-all"]
+  timeout: 600
+```
+
+`autoskillit init` sets this for you. Default: `["pytest", "-v"]`.
+
+### Model Selection
+
+Control which model `run_skill` and `run_skill_retry` use for headless sessions.
+
+```yaml
+model:
+  default: null      # default model when step has no model field (null = CLI default)
+  override: null     # force all sessions to use this model (overrides step YAML)
+```
+
+Pipeline script steps can also specify a `model` field per-step in their YAML definition.
+
+### classify_fix
+
+```yaml
+classify_fix:
+  path_prefixes:
+    - "src/schema/"
+    - "db/migrations/"
+```
+
+File prefixes that trigger `full_restart` instead of `partial_restart`. Default: `[]`.
+
+### reset_workspace
+
+```yaml
+reset_workspace:
+  command: ["task", "clean"]
+  preserve_dirs: ["data", ".cache"]
+```
+
+Default: `command: null` (disabled), `preserve_dirs: []`.
+
+### Safety and Gates
+
+```yaml
+implement_gate:
+  marker: "Dry-walkthrough verified = TRUE"
+  skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
+
+safety:
+  reset_guard_marker: ".autoskillit-workspace"
+  require_dry_walkthrough: true
+  test_gate_on_merge: true
+```
+
+These defaults are usually fine. Override per-project if needed.
+
+### Full Example
+
+```yaml
+test_check:
+  command: ["pytest", "-v", "--tb=short"]
+
+model:
+  default: "haiku"
+
+classify_fix:
+  path_prefixes:
+    - "src/schema/"
+    - "db/migrations/"
+
+reset_workspace:
+  command: ["task", "clean"]
+  preserve_dirs: ["data", ".cache"]
+```
 
 ## Workflows
 
-Declarative YAML workflow definitions guide the orchestrating agent through multi-step processes.
-
-**Built-in workflows:**
+Declarative YAML workflow definitions that guide the orchestrating agent through multi-step processes.
 
 | Workflow | Description |
 |----------|-------------|
@@ -187,29 +212,18 @@ Declarative YAML workflow definitions guide the orchestrating agent through mult
 | `audit-and-fix` | Audit > investigate > plan > implement |
 
 ```bash
-autoskillit workflows list          # show available workflows
+autoskillit workflows list              # show available workflows
 autoskillit workflows show bugfix-loop  # print YAML
-autoskillit update                  # refresh built-ins, preserve customizations
+autoskillit update                      # refresh built-ins, preserve customizations
 ```
 
-Agents access workflows via MCP resource: `workflow://bugfix-loop`
-
-Project workflows in `.autoskillit/workflows/` override built-ins.
+Agents access workflows via MCP resource: `workflow://bugfix-loop`. Project workflows in `.autoskillit/workflows/` override built-ins.
 
 ## Pipeline Scripts
 
-Pipeline scripts are YAML workflow definitions stored in `.autoskillit/scripts/` that give an orchestrating agent a complete loop to follow — which MCP tools and skills to call, in what order, with decision branches at each step. Agents discover scripts via the `list_skill_scripts` MCP tool and load them via `load_skill_script`.
+Pipeline scripts are YAML workflow definitions stored in `.autoskillit/scripts/` that define a complete orchestration loop — which MCP tools and skills to call, in what order, with decision branches at each step.
 
-Scripts use the same YAML schema as workflows (name, description, inputs, steps with tool/action, on_success/on_failure routing, retry blocks) with an added `summary` field for concise pipeline descriptions.
-
-### Discovery and Loading
-
-```
-list_skill_scripts()          → JSON array of {name, description, summary}
-load_skill_script("impl")    → raw YAML content for agent to interpret
-```
-
-Both tools are ungated — available without calling `enable_tools`.
+Scripts use the same YAML schema as workflows (inputs, steps with tool/action, on_success/on_failure routing, retry blocks) with an added `summary` field.
 
 ### Example Script
 
@@ -256,7 +270,7 @@ steps:
     message: "Failed — human intervention needed."
 ```
 
-`/autoskillit:setup-project` generates pipeline scripts tailored to your project. Run `/autoskillit:setup-project /path/to/your-project` to get started.
+`/autoskillit:setup-project` generates pipeline scripts tailored to your project.
 
 ## Diagnostics
 
@@ -265,12 +279,10 @@ autoskillit doctor          # check for stale MCP servers, missing config, plugi
 autoskillit doctor --json   # structured JSON output
 ```
 
-Checks: dead MCP server binaries, plugin metadata, `autoskillit` command on PATH, missing project config.
-
 ## Safety
 
-- **Tool gating**: All tools disabled by default, require user activation via MCP prompt
-- **Reset guard**: Destructive operations require a marker file (`.autoskillit-workspace`) in the target directory. Create with `autoskillit workspace init <dir>`
+- **Tool gating**: 10 tools disabled by default, require user activation via MCP prompt
+- **Reset guard**: Destructive operations require a marker file (`.autoskillit-workspace`). Create with `autoskillit workspace init <dir>`
 - **Dry-walkthrough gate**: Plans must be verified before implementation skills run
 - **Test gate**: Programmatic test validation before merge (no bypass parameter)
 - **Process tree cleanup**: psutil-based cleanup of all subprocess descendants
@@ -280,26 +292,8 @@ Checks: dead MCP server binaries, plugin metadata, `autoskillit` command on PATH
 ```bash
 pip install -e ".[dev]"
 pre-commit install
-
-pytest -v                        # run tests
-pre-commit run --all-files       # format, lint, typecheck
-```
-
-## Project Structure
-
-```
-src/autoskillit/
-  .claude-plugin/      Plugin metadata (plugin.json)
-  .mcp.json            MCP server configuration for the plugin
-  cli.py               Cyclopts CLI (serve, init, config, skills, workflows, update, doctor)
-  config.py            Dataclass config + layered YAML loading
-  script_loader.py     Pipeline script discovery from .autoskillit/scripts/
-  server.py            FastMCP server with 10 tools + 2 prompts + resources
-  process_lifecycle.py  Subprocess management (temp I/O, tree cleanup, timeouts)
-  skill_resolver.py    Bundled skill listing
-  workflow_loader.py   Workflow YAML parsing + validation
-  skills/              12 bundled skills (utilities and building blocks)
-  workflows/           4 built-in workflow definitions
+task test-all                        # run tests
+pre-commit run --all-files           # format, lint, typecheck
 ```
 
 ## License

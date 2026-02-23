@@ -29,7 +29,6 @@ from autoskillit.server import (
     _disable_tools_handler,
     _enable_tools_handler,
     _ensure_skill_prefix,
-    _gate_error_result,
     _parse_pytest_summary,
     _require_enabled,
     _run_subprocess,
@@ -3246,9 +3245,7 @@ class TestLoadSkillScriptFailurePredicates:
         from autoskillit.server import mcp
 
         tools = {
-            c.name: c
-            for c in mcp._local_provider._components.values()
-            if isinstance(c, Tool)
+            c.name: c for c in mcp._local_provider._components.values() if isinstance(c, Tool)
         }
         desc = tools["load_skill_script"].description or ""
         assert "run_skill" in desc

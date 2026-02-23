@@ -748,8 +748,19 @@ async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0
         return json.dumps({"error": f"Query failed: {exc}"})
 
 
+def _resolve_model(step_model: str) -> str | None:
+    """Resolve model selection: config override > step > config default."""
+    if _config.model.override:
+        return _config.model.override
+    if step_model:
+        return step_model
+    if _config.model.default:
+        return _config.model.default
+    return None
+
+
 @mcp.tool(tags={"automation"})
-async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
+async def run_skill(skill_command: str, cwd: str, add_dir: str = "", model: str = "") -> str:
     """Run a Claude Code headless session with a skill command.
 
     Returns JSON with: success, result, session_id, subtype, is_error, exit_code,
@@ -766,6 +777,7 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
         skill_command: The full prompt including skill invocation (e.g. "/investigate ...").
         cwd: Working directory for the claude session.
         add_dir: Optional additional directory to add to the session context.
+        model: Model to use (e.g. "sonnet", "opus"). Empty string = use config default.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -792,6 +804,9 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
     ]
     if add_dir:
         cmd.extend(["--add-dir", add_dir])
+    resolved_model = _resolve_model(model)
+    if resolved_model:
+        cmd.extend(["--model", resolved_model])
 
     result = await run_managed_async(
         cmd,
@@ -808,7 +823,7 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
 
 
 @mcp.tool(tags={"automation"})
-async def run_skill_retry(skill_command: str, cwd: str) -> str:
+async def run_skill_retry(skill_command: str, cwd: str, model: str = "") -> str:
     """Run a Claude Code headless session with retry detection.
 
     Use this for long-running skill sessions that may hit the context limit.
@@ -830,6 +845,7 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
     Args:
         skill_command: The full prompt including skill invocation.
         cwd: Working directory for the claude session.
+        model: Model to use (e.g. "sonnet", "opus"). Empty string = use config default.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -854,6 +870,9 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
         "json",
         "--dangerously-skip-permissions",
     ]
+    resolved_model = _resolve_model(model)
+    if resolved_model:
+        cmd.extend(["--model", resolved_model])
 
     result = await run_managed_async(
         cmd,

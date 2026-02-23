@@ -44,6 +44,7 @@ The project uses pytest with pytest-asyncio for async test support. Tests run in
   * **Fix failing tests immediately**
   * **Add tests for new features**
   * **Follow existing test patterns** in `tests/` — avoid test code redundancy
+  * **Worktree setup**: Use `task install-worktree` in worktrees. Never hardcode `uv venv`/`pip install` in skills or plans.
 
 ## **5. Pre-commit Hooks**
 
@@ -174,3 +175,4 @@ All tool behavior is configurable via `.autoskillit/config.yaml`. No config file
 | `read_db` | `max_rows` | `10000` | Maximum rows returned per query |
 | `model` | `default` | `null` | Default model for run_skill/run_skill_retry when step has no model field |
 | `model` | `override` | `null` | Force all run_skill/run_skill_retry to use this model (overrides step YAML) |
+| `worktree_setup` | `command` | `null` | Worktree env setup command (`null` = auto-detect) |

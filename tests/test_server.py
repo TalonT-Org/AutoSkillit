@@ -24,10 +24,12 @@ from autoskillit.server import (
     CleanupResult,
     _build_skill_result,
     _check_dry_walkthrough,
+    _compute_success,
     _delete_directory_contents,
     _disable_tools_handler,
     _enable_tools_handler,
     _ensure_skill_prefix,
+    _gate_error_result,
     _parse_pytest_summary,
     _require_enabled,
     _run_subprocess,
@@ -421,8 +423,9 @@ class TestCheckDryWalkthrough:
         )
         assert result is not None
         parsed = json.loads(result)
-        assert "error" in parsed
-        assert "dry-walked" in parsed["error"].lower()
+        assert parsed["success"] is False
+        assert parsed["is_error"] is True
+        assert "dry-walked" in parsed["result"].lower()
 
     def test_dry_walkthrough_gate_passes_implement_no_merge(self, tmp_path):
         """Gate allows /autoskillit:implement-worktree-no-merge when plan has marker."""
@@ -440,7 +443,8 @@ class TestCheckDryWalkthrough:
         result = _check_dry_walkthrough(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         assert result is not None
         parsed = json.loads(result)
-        assert "error" in parsed
+        assert parsed["success"] is False
+        assert parsed["is_error"] is True
 
     def test_dry_walkthrough_gate_ignores_unrelated_skills(self):
         """Gate ignores skills that are not implement-worktree variants."""
@@ -546,8 +550,9 @@ class TestRunSkillRetryGate:
                 f"/autoskillit:implement-worktree-no-merge {plan}", str(tmp_path)
             )
         )
-        assert "error" in result
-        assert "dry-walked" in result["error"].lower()
+        assert result["success"] is False
+        assert result["is_error"] is True
+        assert "dry-walked" in result["result"].lower()
 
 
 class TestToolRegistration:
@@ -1185,19 +1190,39 @@ class TestClaudeSessionResult:
         assert parsed.needs_retry is False
         assert parsed.retry_reason == RetryReason.NONE
 
-    def test_handles_unparseable_stdout(self):
-        """Non-JSON stdout produces a fallback result."""
-        parsed = parse_session_result("not json at all")
-        assert parsed.subtype == "unknown"
-        assert parsed.result == "not json at all"
+    def test_non_json_stdout_is_error(self):
+        """Non-JSON output (crashes, tracebacks) is always an error."""
+        parsed = parse_session_result("Traceback (most recent call last):\n  File...")
+        assert parsed.is_error is True
+        assert parsed.subtype == "unparseable"
+        assert "Traceback" in parsed.result
         assert parsed.needs_retry is False
 
-    def test_handles_empty_stdout(self):
-        """Empty stdout produces empty fallback."""
+    def test_empty_stdout_is_error(self):
+        """Empty stdout means the session produced no output — always an error."""
         parsed = parse_session_result("")
-        assert parsed.subtype == "unknown"
+        assert parsed.is_error is True
+        assert parsed.subtype == "empty_output"
         assert parsed.result == ""
         assert parsed.needs_retry is False
+
+    def test_whitespace_only_stdout_is_error(self):
+        """Whitespace-only stdout is treated as empty."""
+        parsed = parse_session_result("  \n  \t  ")
+        assert parsed.is_error is True
+        assert parsed.subtype == "empty_output"
+
+    def test_json_without_type_result_is_error(self):
+        """JSON that isn't a Claude result object is an error."""
+        parsed = parse_session_result('{"some": "random", "json": true}')
+        assert parsed.is_error is False
+        assert parsed.subtype == "unknown"
+
+    def test_non_dict_json_is_error(self):
+        """Non-dict JSON (list, string, number) is unparseable."""
+        parsed = parse_session_result("[1, 2, 3]")
+        assert parsed.is_error is True
+        assert parsed.subtype == "unparseable"
 
     def test_handles_ndjson_with_multiple_lines(self):
         """Parser finds type=result in multi-line NDJSON output."""
@@ -1566,12 +1591,13 @@ class TestRunSkillFailurePaths:
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
     async def test_handles_empty_stdout(self, mock_run):
-        """run_skill returns graceful result when stdout is empty."""
+        """run_skill returns error result when stdout is empty."""
         mock_run.return_value = _make_result(1, "", "segfault")
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["exit_code"] == 1
-        assert result["result"] == ""
-        assert result["subtype"] == "unknown"
+        assert result["is_error"] is True
+        assert result["subtype"] == "empty_output"
+        assert result["success"] is False
 
 
 class TestParsePytestSummary:
@@ -1667,10 +1693,11 @@ class TestGatedToolAccess:
 
     @pytest.mark.asyncio
     async def test_tools_return_error_when_disabled(self):
-        """All tools return error JSON when _tools_enabled is False."""
+        """All tools return standard gate error when _tools_enabled is False."""
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
-        assert "error" in result
-        assert "not enabled" in result["error"].lower()
+        assert result["success"] is False
+        assert result["is_error"] is True
+        assert "not enabled" in result["result"].lower()
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
@@ -1687,7 +1714,8 @@ class TestGatedToolAccess:
         _enable_tools_handler()
         _disable_tools_handler()
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
-        assert "error" in result
+        assert result["success"] is False
+        assert result["is_error"] is True
 
     def test_tools_disabled_by_default(self):
         """_tools_enabled defaults to False at module load."""
@@ -1735,16 +1763,19 @@ class TestGatedToolAccess:
     async def test_run_python_gated(self):
         """run_python requires tools to be enabled."""
         result = json.loads(await run_python(callable="json.dumps", args={"obj": 1}))
-        assert "error" in result
-        assert "not enabled" in result["error"].lower()
+        assert result["success"] is False
+        assert result["is_error"] is True
+        assert "not enabled" in result["result"].lower()
 
     def test_gate_error_structure(self):
-        """_require_enabled returns well-formed error JSON with activation instructions."""
+        """_require_enabled returns standard schema with activation instructions."""
         error = _require_enabled()
         assert error is not None
         parsed = json.loads(error)
-        assert "error" in parsed
-        assert "enable_tools" in parsed["error"]
+        assert parsed["success"] is False
+        assert parsed["is_error"] is True
+        assert parsed["subtype"] == "gate_error"
+        assert "enable_tools" in parsed["result"]
 
     def test_all_tools_tagged_automation(self):
         """All 8 tools have the 'automation' tag for future visibility control."""
@@ -1973,8 +2004,9 @@ class TestConfigDrivenBehavior:
 
         monkeypatch.setattr(server, "_tools_enabled", False)
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
-        assert "error" in result
-        assert "not enabled" in result["error"].lower()
+        assert result["success"] is False
+        assert result["is_error"] is True
+        assert "not enabled" in result["result"].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -2235,8 +2267,7 @@ class TestSafetyConfigWiring:
         result = json.loads(
             await run_skill_retry(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         )
-        # Should NOT return dry-walkthrough error
-        assert "error" not in result
+        assert result["subtype"] != "gate_error"
         assert result["exit_code"] == 0
 
     @pytest.mark.asyncio
@@ -2248,8 +2279,9 @@ class TestSafetyConfigWiring:
         result = json.loads(
             await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         )
-        assert "error" in result
-        assert "dry-walked" in result["error"].lower()
+        assert result["success"] is False
+        assert result["is_error"] is True
+        assert "dry-walked" in result["result"].lower()
 
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
@@ -2269,8 +2301,7 @@ class TestSafetyConfigWiring:
         result = json.loads(
             await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         )
-        # Should NOT return dry-walkthrough error
-        assert "error" not in result
+        assert result["subtype"] != "gate_error"
 
 
 # ---------------------------------------------------------------------------
@@ -2699,8 +2730,9 @@ class TestReadDb:
                 query="SELECT 1",
             )
         )
-        assert "error" in result
-        assert "not enabled" in result["error"].lower()
+        assert result["success"] is False
+        assert result["is_error"] is True
+        assert "not enabled" in result["result"].lower()
 
     @pytest.mark.asyncio
     async def test_max_rows_truncation(self, sample_db, monkeypatch):
@@ -2777,8 +2809,9 @@ class TestReadDbGating:
     @pytest.mark.asyncio
     async def test_read_db_gated(self):
         result = json.loads(await read_db(db_path="/tmp/x.db", query="SELECT 1"))
-        assert "error" in result
-        assert "not enabled" in result["error"]
+        assert result["success"] is False
+        assert result["is_error"] is True
+        assert "not enabled" in result["result"]
 
 
 class TestEnsureSkillPrefix:
@@ -2886,8 +2919,9 @@ class TestDryWalkthroughGateWithPrefix:
         result = json.loads(
             await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         )
-        assert "error" in result
-        assert "dry-walked" in result["error"].lower()
+        assert result["success"] is False
+        assert result["is_error"] is True
+        assert "dry-walked" in result["result"].lower()
 
 
 class TestRunSkillTimeoutFromConfig:
@@ -2984,7 +3018,238 @@ class TestStalenessReturnsNeedsRetry:
             pid=12345,
             stale=True,
         )
-        response = json.loads(_build_skill_result(stale_result, timeout=3600))
+        response = json.loads(_build_skill_result(stale_result))
         assert response["needs_retry"] is True
         assert response["retry_reason"] == "resume"
         assert response["subtype"] == "stale"
+        assert response["success"] is False
+
+
+class TestBuildSkillResultCrossValidation:
+    """_build_skill_result cross-validates signals to produce unambiguous success."""
+
+    EXPECTED_SKILL_KEYS = {
+        "success",
+        "result",
+        "session_id",
+        "subtype",
+        "is_error",
+        "exit_code",
+        "needs_retry",
+        "retry_reason",
+    }
+
+    def test_empty_stdout_exit_zero_is_failure(self):
+        """Exit 0 with empty stdout is NOT success — output was lost."""
+        result_obj = SubprocessResult(
+            returncode=0, stdout="", stderr="", timed_out=False, pid=1, stale=False
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert response["success"] is False
+        assert response["is_error"] is True
+
+    def test_timed_out_session_is_failure(self):
+        """Timed-out sessions are always failures, regardless of partial stdout."""
+        result_obj = SubprocessResult(
+            returncode=-1, stdout="", stderr="", timed_out=True, pid=1, stale=False
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert response["success"] is False
+        assert response["is_error"] is True
+        assert response["subtype"] == "timeout"
+
+    def test_stale_session_is_failure(self):
+        """Stale sessions are failures (even though retriable)."""
+        result_obj = SubprocessResult(
+            returncode=-1, stdout="", stderr="", timed_out=False, pid=1, stale=True
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert response["success"] is False
+        assert response["needs_retry"] is True
+
+    def test_normal_success_has_success_true(self):
+        """A valid session result with non-empty output is success."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Task completed.",
+                "session_id": "s1",
+            }
+        )
+        result_obj = SubprocessResult(
+            returncode=0, stdout=valid_json, stderr="", timed_out=False, pid=1, stale=False
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert response["success"] is True
+        assert response["is_error"] is False
+        assert response["result"] == "Task completed."
+
+    def test_nonzero_exit_overrides_is_error_false(self):
+        """Exit code != 0 means failure even if Claude wrote is_error=false."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "partial",
+                "session_id": "s1",
+            }
+        )
+        result_obj = SubprocessResult(
+            returncode=1, stdout=valid_json, stderr="", timed_out=False, pid=1, stale=False
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert response["success"] is False
+
+    def test_gate_disabled_schema(self):
+        """Gate-disabled response has standard keys."""
+        import autoskillit.server as srv
+
+        original = srv._tools_enabled
+        try:
+            srv._tools_enabled = False
+            response = json.loads(srv._require_enabled())
+            assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
+        finally:
+            srv._tools_enabled = original
+
+    def test_stale_schema(self):
+        """Stale response has standard keys."""
+        result_obj = SubprocessResult(
+            returncode=-1, stdout="", stderr="", timed_out=False, pid=1, stale=True
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
+
+    def test_timeout_schema(self):
+        """Timeout response has standard keys."""
+        result_obj = SubprocessResult(
+            returncode=-1, stdout="", stderr="", timed_out=True, pid=1, stale=False
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
+
+    def test_normal_success_schema(self):
+        """Normal success response has standard keys."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        result_obj = SubprocessResult(
+            returncode=0, stdout=valid_json, stderr="", timed_out=False, pid=1, stale=False
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
+
+    def test_empty_stdout_schema(self):
+        """Empty stdout response has standard keys."""
+        result_obj = SubprocessResult(
+            returncode=0, stdout="", stderr="", timed_out=False, pid=1, stale=False
+        )
+        response = json.loads(_build_skill_result(result_obj))
+        assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
+
+
+class TestGateErrorSchemaNormalization:
+    """Gate errors use the standard 8-field response schema."""
+
+    def test_require_enabled_gate_returns_standard_schema(self):
+        """Gate errors must use the same schema as normal responses."""
+        import autoskillit.server as srv
+
+        original = srv._tools_enabled
+        try:
+            srv._tools_enabled = False
+            gate_result = srv._require_enabled()
+            assert gate_result is not None
+            response = json.loads(gate_result)
+            assert response["success"] is False
+            assert response["is_error"] is True
+            assert response["needs_retry"] is False
+            assert "result" in response
+        finally:
+            srv._tools_enabled = original
+
+    def test_dry_walkthrough_gate_returns_standard_schema(self, tmp_path):
+        """Dry-walkthrough gate errors must use the standard response schema."""
+        plan = tmp_path / "plan.md"
+        plan.write_text("No marker here")
+        skill_cmd = f"/autoskillit:implement-worktree {plan}"
+        result = _check_dry_walkthrough(skill_cmd, str(tmp_path))
+        assert result is not None
+        response = json.loads(result)
+        assert response["success"] is False
+        assert response["is_error"] is True
+        assert response["subtype"] == "gate_error"
+
+
+class TestComputeSuccess:
+    """_compute_success cross-validates all signals for unambiguous success."""
+
+    def test_all_good_is_success(self):
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="Done.", session_id="s1"
+        )
+        assert _compute_success(session, returncode=0, timed_out=False, stale=False) is True
+
+    def test_empty_result_is_failure(self):
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="", session_id="s1"
+        )
+        assert _compute_success(session, returncode=0, timed_out=False, stale=False) is False
+
+    def test_nonzero_exit_is_failure(self):
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="Done.", session_id="s1"
+        )
+        assert _compute_success(session, returncode=1, timed_out=False, stale=False) is False
+
+    def test_is_error_true_is_failure(self):
+        session = ClaudeSessionResult(
+            subtype="success", is_error=True, result="Error occurred", session_id="s1"
+        )
+        assert _compute_success(session, returncode=0, timed_out=False, stale=False) is False
+
+    def test_timed_out_is_failure(self):
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="Done.", session_id="s1"
+        )
+        assert _compute_success(session, returncode=0, timed_out=True, stale=False) is False
+
+    def test_stale_is_failure(self):
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="Done.", session_id="s1"
+        )
+        assert _compute_success(session, returncode=0, timed_out=False, stale=True) is False
+
+    def test_unknown_subtype_is_failure(self):
+        session = ClaudeSessionResult(
+            subtype="unknown", is_error=False, result="Done.", session_id="s1"
+        )
+        assert _compute_success(session, returncode=0, timed_out=False, stale=False) is False
+
+
+class TestLoadSkillScriptFailurePredicates:
+    """The load_skill_script tool description documents failure predicates."""
+
+    def test_description_documents_run_skill_failure(self):
+        """The routing rules must define failure for run_skill, not just test_check."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp
+
+        tools = {
+            c.name: c
+            for c in mcp._local_provider._components.values()
+            if isinstance(c, Tool)
+        }
+        desc = tools["load_skill_script"].description or ""
+        assert "run_skill" in desc
+        assert "success" in desc.lower()

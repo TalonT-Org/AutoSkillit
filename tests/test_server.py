@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sqlite3
 from pathlib import Path
@@ -945,6 +946,243 @@ class TestToolSchemas:
                 if term.lower() not in desc.lower():
                     failures.append(f"Tool '{tool_name}' missing orchestrator term '{term}'")
         assert not failures, "Pipeline tools missing orchestrator guidance:\n" + "\n".join(
+            f"  - {f}" for f in failures
+        )
+
+
+def _extract_docstring_sections(desc: str) -> dict[str, str]:
+    """Split a tool description into named sections by detecting headers.
+
+    Returns a dict of {section_name: section_text} with lowercase-normalized keys.
+    The first paragraph before any header is the ``preamble`` section.
+
+    Detected header patterns:
+    - ALL-CAPS headers with colon or em-dash (ROUTING RULES —, IMPORTANT:)
+    - Capitalized phrase followed by colon (After loading:, Args:)
+    - "During pipeline execution" specific header
+    """
+    lines = desc.split("\n")
+    header_patterns = [
+        # ALL-CAPS header: ROUTING RULES —, FAILURE PREDICATES —, IMPORTANT:
+        re.compile(r"^([A-Z]{2,}(?:\s+[A-Z]{2,})*\s*[—:])"),
+        # Capitalized phrase + colon: After loading:, Allowed during ...:, Args:
+        re.compile(r"^([A-Z][a-z]+(?:\s+[a-z]+)*\s*:)"),
+        # Specific: "During pipeline execution"
+        re.compile(r"^(During pipeline execution[,:]?)"),
+    ]
+
+    sections: dict[str, str] = {}
+    current_key = "preamble"
+    current_lines: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        matched_header = None
+
+        for pattern in header_patterns:
+            m = pattern.match(stripped)
+            if m:
+                matched_header = m.group(1)
+                break
+
+        if matched_header:
+            if current_lines:
+                sections[current_key] = "\n".join(current_lines).strip()
+            key = matched_header.lower().rstrip(":—,").strip()
+            current_key = key
+            current_lines = [stripped]
+        else:
+            current_lines.append(line)
+
+    if current_lines:
+        sections[current_key] = "\n".join(current_lines).strip()
+
+    return sections
+
+
+class TestDocstringSemantics:
+    """Section-aware semantic checks for tool descriptions.
+
+    Unlike TestToolSchemas (which checks token presence), these tests parse
+    descriptions into named sections and verify behavioral correctness,
+    routing, and cross-section consistency.
+    """
+
+    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
+    def test_load_skill_script_action_protocol_routes_through_skill(self):
+        """After loading section must route modifications through make-script-skill."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
+        }
+        desc = tools["load_skill_script"].description or ""
+        sections = _extract_docstring_sections(desc)
+
+        after_loading = sections.get("after loading", "")
+        assert after_loading, "load_skill_script missing 'After loading' section"
+
+        # Modification requests must route through make-script-skill
+        assert "make-script-skill" in after_loading, (
+            "After loading section must route script modifications through make-script-skill"
+        )
+
+    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
+    def test_load_skill_script_after_loading_does_not_instruct_direct_modification(self):
+        """After loading section must not instruct direct file modification."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
+        }
+        desc = tools["load_skill_script"].description or ""
+        sections = _extract_docstring_sections(desc)
+
+        after_loading = sections.get("after loading", "")
+        assert after_loading, "load_skill_script missing 'After loading' section"
+
+        direct_edit_phrases = [
+            "apply them",
+            "Save changes to the original file",
+            "Save as a new script",
+        ]
+        found = [p for p in direct_edit_phrases if p.lower() in after_loading.lower()]
+        assert not found, f"After loading section instructs direct modification: {found}"
+
+    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
+    def test_validate_script_has_failure_routing(self):
+        """validate_script must route validation failures to make-script-skill."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
+        }
+        desc = tools["validate_script"].description or ""
+
+        # Must reference the failure return case
+        assert "false" in desc.lower(), (
+            "validate_script must document the failure case (e.g. {valid: false})"
+        )
+
+        # Failure routing must direct to make-script-skill for remediation
+        desc_lower = desc.lower()
+        has_remediation_context = any(
+            phrase in desc_lower for phrase in ["fix", "remediat", "correct the"]
+        )
+        assert has_remediation_context, (
+            "validate_script must route failures to make-script-skill for remediation"
+        )
+
+    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
+    def test_validate_script_does_not_endorse_direct_editing(self):
+        """validate_script must not normalize direct script editing."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
+        }
+        desc = tools["validate_script"].description or ""
+
+        # "or editing a script" without qualifying through make-script-skill
+        # normalizes the model directly editing YAML files
+        assert "or editing a script" not in desc, (
+            "validate_script normalizes direct editing with 'or editing a script'; "
+            "should qualify as going through make-script-skill"
+        )
+
+    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
+    def test_tool_description_sections_are_not_contradictory(self):
+        """After loading must not instruct what During pipeline execution prohibits."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
+        }
+        desc = tools["load_skill_script"].description or ""
+        sections = _extract_docstring_sections(desc)
+
+        after_loading = sections.get("after loading", "")
+        during_execution = sections.get("during pipeline execution", "")
+        assert after_loading, "Missing 'After loading' section"
+        assert during_execution, "Missing 'During pipeline execution' section"
+
+        # If "During pipeline execution" says Edit/Write are "not used here",
+        # then "After loading" must not instruct behaviors requiring file writing
+        if "not used here" in during_execution.lower():
+            write_implying_phrases = ["apply them", "save changes", "save as"]
+            found = [p for p in write_implying_phrases if p.lower() in after_loading.lower()]
+            assert not found, (
+                f"Contradiction: 'During pipeline execution' prohibits Edit/Write "
+                f"but 'After loading' instructs: {found}"
+            )
+
+    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
+    def test_load_skill_script_has_preview_format_spec(self):
+        """load_skill_script must specify presentation format for loaded scripts."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
+        }
+        desc = tools["load_skill_script"].description or ""
+
+        required_fields = ["constraints", "note", "retry", "capture"]
+        found = [f for f in required_fields if f in desc.lower()]
+        assert len(found) >= 3, (
+            f"load_skill_script must specify a preview format naming critical script "
+            f"fields. Found only: {found}"
+        )
+
+    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
+    def test_script_tool_descriptions_are_coherent(self):
+        """Script tools must form a coherent policy about script modification."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
+        }
+
+        failures = []
+
+        # load_skill_script: modifications must route through make-script-skill
+        load_desc = tools["load_skill_script"].description or ""
+        load_sections = _extract_docstring_sections(load_desc)
+        after_loading = load_sections.get("after loading", "")
+        if "apply them" in after_loading.lower():
+            failures.append(
+                "load_skill_script 'After loading' instructs direct editing ('apply them')"
+            )
+
+        # validate_script: failure must route through make-script-skill
+        validate_desc = tools["validate_script"].description or ""
+        validate_lower = validate_desc.lower()
+        has_failure_routing = (
+            "make-script-skill" in validate_desc
+            and any(w in validate_lower for w in ["fix", "fail", "invalid", "error"])
+            and "false" in validate_lower
+        )
+        if not has_failure_routing:
+            failures.append("validate_script has no failure routing through make-script-skill")
+
+        # validate_script: must not normalize direct editing
+        if "or editing a script" in validate_desc:
+            failures.append("validate_script normalizes direct editing ('or editing a script')")
+
+        assert not failures, "Script tools lack coherent modification policy:\n" + "\n".join(
             f"  - {f}" for f in failures
         )
 

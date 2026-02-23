@@ -1420,7 +1420,11 @@ async def validate_script(script_path: str) -> str:
     """
     import yaml
 
-    from autoskillit.workflow_loader import _parse_workflow, validate_workflow
+    from autoskillit.workflow_loader import (
+        _parse_workflow,
+        analyze_dataflow,
+        validate_workflow,
+    )
 
     path = Path(script_path)
     if not path.is_file():
@@ -1436,10 +1440,23 @@ async def validate_script(script_path: str) -> str:
 
     wf = _parse_workflow(data)
     errors = validate_workflow(wf)
+    report = analyze_dataflow(wf)
+    quality = {
+        "warnings": [
+            {
+                "code": w.code,
+                "step": w.step_name,
+                "field": w.field,
+                "message": w.message,
+            }
+            for w in report.warnings
+        ],
+        "summary": report.summary,
+    }
 
     if errors:
-        return json.dumps({"valid": False, "errors": errors})
-    return json.dumps({"valid": True, "errors": []})
+        return json.dumps({"valid": False, "errors": errors, "quality": quality})
+    return json.dumps({"valid": True, "errors": [], "quality": quality})
 
 
 def _enable_tools_handler() -> None:

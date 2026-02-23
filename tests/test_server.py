@@ -14,6 +14,7 @@ import pytest
 from autoskillit.config import (
     AutomationConfig,
     ClassifyFixConfig,
+    ModelConfig,
     ReadDbConfig,
     ResetWorkspaceConfig,
     RunSkillConfig,
@@ -33,6 +34,7 @@ from autoskillit.server import (
     _ensure_skill_prefix,
     _parse_pytest_summary,
     _require_enabled,
+    _resolve_model,
     _run_subprocess,
     _select_only_authorizer,
     _session_log_dir,
@@ -4193,3 +4195,76 @@ class TestParseSessionResultNullFields:
         }
         parsed = parse_session_result(json.dumps(raw))
         assert parsed.errors == []
+
+
+class TestRunSkillModel:
+    """Tests for model parameter in run_skill and run_skill_retry."""
+
+    _MOCK_STDOUT = (
+        '{"type": "result", "subtype": "success", "is_error": false, '
+        '"result": "done", "session_id": "s1"}'
+    )
+
+    # MOD_S1
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_passes_model_flag(self, mock_run):
+        mock_run.return_value = _make_result(0, self._MOCK_STDOUT, "")
+        await run_skill("/investigate error", "/tmp", model="sonnet")
+        cmd = mock_run.call_args[0][0]
+        assert "--model" in cmd
+        assert cmd[cmd.index("--model") + 1] == "sonnet"
+
+    # MOD_S2
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_retry_passes_model_flag(self, mock_run):
+        mock_run.return_value = _make_result(0, self._MOCK_STDOUT, "")
+        await run_skill_retry("/investigate error", "/tmp", model="sonnet")
+        cmd = mock_run.call_args[0][0]
+        assert "--model" in cmd
+        assert cmd[cmd.index("--model") + 1] == "sonnet"
+
+    # MOD_S3
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_run_skill_no_model_flag_when_empty(self, mock_run):
+        mock_run.return_value = _make_result(0, self._MOCK_STDOUT, "")
+        await run_skill("/investigate error", "/tmp", model="")
+        cmd = mock_run.call_args[0][0]
+        assert "--model" not in cmd
+
+
+class TestResolveModel:
+    """Tests for _resolve_model resolution chain."""
+
+    @pytest.fixture(autouse=True)
+    def _set_config(self, monkeypatch):
+        from autoskillit import server
+
+        self._server = server
+        self._monkeypatch = monkeypatch
+
+    def _set_model_config(self, default=None, override=None):
+        cfg = AutomationConfig(model=ModelConfig(default=default, override=override))
+        self._monkeypatch.setattr(self._server, "_config", cfg)
+
+    # MOD_R1
+    def test_resolve_model_override_wins(self):
+        self._set_model_config(override="haiku")
+        assert _resolve_model("sonnet") == "haiku"
+
+    # MOD_R2
+    def test_resolve_model_step_model(self):
+        self._set_model_config()
+        assert _resolve_model("sonnet") == "sonnet"
+
+    # MOD_R3
+    def test_resolve_model_config_default(self):
+        self._set_model_config(default="haiku")
+        assert _resolve_model("") == "haiku"
+
+    # MOD_R4
+    def test_resolve_model_nothing_set(self):
+        self._set_model_config()
+        assert _resolve_model("") is None

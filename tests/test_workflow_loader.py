@@ -832,6 +832,35 @@ class TestWorkflowLoader:
         step_without = _parse_step({"tool": "test_check"})
         assert step_without.optional is False, "_parse_step must default optional to False"
 
+    # MOD1
+    def test_step_model_field_defaults_to_none(self):
+        step = WorkflowStep(tool="run_skill")
+        assert step.model is None
+
+    # MOD2
+    def test_parse_step_extracts_model(self):
+        step = _parse_step({"tool": "run_skill", "model": "sonnet"})
+        assert step.model == "sonnet"
+
+    # MOD3
+    def test_parse_step_model_absent(self):
+        step = _parse_step({"tool": "run_skill"})
+        assert step.model is None
+
+    # MOD4
+    def test_bundled_assess_steps_use_sonnet(self):
+        bd = builtin_workflows_dir()
+        for f in bd.glob("*.yaml"):
+            wf = load_workflow(f)
+            for step_name, step in wf.steps.items():
+                if (
+                    step.with_args.get("skill_command")
+                    and "assess-and-merge" in step.with_args["skill_command"]
+                ):
+                    assert step.model == "sonnet", (
+                        f"{f.name} step '{step_name}' should have model='sonnet'"
+                    )
+
 
 class TestDataFlowQuality:
     """Tests for data-flow quality analysis (DFQ prefix)."""

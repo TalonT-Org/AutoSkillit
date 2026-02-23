@@ -23,6 +23,12 @@ class TestDefaultConfig:
         assert cfg.safety.require_dry_walkthrough is True
         assert cfg.safety.test_gate_on_merge is True
 
+    def test_default_model_config(self):
+        """MOD_C1: ModelConfig defaults to None for both fields."""
+        cfg = AutomationConfig()
+        assert cfg.model.default is None
+        assert cfg.model.override is None
+
 
 class TestLoadConfig:
     def test_load_config_no_files_returns_defaults(self, tmp_path):
@@ -148,3 +154,23 @@ class TestLoadConfig:
         cfg = load_config(tmp_path)
         assert cfg.reset_workspace.preserve_dirs == {"cache", "state"}
         assert isinstance(cfg.reset_workspace.preserve_dirs, set)
+
+    def test_yaml_loads_model_config(self, tmp_path):
+        """MOD_C2: YAML with model section populates ModelConfig."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"model": {"default": "sonnet"}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.model.default == "sonnet"
+        assert cfg.model.override is None
+
+    def test_partial_model_config(self, tmp_path):
+        """MOD_C3: YAML with only model.override preserves model.default as None."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"model": {"override": "haiku"}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.model.override == "haiku"
+        assert cfg.model.default is None

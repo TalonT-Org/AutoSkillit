@@ -22,12 +22,18 @@ class TestDefaultConfig:
         assert cfg.safety.reset_guard_marker == ".autoskillit-workspace"
         assert cfg.safety.require_dry_walkthrough is True
         assert cfg.safety.test_gate_on_merge is True
+        assert cfg.worktree_setup.command is None
 
     def test_default_model_config(self):
         """MOD_C1: ModelConfig defaults to None for both fields."""
         cfg = AutomationConfig()
         assert cfg.model.default is None
         assert cfg.model.override is None
+
+    def test_default_worktree_setup_config(self):
+        """WS_C1: WorktreeSetupConfig defaults to command=None."""
+        cfg = AutomationConfig()
+        assert cfg.worktree_setup.command is None
 
 
 class TestLoadConfig:
@@ -58,6 +64,7 @@ class TestLoadConfig:
                 "require_dry_walkthrough": False,
                 "test_gate_on_merge": False,
             },
+            "worktree_setup": {"command": ["task", "install-worktree"]},
         }
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)
@@ -72,6 +79,7 @@ class TestLoadConfig:
         assert cfg.safety.reset_guard_marker == ".custom-marker"
         assert cfg.safety.require_dry_walkthrough is False
         assert cfg.safety.test_gate_on_merge is False
+        assert cfg.worktree_setup.command == ["task", "install-worktree"]
 
     def test_partial_yaml_preserves_defaults(self, tmp_path):
         """C4: YAML with only test_check.command -> other fields keep defaults."""
@@ -174,3 +182,21 @@ class TestLoadConfig:
         cfg = load_config(tmp_path)
         assert cfg.model.override == "haiku"
         assert cfg.model.default is None
+
+    def test_yaml_loads_worktree_setup_config(self, tmp_path):
+        """WS_C2: YAML with worktree_setup section populates WorktreeSetupConfig."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"worktree_setup": {"command": ["task", "install-worktree"]}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.worktree_setup.command == ["task", "install-worktree"]
+
+    def test_partial_config_preserves_worktree_setup_default(self, tmp_path):
+        """WS_C3: YAML without worktree_setup -> command stays None."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"test_check": {"command": ["pytest", "-v"]}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.worktree_setup.command is None

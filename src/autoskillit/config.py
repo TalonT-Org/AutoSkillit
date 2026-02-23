@@ -78,6 +78,11 @@ class ModelConfig:
 
 
 @dataclass
+class WorktreeSetupConfig:
+    command: list[str] | None = None
+
+
+@dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
@@ -88,6 +93,7 @@ class AutomationConfig:
     run_skill: RunSkillConfig = field(default_factory=RunSkillConfig)
     run_skill_retry: RunSkillRetryConfig = field(default_factory=RunSkillRetryConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
+    worktree_setup: WorktreeSetupConfig = field(default_factory=WorktreeSetupConfig)
 
 
 def load_config(project_dir: Path | None = None) -> AutomationConfig:

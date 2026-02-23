@@ -14,9 +14,9 @@ tasks:
         echo "Running all tests with -n 4"
         echo "Output: $TEST_OUTPUT"
         if [[ -d ".venv" ]]; then
-          .venv/bin/python -m pytest tests/ -q --tb=short -n 4 --disable-warnings -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+          .venv/bin/python -m pytest tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
         else
-          pytest tests/ -q --tb=short -n 4 --disable-warnings -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+          pytest tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
         fi
         echo ""
         echo "Test output saved to: $TEST_OUTPUT"
@@ -39,7 +39,7 @@ tasks:
         fi
 
         set +e
-        $PYTEST_CMD tests/ -q --tb=short -n 4 --disable-warnings -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+        $PYTEST_CMD tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
         PYTEST_EXIT=${PIPESTATUS[0]}
         set -e
 
@@ -56,6 +56,27 @@ tasks:
           echo "TEST_RESULT=PASS"
           exit 0
         fi
+
+  test-smoke:
+    desc: Run smoke tests (requires ANTHROPIC_API_KEY)
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      TMPDIR: /dev/shm/pytest-tmp
+      OMP_NUM_THREADS: "1"
+      SMOKE_TEST: "1"
+    cmds:
+      - |
+        mkdir -p temp
+        TEST_OUTPUT="temp/smoke-$(date +%Y-%m-%d_%H%M%S).txt"
+        echo "Running smoke tests"
+        echo "Output: $TEST_OUTPUT"
+        if [[ -d ".venv" ]]; then
+          .venv/bin/python -m pytest tests/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+        else
+          pytest tests/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+        fi
+        echo ""
+        echo "Smoke test output saved to: $TEST_OUTPUT"
 
   install-worktree:
     desc: Set up development environment (isolated venv in worktrees, direct install in main)

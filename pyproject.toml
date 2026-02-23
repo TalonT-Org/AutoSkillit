@@ -37,6 +37,9 @@ cache_dir = "/dev/shm/pytest-cache"
 addopts = [
     "--basetemp=/dev/shm/pytest-tmp",
 ]
+markers = [
+    "smoke: end-to-end smoke tests requiring Claude API access (deselect with: -m 'not smoke')",
+]
 
 [tool.ruff]
 target-version = "py311"

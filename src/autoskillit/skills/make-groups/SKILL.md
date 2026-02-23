@@ -1,0 +1,149 @@
+---
+name: make-groups
+description: Break a large plan, architecture proposal, or feature document into sequenced implementation groups for the make-plan pipeline. Use when user says "make groups", "group requirements", "sequence groups", or wants to decompose a large document into ordered implementation units.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo 'Decomposing into sequenced implementation groups...'"
+          once: true
+---
+
+# Implementation Group Decomposition Skill
+
+Break a large document — architecture proposal, feature spec, migration plan, or requirements set — into self-contained implementation groups ordered for sequential execution through the make-plan pipeline.
+
+## When to Use
+
+- User says "make groups", "group requirements", "sequence groups", "decompose into groups"
+- User has a large document with many requirements/features that must be implemented incrementally
+- User wants to feed groups one at a time through `/autoskillit:make-plan`
+
+## Core Principles
+
+- **Groups are implementation units, not categories.** Each group must be independently plannable and implementable. A group produces a working, testable increment.
+- **Requirements travel with their group.** Every requirement from the source document must appear in exactly one group, referenced by its original ID. No requirement is dropped or split.
+- **Dependency order is the sequencing rule.** Group A's output is available when Group B starts. Order by what produces foundations first, consumers last.
+- **Source material is unverified input.** Verify claims about the codebase against subagent findings before incorporating them into grouping decisions.
+
+## Critical Constraints
+
+**NEVER:**
+- Modify any source code files
+- Create files outside `temp/make-groups/` directory
+- Drop, split, or rewrite requirements — reference them by original ID
+- Create groups that cannot be independently planned
+- Include implementation steps or technical approach in the group descriptions
+
+**ALWAYS:**
+- Use subagents to verify codebase structure before finalizing groups
+- Include every requirement from the source document in exactly one group
+- Assign each group a sequential suffix: groupA, groupB, ... groupZ
+- State dependencies between groups explicitly
+- Write to `temp/make-groups/` directory
+
+## Workflow
+
+### Step 1: Read the Source Document
+
+Read the full document. Inventory every requirement (REQ-*), feature, and deliverable. Build a raw list with original IDs preserved.
+
+### Step 2: Verify Against Codebase
+
+Launch **parallel Explore subagents** to understand:
+
+- What exists today that the requirements relate to
+- Module boundaries and dependency directions
+- Which components are foundational vs. consumers
+
+### Step 3: Form Groups
+
+Cluster requirements into groups. Each group must:
+
+1. Be independently plannable — someone could take this group to `/autoskillit:make-plan` without needing other groups implemented first (except declared dependencies)
+2. Produce a working increment — after implementation, the system is in a valid state
+3. Contain all related requirements — no requirement is orphaned or deferred
+
+Name each group with a short descriptive label and assign suffix groupA through groupZ in implementation order.
+
+### Step 4: Order by Dependency
+
+Sort groups so that each group's dependencies are satisfied by earlier groups. Document the dependency chain explicitly.
+
+### Step 5: Write the Groups Document
+
+Save to: `temp/make-groups/groups_{topic}_{YYYY-MM-DD_HHMMSS}.md`
+
+```markdown
+# Implementation Groups: {Topic}
+
+**Date:** {YYYY-MM-DD}
+**Source:** {Document path or description}
+**Groups:** {count}
+
+## Dependency Chain
+
+{group_id} → {group_id} → ... (linear or DAG as needed)
+
+---
+
+## {Group Label} (groupA)
+
+### Purpose
+{What this group delivers and why it comes at this position in the sequence}
+
+### Dependencies
+{None, or list of group IDs that must be complete first}
+
+### Requirements
+- **REQ-XXX-001:** {Original requirement text}
+- **REQ-XXX-002:** {Original requirement text}
+- ...
+
+### Planning Context
+{What make-plan needs to know: affected modules, key interfaces, constraints. Factual only — no prescribed approach.}
+
+---
+
+## {Group Label} (groupB)
+
+{Same structure}
+
+---
+
+{Repeat for each group}
+
+## Traceability
+
+| Requirement | Group |
+|-------------|-------|
+| REQ-XXX-001 | groupA |
+| REQ-XXX-002 | groupA |
+| REQ-YYY-001 | groupB |
+| ... | ... |
+```
+
+### Step 6: Verify Completeness
+
+Before finalizing, check:
+
+- Every requirement from the source document appears in the traceability table
+- No requirement appears in more than one group
+- No group depends on a group that comes after it in the sequence
+- Each group is self-contained enough to be a `/autoskillit:make-plan` input
+
+Report the summary to terminal.
+
+## Output Location
+
+```
+temp/make-groups/groups_{topic}_{YYYY-MM-DD_HHMMSS}.md
+```
+
+## Related Skills
+
+- **`/make-req`** — Produces requirements from raw input (this skill groups existing requirements)
+- **`/autoskillit:make-plan`** — Consumes individual groups as planning input
+- **`/elaborate-phase`** — Elaborates phases within a plan (this skill creates the groups that become plans)
+- **`/autoskillit:dry-walkthrough`** — Validates plans produced from groups

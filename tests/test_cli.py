@@ -646,6 +646,7 @@ constraints:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """orchestrate exits 1 when script name doesn't match any entry."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"
         scripts_dir.mkdir(parents=True)
@@ -660,6 +661,7 @@ constraints:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """orchestrate exits 1 when no .autoskillit/scripts/ directory exists."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(SystemExit) as exc_info:
@@ -672,6 +674,7 @@ constraints:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """orchestrate lists available scripts when name doesn't match."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"
         scripts_dir.mkdir(parents=True)
@@ -688,6 +691,7 @@ constraints:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """orchestrate exits 1 when claude command is not found."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"
         scripts_dir.mkdir(parents=True)
@@ -704,6 +708,7 @@ constraints:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """orchestrate exits 1 when script YAML fails validation."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"
         scripts_dir.mkdir(parents=True)
@@ -724,6 +729,7 @@ constraints:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """orchestrate passes correct flags to subprocess.run."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"
         scripts_dir.mkdir(parents=True)
@@ -763,6 +769,7 @@ constraints:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """orchestrate injects script YAML and orchestrator contract into system prompt."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"
         scripts_dir.mkdir(parents=True)
@@ -801,6 +808,7 @@ constraints:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """orchestrate does not raise SystemExit on returncode 0."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"
         scripts_dir.mkdir(parents=True)
@@ -821,6 +829,7 @@ constraints:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """orchestrate propagates non-zero subprocess exit codes."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"
         scripts_dir.mkdir(parents=True)

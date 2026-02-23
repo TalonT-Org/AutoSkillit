@@ -93,9 +93,12 @@ PROJECT RULES CHECKLIST:
 [ ] Follows existing architectural patterns
 [ ] Uses existing utilities (not reinventing) unless refactoring is part of plan or provides major improvement
 [ ] Test command is `task test-all` — no other test commands (pytest, python -m pytest, etc.) appear in the plan
+[ ] Worktree setup uses `worktree_setup.command` or `task install-worktree` — no hardcoded `uv venv`, `pip install`, or direct package manager invocations
 ```
 
 **Test command enforcement:** Scan the entire plan for any test invocation. The only acceptable test command is `task test-all`. If the plan contains `pytest`, `python -m pytest`, `make test`, or any other direct test runner, replace it with `task test-all`. This project uses a Taskfile and all testing must go through it.
+
+**Worktree setup enforcement:** Scan the plan for any worktree environment setup. The plan should reference the project's configured `worktree_setup.command` or `task install-worktree`. If the plan contains hardcoded `uv venv`, `uv pip install`, `pip install -e`, `npm install` (as worktree setup, not as a configured command), flag it and replace with the config-driven approach.
 
 ### Step 5: Fix the Plan
 

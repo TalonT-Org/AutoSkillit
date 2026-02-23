@@ -170,11 +170,35 @@ def _inject_completion_directive(skill_command: str, marker: str) -> str:
     return skill_command + directive
 
 
-def _build_skill_result(result: SubprocessResult, timeout: float) -> str:
+_FAILURE_SUBTYPES = frozenset({"unknown", "empty_output", "unparseable", "timeout"})
+
+
+def _compute_success(
+    session: ClaudeSessionResult,
+    returncode: int,
+    timed_out: bool,
+    stale: bool,
+) -> bool:
+    """Cross-validate all signals to determine unambiguous success/failure."""
+    if timed_out or stale:
+        return False
+    if returncode != 0:
+        return False
+    if session.is_error:
+        return False
+    if not session.result.strip():
+        return False
+    if session.subtype in _FAILURE_SUBTYPES:
+        return False
+    return True
+
+
+def _build_skill_result(result: SubprocessResult) -> str:
     """Route SubprocessResult fields into the standard run_skill JSON response."""
     if result.stale:
         return json.dumps(
             {
+                "success": False,
                 "result": "Session went stale (no activity for configured threshold). "
                 "Partial progress may have been made. Retry to continue.",
                 "session_id": "",
@@ -187,15 +211,22 @@ def _build_skill_result(result: SubprocessResult, timeout: float) -> str:
         )
 
     if result.timed_out:
-        stdout = result.stdout
         returncode = -1
+        session = ClaudeSessionResult(
+            subtype="timeout",
+            is_error=True,
+            result=_truncate(result.stdout) if result.stdout.strip() else "",
+            session_id="",
+            errors=[],
+        )
     else:
-        stdout = result.stdout
         returncode = result.returncode if result.returncode is not None else -1
+        session = parse_session_result(result.stdout)
 
-    session = parse_session_result(stdout)
+    success = _compute_success(session, returncode, result.timed_out, result.stale)
     return json.dumps(
         {
+            "success": success,
             "result": _truncate(session.agent_result),
             "session_id": session.session_id,
             "subtype": session.subtype,
@@ -270,8 +301,8 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
     """
     if not stdout.strip():
         return ClaudeSessionResult(
-            subtype="unknown",
-            is_error=False,
+            subtype="empty_output",
+            is_error=True,
             result="",
             session_id="",
             errors=[],
@@ -291,11 +322,21 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
 
     if result_obj is None:
         try:
-            result_obj = json.loads(stdout)
+            fallback = json.loads(stdout)
+            if isinstance(fallback, dict):
+                result_obj = fallback
+            else:
+                return ClaudeSessionResult(
+                    subtype="unparseable",
+                    is_error=True,
+                    result=stdout,
+                    session_id="",
+                    errors=[],
+                )
         except json.JSONDecodeError:
             return ClaudeSessionResult(
-                subtype="unknown",
-                is_error=False,
+                subtype="unparseable",
+                is_error=True,
                 result=stdout,
                 session_id="",
                 errors=[],
@@ -624,7 +665,7 @@ async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0
 async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
     """Run a Claude Code headless session with a skill command.
 
-    Returns JSON with: result, session_id, subtype, is_error, exit_code,
+    Returns JSON with: success, result, session_id, subtype, is_error, exit_code,
     needs_retry, retry_reason. When needs_retry is true, retry_reason is
     "resume" — the session should be retried to continue from where it left off.
 
@@ -670,7 +711,7 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "") -> str:
         stale_threshold=cfg.stale_threshold,
     )
 
-    return _build_skill_result(result, cfg.timeout)
+    return _build_skill_result(result)
 
 
 @mcp.tool(tags={"automation"})
@@ -678,9 +719,10 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
     """Run a Claude Code headless session with retry detection.
 
     Use this for long-running skill sessions that may hit the context limit.
-    The needs_retry field indicates whether the session didn't finish.
-    When needs_retry is true, retry_reason is "resume" — the session should
-    be retried to continue from where it left off.
+    Returns JSON with: success, result, session_id, subtype, is_error, exit_code,
+    needs_retry, retry_reason. The needs_retry field indicates whether the session
+    didn't finish. When needs_retry is true, retry_reason is "resume" — the session
+    should be retried to continue from where it left off.
 
     IMPORTANT: When needs_retry is true, the result field contains an actionable
     summary, not the raw CLI error. Do NOT interpret the result text as indicating
@@ -726,7 +768,7 @@ async def run_skill_retry(skill_command: str, cwd: str) -> str:
         stale_threshold=cfg.stale_threshold,
     )
 
-    return _build_skill_result(result, cfg.timeout)
+    return _build_skill_result(result)
 
 
 _OUTCOME_PATTERN = re.compile(

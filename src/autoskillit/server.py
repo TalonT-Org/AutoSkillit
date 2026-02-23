@@ -66,6 +66,22 @@ def _version_info() -> dict:
     }
 
 
+def _gate_error_result(error_message: str) -> str:
+    """Build a standard skill result for gate errors (tools disabled, dry-walkthrough)."""
+    return json.dumps(
+        {
+            "success": False,
+            "result": error_message,
+            "session_id": "",
+            "subtype": "gate_error",
+            "is_error": True,
+            "exit_code": -1,
+            "needs_retry": False,
+            "retry_reason": RetryReason.NONE,
+        }
+    )
+
+
 def _require_enabled() -> str | None:
     """Return error JSON if tools are not enabled, None if OK.
 
@@ -76,14 +92,10 @@ def _require_enabled() -> str | None:
     outside the permission system.
     """
     if not _tools_enabled:
-        return json.dumps(
-            {
-                "error": (
-                    "AutoSkillit tools are not enabled. "
-                    "User must type the enable_tools prompt to activate. "
-                    "Check the MCP prompt list for the exact name."
-                ),
-            }
+        return _gate_error_result(
+            "AutoSkillit tools are not enabled. "
+            "User must type the enable_tools prompt to activate. "
+            "Check the MCP prompt list for the exact name."
         )
     return None
 
@@ -121,21 +133,18 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
     skill_name = parts[0]
 
     if len(parts) < 2:
-        return json.dumps({"error": f"Missing plan path argument for {skill_name}"})
+        return _gate_error_result(f"Missing plan path argument for {skill_name}")
 
     plan_path = Path(cwd) / parts[1].strip().strip('"').strip("'")
     if not plan_path.is_file():
-        return json.dumps({"error": f"Plan file not found: {plan_path}"})
+        return _gate_error_result(f"Plan file not found: {plan_path}")
 
     first_line = plan_path.read_text().split("\n", 1)[0].strip()
     if first_line != _config.implement_gate.marker:
-        return json.dumps(
-            {
-                "error": "Plan has NOT been dry-walked. Run /dry-walkthrough on the plan first.",
-                "plan_path": str(plan_path),
-                "expected_first_line": _config.implement_gate.marker,
-                "actual_first_line": first_line[:100],
-            }
+        return _gate_error_result(
+            f"Plan has NOT been dry-walked. Run /dry-walkthrough on the plan first. "
+            f"Expected first line: {_config.implement_gate.marker!r}, "
+            f"actual: {first_line[:100]!r}"
         )
 
     return None

@@ -19,6 +19,7 @@ import pytest
 
 from autoskillit.process_lifecycle import (
     TerminationReason,
+    _extract_text_content,
     _heartbeat,
     _jsonl_contains_marker,
     _marker_is_standalone,
@@ -933,3 +934,121 @@ class TestHeartbeatTerminationReason:
         )
 
         assert result.termination == TerminationReason.COMPLETED
+
+
+class TestExtractTextContent:
+    """_extract_text_content normalizes Claude API content to plain text."""
+
+    def test_string_passthrough(self):
+        assert _extract_text_content("hello world") == "hello world"
+
+    def test_list_of_content_blocks(self):
+        blocks = [{"type": "text", "text": "done\n%%MARKER%%"}]
+        assert _extract_text_content(blocks) == "done\n%%MARKER%%"
+
+    def test_list_mixed_blocks(self):
+        blocks = [
+            {"type": "text", "text": "working"},
+            {"type": "tool_use", "id": "t1", "name": "Bash"},
+        ]
+        assert _extract_text_content(blocks) == "working\n"
+
+    def test_list_non_dict_element(self):
+        blocks = ["raw string", {"type": "text", "text": "ok"}]
+        assert _extract_text_content(blocks) == "raw string\nok"
+
+    def test_none_returns_empty(self):
+        assert _extract_text_content(None) == ""
+
+    def test_int_returns_str(self):
+        assert _extract_text_content(42) == "42"
+
+    def test_empty_list(self):
+        assert _extract_text_content([]) == ""
+
+    def test_empty_string(self):
+        assert _extract_text_content("") == ""
+
+
+class TestJsonlContainsMarkerContentBlocks:
+    """_jsonl_contains_marker handles list-of-content-blocks format."""
+
+    def test_list_content_blocks_with_marker(self):
+        import json
+
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "Done\n%%AUTOSKILLIT_COMPLETE%%"}]
+                },
+            }
+        )
+        assert _jsonl_contains_marker(
+            content, "%%AUTOSKILLIT_COMPLETE%%", frozenset({"assistant"})
+        )
+
+    def test_list_content_mixed_blocks_with_marker(self):
+        import json
+
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "text", "text": "Running..."},
+                        {"type": "tool_use", "id": "t1", "name": "Bash", "input": {}},
+                        {"type": "text", "text": "\n%%AUTOSKILLIT_COMPLETE%%"},
+                    ]
+                },
+            }
+        )
+        assert _jsonl_contains_marker(
+            content, "%%AUTOSKILLIT_COMPLETE%%", frozenset({"assistant"})
+        )
+
+    def test_list_content_marker_embedded_in_prose(self):
+        import json
+
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "text", "text": "I will emit %%AUTOSKILLIT_COMPLETE%% when done"}
+                    ]
+                },
+            }
+        )
+        assert not _jsonl_contains_marker(
+            content, "%%AUTOSKILLIT_COMPLETE%%", frozenset({"assistant"})
+        )
+
+    def test_list_content_no_marker(self):
+        import json
+
+        content = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "still working"}]},
+            }
+        )
+        assert not _jsonl_contains_marker(
+            content, "%%AUTOSKILLIT_COMPLETE%%", frozenset({"assistant"})
+        )
+
+    def test_none_content_no_crash(self):
+        import json
+
+        content = json.dumps({"type": "assistant", "message": {"content": None}})
+        assert not _jsonl_contains_marker(
+            content, "%%AUTOSKILLIT_COMPLETE%%", frozenset({"assistant"})
+        )
+
+    def test_none_message_no_crash(self):
+        import json
+
+        content = json.dumps({"type": "assistant", "message": None})
+        assert not _jsonl_contains_marker(
+            content, "%%AUTOSKILLIT_COMPLETE%%", frozenset({"assistant"})
+        )

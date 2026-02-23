@@ -31,7 +31,12 @@ from fastmcp import FastMCP
 from fastmcp.prompts.prompt import Message, PromptResult
 
 from autoskillit.config import AutomationConfig, load_config
-from autoskillit.process_lifecycle import SubprocessResult, TerminationReason, run_managed_async
+from autoskillit.process_lifecycle import (
+    SubprocessResult,
+    TerminationReason,
+    _extract_text_content,
+    run_managed_async,
+)
 from autoskillit.types import (
     CONTEXT_EXHAUSTION_MARKER,
     MergeFailedStep,
@@ -302,6 +307,16 @@ class ClaudeSessionResult:
     result: str
     session_id: str
     errors: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.result, str):
+            self.result = _extract_text_content(self.result)
+        if not isinstance(self.errors, list):
+            self.errors = [] if self.errors is None else [str(self.errors)]
+        if not isinstance(self.subtype, str):
+            self.subtype = "unknown" if self.subtype is None else str(self.subtype)
+        if not isinstance(self.session_id, str):
+            self.session_id = "" if self.session_id is None else str(self.session_id)
 
     def _is_context_exhausted(self) -> bool:
         """Detect context window exhaustion from Claude's error output.

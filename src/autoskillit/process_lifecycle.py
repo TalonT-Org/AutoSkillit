@@ -124,6 +124,25 @@ def _marker_is_standalone(text: str, marker: str) -> bool:
     return False
 
 
+def _extract_text_content(raw: object) -> str:
+    """Normalize Claude API content to plain text.
+
+    Handles the three shapes that appear in Claude CLI output:
+    - ``str``: plain text (returned as-is)
+    - ``list[dict]``: content blocks — joins ``text`` fields
+    - ``None`` / other: coerced to string (``None`` → ``""``)
+    """
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        return "\n".join(
+            block.get("text", "") if isinstance(block, dict) else str(block) for block in raw
+        )
+    if raw is None:
+        return ""
+    return str(raw)
+
+
 def _jsonl_contains_marker(
     content: str,
     marker: str,
@@ -156,12 +175,13 @@ def _jsonl_contains_marker(
             continue
 
         if record_type == "assistant":
-            text = obj.get("message", {}).get("content", "")
+            raw = (obj.get("message") or {}).get("content", "")
         elif record_type == "result":
-            text = obj.get("result", "")
+            raw = obj.get("result", "")
         else:
-            text = " ".join(v for v in obj.values() if isinstance(v, str))
+            raw = " ".join(v for v in obj.values() if isinstance(v, str))
 
+        text = _extract_text_content(raw)
         if _marker_is_standalone(text, marker):
             return True
     return False

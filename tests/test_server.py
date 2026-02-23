@@ -4097,3 +4097,68 @@ class TestMarkerCrossValidation:
             )
             is expected
         )
+
+
+class TestClaudeSessionResultTypeEnforcement:
+    """ClaudeSessionResult.__post_init__ enforces field types."""
+
+    def test_null_result_becomes_empty_string(self):
+        session = ClaudeSessionResult(subtype="error", is_error=True, result=None, session_id="s1")
+        assert session.result == ""
+
+    def test_null_errors_becomes_empty_list(self):
+        session = ClaudeSessionResult(
+            subtype="error", is_error=True, result="err", session_id="s1", errors=None
+        )
+        assert session.errors == []
+
+    def test_null_subtype_becomes_unknown(self):
+        session = ClaudeSessionResult(subtype=None, is_error=False, result="ok", session_id="s1")
+        assert session.subtype == "unknown"
+
+    def test_null_session_id_becomes_empty(self):
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="ok", session_id=None
+        )
+        assert session.session_id == ""
+
+    def test_is_context_exhausted_with_null_safe_fields(self):
+        session = ClaudeSessionResult(
+            subtype="error", is_error=True, result=None, session_id="s1", errors=None
+        )
+        assert session._is_context_exhausted() is False
+
+    def test_list_content_result_becomes_string(self):
+        blocks = [{"type": "text", "text": "Task completed."}]
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result=blocks, session_id="s1"
+        )
+        assert session.result == "Task completed."
+        assert isinstance(session.result, str)
+
+
+class TestParseSessionResultNullFields:
+    """parse_session_result handles null JSON values correctly."""
+
+    def test_null_result_field(self):
+        raw = {
+            "type": "result",
+            "subtype": "error_during_execution",
+            "is_error": True,
+            "result": None,
+            "session_id": "s1",
+        }
+        parsed = parse_session_result(json.dumps(raw))
+        assert parsed.result == ""
+
+    def test_null_errors_field(self):
+        raw = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "done",
+            "session_id": "s1",
+            "errors": None,
+        }
+        parsed = parse_session_result(json.dumps(raw))
+        assert parsed.errors == []

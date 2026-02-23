@@ -73,6 +73,7 @@ steps:
 
   assess:
     tool: run_skill
+    model: sonnet
     with:
       skill_command: "/autoskillit:assess-and-merge fix test failures"
       cwd: ${{ inputs.helper_dir }}

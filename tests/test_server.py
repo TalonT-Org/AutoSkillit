@@ -819,6 +819,37 @@ class TestValidateScript:
         result = json.loads(await validate_script(script_path=str(script)))
         assert result["valid"] is True
 
+    # DFQ14
+    @pytest.mark.asyncio
+    async def test_validate_script_includes_quality_field(self, tmp_path):
+        """validate_script response includes quality report with warnings and summary."""
+        script = tmp_path / "dead.yaml"
+        script.write_text(
+            "name: dead-output-test\n"
+            "description: Has a dead capture\n"
+            "constraints:\n"
+            "  - test\n"
+            "steps:\n"
+            "  impl:\n"
+            "    tool: run_skill\n"
+            "    capture:\n"
+            "      worktree_path: '${{ result.worktree_path }}'\n"
+            "    on_success: done\n"
+            "  done:\n"
+            "    action: stop\n"
+            '    message: "Done."\n'
+        )
+        result = json.loads(await validate_script(script_path=str(script)))
+        assert result["valid"] is True
+        assert "quality" in result
+        quality = result["quality"]
+        assert "warnings" in quality
+        assert "summary" in quality
+        dead = [w for w in quality["warnings"] if w["code"] == "DEAD_OUTPUT"]
+        assert len(dead) == 1
+        assert dead[0]["step"] == "impl"
+        assert dead[0]["field"] == "worktree_path"
+
 
 class TestToolSchemas:
     """Regression guard: tool descriptions must not contain legacy terminology."""

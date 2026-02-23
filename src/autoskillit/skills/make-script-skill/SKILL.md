@@ -188,6 +188,8 @@ The system validates scripts against these rules:
 9. `capture` values must contain `${{ result.* }}` expressions
 10. `capture` values must only use the `result.*` namespace
 11. `${{ context.X }}` references must point to a variable captured by a preceding step
+12. `run_skill` / `run_skill_retry` steps should have a `capture:` block to explicitly wire outputs (warning: `IMPLICIT_HANDOFF`)
+13. All captured variables should be consumed by at least one reachable downstream step via `${{ context.X }}` (warning: `DEAD_OUTPUT`)
 
 ## MCP Tool Reference
 
@@ -469,7 +471,10 @@ When called directly as `/autoskillit:make-script-skill`:
 4. Ask for inputs (what's configurable)
 5. Generate the script in the YAML format above
 6. Save to `.autoskillit/scripts/{name}.yaml` (create the directory if needed)
-7. Call `validate_script` with the saved file path. If errors are returned, fix them and re-validate until clean.
+7. Call `validate_script` with the saved file path. If errors are returned, fix them and re-validate until clean. Review the `quality.warnings` in the response:
+   - `DEAD_OUTPUT`: A `capture:` key is never referenced by any reachable downstream step via `${{ context.X }}`. Either add a `${{ context.X }}` reference in the downstream step's `with:` block, or remove the unused capture.
+   - `IMPLICIT_HANDOFF`: A `run_skill` or `run_skill_retry` step has no `capture:` block. Add a `capture:` block to explicitly wire outputs to downstream steps via `${{ context.X }}`, or confirm the skill's output is intentionally unused.
+   - Present the quality summary to the user and fix any warnings that indicate broken wiring.
 8. Tell the user: "Saved to `.autoskillit/scripts/{name}.yaml`. Load it with `load_skill_script("{name}")` via the MCP tool."
 
 ## CRITICAL: Scripts Are NOT Skills
@@ -509,6 +514,7 @@ When the agent is given an existing script's YAML content and a requested change
    - Use temporarily without saving
 5. Call `validate_script` on the saved path
 6. If errors, fix and re-validate until clean
-7. Report the changes made
+7. Review quality warnings and fix data-flow issues before reporting changes
+8. Report the changes made
 
 This edit mode is invoked when `load_skill_script` routes the user's modification request through this skill. The skill receives the existing YAML as context.

@@ -10,10 +10,13 @@ import yaml
 
 from autoskillit.types import RETRY_RESPONSE_FIELDS, WorkflowSource
 from autoskillit.workflow_loader import (
+    DataFlowReport,
     StepResultRoute,
     Workflow,
     WorkflowStep,
+    _build_step_graph,
     _parse_step,
+    analyze_dataflow,
     builtin_workflows_dir,
     list_workflows,
     load_workflow,
@@ -828,3 +831,320 @@ class TestWorkflowLoader:
 
         step_without = _parse_step({"tool": "test_check"})
         assert step_without.optional is False, "_parse_step must default optional to False"
+
+
+class TestDataFlowQuality:
+    """Tests for data-flow quality analysis (DFQ prefix)."""
+
+    def _make_workflow(self, steps: dict[str, dict]) -> Workflow:
+        """Build a minimal Workflow from step dicts."""
+        from autoskillit.workflow_loader import _parse_step
+
+        parsed_steps = {name: _parse_step(data) for name, data in steps.items()}
+        return Workflow(
+            name="test",
+            description="test",
+            steps=parsed_steps,
+            constraints=["test"],
+        )
+
+    # DFQ1
+    def test_analyze_dataflow_returns_report(self):
+        """analyze_dataflow returns a DataFlowReport with warnings list and summary str."""
+        wf = self._make_workflow(
+            {
+                "run": {"tool": "test_check", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        assert isinstance(report, DataFlowReport)
+        assert isinstance(report.warnings, list)
+        assert isinstance(report.summary, str)
+
+    # DFQ2
+    def test_dead_output_detected(self):
+        """Captured var with no downstream context.X consumer triggers DEAD_OUTPUT."""
+        wf = self._make_workflow(
+            {
+                "impl": {
+                    "tool": "run_skill",
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                    "on_success": "finish",
+                },
+                "finish": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT"]
+        assert len(dead) == 1
+        assert dead[0].step_name == "impl"
+        assert dead[0].field == "worktree_path"
+
+    # DFQ3
+    def test_consumed_output_not_flagged(self):
+        """Captured var consumed by downstream step should not trigger DEAD_OUTPUT."""
+        wf = self._make_workflow(
+            {
+                "impl": {
+                    "tool": "run_skill",
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                    "on_success": "test",
+                },
+                "test": {
+                    "tool": "test_check",
+                    "with": {"worktree_path": "${{ context.worktree_path }}"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT"]
+        assert len(dead) == 0
+
+    # DFQ4
+    def test_dead_output_on_any_path_not_flagged(self):
+        """Var consumed on one path but not another should NOT trigger DEAD_OUTPUT."""
+        wf = self._make_workflow(
+            {
+                "impl": {
+                    "tool": "run_skill",
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                    "on_success": "merge",
+                    "on_failure": "escalate",
+                },
+                "merge": {
+                    "tool": "merge_worktree",
+                    "with": {"worktree_path": "${{ context.worktree_path }}"},
+                    "on_success": "done",
+                },
+                "escalate": {"action": "stop", "message": "Failed"},
+                "done": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT"]
+        assert len(dead) == 0
+
+    # DFQ5
+    def test_implicit_handoff_detected(self):
+        """run_skill step without capture triggers IMPLICIT_HANDOFF."""
+        wf = self._make_workflow(
+            {
+                "impl": {
+                    "tool": "run_skill",
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        implicit = [w for w in report.warnings if w.code == "IMPLICIT_HANDOFF"]
+        assert len(implicit) == 1
+        assert implicit[0].step_name == "impl"
+
+    # DFQ6
+    def test_non_skill_step_no_implicit_handoff(self):
+        """test_check step without capture should NOT trigger IMPLICIT_HANDOFF."""
+        wf = self._make_workflow(
+            {
+                "test": {
+                    "tool": "test_check",
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        implicit = [w for w in report.warnings if w.code == "IMPLICIT_HANDOFF"]
+        assert len(implicit) == 0
+
+    # DFQ7
+    def test_skill_step_with_capture_no_implicit_handoff(self):
+        """run_skill step with capture should NOT trigger IMPLICIT_HANDOFF."""
+        wf = self._make_workflow(
+            {
+                "impl": {
+                    "tool": "run_skill",
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        implicit = [w for w in report.warnings if w.code == "IMPLICIT_HANDOFF"]
+        assert len(implicit) == 0
+
+    # DFQ8
+    def test_terminal_step_no_implicit_handoff(self):
+        """action: stop steps should NOT trigger IMPLICIT_HANDOFF."""
+        wf = self._make_workflow(
+            {
+                "done": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        implicit = [w for w in report.warnings if w.code == "IMPLICIT_HANDOFF"]
+        assert len(implicit) == 0
+
+    # DFQ9
+    def test_graph_construction_follows_all_routing_edges(self):
+        """_build_step_graph follows on_success, on_failure, on_result, retry edges."""
+        wf = self._make_workflow(
+            {
+                "start": {
+                    "tool": "run_skill",
+                    "on_success": "check",
+                    "on_failure": "fix",
+                    "retry": {"max_attempts": 3, "on": "needs_retry", "on_exhausted": "escalate"},
+                },
+                "check": {
+                    "tool": "test_check",
+                    "on_result": {
+                        "field": "passed",
+                        "routes": {"true": "done", "false": "fix"},
+                    },
+                },
+                "fix": {"tool": "run_skill", "on_success": "start"},
+                "escalate": {"action": "stop", "message": "Exhausted"},
+                "done": {"action": "stop", "message": "Done"},
+            }
+        )
+        graph = _build_step_graph(wf)
+        assert graph["start"] == {"check", "fix", "escalate"}
+        assert graph["check"] == {"done", "fix"}
+        assert graph["fix"] == {"start"}
+        assert graph["escalate"] == set()
+        assert graph["done"] == set()
+
+    # DFQ10
+    def test_dead_output_via_on_result_route(self):
+        """Dead output detection works with on_result routing."""
+        # Case 1: consumed on one route -> no warning
+        wf = self._make_workflow(
+            {
+                "impl": {
+                    "tool": "run_skill",
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                    "on_result": {
+                        "field": "success",
+                        "routes": {"true": "merge", "false": "escalate"},
+                    },
+                },
+                "merge": {
+                    "tool": "merge_worktree",
+                    "with": {"worktree_path": "${{ context.worktree_path }}"},
+                    "on_success": "done",
+                },
+                "escalate": {"action": "stop", "message": "Failed"},
+                "done": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT"]
+        assert len(dead) == 0
+
+        # Case 2: consumed on neither route -> warning
+        wf2 = self._make_workflow(
+            {
+                "impl": {
+                    "tool": "run_skill",
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                    "on_result": {
+                        "field": "success",
+                        "routes": {"true": "done", "false": "escalate"},
+                    },
+                },
+                "done": {"action": "stop", "message": "Done"},
+                "escalate": {"action": "stop", "message": "Failed"},
+            }
+        )
+        report2 = analyze_dataflow(wf2)
+        dead2 = [w for w in report2.warnings if w.code == "DEAD_OUTPUT"]
+        assert len(dead2) == 1
+        assert dead2[0].field == "worktree_path"
+
+    # DFQ11
+    def test_summary_reports_counts(self):
+        """Summary includes warning count when warnings exist."""
+        wf = self._make_workflow(
+            {
+                "impl": {
+                    "tool": "run_skill",
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                    "on_success": "run",
+                },
+                "run": {
+                    "tool": "run_skill",
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        # 1 dead output (worktree_path) + 1 implicit handoff (run) = 2
+        assert "2 data-flow warnings" in report.summary
+
+    # DFQ12
+    def test_clean_workflow_summary(self):
+        """Clean workflow summary says no warnings."""
+        wf = self._make_workflow(
+            {
+                "impl": {
+                    "tool": "run_skill",
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                    "on_success": "test",
+                },
+                "test": {
+                    "tool": "test_check",
+                    "with": {"worktree_path": "${{ context.worktree_path }}"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        assert "No data-flow warnings" in report.summary
+
+    # DFQ13
+    def test_bundled_workflows_produce_reports(self):
+        """analyze_dataflow runs cleanly on all bundled workflow YAMLs."""
+        wf_dir = builtin_workflows_dir()
+        assert wf_dir.is_dir(), f"Bundled workflows dir not found: {wf_dir}"
+        yaml_files = list(wf_dir.glob("*.yaml")) + list(wf_dir.glob("*.yml"))
+        assert len(yaml_files) > 0, "No bundled workflow files found"
+        for yaml_file in yaml_files:
+            wf = load_workflow(yaml_file)
+            report = analyze_dataflow(wf)
+            assert isinstance(report, DataFlowReport)
+            assert isinstance(report.warnings, list)
+
+    # DFQ15
+    def test_multiple_dead_outputs_all_reported(self):
+        """Multiple dead captures each get their own DEAD_OUTPUT warning."""
+        wf = self._make_workflow(
+            {
+                "impl": {
+                    "tool": "run_skill",
+                    "capture": {
+                        "a": "${{ result.a }}",
+                        "b": "${{ result.b }}",
+                        "c": "${{ result.c }}",
+                    },
+                    "on_success": "test",
+                },
+                "test": {
+                    "tool": "test_check",
+                    "with": {"val": "${{ context.a }}"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done"},
+            }
+        )
+        report = analyze_dataflow(wf)
+        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT"]
+        assert len(dead) == 2
+        dead_fields = {w.field for w in dead}
+        assert dead_fields == {"b", "c"}

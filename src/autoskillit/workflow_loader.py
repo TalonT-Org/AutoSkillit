@@ -50,6 +50,7 @@ class WorkflowStep:
     note: str | None = None
     capture: dict[str, str] = field(default_factory=dict)
     optional: bool = False
+    model: str | None = None
 
 
 @dataclass
@@ -294,6 +295,7 @@ def _parse_step(data: dict[str, Any]) -> WorkflowStep:
         note=data.get("note"),
         capture=data.get("capture", {}),
         optional=bool(data.get("optional", False)),
+        model=data.get("model"),
     )
 
 

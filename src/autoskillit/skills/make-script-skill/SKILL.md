@@ -210,8 +210,8 @@ Available tools for use in `tool:` fields:
 These skills ship with the autoskillit plugin and are invoked as `/autoskillit:<name>`:
 
 assess-and-merge, dry-walkthrough, implement-worktree, implement-worktree-no-merge,
-investigate, make-plan, make-script-skill, mermaid, rectify, retry-worktree,
-review-approach, setup-project
+investigate, make-groups, make-plan, make-script-skill, mermaid, rectify,
+retry-worktree, review-approach, setup-project
 
 ## Skill Reference Disambiguation
 
@@ -495,3 +495,20 @@ When loaded via the Skill tool by another skill (e.g., setup-project), the calli
 - Inputs are already identified
 
 Apply the format rules above to produce the YAML script. Do not re-ask for information the calling agent has already gathered.
+
+## Edit Mode (Loaded with Existing Script Content)
+
+When the agent is given an existing script's YAML content and a requested change:
+
+1. Parse the existing YAML to understand the current structure
+2. Apply the requested modifications while preserving all existing fields
+3. Resolve any skill references per the disambiguation procedure
+4. Write the modified YAML to the target path — ask the user whether to:
+   - Save changes to the original file
+   - Save as a new script (prompt for name)
+   - Use temporarily without saving
+5. Call `validate_script` on the saved path
+6. If errors, fix and re-validate until clean
+7. Report the changes made
+
+This edit mode is invoked when `load_skill_script` routes the user's modification request through this skill. The skill receives the existing YAML as context.

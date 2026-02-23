@@ -72,6 +72,12 @@ class RunSkillRetryConfig:
 
 
 @dataclass
+class ModelConfig:
+    default: str | None = None
+    override: str | None = None
+
+
+@dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
@@ -81,6 +87,7 @@ class AutomationConfig:
     read_db: ReadDbConfig = field(default_factory=ReadDbConfig)
     run_skill: RunSkillConfig = field(default_factory=RunSkillConfig)
     run_skill_retry: RunSkillRetryConfig = field(default_factory=RunSkillRetryConfig)
+    model: ModelConfig = field(default_factory=ModelConfig)
 
 
 def load_config(project_dir: Path | None = None) -> AutomationConfig:

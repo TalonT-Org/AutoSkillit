@@ -358,3 +358,37 @@ def _check_worktree_retry_creates_new(
                 )
             )
     return findings
+
+
+_CORE_FORBIDDEN_TOOLS = frozenset({"Read", "Grep", "Glob", "Edit", "Write", "Bash"})
+
+
+@semantic_rule(
+    name="weak-constraint-text",
+    description=(
+        "Pipeline constraints should enumerate forbidden native tools by name. "
+        "Generic one-liner constraints like 'Only use MCP tools' are too vague "
+        "to enforce orchestrator discipline."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_weak_constraint_text(wf: Workflow) -> list[RuleFinding]:
+    if not wf.constraints:
+        return []
+
+    all_text = " ".join(wf.constraints)
+    found = sum(1 for tool in _CORE_FORBIDDEN_TOOLS if tool in all_text)
+    if found < 6:
+        return [
+            RuleFinding(
+                rule="weak-constraint-text",
+                severity=Severity.WARNING,
+                step_name="(workflow)",
+                message=(
+                    "Pipeline constraints do not enumerate forbidden native tools. "
+                    "Name specific tools (Read, Grep, Glob, Edit, Write, Bash) "
+                    "for orchestrator discipline."
+                ),
+            )
+        ]
+    return []

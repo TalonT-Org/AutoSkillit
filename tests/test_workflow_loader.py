@@ -1233,3 +1233,41 @@ class TestVersionField:
         path = _write_yaml(tmp_path / "wf.yaml", data)
         wf = load_workflow(path)
         assert wf.version == "1.3.0"
+
+
+class TestWeakConstraintRule:
+    """Tests for the weak-constraint-text semantic rule."""
+
+    def _make_workflow_with_constraints(self, constraints: list[str]) -> Workflow:
+        from autoskillit.workflow_loader import _parse_step
+
+        steps = {
+            "run": _parse_step({"tool": "test_check", "on_success": "done"}),
+            "done": _parse_step({"action": "stop", "message": "Done"}),
+        }
+        return Workflow(
+            name="test",
+            description="test",
+            steps=steps,
+            constraints=constraints,
+        )
+
+    def test_weak_constraint_text_detected(self):
+        """Generic one-liner constraints should trigger weak-constraint-text warning."""
+        from autoskillit.semantic_rules import run_semantic_rules
+
+        wf = self._make_workflow_with_constraints(["Only use AutoSkillit MCP tools."])
+        findings = run_semantic_rules(wf)
+        weak = [f for f in findings if f.rule == "weak-constraint-text"]
+        assert weak, "Generic constraint should trigger weak-constraint-text warning"
+
+    def test_detailed_constraints_pass(self):
+        """Constraints naming core forbidden tools should not trigger the warning."""
+        from autoskillit.semantic_rules import run_semantic_rules
+
+        wf = self._make_workflow_with_constraints(
+            ["NEVER use native tools (Read, Grep, Glob, Edit, Write, Bash) from the orchestrator."]
+        )
+        findings = run_semantic_rules(wf)
+        weak = [f for f in findings if f.rule == "weak-constraint-text"]
+        assert not weak, "Detailed constraint should not trigger weak-constraint-text"

@@ -919,7 +919,11 @@ class TestToolSchemas:
         ],
     }
 
-    FORBIDDEN_NATIVE_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
+    @property
+    def FORBIDDEN_NATIVE_TOOLS(self) -> list[str]:  # noqa: N802
+        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
+
+        return list(PIPELINE_FORBIDDEN_TOOLS)
 
     PIPELINE_TOOLS_WITH_GUIDANCE: dict[str, list[str]] = {
         "run_skill": ["MCP tool", "delegate"],
@@ -1025,6 +1029,56 @@ class TestToolSchemas:
             f"  - {f}" for f in failures
         )
 
+    def test_pipeline_forbidden_tools_constant_is_complete(self):
+        """PIPELINE_FORBIDDEN_TOOLS must contain all 11 native Claude Code tools."""
+        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
+
+        expected = {
+            "Read",
+            "Grep",
+            "Glob",
+            "Edit",
+            "Write",
+            "Bash",
+            "Task",
+            "Explore",
+            "WebFetch",
+            "WebSearch",
+            "NotebookEdit",
+        }
+        actual = set(PIPELINE_FORBIDDEN_TOOLS)
+        missing = expected - actual
+        assert not missing, f"PIPELINE_FORBIDDEN_TOOLS missing tools: {missing}"
+
+    def test_run_skill_names_all_forbidden_tools(self):
+        """run_skill and run_skill_retry docstrings must name all forbidden tools."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
+        from autoskillit.server import mcp as server
+
+        tools = {
+            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
+        }
+        for tool_name in ("run_skill", "run_skill_retry"):
+            desc = tools[tool_name].description or ""
+            missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in desc]
+            assert not missing, (
+                f"{tool_name} docstring must name all forbidden tools. Missing: {missing}"
+            )
+
+    def test_bundled_workflow_constraints_name_all_forbidden_tools(self):
+        """All bundled workflow constraint blocks must name every forbidden tool."""
+        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
+        from autoskillit.workflow_loader import builtin_workflows_dir, load_workflow
+
+        wf_dir = builtin_workflows_dir()
+        for path in sorted(wf_dir.glob("*.yaml")):
+            wf = load_workflow(path)
+            all_constraint_text = " ".join(wf.constraints)
+            missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in all_constraint_text]
+            assert not missing, f"{path.name} constraints missing forbidden tools: {missing}"
+
 
 def _extract_docstring_sections(desc: str) -> dict[str, str]:
     """Split a tool description into named sections by detecting headers.
@@ -1036,6 +1090,7 @@ def _extract_docstring_sections(desc: str) -> dict[str, str]:
     - ALL-CAPS headers with colon or em-dash (ROUTING RULES —, IMPORTANT:)
     - Capitalized phrase followed by colon (After loading:, Args:)
     - "During pipeline execution" specific header
+    - "NEVER use native" prohibition header
     """
     lines = desc.split("\n")
     header_patterns = [
@@ -1043,8 +1098,9 @@ def _extract_docstring_sections(desc: str) -> dict[str, str]:
         re.compile(r"^([A-Z]{2,}(?:\s+[A-Z]{2,})*\s*[—:])"),
         # Capitalized phrase + colon: After loading:, Allowed during ...:, Args:
         re.compile(r"^([A-Z][a-z]+(?:\s+[a-z]+)*\s*:)"),
-        # Specific: "During pipeline execution"
+        # Specific: "During pipeline execution" or "NEVER use native"
         re.compile(r"^(During pipeline execution[,:]?)"),
+        re.compile(r"^(NEVER use native)"),
     ]
 
     sections: dict[str, str] = {}
@@ -1171,7 +1227,7 @@ class TestDocstringSemantics:
         )
 
     def test_tool_description_sections_are_not_contradictory(self):
-        """After loading must not instruct what During pipeline execution prohibits."""
+        """After loading must not instruct what the prohibition section prohibits."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -1183,17 +1239,22 @@ class TestDocstringSemantics:
         sections = _extract_docstring_sections(desc)
 
         after_loading = sections.get("after loading", "")
-        during_execution = sections.get("during pipeline execution", "")
+        # Accept either old or new section header
+        prohibition = sections.get("during pipeline execution", "") or sections.get(
+            "never use native", ""
+        )
         assert after_loading, "Missing 'After loading' section"
-        assert during_execution, "Missing 'During pipeline execution' section"
+        assert prohibition, (
+            "Missing prohibition section (NEVER use native / During pipeline execution)"
+        )
 
-        # If "During pipeline execution" says Edit/Write are "not used here",
+        # If the prohibition section says Edit/Write are prohibited or "not used here",
         # then "After loading" must not instruct behaviors requiring file writing
-        if "not used here" in during_execution.lower():
+        if "not used here" in prohibition.lower() or "prohibited" in prohibition.lower():
             write_implying_phrases = ["apply them", "save changes", "save as"]
             found = [p for p in write_implying_phrases if p.lower() in after_loading.lower()]
             assert not found, (
-                f"Contradiction: 'During pipeline execution' prohibits Edit/Write "
+                f"Contradiction: prohibition section prohibits Edit/Write "
                 f"but 'After loading' instructs: {found}"
             )
 
@@ -2185,24 +2246,28 @@ class TestEnableToolsVersionReporting:
         assert "autoskillit_status" in msg
 
     def test_enable_tools_carries_orchestrator_contract(self):
-        """enable_tools prompt must establish orchestrator discipline contract."""
-        from autoskillit.server import enable_tools
+        """enable_tools prompt must use prohibition framing and name all forbidden tools."""
+        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS, enable_tools
 
         result = enable_tools()
         msg = self._prompt_text(result)
 
-        required_terms = [
-            "Read",
-            "Grep",
-            "Glob",
-            "Edit",
-            "Write",
-            "Bash",
-            "pipeline execution",
-            "MCP tools",
-        ]
-        missing = [t for t in required_terms if t not in msg]
-        assert not missing, f"enable_tools prompt missing orchestrator contract terms: {missing}"
+        # Must name every forbidden tool
+        missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in msg]
+        assert not missing, f"enable_tools prompt missing forbidden tools: {missing}"
+
+        # Must use prohibition framing
+        prohibition_terms = ["NEVER", "Do NOT", "MUST NOT", "are prohibited"]
+        assert any(term in msg for term in prohibition_terms), (
+            "enable_tools prompt must use prohibition framing "
+            f"(one of {prohibition_terms}), got: {msg[:200]}"
+        )
+
+        # Must NOT use the conditional escape-hatch phrasing
+        assert "During pipeline execution, only use" not in msg, (
+            "enable_tools prompt must not use conditional 'During pipeline execution, only use' "
+            "phrasing — the restriction should be unconditional"
+        )
 
     def test_enable_tools_still_enables_on_mismatch(self, tmp_path, monkeypatch):
         from autoskillit import server

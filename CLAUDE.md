@@ -35,6 +35,13 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **Do Not Add Root Files**: Never create new root files unless explicitly required.
   * **Never commit unless told to do so**
 
+### **3.3. Pipeline Execution**
+
+  * **Orchestrator Discipline**: When executing a pipeline script (loaded via `load_skill_script`), NEVER use native Claude Code tools directly. The following tools are prohibited for the orchestrator: Read, Grep, Glob, Edit, Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit.
+  * **Delegate Through Headless Sessions**: All code reading, searching, editing, and investigation MUST go through `run_skill` or `run_skill_retry`, which launch headless sessions with full tool access.
+  * **Route Failures, Do Not Investigate**: When a pipeline step fails, follow the step's `on_failure` route. Do NOT use native tools to diagnose failures — the downstream skill has diagnostic access that the orchestrator does not.
+  * **Use `run_cmd` for Shell Access**: If shell commands are needed during a pipeline, use the `run_cmd` MCP tool, not the native Bash tool.
+
 ## **4. Testing Guidelines**
 
 The project uses pytest with pytest-asyncio for async test support. Tests run in parallel via pytest-xdist (`-n 4`). All tests must be safe for parallel execution.

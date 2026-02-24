@@ -1459,6 +1459,25 @@ async def load_skill_script(name: str) -> str:
     - Steps with a `model:` field: when calling `run_skill` or `run_skill_retry`,
       pass the step's `model` value as the `model` parameter to the tool.
 
+    TOKEN USAGE TRACKING:
+    - run_skill and run_skill_retry responses include a `token_usage` field
+      (null when unavailable) with: input_tokens, output_tokens,
+      cache_creation_input_tokens, cache_read_input_tokens, and model_breakdown.
+    - Accumulate token_usage from each run_skill/run_skill_retry step result
+      into a running total during pipeline execution.
+    - At pipeline completion, render a token usage summary table:
+
+      ## Token Usage Summary
+      | Step | input | output | cache_create | cache_read | Model |
+      |------|-------|--------|--------------|------------|-------|
+      | investigate | 45230 | 12400 | 8000 | 15000 | claude-sonnet-4-6 |
+      | implement | 98100 | 34200 | 12000 | 45000 | claude-sonnet-4-6 |
+      | test_check | — | — | — | — | — |
+      | **Total** | **143330** | **46600** | **20000** | **60000** | |
+
+    - Non-skill steps (test_check, run_cmd, merge_worktree) have no token
+      usage — show "—" in their row.
+
     ROUTING RULES — MANDATORY:
     - When a tool returns a failure result, you MUST follow the step's on_failure route.
     - When a step fails, route to on_failure — do not use Read, Grep, Glob, Edit,

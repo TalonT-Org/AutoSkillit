@@ -83,43 +83,79 @@ _SKILL_TOOLS = frozenset({"run_skill", "run_skill_retry"})
 
 
 @semantic_rule(
-    name="retry-without-worktree-path",
+    name="unsatisfied-skill-input",
     description=(
-        "run_skill_retry steps with needs_retry routing must receive "
-        "worktree_path from a prior capture to resume instead of restarting."
+        "Skill steps must provide all required inputs via context or pipeline "
+        "input references. Detects when a skill requires an input that the "
+        "step does not reference."
     ),
     severity=Severity.ERROR,
 )
-def _check_retry_without_worktree_path(wf: Workflow) -> list[RuleFinding]:
+def _check_unsatisfied_skill_input(wf: Workflow) -> list[RuleFinding]:
+    from autoskillit.contract_validator import (
+        count_positional_args,
+        extract_context_refs,
+        extract_input_refs,
+        get_skill_contract,
+        load_bundled_manifest,
+        resolve_skill_name,
+    )
+
     findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+    input_names = set(wf.inputs.keys())
     available_context: set[str] = set()
 
     for step_name, step in wf.steps.items():
-        if (
-            step.tool == "run_skill_retry"
-            and step.retry
-            and step.retry.on == "needs_retry"
-            and "worktree_path" in available_context
-        ):
-            has_worktree_ref = any(
-                "context.worktree_path" in str(val) for val in step.with_args.values()
-            )
-            if not has_worktree_ref:
-                findings.append(
-                    RuleFinding(
-                        rule="retry-without-worktree-path",
-                        severity=Severity.ERROR,
-                        step_name=step_name,
-                        message=(
-                            f"Step '{step_name}' uses run_skill_retry with needs_retry "
-                            f"routing but does not receive worktree_path from context. "
-                            f"A preceding step captures worktree_path — add "
-                            f"'worktree_path: \"${{{{ context.worktree_path }}}}\"' to "
-                            f"this step's 'with:' block so retries resume the existing "
-                            f"worktree instead of creating a new one."
-                        ),
-                    )
-                )
+        if step.tool in _SKILL_TOOLS:
+            skill_cmd = step.with_args.get("skill_command", "")
+            skill_name = resolve_skill_name(skill_cmd)
+            if skill_name:
+                contract = get_skill_contract(skill_name, manifest)
+                if contract:
+                    # If the skill command has inline positional args beyond
+                    # the skill name (e.g., "/autoskillit:investigate the
+                    # test failures"), we cannot determine which named contract
+                    # inputs they satisfy. Skip checking — only check steps
+                    # that use explicit ${{ }} references for all arguments.
+                    if count_positional_args(skill_cmd) > 0:
+                        available_context.update(step.capture.keys())
+                        continue
+
+                    ctx_refs = extract_context_refs(step)
+                    inp_refs = extract_input_refs(step)
+                    provided = ctx_refs | inp_refs
+
+                    for req_input in contract.inputs:
+                        if not req_input.required:
+                            continue
+                        name = req_input.name
+                        if name not in provided:
+                            if name in available_context or name in input_names:
+                                msg = (
+                                    f"Step '{step_name}' invokes {skill_name} which requires "
+                                    f"'{name}', and '{name}' is available in the pipeline "
+                                    f"context, but the step does not reference it. Add "
+                                    f"'${{{{ context.{name} }}}}' to the step's skill_command "
+                                    f"or with: block."
+                                )
+                            else:
+                                msg = (
+                                    f"Step '{step_name}' invokes {skill_name} which requires "
+                                    f"'{name}', but '{name}' is not available at this point "
+                                    f"in the pipeline. No prior step captures it and it is "
+                                    f"not a pipeline input."
+                                )
+                            findings.append(
+                                RuleFinding(
+                                    rule="unsatisfied-skill-input",
+                                    severity=Severity.ERROR,
+                                    step_name=step_name,
+                                    message=msg,
+                                )
+                            )
+
+        # Accumulate captures for subsequent steps
         available_context.update(step.capture.keys())
 
     return findings

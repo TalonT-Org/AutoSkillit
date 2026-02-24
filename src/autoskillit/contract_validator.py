@@ -284,3 +284,129 @@ def validate_pipeline_contracts(wf: Any, contract: dict[str, Any]) -> list[dict[
                     }
                 )
     return findings
+
+
+# ---------------------------------------------------------------------------
+# Staleness detection
+# ---------------------------------------------------------------------------
+
+
+def check_contract_staleness(contract: dict[str, Any]) -> list[StaleItem]:
+    """Check a pipeline contract for staleness against the current manifest.
+
+    Returns a list of StaleItem entries indicating what changed.
+    """
+    stale: list[StaleItem] = []
+    manifest = load_bundled_manifest()
+
+    stored_version = contract.get("bundled_manifest_version", "")
+    current_version = manifest["version"]
+    if stored_version != current_version:
+        stale.append(
+            StaleItem(
+                skill="(manifest)",
+                reason="version_mismatch",
+                stored_value=stored_version,
+                current_value=current_version,
+            )
+        )
+
+    for skill_name, stored_hash in contract.get("skill_hashes", {}).items():
+        current_hash = compute_skill_hash(skill_name)
+        if current_hash and stored_hash != current_hash:
+            stale.append(
+                StaleItem(
+                    skill=skill_name,
+                    reason="hash_mismatch",
+                    stored_value=stored_hash,
+                    current_value=current_hash,
+                )
+            )
+
+    return stale
+
+
+async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]:
+    """Use Haiku to determine if stale contracts changed meaningfully.
+
+    For each stale item with reason="hash_mismatch", reads the current
+    SKILL.md and asks Haiku whether the inputs or outputs changed.
+
+    Returns a list of dicts with keys: skill, meaningful (bool), summary (str).
+    """
+    import asyncio
+    import json
+
+    results: list[dict[str, Any]] = []
+
+    for item in stale_items:
+        if item.reason == "version_mismatch":
+            results.append(
+                {
+                    "skill": item.skill,
+                    "meaningful": True,
+                    "summary": (
+                        f"Manifest version changed from {item.stored_value} "
+                        f"to {item.current_value}. Structure may have changed."
+                    ),
+                }
+            )
+            continue
+
+        if item.reason != "hash_mismatch":
+            continue
+
+        skill_md_path = bundled_skills_dir() / item.skill / "SKILL.md"
+        if not skill_md_path.is_file():
+            results.append(
+                {
+                    "skill": item.skill,
+                    "meaningful": True,
+                    "summary": f"SKILL.md for {item.skill} not found.",
+                }
+            )
+            continue
+
+        skill_content = skill_md_path.read_text()
+        manifest = load_bundled_manifest()
+        contract_data = manifest.get("skills", {}).get(item.skill, {})
+
+        prompt = (
+            f"Compare the stored skill contract with the current SKILL.md content.\n\n"
+            f"Stored contract:\n{json.dumps(contract_data, indent=2)}\n\n"
+            f"Current SKILL.md:\n{skill_content[:3000]}\n\n"
+            f"Did the inputs or outputs change? Respond with JSON only: "
+            f'{{"meaningful_change": true/false, "summary": "brief explanation"}}'
+        )
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "claude",
+                "-p",
+                prompt,
+                "--model",
+                "haiku",
+                "--output-format",
+                "json",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+            response = json.loads(stdout.decode())
+            results.append(
+                {
+                    "skill": item.skill,
+                    "meaningful": response.get("meaningful_change", True),
+                    "summary": response.get("summary", "No summary provided."),
+                }
+            )
+        except (TimeoutError, json.JSONDecodeError, OSError):
+            results.append(
+                {
+                    "skill": item.skill,
+                    "meaningful": True,
+                    "summary": f"Triage failed for {item.skill}; treating as meaningful.",
+                }
+            )
+
+    return results

@@ -13,6 +13,7 @@ import sys
 import textwrap
 import time
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import psutil
 import pytest
@@ -20,6 +21,7 @@ import pytest
 from autoskillit.process_lifecycle import (
     TerminationReason,
     _extract_text_content,
+    _has_active_api_connection,
     _heartbeat,
     _jsonl_contains_marker,
     _marker_is_standalone,
@@ -1052,3 +1054,245 @@ class TestJsonlContainsMarkerContentBlocks:
         assert not _jsonl_contains_marker(
             content, "%%AUTOSKILLIT_COMPLETE%%", frozenset({"assistant"})
         )
+
+
+class TestHasActiveApiConnection:
+    """Unit tests for _has_active_api_connection."""
+
+    def _make_conn(self, port: int, status: str = "ESTABLISHED") -> Mock:
+        conn = Mock()
+        conn.status = status
+        conn.raddr = Mock()
+        conn.raddr.port = port
+        return conn
+
+    def _patch_psutil(self, parent_conns, child_conns_list=None):
+        """Returns a context manager patching psutil in process_lifecycle."""
+        mock_parent = Mock()
+        mock_parent.net_connections.return_value = parent_conns
+        children = []
+        for child_conns in child_conns_list or []:
+            mock_child = Mock()
+            mock_child.net_connections.return_value = child_conns
+            children.append(mock_child)
+        mock_parent.children.return_value = children
+        return patch("autoskillit.process_lifecycle.psutil.Process", return_value=mock_parent)
+
+    def test_returns_true_when_parent_has_established_port_443(self):
+        with self._patch_psutil([self._make_conn(443)]):
+            assert _has_active_api_connection(12345) is True
+
+    def test_returns_true_when_child_has_established_port_443(self):
+        with self._patch_psutil(
+            parent_conns=[self._make_conn(80)],
+            child_conns_list=[[self._make_conn(443)]],
+        ):
+            assert _has_active_api_connection(12345) is True
+
+    def test_returns_false_when_no_connections(self):
+        with self._patch_psutil([]):
+            assert _has_active_api_connection(12345) is False
+
+    def test_returns_false_when_all_connections_non_443(self):
+        conns = [self._make_conn(80), self._make_conn(8080), self._make_conn(22)]
+        with self._patch_psutil(conns):
+            assert _has_active_api_connection(12345) is False
+
+    def test_returns_false_when_443_is_not_established(self):
+        conns = [
+            self._make_conn(443, status="TIME_WAIT"),
+            self._make_conn(443, status="CLOSE_WAIT"),
+        ]
+        with self._patch_psutil(conns):
+            assert _has_active_api_connection(12345) is False
+
+    def test_returns_false_when_no_raddr(self):
+        conn = Mock()
+        conn.status = "ESTABLISHED"
+        conn.raddr = None
+        with self._patch_psutil([conn]):
+            assert _has_active_api_connection(12345) is False
+
+    def test_returns_false_on_nosuchprocess(self):
+        with patch(
+            "autoskillit.process_lifecycle.psutil.Process",
+            side_effect=psutil.NoSuchProcess(12345),
+        ):
+            assert _has_active_api_connection(12345) is False
+
+    def test_skips_dead_child_gracefully(self):
+        mock_parent = Mock()
+        mock_parent.net_connections.return_value = []
+        mock_dead_child = Mock()
+        mock_dead_child.net_connections.side_effect = psutil.NoSuchProcess(99999)
+        mock_live_child = Mock()
+        mock_live_child.net_connections.return_value = [self._make_conn(443)]
+        mock_parent.children.return_value = [mock_dead_child, mock_live_child]
+        with patch("autoskillit.process_lifecycle.psutil.Process", return_value=mock_parent):
+            assert _has_active_api_connection(12345) is True
+
+    def test_skips_zombie_child_gracefully(self):
+        mock_parent = Mock()
+        mock_parent.net_connections.return_value = []
+        mock_zombie = Mock()
+        mock_zombie.net_connections.side_effect = psutil.ZombieProcess(99998)
+        mock_live_child = Mock()
+        mock_live_child.net_connections.return_value = [self._make_conn(443)]
+        mock_parent.children.return_value = [mock_zombie, mock_live_child]
+        with patch("autoskillit.process_lifecycle.psutil.Process", return_value=mock_parent):
+            assert _has_active_api_connection(12345) is True
+
+
+class TestSessionLogMonitorStaleSuppressionGate:
+    """_session_log_monitor suppresses stale when process has an active port-443 connection."""
+
+    @pytest.mark.asyncio
+    async def test_suppresses_stale_when_port_443_connection_active(self, tmp_path):
+        """
+        File stops growing. Monitor reaches stale_threshold. But process has
+        an ESTABLISHED port-443 connection → suppression fires, clock resets,
+        monitor continues. On second check (connection dropped) → stale fires.
+        """
+        import asyncio
+
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+
+        call_count = {"n": 0}
+
+        def side_effect(pid):
+            call_count["n"] += 1
+            return call_count["n"] == 1  # True on first call, False on second
+
+        with patch(
+            "autoskillit.process_lifecycle._has_active_api_connection",
+            side_effect=side_effect,
+        ):
+            result = await asyncio.wait_for(
+                _session_log_monitor(
+                    tmp_path,
+                    "DONE",
+                    stale_threshold=0.5,
+                    spawn_time=spawn_time,
+                    pid=99999,
+                ),
+                timeout=12.0,
+            )
+        assert result == "stale"
+        assert call_count["n"] == 2
+
+    @pytest.mark.asyncio
+    async def test_fires_stale_immediately_when_no_api_connection(self, tmp_path):
+        """Standard stale: file silent, no pid provided, stale fires as before."""
+        import asyncio
+
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+        result = await asyncio.wait_for(
+            _session_log_monitor(
+                tmp_path,
+                "DONE",
+                stale_threshold=0.5,
+                spawn_time=spawn_time,
+                # pid omitted (defaults to None)
+            ),
+            timeout=5.0,
+        )
+        assert result == "stale"
+
+    @pytest.mark.asyncio
+    async def test_fires_stale_when_pid_is_none_regardless_of_tcp(self, tmp_path):
+        """pid=None bypasses TCP check entirely — existing behavior preserved."""
+        import asyncio
+
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+
+        with patch("autoskillit.process_lifecycle._has_active_api_connection") as mock_tcp:
+            result = await asyncio.wait_for(
+                _session_log_monitor(
+                    tmp_path,
+                    "DONE",
+                    stale_threshold=0.5,
+                    spawn_time=spawn_time,
+                    pid=None,
+                ),
+                timeout=5.0,
+            )
+        assert result == "stale"
+        mock_tcp.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_suppression_emits_warning(self, tmp_path, caplog):
+        """A suppression event must log a warning with elapsed time."""
+        import asyncio
+        import logging
+
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+
+        calls = {"n": 0}
+
+        def side_effect(pid):
+            calls["n"] += 1
+            return calls["n"] == 1
+
+        with patch(
+            "autoskillit.process_lifecycle._has_active_api_connection",
+            side_effect=side_effect,
+        ):
+            with caplog.at_level(logging.WARNING, logger="autoskillit.process_lifecycle"):
+                await asyncio.wait_for(
+                    _session_log_monitor(
+                        tmp_path,
+                        "DONE",
+                        stale_threshold=0.5,
+                        spawn_time=spawn_time,
+                        pid=99999,
+                    ),
+                    timeout=12.0,
+                )
+        assert any(
+            "port-443" in record.message or "ESTABLISHED" in record.message
+            for record in caplog.records
+        )
+
+
+class TestRunManagedAsyncPassesPidToMonitor:
+    """Verify that run_managed_async passes proc.pid to _session_log_monitor."""
+
+    @pytest.mark.asyncio
+    async def test_pid_passed_to_session_monitor(self, tmp_path):
+        """
+        Spawn a real subprocess. Patch _session_log_monitor to capture args.
+        Verify the pid kwarg matches the real subprocess PID.
+        """
+        captured = {}
+
+        async def capturing_monitor(*args, **kwargs):
+            captured["pid"] = kwargs.get("pid")
+            captured["positional_pid"] = args[5] if len(args) > 5 else None
+            return "stale"
+
+        session_file = tmp_path / "fake_session.jsonl"
+        session_file.write_text("")
+
+        with patch("autoskillit.process_lifecycle._session_log_monitor", capturing_monitor):
+            result = await run_managed_async(
+                ["sleep", "5"],
+                cwd=tmp_path,
+                timeout=3.0,
+                session_log_dir=tmp_path,
+                stale_threshold=0.1,
+                completion_marker="DONE",
+            )
+
+        assert result.termination == TerminationReason.STALE
+        pid_received = captured.get("pid") or captured.get("positional_pid")
+        assert pid_received is not None
+        assert isinstance(pid_received, int)
+        assert pid_received > 0

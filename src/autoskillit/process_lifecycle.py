@@ -238,12 +238,36 @@ async def _heartbeat(
             return "completion"
 
 
+def _has_active_api_connection(pid: int) -> bool:
+    """Return True if the process tree rooted at `pid` has an ESTABLISHED TCP
+    connection to port 443 (the Anthropic API endpoint).
+
+    Used by _session_log_monitor to suppress stale-kill when a long-running
+    API streaming call is in-flight.
+    """
+    try:
+        parent = psutil.Process(pid)
+        for proc in [parent] + parent.children(recursive=True):
+            try:
+                get_conns = getattr(proc, "net_connections", proc.connections)
+                conns = get_conns(kind="tcp")
+                for conn in conns:
+                    if conn.status == "ESTABLISHED" and conn.raddr and conn.raddr.port == 443:
+                        return True
+            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+                continue
+    except psutil.NoSuchProcess:
+        pass
+    return False
+
+
 async def _session_log_monitor(
     session_log_dir: Path,
     completion_marker: str,
     stale_threshold: float,
     spawn_time: float,
     record_types: frozenset[str] = frozenset({"assistant"}),
+    pid: int | None = None,
 ) -> str:
     """Watch Claude Code session log for completion or staleness.
 
@@ -313,7 +337,16 @@ async def _session_log_monitor(
             # Check staleness
             elapsed = asyncio.get_event_loop().time() - last_change
             if elapsed >= stale_threshold:
-                return "stale"
+                if pid is not None and _has_active_api_connection(pid):
+                    last_change = asyncio.get_event_loop().time()
+                    logger.warning(
+                        "JSONL silent for %.0fs but ESTABLISHED port-443 connection — "
+                        "suppressing stale kill (pid=%d)",
+                        elapsed,
+                        pid,
+                    )
+                else:
+                    return "stale"
 
 
 @contextmanager
@@ -482,6 +515,7 @@ async def run_managed_async(
                         stale_threshold,
                         time.time(),
                         session_record_types,
+                        pid=proc.pid,
                     )
                 )
                 tasks.add(session_monitor_task)

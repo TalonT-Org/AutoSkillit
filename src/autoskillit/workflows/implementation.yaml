@@ -52,6 +52,20 @@ steps:
     with:
       skill_command: "/autoskillit:implement-worktree the verified plan"
       cwd: ${{ inputs.work_dir }}
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    retry:
+      max_attempts: 1
+      on: needs_retry
+      on_exhausted: retry_worktree
+    on_success: done
+    on_failure: escalate
+
+  retry_worktree:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:retry-worktree the verified plan ${{ context.worktree_path }}"
+      cwd: ${{ inputs.work_dir }}
     retry:
       max_attempts: 3
       on: needs_retry

@@ -22,10 +22,10 @@ from autoskillit.contract_validator import (
 
 
 def test_load_bundled_manifest():
-    """Bundled manifest loads successfully and contains all 13 skills."""
+    """Bundled manifest loads successfully and contains all 14 skills."""
     manifest = load_bundled_manifest()
     assert manifest["version"] == "0.1.0"
-    assert len(manifest["skills"]) == 13
+    assert len(manifest["skills"]) == 14
 
 
 def test_load_bundled_manifest_skill_inputs_typed():

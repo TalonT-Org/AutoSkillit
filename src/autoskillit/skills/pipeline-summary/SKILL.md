@@ -17,7 +17,7 @@ and a PR from the feature branch into the target branch.
 
 ## Arguments
 
-/autoskillit:pipeline-summary {bug_report_path} {feature_branch} {target_branch} {workspace}
+`/autoskillit:pipeline-summary {bug_report_path} {feature_branch} {target_branch} {workspace}`
 
 - **bug_report_path** — Path to the JSON file containing bug metadata
 - **feature_branch** — Name of the branch containing all accumulated fixes
@@ -63,13 +63,13 @@ Read the JSON file at `{bug_report_path}`. Expected structure:
 If the file is empty, contains `[]`, or doesn't exist, write a clean-run summary and exit successfully.
 
 ### Step 3: Write Local Summary
-Write a markdown summary to `{workspace}/pipeline-summary.md`:
+Write a markdown summary to `{workspace}/run-summary.md`:
 - Title: "Pipeline Run Summary — {date}"
 - Bug count and fix count
 - Table of all bugs with step, error, fix, iteration
 - Branch info: feature branch name, target branch
 
-Output: `summary_path={workspace}/pipeline-summary.md`
+Output: `summary_path={workspace}/run-summary.md`
 
 ### Step 4: Check GitHub Availability
 Run `gh auth status 2>/dev/null`. If exit code is non-zero or `gh` is not found:
@@ -109,5 +109,5 @@ Capture the PR URL from stdout.
 Output: `pr_url={url}`
 
 ## Output
-- Always: `summary_path={workspace}/pipeline-summary.md`
+- Always: `summary_path={workspace}/run-summary.md`
 - If GitHub available: `issue_url={url}` and `pr_url={url}`

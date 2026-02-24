@@ -304,3 +304,57 @@ def _check_retry_without_capture(wf: Workflow) -> list[RuleFinding]:
                     )
                 )
     return findings
+
+
+_WORKTREE_CREATING_SKILLS = frozenset(
+    {
+        "implement-worktree",
+        "implement-worktree-no-merge",
+    }
+)
+
+
+@semantic_rule(
+    name="worktree-retry-creates-new",
+    description=(
+        "Worktree-creating skills (implement-worktree, "
+        "implement-worktree-no-merge) must not have retry "
+        "max_attempts > 1. Each retry re-invokes the skill, "
+        "creating a new worktree and orphaning the previous one. "
+        "Use max_attempts: 1 and route on_exhausted to a "
+        "retry-worktree step instead."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_worktree_retry_creates_new(
+    wf: Workflow,
+) -> list[RuleFinding]:
+    from autoskillit.contract_validator import resolve_skill_name
+
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        if step.tool not in _SKILL_TOOLS:
+            continue
+        if not step.retry or step.retry.max_attempts <= 1:
+            continue
+
+        skill_cmd = step.with_args.get("skill_command", "")
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name and skill_name in _WORKTREE_CREATING_SKILLS:
+            findings.append(
+                RuleFinding(
+                    rule="worktree-retry-creates-new",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' retries {skill_name} "
+                        f"with max_attempts="
+                        f"{step.retry.max_attempts}. Each retry "
+                        f"creates a new worktree, orphaning partial "
+                        f"progress. Set max_attempts: 1 and route "
+                        f"on_exhausted to a retry-worktree step that "
+                        f"resumes in the existing worktree."
+                    ),
+                )
+            )
+    return findings

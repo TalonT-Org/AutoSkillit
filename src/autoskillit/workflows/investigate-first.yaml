@@ -11,7 +11,7 @@ constraints:
     Do not investigate or attempt to fix failures directly."
 
 inputs:
-  problem:
+  topic:
     description: Description of the bug, error, or question to investigate
     required: true
   work_dir:
@@ -28,7 +28,7 @@ steps:
   investigate:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:investigate ${{ inputs.problem }}"
+      skill_command: "/autoskillit:investigate ${{ inputs.topic }}"
       cwd: ${{ inputs.work_dir }}
     on_success: rectify
     on_failure: escalate
@@ -54,6 +54,20 @@ steps:
     tool: run_skill_retry
     with:
       skill_command: "/autoskillit:implement-worktree the verified plan"
+      cwd: ${{ inputs.work_dir }}
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    retry:
+      max_attempts: 1
+      on: needs_retry
+      on_exhausted: retry_worktree
+    on_success: verify
+    on_failure: escalate
+
+  retry_worktree:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:retry-worktree the verified plan ${{ context.worktree_path }}"
       cwd: ${{ inputs.work_dir }}
     retry:
       max_attempts: 3

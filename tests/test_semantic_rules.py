@@ -505,3 +505,154 @@ class TestOutdatedScriptVersionRule:
         version_findings = [f for f in findings if f.rule == "outdated-script-version"]
         assert len(version_findings) == 1
         assert version_findings[0].severity == Severity.WARNING
+
+
+# ---------------------------------------------------------------------------
+# T14: worktree-retry-creates-new
+# ---------------------------------------------------------------------------
+
+
+def test_worktree_retry_creates_new_triggers():
+    """Worktree-creating skill with retry max_attempts > 1 -> ERROR."""
+    wf = _make_workflow(
+        {
+            "implement": {
+                "tool": "run_skill_retry",
+                "with": {
+                    "skill_command": (
+                        "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+                    ),
+                },
+                "retry": {
+                    "on": "needs_retry",
+                    "max_attempts": 3,
+                    "on_exhausted": "retry_wt",
+                },
+                "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                "on_success": "done",
+            },
+            "retry_wt": {
+                "tool": "run_skill_retry",
+                "with": {
+                    "skill_command": (
+                        "/autoskillit:retry-worktree "
+                        "${{ context.plan_path }} ${{ context.worktree_path }}"
+                    ),
+                },
+                "retry": {
+                    "on": "needs_retry",
+                    "max_attempts": 3,
+                    "on_exhausted": "done",
+                },
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    errors = [f for f in findings if f.severity == Severity.ERROR]
+    assert any(
+        f.rule == "worktree-retry-creates-new" and "implement" in f.step_name for f in errors
+    )
+
+
+def test_worktree_retry_creates_new_clean_max_one():
+    """Worktree-creating skill with max_attempts: 1 -> no finding."""
+    wf = _make_workflow(
+        {
+            "implement": {
+                "tool": "run_skill_retry",
+                "with": {
+                    "skill_command": (
+                        "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+                    ),
+                },
+                "retry": {
+                    "on": "needs_retry",
+                    "max_attempts": 1,
+                    "on_exhausted": "retry_wt",
+                },
+                "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                "on_success": "done",
+            },
+            "retry_wt": {
+                "tool": "run_skill_retry",
+                "with": {
+                    "skill_command": (
+                        "/autoskillit:retry-worktree "
+                        "${{ context.plan_path }} ${{ context.worktree_path }}"
+                    ),
+                },
+                "retry": {
+                    "on": "needs_retry",
+                    "max_attempts": 3,
+                    "on_exhausted": "done",
+                },
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "worktree-retry-creates-new" for f in findings)
+
+
+def test_worktree_retry_creates_new_implement_worktree():
+    """implement-worktree (with merge) also triggers the rule."""
+    wf = _make_workflow(
+        {
+            "implement": {
+                "tool": "run_skill_retry",
+                "with": {
+                    "skill_command": "/autoskillit:implement-worktree ${{ context.plan_path }}",
+                },
+                "retry": {"on": "needs_retry", "max_attempts": 2, "on_exhausted": "done"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert any(f.rule == "worktree-retry-creates-new" for f in findings)
+
+
+def test_worktree_retry_creates_new_no_retry_block():
+    """Worktree-creating skill without retry block -> no finding."""
+    wf = _make_workflow(
+        {
+            "implement": {
+                "tool": "run_skill_retry",
+                "with": {
+                    "skill_command": (
+                        "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+                    ),
+                },
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "worktree-retry-creates-new" for f in findings)
+
+
+def test_worktree_retry_creates_new_retry_worktree_ok():
+    """retry-worktree with max_attempts > 1 is fine — it resumes, not creates."""
+    wf = _make_workflow(
+        {
+            "retry_wt": {
+                "tool": "run_skill_retry",
+                "with": {
+                    "skill_command": (
+                        "/autoskillit:retry-worktree "
+                        "${{ context.plan_path }} ${{ context.worktree_path }}"
+                    ),
+                },
+                "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "worktree-retry-creates-new" for f in findings)

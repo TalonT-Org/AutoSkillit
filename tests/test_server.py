@@ -1090,6 +1090,7 @@ def _extract_docstring_sections(desc: str) -> dict[str, str]:
     - ALL-CAPS headers with colon or em-dash (ROUTING RULES —, IMPORTANT:)
     - Capitalized phrase followed by colon (After loading:, Args:)
     - "During pipeline execution" specific header
+    - "NEVER use native" prohibition header
     """
     lines = desc.split("\n")
     header_patterns = [
@@ -1097,8 +1098,9 @@ def _extract_docstring_sections(desc: str) -> dict[str, str]:
         re.compile(r"^([A-Z]{2,}(?:\s+[A-Z]{2,})*\s*[—:])"),
         # Capitalized phrase + colon: After loading:, Allowed during ...:, Args:
         re.compile(r"^([A-Z][a-z]+(?:\s+[a-z]+)*\s*:)"),
-        # Specific: "During pipeline execution"
+        # Specific: "During pipeline execution" or "NEVER use native"
         re.compile(r"^(During pipeline execution[,:]?)"),
+        re.compile(r"^(NEVER use native)"),
     ]
 
     sections: dict[str, str] = {}
@@ -1225,7 +1227,7 @@ class TestDocstringSemantics:
         )
 
     def test_tool_description_sections_are_not_contradictory(self):
-        """After loading must not instruct what During pipeline execution prohibits."""
+        """After loading must not instruct what the prohibition section prohibits."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -1237,17 +1239,22 @@ class TestDocstringSemantics:
         sections = _extract_docstring_sections(desc)
 
         after_loading = sections.get("after loading", "")
-        during_execution = sections.get("during pipeline execution", "")
+        # Accept either old or new section header
+        prohibition = sections.get("during pipeline execution", "") or sections.get(
+            "never use native", ""
+        )
         assert after_loading, "Missing 'After loading' section"
-        assert during_execution, "Missing 'During pipeline execution' section"
+        assert prohibition, (
+            "Missing prohibition section (NEVER use native / During pipeline execution)"
+        )
 
-        # If "During pipeline execution" says Edit/Write are "not used here",
+        # If the prohibition section says Edit/Write are prohibited or "not used here",
         # then "After loading" must not instruct behaviors requiring file writing
-        if "not used here" in during_execution.lower():
+        if "not used here" in prohibition.lower() or "prohibited" in prohibition.lower():
             write_implying_phrases = ["apply them", "save changes", "save as"]
             found = [p for p in write_implying_phrases if p.lower() in after_loading.lower()]
             assert not found, (
-                f"Contradiction: 'During pipeline execution' prohibits Edit/Write "
+                f"Contradiction: prohibition section prohibits Edit/Write "
                 f"but 'After loading' instructs: {found}"
             )
 

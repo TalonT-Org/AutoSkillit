@@ -69,6 +69,22 @@ class LoadResult(Generic[T]):
 # Centralized here so tests can reference the canonical value.
 CONTEXT_EXHAUSTION_MARKER = "prompt is too long"
 
+# Native Claude Code tools that pipeline orchestrators must NEVER use directly.
+# Canonical source of truth — imported by server.py, semantic_rules.py, and tests.
+PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
+    "Read",
+    "Grep",
+    "Glob",
+    "Edit",
+    "Write",
+    "Bash",
+    "Task",
+    "Explore",
+    "WebFetch",
+    "WebSearch",
+    "NotebookEdit",
+)
+
 # Known field names in run_skill_retry response — used by workflow validation
 RETRY_RESPONSE_FIELDS: frozenset[str] = frozenset(
     {

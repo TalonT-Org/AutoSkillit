@@ -39,6 +39,7 @@ from autoskillit.process_lifecycle import (
 )
 from autoskillit.types import (
     CONTEXT_EXHAUSTION_MARKER,
+    PIPELINE_FORBIDDEN_TOOLS,
     MergeFailedStep,
     MergeState,
     RestartScope,
@@ -52,20 +53,6 @@ _config: AutomationConfig = load_config(Path.cwd())
 _plugin_dir = str(Path(__file__).parent)
 
 _tools_enabled = False
-
-PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
-    "Read",
-    "Grep",
-    "Glob",
-    "Edit",
-    "Write",
-    "Bash",
-    "Task",
-    "Explore",
-    "WebFetch",
-    "WebSearch",
-    "NotebookEdit",
-)
 
 
 def _version_info() -> dict:

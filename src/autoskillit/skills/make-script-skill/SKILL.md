@@ -106,6 +106,7 @@ steps:
 | `description` | Yes | string | Human-readable, shown in listings |
 | `summary` | Yes | string | Pipeline chain shown in `list_skill_scripts` output |
 | `inputs` | No | mapping | Omit if the script has no configurable values |
+| `constraints` | Yes | list[str] | Orchestrator discipline rules. Must enumerate forbidden native tools (Read, Grep, Glob, Edit, Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit). |
 | `steps` | Yes | mapping | At least one step required |
 
 ### Input Fields
@@ -251,6 +252,12 @@ name: implementation
 description: Plan, verify, implement, test, and merge a task.
 summary: make-plan > dry-walk > implement > test > merge
 
+constraints:
+  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
+    orchestrator. All work is delegated through run_skill/run_skill_retry."
+  - "Route to on_failure when a step fails — do not investigate directly."
+
 inputs:
   task:
     description: What to implement
@@ -336,6 +343,12 @@ A condensed bugfix loop showing retry, classify, and routing patterns:
 name: bugfix-loop
 description: Test, fix, and merge with automatic retry.
 summary: test > investigate > plan > implement > verify > merge
+
+constraints:
+  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
+    orchestrator. All work is delegated through run_skill/run_skill_retry."
+  - "Route to on_failure when a step fails — do not investigate directly."
 
 inputs:
   test_dir:

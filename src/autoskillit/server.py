@@ -1461,6 +1461,10 @@ async def validate_script(script_path: str) -> str:
     """
     import yaml
 
+    from autoskillit.contract_validator import (
+        load_pipeline_contract,
+        validate_pipeline_contracts,
+    )
     from autoskillit.semantic_rules import Severity, run_semantic_rules
     from autoskillit.workflow_loader import (
         _parse_workflow,
@@ -1499,9 +1503,18 @@ async def validate_script(script_path: str) -> str:
     }
     semantic = [f.to_dict() for f in semantic_findings]
 
+    # Contract validation
+    contract_findings: list[dict] = []
+    scripts_dir = path.parent
+    script_name = path.stem
+    contract = load_pipeline_contract(script_name, scripts_dir)
+    if contract:
+        contract_findings = validate_pipeline_contracts(wf, contract)
+
     has_schema_errors = bool(errors)
     has_semantic_errors = any(f.severity == Severity.ERROR for f in semantic_findings)
-    valid = not has_schema_errors and not has_semantic_errors
+    has_contract_errors = any(f.get("severity") == "error" for f in contract_findings)
+    valid = not has_schema_errors and not has_semantic_errors and not has_contract_errors
 
     return json.dumps(
         {
@@ -1509,6 +1522,7 @@ async def validate_script(script_path: str) -> str:
             "errors": errors,
             "quality": quality,
             "semantic": semantic,
+            "contracts": contract_findings,
         }
     )
 

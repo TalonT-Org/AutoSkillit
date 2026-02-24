@@ -1413,6 +1413,12 @@ async def load_skill_script(name: str) -> str:
     """
     import yaml
 
+    from autoskillit.contract_validator import (
+        check_contract_staleness,
+        generate_pipeline_contract,
+        load_pipeline_contract,
+        validate_pipeline_contracts,
+    )
     from autoskillit.script_loader import load_script
     from autoskillit.semantic_rules import run_semantic_rules
     from autoskillit.workflow_loader import _parse_workflow
@@ -1428,6 +1434,42 @@ async def load_skill_script(name: str) -> str:
             wf = _parse_workflow(data)
             findings = run_semantic_rules(wf)
             suggestions = [f.to_dict() for f in findings]
+
+            # Contract validation
+            scripts_dir = Path.cwd() / ".autoskillit" / "scripts"
+            contract = load_pipeline_contract(name, scripts_dir)
+            if contract is None:
+                # Auto-generate for first load
+                script_path = scripts_dir / f"{name}.yaml"
+                if not script_path.exists():
+                    script_path = scripts_dir / f"{name}.yml"
+                if script_path.exists():
+                    try:
+                        generate_pipeline_contract(script_path, scripts_dir)
+                        contract = load_pipeline_contract(name, scripts_dir)
+                    except Exception:
+                        pass  # Non-blocking
+
+            if contract:
+                contract_findings = validate_pipeline_contracts(wf, contract)
+                suggestions.extend(contract_findings)
+
+                # Staleness check
+                stale = check_contract_staleness(contract)
+                for item in stale:
+                    suggestions.append(
+                        {
+                            "rule": "stale-contract",
+                            "severity": "warning",
+                            "step": item.skill,
+                            "message": (
+                                f"Contract is stale: {item.reason} for "
+                                f"'{item.skill}' (stored={item.stored_value}, "
+                                f"current={item.current_value}). Consider "
+                                f"regenerating the contract."
+                            ),
+                        }
+                    )
     except Exception:
         pass  # Non-blocking: parse failures don't affect load
 

@@ -221,7 +221,19 @@ def generate_pipeline_contract(pipeline_path: Path, scripts_dir: Path) -> Path:
                         ],
                         "outputs": [{"name": o.name, "type": o.type} for o in contract.outputs],
                     }
-                    entry["required"] = [i.name for i in contract.inputs if i.required]
+                    if count_positional_args(skill_cmd) > 0:
+                        # Positional args used — can't verify named inputs by ref
+                        entry["required"] = []
+                    else:
+                        # Named template refs only — flag required inputs not referenced
+                        ctx_refs = extract_context_refs(step)
+                        inp_refs = extract_input_refs(step)
+                        referenced = ctx_refs | inp_refs
+                        entry["required"] = [
+                            i.name
+                            for i in contract.inputs
+                            if i.required and i.name not in referenced
+                        ]
                     if skill_name not in skill_hashes:
                         skill_hashes[skill_name] = compute_skill_hash(skill_name)
 
@@ -271,7 +283,21 @@ def validate_pipeline_contracts(wf: Any, contract: dict[str, Any]) -> list[dict[
     for entry in contract.get("dataflow", []):
         available = set(entry.get("available", []))
         for req in entry.get("required", []):
-            if req not in available:
+            # req is a required input not referenced in the step's skill_command
+            if req in available:
+                findings.append(
+                    {
+                        "rule": "contract-unreferenced-required",
+                        "severity": Severity.ERROR.value,
+                        "step": entry.get("step", ""),
+                        "message": (
+                            f"Step '{entry['step']}' requires '{req}' which is available "
+                            f"in context as '${{{{ context.{req} }}}}', but the step does "
+                            f"not reference it in the skill_command."
+                        ),
+                    }
+                )
+            else:
                 findings.append(
                     {
                         "rule": "contract-unsatisfied-input",

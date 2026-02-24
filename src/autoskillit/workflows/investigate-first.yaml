@@ -11,7 +11,7 @@ constraints:
     Do not investigate or attempt to fix failures directly."
 
 inputs:
-  problem:
+  topic:
     description: Description of the bug, error, or question to investigate
     required: true
   work_dir:
@@ -28,7 +28,7 @@ steps:
   investigate:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:investigate ${{ inputs.problem }}"
+      skill_command: "/autoskillit:investigate ${{ inputs.topic }}"
       cwd: ${{ inputs.work_dir }}
     on_success: rectify
     on_failure: escalate

@@ -11,7 +11,7 @@ constraints:
     Do not investigate or attempt to fix failures directly."
 
 inputs:
-  task_description:
+  task:
     description: Description of the feature or change to implement
     required: true
   work_dir:
@@ -25,7 +25,7 @@ steps:
   plan:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:make-plan ${{ inputs.task_description }}"
+      skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
       cwd: ${{ inputs.work_dir }}
     on_success: review
     on_failure: escalate

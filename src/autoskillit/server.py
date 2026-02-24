@@ -1406,13 +1406,32 @@ async def load_skill_script(name: str) -> str:
     as .yaml files (NOT in .autoskillit/skills/ or any other directory).
 
     This tool is always available (not gated by enable_tools).
+
+    Response format: always JSON with ``content`` (raw YAML string) and
+    ``suggestions`` (list of semantic findings, possibly empty) keys.
+    On error: JSON with ``error`` key.
     """
+    import yaml
+
     from autoskillit.script_loader import load_script
+    from autoskillit.semantic_rules import run_semantic_rules
+    from autoskillit.workflow_loader import _parse_workflow
 
     content = load_script(Path.cwd(), name)
     if content is None:
         return json.dumps({"error": f"No script named '{name}' in .autoskillit/scripts/"})
-    return content
+
+    suggestions: list[dict[str, str]] = []
+    try:
+        data = yaml.safe_load(content)
+        if isinstance(data, dict) and "steps" in data:
+            wf = _parse_workflow(data)
+            findings = run_semantic_rules(wf)
+            suggestions = [f.to_dict() for f in findings]
+    except Exception:
+        pass  # Non-blocking: parse failures don't affect load
+
+    return json.dumps({"content": content, "suggestions": suggestions})
 
 
 @mcp.tool(tags={"automation"})
@@ -1442,6 +1461,7 @@ async def validate_script(script_path: str) -> str:
     """
     import yaml
 
+    from autoskillit.semantic_rules import Severity, run_semantic_rules
     from autoskillit.workflow_loader import (
         _parse_workflow,
         analyze_dataflow,
@@ -1463,6 +1483,8 @@ async def validate_script(script_path: str) -> str:
     wf = _parse_workflow(data)
     errors = validate_workflow(wf)
     report = analyze_dataflow(wf)
+    semantic_findings = run_semantic_rules(wf)
+
     quality = {
         "warnings": [
             {
@@ -1475,10 +1497,20 @@ async def validate_script(script_path: str) -> str:
         ],
         "summary": report.summary,
     }
+    semantic = [f.to_dict() for f in semantic_findings]
 
-    if errors:
-        return json.dumps({"valid": False, "errors": errors, "quality": quality})
-    return json.dumps({"valid": True, "errors": [], "quality": quality})
+    has_schema_errors = bool(errors)
+    has_semantic_errors = any(f.severity == Severity.ERROR for f in semantic_findings)
+    valid = not has_schema_errors and not has_semantic_errors
+
+    return json.dumps(
+        {
+            "valid": valid,
+            "errors": errors,
+            "quality": quality,
+            "semantic": semantic,
+        }
+    )
 
 
 def _enable_tools_handler() -> None:

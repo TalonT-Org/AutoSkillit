@@ -86,6 +86,7 @@ def _gate_error_result(error_message: str) -> str:
             "needs_retry": False,
             "retry_reason": RetryReason.NONE,
             "stderr": "",
+            "token_usage": None,
         }
     )
 

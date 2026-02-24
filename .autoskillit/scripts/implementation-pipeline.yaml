@@ -26,8 +26,10 @@ inputs:
     default: "false"
 
 constraints:
+  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
+    orchestrator. All work is delegated through run_skill/run_skill_retry."
   - "Route to on_failure — never investigate or fix directly from the orchestrator."
-  - "Only use AutoSkillit MCP tools during pipeline execution."
   - "When make_groups is false, task input is required."
   - "When make_groups is true, source_doc input is required."
 

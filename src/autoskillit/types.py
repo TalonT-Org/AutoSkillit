@@ -97,5 +97,6 @@ RETRY_RESPONSE_FIELDS: frozenset[str] = frozenset(
         "needs_retry",
         "retry_reason",
         "stderr",
+        "token_usage",
     }
 )

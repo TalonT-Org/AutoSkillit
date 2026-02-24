@@ -3541,6 +3541,7 @@ class TestBuildSkillResultCrossValidation:
         "needs_retry",
         "retry_reason",
         "stderr",
+        "token_usage",
     }
 
     def test_empty_stdout_exit_zero_is_failure(self):
@@ -3943,7 +3944,7 @@ class TestRetryResponseFieldsIncludesStderr:
         assert "stderr" in RETRY_RESPONSE_FIELDS
 
     def test_field_count(self):
-        assert len(RETRY_RESPONSE_FIELDS) == 9
+        assert len(RETRY_RESPONSE_FIELDS) == 10
 
 
 class TestLoadSkillScriptFailurePredicates:

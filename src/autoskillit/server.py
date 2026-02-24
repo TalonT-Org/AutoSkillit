@@ -26,6 +26,7 @@ import sys
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from fastmcp import FastMCP
 from fastmcp.prompts.prompt import Message, PromptResult
@@ -261,6 +262,7 @@ def _build_skill_result(result: SubprocessResult, completion_marker: str = "") -
                 "needs_retry": True,
                 "retry_reason": RetryReason.RESUME,
                 "stderr": "",
+                "token_usage": None,
             }
         )
 
@@ -295,6 +297,7 @@ def _build_skill_result(result: SubprocessResult, completion_marker: str = "") -
             "needs_retry": needs_retry,
             "retry_reason": retry_reason,
             "stderr": _truncate(result.stderr),
+            "token_usage": session.token_usage,
         }
     )
 
@@ -308,6 +311,7 @@ class ClaudeSessionResult:
     result: str
     session_id: str
     errors: list[str] = field(default_factory=list)
+    token_usage: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
@@ -380,6 +384,75 @@ class ClaudeSessionResult:
         return RetryReason.NONE
 
 
+_TOKEN_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+)
+
+
+def extract_token_usage(stdout: str) -> dict[str, Any] | None:
+    """Extract token usage from Claude CLI NDJSON output.
+
+    Scans assistant records for per-model usage and the result record
+    for authoritative aggregated totals.  Returns None if no usage
+    data is found.
+    """
+    if not stdout.strip():
+        return None
+
+    model_buckets: dict[str, dict[str, int]] = {}
+    result_usage: dict[str, int] | None = None
+
+    for line in stdout.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+
+        record_type = obj.get("type")
+
+        if record_type == "assistant":
+            msg = obj.get("message")
+            if not isinstance(msg, dict):
+                continue
+            usage = msg.get("usage")
+            if not isinstance(usage, dict):
+                continue
+            model = msg.get("model", "unknown")
+            bucket = model_buckets.setdefault(model, {f: 0 for f in _TOKEN_FIELDS})
+            for f in _TOKEN_FIELDS:
+                bucket[f] += usage.get(f, 0)
+
+        elif record_type == "result":
+            usage = obj.get("usage")
+            if isinstance(usage, dict):
+                result_usage = {f: usage.get(f, 0) for f in _TOKEN_FIELDS}
+
+    if not model_buckets and result_usage is None:
+        return None
+
+    # Aggregated totals: prefer result record, fall back to assistant sum
+    if result_usage is not None:
+        totals = dict(result_usage)
+    else:
+        totals = {f: 0 for f in _TOKEN_FIELDS}
+        for bucket in model_buckets.values():
+            for f in _TOKEN_FIELDS:
+                totals[f] += bucket[f]
+
+    return {
+        **totals,
+        "model_breakdown": dict(model_buckets) if model_buckets else {},
+    }
+
+
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
     """Parse Claude Code's --output-format json stdout into a typed result.
 
@@ -430,12 +503,15 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                 errors=[],
             )
 
+    token_usage = extract_token_usage(stdout)
+
     return ClaudeSessionResult(
         subtype=result_obj.get("subtype", "unknown"),
         is_error=result_obj.get("is_error", False),
         result=result_obj.get("result", ""),
         session_id=result_obj.get("session_id", ""),
         errors=result_obj.get("errors", []),
+        token_usage=token_usage,
     )
 
 

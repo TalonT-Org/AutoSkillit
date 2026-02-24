@@ -41,6 +41,7 @@ from autoskillit.server import (
     _validate_select_only,
     autoskillit_status,
     classify_fix,
+    extract_token_usage,
     list_skill_scripts,
     load_skill_script,
     merge_worktree,
@@ -4652,3 +4653,365 @@ class TestMigrationSuppression:
         assert "semantic" in result
         rules = [s["rule"] for s in result["semantic"]]
         assert "outdated-script-version" in rules
+
+
+class TestExtractTokenUsage:
+    """Tests for extract_token_usage()."""
+
+    def test_single_assistant_record(self):
+        """Single assistant record produces correct totals and model breakdown."""
+        stdout = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 100,
+                        "output_tokens": 50,
+                        "cache_creation_input_tokens": 10,
+                        "cache_read_input_tokens": 5,
+                    },
+                },
+            }
+        )
+        result = extract_token_usage(stdout)
+        assert result is not None
+        assert result["input_tokens"] == 100
+        assert result["output_tokens"] == 50
+        assert result["cache_creation_input_tokens"] == 10
+        assert result["cache_read_input_tokens"] == 5
+        assert result["model_breakdown"] == {
+            "claude-sonnet-4-6": {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 10,
+                "cache_read_input_tokens": 5,
+            }
+        }
+
+    def test_multiple_assistant_records_same_model(self):
+        """Multiple turns with same model accumulate correctly."""
+        line1 = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 100,
+                        "output_tokens": 40,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 0,
+                    },
+                },
+            }
+        )
+        line2 = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 200,
+                        "output_tokens": 60,
+                        "cache_creation_input_tokens": 20,
+                        "cache_read_input_tokens": 10,
+                    },
+                },
+            }
+        )
+        stdout = line1 + "\n" + line2
+        result = extract_token_usage(stdout)
+        assert result is not None
+        assert result["input_tokens"] == 300
+        assert result["output_tokens"] == 100
+        assert result["cache_creation_input_tokens"] == 20
+        assert result["cache_read_input_tokens"] == 10
+        assert "claude-sonnet-4-6" in result["model_breakdown"]
+        assert result["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == 300
+
+    def test_multiple_models(self):
+        """Assistant records with different models produce per-model breakdown."""
+        line1 = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 100,
+                        "output_tokens": 30,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 0,
+                    },
+                },
+            }
+        )
+        line2 = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-opus-4-6",
+                    "usage": {
+                        "input_tokens": 200,
+                        "output_tokens": 70,
+                        "cache_creation_input_tokens": 5,
+                        "cache_read_input_tokens": 15,
+                    },
+                },
+            }
+        )
+        stdout = line1 + "\n" + line2
+        result = extract_token_usage(stdout)
+        assert result is not None
+        assert "claude-sonnet-4-6" in result["model_breakdown"]
+        assert "claude-opus-4-6" in result["model_breakdown"]
+        assert result["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == 100
+        assert result["model_breakdown"]["claude-opus-4-6"]["input_tokens"] == 200
+        # totals summed from both models (no result record present)
+        assert result["input_tokens"] == 300
+        assert result["output_tokens"] == 100
+
+    def test_result_record_usage_preferred_for_totals(self):
+        """When result record has usage, it provides the top-level totals."""
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 100,
+                        "output_tokens": 40,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 0,
+                    },
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+                "usage": {
+                    "input_tokens": 999,
+                    "output_tokens": 888,
+                    "cache_creation_input_tokens": 50,
+                    "cache_read_input_tokens": 25,
+                },
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+        result = extract_token_usage(stdout)
+        assert result is not None
+        # result record totals take precedence over assistant sum
+        assert result["input_tokens"] == 999
+        assert result["output_tokens"] == 888
+        assert result["cache_creation_input_tokens"] == 50
+        assert result["cache_read_input_tokens"] == 25
+        # model breakdown still comes from assistant records
+        assert "claude-sonnet-4-6" in result["model_breakdown"]
+
+    def test_fallback_to_assistant_sum_when_no_result_usage(self):
+        """When result record lacks usage, top-level totals are summed from assistants."""
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 150,
+                        "output_tokens": 60,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 0,
+                    },
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+                # no "usage" key
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+        result = extract_token_usage(stdout)
+        assert result is not None
+        assert result["input_tokens"] == 150
+        assert result["output_tokens"] == 60
+
+    def test_no_usage_data_returns_none(self):
+        """Stdout with no usage records at all returns None."""
+        stdout = json.dumps({"type": "user", "message": {"content": "hello"}})
+        result = extract_token_usage(stdout)
+        assert result is None
+
+    def test_empty_stdout_returns_none(self):
+        """Empty string returns None."""
+        assert extract_token_usage("") is None
+
+    def test_non_json_stdout_returns_none(self):
+        """Non-parseable stdout returns None."""
+        assert extract_token_usage("not json at all\nstill not json") is None
+
+    def test_cache_tokens_default_to_zero(self):
+        """Missing cache token fields default to 0, not omitted."""
+        stdout = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 80,
+                        "output_tokens": 20,
+                        # cache fields absent
+                    },
+                },
+            }
+        )
+        result = extract_token_usage(stdout)
+        assert result is not None
+        assert result["cache_creation_input_tokens"] == 0
+        assert result["cache_read_input_tokens"] == 0
+        breakdown = result["model_breakdown"]["claude-sonnet-4-6"]
+        assert breakdown["cache_creation_input_tokens"] == 0
+        assert breakdown["cache_read_input_tokens"] == 0
+
+    def test_ignores_non_assistant_non_result_records(self):
+        """user and system records are skipped."""
+        user_line = json.dumps({"type": "user", "message": {"content": "do something"}})
+        system_line = json.dumps({"type": "system", "subtype": "init"})
+        stdout = user_line + "\n" + system_line
+        result = extract_token_usage(stdout)
+        assert result is None
+
+
+class TestClaudeSessionResultTokenUsage:
+    """Token usage field on ClaudeSessionResult."""
+
+    def test_default_is_none(self):
+        """token_usage defaults to None when not provided."""
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="Done.", session_id="s1"
+        )
+        assert session.token_usage is None
+
+    def test_preserves_token_usage_dict(self):
+        """token_usage dict is stored and accessible."""
+        usage = {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 10,
+            "cache_read_input_tokens": 5,
+            "model_breakdown": {"claude-sonnet-4-6": {"input_tokens": 100, "output_tokens": 50}},
+        }
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Done.",
+            session_id="s1",
+            token_usage=usage,
+        )
+        assert session.token_usage is usage
+        assert session.token_usage["input_tokens"] == 100
+        assert "model_breakdown" in session.token_usage
+
+
+class TestBuildSkillResultTokenUsage:
+    """token_usage field in _build_skill_result output."""
+
+    def _make_ndjson(self, *, model: str = "claude-sonnet-4-6") -> str:
+        """Build a two-line NDJSON with an assistant record and a result record with usage."""
+        assistant = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": model,
+                    "usage": {
+                        "input_tokens": 120,
+                        "output_tokens": 45,
+                        "cache_creation_input_tokens": 8,
+                        "cache_read_input_tokens": 3,
+                    },
+                },
+            }
+        )
+        result_rec = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Task complete.",
+                "session_id": "sess-abc",
+                "usage": {
+                    "input_tokens": 200,
+                    "output_tokens": 80,
+                    "cache_creation_input_tokens": 8,
+                    "cache_read_input_tokens": 3,
+                },
+            }
+        )
+        return assistant + "\n" + result_rec
+
+    def test_token_usage_included_when_present(self):
+        """JSON response includes token_usage when session has usage data."""
+        stdout = self._make_ndjson()
+        result_obj = _make_result(0, stdout, "")
+        response = json.loads(_build_skill_result(result_obj))
+        assert "token_usage" in response
+        usage = response["token_usage"]
+        assert usage is not None
+        assert usage["input_tokens"] == 200
+        assert usage["output_tokens"] == 80
+        assert usage["cache_creation_input_tokens"] == 8
+        assert usage["cache_read_input_tokens"] == 3
+        assert "model_breakdown" in usage
+        assert "claude-sonnet-4-6" in usage["model_breakdown"]
+
+    def test_token_usage_null_when_absent(self):
+        """JSON response has token_usage: null when no usage data."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+                # no usage field
+            }
+        )
+        result_obj = _make_result(0, stdout, "")
+        response = json.loads(_build_skill_result(result_obj))
+        assert response["token_usage"] is None
+
+    def test_stale_result_has_null_token_usage(self):
+        """Stale termination produces null token_usage."""
+        stale_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=1,
+        )
+        response = json.loads(_build_skill_result(stale_result))
+        assert response["token_usage"] is None
+
+    def test_timeout_result_has_null_token_usage(self):
+        """Timeout termination produces null token_usage."""
+        timeout_result = _make_timeout_result(stdout="", stderr="")
+        response = json.loads(_build_skill_result(timeout_result))
+        assert response["token_usage"] is None
+
+
+class TestRetryResponseFieldsTokenUsage:
+    """RETRY_RESPONSE_FIELDS includes token_usage."""
+
+    def test_token_usage_in_fields(self):
+        assert "token_usage" in RETRY_RESPONSE_FIELDS
+
+    def test_field_count(self):
+        assert len(RETRY_RESPONSE_FIELDS) == 10

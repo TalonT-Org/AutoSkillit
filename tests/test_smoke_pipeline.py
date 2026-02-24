@@ -224,8 +224,10 @@ class TestSmokeScriptValidation:
         assert "smoke-test" in names
 
     async def test_script_loads_with_expected_structure(self) -> None:
-        raw = await load_skill_script(name="smoke-test")
-        pipeline = yaml.safe_load(raw)
+        result = json.loads(await load_skill_script(name="smoke-test"))
+        assert "content" in result
+        assert "suggestions" in result
+        pipeline = yaml.safe_load(result["content"])
         assert "steps" in pipeline
         assert "inputs" in pipeline
         assert "constraints" in pipeline

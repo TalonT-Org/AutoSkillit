@@ -1084,7 +1084,6 @@ class TestDocstringSemantics:
     routing, and cross-section consistency.
     """
 
-    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
     def test_load_skill_script_action_protocol_routes_through_skill(self):
         """After loading section must route modifications through make-script-skill."""
         from fastmcp.tools import Tool
@@ -1105,7 +1104,6 @@ class TestDocstringSemantics:
             "After loading section must route script modifications through make-script-skill"
         )
 
-    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
     def test_load_skill_script_after_loading_does_not_instruct_direct_modification(self):
         """After loading section must not instruct direct file modification."""
         from fastmcp.tools import Tool
@@ -1129,7 +1127,6 @@ class TestDocstringSemantics:
         found = [p for p in direct_edit_phrases if p.lower() in after_loading.lower()]
         assert not found, f"After loading section instructs direct modification: {found}"
 
-    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
     def test_validate_script_has_failure_routing(self):
         """validate_script must route validation failures to make-script-skill."""
         from fastmcp.tools import Tool
@@ -1155,7 +1152,6 @@ class TestDocstringSemantics:
             "validate_script must route failures to make-script-skill for remediation"
         )
 
-    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
     def test_validate_script_does_not_endorse_direct_editing(self):
         """validate_script must not normalize direct script editing."""
         from fastmcp.tools import Tool
@@ -1174,7 +1170,6 @@ class TestDocstringSemantics:
             "should qualify as going through make-script-skill"
         )
 
-    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
     def test_tool_description_sections_are_not_contradictory(self):
         """After loading must not instruct what During pipeline execution prohibits."""
         from fastmcp.tools import Tool
@@ -1202,7 +1197,6 @@ class TestDocstringSemantics:
                 f"but 'After loading' instructs: {found}"
             )
 
-    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
     def test_load_skill_script_has_preview_format_spec(self):
         """load_skill_script must specify presentation format for loaded scripts."""
         from fastmcp.tools import Tool
@@ -1221,7 +1215,6 @@ class TestDocstringSemantics:
             f"fields. Found only: {found}"
         )
 
-    @pytest.mark.xfail(reason="Part B fixes docstrings", strict=True)
     def test_script_tool_descriptions_are_coherent(self):
         """Script tools must form a coherent policy about script modification."""
         from fastmcp.tools import Tool

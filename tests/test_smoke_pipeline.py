@@ -234,6 +234,7 @@ class TestSmokeScriptValidation:
         expected_steps = {
             "setup",
             "seed_task",
+            "create_branch",
             "investigate",
             "rectify",
             "implement",
@@ -241,6 +242,8 @@ class TestSmokeScriptValidation:
             "assess",
             "classify",
             "merge",
+            "check_summary",
+            "create_summary",
             "done",
             "escalate",
         }
@@ -251,6 +254,9 @@ class TestSmokeScriptValidation:
         assert pipeline["steps"]["test"]["tool"] == "test_check"
         assert pipeline["steps"]["merge"]["tool"] == "merge_worktree"
         assert pipeline["steps"]["classify"]["tool"] == "classify_fix"
+        assert pipeline["steps"]["create_branch"]["action"] == "route"
+        assert pipeline["steps"]["check_summary"]["action"] == "route"
+        assert pipeline["steps"]["create_summary"]["tool"] == "run_skill"
 
     def test_executor_interpolation(self) -> None:
         executor = SmokeExecutor(steps={}, inputs={"workspace": "/tmp/ws"})
@@ -314,6 +320,38 @@ class TestSmokeScriptValidation:
         assert call_count == 2
         assert result["success"] is True
 
+    async def test_script_has_collect_on_branch_input(self) -> None:
+        result = json.loads(await load_skill_script(name="smoke-test"))
+        pipeline = yaml.safe_load(result["content"])
+        inputs = pipeline["inputs"]
+        assert "collect_on_branch" in inputs
+        assert inputs["collect_on_branch"]["default"] == "true"
+        assert "original_base_branch" in inputs
+        assert inputs["original_base_branch"]["default"] == "main"
+
+    async def test_assess_step_references_bug_report(self) -> None:
+        pipeline = yaml.safe_load(SMOKE_SCRIPT.read_text())
+        assess_cmd = pipeline["steps"]["assess"]["with"]["skill_command"]
+        assert "bug_report.json" in assess_cmd
+
+    def test_pipeline_summary_skill_exists(self) -> None:
+        from autoskillit.skill_resolver import SkillResolver
+
+        resolver = SkillResolver()
+        names = [s.name for s in resolver.list_all()]
+        assert "pipeline-summary" in names
+
+    def test_pipeline_summary_contract_declared(self) -> None:
+        contracts_path = PROJECT_ROOT / "src" / "autoskillit" / "skill_contracts.yaml"
+        contracts = yaml.safe_load(contracts_path.read_text())
+        assert "pipeline-summary" in contracts["skills"]
+        skill = contracts["skills"]["pipeline-summary"]
+        required_inputs = [i["name"] for i in skill["inputs"] if i.get("required", False)]
+        assert "bug_report_path" in required_inputs
+        assert "feature_branch" in required_inputs
+        assert "target_branch" in required_inputs
+        assert "workspace" in required_inputs
+
 
 # ---------------------------------------------------------------------------
 # Smoke Execution Tests (API required)
@@ -340,7 +378,12 @@ class TestSmokePipelineExecution:
         pipeline = yaml.safe_load(raw)
         executor = SmokeExecutor(
             steps=pipeline["steps"],
-            inputs={"workspace": str(workspace), "base_branch": "main"},
+            inputs={
+                "workspace": str(workspace),
+                "base_branch": "main",
+                "collect_on_branch": "true",
+                "original_base_branch": "main",
+            },
         )
         terminal, message = await executor.run()
         return terminal, message

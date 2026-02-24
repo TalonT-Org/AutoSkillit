@@ -53,6 +53,20 @@ _plugin_dir = str(Path(__file__).parent)
 
 _tools_enabled = False
 
+PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
+    "Read",
+    "Grep",
+    "Glob",
+    "Edit",
+    "Write",
+    "Bash",
+    "Task",
+    "Explore",
+    "WebFetch",
+    "WebSearch",
+    "NotebookEdit",
+)
+
 
 def _version_info() -> dict:
     """Return version health information for the running server."""
@@ -768,10 +782,10 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "", model: str 
     "resume" — the session should be retried to continue from where it left off.
 
     This is the correct MCP tool to delegate work to a headless session during
-    pipeline execution. Native tools like Bash, Edit, and Read are not used here
-    because the headless session launched by this MCP tool has full tool access
-    and handles all code changes, investigation, and remediation on behalf of
-    the orchestrator.
+    pipeline execution. NEVER use native tools (Read, Grep, Glob, Edit, Write,
+    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the orchestrator.
+    All code changes, investigation, and research happen through the headless
+    session launched by this tool.
 
     Args:
         skill_command: The full prompt including skill invocation (e.g. "/investigate ...").
@@ -838,9 +852,10 @@ async def run_skill_retry(skill_command: str, cwd: str, model: str = "") -> str:
     execution. The correct action is always to resume the session.
 
     This is the correct MCP tool for long-running delegated work during pipeline
-    execution. Native tools like Bash, Edit, and Read are not used here because
-    the headless session launched by this MCP tool has full tool access and handles
-    all code changes, investigation, and remediation on behalf of the orchestrator.
+    execution. NEVER use native tools (Read, Grep, Glob, Edit, Write, Bash, Task,
+    Explore, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All code
+    changes, investigation, and research happen through the headless session
+    launched by this tool.
 
     Args:
         skill_command: The full prompt including skill invocation.
@@ -1361,15 +1376,14 @@ async def load_skill_script(name: str) -> str:
         If present, list all constraint strings.
         If absent, note: "No constraints defined"
 
-    During pipeline execution, only use AutoSkillit MCP tools:
-    - Read, Grep, Glob (code investigation) — not used here because investigation
-      happens inside headless sessions launched by run_skill/run_skill_retry,
-      which have full tool access.
-    - Edit, Write (code modification) — not used here because all code changes
-      are delegated through run_skill/run_skill_retry.
-    - Bash (shell commands) — not used here; use run_cmd if shell access is needed.
-    - Task/Explore subagents, WebFetch, WebSearch — not used here; delegate via
-      run_skill for any research or multi-step work.
+    NEVER use native Claude Code tools from the orchestrator during pipeline
+    execution. The following are prohibited: Read, Grep, Glob, Edit, Write,
+    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit.
+    - Code investigation happens inside headless sessions launched by
+      run_skill/run_skill_retry, which have full tool access.
+    - Code modification is delegated through run_skill/run_skill_retry.
+    - Shell commands use run_cmd, not the native Bash tool.
+    - Research and multi-step work are delegated via run_skill.
 
     Allowed during pipeline execution:
     - AutoSkillit MCP tools (call directly, not via subagents)
@@ -1385,8 +1399,9 @@ async def load_skill_script(name: str) -> str:
     ROUTING RULES — MANDATORY:
     - When a tool returns a failure result, you MUST follow the step's on_failure route.
     - When a step fails, route to on_failure — do not use Read, Grep, Glob, Edit,
-      Write, Bash, or Explore subagents to investigate. The on_failure step (e.g.,
-      assess-and-merge) has diagnostic access that the orchestrator does not.
+      Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit or any native
+      tool to investigate. The on_failure step (e.g., assess-and-merge) has
+      diagnostic access that the orchestrator does not.
     - Your ONLY job is to route to the correct next step and pass the
       required arguments. The downstream skill does the actual work.
 
@@ -1598,17 +1613,19 @@ def enable_tools() -> PromptResult:
     """Enable AutoSkillit MCP tools for this session."""
     _enable_tools_handler()
 
+    _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
+
     text = (
         "AutoSkillit tools are now enabled for this session. "
         "Call the autoskillit_status tool now to display version "
         "and health information to the user.\n\n"
-        "During pipeline execution, only use AutoSkillit MCP tools. "
-        "Native tools (Read, Grep, Glob, Edit, Write, Bash) are not "
-        "available in this context — all code changes and investigation "
-        "happen through headless sessions via run_skill/run_skill_retry, "
-        "which have full tool access. When a step fails, route to "
-        "on_failure — the downstream skill has diagnostic access that "
-        "the orchestrator does not."
+        "IMPORTANT — Orchestrator Discipline:\n"
+        f"NEVER use native Claude Code tools ({_forbidden_list}) "
+        "in this session. All code reading, searching, editing, and "
+        "investigation MUST be delegated through run_skill or "
+        "run_skill_retry, which launch headless sessions with full "
+        "tool access. Do NOT use native tools to investigate failures — "
+        "route to on_failure and let the downstream skill handle diagnosis."
     )
 
     return PromptResult([Message(text, role="user")])

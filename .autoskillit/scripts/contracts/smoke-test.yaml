@@ -1,0 +1,165 @@
+generated_at: '2026-02-24T03:17:43.359611+00:00'
+bundled_manifest_version: 0.1.0
+skill_hashes:
+  pipeline-summary: sha256:08d8a65e195c48a4508e18682560a7d76cb9cabdc13ecc259a17ca895aadff1c
+skills:
+  pipeline-summary:
+    inputs:
+    - name: bug_report_path
+      type: file_path
+      required: true
+    - name: feature_branch
+      type: string
+      required: true
+    - name: target_branch
+      type: string
+      required: true
+    - name: workspace
+      type: directory_path
+      required: true
+    outputs:
+    - name: summary_path
+      type: file_path
+    - name: issue_url
+      type: string
+    - name: pr_url
+      type: string
+dataflow:
+- step: setup
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - workspace
+  required: []
+  produced: []
+- step: seed_task
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - workspace
+  required: []
+  produced: []
+- step: create_branch
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - workspace
+  required: []
+  produced: []
+- step: investigate
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - workspace
+  required: []
+  produced: []
+- step: rectify
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - workspace
+  required: []
+  produced:
+  - plan_path
+- step: implement
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - plan_path
+  - workspace
+  required: []
+  produced:
+  - worktree_path
+- step: test
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - plan_path
+  - workspace
+  - worktree_path
+  required: []
+  produced: []
+- step: assess
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - plan_path
+  - workspace
+  - worktree_path
+  required: []
+  produced: []
+- step: classify
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - plan_path
+  - workspace
+  - worktree_path
+  required: []
+  produced: []
+- step: merge
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - plan_path
+  - workspace
+  - worktree_path
+  required: []
+  produced: []
+- step: check_summary
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - plan_path
+  - workspace
+  - worktree_path
+  required: []
+  produced: []
+- step: create_summary
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - plan_path
+  - workspace
+  - worktree_path
+  required:
+  - bug_report_path
+  - feature_branch
+  - target_branch
+  - workspace
+  produced:
+  - summary_path
+- step: done
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - plan_path
+  - summary_path
+  - workspace
+  - worktree_path
+  required: []
+  produced: []
+- step: escalate
+  available:
+  - base_branch
+  - collect_on_branch
+  - original_base_branch
+  - plan_path
+  - summary_path
+  - workspace
+  - worktree_path
+  required: []
+  produced: []

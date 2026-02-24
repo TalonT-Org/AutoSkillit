@@ -144,7 +144,7 @@ Before writing the final plan, verify:
 
 ## Output
 
-If the plan exceeds 500 lines, split it into two files (`_part_a` and `_part_b`) at a natural section boundary. Each part should reference the other.
+If the plan exceeds 500 lines, split it into two files (`_part_a` and `_part_b`) at a natural section boundary. Never cross-reference between parts — each file must stand alone without linking to the other.
 
 Save the plan to: `temp/make-plan/{task_name}_plan_{YYYY-MM-DD_HHMMSS}.md`
 

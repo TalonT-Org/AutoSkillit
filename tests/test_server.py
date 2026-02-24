@@ -670,12 +670,14 @@ class TestSkillScriptTools:
     # SS2
     @pytest.mark.asyncio
     @patch("autoskillit.script_loader.load_script")
-    async def test_load_returns_raw_yaml(self, mock_load):
-        """load_skill_script returns raw YAML content (not gated)."""
+    async def test_load_returns_json_with_content(self, mock_load):
+        """load_skill_script returns JSON with content and suggestions (not gated)."""
         mock_load.return_value = "name: test\ndescription: Test script\n"
-        result = await load_skill_script(name="test")
-        assert "name: test" in result
-        assert "description: Test script" in result
+        result = json.loads(await load_skill_script(name="test"))
+        assert "content" in result
+        assert "suggestions" in result
+        assert "name: test" in result["content"]
+        assert "description: Test script" in result["content"]
 
     # SS3
     @pytest.mark.asyncio
@@ -730,6 +732,22 @@ class TestSkillScriptTools:
         result = json.loads(await list_skill_scripts())
         assert "errors" in result
         assert len(result["errors"]) == 1
+
+    # SS7
+    @pytest.mark.asyncio
+    @patch("autoskillit.script_loader.load_script")
+    async def test_load_returns_json_with_suggestions(self, mock_load):
+        """load_skill_script response always has 'content' and 'suggestions' keys."""
+        mock_load.return_value = (
+            "name: test\ndescription: Test\nconstraints:\n  - test\n"
+            "steps:\n  do:\n    tool: test_check\n    model: sonnet\n"
+            "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
+        )
+        result = json.loads(await load_skill_script(name="test"))
+        assert "content" in result
+        assert "suggestions" in result
+        assert isinstance(result["suggestions"], list)
+        assert any(s["rule"] == "model-on-non-skill-step" for s in result["suggestions"])
 
 
 class TestValidateScript:
@@ -851,6 +869,31 @@ class TestValidateScript:
         assert len(dead) == 1
         assert dead[0]["step"] == "impl"
         assert dead[0]["field"] == "worktree_path"
+
+    # SEM1
+    @pytest.mark.asyncio
+    async def test_validate_script_includes_semantic_findings(self, tmp_path):
+        """validate_script response includes 'semantic' key with findings."""
+        script = tmp_path / "semantic.yaml"
+        script.write_text(
+            "name: semantic-test\n"
+            "description: Has model on non-skill step\n"
+            "constraints:\n"
+            "  - test\n"
+            "steps:\n"
+            "  check:\n"
+            "    tool: test_check\n"
+            "    model: sonnet\n"
+            "    on_success: done\n"
+            "  done:\n"
+            "    action: stop\n"
+            '    message: "Done."\n'
+        )
+        result = json.loads(await validate_script(script_path=str(script)))
+        assert "semantic" in result
+        assert isinstance(result["semantic"], list)
+        assert any(f["rule"] == "model-on-non-skill-step" for f in result["semantic"])
+        assert result["valid"] is True  # Warning does not block validity
 
 
 class TestToolSchemas:

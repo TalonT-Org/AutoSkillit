@@ -212,8 +212,8 @@ Available tools for use in `tool:` fields:
 These skills ship with the autoskillit plugin and are invoked as `/autoskillit:<name>`:
 
 assess-and-merge, dry-walkthrough, implement-worktree, implement-worktree-no-merge,
-investigate, make-groups, make-plan, make-script-skill, mermaid, rectify,
-retry-worktree, review-approach, setup-project
+investigate, make-groups, make-plan, make-script-skill, mermaid, pipeline-summary,
+rectify, retry-worktree, review-approach, setup-project
 
 ## Skill Reference Disambiguation
 

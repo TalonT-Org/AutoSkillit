@@ -81,6 +81,28 @@ skills:
     inputs: []
     outputs: []
 
+  pipeline-summary:
+    inputs:
+      - name: bug_report_path
+        type: file_path
+        required: true
+      - name: feature_branch
+        type: string
+        required: true
+      - name: target_branch
+        type: string
+        required: true
+      - name: workspace
+        type: directory_path
+        required: true
+    outputs:
+      - name: summary_path
+        type: file_path
+      - name: issue_url
+        type: string
+      - name: pr_url
+        type: string
+
   rectify:
     inputs:
       - name: investigation_path

@@ -1,13 +1,19 @@
 name: smoke-test
 description: End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
-summary: setup > seed_task > investigate > rectify > implement > test > merge > done (assess/classify loop on failure)
+summary: setup > seed_task > create_branch? > investigate > rectify > implement > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
 
 inputs:
   workspace:
     description: Absolute path to temp workspace directory (must be a git repo with initial commit)
     required: true
   base_branch:
-    description: Branch to merge into
+    description: Branch to merge into (overridden to feature branch when collect_on_branch is true)
+    default: "main"
+  collect_on_branch:
+    description: Collect all fixes on a feature branch and create issue+PR at end (true/false)
+    default: "true"
+  original_base_branch:
+    description: The original base branch for PR target (set automatically from base_branch when collect_on_branch is true)
     default: "main"
 
 constraints:
@@ -28,8 +34,23 @@ steps:
     with:
       cmd: "echo 'Create ok.txt with content OK' > task.txt"
       cwd: "${{ inputs.workspace }}"
+    on_success: create_branch
+    on_failure: escalate
+
+  create_branch:
+    action: route
     on_success: investigate
     on_failure: escalate
+    optional: true
+    note: >
+      Only execute if collect_on_branch input is 'true'. Otherwise skip directly to investigate.
+      When executing:
+      1. Save the original base_branch value — this is the PR target (original_base_branch input).
+      2. Create a feature branch: git checkout -b smoke-run-YYYYMMDD-HHMMSS in the workspace.
+      3. Initialize bug_report.json as an empty array [] in the workspace.
+      4. From this point forward, treat the feature branch name as the merge target.
+         The agent must pass the feature branch name as base_branch to all subsequent
+         merge_worktree calls (override the input value in context or interpolation).
 
   investigate:
     tool: run_skill
@@ -73,7 +94,7 @@ steps:
   assess:
     tool: run_skill
     with:
-      skill_command: "In the git worktree at ${{ context.worktree_path }}, check what file is expected by the test and create/fix it. Commit any changes. Then output: fixed=true"
+      skill_command: "In the git worktree at ${{ context.worktree_path }}, check what file is expected by the test and create/fix it. Commit any changes. After fixing, append a JSON object to ${{ inputs.workspace }}/bug_report.json with keys: step (string 'test'), error (what failed), fix (what you did), iteration (number). The file contains a JSON array — read it, append your entry, write it back. Then output: fixed=true"
       cwd: "${{ context.worktree_path }}"
     on_success: test
     on_failure: classify
@@ -99,8 +120,34 @@ steps:
     with:
       worktree_path: "${{ context.worktree_path }}"
       base_branch: "${{ inputs.base_branch }}"
+    on_success: check_summary
+    on_failure: escalate
+
+  check_summary:
+    action: route
+    on_success: create_summary
+    on_failure: done
+    note: >
+      Routing step — evaluate whether to create a summary:
+      1. If collect_on_branch input is 'false' → route to done (on_failure).
+      2. If ${{ inputs.workspace }}/bug_report.json does not exist or is empty [] → route to done (on_failure).
+      3. Otherwise → route to create_summary (on_success).
+
+  create_summary:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:pipeline-summary ${{ inputs.workspace }}/bug_report.json smoke-run ${{ inputs.original_base_branch }} ${{ inputs.workspace }}"
+      cwd: "${{ inputs.workspace }}"
+    capture:
+      summary_path: "${{ result.summary_path }}"
     on_success: done
     on_failure: escalate
+    optional: true
+    note: >
+      Skipped when collect_on_branch is 'false' or no bugs were encountered.
+      The feature branch name passed here should be the actual branch name created
+      in create_branch (the agent tracks this). The skill gracefully handles
+      missing gh CLI by writing a local summary only.
 
   done:
     action: stop

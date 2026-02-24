@@ -92,7 +92,7 @@ steps:
     on_success: test
     on_failure: escalate
     retry:
-      max_attempts: 3
+      max_attempts: 1
       on: needs_retry
       on_exhausted: retry_worktree
     note: "Extracts worktree_path from result for use in subsequent steps."

@@ -1,0 +1,251 @@
+generated_at: '2026-02-24T02:37:07.351455+00:00'
+bundled_manifest_version: 0.1.0
+skill_hashes:
+  make-groups: sha256:16e36e3b78f9eb8efc3b377dee2a315e4bcf67a0060385e1a4c33caa0cb00684
+  make-plan: sha256:266e05cebfe2c4ee45dbafbab3835625ce16388028f758c336754d991cf19fd4
+  review-approach: sha256:1c4f635817ec35b2428e9486126a448027f14e5e3cd8e1c06609cc6a1d5a0bc6
+  dry-walkthrough: sha256:dface9e671dc81e2ca0ed2eea6eb274ac62d6b563efde23a02e0f904500c370f
+  implement-worktree-no-merge: sha256:fdb7dc3d525aeb7021b49d6ca4656ba0775c349d25c807d80d2fa875d5d82613
+  retry-worktree: sha256:f5bb33d213e0d1070453d11882152c3e7c285499eb82ed22bdd8048ba65f19fe
+  assess-and-merge: sha256:e04a2d6b4f986db492698c00b324426576e0a065ba060b984f70f3eca5f831ae
+skills:
+  make-groups:
+    inputs:
+    - name: source_doc
+      type: file_path
+      required: true
+    outputs:
+    - name: groups_path
+      type: file_path
+    - name: manifest_path
+      type: file_path
+  make-plan:
+    inputs:
+    - name: task
+      type: string
+      required: true
+    outputs:
+    - name: plan_path
+      type: file_path
+  review-approach:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: false
+    outputs:
+    - name: review_path
+      type: file_path
+  dry-walkthrough:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+    outputs:
+    - name: verified_plan_path
+      type: file_path
+  implement-worktree-no-merge:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+    outputs:
+    - name: worktree_path
+      type: directory_path
+  retry-worktree:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: worktree_path
+      type: directory_path
+      required: true
+    outputs:
+    - name: worktree_path
+      type: directory_path
+  assess-and-merge:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs:
+    - name: merged_branch
+      type: string
+dataflow:
+- step: group
+  available:
+  - base_branch
+  - make_groups
+  - project_dir
+  - review_approach
+  - source_doc
+  - task
+  - work_dir
+  required:
+  - source_doc
+  produced:
+  - groups_path
+- step: plan
+  available:
+  - base_branch
+  - groups_path
+  - make_groups
+  - project_dir
+  - review_approach
+  - source_doc
+  - task
+  - work_dir
+  required:
+  - task
+  produced:
+  - plan_path
+- step: review
+  available:
+  - base_branch
+  - groups_path
+  - make_groups
+  - plan_path
+  - project_dir
+  - review_approach
+  - source_doc
+  - task
+  - work_dir
+  required: []
+  produced: []
+- step: verify
+  available:
+  - base_branch
+  - groups_path
+  - make_groups
+  - plan_path
+  - project_dir
+  - review_approach
+  - source_doc
+  - task
+  - work_dir
+  required:
+  - plan_path
+  produced: []
+- step: implement
+  available:
+  - base_branch
+  - groups_path
+  - make_groups
+  - plan_path
+  - project_dir
+  - review_approach
+  - source_doc
+  - task
+  - work_dir
+  required:
+  - plan_path
+  produced:
+  - worktree_path
+- step: retry_worktree
+  available:
+  - base_branch
+  - groups_path
+  - make_groups
+  - plan_path
+  - project_dir
+  - review_approach
+  - source_doc
+  - task
+  - work_dir
+  - worktree_path
+  required:
+  - plan_path
+  - worktree_path
+  produced: []
+- step: test
+  available:
+  - base_branch
+  - groups_path
+  - make_groups
+  - plan_path
+  - project_dir
+  - review_approach
+  - source_doc
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: merge
+  available:
+  - base_branch
+  - groups_path
+  - make_groups
+  - plan_path
+  - project_dir
+  - review_approach
+  - source_doc
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: fix
+  available:
+  - base_branch
+  - groups_path
+  - make_groups
+  - plan_path
+  - project_dir
+  - review_approach
+  - source_doc
+  - task
+  - work_dir
+  - worktree_path
+  required:
+  - worktree_path
+  - plan_path
+  - base_branch
+  produced: []
+- step: next_or_done
+  available:
+  - base_branch
+  - groups_path
+  - make_groups
+  - plan_path
+  - project_dir
+  - review_approach
+  - source_doc
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: done
+  available:
+  - base_branch
+  - groups_path
+  - make_groups
+  - plan_path
+  - project_dir
+  - review_approach
+  - source_doc
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: escalate
+  available:
+  - base_branch
+  - groups_path
+  - make_groups
+  - plan_path
+  - project_dir
+  - review_approach
+  - source_doc
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []

@@ -16,6 +16,7 @@ from autoskillit.workflow_loader import (
     WorkflowStep,
     _build_step_graph,
     _parse_step,
+    _parse_workflow,
     analyze_dataflow,
     builtin_workflows_dir,
     list_workflows,
@@ -1177,3 +1178,58 @@ class TestDataFlowQuality:
         assert len(dead) == 2
         dead_fields = {w.field for w in dead}
         assert dead_fields == {"b", "c"}
+
+
+# ---------------------------------------------------------------------------
+# TestVersionField: autoskillit_version field on Workflow dataclass
+# ---------------------------------------------------------------------------
+
+_VALID_WORKFLOW_DATA: dict = {
+    "name": "version-test-workflow",
+    "description": "A workflow for testing the version field",
+    "steps": {
+        "do_it": {
+            "tool": "run_cmd",
+            "on_success": "done",
+        },
+        "done": {"action": "stop", "message": "Done."},
+    },
+    "constraints": ["Only use AutoSkillit MCP tools during pipeline execution"],
+}
+
+
+class TestVersionField:
+    """autoskillit_version field on Workflow dataclass."""
+
+    # VER1: Workflow without autoskillit_version has version=None
+    def test_version_none_when_absent(self) -> None:
+        """_parse_workflow sets version=None when autoskillit_version is absent."""
+        data = dict(_VALID_WORKFLOW_DATA)
+        wf = _parse_workflow(data)
+        assert wf.version is None
+
+    # VER2: Workflow with autoskillit_version="0.2.0" parses correctly
+    def test_version_set_when_present(self) -> None:
+        """_parse_workflow reads autoskillit_version and stores it as version."""
+        data = dict(_VALID_WORKFLOW_DATA)
+        data["autoskillit_version"] = "0.2.0"
+        wf = _parse_workflow(data)
+        assert wf.version == "0.2.0"
+
+    # VER3: autoskillit_version does not cause validation errors
+    def test_version_does_not_cause_validation_errors(self) -> None:
+        """A workflow with autoskillit_version passes validate_workflow with no errors."""
+        data = dict(_VALID_WORKFLOW_DATA)
+        data["autoskillit_version"] = "0.2.0"
+        wf = _parse_workflow(data)
+        errors = validate_workflow(wf)
+        assert errors == []
+
+    # VER4: autoskillit_version is preserved in round-trip (parse -> access)
+    def test_version_preserved_in_round_trip(self, tmp_path: Path) -> None:
+        """version attribute survives a full write-to-disk and load_workflow round-trip."""
+        data = dict(_VALID_WORKFLOW_DATA)
+        data["autoskillit_version"] = "1.3.0"
+        path = _write_yaml(tmp_path / "wf.yaml", data)
+        wf = load_workflow(path)
+        assert wf.version == "1.3.0"

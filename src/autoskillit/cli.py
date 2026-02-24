@@ -71,6 +71,8 @@ def init(
     test_command
         Test command string for non-interactive init (e.g. "pytest -v").
     """
+    from autoskillit.config import ensure_project_temp
+
     project_dir = Path.cwd()
     config_dir = project_dir / ".autoskillit"
     config_dir.mkdir(exist_ok=True)
@@ -87,6 +89,8 @@ def init(
 
         config_path.write_text(_generate_config_yaml(cmd_parts))
         print(f"Config written to: {config_path}")
+
+    ensure_project_temp(project_dir)
 
     print("\nReady! Start Claude Code and enable tools:")
     print("  claude")
@@ -436,6 +440,45 @@ def doctor(*, output_json: bool = False):
                 "Marketplace symlink missing. Re-run: autoskillit install",
             )
         )
+
+    # Check 7: Script version health
+    from autoskillit import __version__
+    from autoskillit.script_loader import list_scripts
+
+    scripts_result = list_scripts(Path.cwd())
+    if not scripts_result.items:
+        results.append(
+            DoctorResult(
+                Severity.OK,
+                "script_version_health",
+                "No pipeline scripts found",
+            )
+        )
+    else:
+        from packaging.version import Version
+
+        outdated = []
+        for script in scripts_result.items:
+            if script.version is None or Version(script.version) < Version(__version__):
+                outdated.append(script.name)
+
+        if outdated:
+            results.append(
+                DoctorResult(
+                    Severity.WARNING,
+                    "script_version_health",
+                    f"{len(outdated)} script(s) below version {__version__}: "
+                    f"{', '.join(outdated)}. Run 'autoskillit migrate' to update.",
+                )
+            )
+        else:
+            results.append(
+                DoctorResult(
+                    Severity.OK,
+                    "script_version_health",
+                    f"All {len(scripts_result.items)} script(s) at version {__version__}",
+                )
+            )
 
     # Output
     if output_json:

@@ -427,6 +427,7 @@ class TestCLI:
             "autoskillit_on_path",
             "project_config",
             "version_consistency",
+            "script_version_health",
         }
         assert expected <= check_names
 
@@ -842,3 +843,112 @@ constraints:
         with pytest.raises(SystemExit) as exc_info:
             cli.orchestrate("test-script")
         assert exc_info.value.code == 42
+
+
+# ---------------------------------------------------------------------------
+# TestDoctorScriptHealth: doctor check for script version staleness
+# ---------------------------------------------------------------------------
+
+_MINIMAL_SCRIPT_YAML = """\
+name: my-script
+description: A test script
+steps:
+  do_it:
+    tool: run_cmd
+    with:
+      cmd: echo hello
+    on_success: done
+  done:
+    action: stop
+    message: Done
+constraints:
+  - Only use AutoSkillit MCP tools during pipeline execution
+"""
+
+
+class TestDoctorScriptHealth:
+    """Doctor check for script version staleness."""
+
+    # DOC1: No .autoskillit/scripts/ -> OK result
+    def test_no_scripts_dir_reports_ok(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """doctor reports OK for script_version_health when no scripts directory exists."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        # No .autoskillit/scripts/ directory created
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
+        assert len(script_checks) == 1
+        assert script_checks[0]["severity"] == "ok"
+
+    # DOC2: All scripts at current version -> OK result
+    def test_all_scripts_at_current_version_reports_ok(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """doctor reports OK when all scripts carry the current installed version."""
+        import autoskillit
+
+        current_version = autoskillit.__version__
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "up-to-date.yaml").write_text(
+            f"name: up-to-date\ndescription: Current version\n"
+            f'autoskillit_version: "{current_version}"\n'
+            + _MINIMAL_SCRIPT_YAML.split("\n", 2)[2]  # reuse steps/constraints block
+        )
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
+        assert len(script_checks) == 1
+        assert script_checks[0]["severity"] == "ok"
+
+    # DOC3: Scripts below current version -> WARNING result with count
+    def test_outdated_scripts_reports_warning_with_count(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """doctor reports WARNING with a count when scripts have an older version."""
+        import autoskillit
+
+        monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "old-script.yaml").write_text(
+            'name: old-script\ndescription: Old\nautoskillit_version: "0.1.0"\n'
+        )
+        (scripts_dir / "also-old.yaml").write_text(
+            'name: also-old\ndescription: Also old\nautoskillit_version: "0.1.0"\n'
+        )
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
+        assert len(script_checks) == 1
+        assert script_checks[0]["severity"] == "warning"
+        assert "2" in script_checks[0]["message"]
+
+    # DOC4: Scripts with no version field -> WARNING result
+    def test_scripts_without_version_reports_warning(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """doctor reports WARNING when script YAML has no autoskillit_version field."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "no-version.yaml").write_text(
+            "name: no-version\ndescription: No version field\n"
+        )
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
+        assert len(script_checks) == 1
+        assert script_checks[0]["severity"] == "warning"

@@ -83,6 +83,11 @@ class WorktreeSetupConfig:
 
 
 @dataclass
+class MigrationConfig:
+    suppressed: list[str] = field(default_factory=list)
+
+
+@dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
@@ -94,6 +99,7 @@ class AutomationConfig:
     run_skill_retry: RunSkillRetryConfig = field(default_factory=RunSkillRetryConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     worktree_setup: WorktreeSetupConfig = field(default_factory=WorktreeSetupConfig)
+    migration: MigrationConfig = field(default_factory=MigrationConfig)
 
 
 def load_config(project_dir: Path | None = None) -> AutomationConfig:
@@ -116,6 +122,20 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     """Read a YAML file and return its contents as a dict."""
     data = yaml.safe_load(path.read_text())
     return data if isinstance(data, dict) else {}
+
+
+def ensure_project_temp(project_dir: Path) -> Path:
+    """Ensure .autoskillit/temp/ exists with .gitignore.
+
+    Called defensively by any code that needs temp space. Idempotent.
+    """
+    autoskillit_dir = project_dir / ".autoskillit"
+    temp_dir = autoskillit_dir / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    gitignore_path = autoskillit_dir / ".gitignore"
+    if not gitignore_path.exists():
+        gitignore_path.write_text("temp/\n")
+    return temp_dir
 
 
 def _merge_into(config: AutomationConfig, data: dict[str, Any]) -> None:

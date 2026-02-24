@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.semantic_rules import (
     RuleFinding,
     Severity,
@@ -412,3 +414,94 @@ def test_bundled_workflows_pass_semantic_rules():
         assert not errors, (
             f"Bundled workflow {path.name} has error-severity semantic findings: {errors}"
         )
+
+
+# ---------------------------------------------------------------------------
+# TestOutdatedScriptVersionRule: semantic rule that detects outdated versions
+# ---------------------------------------------------------------------------
+
+
+class TestOutdatedScriptVersionRule:
+    """Semantic rule that detects outdated script versions."""
+
+    # MSR1: outdated-script-version fires when wf.version < installed version
+    def test_fires_when_version_below_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Finding is emitted when wf.version is older than the installed package version."""
+        import autoskillit
+
+        monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
+        wf = _make_workflow(
+            {
+                "do_thing": {
+                    "tool": "run_cmd",
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        wf.version = "0.1.0"
+        findings = run_semantic_rules(wf)
+        version_findings = [f for f in findings if f.rule == "outdated-script-version"]
+        assert len(version_findings) == 1
+
+    # MSR2: outdated-script-version does NOT fire when wf.version == installed
+    def test_does_not_fire_when_version_matches(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No finding when wf.version equals the installed package version."""
+        import autoskillit
+
+        monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
+        wf = _make_workflow(
+            {
+                "do_thing": {
+                    "tool": "run_cmd",
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        wf.version = "0.2.0"
+        findings = run_semantic_rules(wf)
+        version_findings = [f for f in findings if f.rule == "outdated-script-version"]
+        assert len(version_findings) == 0
+
+    # MSR3: outdated-script-version fires when wf.version is None
+    def test_fires_when_version_is_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Finding is emitted when wf.version is None (no autoskillit_version field)."""
+        import autoskillit
+
+        monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
+        wf = _make_workflow(
+            {
+                "do_thing": {
+                    "tool": "run_cmd",
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        # wf.version is None by default from _make_workflow
+        assert wf.version is None
+        findings = run_semantic_rules(wf)
+        version_findings = [f for f in findings if f.rule == "outdated-script-version"]
+        assert len(version_findings) == 1
+
+    # MSR4: Rule produces WARNING severity (not ERROR)
+    def test_finding_severity_is_warning(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The outdated-script-version rule always produces WARNING severity findings."""
+        import autoskillit
+
+        monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
+        wf = _make_workflow(
+            {
+                "do_thing": {
+                    "tool": "run_cmd",
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        wf.version = "0.1.0"
+        findings = run_semantic_rules(wf)
+        version_findings = [f for f in findings if f.rule == "outdated-script-version"]
+        assert len(version_findings) == 1
+        assert version_findings[0].severity == Severity.WARNING

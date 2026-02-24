@@ -272,3 +272,53 @@ class TestLoadScript:
         """load_script returns None for nonexistent script name."""
         _make_scripts_dir(tmp_path)
         assert load_script(tmp_path, "nonexistent") is None
+
+
+# ---------------------------------------------------------------------------
+# TestScriptVersion: ScriptInfo includes version from autoskillit_version field
+# ---------------------------------------------------------------------------
+
+
+class TestScriptVersion:
+    """ScriptInfo includes version from autoskillit_version field."""
+
+    # SV1: ScriptInfo.version is None when field absent
+    def test_version_none_when_absent(self, tmp_path: Path) -> None:
+        """_parse_script_metadata sets version=None when autoskillit_version is absent."""
+        path = tmp_path / "script.yaml"
+        path.write_text("name: my-script\ndescription: A script\n")
+        info = _parse_script_metadata(path)
+        assert info.version is None
+
+    # SV2: ScriptInfo.version is "0.2.0" when field present
+    def test_version_set_when_present(self, tmp_path: Path) -> None:
+        """_parse_script_metadata reads autoskillit_version and stores it as version."""
+        path = tmp_path / "script.yaml"
+        path.write_text('name: my-script\ndescription: A script\nautoskillit_version: "0.2.0"\n')
+        info = _parse_script_metadata(path)
+        assert info.version == "0.2.0"
+
+    # SV3: list_scripts returns version in ScriptInfo items
+    def test_list_scripts_includes_version(self, tmp_path: Path) -> None:
+        """list_scripts propagates autoskillit_version into the returned ScriptInfo items."""
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "versioned.yaml").write_text(
+            "name: versioned-script\n"
+            "description: Has version\n"
+            'autoskillit_version: "0.2.0"\n'
+            "steps:\n"
+            "  do_it:\n"
+            "    tool: run_cmd\n"
+            "    on_success: done\n"
+            "  done:\n"
+            "    action: stop\n"
+            "    message: Done.\n"
+        )
+        (scripts_dir / "unversioned.yaml").write_text(
+            "name: unversioned-script\ndescription: No version\n"
+        )
+        result = list_scripts(tmp_path)
+        by_name = {s.name: s for s in result.items}
+        assert by_name["versioned-script"].version == "0.2.0"
+        assert by_name["unversioned-script"].version is None

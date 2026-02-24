@@ -83,6 +83,47 @@ _SKILL_TOOLS = frozenset({"run_skill", "run_skill_retry"})
 
 
 @semantic_rule(
+    name="outdated-script-version",
+    description="Script's autoskillit_version is below the installed package version",
+    severity=Severity.WARNING,
+)
+def _check_outdated_version(wf: Workflow) -> list[RuleFinding]:
+    from packaging.version import Version
+
+    from autoskillit import __version__
+
+    script_ver = wf.version
+    if script_ver is None:
+        return [
+            RuleFinding(
+                rule="outdated-script-version",
+                severity=Severity.WARNING,
+                step_name="(top-level)",
+                message=(
+                    f"Script has no autoskillit_version field. "
+                    f"Current installed version is {__version__}. "
+                    f"Run 'autoskillit migrate' to update."
+                ),
+            )
+        ]
+
+    if Version(script_ver) < Version(__version__):
+        return [
+            RuleFinding(
+                rule="outdated-script-version",
+                severity=Severity.WARNING,
+                step_name="(top-level)",
+                message=(
+                    f"Script version {script_ver} is behind installed "
+                    f"version {__version__}. Run 'autoskillit migrate' to update."
+                ),
+            )
+        ]
+
+    return []
+
+
+@semantic_rule(
     name="unsatisfied-skill-input",
     description=(
         "Skill steps must provide all required inputs via context or pipeline "

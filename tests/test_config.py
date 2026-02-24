@@ -200,3 +200,30 @@ class TestLoadConfig:
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)
         assert cfg.worktree_setup.command is None
+
+
+class TestMigrationConfig:
+    """MigrationConfig dataclass and YAML loading."""
+
+    def test_default_migration_config_has_empty_suppressed(self):
+        """MC1: Default MigrationConfig has empty suppressed list."""
+        from autoskillit.config import MigrationConfig
+
+        mc = MigrationConfig()
+        assert mc.suppressed == []
+        assert isinstance(mc.suppressed, list)
+
+    def test_migration_suppressed_loads_from_yaml(self, tmp_path):
+        """MC2: migration.suppressed loads from YAML as list of strings."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"migration": {"suppressed": ["script-a", "script-b"]}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.migration.suppressed == ["script-a", "script-b"]
+
+    def test_automation_config_has_migration_field_with_defaults(self):
+        """MC3: AutomationConfig.migration exists with correct defaults."""
+        cfg = AutomationConfig()
+        assert hasattr(cfg, "migration")
+        assert cfg.migration.suppressed == []

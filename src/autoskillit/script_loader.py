@@ -16,6 +16,7 @@ class ScriptInfo:
     description: str
     summary: str
     path: Path
+    version: str | None = None
 
 
 def _extract_frontmatter(text: str) -> str:
@@ -53,6 +54,7 @@ def _parse_script_metadata(path: Path) -> ScriptInfo:
         description=data.get("description", ""),
         summary=data.get("summary", ""),
         path=path,
+        version=data.get("autoskillit_version"),
     )
 
 

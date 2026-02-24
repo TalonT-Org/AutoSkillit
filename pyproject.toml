@@ -9,6 +9,7 @@ description = "MCP server for orchestrating automated skill-driven workflows wit
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=3.0.0",
+    "packaging>=23.0",
     "psutil>=7.2.0",
     "pyyaml>=6.0",
     "cyclopts>=3.0",
@@ -27,7 +28,7 @@ autoskillit = "autoskillit.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/autoskillit"]
-artifacts = ["src/autoskillit/.claude-plugin/**", "src/autoskillit/.mcp.json"]
+artifacts = ["src/autoskillit/.claude-plugin/**", "src/autoskillit/.mcp.json", "src/autoskillit/migrations/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

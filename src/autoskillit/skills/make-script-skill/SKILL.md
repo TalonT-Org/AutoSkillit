@@ -53,6 +53,7 @@ Every generated script MUST follow the workflow YAML schema:
 
 ```yaml
 name: {script-name}
+autoskillit_version: "{version}"  # from autoskillit_status.package_version
 description: {One line description.}
 summary: {Concise pipeline chain, e.g. "plan > verify > implement > test > merge"}
 
@@ -86,7 +87,7 @@ steps:
 
 ## Format Rules
 
-- **Top-level fields**: `name`, `description`, `summary` (required), `inputs`, `steps`
+- **Top-level fields**: `name`, `autoskillit_version` (stamped), `description`, `summary` (required), `inputs`, `steps`
 - **Inputs**: each with `description`, optional `required` (default false) and `default`
 - **Steps**: each has either `tool` (MCP tool call) or `action` (terminal: `stop`)
 - **Tool steps**: use `with:` for arguments, `on_success`/`on_failure` for routing
@@ -103,6 +104,7 @@ steps:
 | Field | Required | Type | Notes |
 |-------|----------|------|-------|
 | `name` | Yes | string | Unique identifier; validation fails if empty |
+| `autoskillit_version` | No | string | Package version that generated this script. Set from `autoskillit_status.package_version`. Used by migration system to detect outdated scripts. |
 | `description` | Yes | string | Human-readable, shown in listings |
 | `summary` | Yes | string | Pipeline chain shown in `list_skill_scripts` output |
 | `inputs` | No | mapping | Omit if the script has no configurable values |
@@ -470,13 +472,14 @@ When called directly as `/autoskillit:make-script-skill`:
 3. Ask for the tool calls and routing (which MCP tools, what order, what conditions)
 4. Ask for inputs (what's configurable)
 5. Generate the script in the YAML format above
-6. Save to `.autoskillit/scripts/{name}.yaml` (create the directory if needed)
-7. Call `validate_script` with the saved file path. If errors are returned, fix them and re-validate until clean. Review the `quality.warnings` in the response:
+6. Before saving, call `autoskillit_status` to get `package_version` and stamp `autoskillit_version: "{package_version}"` as the second top-level field (after `name`). This is required for the migration system to track script age.
+7. Save to `.autoskillit/scripts/{name}.yaml` (create the directory if needed)
+8. Call `validate_script` with the saved file path. If errors are returned, fix them and re-validate until clean. Review the `quality.warnings` in the response:
    - `DEAD_OUTPUT`: A `capture:` key is never referenced by any reachable downstream step via `${{ context.X }}`. Either add a `${{ context.X }}` reference in the downstream step's `with:` block, or remove the unused capture.
    - `IMPLICIT_HANDOFF`: A `run_skill` or `run_skill_retry` step has no `capture:` block. Add a `capture:` block to explicitly wire outputs to downstream steps via `${{ context.X }}`, or confirm the skill's output is intentionally unused.
    - Present the quality summary to the user and fix any warnings that indicate broken wiring.
-8. After validation passes, generate the pipeline contract file by calling `generate_pipeline_contract` on the saved script. This creates `.autoskillit/scripts/contracts/{name}.yaml` alongside the pipeline script. Use `run_python` with `autoskillit.contract_validator.generate_pipeline_contract` passing the script path and scripts directory, or rely on `load_skill_script` which auto-generates contracts on first load.
-9. Tell the user: "Saved to `.autoskillit/scripts/{name}.yaml`. Load it with `load_skill_script("{name}")` via the MCP tool."
+9. After validation passes, generate the pipeline contract file by calling `generate_pipeline_contract` on the saved script. This creates `.autoskillit/scripts/contracts/{name}.yaml` alongside the pipeline script. Use `run_python` with `autoskillit.contract_validator.generate_pipeline_contract` passing the script path and scripts directory, or rely on `load_skill_script` which auto-generates contracts on first load.
+10. Tell the user: "Saved to `.autoskillit/scripts/{name}.yaml`. Load it with `load_skill_script("{name}")` via the MCP tool."
 
 ## CRITICAL: Scripts Are NOT Skills
 

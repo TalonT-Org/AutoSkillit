@@ -4304,3 +4304,285 @@ class TestResolveModel:
     def test_resolve_model_nothing_set(self):
         self._set_model_config()
         assert _resolve_model("") is None
+
+
+# ---------------------------------------------------------------------------
+# Minimal valid script YAML used across migration suggestion tests
+# ---------------------------------------------------------------------------
+
+_MINIMAL_SCRIPT_YAML = """\
+name: test-script
+description: Test
+summary: test
+inputs:
+  task:
+    description: What to do
+    required: true
+steps:
+  do-thing:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:investigate ${{ inputs.task }}"
+      cwd: "."
+    on_success: done
+    on_failure: escalate
+  done:
+    action: stop
+    message: "Done."
+  escalate:
+    action: stop
+    message: "Failed."
+constraints:
+  - "Follow routing rules"
+"""
+
+
+def _write_minimal_script(scripts_dir: Path, name: str = "test-script") -> Path:
+    """Write a minimal valid workflow script with no autoskillit_version field."""
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    path = scripts_dir / f"{name}.yaml"
+    path.write_text(_MINIMAL_SCRIPT_YAML)
+    return path
+
+
+class TestMigrationSuggestions:
+    """MSUG1-MSUG4: load_skill_script and validate_script surface migration warnings."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_tools(self, monkeypatch):
+        """Verify these tools work WITHOUT tool activation."""
+        from autoskillit import server
+
+        monkeypatch.setattr(server, "_tools_enabled", False)
+
+    # MSUG1
+    @pytest.mark.asyncio
+    async def test_load_includes_outdated_version_when_not_suppressed(self, tmp_path, monkeypatch):
+        """MSUG1: load_skill_script includes outdated-script-version when not suppressed."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        _write_minimal_script(scripts_dir, "test-script")
+
+        from autoskillit import server
+        from autoskillit.config import MigrationConfig
+
+        monkeypatch.setattr(
+            server,
+            "_config",
+            AutomationConfig(migration=MigrationConfig(suppressed=[])),
+        )
+
+        result = json.loads(await load_skill_script(name="test-script"))
+        assert "content" in result
+        assert "suggestions" in result
+        rules = [s["rule"] for s in result["suggestions"]]
+        assert "outdated-script-version" in rules
+
+    # MSUG2
+    @pytest.mark.asyncio
+    async def test_validate_always_includes_outdated_version(self, tmp_path):
+        """MSUG2: validate_script always includes outdated-script-version in semantic results."""
+        script = tmp_path / "test-script.yaml"
+        script.write_text(_MINIMAL_SCRIPT_YAML)
+
+        result = json.loads(await validate_script(script_path=str(script)))
+        assert "semantic" in result
+        rules = [s["rule"] for s in result["semantic"]]
+        assert "outdated-script-version" in rules
+
+    # MSUG3
+    @pytest.mark.asyncio
+    async def test_load_includes_migration_note_description(self, tmp_path, monkeypatch):
+        """MSUG3: Suggestions include migration note description when available."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        _write_minimal_script(scripts_dir, "test-script")
+
+        # Create a fake migrations directory with a migration YAML that applies
+        # to scripts with no version (version 0.0.0 < installed version)
+        import autoskillit
+        from autoskillit import server
+        from autoskillit.config import MigrationConfig
+
+        installed_ver = autoskillit.__version__
+        fake_mig_dir = tmp_path / "migrations"
+        fake_mig_dir.mkdir()
+        migration_yaml = (
+            f"from_version: '0.0.0'\n"
+            f"to_version: '{installed_ver}'\n"
+            "description: Upgrade scripts\n"
+            "changes:\n"
+            "  - id: add-summary-field\n"
+            "    description: Scripts now require a summary field\n"
+            "    instruction: Add summary field to your script\n"
+        )
+        (fake_mig_dir / "0.0.0-migration.yaml").write_text(migration_yaml)
+
+        import autoskillit.migration_loader as ml
+
+        monkeypatch.setattr(ml, "_migrations_dir", lambda: fake_mig_dir)
+        monkeypatch.setattr(
+            server,
+            "_config",
+            AutomationConfig(migration=MigrationConfig(suppressed=[])),
+        )
+
+        result = json.loads(await load_skill_script(name="test-script"))
+        assert "suggestions" in result
+        migration_suggestions = [
+            s for s in result["suggestions"] if s["rule"].startswith("migration-")
+        ]
+        assert len(migration_suggestions) >= 1
+        assert any("summary field" in s["message"] for s in migration_suggestions), (
+            f"Expected description in suggestion messages: {migration_suggestions}"
+        )
+
+    # MSUG4
+    @pytest.mark.asyncio
+    async def test_load_outdated_version_message_includes_ask_user(self, tmp_path, monkeypatch):
+        """MSUG4: Suggestion message includes agent instructions for user."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        _write_minimal_script(scripts_dir, "test-script")
+
+        from autoskillit import server
+        from autoskillit.config import MigrationConfig
+
+        monkeypatch.setattr(
+            server,
+            "_config",
+            AutomationConfig(migration=MigrationConfig(suppressed=[])),
+        )
+
+        result = json.loads(await load_skill_script(name="test-script"))
+        outdated = [s for s in result["suggestions"] if s["rule"] == "outdated-script-version"]
+        assert len(outdated) == 1
+        assert "Ask the user: migrate now or suppress?" in outdated[0]["message"]
+
+
+class TestMigrationSuppression:
+    """SUP1-SUP4: load_skill_script respects migration.suppressed config."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_tools(self, monkeypatch):
+        """Verify these tools work WITHOUT tool activation."""
+        from autoskillit import server
+
+        monkeypatch.setattr(server, "_tools_enabled", False)
+
+    # SUP1
+    @pytest.mark.asyncio
+    async def test_outdated_version_not_in_suggestions_when_suppressed(
+        self, tmp_path, monkeypatch
+    ):
+        """SUP1: outdated-script-version absent when script is suppressed."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        _write_minimal_script(scripts_dir, "test-script")
+
+        from autoskillit import server
+        from autoskillit.config import MigrationConfig
+
+        monkeypatch.setattr(
+            server,
+            "_config",
+            AutomationConfig(migration=MigrationConfig(suppressed=["test-script"])),
+        )
+
+        result = json.loads(await load_skill_script(name="test-script"))
+        assert "suggestions" in result
+        rules = [s["rule"] for s in result["suggestions"]]
+        assert "outdated-script-version" not in rules
+
+    # SUP2
+    @pytest.mark.asyncio
+    async def test_outdated_version_in_suggestions_when_not_suppressed(
+        self, tmp_path, monkeypatch
+    ):
+        """SUP2: outdated-script-version present when script is not suppressed."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        _write_minimal_script(scripts_dir, "test-script")
+
+        from autoskillit import server
+        from autoskillit.config import MigrationConfig
+
+        monkeypatch.setattr(
+            server,
+            "_config",
+            AutomationConfig(migration=MigrationConfig(suppressed=["other-script"])),
+        )
+
+        result = json.loads(await load_skill_script(name="test-script"))
+        assert "suggestions" in result
+        rules = [s["rule"] for s in result["suggestions"]]
+        assert "outdated-script-version" in rules
+
+    # SUP3
+    @pytest.mark.asyncio
+    async def test_migration_change_suggestions_filtered_when_suppressed(
+        self, tmp_path, monkeypatch
+    ):
+        """SUP3: migration-{id} suggestions also filtered when script is suppressed."""
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        _write_minimal_script(scripts_dir, "test-script")
+
+        import autoskillit
+        import autoskillit.migration_loader as ml
+        from autoskillit import server
+        from autoskillit.config import MigrationConfig
+
+        installed_ver = autoskillit.__version__
+        fake_mig_dir = tmp_path / "migrations"
+        fake_mig_dir.mkdir()
+        migration_yaml = (
+            f"from_version: '0.0.0'\n"
+            f"to_version: '{installed_ver}'\n"
+            "description: Upgrade scripts\n"
+            "changes:\n"
+            "  - id: add-summary-field\n"
+            "    description: Scripts now require a summary field\n"
+            "    instruction: Add summary field to your script\n"
+        )
+        (fake_mig_dir / "0.0.0-migration.yaml").write_text(migration_yaml)
+
+        monkeypatch.setattr(ml, "_migrations_dir", lambda: fake_mig_dir)
+        monkeypatch.setattr(
+            server,
+            "_config",
+            AutomationConfig(migration=MigrationConfig(suppressed=["test-script"])),
+        )
+
+        result = json.loads(await load_skill_script(name="test-script"))
+        assert "suggestions" in result
+        migration_rules = [
+            s["rule"] for s in result["suggestions"] if s["rule"].startswith("migration-")
+        ]
+        assert migration_rules == [], (
+            f"Expected no migration-* suggestions for suppressed script, got: {migration_rules}"
+        )
+
+    # SUP4
+    @pytest.mark.asyncio
+    async def test_validate_always_includes_outdated_version_regardless_of_suppression(
+        self, tmp_path, monkeypatch
+    ):
+        """SUP4: validate_script includes outdated-script-version even when suppressed."""
+        script = tmp_path / "test-script.yaml"
+        script.write_text(_MINIMAL_SCRIPT_YAML)
+
+        from autoskillit import server
+        from autoskillit.config import MigrationConfig
+
+        # Even with script suppressed in config, validate_script does not filter
+        monkeypatch.setattr(
+            server,
+            "_config",
+            AutomationConfig(migration=MigrationConfig(suppressed=["test-script"])),
+        )
+
+        result = json.loads(await validate_script(script_path=str(script)))
+        assert "semantic" in result
+        rules = [s["rule"] for s in result["semantic"]]
+        assert "outdated-script-version" in rules

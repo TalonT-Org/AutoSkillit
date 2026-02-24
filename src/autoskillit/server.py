@@ -1435,6 +1435,40 @@ async def load_skill_script(name: str) -> str:
             findings = run_semantic_rules(wf)
             suggestions = [f.to_dict() for f in findings]
 
+            # Migration awareness — filter suppressed, add migration note context
+            from autoskillit import __version__
+            from autoskillit.migration_loader import applicable_migrations
+
+            is_suppressed = name in _config.migration.suppressed
+
+            if is_suppressed:
+                suggestions = [
+                    s for s in suggestions if s.get("rule") != "outdated-script-version"
+                ]
+            else:
+                for s in suggestions:
+                    if s.get("rule") == "outdated-script-version":
+                        s["message"] += (
+                            " Ask the user: migrate now or suppress? "
+                            "If migrate: invoke /autoskillit:migrate-scripts. "
+                            "If suppress: add this script name to migration.suppressed "
+                            "in .autoskillit/config.yaml."
+                        )
+
+            if not is_suppressed:
+                migrations = applicable_migrations(wf.version, __version__)
+                for note in migrations:
+                    for change in note.changes:
+                        suggestions.append(
+                            {
+                                "rule": f"migration-{change.id}",
+                                "severity": "warning",
+                                "step": "(migration)",
+                                "message": f"[Migration to {note.to_version}] "
+                                f"{change.description}",
+                            }
+                        )
+
             # Contract validation
             scripts_dir = Path.cwd() / ".autoskillit" / "scripts"
             contract = load_pipeline_contract(name, scripts_dir)

@@ -61,6 +61,7 @@ class Workflow:
     inputs: dict[str, WorkflowInput] = field(default_factory=dict)
     steps: dict[str, WorkflowStep] = field(default_factory=dict)
     constraints: list[str] = field(default_factory=list)
+    version: str | None = None
 
 
 @dataclass
@@ -261,6 +262,7 @@ def _parse_workflow(data: dict[str, Any]) -> Workflow:
         inputs=inputs,
         steps=steps,
         constraints=constraints,
+        version=data.get("autoskillit_version"),
     )
 
 

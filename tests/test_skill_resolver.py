@@ -20,6 +20,7 @@ BUNDLED_SKILLS = [
     "make-plan",
     "make-script-skill",
     "mermaid",
+    "migrate-scripts",
     "pipeline-summary",
     "rectify",
     "retry-worktree",

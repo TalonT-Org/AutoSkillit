@@ -504,6 +504,55 @@ def doctor(*, output_json: bool = False):
                 print(f"{r.severity}: {r.message}")
 
 
+@app.command
+def migrate(*, check: bool = False):
+    """Report outdated pipeline scripts and their available migrations.
+
+    Parameters
+    ----------
+    check
+        Exit with code 1 if any scripts need migration (useful for CI).
+    """
+    from autoskillit import __version__
+    from autoskillit.migration_loader import applicable_migrations
+    from autoskillit.script_loader import list_scripts
+
+    project_dir = Path.cwd()
+    scripts = list_scripts(project_dir)
+
+    if not scripts.items:
+        print("No pipeline scripts found in .autoskillit/scripts/")
+        return
+
+    pending = []
+    for script in scripts.items:
+        applicable = applicable_migrations(script.version, __version__)
+        if applicable:
+            pending.append((script, applicable))
+
+    if not pending:
+        print(f"All {len(scripts.items)} script(s) are at version {__version__}.")
+        return
+
+    print(f"{len(pending)} script(s) need migration:\n")
+    for script, migrations in pending:
+        current = script.version or "(no version)"
+        target = migrations[-1].to_version
+        total_changes = sum(len(m.changes) for m in migrations)
+        print(f"  {script.name}: {current} -> {target} ({total_changes} change(s))")
+        for mig in migrations:
+            for change in mig.changes:
+                print(f"    - {change.description}")
+
+    if check:
+        raise SystemExit(1)
+
+    print(
+        "\nTo apply migrations, start a Claude Code session and load each script "
+        "with load_skill_script. The agent will prompt you to migrate or suppress."
+    )
+
+
 @config_app.command(name="show")
 def config_show():
     """Show resolved configuration as JSON."""

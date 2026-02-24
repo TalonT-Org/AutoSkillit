@@ -952,3 +952,116 @@ class TestDoctorScriptHealth:
         script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
         assert len(script_checks) == 1
         assert script_checks[0]["severity"] == "warning"
+
+
+# ---------------------------------------------------------------------------
+# TestMigrateCommand: migrate CLI command for reporting outdated scripts
+# ---------------------------------------------------------------------------
+
+
+class TestMigrateCommand:
+    """Tests for the ``autoskillit migrate`` CLI command."""
+
+    # MIG1: --check reports outdated scripts without modifying them
+    def test_check_reports_outdated_scripts(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """migrate --check lists scripts needing migration and does not modify them."""
+        import autoskillit
+
+        monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        script_content = 'name: my-pipeline\ndescription: Test\nautoskillit_version: "0.1.0"\n'
+        (scripts_dir / "my-pipeline.yaml").write_text(script_content)
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.migrate(check=True)
+        assert exc_info.value.code == 1
+
+        captured = capsys.readouterr()
+        assert "my-pipeline" in captured.out
+        # Original file untouched
+        assert (scripts_dir / "my-pipeline.yaml").read_text() == script_content
+
+    # MIG2: No scripts to migrate prints "all scripts up to date"
+    def test_no_pending_migrations_reports_up_to_date(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """migrate reports all scripts up to date when versions match."""
+        import autoskillit
+
+        current_version = autoskillit.__version__
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "current.yaml").write_text(
+            f'name: current\ndescription: Up to date\nautoskillit_version: "{current_version}"\n'
+        )
+
+        cli.migrate(check=False)
+
+        captured = capsys.readouterr()
+        assert "All" in captured.out
+        assert "at version" in captured.out
+
+    # MIG3: Reports count of scripts needing migration
+    def test_reports_count_of_pending_scripts(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """migrate reports the number of scripts needing migration."""
+        import autoskillit
+
+        monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "old1.yaml").write_text(
+            'name: old1\ndescription: Old\nautoskillit_version: "0.1.0"\n'
+        )
+        (scripts_dir / "old2.yaml").write_text(
+            'name: old2\ndescription: Also old\nautoskillit_version: "0.1.0"\n'
+        )
+
+        cli.migrate(check=False)
+
+        captured = capsys.readouterr()
+        assert "2 script(s) need migration" in captured.out
+
+    # MIG4: --check returns exit code 1 when migrations pending
+    def test_check_exits_1_when_pending(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """migrate --check exits with code 1 when scripts need migration."""
+        import autoskillit
+
+        monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "outdated.yaml").write_text(
+            'name: outdated\ndescription: Old\nautoskillit_version: "0.1.0"\n'
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.migrate(check=True)
+        assert exc_info.value.code == 1
+
+    # MIG5: --check returns exit code 0 when all current
+    def test_check_exits_0_when_current(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """migrate --check exits normally (no SystemExit) when all scripts are current."""
+        import autoskillit
+
+        current_version = autoskillit.__version__
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "current.yaml").write_text(
+            f'name: current\ndescription: Up to date\nautoskillit_version: "{current_version}"\n'
+        )
+
+        # Should not raise SystemExit
+        cli.migrate(check=True)

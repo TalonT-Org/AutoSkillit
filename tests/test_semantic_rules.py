@@ -9,6 +9,7 @@ from autoskillit.semantic_rules import (
 )
 from autoskillit.workflow_loader import (
     Workflow,
+    WorkflowInput,
     _parse_step,
     load_workflow,
 )
@@ -42,49 +43,29 @@ def test_registry_collects_rules():
 
 
 # ---------------------------------------------------------------------------
-# T2-T4b: retry-without-worktree-path
+# T2-T4b: unsatisfied-skill-input (replaces retry-without-worktree-path)
 # ---------------------------------------------------------------------------
 
 
-def test_retry_without_worktree_path_triggers():
-    """Preceding step captures worktree_path; run_skill_retry step with retry
-    does NOT receive it -> error."""
+def test_unsatisfied_input_replaces_worktree_path_check():
+    """REGRESSION: Same pipeline that triggered retry-without-worktree-path
+    now triggers unsatisfied-skill-input for retry-worktree."""
     wf = _make_workflow(
         {
             "implement": {
                 "tool": "run_skill",
-                "capture": {"worktree_path": "${{ result.worktree_path }}"},
-                "on_success": "retry_step",
-            },
-            "retry_step": {
-                "tool": "run_skill_retry",
-                "with": {"skill_command": "/do-stuff"},
-                "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
-                "on_success": "done",
-            },
-            "done": {"action": "stop", "message": "Done."},
-        }
-    )
-    findings = run_semantic_rules(wf)
-    assert any(
-        f.rule == "retry-without-worktree-path" and f.severity == Severity.ERROR for f in findings
-    )
-
-
-def test_retry_without_worktree_path_clean():
-    """Step uses run_skill_retry with retry and receives worktree_path -> no finding."""
-    wf = _make_workflow(
-        {
-            "implement": {
-                "tool": "run_skill",
+                "with": {
+                    "skill_command": (
+                        "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+                    ),
+                },
                 "capture": {"worktree_path": "${{ result.worktree_path }}"},
                 "on_success": "retry_step",
             },
             "retry_step": {
                 "tool": "run_skill_retry",
                 "with": {
-                    "skill_command": "/do-stuff",
-                    "cwd": "${{ context.worktree_path }}",
+                    "skill_command": "/autoskillit:retry-worktree ${{ context.plan_path }}",
                 },
                 "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
                 "on_success": "done",
@@ -93,38 +74,34 @@ def test_retry_without_worktree_path_clean():
         }
     )
     findings = run_semantic_rules(wf)
-    assert not any(f.rule == "retry-without-worktree-path" for f in findings)
+    errors = [f for f in findings if f.severity == Severity.ERROR]
+    assert any(
+        f.rule == "unsatisfied-skill-input" and "worktree_path" in f.message for f in errors
+    )
 
 
-def test_retry_without_worktree_path_skips_non_retry():
-    """Steps without retry block are not flagged."""
+def test_unsatisfied_input_clean_when_provided():
+    """All required inputs are provided -> no finding."""
     wf = _make_workflow(
         {
             "implement": {
                 "tool": "run_skill",
+                "with": {
+                    "skill_command": (
+                        "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+                    ),
+                },
                 "capture": {"worktree_path": "${{ result.worktree_path }}"},
-                "on_success": "next_step",
+                "on_success": "retry_step",
             },
-            "next_step": {
-                "tool": "run_skill_retry",
-                "with": {"skill_command": "/do-stuff"},
-                "on_success": "done",
-            },
-            "done": {"action": "stop", "message": "Done."},
-        }
-    )
-    findings = run_semantic_rules(wf)
-    assert not any(f.rule == "retry-without-worktree-path" for f in findings)
-
-
-def test_retry_without_worktree_path_skips_no_preceding_capture():
-    """run_skill_retry with retry but NO preceding step captures worktree_path
-    -> no finding. The skill may create its own worktree internally."""
-    wf = _make_workflow(
-        {
             "retry_step": {
                 "tool": "run_skill_retry",
-                "with": {"skill_command": "/do-stuff"},
+                "with": {
+                    "skill_command": (
+                        "/autoskillit:retry-worktree "
+                        "${{ context.plan_path }} ${{ context.worktree_path }}"
+                    ),
+                },
                 "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
                 "on_success": "done",
             },
@@ -132,7 +109,110 @@ def test_retry_without_worktree_path_skips_no_preceding_capture():
         }
     )
     findings = run_semantic_rules(wf)
-    assert not any(f.rule == "retry-without-worktree-path" for f in findings)
+    assert not any(f.rule == "unsatisfied-skill-input" for f in findings)
+
+
+def test_unsatisfied_input_not_available():
+    """Required input never captured by any prior step -> ERROR."""
+    wf = _make_workflow(
+        {
+            "retry_step": {
+                "tool": "run_skill_retry",
+                "with": {
+                    "skill_command": "/autoskillit:retry-worktree ${{ context.plan_path }}",
+                },
+                "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    errors = [
+        f for f in findings if f.rule == "unsatisfied-skill-input" and f.severity == Severity.ERROR
+    ]
+    assert any("worktree_path" in f.message for f in errors)
+
+
+def test_unsatisfied_input_unknown_skill_ignored():
+    """Steps with unrecognized skill names produce no contract findings."""
+    wf = _make_workflow(
+        {
+            "step": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/some-unknown-skill"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "unsatisfied-skill-input" for f in findings)
+
+
+def test_unsatisfied_input_from_pipeline_inputs():
+    """Skill inputs satisfied by pipeline inputs (not just captures) -> no finding."""
+    wf = Workflow(
+        name="test",
+        description="test",
+        inputs={
+            "plan_path": WorkflowInput(description="Plan file", required=True),
+            "worktree_path": WorkflowInput(description="Worktree", required=True),
+        },
+        steps={
+            "retry_step": _parse_step(
+                {
+                    "tool": "run_skill_retry",
+                    "with": {
+                        "skill_command": (
+                            "/autoskillit:retry-worktree "
+                            "${{ inputs.plan_path }} ${{ inputs.worktree_path }}"
+                        ),
+                    },
+                    "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
+                    "on_success": "done",
+                }
+            ),
+            "done": _parse_step({"action": "stop", "message": "Done."}),
+        },
+        constraints=["test"],
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "unsatisfied-skill-input" for f in findings)
+
+
+def test_unsatisfied_input_non_skill_tool_ignored():
+    """Non-skill tools (test_check, merge_worktree) are not contract-checked."""
+    wf = _make_workflow(
+        {
+            "test": {
+                "tool": "test_check",
+                "with": {"worktree_path": "${{ context.worktree_path }}"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "unsatisfied-skill-input" for f in findings)
+
+
+def test_unsatisfied_input_inline_positional_args_skipped():
+    """Steps with inline positional text (no ${{ }} refs) are skipped to
+    avoid false positives on bundled workflows like
+    '/autoskillit:investigate the test failures'."""
+    wf = _make_workflow(
+        {
+            "investigate": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:investigate the test failures"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "unsatisfied-skill-input" for f in findings)
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +381,19 @@ def test_rule_finding_to_dict():
 
 
 # ---------------------------------------------------------------------------
-# T12: Bundled workflows pass semantic rules
+# T12: Old rule removed
+# ---------------------------------------------------------------------------
+
+
+def test_old_rule_removed():
+    """The retry-without-worktree-path rule no longer exists in the registry."""
+    from autoskillit.semantic_rules import _RULE_REGISTRY
+
+    assert not any(r.name == "retry-without-worktree-path" for r in _RULE_REGISTRY)
+
+
+# ---------------------------------------------------------------------------
+# T13: Bundled workflows pass semantic rules
 # ---------------------------------------------------------------------------
 
 

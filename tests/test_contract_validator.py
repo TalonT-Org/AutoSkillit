@@ -1,0 +1,276 @@
+"""Tests for contract_validator module."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import yaml
+
+from autoskillit.contract_validator import (
+    check_contract_staleness,
+    compute_skill_hash,
+    generate_pipeline_contract,
+    load_bundled_manifest,
+    load_pipeline_contract,
+    resolve_skill_name,
+    validate_pipeline_contracts,
+)
+
+# ---------------------------------------------------------------------------
+# T1: Manifest Loading
+# ---------------------------------------------------------------------------
+
+
+def test_load_bundled_manifest():
+    """Bundled manifest loads successfully and contains all 13 skills."""
+    manifest = load_bundled_manifest()
+    assert manifest["version"] == "0.1.0"
+    assert len(manifest["skills"]) == 13
+
+
+def test_load_bundled_manifest_skill_inputs_typed():
+    """Each input in the manifest has name, type, and required fields."""
+    manifest = load_bundled_manifest()
+    for skill_name, skill in manifest["skills"].items():
+        assert "inputs" in skill
+        assert "outputs" in skill
+        for inp in skill["inputs"]:
+            assert "name" in inp, f"{skill_name}: input missing 'name'"
+            assert "type" in inp, f"{skill_name}: input {inp['name']} missing 'type'"
+            assert "required" in inp, f"{skill_name}: input {inp['name']} missing 'required'"
+
+
+# ---------------------------------------------------------------------------
+# T2: Skill Name Resolution
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_skill_name_standard():
+    assert (
+        resolve_skill_name("/autoskillit:retry-worktree ${{ context.plan_path }}")
+        == "retry-worktree"
+    )
+
+
+def test_resolve_skill_name_with_use_prefix():
+    assert (
+        resolve_skill_name("Use /autoskillit:implement-worktree plan.md") == "implement-worktree"
+    )
+
+
+def test_resolve_skill_name_no_prefix():
+    assert resolve_skill_name("/do-stuff") is None
+
+
+def test_resolve_skill_name_dynamic():
+    """Dynamic skill commands like /audit-${{ inputs.audit_type }} return None."""
+    assert resolve_skill_name("/audit-${{ inputs.audit_type }}") is None
+
+
+# ---------------------------------------------------------------------------
+# T4: Pipeline Contract Generation and Loading
+# ---------------------------------------------------------------------------
+
+SAMPLE_PIPELINE_YAML = """\
+name: test-pipeline
+description: A test pipeline
+summary: "Test flow"
+inputs:
+  plan_path:
+    description: Plan file
+    required: true
+steps:
+  implement:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ inputs.plan_path }}"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    on_success: test
+  test:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: done
+    on_failure: done
+  done:
+    action: stop
+    message: "Done."
+constraints:
+  - test
+"""
+
+
+def test_generate_pipeline_contract(tmp_path: Path):
+    """Generates a contract file with expected structure."""
+    scripts_dir = tmp_path / ".autoskillit" / "scripts"
+    scripts_dir.mkdir(parents=True)
+    pipeline = scripts_dir / "test-pipeline.yaml"
+    pipeline.write_text(SAMPLE_PIPELINE_YAML)
+
+    generate_pipeline_contract(pipeline, scripts_dir)
+
+    contract_path = scripts_dir / "contracts" / "test-pipeline.yaml"
+    assert contract_path.exists()
+    contract = yaml.safe_load(contract_path.read_text())
+    assert "generated_at" in contract
+    assert "bundled_manifest_version" in contract
+    assert "skill_hashes" in contract
+    assert "skills" in contract
+    assert "dataflow" in contract
+
+
+def test_load_pipeline_contract(tmp_path: Path):
+    """Loads a previously generated contract."""
+    scripts_dir = tmp_path / ".autoskillit" / "scripts"
+    scripts_dir.mkdir(parents=True)
+    pipeline = scripts_dir / "test-pipeline.yaml"
+    pipeline.write_text(SAMPLE_PIPELINE_YAML)
+
+    generate_pipeline_contract(pipeline, scripts_dir)
+
+    contract = load_pipeline_contract("test-pipeline", scripts_dir)
+    assert contract is not None
+    assert contract["bundled_manifest_version"] == "0.1.0"
+
+
+def test_load_pipeline_contract_missing():
+    """Returns None when no contract file exists."""
+    contract = load_pipeline_contract("nonexistent", Path("/tmp/no-scripts"))
+    assert contract is None
+
+
+# ---------------------------------------------------------------------------
+# T5: Staleness Detection
+# ---------------------------------------------------------------------------
+
+
+def test_check_staleness_clean():
+    """No staleness when version and hashes match."""
+    contract = {
+        "bundled_manifest_version": "0.1.0",
+        "skill_hashes": {"investigate": compute_skill_hash("investigate")},
+    }
+    stale = check_contract_staleness(contract)
+    assert len(stale) == 0
+
+
+def test_check_staleness_version_mismatch():
+    """Detects bundled manifest version drift."""
+    contract = {
+        "bundled_manifest_version": "0.0.1",
+        "skill_hashes": {},
+    }
+    stale = check_contract_staleness(contract)
+    assert any(s.reason == "version_mismatch" for s in stale)
+
+
+def test_check_staleness_hash_mismatch():
+    """Detects SKILL.md content change."""
+    contract = {
+        "bundled_manifest_version": "0.1.0",
+        "skill_hashes": {"investigate": "sha256:0000000000"},
+    }
+    stale = check_contract_staleness(contract)
+    assert any(s.skill == "investigate" and s.reason == "hash_mismatch" for s in stale)
+
+
+# ---------------------------------------------------------------------------
+# T6: Dataflow Validation
+# ---------------------------------------------------------------------------
+
+CLEAN_PIPELINE_YAML = """\
+name: clean-pipeline
+description: Pipeline with correct dataflow
+summary: "Clean flow"
+inputs:
+  plan_path:
+    description: Plan file
+    required: true
+steps:
+  implement:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ inputs.plan_path }}"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    on_success: retry
+  retry:
+    tool: run_skill_retry
+    with:
+      skill_command: >-
+        /autoskillit:retry-worktree
+        ${{ inputs.plan_path }}
+        ${{ context.worktree_path }}
+    retry:
+      on: needs_retry
+      max_attempts: 3
+      on_exhausted: done
+    on_success: done
+  done:
+    action: stop
+    message: "Done."
+constraints:
+  - test
+"""
+
+BAD_PIPELINE_YAML = """\
+name: bad-pipeline
+description: Pipeline with missing skill input
+summary: "Bad flow"
+inputs:
+  plan_path:
+    description: Plan file
+    required: true
+steps:
+  implement:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ inputs.plan_path }}"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    on_success: retry
+  retry:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:retry-worktree ${{ inputs.plan_path }}"
+    retry:
+      on: needs_retry
+      max_attempts: 3
+      on_exhausted: done
+    on_success: done
+  done:
+    action: stop
+    message: "Done."
+constraints:
+  - test
+"""
+
+
+def test_validate_pipeline_contracts_clean(tmp_path: Path):
+    """Pipeline with correct dataflow produces no findings."""
+    scripts_dir = tmp_path / ".autoskillit" / "scripts"
+    scripts_dir.mkdir(parents=True)
+    pipeline = scripts_dir / "clean.yaml"
+    pipeline.write_text(CLEAN_PIPELINE_YAML)
+
+    contract_path = generate_pipeline_contract(pipeline, scripts_dir)
+    contract = yaml.safe_load(contract_path.read_text())
+
+    findings = validate_pipeline_contracts(None, contract)
+    assert len(findings) == 0
+
+
+def test_validate_pipeline_contracts_missing_input(tmp_path: Path):
+    """Pipeline with missing skill input produces finding."""
+    scripts_dir = tmp_path / ".autoskillit" / "scripts"
+    scripts_dir.mkdir(parents=True)
+    pipeline = scripts_dir / "bad.yaml"
+    pipeline.write_text(BAD_PIPELINE_YAML)
+
+    contract_path = generate_pipeline_contract(pipeline, scripts_dir)
+    contract = yaml.safe_load(contract_path.read_text())
+
+    findings = validate_pipeline_contracts(None, contract)
+    assert len(findings) > 0
+    assert any("worktree_path" in f["message"] for f in findings)

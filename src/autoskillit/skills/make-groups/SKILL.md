@@ -205,9 +205,29 @@ temp/make-groups/
 └── ...
 ```
 
+## Feature Branch Recommendation
+
+When implementing multiple groups from this skill's output, **always work on a feature branch**,
+not directly on `main`. Group implementations take multiple plan-implement-merge cycles and
+should not land on the base branch until the full set is audited.
+
+After `make-groups` completes, create a feature branch before starting the pipeline:
+
+```bash
+git checkout -b feature/{topic}
+```
+
+Then run each group through the pipeline using the feature branch as `base_branch` for all
+`merge_worktree` calls. The `/autoskillit:audit-impl` skill accepts the manifest as input
+and audits all groups at once as the final gate before merging the feature branch to `main`.
+
+Use the `group-implementation` bundled workflow to automate this — it creates the feature
+branch, runs the group loop, and gates on audit before signalling merge-ready.
+
 ## Related Skills
 
 - **`/make-req`** — Produces requirements from raw input (this skill groups existing requirements)
 - **`/autoskillit:make-plan`** — Consumes individual groups as planning input
 - **`/elaborate-phase`** — Elaborates phases within a plan (this skill creates the groups that become plans)
 - **`/autoskillit:dry-walkthrough`** — Validates plans produced from groups
+- **`/autoskillit:audit-impl`** — Audits the full implementation against all group plans

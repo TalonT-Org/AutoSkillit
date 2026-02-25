@@ -20,6 +20,9 @@ inputs:
   base_branch:
     description: Branch to merge into
     default: main
+  audit:
+    description: Run /autoskillit:audit-impl before merge to gate on implementation quality
+    default: "false"
 
 steps:
   plan:
@@ -27,6 +30,8 @@ steps:
     with:
       skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
       cwd: ${{ inputs.work_dir }}
+    capture:
+      plan_path: "${{ result.plan_path }}"
     on_success: review
     on_failure: escalate
 
@@ -58,7 +63,7 @@ steps:
       max_attempts: 1
       on: needs_retry
       on_exhausted: retry_worktree
-    on_success: done
+    on_success: audit_impl
     on_failure: escalate
 
   retry_worktree:
@@ -70,12 +75,21 @@ steps:
       max_attempts: 3
       on: needs_retry
       on_exhausted: escalate
+    on_success: audit_impl
+    on_failure: escalate
+
+  audit_impl:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      cwd: ${{ inputs.work_dir }}
+    note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to done.
     on_success: done
     on_failure: escalate
 
   done:
     action: stop
-    message: "Implementation complete. Worktree ready for review."
+    message: "Implementation complete. Worktree ready for review and merge."
 
   escalate:
     action: stop

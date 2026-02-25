@@ -23,6 +23,9 @@ inputs:
   base_branch:
     description: Branch to merge fixes into
     default: main
+  audit:
+    description: Run /autoskillit:audit-impl before merge to gate on implementation quality
+    default: "false"
 
 steps:
   investigate:
@@ -38,6 +41,8 @@ steps:
     with:
       skill_command: "/autoskillit:rectify"
       cwd: ${{ inputs.work_dir }}
+    capture:
+      plan_path: "${{ result.plan_path }}"
     on_success: dry_walkthrough
     on_failure: escalate
 
@@ -80,7 +85,7 @@ steps:
     tool: test_check
     with:
       worktree_path: ${{ inputs.work_dir }}
-    on_success: merge
+    on_success: audit_impl
     on_failure: assess
 
   assess:
@@ -90,6 +95,15 @@ steps:
       skill_command: "/autoskillit:assess-and-merge fix test failures"
       cwd: ${{ inputs.work_dir }}
     on_success: verify
+    on_failure: escalate
+
+  audit_impl:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      cwd: ${{ inputs.work_dir }}
+    note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
+    on_success: merge
     on_failure: escalate
 
   merge:

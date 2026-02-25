@@ -78,14 +78,14 @@ src/autoskillit/
 ├── skill_resolver.py        # Bundled skill listing
 ├── workflow_loader.py       # Workflow YAML loading, validation, listing
 ├── process_lifecycle.py     # Subprocess management (kill trees, temp I/O, timeouts)
-├── skills/                  # 13 bundled skills (SKILL.md per skill)
-│   ├── assess-and-merge/    │   ├── dry-walkthrough/
-│   ├── implement-worktree/  │   ├── implement-worktree-no-merge/
-│   ├── investigate/         │   ├── make-groups/
-│   ├── make-plan/           │   ├── make-script-skill/
-│   ├── mermaid/             │   ├── rectify/
-│   ├── retry-worktree/      │   ├── review-approach/
-│   └── setup-project/
+├── skills/                  # 14 bundled skills (SKILL.md per skill)
+│   ├── assess-and-merge/    │   ├── audit-impl/
+│   ├── dry-walkthrough/     │   ├── implement-worktree/
+│   ├── implement-worktree-no-merge/ │   ├── investigate/
+│   ├── make-groups/         │   ├── make-plan/
+│   ├── make-script-skill/   │   ├── mermaid/
+│   ├── rectify/             │   ├── retry-worktree/
+│   ├── review-approach/     │   └── setup-project/
 └── workflows/               # 4 bundled workflow YAML definitions
     ├── audit-and-fix.yaml
     ├── bugfix-loop.yaml

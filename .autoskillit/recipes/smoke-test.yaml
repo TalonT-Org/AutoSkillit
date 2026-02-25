@@ -1,4 +1,5 @@
 name: smoke-test
+autoskillit_version: "0.2.0"
 description: End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
 summary: setup > seed_task > create_branch? > investigate > rectify > implement > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
 

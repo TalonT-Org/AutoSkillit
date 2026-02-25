@@ -33,6 +33,7 @@ kitchen_rules:
   - "Route to on_failure — never investigate or fix directly from the orchestrator."
   - "When make_groups is false, task input is required."
   - "When make_groups is true, source_doc input is required."
+  - "Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront."
 
 steps:
   group:
@@ -87,7 +88,7 @@ steps:
       step_name: "verify"
     on_success: implement
     on_failure: escalate
-    note: "Run for each plan_part sequentially. If review produced a report, pass it as additional arg."
+    note: "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify → implement → test → merge — for that part before advancing to the next part. Never run verify for all parts first. If review produced a report, pass it as an additional arg to dry-walkthrough."
 
   implement:
     tool: run_skill_retry

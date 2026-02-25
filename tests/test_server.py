@@ -829,7 +829,8 @@ class TestRecipeTools:
             "steps:\n  do:\n    tool: test_check\n    model: sonnet\n"
             "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
         )
-        result = json.loads(await load_recipe(name="test"))
+        with patch("autoskillit.migration_loader.applicable_migrations", return_value=[]):
+            result = json.loads(await load_recipe(name="test"))
         assert "content" in result
         assert "suggestions" in result
         assert isinstance(result["suggestions"], list)
@@ -4811,7 +4812,7 @@ class TestLoadRecipeAutoMigration:
         with patch("autoskillit.server._run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
-        mock_headless.assert_called_once()
+        mock_headless.assert_awaited_once()
 
     # LR2
     @pytest.mark.asyncio

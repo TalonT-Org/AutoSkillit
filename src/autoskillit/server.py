@@ -1759,7 +1759,6 @@ async def load_recipe(name: str) -> str:
                     mfile,
                     run_headless=_run_headless_core,
                     temp_dir=temp_dir,
-                    plugin_dir=Path(_plugin_dir),
                 )
 
                 if migration_result.success:

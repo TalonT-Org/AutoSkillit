@@ -19,6 +19,9 @@ from autoskillit.recipe_parser import validate_recipe
 
 logger = get_logger(__name__)
 
+MIGRATE_RECIPES_MAX_RETRIES: int = 3
+"""Max validation-retry attempts for LLM-driven recipe migration (matches SKILL.md)."""
+
 
 @dataclass
 class MigrationFile:
@@ -78,7 +81,6 @@ class MigrationEngine:
         *,
         run_headless: Callable[..., Awaitable[dict]],
         temp_dir: Path,
-        plugin_dir: Path | None = None,
     ) -> MigrationResult:
         adapter = self._adapters.get(file.file_type)
         if adapter is None:
@@ -178,7 +180,7 @@ class RecipeMigrationAdapter:
                 success=False,
                 name=file.name,
                 error=raw.get("result", "headless session failed"),
-                retries_attempted=3,
+                retries_attempted=MIGRATE_RECIPES_MAX_RETRIES,
             )
 
         temp_out = self.get_temp_output_path(file, temp_dir)

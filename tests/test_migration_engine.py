@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from autoskillit.migration_engine import (
+    MIGRATE_RECIPES_MAX_RETRIES,
     ContractMigrationAdapter,
     MigrationFile,
     RecipeMigrationAdapter,
@@ -458,3 +459,31 @@ class TestMigrationEngine:
         engine = default_migration_engine()
         assert engine.get_adapter("recipe") is not None
         assert engine.get_adapter("contract") is not None
+
+
+class TestMigrateRecipesConstant:
+    def test_constant_value(self) -> None:
+        assert MIGRATE_RECIPES_MAX_RETRIES == 3
+
+    @pytest.mark.asyncio
+    async def test_failed_headless_retries_match_constant(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recipe_path = tmp_path / ".autoskillit" / "recipes" / "myrecipe.yaml"
+        recipe_path.parent.mkdir(parents=True)
+        recipe_path.write_text("name: myrecipe\n")
+        monkeypatch.setattr(
+            "autoskillit.migration_engine.applicable_migrations",
+            lambda *a, **kw: [_make_migration_note()],
+        )
+        mock_rh = AsyncMock(return_value={"success": False, "result": "boom"})
+        adapter = RecipeMigrationAdapter()
+        file = MigrationFile(
+            name="myrecipe",
+            path=recipe_path,
+            file_type="recipe",
+            current_version="0.0.1",
+        )
+        result = await adapter.migrate(file, run_headless=mock_rh, temp_dir=tmp_path)
+        assert not result.success
+        assert result.retries_attempted == MIGRATE_RECIPES_MAX_RETRIES

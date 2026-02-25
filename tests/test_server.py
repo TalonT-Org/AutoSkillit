@@ -7,7 +7,7 @@ import re
 import shutil
 import sqlite3
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -4554,7 +4554,7 @@ def _write_minimal_script(scripts_dir: Path, name: str = "test-script") -> Path:
 
 
 class TestMigrationSuggestions:
-    """MSUG1-MSUG4: load_recipe and validate_recipe surface migration warnings."""
+    """MSUG2: validate_recipe surfaces migration warnings."""
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, monkeypatch):
@@ -4562,29 +4562,6 @@ class TestMigrationSuggestions:
         from autoskillit import server
 
         monkeypatch.setattr(server, "_tools_enabled", False)
-
-    # MSUG1
-    @pytest.mark.asyncio
-    async def test_load_includes_outdated_version_when_not_suppressed(self, tmp_path, monkeypatch):
-        """MSUG1: load_recipe includes outdated-script-version when not suppressed."""
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        _write_minimal_script(scripts_dir, "test-script")
-
-        from autoskillit import server
-        from autoskillit.config import MigrationConfig
-
-        monkeypatch.setattr(
-            server,
-            "_config",
-            AutomationConfig(migration=MigrationConfig(suppressed=[])),
-        )
-
-        result = json.loads(await load_recipe(name="test-script"))
-        assert "content" in result
-        assert "suggestions" in result
-        rules = [s["rule"] for s in result["suggestions"]]
-        assert "outdated-recipe-version" in rules
 
     # MSUG2
     @pytest.mark.asyncio
@@ -4598,78 +4575,9 @@ class TestMigrationSuggestions:
         rules = [s["rule"] for s in result["semantic"]]
         assert "outdated-recipe-version" in rules
 
-    # MSUG3
-    @pytest.mark.asyncio
-    async def test_load_includes_migration_note_description(self, tmp_path, monkeypatch):
-        """MSUG3: Suggestions include migration note description when available."""
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        _write_minimal_script(scripts_dir, "test-script")
-
-        # Create a fake migrations directory with a migration YAML that applies
-        # to scripts with no version (version 0.0.0 < installed version)
-        import autoskillit
-        from autoskillit import server
-        from autoskillit.config import MigrationConfig
-
-        installed_ver = autoskillit.__version__
-        fake_mig_dir = tmp_path / "migrations"
-        fake_mig_dir.mkdir()
-        migration_yaml = (
-            f"from_version: '0.0.0'\n"
-            f"to_version: '{installed_ver}'\n"
-            "description: Upgrade scripts\n"
-            "changes:\n"
-            "  - id: add-summary-field\n"
-            "    description: Scripts now require a summary field\n"
-            "    instruction: Add summary field to your script\n"
-        )
-        (fake_mig_dir / "0.0.0-migration.yaml").write_text(migration_yaml)
-
-        import autoskillit.migration_loader as ml
-
-        monkeypatch.setattr(ml, "_migrations_dir", lambda: fake_mig_dir)
-        monkeypatch.setattr(
-            server,
-            "_config",
-            AutomationConfig(migration=MigrationConfig(suppressed=[])),
-        )
-
-        result = json.loads(await load_recipe(name="test-script"))
-        assert "suggestions" in result
-        migration_suggestions = [
-            s for s in result["suggestions"] if s["rule"].startswith("migration-")
-        ]
-        assert len(migration_suggestions) >= 1
-        assert any("summary field" in s["message"] for s in migration_suggestions), (
-            f"Expected description in suggestion messages: {migration_suggestions}"
-        )
-
-    # MSUG4
-    @pytest.mark.asyncio
-    async def test_load_outdated_version_message_includes_ask_user(self, tmp_path, monkeypatch):
-        """MSUG4: Suggestion message includes agent instructions for user."""
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        _write_minimal_script(scripts_dir, "test-script")
-
-        from autoskillit import server
-        from autoskillit.config import MigrationConfig
-
-        monkeypatch.setattr(
-            server,
-            "_config",
-            AutomationConfig(migration=MigrationConfig(suppressed=[])),
-        )
-
-        result = json.loads(await load_recipe(name="test-script"))
-        outdated = [s for s in result["suggestions"] if s["rule"] == "outdated-recipe-version"]
-        assert len(outdated) == 1
-        assert "Ask the user: migrate now or suppress?" in outdated[0]["message"]
-
 
 class TestMigrationSuppression:
-    """SUP1-SUP4: load_recipe respects migration.suppressed config."""
+    """SUP1, SUP4: load_recipe respects migration.suppressed config."""
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, monkeypatch):
@@ -4683,7 +4591,7 @@ class TestMigrationSuppression:
     async def test_outdated_version_not_in_suggestions_when_suppressed(
         self, tmp_path, monkeypatch
     ):
-        """SUP1: outdated-script-version absent when script is suppressed."""
+        """SUP1: outdated-recipe-version absent when recipe is suppressed; headless not called."""
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         _write_minimal_script(scripts_dir, "test-script")
@@ -4697,79 +4605,14 @@ class TestMigrationSuppression:
             AutomationConfig(migration=MigrationConfig(suppressed=["test-script"])),
         )
 
-        result = json.loads(await load_recipe(name="test-script"))
+        mock_headless = AsyncMock(return_value={"success": True})
+        with patch("autoskillit.server._run_headless_core", mock_headless):
+            result = json.loads(await load_recipe(name="test-script"))
+
         assert "suggestions" in result
         rules = [s["rule"] for s in result["suggestions"]]
         assert "outdated-recipe-version" not in rules
-
-    # SUP2
-    @pytest.mark.asyncio
-    async def test_outdated_version_in_suggestions_when_not_suppressed(
-        self, tmp_path, monkeypatch
-    ):
-        """SUP2: outdated-script-version present when script is not suppressed."""
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        _write_minimal_script(scripts_dir, "test-script")
-
-        from autoskillit import server
-        from autoskillit.config import MigrationConfig
-
-        monkeypatch.setattr(
-            server,
-            "_config",
-            AutomationConfig(migration=MigrationConfig(suppressed=["other-script"])),
-        )
-
-        result = json.loads(await load_recipe(name="test-script"))
-        assert "suggestions" in result
-        rules = [s["rule"] for s in result["suggestions"]]
-        assert "outdated-recipe-version" in rules
-
-    # SUP3
-    @pytest.mark.asyncio
-    async def test_migration_change_suggestions_filtered_when_suppressed(
-        self, tmp_path, monkeypatch
-    ):
-        """SUP3: migration-{id} suggestions also filtered when script is suppressed."""
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        _write_minimal_script(scripts_dir, "test-script")
-
-        import autoskillit
-        import autoskillit.migration_loader as ml
-        from autoskillit import server
-        from autoskillit.config import MigrationConfig
-
-        installed_ver = autoskillit.__version__
-        fake_mig_dir = tmp_path / "migrations"
-        fake_mig_dir.mkdir()
-        migration_yaml = (
-            f"from_version: '0.0.0'\n"
-            f"to_version: '{installed_ver}'\n"
-            "description: Upgrade scripts\n"
-            "changes:\n"
-            "  - id: add-summary-field\n"
-            "    description: Scripts now require a summary field\n"
-            "    instruction: Add summary field to your script\n"
-        )
-        (fake_mig_dir / "0.0.0-migration.yaml").write_text(migration_yaml)
-
-        monkeypatch.setattr(ml, "_migrations_dir", lambda: fake_mig_dir)
-        monkeypatch.setattr(
-            server,
-            "_config",
-            AutomationConfig(migration=MigrationConfig(suppressed=["test-script"])),
-        )
-
-        result = json.loads(await load_recipe(name="test-script"))
-        assert "suggestions" in result
-        migration_rules = [
-            s["rule"] for s in result["suggestions"] if s["rule"].startswith("migration-")
-        ]
-        assert migration_rules == [], (
-            f"Expected no migration-* suggestions for suppressed script, got: {migration_rules}"
-        )
+        mock_headless.assert_not_called()
 
     # SUP4
     @pytest.mark.asyncio
@@ -4794,6 +4637,220 @@ class TestMigrationSuppression:
         assert "semantic" in result
         rules = [s["rule"] for s in result["semantic"]]
         assert "outdated-recipe-version" in rules
+
+
+class TestLoadRecipeAutoMigration:
+    """LR1-LR9: load_recipe auto-migrates outdated recipes via _run_headless_core."""
+
+    @pytest.fixture(autouse=True)
+    def _close_kitchen(self, monkeypatch):
+        """Verify load_recipe works WITHOUT tool activation."""
+        from autoskillit import server
+
+        monkeypatch.setattr(server, "_tools_enabled", False)
+
+    def _setup_migration_env(self, tmp_path, monkeypatch, *, suppressed: list[str] | None = None):
+        """Create directory structure, fake migration YAML, and config."""
+        import autoskillit
+        import autoskillit.migration_loader as ml
+        from autoskillit import server
+        from autoskillit.config import MigrationConfig
+
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        recipe_path = recipes_dir / "test-script.yaml"
+        recipe_path.write_text(_MINIMAL_SCRIPT_YAML)
+
+        installed_ver = autoskillit.__version__
+        fake_mig_dir = tmp_path / "migrations"
+        fake_mig_dir.mkdir()
+        migration_yaml = (
+            f"from_version: '0.0.0'\n"
+            f"to_version: '{installed_ver}'\n"
+            "description: Upgrade scripts\n"
+            "changes:\n"
+            "  - id: add-summary-field\n"
+            "    description: Scripts now require a summary field\n"
+            "    instruction: Add summary field to your script\n"
+        )
+        (fake_mig_dir / "0.0.0-migration.yaml").write_text(migration_yaml)
+        monkeypatch.setattr(ml, "_migrations_dir", lambda: fake_mig_dir)
+
+        monkeypatch.setattr(
+            server,
+            "_config",
+            AutomationConfig(migration=MigrationConfig(suppressed=suppressed or [])),
+        )
+
+        temp_mig_dir = tmp_path / ".autoskillit" / "temp" / "migrations"
+        temp_mig_dir.mkdir(parents=True)
+
+        migrated_content = _MINIMAL_SCRIPT_YAML + f"autoskillit_version: '{installed_ver}'\n"
+        return {
+            "recipe_path": recipe_path,
+            "temp_mig_dir": temp_mig_dir,
+            "migrated_content": migrated_content,
+            "installed_ver": installed_ver,
+        }
+
+    # LR1
+    @pytest.mark.asyncio
+    async def test_auto_migrates_outdated_recipe(self, tmp_path, monkeypatch):
+        """LR1: When recipe version < installed, _run_headless_core is called once."""
+        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
+
+        mock_headless = AsyncMock(return_value={"success": True})
+        with patch("autoskillit.server._run_headless_core", mock_headless):
+            await load_recipe(name="test-script")
+
+        mock_headless.assert_called_once()
+
+    # LR2
+    @pytest.mark.asyncio
+    async def test_returns_migrated_content_on_success(self, tmp_path, monkeypatch):
+        """LR2: After successful migration, returned content equals migrated file content."""
+        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
+
+        mock_headless = AsyncMock(return_value={"success": True})
+        with patch("autoskillit.server._run_headless_core", mock_headless):
+            result = json.loads(await load_recipe(name="test-script"))
+
+        assert "content" in result
+        assert result["content"] == ctx["migrated_content"]
+
+    # LR3
+    @pytest.mark.asyncio
+    async def test_writes_back_to_original_on_success(self, tmp_path, monkeypatch):
+        """LR3: Original .autoskillit/recipes/{name}.yaml is overwritten with migrated content."""
+        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
+
+        mock_headless = AsyncMock(return_value={"success": True})
+        with patch("autoskillit.server._run_headless_core", mock_headless):
+            await load_recipe(name="test-script")
+
+        assert ctx["recipe_path"].read_text() == ctx["migrated_content"]
+
+    # LR4
+    @pytest.mark.asyncio
+    async def test_clears_failure_record_after_successful_migration(self, tmp_path, monkeypatch):
+        """LR4: FailureStore.clear(name) is called when migration succeeds."""
+        from autoskillit.failure_store import FailureStore, default_store_path
+
+        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
+
+        store = FailureStore(default_store_path(tmp_path))
+        store.record(
+            name="test-script",
+            file_path=ctx["recipe_path"],
+            file_type="recipe",
+            error="prior failure",
+            retries_attempted=1,
+        )
+        assert store.has_failure("test-script")
+
+        mock_headless = AsyncMock(return_value={"success": True})
+        with patch("autoskillit.server._run_headless_core", mock_headless):
+            await load_recipe(name="test-script")
+
+        assert not store.has_failure("test-script")
+
+    # LR5
+    @pytest.mark.asyncio
+    async def test_records_failure_when_migration_fails(self, tmp_path, monkeypatch):
+        """LR5: When headless returns success=False, failure is recorded to failures.json."""
+        from autoskillit.failure_store import FailureStore, default_store_path
+
+        self._setup_migration_env(tmp_path, monkeypatch)
+
+        mock_headless = AsyncMock(return_value={"success": False, "result": "headless failed"})
+        with patch("autoskillit.server._run_headless_core", mock_headless):
+            await load_recipe(name="test-script")
+
+        store = FailureStore(default_store_path(tmp_path))
+        assert store.has_failure("test-script")
+
+    # LR6
+    @pytest.mark.asyncio
+    async def test_migration_failed_suggestion_added(self, tmp_path, monkeypatch):
+        """LR6: Returned suggestions contains a migration-failed entry with error severity."""
+        self._setup_migration_env(tmp_path, monkeypatch)
+
+        mock_headless = AsyncMock(return_value={"success": False, "result": "headless failed"})
+        with patch("autoskillit.server._run_headless_core", mock_headless):
+            result = json.loads(await load_recipe(name="test-script"))
+
+        migration_failed = [
+            s for s in result["suggestions"] if s.get("rule") == "migration-failed"
+        ]
+        assert len(migration_failed) == 1
+        assert migration_failed[0]["severity"] == "error"
+
+    # LR7
+    @pytest.mark.asyncio
+    async def test_suppressed_recipe_not_auto_migrated(self, tmp_path, monkeypatch):
+        """LR7: When name in migration.suppressed, headless is never called."""
+        self._setup_migration_env(tmp_path, monkeypatch, suppressed=["test-script"])
+
+        mock_headless = AsyncMock(return_value={"success": True})
+        with patch("autoskillit.server._run_headless_core", mock_headless):
+            await load_recipe(name="test-script")
+
+        mock_headless.assert_not_called()
+
+    # LR8
+    @pytest.mark.asyncio
+    async def test_up_to_date_recipe_not_migrated(self, tmp_path, monkeypatch):
+        """LR8: When applicable_migrations returns [], headless is never called."""
+        import autoskillit
+        import autoskillit.migration_loader as ml
+        from autoskillit import server
+        from autoskillit.config import MigrationConfig
+
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        current_ver = autoskillit.__version__
+        (recipes_dir / "test-script.yaml").write_text(
+            _MINIMAL_SCRIPT_YAML + f"autoskillit_version: '{current_ver}'\n"
+        )
+
+        empty_mig_dir = tmp_path / "migrations"
+        empty_mig_dir.mkdir()
+        monkeypatch.setattr(ml, "_migrations_dir", lambda: empty_mig_dir)
+        monkeypatch.setattr(
+            server,
+            "_config",
+            AutomationConfig(migration=MigrationConfig(suppressed=[])),
+        )
+
+        mock_headless = AsyncMock(return_value={"success": True})
+        with patch("autoskillit.server._run_headless_core", mock_headless):
+            await load_recipe(name="test-script")
+
+        mock_headless.assert_not_called()
+
+    # LR9
+    @pytest.mark.asyncio
+    async def test_no_migration_suggestions_injected_after_success(self, tmp_path, monkeypatch):
+        """LR9: Returned suggestions contain no migration-* warning entries after success."""
+        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
+
+        mock_headless = AsyncMock(return_value={"success": True})
+        with patch("autoskillit.server._run_headless_core", mock_headless):
+            result = json.loads(await load_recipe(name="test-script"))
+
+        migration_warnings = [
+            s for s in result["suggestions"] if s.get("rule", "").startswith("migration-")
+        ]
+        assert migration_warnings == [], (
+            f"Expected no migration-* suggestions after success, got: {migration_warnings}"
+        )
 
 
 class TestExtractTokenUsage:

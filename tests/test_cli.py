@@ -1195,3 +1195,24 @@ class TestMigrateCommand:
 
         # Should not raise SystemExit
         cli.migrate(check=True)
+
+    # MC3: Without --check, output contains no "Claude Code session" instructions
+    def test_migrate_no_check_prints_summary_only(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """MC3: Without --check, output lists pending but omits Claude Code session text."""
+        import autoskillit
+
+        monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "old.yaml").write_text(
+            'name: old\ndescription: Old recipe\nautoskillit_version: "0.1.0"\n'
+        )
+
+        cli.migrate(check=False)
+
+        captured = capsys.readouterr()
+        assert "old" in captured.out
+        assert "Claude Code session" not in captured.out

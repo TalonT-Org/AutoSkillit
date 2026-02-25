@@ -103,6 +103,47 @@ WRITE_RESULT_THEN_HANG_SCRIPT = textwrap.dedent("""\
     time.sleep(3600)
 """)
 
+# Script that:
+#   (1) writes %%ORDER_UP%% to a JSONL session file (Channel B fires)
+#   (2) writes type=result to stdout after a delay (Channel A confirms within drain window)
+#   (3) hangs until killed
+# Pass session_dir as sys.argv[1].
+CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
+    import sys, time, json, os
+    session_dir = sys.argv[1]
+    os.makedirs(session_dir, exist_ok=True)
+    # Small delay to ensure file ctime > spawn_time recorded in run_managed_async
+    time.sleep(0.1)
+    with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
+        record = {"type": "assistant", "message": {"role": "assistant",
+                  "content": "%%ORDER_UP%%"}}
+        f.write(json.dumps(record) + "\\n")
+        f.flush()
+    # Wait until after Channel B fires (~3s: 1s Phase 1 + 2s Phase 2 poll), then write stdout
+    time.sleep(4.0)
+    result = {"type": "result", "subtype": "success", "is_error": False,
+              "result": "done", "session_id": "s1"}
+    sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\\n")
+    sys.stdout.flush()
+    time.sleep(3600)
+""")
+
+# Script that writes %%ORDER_UP%% to session JSONL but never writes type=result to stdout.
+# Simulates CLI hung post-completion — drain timeout should expire and kill anyway.
+# Pass session_dir as sys.argv[1].
+CHANNEL_B_NO_STDOUT_SCRIPT = textwrap.dedent("""\
+    import sys, time, json, os
+    session_dir = sys.argv[1]
+    os.makedirs(session_dir, exist_ok=True)
+    time.sleep(0.1)
+    with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
+        record = {"type": "assistant", "message": {"role": "assistant",
+                  "content": "%%ORDER_UP%%"}}
+        f.write(json.dumps(record) + "\\n")
+        f.flush()
+    time.sleep(3600)
+""")
+
 # Script that writes non-matching output then hangs
 PARTIAL_OUTPUT_THEN_HANG_SCRIPT = textwrap.dedent("""\
     import sys, time
@@ -1297,3 +1338,89 @@ class TestRunManagedAsyncPassesPidToMonitor:
         assert pid_received is not None
         assert isinstance(pid_received, int)
         assert pid_received > 0
+
+
+class TestChannelBDrainWait:
+    """Channel B (session monitor) winning before Channel A triggers bounded drain wait."""
+
+    @pytest.mark.asyncio
+    async def test_channel_b_wins_then_channel_a_confirms_within_drain(self, tmp_path):
+        """Channel B fires first; drain wait allows Channel A to confirm stdout data.
+
+        Sequence:
+          t=0.1s  script writes %%ORDER_UP%% to session JSONL (Channel B will fire)
+          t~3s    session monitor detects marker, Channel B fires → drain wait starts
+          t=4.1s  script writes type=result to stdout
+          t~4.5s  heartbeat detects type=result, Channel A fires → drain completes
+          t~4.5s  process killed with confirmed stdout
+        """
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        script = tmp_path / "channel_b_then_a.py"
+        script.write_text(CHANNEL_B_THEN_A_CONFIRM_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script), str(session_dir)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker='"type":"result"',
+            session_log_dir=session_dir,
+            completion_marker="%%ORDER_UP%%",
+            completion_drain_timeout=5.0,
+        )
+
+        assert result.termination == TerminationReason.COMPLETED
+        # Drain wait confirmed Channel A fired: stdout is non-empty
+        assert result.stdout.strip()
+
+    @pytest.mark.asyncio
+    async def test_channel_b_wins_drain_timeout_still_kills(self, tmp_path):
+        """Channel B fires; Channel A never fires; drain times out and process is killed.
+
+        Sequence:
+          t=0.1s  script writes %%ORDER_UP%% to session JSONL
+          t~3s    Channel B fires → drain wait starts with 0.5s timeout
+          t~3.5s  drain times out (script never wrote to stdout)
+          t~3.5s  process killed with empty stdout
+        """
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        script = tmp_path / "channel_b_no_stdout.py"
+        script.write_text(CHANNEL_B_NO_STDOUT_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script), str(session_dir)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker='"type":"result"',
+            session_log_dir=session_dir,
+            completion_marker="%%ORDER_UP%%",
+            completion_drain_timeout=0.5,
+        )
+
+        assert result.termination == TerminationReason.COMPLETED
+        # Drain timed out: CLI hung and never flushed its result record
+        assert not result.stdout.strip()
+
+    @pytest.mark.asyncio
+    async def test_channel_a_wins_unchanged_behavior(self, tmp_path):
+        """Channel A (heartbeat) wins before any session monitor: no drain wait needed.
+
+        Sequence:
+          t=0     script writes type=result to stdout immediately
+          t~0.5s  heartbeat fires, Channel A confirmed → kill immediately
+          No drain wait: heartbeat_task is in done set
+        """
+        script = tmp_path / "result_hang.py"
+        script.write_text(WRITE_RESULT_THEN_HANG_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker='"type":"result"',
+            # No session_log_dir: Channel B cannot fire
+        )
+
+        assert result.termination == TerminationReason.COMPLETED
+        assert result.stdout.strip()  # Channel A confirmed: stdout is non-empty

@@ -61,6 +61,7 @@ class RunSkillConfig:
     heartbeat_marker: str = '"type":"result"'
     stale_threshold: int = 1200  # 20 minutes
     completion_marker: str = "%%ORDER_UP%%"
+    completion_drain_timeout: float = 5.0
 
 
 @dataclass

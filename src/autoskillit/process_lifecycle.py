@@ -442,6 +442,7 @@ async def run_managed_async(
     completion_marker: str = "",
     stale_threshold: float = 1200,
     session_record_types: frozenset[str] = frozenset({"assistant"}),
+    completion_drain_timeout: float = 5.0,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -467,6 +468,11 @@ async def run_managed_async(
         completion_marker: Marker to watch for in session log content.
         stale_threshold: Seconds of session log inactivity before "stale".
         session_record_types: JSONL record types to scan for completion marker.
+        completion_drain_timeout: Seconds to wait for Channel A (heartbeat) to
+            confirm stdout data after Channel B (session monitor) signals
+            completion. Prevents false-negative failures from the Channel B /
+            Channel A race where the session monitor fires before the CLI
+            flushes its result record.
     """
     if pty_mode:
         cmd = pty_wrap_command(cmd)
@@ -536,7 +542,28 @@ async def run_managed_async(
                     termination = TerminationReason.STALE
                     logger.warning("Session stale for %ss, killing tree", stale_threshold)
                     await async_kill_process_tree(proc.pid)
+                elif heartbeat_task in done:
+                    # Channel A won: type=result is confirmed in stdout temp file.
+                    # Kill is safe — data availability is guaranteed.
+                    termination = TerminationReason.COMPLETED
+                    await async_kill_process_tree(proc.pid)
                 else:
+                    # Channel B won (session_monitor returned "completion") before
+                    # Channel A. Arm a bounded drain wait to give Channel A the
+                    # opportunity to confirm data in stdout before killing.
+                    if heartbeat_task is not None:
+                        data_confirmed = asyncio.Event()
+                        heartbeat_task.add_done_callback(lambda _: data_confirmed.set())
+                        try:
+                            await asyncio.wait_for(
+                                data_confirmed.wait(), timeout=completion_drain_timeout
+                            )
+                        except TimeoutError:
+                            # CLI did not flush type=result within drain_timeout.
+                            # Rare: indicates CLI hung after generating the
+                            # completion marker. Kill anyway — this is a genuine
+                            # CLI issue, not a race condition.
+                            pass
                     termination = TerminationReason.COMPLETED
                     await async_kill_process_tree(proc.pid)
             except TimeoutError:

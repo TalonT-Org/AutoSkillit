@@ -4217,6 +4217,112 @@ class TestCompletionViaMonitorKill:
         )
 
 
+class TestBuildSkillResultCompleted:
+    """_build_skill_result and _compute_success handle COMPLETED termination correctly."""
+
+    def test_build_skill_result_completed_nonempty_result_is_success(self):
+        """COMPLETED + valid JSON stdout with non-empty result → success=True."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Task done.",
+                "session_id": "s1",
+            }
+        )
+        result = _make_result(
+            returncode=-15,
+            stdout=stdout,
+            termination_reason=TerminationReason.COMPLETED,
+        )
+        parsed = json.loads(_build_skill_result(result))
+        assert parsed["success"] is True
+
+    def test_build_skill_result_completed_empty_result_is_failure(self):
+        """COMPLETED + empty stdout → success=False, needs_retry=False.
+
+        This represents a CLI hang after generating the completion marker (drain
+        timeout expired). It is a genuine CLI issue, not a race condition.
+        """
+        result = _make_result(
+            returncode=-15,
+            stdout="",
+            termination_reason=TerminationReason.COMPLETED,
+        )
+        parsed = json.loads(_build_skill_result(result))
+        assert parsed["success"] is False
+        assert parsed["needs_retry"] is False
+
+    def test_compute_success_completed_empty_result_returns_false(self):
+        """Empty result with COMPLETED termination: bypass does NOT engage → returns False.
+
+        Documents the branch at _compute_success lines ~211-216: the pass branch
+        requires result.strip() to be truthy. When result is empty, the function
+        falls through to the final guard which returns False.
+        """
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            result="",
+            is_error=True,
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=-15,
+                termination=TerminationReason.COMPLETED,
+            )
+            is False
+        )
+
+
+class TestRunSkillRetryConsolidation:
+    """run_skill_retry delegates to _run_headless_core with retry-specific config."""
+
+    @pytest.mark.asyncio
+    async def test_run_skill_retry_passes_add_dir_to_subprocess(self):
+        """add_dir is forwarded to _run_headless_core (was silently absent before)."""
+        success_dict = {
+            "success": True,
+            "result": "ok",
+            "session_id": "s1",
+            "subtype": "success",
+            "is_error": False,
+            "exit_code": 0,
+            "needs_retry": False,
+            "retry_reason": "none",
+            "stderr": "",
+            "token_usage": None,
+        }
+        mock_core = AsyncMock(return_value=success_dict)
+        with patch("autoskillit.server._run_headless_core", mock_core):
+            await run_skill_retry("/investigate something", "/tmp", add_dir="/extra/dir")
+
+        assert mock_core.call_args.kwargs.get("add_dir") == "/extra/dir"
+
+    @pytest.mark.asyncio
+    async def test_run_skill_retry_uses_retry_timeout_not_skill_timeout(self):
+        """run_skill_retry passes RunSkillRetryConfig.timeout (7200) not RunSkillConfig (3600)."""
+        success_dict = {
+            "success": True,
+            "result": "ok",
+            "session_id": "s1",
+            "subtype": "success",
+            "is_error": False,
+            "exit_code": 0,
+            "needs_retry": False,
+            "retry_reason": "none",
+            "stderr": "",
+            "token_usage": None,
+        }
+        mock_core = AsyncMock(return_value=success_dict)
+        with patch("autoskillit.server._run_headless_core", mock_core):
+            await run_skill_retry("/investigate something", "/tmp")
+
+        assert mock_core.call_args.kwargs.get("timeout") == 7200
+
+
 class TestMarkerCrossValidation:
     """Completion marker cross-validation catches misclassified sessions."""
 

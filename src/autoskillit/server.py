@@ -893,11 +893,18 @@ async def _run_headless_core(
     model: str | None = None,
     step_name: str = "",
     add_dir: str = "",
+    timeout: int | None = None,
+    stale_threshold: int | None = None,
 ) -> dict:
-    """Shared headless runner used by run_skill and load_recipe auto-migration.
+    """Shared headless runner used by run_skill, run_skill_retry, and load_recipe.
 
     Does NOT check open_kitchen gate — callers are responsible for authorization context.
     Returns the raw result dict with at minimum a 'success' key.
+
+    Args:
+        timeout: Override the default run_skill timeout. Used by run_skill_retry
+            to pass its longer timeout without a separate subprocess-building path.
+        stale_threshold: Override the default stale threshold. Used by run_skill_retry.
     """
     cfg = _config.run_skill
     original_skill_command = skill_command
@@ -924,12 +931,13 @@ async def _run_headless_core(
     result = await run_managed_async(
         cmd,
         cwd=Path(cwd),
-        timeout=cfg.timeout,
+        timeout=timeout if timeout is not None else cfg.timeout,
         pty_mode=True,
         heartbeat_marker=cfg.heartbeat_marker,
         session_log_dir=_session_log_dir(cwd),
         completion_marker=cfg.completion_marker,
-        stale_threshold=cfg.stale_threshold,
+        stale_threshold=stale_threshold if stale_threshold is not None else cfg.stale_threshold,
+        completion_drain_timeout=cfg.completion_drain_timeout,
     )
 
     result_str = _build_skill_result(
@@ -1007,6 +1015,7 @@ async def run_skill(
 async def run_skill_retry(
     skill_command: str,
     cwd: str,
+    add_dir: str = "",
     model: str = "",
     step_name: str = "",
     ctx: Context = CurrentContext(),
@@ -1033,6 +1042,7 @@ async def run_skill_retry(
     Args:
         skill_command: The full prompt including skill invocation.
         cwd: Working directory for the claude session.
+        add_dir: Optional additional directory to add to the session context.
         model: Model to use (e.g. "sonnet", "opus"). Empty string = use config default.
         step_name: Optional YAML step key (e.g. "implement"). When set, token usage is
             accumulated in the server-side token log, grouped by this name.
@@ -1056,40 +1066,15 @@ async def run_skill_retry(
             return gate_error
 
     cfg = _config.run_skill_retry
-    original_skill_command = skill_command
-    skill_command = _inject_completion_directive(
-        _ensure_skill_prefix(skill_command), cfg.completion_marker
-    )
-
-    cmd = [
-        "claude",
-        "-p",
+    parsed = await _run_headless_core(
         skill_command,
-        "--plugin-dir",
-        _plugin_dir,
-        "--output-format",
-        "json",
-        "--dangerously-skip-permissions",
-    ]
-    resolved_model = _resolve_model(model)
-    if resolved_model:
-        cmd.extend(["--model", resolved_model])
-
-    result = await run_managed_async(
-        cmd,
-        cwd=Path(cwd),
+        cwd,
+        model=model,
+        add_dir=add_dir,
+        step_name=step_name,
         timeout=cfg.timeout,
-        pty_mode=True,
-        heartbeat_marker=cfg.heartbeat_marker,
-        session_log_dir=_session_log_dir(cwd),
-        completion_marker=cfg.completion_marker,
         stale_threshold=cfg.stale_threshold,
     )
-
-    result_str = _build_skill_result(
-        result, completion_marker=cfg.completion_marker, skill_command=original_skill_command
-    )
-    parsed = json.loads(result_str)
     if not parsed.get("success"):
         try:
             await ctx.error(
@@ -1099,9 +1084,7 @@ async def run_skill_retry(
             )
         except AttributeError:
             pass
-    if step_name:
-        _token_log.record(step_name, parsed.get("token_usage"))
-    return result_str
+    return json.dumps(parsed)
 
 
 _OUTCOME_PATTERN = re.compile(

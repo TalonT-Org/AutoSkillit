@@ -57,3 +57,19 @@ The orchestrator provides all context in the prompt:
 - If all 3 retry attempts fail validation, output the best attempt with a clear warning
 - If no patterns are detected (script already up to date), stamp the version and report no changes needed
 - If write-recipe produces unexpected output, report the error and preserve the original script
+
+## Failure Persistence
+
+If all 3 retry attempts are exhausted without a valid result, BEFORE declaring failure
+you MUST persist the failure record:
+
+  run_python:
+    callable: autoskillit.failure_store.record_from_skill
+    args:
+      name: {recipe stem, e.g. "my-pipeline"}
+      file_path: {absolute path received as script_path argument}
+      file_type: recipe
+      error: {description of last validation error}
+      retries_attempted: 3
+
+After recording, output a clear failure summary and stop.

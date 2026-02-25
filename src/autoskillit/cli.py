@@ -493,6 +493,7 @@ def doctor(*, output_json: bool = False):
 
     # Check 7: Script version health
     from autoskillit import __version__
+    from autoskillit.failure_store import FailureStore, default_store_path
     from autoskillit.recipe_loader import list_recipes
 
     scripts_result = list_recipes(Path.cwd())
@@ -507,18 +508,37 @@ def doctor(*, output_json: bool = False):
     else:
         from packaging.version import Version
 
-        outdated = []
+        failure_store = FailureStore(default_store_path(Path.cwd()))
+        known_failures = failure_store.load()
+
+        failed_migrations: list[str] = []
+        outdated: list[str] = []
         for script in scripts_result.items:
-            if script.version is None or Version(script.version) < Version(__version__):
+            if script.name in known_failures:
+                f = known_failures[script.name]
+                failed_migrations.append(
+                    f"{script.name} (failed after {f.retries_attempted} retries)"
+                )
+            elif script.version is None or Version(script.version) < Version(__version__):
                 outdated.append(script.name)
 
-        if outdated:
+        if failed_migrations:
+            results.append(
+                DoctorResult(
+                    Severity.ERROR,
+                    "script_version_health",
+                    "Migration failed — manual intervention required: "
+                    + ", ".join(failed_migrations),
+                )
+            )
+        elif outdated:
             results.append(
                 DoctorResult(
                     Severity.WARNING,
                     "script_version_health",
-                    f"{len(outdated)} script(s) below version {__version__}: "
-                    f"{', '.join(outdated)}. Run 'autoskillit migrate' to update.",
+                    "Outdated recipes: "
+                    + ", ".join(outdated)
+                    + ". Will be auto-migrated on next load.",
                 )
             )
         else:
@@ -526,7 +546,7 @@ def doctor(*, output_json: bool = False):
                 DoctorResult(
                     Severity.OK,
                     "script_version_health",
-                    f"All {len(scripts_result.items)} script(s) at version {__version__}",
+                    "All recipes up to date",
                 )
             )
 

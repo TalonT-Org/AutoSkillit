@@ -1418,6 +1418,31 @@ async def load_skill_script(name: str) -> str:
 
         **Flow:** {summary}
 
+        ### Graph
+        Render a route table showing the full execution flow. Use this exact
+        column layout (align columns with spaces):
+
+          Step               Tool                  ✓ success           ✗ failure
+          ───────────────────────────────────────────────────────────────────────
+          {step}             {tool/action/python}  → {on_success}      → {on_failure}
+
+        Rules:
+        - List steps in YAML declaration order.
+        - For the Tool column: use the tool/action/python value. Append
+          [model] if a model is set, e.g. "run_skill [sonnet]".
+        - If on_success routes back to an earlier step, append ↑ to the name.
+        - If on_failure routes back to an earlier step, append ↑ to the name.
+        - If a step has retry: add an indented continuation line below it:
+              ↺ ×{max_attempts} ({on} condition)  → {on_exhausted}
+        - If a step uses on_result instead of on_success: leave the ✓ success
+          cell empty and add indented continuation lines for each route:
+              {route_key}  → {route_target}
+          Append ↑ to any target that is an earlier step.
+        - Terminal steps (action: stop) are excluded from the table and
+          listed below the closing rule, one per line:
+              {name}  "{message}"
+        - Close the table with the same ─── rule used to open it.
+
         ### Inputs
         For each input show: name, description, required/optional, default value.
         Distinguish user-supplied inputs (required=true or meaningful defaults)
@@ -1425,12 +1450,9 @@ async def load_skill_script(name: str) -> str:
         indicating it is set by a prior step or the agent).
 
         ### Steps
-        For each step show:
+        For each non-terminal step show:
         - Step name and tool/action/python discriminator
-        - Routing: on_success → X, on_failure → Y
-        - If on_result: show field name and each route
-        - If optional: true, mark as "[Optional]" and show the note explaining
-          the skip condition
+        - If optional: true, mark as "[Optional]" and show the note
         - If retry block exists: retries Nx on {condition}, then → {on_exhausted}
         - If note exists, show it (notes contain critical agent instructions)
         - If capture exists, show what values are extracted

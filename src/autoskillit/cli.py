@@ -46,10 +46,18 @@ app.command(workspace_app)
 
 
 @app.default
-def serve():
+def serve(*, verbose: bool = False):
     """Start the MCP server (default command)."""
+    import logging as _stdlib_logging
+
+    from autoskillit._logging import configure_logging
     from autoskillit.server import mcp
 
+    configure_logging(
+        level=_stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO,
+        json_output=not sys.stderr.isatty(),
+        stream=sys.stderr,
+    )
     mcp.run()
 
 

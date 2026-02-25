@@ -274,3 +274,32 @@ def test_validate_recipe_cards_missing_input(tmp_path: Path):
     findings = validate_recipe_cards(None, contract)
     assert len(findings) > 0
     assert any("worktree_path" in f["message"] for f in findings)
+
+
+# ---------------------------------------------------------------------------
+# Structural: subprocess I/O uses temp files, not PIPE
+# ---------------------------------------------------------------------------
+
+
+class TestContractValidatorSubprocess:
+    """triage_staleness must use temp file I/O instead of asyncio.subprocess.PIPE."""
+
+    def test_contract_validator_uses_temp_file_not_pipe(self):
+        """Structural assertion: triage_staleness must not use PIPE for subprocess I/O.
+
+        The rest of the codebase was explicitly redesigned to avoid pipe-buffer
+        deadlock when child subprocesses inherit the write-end FD. This test
+        ensures the contract_validator subprocess call follows the same pattern.
+        """
+        import inspect
+
+        from autoskillit.contract_validator import triage_staleness
+
+        source = inspect.getsource(triage_staleness)
+        assert "asyncio.subprocess.PIPE" not in source, (
+            "triage_staleness must not use asyncio.subprocess.PIPE for subprocess I/O; "
+            "use create_temp_io from process_lifecycle instead"
+        )
+        assert "create_temp_io" in source, (
+            "triage_staleness must use create_temp_io for subprocess stdout/stderr"
+        )

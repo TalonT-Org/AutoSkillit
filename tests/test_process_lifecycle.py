@@ -1424,3 +1424,42 @@ class TestChannelBDrainWait:
 
         assert result.termination == TerminationReason.COMPLETED
         assert result.stdout.strip()  # Channel A confirmed: stdout is non-empty
+
+
+class TestHeartbeatScanPosition:
+    """_heartbeat uses byte-safe scan position — regression test for multi-byte content."""
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_detects_record_after_multibyte_content(self, tmp_path):
+        """Heartbeat correctly scans past multi-byte UTF-8 content to detect a result record.
+
+        Regression test: ensures the byte-offset refactor (scan_pos tracks bytes, not chars)
+        does not break detection when prior content contains multi-byte characters.
+        """
+        import asyncio
+        import json
+
+        stdout_path = tmp_path / "stdout.tmp"
+        # Write an assistant message with multi-byte UTF-8 content (CJK characters),
+        # followed by a result record on a new line.
+        assistant_msg = json.dumps(
+            {"type": "assistant", "message": "こんにちは"},
+            separators=(",", ":"),
+        )
+        result_record = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+            },
+            separators=(",", ":"),
+        )
+        stdout_path.write_text(assistant_msg + "\n" + result_record + "\n", encoding="utf-8")
+
+        result = await asyncio.wait_for(
+            _heartbeat(stdout_path, '"type":"result"'),
+            timeout=10,
+        )
+        assert result == "completion"

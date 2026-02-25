@@ -16,6 +16,7 @@ from typing import Any
 
 import yaml
 
+from autoskillit.process_lifecycle import create_temp_io, read_temp_output
 from autoskillit.skill_resolver import bundled_skills_dir
 
 # ---------------------------------------------------------------------------
@@ -406,19 +407,23 @@ async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]
         )
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "claude",
-                "-p",
-                prompt,
-                "--model",
-                "haiku",
-                "--output-format",
-                "json",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-            response = json.loads(stdout.decode())
+            with create_temp_io() as (stdout_file, stderr_file, _stdin_path):
+                stdout_path = Path(stdout_file.name)
+                stderr_path = Path(stderr_file.name)
+                proc = await asyncio.create_subprocess_exec(
+                    "claude",
+                    "-p",
+                    prompt,
+                    "--model",
+                    "haiku",
+                    "--output-format",
+                    "json",
+                    stdout=stdout_file,
+                    stderr=stderr_file,
+                )
+                await asyncio.wait_for(proc.wait(), timeout=30)
+                stdout_str, _ = read_temp_output(stdout_path, stderr_path)
+            response = json.loads(stdout_str)
             results.append(
                 {
                     "skill": item.skill,

@@ -205,10 +205,15 @@ def _compute_success(
     if termination in (TerminationReason.TIMED_OUT, TerminationReason.STALE):
         return False
     if returncode != 0:
-        # Monitor-completion path: when the session monitor or heartbeat
-        # detects completion and kills the process, returncode is a negative
-        # signal code (e.g. -15 for SIGTERM) or 0 through PTY masking.
-        # Trust the session envelope when termination is COMPLETED.
+        # COMPLETED path: the process was killed by our own async_kill_process_tree
+        # (signal -15 or -9), so a non-zero returncode is expected and trustworthy
+        # when the session envelope says "success". Trust the envelope.
+        #
+        # NATURAL_EXIT path: the process exited on its own with an error code.
+        # We cannot distinguish PTY-masking quirks from genuine CLI errors here,
+        # so we fail conservatively. The session result record (if any) may still
+        # be present in stdout — but a non-zero natural exit is treated as authoritative
+        # evidence of failure. No asymmetric bypass is applied.
         if (
             termination == TerminationReason.COMPLETED
             and session.subtype == "success"
@@ -249,6 +254,11 @@ def _compute_retry(
     if session.subtype == "empty_output" and returncode == 0:
         return True, RetryReason.RESUME
 
+    # unparseable output under COMPLETED means the process was killed mid-write
+    # (drain timeout expired). The session likely completed; retry with resume.
+    if session.subtype == "unparseable" and termination == TerminationReason.COMPLETED:
+        return True, RetryReason.RESUME
+
     return False, RetryReason.NONE
 
 
@@ -283,6 +293,43 @@ def _build_skill_result(
 ) -> str:
     """Route SubprocessResult fields into the standard run_skill JSON response."""
     if result.termination == TerminationReason.STALE:
+        # Attempt to recover from stdout before declaring stale failure.
+        # A session that completed its result record before going quiet deserves
+        # to have its output honored.
+        stale_session = parse_session_result(result.stdout)
+        if (
+            stale_session.subtype == "success"
+            and stale_session.result.strip()
+            and not stale_session.is_error
+        ):
+            # The session wrote a valid result before going stale.
+            # Treat as COMPLETED rather than STALE.
+            stale_returncode = result.returncode if result.returncode is not None else -1
+            success = _compute_success(
+                stale_session,
+                stale_returncode,
+                TerminationReason.COMPLETED,
+                completion_marker=completion_marker,
+            )
+            if success:
+                logger.warning(
+                    "Session went stale but stdout contained a valid result; recovering"
+                )
+                return json.dumps(
+                    {
+                        "success": True,
+                        "result": _truncate(stale_session.agent_result),
+                        "session_id": stale_session.session_id,
+                        "subtype": "recovered_from_stale",
+                        "is_error": False,
+                        "exit_code": stale_returncode,
+                        "needs_retry": False,
+                        "retry_reason": RetryReason.NONE,
+                        "stderr": result.stderr if result.stderr else "",
+                        "token_usage": stale_session.token_usage,
+                    }
+                )
+        # No valid result in stdout — fall through to original stale response
         _capture_failure(
             skill_command,
             exit_code=result.returncode if result.returncode is not None else -1,

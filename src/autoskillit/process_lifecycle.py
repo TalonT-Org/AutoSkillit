@@ -221,20 +221,21 @@ async def _heartbeat(
     appears in stdout. The *marker* parameter is accepted for API compatibility
     but is not used — the heartbeat detects record type presence, not content.
     """
-    scan_pos = 0
+    scan_pos = 0  # byte offset into the file
     os_error_count = 0
     while True:
         await asyncio.sleep(0.5)
         try:
-            content = stdout_path.read_text(errors="replace")
+            raw = stdout_path.read_bytes()
             os_error_count = 0
         except OSError:
             os_error_count += 1
             if os_error_count == 10:
                 logger.warning("Heartbeat: 10 consecutive read failures on %s", stdout_path)
             continue
-        new_content = content[scan_pos:]
-        scan_pos = len(content)
+        new_raw = raw[scan_pos:]
+        scan_pos = len(raw)
+        new_content = new_raw.decode("utf-8", errors="replace")
         if _jsonl_has_record_type(new_content, record_types):
             return "completion"
 

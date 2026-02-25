@@ -3916,6 +3916,41 @@ class TestComputeSuccess:
         )
 
 
+class TestComputeSuccessNaturalExitNonZero:
+    """NATURAL_EXIT with non-zero returncode is always a failure."""
+
+    def test_natural_exit_nonzero_returncode_with_success_session_returns_false(self):
+        """NATURAL_EXIT + non-zero returncode is unrecoverable regardless of session envelope.
+
+        Documents that PTY-masking quirks on natural exit cannot be distinguished from
+        genuine CLI errors, so we fail conservatively.
+        """
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="done", session_id="s1"
+        )
+        assert (
+            _compute_success(session, returncode=1, termination=TerminationReason.NATURAL_EXIT)
+            is False
+        )
+
+    def test_completed_and_natural_exit_same_outcome_when_returncode_zero(self):
+        """COMPLETED and NATURAL_EXIT agree when returncode=0 (no PTY masking issue).
+
+        Documents the symmetric case: asymmetry only matters when returncode != 0.
+        """
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="done", session_id="s1"
+        )
+        result_completed = _compute_success(
+            session, returncode=-15, termination=TerminationReason.COMPLETED
+        )
+        result_natural = _compute_success(
+            session, returncode=0, termination=TerminationReason.NATURAL_EXIT
+        )
+        assert result_completed is True
+        assert result_natural is True
+
+
 class TestComputeRetry:
     """_compute_retry cross-validates all signals for retry eligibility."""
 
@@ -3995,6 +4030,39 @@ class TestComputeRetry:
             is_error=True,
             result="tool error",
             session_id="s1",
+        )
+        needs, reason = _compute_retry(
+            session, returncode=1, termination=TerminationReason.NATURAL_EXIT
+        )
+        assert needs is False
+        assert reason == RetryReason.NONE
+
+
+class TestComputeRetryUnparseable:
+    """_compute_retry distinguishes unparseable under COMPLETED vs NATURAL_EXIT."""
+
+    def test_unparseable_subtype_with_nonzero_returncode_should_retry(self):
+        """unparseable under COMPLETED means process was killed mid-write.
+
+        The drain timeout expired before the result record was fully flushed.
+        The session likely completed; retry with resume.
+        """
+        session = ClaudeSessionResult(
+            subtype="unparseable", is_error=True, result="partial", session_id=""
+        )
+        needs, reason = _compute_retry(
+            session, returncode=-15, termination=TerminationReason.COMPLETED
+        )
+        assert needs is True
+        assert reason == RetryReason.RESUME
+
+    def test_unparseable_subtype_natural_exit_no_retry(self):
+        """unparseable under NATURAL_EXIT is a content failure, not retryable.
+
+        The process exited cleanly with malformed output — this is not a timing issue.
+        """
+        session = ClaudeSessionResult(
+            subtype="unparseable", is_error=True, result="", session_id=""
         )
         needs, reason = _compute_retry(
             session, returncode=1, termination=TerminationReason.NATURAL_EXIT
@@ -5754,3 +5822,55 @@ class TestOpenKitchenAdvisory:
         msg = self._prompt_text(result)
         assert "RECIPE UPDATE AVAILABLE" in msg
         assert "`bugfix-loop`" in msg
+
+
+class TestStalePathStdoutCheck:
+    """STALE termination recovers from stdout when a valid result record is present."""
+
+    def _make_stale_result(self, stdout: str, returncode: int = -15) -> SubprocessResult:
+        return SubprocessResult(
+            returncode=returncode,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=12345,
+        )
+
+    def test_stale_kill_with_completed_result_in_stdout_is_success(self):
+        """Session wrote a valid type=result record before going stale — should recover."""
+        valid_completed_jsonl = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Task completed successfully.",
+                "session_id": "sess-stale-recovery",
+            }
+        )
+        result_obj = self._make_stale_result(stdout=valid_completed_jsonl)
+        parsed = json.loads(_build_skill_result(result_obj))
+        assert parsed["success"] is True
+        assert parsed["subtype"] == "recovered_from_stale"
+
+    def test_stale_with_empty_stdout_returns_failure(self):
+        """Stale session with no stdout — original failure response preserved."""
+        result_obj = self._make_stale_result(stdout="")
+        parsed = json.loads(_build_skill_result(result_obj))
+        assert parsed["success"] is False
+        assert parsed["subtype"] == "stale"
+
+    def test_stale_with_error_result_returns_failure(self):
+        """Stale session where the result record has is_error=True — not recovered."""
+        error_jsonl = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "result": "Tool call failed.",
+                "session_id": "sess-err",
+            }
+        )
+        result_obj = self._make_stale_result(stdout=error_jsonl)
+        parsed = json.loads(_build_skill_result(result_obj))
+        assert parsed["success"] is False
+        assert parsed["subtype"] == "stale"

@@ -1,5 +1,5 @@
-name: bugfix-loop
-description: End-to-end test with automatic bug fixing in isolated worktrees.
+name: investigate-first
+description: Investigate a problem deeply, plan architectural fix, implement and merge.
 
 constraints:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -11,59 +11,58 @@ constraints:
     Do not investigate or attempt to fix failures directly."
 
 inputs:
-  test_dir:
-    description: Directory containing the project to test
+  topic:
+    description: Description of the bug, error, or question to investigate
     required: true
+  work_dir:
+    description: Working directory for agent sessions
+    required: true
+  target_dir:
+    description: Optional additional project directory for context
+    default: ""
   base_branch:
     description: Branch to merge fixes into
     default: main
-  helper_dir:
-    description: Directory for helper agent sessions
-    required: true
   audit:
     description: Run /autoskillit:audit-impl before merge to gate on implementation quality
     default: "false"
 
 steps:
-  reset:
-    tool: reset_test_dir
-    with:
-      test_dir: ${{ inputs.test_dir }}
-    on_success: test
-    on_failure: escalate
-
-  test:
-    tool: test_check
-    with:
-      worktree_path: ${{ inputs.test_dir }}
-    on_success: done
-    on_failure: investigate
-
   investigate:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:investigate the test failures"
-      cwd: ${{ inputs.helper_dir }}
+      skill_command: "/autoskillit:investigate ${{ inputs.topic }}"
+      cwd: ${{ inputs.work_dir }}
       step_name: "investigate"
-    on_success: plan
+    on_success: rectify
     on_failure: escalate
 
-  plan:
+  rectify:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:rectify the investigation findings"
-      cwd: ${{ inputs.helper_dir }}
-      step_name: "plan"
+      skill_command: "/autoskillit:rectify"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "rectify"
     capture:
       plan_path: "${{ result.plan_path }}"
-    on_success: implement
+    on_success: dry_walkthrough
     on_failure: escalate
+
+  dry_walkthrough:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:dry-walkthrough the plan"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "dry_walkthrough"
+    on_success: implement
+    on_failure: rectify
+    note: If walkthrough finds issues, re-plan via rectify.
 
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:implement-worktree-no-merge the plan"
-      cwd: ${{ inputs.helper_dir }}
+      skill_command: "/autoskillit:implement-worktree the verified plan"
+      cwd: ${{ inputs.work_dir }}
       step_name: "implement"
     capture:
       worktree_path: "${{ result.worktree_path }}"
@@ -77,8 +76,8 @@ steps:
   retry_worktree:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:retry-worktree the plan ${{ context.worktree_path }}"
-      cwd: ${{ inputs.helper_dir }}
+      skill_command: "/autoskillit:retry-worktree the verified plan ${{ context.worktree_path }}"
+      cwd: ${{ inputs.work_dir }}
       step_name: "retry_worktree"
     retry:
       max_attempts: 3
@@ -90,7 +89,7 @@ steps:
   verify:
     tool: test_check
     with:
-      worktree_path: ${{ inputs.test_dir }}
+      worktree_path: ${{ inputs.work_dir }}
     on_success: audit_impl
     on_failure: assess
 
@@ -99,28 +98,16 @@ steps:
     model: sonnet
     with:
       skill_command: "/autoskillit:assess-and-merge fix test failures"
-      cwd: ${{ inputs.helper_dir }}
+      cwd: ${{ inputs.work_dir }}
       step_name: "assess"
     on_success: verify
-    on_failure: classify
-
-  classify:
-    tool: classify_fix
-    with:
-      worktree_path: ${{ inputs.test_dir }}
-      base_branch: ${{ inputs.base_branch }}
-    on_result:
-      field: restart_scope
-      routes:
-        full_restart: investigate
-        partial_restart: implement
     on_failure: escalate
 
   audit_impl:
     tool: run_skill
     with:
       skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
-      cwd: ${{ inputs.helper_dir }}
+      cwd: ${{ inputs.work_dir }}
       step_name: "audit_impl"
     note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
     on_success: merge
@@ -129,14 +116,14 @@ steps:
   merge:
     tool: merge_worktree
     with:
-      worktree_path: ${{ inputs.test_dir }}
+      worktree_path: ${{ inputs.work_dir }}
       base_branch: ${{ inputs.base_branch }}
     on_success: done
     on_failure: escalate
 
   done:
     action: stop
-    message: "All tests passing. Fix merged successfully."
+    message: "Investigation complete. Fix implemented and merged."
 
   escalate:
     action: stop

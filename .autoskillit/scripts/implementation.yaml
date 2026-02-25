@@ -1,0 +1,102 @@
+name: implementation
+description: Plan, verify, and implement a feature in an isolated worktree.
+
+constraints:
+  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
+    orchestrator. All code changes and investigation happen through
+    headless sessions via run_skill/run_skill_retry."
+  - "Route to on_failure when a step fails — the downstream skill (e.g.,
+    assess-and-merge) has diagnostic access that the orchestrator does not.
+    Do not investigate or attempt to fix failures directly."
+
+inputs:
+  task:
+    description: Description of the feature or change to implement
+    required: true
+  work_dir:
+    description: Working directory for agent sessions
+    required: true
+  base_branch:
+    description: Branch to merge into
+    default: main
+  audit:
+    description: Run /autoskillit:audit-impl before merge to gate on implementation quality
+    default: "false"
+
+steps:
+  plan:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "plan"
+    capture:
+      plan_path: "${{ result.plan_path }}"
+    on_success: review
+    on_failure: escalate
+
+  review:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:review-approach the plan"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "review"
+    on_success: dry_walkthrough
+    on_failure: escalate
+
+  dry_walkthrough:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:dry-walkthrough the plan"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "dry_walkthrough"
+    on_success: implement
+    on_failure: plan
+    note: If walkthrough finds issues, re-plan.
+
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:implement-worktree the verified plan"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "implement"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    retry:
+      max_attempts: 1
+      on: needs_retry
+      on_exhausted: retry_worktree
+    on_success: audit_impl
+    on_failure: escalate
+
+  retry_worktree:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:retry-worktree the verified plan ${{ context.worktree_path }}"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "retry_worktree"
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: escalate
+    on_success: audit_impl
+    on_failure: escalate
+
+  audit_impl:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "audit_impl"
+    note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to done.
+    on_success: done
+    on_failure: escalate
+
+  done:
+    action: stop
+    message: "Implementation complete. Worktree ready for review and merge."
+
+  escalate:
+    action: stop
+    message: "Human intervention needed."

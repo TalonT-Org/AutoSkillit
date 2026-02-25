@@ -52,7 +52,10 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     import logging as _stdlib_logging
 
     from autoskillit._logging import configure_logging
+    from autoskillit.script_loader import sync_bundled_scripts
     from autoskillit.server import mcp
+
+    sync_bundled_scripts(Path.cwd())
 
     configure_logging(
         level=_stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO,

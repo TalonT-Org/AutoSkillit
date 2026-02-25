@@ -8,10 +8,12 @@ import pytest
 import yaml
 
 from autoskillit.script_loader import (
+    _bundled_workflows_dir,
     _extract_frontmatter,
     _parse_script_metadata,
     list_scripts,
     load_script,
+    sync_bundled_scripts,
 )
 
 SCRIPT_A = {
@@ -277,6 +279,60 @@ class TestLoadScript:
 # ---------------------------------------------------------------------------
 # TestScriptVersion: ScriptInfo includes version from autoskillit_version field
 # ---------------------------------------------------------------------------
+
+
+class TestSyncBundledScripts:
+    def test_no_op_when_autoskillit_dir_missing(self, tmp_path: Path) -> None:
+        """sync_bundled_scripts does nothing when .autoskillit/ does not exist."""
+        sync_bundled_scripts(tmp_path)
+        assert not (tmp_path / ".autoskillit").exists()
+
+    def test_creates_scripts_dir_when_absent(self, tmp_path: Path) -> None:
+        """sync_bundled_scripts creates .autoskillit/scripts/ if .autoskillit/ exists."""
+        (tmp_path / ".autoskillit").mkdir()
+        sync_bundled_scripts(tmp_path)
+        assert (tmp_path / ".autoskillit" / "scripts").is_dir()
+
+    def test_copies_bundled_workflows(self, tmp_path: Path) -> None:
+        """sync_bundled_scripts copies all bundled workflow YAMLs into scripts/."""
+        (tmp_path / ".autoskillit").mkdir()
+        sync_bundled_scripts(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        bundled = list(_bundled_workflows_dir().glob("*.yaml"))
+        assert len(bundled) > 0
+        for src in bundled:
+            assert (scripts_dir / src.name).exists()
+
+    def test_overwrites_existing_file(self, tmp_path: Path) -> None:
+        """sync_bundled_scripts overwrites same-named local scripts with bundled content."""
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        bundled = next(_bundled_workflows_dir().glob("*.yaml"))
+        (scripts_dir / bundled.name).write_text("name: stale\ndescription: old\n")
+        sync_bundled_scripts(tmp_path)
+        content = (scripts_dir / bundled.name).read_text()
+        assert "stale" not in content
+
+    def test_leaves_project_specific_scripts_untouched(self, tmp_path: Path) -> None:
+        """sync_bundled_scripts does not delete or modify project-specific scripts."""
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-custom-script.yaml").write_text("name: my-custom-script\n")
+        sync_bundled_scripts(tmp_path)
+        assert (scripts_dir / "my-custom-script.yaml").read_text() == "name: my-custom-script\n"
+
+    def test_synced_scripts_are_discoverable(self, tmp_path: Path) -> None:
+        """Scripts synced from bundled workflows are returned by list_scripts."""
+        (tmp_path / ".autoskillit").mkdir()
+        sync_bundled_scripts(tmp_path)
+        result = list_scripts(tmp_path)
+        names = {s.name for s in result.items}
+        bundled = list(_bundled_workflows_dir().glob("*.yaml"))
+        for src in bundled:
+            import yaml as _yaml
+
+            data = _yaml.safe_load(src.read_text())
+            assert data["name"] in names
 
 
 class TestScriptVersion:

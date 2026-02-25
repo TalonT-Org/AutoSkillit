@@ -88,6 +88,11 @@ class MigrationConfig:
 
 
 @dataclass
+class TokenUsageConfig:
+    verbosity: str = "summary"  # "summary" | "none"
+
+
+@dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
@@ -100,6 +105,7 @@ class AutomationConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     worktree_setup: WorktreeSetupConfig = field(default_factory=WorktreeSetupConfig)
     migration: MigrationConfig = field(default_factory=MigrationConfig)
+    token_usage: TokenUsageConfig = field(default_factory=TokenUsageConfig)
 
 
 def load_config(project_dir: Path | None = None) -> AutomationConfig:

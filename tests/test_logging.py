@@ -28,21 +28,20 @@ class TestGetLogger:
             get_logger("autoskillit.server").info("probe")
         assert logs[0]["logger"] == "autoskillit.server"
 
-    def test_no_output_before_configure(self):
-        """Before configure_logging(), the stdlib NullHandler suppresses all output."""
-        stream = io.StringIO()
-        # Attach a stream handler to root to catch any leakage
-        root = logging.getLogger()  # noqa: TID251
-        handler = logging.StreamHandler(stream)
-        root.addHandler(handler)
-        try:
-            from autoskillit._logging import get_logger
+    def test_no_output_before_configure(self, capsys: pytest.CaptureFixture[str]):
+        """NullHandler prevents stdlib lastResort from writing to stderr before configure().
 
-            get_logger("autoskillit.test").warning("should_be_silent")
-            # Only passes if autoskillit NullHandler suppresses propagation
-            assert "should_be_silent" not in stream.getvalue()
-        finally:
-            root.removeHandler(handler)
+        Python 3.2+ invokes a lastResort handler that writes WARNING+ records to
+        sys.stderr when no handlers are found anywhere in the logger hierarchy.
+        The NullHandler installed in __init__.py satisfies the 'at least one
+        handler found' condition, preventing lastResort from firing for any
+        autoskillit.* stdlib logger before configure_logging() is called.
+        """
+        stdlib_logger = logging.getLogger("autoskillit.pre_configure_check")  # noqa: TID251
+        stdlib_logger.warning("should_not_appear_before_configure")
+        captured = capsys.readouterr()
+        assert "should_not_appear_before_configure" not in captured.err
+        assert "should_not_appear_before_configure" not in captured.out
 
 
 class TestConfigureLogging:

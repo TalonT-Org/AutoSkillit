@@ -12,8 +12,9 @@ from dataclasses import dataclass
 from datetime import UTC
 from enum import StrEnum
 from pathlib import Path
+from typing import Annotated
 
-from cyclopts import App
+from cyclopts import App, Parameter
 
 
 class Severity(StrEnum):
@@ -46,7 +47,7 @@ app.command(workspace_app)
 
 
 @app.default
-def serve(*, verbose: bool = False):
+def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = False):
     """Start the MCP server (default command)."""
     import logging as _stdlib_logging
 

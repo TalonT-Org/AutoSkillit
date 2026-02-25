@@ -74,7 +74,7 @@ src/autoskillit/
 ├── cli.py                   # CLI: serve, init, config show, skills, workflows
 ├── config.py                # Dataclass config + YAML loading (layered resolution)
 ├── script_loader.py         # Pipeline script discovery from .autoskillit/scripts/
-├── server.py                # FastMCP server with 14 MCP tools + 2 prompts
+├── server.py                # FastMCP server with 15 MCP tools + 2 prompts
 ├── skill_resolver.py        # Bundled skill listing
 ├── workflow_loader.py       # Workflow YAML loading, validation, listing
 ├── process_lifecycle.py     # Subprocess management (kill trees, temp I/O, timeouts)
@@ -94,8 +94,11 @@ src/autoskillit/
 
 tests/
 ├── conftest.py              # Shared fixtures (tools enabled + default config)
+├── test_architecture.py     # AST enforcement (no print(), no sensitive logger kwargs)
+├── test_audit.py            # Audit log and FailureRecord tests
 ├── test_cli.py              # CLI command tests
 ├── test_config.py           # Config loading tests
+├── test_logging.py          # Logging infrastructure tests
 ├── test_process_lifecycle.py # Subprocess integration tests
 ├── test_script_loader.py    # Script loader tests
 ├── test_server.py           # Server unit tests
@@ -110,10 +113,12 @@ temp/                        # Temporary/working files (gitignored)
   * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
   * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `skills list`, `workflows list/show`, `workspace init`, `update`, and `doctor`.
   * **script_loader.py**: Discovers and loads pipeline scripts from `.autoskillit/scripts/`. Scripts use the workflow YAML schema (inputs, steps, routing, retry) with an added `summary` field. `list_scripts` returns `ScriptInfo` records for listing. `load_script` returns raw YAML for agent consumption.
-  * **server.py**: FastMCP server. 10 gated tools require user activation via MCP prompts. 4 ungated tools (`autoskillit_status`, `list_skill_scripts`, `load_skill_script`, `validate_script`) are always available. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/autoskillit:implement-worktree` without a verified plan. `_plugin_dir` is passed to headless sessions via `--plugin-dir`. Registers `workflow://` resource handler.
+  * **server.py**: FastMCP server. 10 gated tools require user activation via MCP prompts. 5 ungated tools (`autoskillit_status`, `list_skill_scripts`, `load_skill_script`, `validate_script`, `get_pipeline_report`) are always available. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/autoskillit:implement-worktree` without a verified plan. `_plugin_dir` is passed to headless sessions via `--plugin-dir`. Registers `workflow://` resource handler.
   * **skill_resolver.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
   * **workflow_loader.py**: YAML workflow loading, validation, and listing. Discovers workflows from `.autoskillit/workflows/` (project) and bundled package directory. `WorkflowStep` supports an optional `model` field for per-step model selection.
-  * **process_lifecycle.py**: Self-contained subprocess utilities (no internal deps, only stdlib + psutil). Handles process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts.
+  * **process_lifecycle.py**: Subprocess utilities for process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts. Uses `get_logger()` from `_logging.py`.
+  * **_logging.py**: Centralized structlog configuration. `get_logger(name)` is the single import point for all production modules. `configure_logging()` is called once by the CLI `serve` command — routes all output to stderr via `WriteLoggerFactory`, never stdout.
+  * **_audit.py**: Pipeline failure tracking. `AuditLog` captures every non-success result from `_build_skill_result()` into an in-memory list. `_audit_log` is the module-level singleton used by `server.py`. `get_pipeline_report` retrieves the accumulated failures.
 
 ### **Plugin Structure**
 

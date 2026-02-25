@@ -194,4 +194,5 @@ All tool behavior is configurable via `.autoskillit/config.yaml`. No config file
 | `read_db` | `max_rows` | `10000` | Maximum rows returned per query |
 | `model` | `default` | `null` | Default model for run_skill/run_skill_retry when step has no model field |
 | `model` | `override` | `null` | Force all run_skill/run_skill_retry to use this model (overrides step YAML) |
+| `token_usage` | `verbosity` | `"summary"` | Token table behavior: `"summary"` = render once at pipeline end; `"none"` = suppress entirely |
 | `worktree_setup` | `command` | `null` | Worktree env setup command (`null` = auto-detect) |

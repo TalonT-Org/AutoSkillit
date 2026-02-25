@@ -15,6 +15,7 @@ Exemptions:
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 from typing import NamedTuple
 
@@ -86,6 +87,22 @@ def _scan(path: Path) -> list[Violation]:
 
 
 _SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
+
+
+def test_tmp_path_is_ram_backed(tmp_path: Path) -> None:
+    """On Linux/WSL2, tmp_path must resolve to /dev/shm (RAM-backed tmpfs).
+
+    On macOS no assertion is made — disk-backed /tmp is acceptable there.
+    Fails intentionally on Linux when pytest is invoked directly without --basetemp.
+    Always run tests via 'task test-all', not pytest directly.
+    """
+    if sys.platform == "linux":
+        path_str = str(tmp_path)
+        assert path_str.startswith("/dev/shm"), (
+            f"tmp_path ({path_str!r}) is not in /dev/shm. "
+            "Run tests via 'task test-all', which passes "
+            "--basetemp=/dev/shm/pytest-tmp."
+        )
 
 
 class TestArchitectureEnforcement:

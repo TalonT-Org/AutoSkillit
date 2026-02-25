@@ -1,11 +1,23 @@
 version: '3'
 
+vars:
+  PYTEST_TMPDIR: '{{if eq OS "linux"}}/dev/shm/pytest-tmp{{else}}/tmp/pytest-tmp{{end}}'
+  PYTEST_CACHEDIR: '{{if eq OS "linux"}}/dev/shm/pytest-cache{{else}}/tmp/pytest-cache{{end}}'
+
 tasks:
+  _tmpdir-setup:
+    internal: true
+    desc: Ensure test temp directories exist (platform-aware)
+    cmds:
+      - mkdir -p {{.PYTEST_TMPDIR}} {{.PYTEST_CACHEDIR}}
+
   test-all:
     desc: Run all tests with parallel workers
+    deps: [_tmpdir-setup]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
     cmds:
       - |
         mkdir -p temp
@@ -13,18 +25,20 @@ tasks:
         echo "Running all tests with -n 4"
         echo "Output: $TEST_OUTPUT"
         if [[ -d ".venv" ]]; then
-          .venv/bin/python -m pytest tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+          .venv/bin/python -m pytest tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         else
-          pytest tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+          pytest tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         fi
         echo ""
         echo "Test output saved to: $TEST_OUTPUT"
 
   test-check:
     desc: Run all tests and return unambiguous PASS/FAIL (for automation)
+    deps: [_tmpdir-setup]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
     cmds:
       - |
         mkdir -p temp
@@ -37,7 +51,7 @@ tasks:
         fi
 
         set +e
-        $PYTEST_CMD tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+        $PYTEST_CMD tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         PYTEST_EXIT=${PIPESTATUS[0]}
         set -e
 
@@ -57,10 +71,12 @@ tasks:
 
   test-smoke:
     desc: Run smoke tests (requires ANTHROPIC_API_KEY)
+    deps: [_tmpdir-setup]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
       SMOKE_TEST: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
     cmds:
       - |
         mkdir -p temp
@@ -68,9 +84,9 @@ tasks:
         echo "Running smoke tests"
         echo "Output: $TEST_OUTPUT"
         if [[ -d ".venv" ]]; then
-          .venv/bin/python -m pytest tests/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+          .venv/bin/python -m pytest tests/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         else
-          pytest tests/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" 2>&1 | tee "$TEST_OUTPUT"
+          pytest tests/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         fi
         echo ""
         echo "Smoke test output saved to: $TEST_OUTPUT"

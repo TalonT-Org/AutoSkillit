@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 15 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db + ungated autoskillit_status, list_skill_scripts, load_skill_script, validate_script, get_pipeline_report) with 10 gated behind MCP prompts for user-only activation, and 13 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 16 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db + ungated autoskillit_status, list_skill_scripts, load_skill_script, validate_script, get_pipeline_report, get_token_summary) with 10 gated behind MCP prompts for user-only activation, and 13 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -70,6 +70,7 @@ src/autoskillit/
 ├── .claude-plugin/          # Plugin metadata (plugin.json)
 ├── .mcp.json                # MCP server config for plugin loading
 ├── _audit.py                # FailureRecord, AuditLog, _audit_log singleton
+├── _token_log.py            # TokenEntry, TokenLog, _token_log singleton
 ├── _logging.py              # Centralized structlog configuration (get_logger, configure_logging)
 ├── cli.py                   # CLI: serve, init, config show, skills, workflows
 ├── config.py                # Dataclass config + YAML loading (layered resolution)
@@ -103,6 +104,7 @@ tests/
 ├── test_script_loader.py    # Script loader tests
 ├── test_server.py           # Server unit tests
 ├── test_skill_resolver.py   # Skill resolution tests
+├── test_token_log.py        # Token usage tracking tests
 └── test_workflow_loader.py  # Workflow loading/validation tests
 
 temp/                        # Temporary/working files (gitignored)
@@ -113,12 +115,13 @@ temp/                        # Temporary/working files (gitignored)
   * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
   * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `skills list`, `workflows list/show`, `workspace init`, `update`, and `doctor`.
   * **script_loader.py**: Discovers and loads pipeline scripts from `.autoskillit/scripts/`. Scripts use the workflow YAML schema (inputs, steps, routing, retry) with an added `summary` field. `list_scripts` returns `ScriptInfo` records for listing. `load_script` returns raw YAML for agent consumption.
-  * **server.py**: FastMCP server. 10 gated tools require user activation via MCP prompts. 5 ungated tools (`autoskillit_status`, `list_skill_scripts`, `load_skill_script`, `validate_script`, `get_pipeline_report`) are always available. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/autoskillit:implement-worktree` without a verified plan. `_plugin_dir` is passed to headless sessions via `--plugin-dir`. Registers `workflow://` resource handler.
+  * **server.py**: FastMCP server. 10 gated tools require user activation via MCP prompts. 6 ungated tools (`autoskillit_status`, `list_skill_scripts`, `load_skill_script`, `validate_script`, `get_pipeline_report`, `get_token_summary`) are always available. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/autoskillit:implement-worktree` without a verified plan. `_plugin_dir` is passed to headless sessions via `--plugin-dir`. Registers `workflow://` resource handler.
   * **skill_resolver.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
   * **workflow_loader.py**: YAML workflow loading, validation, and listing. Discovers workflows from `.autoskillit/workflows/` (project) and bundled package directory. `WorkflowStep` supports an optional `model` field for per-step model selection.
   * **process_lifecycle.py**: Subprocess utilities for process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts. Uses `get_logger()` from `_logging.py`.
   * **_logging.py**: Centralized structlog configuration. `get_logger(name)` is the single import point for all production modules. `configure_logging()` is called once by the CLI `serve` command — routes all output to stderr via `WriteLoggerFactory`, never stdout.
   * **_audit.py**: Pipeline failure tracking. `AuditLog` captures every non-success result from `_build_skill_result()` into an in-memory list. `_audit_log` is the module-level singleton used by `server.py`. `get_pipeline_report` retrieves the accumulated failures.
+  * **_token_log.py**: Pipeline token usage tracking. `TokenLog` accumulates token counts keyed by YAML step name. `_token_log` is the module-level singleton used by `server.py`. `get_token_summary` retrieves the accumulated per-step totals.
 
 ### **Plugin Structure**
 
@@ -153,6 +156,7 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 | `load_skill_script` | Load a script by name as raw YAML (ungated) |
 | `validate_script` | Validate a pipeline script against the workflow schema (ungated) |
 | `get_pipeline_report` | Return accumulated run_skill/run_skill_retry failure report (ungated) |
+| `get_token_summary` | Return accumulated token usage grouped by step name (ungated) |
 | `enable_tools` (prompt) | User-only activation — type the enable_tools prompt from the MCP prompt list |
 | `disable_tools` (prompt) | User-only deactivation — type the disable_tools prompt from the MCP prompt list |
 
@@ -164,7 +168,7 @@ Claude Code based on how the server was loaded (e.g. `plugin_autoskillit_autoski
 for plugin installs). This uses MCP prompts (user-only, model cannot invoke)
 and survives `--dangerously-skip-permissions`.
 
-`autoskillit_status`, `list_skill_scripts`, `load_skill_script`, `validate_script`, and `get_pipeline_report` are ungated — available without calling `enable_tools`.
+`autoskillit_status`, `list_skill_scripts`, `load_skill_script`, `validate_script`, `get_pipeline_report`, and `get_token_summary` are ungated — available without calling `enable_tools`.
 
 ### **Configuration**
 

@@ -44,6 +44,7 @@ from autoskillit.server import (
     classify_fix,
     extract_token_usage,
     get_pipeline_report,
+    get_token_summary,
     list_skill_scripts,
     load_skill_script,
     merge_worktree,
@@ -645,6 +646,7 @@ class TestToolRegistration:
             "autoskillit_status",
             "validate_script",
             "get_pipeline_report",
+            "get_token_summary",
         }
         assert expected == tool_names
 
@@ -2252,6 +2254,7 @@ class TestGatedToolAccess:
             "load_skill_script",
             "validate_script",
             "get_pipeline_report",
+            "get_token_summary",
         }
         assert expected == tool_names
 
@@ -5196,3 +5199,249 @@ class TestFailureCaptureInBuildSkillResult:
         result = _make_result(returncode=1, stderr=long_stderr, stdout=_failed_session_json())
         _build_skill_result(result, skill_command="/test")
         assert len(al.get_report()[0].stderr) <= 500
+
+
+class TestRunSkillStepName:
+    """step_name param drives _token_log accumulation."""
+
+    def _make_ndjson(self) -> str:
+        result_rec = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Task complete.",
+                "session_id": "sess-abc",
+                "usage": {
+                    "input_tokens": 200,
+                    "output_tokens": 80,
+                    "cache_creation_input_tokens": 8,
+                    "cache_read_input_tokens": 3,
+                },
+            }
+        )
+        return result_rec
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_step_name_records_token_usage(self, mock_run, monkeypatch):
+        import autoskillit.server as server_mod
+
+        monkeypatch.setattr(server_mod, "_tools_enabled", True)
+        from autoskillit.server import _token_log as tl
+
+        tl.clear()
+        mock_run.return_value = _make_result(returncode=0, stdout=self._make_ndjson())
+        await run_skill(
+            skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="plan"
+        )
+        report = tl.get_report()
+        assert len(report) == 1
+        assert report[0]["step_name"] == "plan"
+        assert report[0]["input_tokens"] == 200
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_no_step_name_does_not_record(self, mock_run, monkeypatch):
+        import autoskillit.server as server_mod
+
+        monkeypatch.setattr(server_mod, "_tools_enabled", True)
+        from autoskillit.server import _token_log as tl
+
+        tl.clear()
+        mock_run.return_value = _make_result(returncode=0, stdout=self._make_ndjson())
+        await run_skill(skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="")
+        assert tl.get_report() == []
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_null_token_usage_does_not_record(self, mock_run, monkeypatch):
+        import autoskillit.server as server_mod
+
+        monkeypatch.setattr(server_mod, "_tools_enabled", True)
+        from autoskillit.server import _token_log as tl
+
+        tl.clear()
+        # Return NDJSON with no usage field → token_usage will be null
+        no_usage_ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+            }
+        )
+        mock_run.return_value = _make_result(returncode=0, stdout=no_usage_ndjson)
+        await run_skill(
+            skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="plan"
+        )
+        assert tl.get_report() == []
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_step_name_run_skill_retry(self, mock_run, monkeypatch):
+        import autoskillit.server as server_mod
+
+        monkeypatch.setattr(server_mod, "_tools_enabled", True)
+        from autoskillit.server import _token_log as tl
+
+        tl.clear()
+        mock_run.return_value = _make_result(returncode=0, stdout=self._make_ndjson())
+        await run_skill_retry(
+            skill_command="/autoskillit:investigate the test failures",
+            cwd="/tmp",
+            step_name="implement",
+        )
+        report = tl.get_report()
+        assert len(report) == 1
+        assert report[0]["step_name"] == "implement"
+        assert report[0]["input_tokens"] == 200
+
+
+class TestGetTokenSummary:
+    """get_token_summary is ungated and returns accumulated token usage."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_tools(self, monkeypatch):
+        import autoskillit.server as server_mod
+
+        monkeypatch.setattr(server_mod, "_tools_enabled", False)
+
+    @pytest.mark.asyncio
+    async def test_ungated_does_not_require_enable_tools(self):
+        result = json.loads(await get_token_summary())
+        assert "error" not in result
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_steps_initially(self):
+        from autoskillit.server import _token_log as tl
+
+        tl.clear()
+        result = json.loads(await get_token_summary())
+        assert result["steps"] == []
+        assert result["total"]["input_tokens"] == 0
+        assert result["total"]["output_tokens"] == 0
+        assert result["total"]["cache_creation_input_tokens"] == 0
+        assert result["total"]["cache_read_input_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_returns_entry_per_step_name(self):
+        from autoskillit.server import _token_log as tl
+
+        tl.clear()
+        tl.record(
+            "investigate",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 10,
+                "cache_read_input_tokens": 5,
+            },
+        )
+        tl.record(
+            "implement",
+            {
+                "input_tokens": 200,
+                "output_tokens": 80,
+                "cache_creation_input_tokens": 20,
+                "cache_read_input_tokens": 10,
+            },
+        )
+        result = json.loads(await get_token_summary())
+        assert len(result["steps"]) == 2
+        assert result["steps"][0]["step_name"] == "investigate"
+        assert result["steps"][1]["step_name"] == "implement"
+
+    @pytest.mark.asyncio
+    async def test_multiple_invocations_same_step_are_summed(self):
+        from autoskillit.server import _token_log as tl
+
+        tl.clear()
+        usage = {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
+        tl.record("implement", usage)
+        tl.record("implement", usage)
+        tl.record("implement", usage)
+        result = json.loads(await get_token_summary())
+        assert len(result["steps"]) == 1
+        assert result["steps"][0]["input_tokens"] == 300
+        assert result["steps"][0]["invocation_count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_total_field_sums_all_steps(self):
+        from autoskillit.server import _token_log as tl
+
+        tl.clear()
+        tl.record(
+            "plan",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 10,
+                "cache_read_input_tokens": 5,
+            },
+        )
+        tl.record(
+            "implement",
+            {
+                "input_tokens": 200,
+                "output_tokens": 80,
+                "cache_creation_input_tokens": 20,
+                "cache_read_input_tokens": 10,
+            },
+        )
+        result = json.loads(await get_token_summary())
+        assert result["total"]["input_tokens"] == 300
+        assert result["total"]["output_tokens"] == 130
+        assert result["total"]["cache_creation_input_tokens"] == 30
+        assert result["total"]["cache_read_input_tokens"] == 15
+
+    @pytest.mark.asyncio
+    async def test_clear_true_resets_after_returning(self):
+        from autoskillit.server import _token_log as tl
+
+        tl.clear()
+        tl.record(
+            "plan",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+        )
+        result = json.loads(await get_token_summary(clear=True))
+        assert len(result["steps"]) == 1
+        result2 = json.loads(await get_token_summary())
+        assert result2["steps"] == []
+
+    @pytest.mark.asyncio
+    async def test_response_shape(self):
+        from autoskillit.server import _token_log as tl
+
+        tl.clear()
+        tl.record(
+            "plan",
+            {
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "cache_creation_input_tokens": 1,
+                "cache_read_input_tokens": 2,
+            },
+        )
+        result = json.loads(await get_token_summary())
+        assert "steps" in result
+        assert "total" in result
+        assert isinstance(result["steps"], list)
+        total_keys = set(result["total"].keys())
+        assert {
+            "input_tokens",
+            "output_tokens",
+            "cache_creation_input_tokens",
+            "cache_read_input_tokens",
+        } <= total_keys

@@ -44,6 +44,7 @@ steps:
     with:
       skill_command: "/autoskillit:investigate the test failures"
       cwd: ${{ inputs.helper_dir }}
+      step_name: "investigate"
     on_success: plan
     on_failure: escalate
 
@@ -52,6 +53,7 @@ steps:
     with:
       skill_command: "/autoskillit:rectify the investigation findings"
       cwd: ${{ inputs.helper_dir }}
+      step_name: "plan"
     capture:
       plan_path: "${{ result.plan_path }}"
     on_success: implement
@@ -62,6 +64,7 @@ steps:
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge the plan"
       cwd: ${{ inputs.helper_dir }}
+      step_name: "implement"
     capture:
       worktree_path: "${{ result.worktree_path }}"
     retry:
@@ -76,6 +79,7 @@ steps:
     with:
       skill_command: "/autoskillit:retry-worktree the plan ${{ context.worktree_path }}"
       cwd: ${{ inputs.helper_dir }}
+      step_name: "retry_worktree"
     retry:
       max_attempts: 3
       on: needs_retry
@@ -96,6 +100,7 @@ steps:
     with:
       skill_command: "/autoskillit:assess-and-merge fix test failures"
       cwd: ${{ inputs.helper_dir }}
+      step_name: "assess"
     on_success: verify
     on_failure: classify
 
@@ -116,6 +121,7 @@ steps:
     with:
       skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: ${{ inputs.helper_dir }}
+      step_name: "audit_impl"
     note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
     on_success: merge
     on_failure: escalate

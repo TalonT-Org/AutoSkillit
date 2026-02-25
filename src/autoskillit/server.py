@@ -35,6 +35,7 @@ from fastmcp.prompts.prompt import Message, PromptResult
 
 from autoskillit._audit import FailureRecord, _audit_log
 from autoskillit._logging import get_logger
+from autoskillit._token_log import _token_log
 from autoskillit.config import AutomationConfig, load_config
 from autoskillit.process_lifecycle import (
     SubprocessResult,
@@ -891,6 +892,7 @@ async def run_skill(
     cwd: str,
     add_dir: str = "",
     model: str = "",
+    step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Run a Claude Code headless session with a skill command.
@@ -910,6 +912,8 @@ async def run_skill(
         cwd: Working directory for the claude session.
         add_dir: Optional additional directory to add to the session context.
         model: Model to use (e.g. "sonnet", "opus"). Empty string = use config default.
+        step_name: Optional YAML step key (e.g. "implement"). When set, token usage is
+            accumulated in the server-side token log, grouped by this name.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -975,6 +979,8 @@ async def run_skill(
             )
         except AttributeError:
             pass
+    if step_name:
+        _token_log.record(step_name, parsed.get("token_usage"))
     return result_str
 
 
@@ -983,6 +989,7 @@ async def run_skill_retry(
     skill_command: str,
     cwd: str,
     model: str = "",
+    step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Run a Claude Code headless session with retry detection.
@@ -1008,6 +1015,8 @@ async def run_skill_retry(
         skill_command: The full prompt including skill invocation.
         cwd: Working directory for the claude session.
         model: Model to use (e.g. "sonnet", "opus"). Empty string = use config default.
+        step_name: Optional YAML step key (e.g. "implement"). When set, token usage is
+            accumulated in the server-side token log, grouped by this name.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -1071,6 +1080,8 @@ async def run_skill_retry(
             )
         except AttributeError:
             pass
+    if step_name:
+        _token_log.record(step_name, parsed.get("token_usage"))
     return result_str
 
 
@@ -1497,6 +1508,34 @@ async def get_pipeline_report(clear: bool = False) -> str:
 
 
 @mcp.tool(tags={"automation"})
+async def get_token_summary(clear: bool = False) -> str:
+    """Return accumulated run_skill/run_skill_retry token usage grouped by step name.
+
+    Ungated — available without calling enable_tools.
+
+    Returns JSON with:
+    - steps: list of {step_name, input_tokens, output_tokens,
+                       cache_creation_input_tokens, cache_read_input_tokens,
+                       invocation_count}
+    - total: {input_tokens, output_tokens, cache_creation_input_tokens,
+               cache_read_input_tokens}
+
+    Args:
+        clear: If True, reset the token log after returning current data.
+    """
+    steps = _token_log.get_report()
+    if clear:
+        _token_log.clear()
+    total: dict[str, int] = {
+        "input_tokens": sum(s["input_tokens"] for s in steps),
+        "output_tokens": sum(s["output_tokens"] for s in steps),
+        "cache_creation_input_tokens": sum(s["cache_creation_input_tokens"] for s in steps),
+        "cache_read_input_tokens": sum(s["cache_read_input_tokens"] for s in steps),
+    }
+    return json.dumps({"steps": steps, "total": total})
+
+
+@mcp.tool(tags={"automation"})
 async def list_skill_scripts() -> str:
     """List available pipeline scripts from .autoskillit/scripts/.
 
@@ -1616,23 +1655,33 @@ async def load_skill_script(name: str) -> str:
       pass the step's `model` value as the `model` parameter to the tool.
 
     TOKEN USAGE TRACKING:
-    - run_skill and run_skill_retry responses include a `token_usage` field
-      (null when unavailable) with: input_tokens, output_tokens,
-      cache_creation_input_tokens, cache_read_input_tokens, and model_breakdown.
-    - Accumulate token_usage from each run_skill/run_skill_retry step result
-      into a running total during pipeline execution.
-    - At pipeline completion, render a token usage summary table:
+    - Pass step_name (the YAML step key, e.g. "implement") in the with: block when
+      calling run_skill or run_skill_retry. The server accumulates token usage
+      server-side, grouped by step name.
+    - At pipeline completion, call get_token_summary(clear=True) to retrieve the
+      accumulated report, then render it as a markdown table.
+    - get_token_summary returns:
+        {
+          "steps": [
+            {"step_name": "investigate", "input_tokens": 7, "output_tokens": 5939,
+             "cache_creation_input_tokens": 8495, "cache_read_input_tokens": 252179,
+             "invocation_count": 1},
+            ...
+          ],
+          "total": {"input_tokens": ..., "output_tokens": ...,
+                    "cache_creation_input_tokens": ..., "cache_read_input_tokens": ...}
+        }
+    - Render as:
 
       ## Token Usage Summary
-      | Step | input | output | cache_create | cache_read | Model |
-      |------|-------|--------|--------------|------------|-------|
-      | investigate | 45230 | 12400 | 8000 | 15000 | claude-sonnet-4-6 |
-      | implement | 98100 | 34200 | 12000 | 45000 | claude-sonnet-4-6 |
-      | test_check | — | — | — | — | — |
-      | **Total** | **143330** | **46600** | **20000** | **60000** | |
+      | Step | input | output | cache_create | cache_read |
+      |------|-------|--------|--------------|------------|
+      | investigate | 7 | 5939 | 8495 | 252179 |
+      | implement | 2031 | 122306 | 280601 | 19,071,323 |
+      | **Total** | ... | ... | ... | ... |
 
-    - Non-skill steps (test_check, run_cmd, merge_worktree) have no token
-      usage — show "—" in their row.
+    - Non-skill steps (test_check, run_cmd, merge_worktree) have no token usage —
+      they are not included in get_token_summary output. Do not add rows for them.
 
     ROUTING RULES — MANDATORY:
     - When a tool returns a failure result, you MUST follow the step's on_failure route.

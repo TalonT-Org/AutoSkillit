@@ -30,6 +30,7 @@ steps:
     with:
       skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
       cwd: ${{ inputs.work_dir }}
+      step_name: "plan"
     capture:
       plan_path: "${{ result.plan_path }}"
     on_success: review
@@ -40,6 +41,7 @@ steps:
     with:
       skill_command: "/autoskillit:review-approach the plan"
       cwd: ${{ inputs.work_dir }}
+      step_name: "review"
     on_success: dry_walkthrough
     on_failure: escalate
 
@@ -48,6 +50,7 @@ steps:
     with:
       skill_command: "/autoskillit:dry-walkthrough the plan"
       cwd: ${{ inputs.work_dir }}
+      step_name: "dry_walkthrough"
     on_success: implement
     on_failure: plan
     note: If walkthrough finds issues, re-plan.
@@ -57,6 +60,7 @@ steps:
     with:
       skill_command: "/autoskillit:implement-worktree the verified plan"
       cwd: ${{ inputs.work_dir }}
+      step_name: "implement"
     capture:
       worktree_path: "${{ result.worktree_path }}"
     retry:
@@ -71,6 +75,7 @@ steps:
     with:
       skill_command: "/autoskillit:retry-worktree the verified plan ${{ context.worktree_path }}"
       cwd: ${{ inputs.work_dir }}
+      step_name: "retry_worktree"
     retry:
       max_attempts: 3
       on: needs_retry
@@ -83,6 +88,7 @@ steps:
     with:
       skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: ${{ inputs.work_dir }}
+      step_name: "audit_impl"
     note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to done.
     on_success: done
     on_failure: escalate

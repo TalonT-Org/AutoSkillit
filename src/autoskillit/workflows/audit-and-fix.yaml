@@ -24,6 +24,7 @@ steps:
     with:
       skill_command: "/audit-${{ inputs.audit_type }}"
       cwd: ${{ inputs.work_dir }}
+      step_name: "audit"
     on_success: investigate
     on_failure: escalate
 
@@ -32,6 +33,7 @@ steps:
     with:
       skill_command: "/autoskillit:investigate the audit findings"
       cwd: ${{ inputs.work_dir }}
+      step_name: "investigate"
     on_success: plan
     on_failure: escalate
 
@@ -40,6 +42,7 @@ steps:
     with:
       skill_command: "/autoskillit:rectify the investigation"
       cwd: ${{ inputs.work_dir }}
+      step_name: "plan"
     on_success: implement
     on_failure: escalate
 
@@ -48,6 +51,7 @@ steps:
     with:
       skill_command: "/autoskillit:implement-worktree the plan"
       cwd: ${{ inputs.work_dir }}
+      step_name: "implement"
     capture:
       worktree_path: "${{ result.worktree_path }}"
     retry:
@@ -62,6 +66,7 @@ steps:
     with:
       skill_command: "/autoskillit:retry-worktree the plan ${{ context.worktree_path }}"
       cwd: ${{ inputs.work_dir }}
+      step_name: "retry_worktree"
     retry:
       max_attempts: 3
       on: needs_retry

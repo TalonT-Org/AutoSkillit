@@ -1,5 +1,7 @@
 """Shared test fixtures for autoskillit."""
 
+from collections.abc import Generator
+
 import pytest
 import structlog
 
@@ -91,3 +93,13 @@ def _reset_audit_log():
     _audit_log.clear()
     yield
     _audit_log.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_token_log() -> Generator[None, None, None]:
+    """Clear the module-level _token_log singleton before each test."""
+    from autoskillit._token_log import _token_log
+
+    _token_log.clear()
+    yield
+    _token_log.clear()

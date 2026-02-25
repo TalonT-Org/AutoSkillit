@@ -39,6 +39,7 @@ steps:
     with:
       skill_command: "/autoskillit:make-groups ${{ inputs.source_doc }}"
       cwd: "${{ inputs.work_dir }}"
+      step_name: "group"
     capture:
       groups_path: "${{ result.groups_path }}"
     on_success: plan
@@ -56,6 +57,7 @@ steps:
     with:
       skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
       cwd: "${{ inputs.work_dir }}"
+      step_name: "plan"
     capture:
       plan_path: "${{ result.plan_path }}"
     on_success: review
@@ -71,6 +73,7 @@ steps:
     with:
       skill_command: "/autoskillit:review-approach ${{ context.plan_path }}"
       cwd: "${{ inputs.work_dir }}"
+      step_name: "review"
     on_success: verify
     on_failure: escalate
     note: "Only execute this step if review_approach input is 'true'. Otherwise skip directly to verify."
@@ -80,6 +83,7 @@ steps:
     with:
       skill_command: "/autoskillit:dry-walkthrough ${{ context.plan_path }}"
       cwd: "${{ inputs.work_dir }}"
+      step_name: "verify"
     on_success: implement
     on_failure: escalate
     note: "Run for each plan_part sequentially. If review produced a report, pass it as additional arg."
@@ -89,6 +93,7 @@ steps:
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
       cwd: "${{ inputs.work_dir }}"
+      step_name: "implement"
     capture:
       worktree_path: "${{ result.worktree_path }}"
     on_success: test
@@ -104,6 +109,7 @@ steps:
     with:
       skill_command: "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}"
       cwd: "${{ inputs.work_dir }}"
+      step_name: "retry_worktree"
     on_success: test
     on_failure: escalate
     retry:
@@ -137,6 +143,7 @@ steps:
     with:
       skill_command: "/autoskillit:assess-and-merge ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.work_dir }}"
+      step_name: "fix"
     on_success: next_or_done
     on_failure: escalate
     retry:

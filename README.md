@@ -44,12 +44,12 @@ autoskillit init --test-command "pytest -v"   # non-interactive
 
 This creates `.autoskillit/config.yaml`. Use `--force` to overwrite an existing config.
 
-### 4. Enable tools in session
+### 4. Open the kitchen
 
-10 tools are gated by default. Activate them by typing the enable prompt shown by `autoskillit doctor` or in the MCP tool list. The prompt name depends on how the plugin was loaded:
+10 tools are gated by default. Activate them by typing the open prompt shown by `autoskillit doctor` or in the MCP tool list. The prompt name depends on how the plugin was loaded:
 
-- Plugin install: `/mcp__plugin_autoskillit_autoskillit__enable_tools`
-- `--plugin-dir`: `/mcp__autoskillit__enable_tools`
+- Plugin install: `/mcp__plugin_autoskillit_autoskillit__open_kitchen`
+- `--plugin-dir`: `/mcp__autoskillit__open_kitchen`
 
 This uses MCP prompts (user-only, model cannot invoke) and survives `--dangerously-skip-permissions`.
 
@@ -74,7 +74,7 @@ list_skill_scripts()          -> JSON array of {name, description, summary}
 load_skill_script("impl")    -> raw YAML content for agent to interpret
 ```
 
-Both tools are ungated — available without calling `enable_tools`.
+Both tools are ungated — available without calling `open_kitchen`.
 
 ## MCP Tools
 
@@ -90,7 +90,7 @@ Both tools are ungated — available without calling `enable_tools`.
 | `classify_fix` | Yes | Analyze diff to determine restart scope (full vs partial) |
 | `reset_workspace` | Yes | Reset workspace directory, preserving configured paths |
 | `read_db` | Yes | Run read-only SQL queries against SQLite databases |
-| `autoskillit_status` | No | Return version health and config status |
+| `kitchen_status` | No | Return version health and configuration status |
 | `list_skill_scripts` | No | List pipeline scripts from .autoskillit/scripts/ |
 | `load_skill_script` | No | Load a pipeline script by name as raw YAML |
 | `validate_script` | No | Validate a pipeline script against the workflow schema |

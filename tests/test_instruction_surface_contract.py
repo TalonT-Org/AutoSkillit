@@ -82,7 +82,7 @@ class TestServerToolSurfaceContract:
     """Server tool docstrings and prompts must name all forbidden tools."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self, monkeypatch):
+    def _close_kitchen(self, monkeypatch):
         import autoskillit.server as srv
 
         monkeypatch.setattr(srv, "_tools_enabled", False)

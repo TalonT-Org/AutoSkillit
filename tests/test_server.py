@@ -656,7 +656,7 @@ class TestKitchenStatus:
     """kitchen_status tool returns version health info (ungated)."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self, monkeypatch):
+    def _close_kitchen(self, monkeypatch):
         from autoskillit import server
 
         monkeypatch.setattr(server, "_tools_enabled", False)
@@ -718,7 +718,7 @@ class TestRecipeTools:
     """Tests for ungated list_recipes and load_recipe tools."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self, monkeypatch):
+    def _close_kitchen(self, monkeypatch):
         """Verify these tools work WITHOUT tool activation."""
         from autoskillit import server
 
@@ -840,7 +840,7 @@ class TestValidateRecipe:
     """Tests for ungated validate_recipe tool."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self, monkeypatch):
+    def _close_kitchen(self, monkeypatch):
         """Verify this tool works WITHOUT tool activation."""
         from autoskillit import server
 
@@ -2207,7 +2207,7 @@ class TestGatedToolAccess:
     """Prompt-gated tool access: tools disabled by default, user-only activation."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self, monkeypatch):
+    def _close_kitchen(self, monkeypatch):
         """Override the global autouse fixture — start disabled for gate tests."""
         from autoskillit import server
 
@@ -2369,7 +2369,7 @@ class TestOpenKitchenVersionReporting:
     """open_kitchen returns version info and warns on mismatch."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self, monkeypatch):
+    def _close_kitchen(self, monkeypatch):
         from autoskillit import server
 
         monkeypatch.setattr(server, "_tools_enabled", False)
@@ -3402,7 +3402,7 @@ class TestReadDbGating:
     """read_db gating test in disabled-tools context."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self, monkeypatch):
+    def _close_kitchen(self, monkeypatch):
         from autoskillit import server
 
         monkeypatch.setattr(server, "_tools_enabled", False)
@@ -4557,7 +4557,7 @@ class TestMigrationSuggestions:
     """MSUG1-MSUG4: load_recipe and validate_recipe surface migration warnings."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self, monkeypatch):
+    def _close_kitchen(self, monkeypatch):
         """Verify these tools work WITHOUT tool activation."""
         from autoskillit import server
 
@@ -4672,7 +4672,7 @@ class TestMigrationSuppression:
     """SUP1-SUP4: load_recipe respects migration.suppressed config."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self, monkeypatch):
+    def _close_kitchen(self, monkeypatch):
         """Verify these tools work WITHOUT tool activation."""
         from autoskillit import server
 
@@ -5161,9 +5161,9 @@ class TestRetryResponseFieldsTokenUsage:
 class TestGetPipelineReport:
     """get_pipeline_report is ungated and returns accumulated failures."""
 
-    # Override conftest to test WITHOUT enable_tools
+    # Override conftest to test WITHOUT open_kitchen
     @pytest.fixture(autouse=True)
-    def _disable_tools(self, monkeypatch):
+    def _close_kitchen(self, monkeypatch):
         import autoskillit.server as server_mod
 
         monkeypatch.setattr(server_mod, "_tools_enabled", False)
@@ -5178,7 +5178,7 @@ class TestGetPipelineReport:
         assert result["failures"] == []
 
     @pytest.mark.asyncio
-    async def test_ungated_does_not_require_enable_tools(self):
+    async def test_ungated_does_not_require_open_kitchen(self):
         """Must succeed even when _tools_enabled is False."""
         from autoskillit.server import _audit_log as al
 
@@ -5381,13 +5381,13 @@ class TestGetTokenSummary:
     """get_token_summary is ungated and returns accumulated token usage."""
 
     @pytest.fixture(autouse=True)
-    def _disable_tools(self, monkeypatch):
+    def _close_kitchen(self, monkeypatch):
         import autoskillit.server as server_mod
 
         monkeypatch.setattr(server_mod, "_tools_enabled", False)
 
     @pytest.mark.asyncio
-    async def test_ungated_does_not_require_enable_tools(self):
+    async def test_ungated_does_not_require_open_kitchen(self):
         result = json.loads(await get_token_summary())
         assert "error" not in result
 

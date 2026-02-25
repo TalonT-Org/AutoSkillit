@@ -7,7 +7,7 @@ import structlog
 
 
 @pytest.fixture(autouse=True)
-def _enable_tools_for_tests(monkeypatch):
+def _open_kitchen_for_tests(monkeypatch):
     """Enable AutoSkillit tools for all tests (mirrors production activation).
 
     Tests that need the disabled state should use a local fixture to override.

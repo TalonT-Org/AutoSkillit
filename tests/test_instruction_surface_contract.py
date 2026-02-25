@@ -151,3 +151,16 @@ class TestBundledWorkflowContract:
             all_text = " ".join(wf.kitchen_rules)
             missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in all_text]
             assert not missing, f"{wf_info.name} constraints missing tools: {missing}"
+
+
+class TestSkillMdToolNameCurrency:
+    """SKILL.md files must reference current tool names, not pre-rename identifiers."""
+
+    def test_write_recipe_skill_references_kitchen_status(self):
+        """write-recipe SKILL.md must use kitchen_status, not old autoskillit_status."""
+        skill_md = Path(__file__).parent.parent / "src/autoskillit/skills/write-recipe/SKILL.md"
+        content = skill_md.read_text()
+        assert "autoskillit_status" not in content, (
+            "write-recipe/SKILL.md still references 'autoskillit_status'. "
+            "Update all occurrences to 'kitchen_status'."
+        )

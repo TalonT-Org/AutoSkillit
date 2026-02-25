@@ -2,7 +2,7 @@
 """MCP server for orchestrating automated skill-driven workflows.
 
 All tools are gated by default and require the user to type the
-enable_tools prompt to activate. The prompt name depends on how the
+open_kitchen prompt to activate. The prompt name depends on how the
 server is loaded (plugin vs --plugin-dir). This uses MCP prompts
 (user-controlled, model cannot invoke) to set an in-memory flag
 that each tool checks before executing. The gate survives
@@ -102,7 +102,7 @@ def _require_enabled() -> str | None:
     """Return error JSON if tools are not enabled, None if OK.
 
     All tools are gated by default and can only be activated by the user
-    typing the enable_tools prompt. The prompt name is prefixed by Claude
+    typing the open_kitchen prompt. The prompt name is prefixed by Claude
     Code based on how the server was loaded (plugin vs --plugin-dir).
     This survives --dangerously-skip-permissions because MCP prompts are
     outside the permission system.
@@ -1494,7 +1494,7 @@ async def get_pipeline_report(clear: bool = False) -> str:
       - failures: list of {timestamp, skill_command, exit_code, subtype,
                             needs_retry, retry_reason, stderr}
 
-    This tool is ungated — it does not require enable_tools.
+    This tool is always available (not gated by open_kitchen).
     """
     report = _audit_log.get_report()
     if clear:
@@ -1511,7 +1511,7 @@ async def get_pipeline_report(clear: bool = False) -> str:
 async def get_token_summary(clear: bool = False) -> str:
     """Return accumulated run_skill/run_skill_retry token usage grouped by step name.
 
-    Ungated — available without calling enable_tools.
+    This tool is always available (not gated by open_kitchen).
 
     Returns JSON with:
     - steps: list of {step_name, input_tokens, output_tokens,
@@ -1933,7 +1933,7 @@ def get_recipe(name: str) -> str:
 
 @mcp.prompt()
 def open_kitchen() -> PromptResult:
-    """Enable AutoSkillit MCP tools for this session."""
+    """Open the AutoSkillit kitchen for service."""
     _open_kitchen_handler()
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
@@ -1966,6 +1966,6 @@ def open_kitchen() -> PromptResult:
 
 @mcp.prompt()
 def close_kitchen() -> PromptResult:
-    """Disable AutoSkillit MCP tools for this session."""
+    """Close the AutoSkillit kitchen."""
     _close_kitchen_handler()
     return PromptResult([Message("Kitchen is closed.", role="assistant")])

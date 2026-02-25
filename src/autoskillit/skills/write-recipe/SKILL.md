@@ -53,7 +53,7 @@ Every generated script MUST follow the workflow YAML schema:
 
 ```yaml
 name: {script-name}
-autoskillit_version: "{version}"  # from autoskillit_status.package_version
+autoskillit_version: "{version}"  # from kitchen_status.package_version
 description: {One line description.}
 summary: {Concise pipeline chain, e.g. "plan > verify > implement > test > merge"}
 
@@ -104,7 +104,7 @@ steps:
 | Field | Required | Type | Notes |
 |-------|----------|------|-------|
 | `name` | Yes | string | Unique identifier; validation fails if empty |
-| `autoskillit_version` | No | string | Package version that generated this script. Set from `autoskillit_status.package_version`. Used by migration system to detect outdated scripts. |
+| `autoskillit_version` | No | string | Package version that generated this script. Set from `kitchen_status.package_version`. Used by migration system to detect outdated scripts. |
 | `description` | Yes | string | Human-readable, shown in listings |
 | `summary` | Yes | string | Pipeline chain shown in `list_recipes` output |
 | `inputs` | No | mapping | Omit if the script has no configurable values |
@@ -485,7 +485,7 @@ When called directly as `/autoskillit:write-recipe`:
 3. Ask for the tool calls and routing (which MCP tools, what order, what conditions)
 4. Ask for inputs (what's configurable)
 5. Generate the script in the YAML format above
-6. Before saving, call `autoskillit_status` to get `package_version` and stamp `autoskillit_version: "{package_version}"` as the second top-level field (after `name`). This is required for the migration system to track script age.
+6. Before saving, call `kitchen_status` to get `package_version` and stamp `autoskillit_version: "{package_version}"` as the second top-level field (after `name`). This is required for the migration system to track script age.
 7. Save to `.autoskillit/recipes/{name}.yaml` (create the directory if needed)
 8. Call `validate_recipe` with the saved file path. If errors are returned, fix them and re-validate until clean. Review the `quality.warnings` in the response:
    - `DEAD_OUTPUT`: A `capture:` key is never referenced by any reachable downstream step via `${{ context.X }}`. Either add a `${{ context.X }}` reference in the downstream step's `with:` block, or remove the unused capture.

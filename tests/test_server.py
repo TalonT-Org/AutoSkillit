@@ -972,6 +972,9 @@ class TestToolSchemas:
         "bugfix-loop",
         "automation-mcp",
         "ai-executor",
+        "enable_tools",  # old open_kitchen prompt name
+        "disable_tools",  # old close_kitchen prompt name
+        "autoskillit_status",  # old kitchen_status tool name
     }
 
     REQUIRED_CROSS_REFS: dict[str, list[str]] = {
@@ -2288,6 +2291,59 @@ class TestGatedToolAccess:
         tools = [c for c in mcp._local_provider._components.values() if isinstance(c, Tool)]
         for tool in tools:
             assert "automation" in tool.tags, f"{tool.name} missing 'automation' tag"
+
+
+class TestPromptSchemas:
+    """Prompt descriptions must be accurate, current, and cooking-themed."""
+
+    def _get_prompts(self):
+        from fastmcp.prompts import Prompt
+
+        from autoskillit.server import mcp
+
+        return {
+            c.name: c for c in mcp._local_provider._components.values() if isinstance(c, Prompt)
+        }
+
+    PROMPT_FORBIDDEN_TERMS = [
+        "enable_tools",
+        "disable_tools",
+        "autoskillit_status",
+        "executor",
+        "bugfix-loop",
+    ]
+
+    def test_prompt_descriptions_contain_no_legacy_terms(self):
+        """Prompt descriptions must not use any pre-rename vocabulary."""
+        prompts = self._get_prompts()
+        for name, prompt in prompts.items():
+            desc = (prompt.description or "").lower()
+            for term in self.PROMPT_FORBIDDEN_TERMS:
+                assert term not in desc, (
+                    f"Prompt '{name}' description contains legacy term '{term}': {desc!r}"
+                )
+
+    def test_prompt_descriptions_are_cooking_themed(self):
+        """All prompt descriptions must use cooking vocabulary."""
+        prompts = self._get_prompts()
+        for name, prompt in prompts.items():
+            desc = (prompt.description or "").lower()
+            assert "kitchen" in desc, (
+                f"Prompt '{name}' description must contain cooking vocabulary "
+                f"('kitchen'): {desc!r}"
+            )
+
+    def test_close_kitchen_returns_cooking_confirmation(self):
+        """close_kitchen must return a cooking-themed closing message."""
+        from autoskillit.server import _close_kitchen_handler
+
+        _close_kitchen_handler()  # ensure closed state
+        prompts = self._get_prompts()
+        result = prompts["close_kitchen"].fn()
+        text = result.messages[0].content.text
+        assert "kitchen" in text.lower(), (
+            f"close_kitchen return message must be cooking-themed: {text!r}"
+        )
 
 
 class TestOpenKitchenVersionReporting:

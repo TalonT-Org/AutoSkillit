@@ -10,8 +10,8 @@ import dataclasses
 from collections.abc import Callable
 from enum import StrEnum
 
+from autoskillit.recipe_parser import Recipe
 from autoskillit.types import PIPELINE_FORBIDDEN_TOOLS
-from autoskillit.workflow_loader import Workflow
 
 
 class Severity(StrEnum):
@@ -44,7 +44,7 @@ class RuleSpec:
     name: str
     description: str
     severity: Severity
-    check: Callable[[Workflow], list[RuleFinding]]
+    check: Callable[[Recipe], list[RuleFinding]]
 
 
 _RULE_REGISTRY: list[RuleSpec] = []
@@ -58,8 +58,8 @@ def semantic_rule(
     """Decorator that registers a semantic validation rule."""
 
     def decorator(
-        fn: Callable[[Workflow], list[RuleFinding]],
-    ) -> Callable[[Workflow], list[RuleFinding]]:
+        fn: Callable[[Recipe], list[RuleFinding]],
+    ) -> Callable[[Recipe], list[RuleFinding]]:
         _RULE_REGISTRY.append(
             RuleSpec(name=name, description=description, severity=severity, check=fn)
         )
@@ -68,7 +68,7 @@ def semantic_rule(
     return decorator
 
 
-def run_semantic_rules(wf: Workflow) -> list[RuleFinding]:
+def run_semantic_rules(wf: Recipe) -> list[RuleFinding]:
     """Execute all registered semantic rules against a workflow."""
     findings: list[RuleFinding] = []
     for spec in _RULE_REGISTRY:
@@ -84,11 +84,11 @@ _SKILL_TOOLS = frozenset({"run_skill", "run_skill_retry"})
 
 
 @semantic_rule(
-    name="outdated-script-version",
-    description="Script's autoskillit_version is below the installed package version",
+    name="outdated-recipe-version",
+    description="Recipe's autoskillit_version is below the installed package version",
     severity=Severity.WARNING,
 )
-def _check_outdated_version(wf: Workflow) -> list[RuleFinding]:
+def _check_outdated_version(wf: Recipe) -> list[RuleFinding]:
     from packaging.version import Version
 
     from autoskillit import __version__
@@ -97,11 +97,11 @@ def _check_outdated_version(wf: Workflow) -> list[RuleFinding]:
     if script_ver is None:
         return [
             RuleFinding(
-                rule="outdated-script-version",
+                rule="outdated-recipe-version",
                 severity=Severity.WARNING,
                 step_name="(top-level)",
                 message=(
-                    f"Script has no autoskillit_version field. "
+                    f"Recipe has no autoskillit_version field. "
                     f"Current installed version is {__version__}. "
                     f"Run 'autoskillit migrate' to update."
                 ),
@@ -111,11 +111,11 @@ def _check_outdated_version(wf: Workflow) -> list[RuleFinding]:
     if Version(script_ver) < Version(__version__):
         return [
             RuleFinding(
-                rule="outdated-script-version",
+                rule="outdated-recipe-version",
                 severity=Severity.WARNING,
                 step_name="(top-level)",
                 message=(
-                    f"Script version {script_ver} is behind installed "
+                    f"Recipe version {script_ver} is behind installed "
                     f"version {__version__}. Run 'autoskillit migrate' to update."
                 ),
             )
@@ -125,15 +125,15 @@ def _check_outdated_version(wf: Workflow) -> list[RuleFinding]:
 
 
 @semantic_rule(
-    name="unsatisfied-skill-input",
+    name="missing-ingredient",
     description=(
-        "Skill steps must provide all required inputs via context or pipeline "
-        "input references. Detects when a skill requires an input that the "
+        "Skill steps must provide all required ingredients via context or recipe "
+        "ingredient references. Detects when a skill requires an ingredient that the "
         "step does not reference."
     ),
     severity=Severity.ERROR,
 )
-def _check_unsatisfied_skill_input(wf: Workflow) -> list[RuleFinding]:
+def _check_unsatisfied_skill_input(wf: Recipe) -> list[RuleFinding]:
     from autoskillit.contract_validator import (
         count_positional_args,
         extract_context_refs,
@@ -145,7 +145,7 @@ def _check_unsatisfied_skill_input(wf: Workflow) -> list[RuleFinding]:
 
     findings: list[RuleFinding] = []
     manifest = load_bundled_manifest()
-    input_names = set(wf.inputs.keys())
+    ingredient_names = set(wf.ingredients.keys())
     available_context: set[str] = set()
 
     for step_name, step in wf.steps.items():
@@ -173,10 +173,10 @@ def _check_unsatisfied_skill_input(wf: Workflow) -> list[RuleFinding]:
                             continue
                         name = req_input.name
                         if name not in provided:
-                            if name in available_context or name in input_names:
+                            if name in available_context or name in ingredient_names:
                                 msg = (
                                     f"Step '{step_name}' invokes {skill_name} which requires "
-                                    f"'{name}', and '{name}' is available in the pipeline "
+                                    f"'{name}', and '{name}' is available in the recipe "
                                     f"context, but the step does not reference it. Add "
                                     f"'${{{{ context.{name} }}}}' to the step's skill_command "
                                     f"or with: block."
@@ -185,12 +185,12 @@ def _check_unsatisfied_skill_input(wf: Workflow) -> list[RuleFinding]:
                                 msg = (
                                     f"Step '{step_name}' invokes {skill_name} which requires "
                                     f"'{name}', but '{name}' is not available at this point "
-                                    f"in the pipeline. No prior step captures it and it is "
-                                    f"not a pipeline input."
+                                    f"in the recipe. No prior step captures it and it is "
+                                    f"not a recipe ingredient."
                                 )
                             findings.append(
                                 RuleFinding(
-                                    rule="unsatisfied-skill-input",
+                                    rule="missing-ingredient",
                                     severity=Severity.ERROR,
                                     step_name=step_name,
                                     message=msg,
@@ -208,7 +208,7 @@ def _check_unsatisfied_skill_input(wf: Workflow) -> list[RuleFinding]:
     description="Steps that no other step routes to (and are not the entry point) are dead code.",
     severity=Severity.WARNING,
 )
-def _check_unreachable_steps(wf: Workflow) -> list[RuleFinding]:
+def _check_unreachable_steps(wf: Recipe) -> list[RuleFinding]:
     if not wf.steps:
         return []
 
@@ -247,7 +247,7 @@ def _check_unreachable_steps(wf: Workflow) -> list[RuleFinding]:
     description="The 'model' field only affects run_skill/run_skill_retry steps.",
     severity=Severity.WARNING,
 )
-def _check_model_on_non_skill(wf: Workflow) -> list[RuleFinding]:
+def _check_model_on_non_skill(wf: Recipe) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
         if step.model and step.tool not in _SKILL_TOOLS:
@@ -274,7 +274,7 @@ def _check_model_on_non_skill(wf: Workflow) -> list[RuleFinding]:
     ),
     severity=Severity.WARNING,
 )
-def _check_retry_without_capture(wf: Workflow) -> list[RuleFinding]:
+def _check_retry_without_capture(wf: Recipe) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     step_names = list(wf.steps.keys())
 
@@ -328,7 +328,7 @@ _WORKTREE_CREATING_SKILLS = frozenset(
     severity=Severity.ERROR,
 )
 def _check_worktree_retry_creates_new(
-    wf: Workflow,
+    wf: Recipe,
 ) -> list[RuleFinding]:
     from autoskillit.contract_validator import resolve_skill_name
 
@@ -370,11 +370,11 @@ def _check_worktree_retry_creates_new(
     ),
     severity=Severity.WARNING,
 )
-def _check_weak_constraint_text(wf: Workflow) -> list[RuleFinding]:
-    if not wf.constraints:
+def _check_weak_constraint_text(wf: Recipe) -> list[RuleFinding]:
+    if not wf.kitchen_rules:
         return []
 
-    all_text = " ".join(wf.constraints)
+    all_text = " ".join(wf.kitchen_rules)
     found = sum(1 for tool in PIPELINE_FORBIDDEN_TOOLS if tool in all_text)
     if found < len(PIPELINE_FORBIDDEN_TOOLS):
         tool_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
@@ -382,9 +382,9 @@ def _check_weak_constraint_text(wf: Workflow) -> list[RuleFinding]:
             RuleFinding(
                 rule="weak-constraint-text",
                 severity=Severity.WARNING,
-                step_name="(workflow)",
+                step_name="(recipe)",
                 message=(
-                    "Pipeline constraints do not enumerate forbidden native tools. "
+                    "Recipe kitchen_rules do not enumerate forbidden native tools. "
                     f"Name specific tools ({tool_list}) "
                     "for orchestrator discipline."
                 ),

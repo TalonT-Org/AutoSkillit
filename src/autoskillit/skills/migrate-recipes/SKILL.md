@@ -1,15 +1,15 @@
 ---
-name: migrate-scripts
-description: Apply versioned migration notes to an AutoSkillit pipeline script. Use when user confirms migration, called by agent or autoskillit migrate CLI, or invoked directly.
+name: migrate-recipes
+description: Apply versioned migration notes to an AutoSkillit recipe. Use when user confirms migration, called by agent or autoskillit migrate CLI, or invoked directly.
 ---
 
 # Migrate Scripts Skill
 
-Apply versioned migration notes to an AutoSkillit pipeline script.
+Apply versioned migration notes to an AutoSkillit recipe.
 
 ## When to Use
 
-- Called by an agent when user confirms migration (via load_skill_script suggestion)
+- Called by an agent when user confirms migration (via load_recipe suggestion)
 - Called by `autoskillit migrate` CLI command via `run_skill`
 - Can be invoked directly by user
 
@@ -25,13 +25,13 @@ The orchestrator provides all context in the prompt:
 
 **NEVER:**
 - Modify the original script file directly
-- Skip validation via validate_script
+- Skip validation via validate_recipe
 - Apply changes without checking if the pattern exists in the script
 - Declare success if validation fails after all retry attempts
 
 **ALWAYS:**
 - Save migrated scripts to .autoskillit/temp/migrations/{script_name}.yaml for review
-- Validate via validate_script before declaring success
+- Validate via validate_recipe before declaring success
 - Preserve all existing script fields not targeted by migration changes
 - Output a human-readable diff summary of changes applied
 
@@ -42,11 +42,11 @@ The orchestrator provides all context in the prompt:
    - `tool`: Match steps with this tool value
    - `skill_pattern`: Match steps whose `skill_command` in `with:` contains this substring
    - `missing_field`: The field that should be added if absent
-3. If changes are needed, use `/autoskillit:make-script-skill` in edit mode:
-   - Load the skill: invoke `/autoskillit:make-script-skill` via the Skill tool
+3. If changes are needed, use `/autoskillit:write-recipe` in edit mode:
+   - Load the skill: invoke `/autoskillit:write-recipe` via the Skill tool
    - Provide the current YAML content
    - Describe all needed changes with the `instruction` text and before/after examples
-4. Validate the result with `validate_script`
+4. Validate the result with `validate_recipe`
 5. On validation failure, retry up to 3 times with error feedback
 6. Ensure `autoskillit_version` is set to the `target_version`
 7. Save the migrated script to `.autoskillit/temp/migrations/{script_name}.yaml`
@@ -56,4 +56,4 @@ The orchestrator provides all context in the prompt:
 
 - If all 3 retry attempts fail validation, output the best attempt with a clear warning
 - If no patterns are detected (script already up to date), stamp the version and report no changes needed
-- If make-script-skill produces unexpected output, report the error and preserve the original script
+- If write-recipe produces unexpected output, report the error and preserve the original script

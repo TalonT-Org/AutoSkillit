@@ -27,12 +27,12 @@ from autoskillit.server import (
     CleanupResult,
     _build_skill_result,
     _check_dry_walkthrough,
+    _close_kitchen_handler,
     _compute_retry,
     _compute_success,
     _delete_directory_contents,
-    _disable_tools_handler,
-    _enable_tools_handler,
     _ensure_skill_prefix,
+    _open_kitchen_handler,
     _parse_pytest_summary,
     _require_enabled,
     _resolve_model,
@@ -40,13 +40,13 @@ from autoskillit.server import (
     _select_only_authorizer,
     _session_log_dir,
     _validate_select_only,
-    autoskillit_status,
     classify_fix,
     extract_token_usage,
     get_pipeline_report,
     get_token_summary,
-    list_skill_scripts,
-    load_skill_script,
+    kitchen_status,
+    list_recipes,
+    load_recipe,
     merge_worktree,
     parse_session_result,
     read_db,
@@ -57,7 +57,7 @@ from autoskillit.server import (
     run_skill,
     run_skill_retry,
     test_check,
-    validate_script,
+    validate_recipe,
 )
 from autoskillit.types import (
     CONTEXT_EXHAUSTION_MARKER,
@@ -641,18 +641,18 @@ class TestToolRegistration:
             "reset_workspace",
             "merge_worktree",
             "read_db",
-            "list_skill_scripts",
-            "load_skill_script",
-            "autoskillit_status",
-            "validate_script",
+            "list_recipes",
+            "load_recipe",
+            "kitchen_status",
+            "validate_recipe",
             "get_pipeline_report",
             "get_token_summary",
         }
         assert expected == tool_names
 
 
-class TestAutoskillitStatus:
-    """autoskillit_status tool returns version health info (ungated)."""
+class TestKitchenStatus:
+    """kitchen_status tool returns version health info (ungated)."""
 
     @pytest.fixture(autouse=True)
     def _disable_tools(self, monkeypatch):
@@ -664,7 +664,7 @@ class TestAutoskillitStatus:
     async def test_status_returns_version_info(self):
         from autoskillit import __version__
 
-        result = json.loads(await autoskillit_status())
+        result = json.loads(await kitchen_status())
         assert result["package_version"] == __version__
         assert result["plugin_json_version"] == __version__
         assert result["versions_match"] is True
@@ -680,7 +680,7 @@ class TestAutoskillitStatus:
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
         monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
-        result = json.loads(await autoskillit_status())
+        result = json.loads(await kitchen_status())
         assert result["versions_match"] is False
         assert "warning" in result
         assert "mismatch" in result["warning"].lower()
@@ -690,13 +690,13 @@ class TestAutoskillitStatus:
         from autoskillit import server
 
         assert server._tools_enabled is False
-        result = json.loads(await autoskillit_status())
+        result = json.loads(await kitchen_status())
         assert result["tools_enabled"] is False
         assert "package_version" in result
 
 
-class TestSkillScriptTools:
-    """Tests for ungated list_skill_scripts and load_skill_script tools."""
+class TestRecipeTools:
+    """Tests for ungated list_recipes and load_recipe tools."""
 
     @pytest.fixture(autouse=True)
     def _disable_tools(self, monkeypatch):
@@ -707,62 +707,67 @@ class TestSkillScriptTools:
 
     # SS1
     @pytest.mark.asyncio
-    @patch("autoskillit.script_loader.list_scripts")
+    @patch("autoskillit.recipe_loader.list_recipes")
     async def test_list_returns_json_object(self, mock_list):
-        """list_skill_scripts returns JSON object with scripts array (not gated)."""
-        from autoskillit.script_loader import ScriptInfo
+        """list_recipes returns JSON object with scripts array (not gated)."""
+        from autoskillit.recipe_loader import RecipeInfo
+        from autoskillit.recipe_parser import RecipeSource
         from autoskillit.types import LoadResult
 
         mock_list.return_value = LoadResult(
             items=[
-                ScriptInfo(
-                    name="impl", description="Implement", summary="plan > impl", path=Path("/x")
+                RecipeInfo(
+                    name="impl",
+                    description="Implement",
+                    summary="plan > impl",
+                    path=Path("/x"),
+                    source=RecipeSource.PROJECT,
                 ),
             ],
             errors=[],
         )
-        result = json.loads(await list_skill_scripts())
+        result = json.loads(await list_recipes())
         assert isinstance(result, dict)
-        assert len(result["scripts"]) == 1
-        assert result["scripts"][0]["name"] == "impl"
-        assert result["scripts"][0]["description"] == "Implement"
-        assert result["scripts"][0]["summary"] == "plan > impl"
+        assert len(result["recipes"]) == 1
+        assert result["recipes"][0]["name"] == "impl"
+        assert result["recipes"][0]["description"] == "Implement"
+        assert result["recipes"][0]["summary"] == "plan > impl"
         assert "errors" not in result
 
     # SS2
     @pytest.mark.asyncio
-    @patch("autoskillit.script_loader.load_script")
+    @patch("autoskillit.recipe_loader.load_recipe")
     async def test_load_returns_json_with_content(self, mock_load):
-        """load_skill_script returns JSON with content and suggestions (not gated)."""
-        mock_load.return_value = "name: test\ndescription: Test script\n"
-        result = json.loads(await load_skill_script(name="test"))
+        """load_recipe returns JSON with content and suggestions (not gated)."""
+        mock_load.return_value = "name: test\ndescription: Test recipe\n"
+        result = json.loads(await load_recipe(name="test"))
         assert "content" in result
         assert "suggestions" in result
         assert "name: test" in result["content"]
-        assert "description: Test script" in result["content"]
+        assert "description: Test recipe" in result["content"]
 
     # SS3
     @pytest.mark.asyncio
-    @patch("autoskillit.script_loader.load_script")
+    @patch("autoskillit.recipe_loader.load_recipe")
     async def test_load_unknown_returns_error(self, mock_load):
-        """load_skill_script returns error JSON for unknown script name."""
+        """load_recipe returns error JSON for unknown recipe name."""
         mock_load.return_value = None
-        result = json.loads(await load_skill_script(name="nonexistent"))
+        result = json.loads(await load_recipe(name="nonexistent"))
         assert "error" in result
         assert "nonexistent" in result["error"]
 
     # SS4
     @pytest.mark.asyncio
-    @patch("autoskillit.script_loader.list_scripts")
+    @patch("autoskillit.recipe_loader.list_recipes")
     async def test_list_reports_errors_in_response(self, mock_list):
-        """list_skill_scripts includes errors in JSON when scripts fail to parse."""
+        """list_recipes includes errors in JSON when recipes fail to parse."""
         from autoskillit.types import LoadReport, LoadResult
 
         mock_list.return_value = LoadResult(
             items=[],
-            errors=[LoadReport(path=Path("/scripts/broken.yaml"), error="bad yaml")],
+            errors=[LoadReport(path=Path("/recipes/broken.yaml"), error="bad yaml")],
         )
-        result = json.loads(await list_skill_scripts())
+        result = json.loads(await list_recipes())
         assert "errors" in result
         assert len(result["errors"]) == 1
         assert result["errors"][0]["file"] == "broken.yaml"
@@ -771,49 +776,49 @@ class TestSkillScriptTools:
     # SS5
     @pytest.mark.asyncio
     async def test_list_integration_discovers_frontmatter(self, tmp_path, monkeypatch):
-        """Server tool discovers scripts even when body has YAML-like syntax."""
+        """Server tool discovers recipes even when body has YAML-like syntax."""
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
-        scripts_dir.mkdir(parents=True)
-        (scripts_dir / "pipeline.yaml").write_text(
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "pipeline.yaml").write_text(
             "---\nname: test-pipe\ndescription: Test\nsummary: a > b\n---\n\n"
             "# Pipeline\n\nSETUP:\n  - project_dir = /path/to/project\n"
         )
-        result = json.loads(await list_skill_scripts())
-        assert len(result["scripts"]) == 1
-        assert result["scripts"][0]["name"] == "test-pipe"
+        result = json.loads(await list_recipes())
+        assert len(result["recipes"]) == 1
+        assert result["recipes"][0]["name"] == "test-pipe"
 
     # SS6
     @pytest.mark.asyncio
     async def test_list_integration_reports_errors(self, tmp_path, monkeypatch):
         """Server tool reports parse errors to the caller from real files."""
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
-        scripts_dir.mkdir(parents=True)
-        (scripts_dir / "broken.yaml").write_text(":: bad yaml {{[\n")
-        result = json.loads(await list_skill_scripts())
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "broken.yaml").write_text(":: bad yaml {{[\n")
+        result = json.loads(await list_recipes())
         assert "errors" in result
         assert len(result["errors"]) == 1
 
     # SS7
     @pytest.mark.asyncio
-    @patch("autoskillit.script_loader.load_script")
+    @patch("autoskillit.recipe_loader.load_recipe")
     async def test_load_returns_json_with_suggestions(self, mock_load):
-        """load_skill_script response always has 'content' and 'suggestions' keys."""
+        """load_recipe response always has 'content' and 'suggestions' keys."""
         mock_load.return_value = (
-            "name: test\ndescription: Test\nconstraints:\n  - test\n"
+            "name: test\ndescription: Test\nkitchen_rules:\n  - test\n"
             "steps:\n  do:\n    tool: test_check\n    model: sonnet\n"
             "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
         )
-        result = json.loads(await load_skill_script(name="test"))
+        result = json.loads(await load_recipe(name="test"))
         assert "content" in result
         assert "suggestions" in result
         assert isinstance(result["suggestions"], list)
         assert any(s["rule"] == "model-on-non-skill-step" for s in result["suggestions"])
 
 
-class TestValidateScript:
-    """Tests for ungated validate_script tool."""
+class TestValidateRecipe:
+    """Tests for ungated validate_recipe tool."""
 
     @pytest.fixture(autouse=True)
     def _disable_tools(self, monkeypatch):
@@ -824,14 +829,14 @@ class TestValidateScript:
 
     # VS1
     @pytest.mark.asyncio
-    async def test_valid_script_returns_success(self, tmp_path):
-        """validate_script returns valid=true for a correct script."""
+    async def test_valid_recipe_returns_success(self, tmp_path):
+        """validate_recipe returns valid=true for a correct recipe."""
         script = tmp_path / "good.yaml"
         script.write_text(
             "name: test\n"
-            "description: A test script\n"
+            "description: A test recipe\n"
             "summary: a > b\n"
-            "constraints:\n"
+            "kitchen_rules:\n"
             "  - test\n"
             "steps:\n"
             "  do_thing:\n"
@@ -844,47 +849,47 @@ class TestValidateScript:
             "    action: stop\n"
             '    message: "Done."\n'
         )
-        result = json.loads(await validate_script(script_path=str(script)))
+        result = json.loads(await validate_recipe(script_path=str(script)))
         assert result["valid"] is True
         assert result["errors"] == []
 
     # VS2
     @pytest.mark.asyncio
-    async def test_invalid_script_returns_errors(self, tmp_path):
-        """validate_script returns valid=false with errors for missing name."""
+    async def test_invalid_recipe_returns_errors(self, tmp_path):
+        """validate_recipe returns valid=false with errors for missing name."""
         script = tmp_path / "bad.yaml"
         script.write_text("description: Missing name\nsteps:\n  do_thing:\n    tool: run_cmd\n")
-        result = json.loads(await validate_script(script_path=str(script)))
+        result = json.loads(await validate_recipe(script_path=str(script)))
         assert result["valid"] is False
         assert any("name" in e for e in result["errors"])
 
     # VS3
     @pytest.mark.asyncio
     async def test_nonexistent_file_returns_error(self):
-        """validate_script returns error for nonexistent file."""
-        result = json.loads(await validate_script(script_path="/nonexistent/path.yaml"))
+        """validate_recipe returns error for nonexistent file."""
+        result = json.loads(await validate_recipe(script_path="/nonexistent/path.yaml"))
         assert "error" in result
         assert "not found" in result["error"].lower() or "File not found" in result["error"]
 
     # VS4
     @pytest.mark.asyncio
     async def test_malformed_yaml_returns_error(self, tmp_path):
-        """validate_script returns error for unparseable YAML."""
+        """validate_recipe returns error for unparseable YAML."""
         script = tmp_path / "broken.yaml"
         script.write_text("key: [\n  unclosed\n")
-        result = json.loads(await validate_script(script_path=str(script)))
+        result = json.loads(await validate_recipe(script_path=str(script)))
         assert "error" in result
         assert "yaml" in result["error"].lower() or "YAML" in result["error"]
 
     # T_OR10
     @pytest.mark.asyncio
-    async def test_validate_script_with_on_result(self, tmp_path):
-        """validate_script correctly validates on_result blocks."""
+    async def test_validate_recipe_with_on_result(self, tmp_path):
+        """validate_recipe correctly validates on_result blocks."""
         script = tmp_path / "good.yaml"
         script.write_text(
-            "name: result-script\n"
+            "name: result-recipe\n"
             "description: Uses on_result\n"
-            "constraints:\n"
+            "kitchen_rules:\n"
             "  - test\n"
             "steps:\n"
             "  classify:\n"
@@ -898,18 +903,18 @@ class TestValidateScript:
             "    action: stop\n"
             '    message: "Done."\n'
         )
-        result = json.loads(await validate_script(script_path=str(script)))
+        result = json.loads(await validate_recipe(script_path=str(script)))
         assert result["valid"] is True
 
     # DFQ14
     @pytest.mark.asyncio
-    async def test_validate_script_includes_quality_field(self, tmp_path):
-        """validate_script response includes quality report with warnings and summary."""
+    async def test_validate_recipe_includes_quality_field(self, tmp_path):
+        """validate_recipe response includes quality report with warnings and summary."""
         script = tmp_path / "dead.yaml"
         script.write_text(
             "name: dead-output-test\n"
             "description: Has a dead capture\n"
-            "constraints:\n"
+            "kitchen_rules:\n"
             "  - test\n"
             "steps:\n"
             "  impl:\n"
@@ -921,7 +926,7 @@ class TestValidateScript:
             "    action: stop\n"
             '    message: "Done."\n'
         )
-        result = json.loads(await validate_script(script_path=str(script)))
+        result = json.loads(await validate_recipe(script_path=str(script)))
         assert result["valid"] is True
         assert "quality" in result
         quality = result["quality"]
@@ -934,13 +939,13 @@ class TestValidateScript:
 
     # SEM1
     @pytest.mark.asyncio
-    async def test_validate_script_includes_semantic_findings(self, tmp_path):
-        """validate_script response includes 'semantic' key with findings."""
+    async def test_validate_recipe_includes_semantic_findings(self, tmp_path):
+        """validate_recipe response includes 'semantic' key with findings."""
         script = tmp_path / "semantic.yaml"
         script.write_text(
             "name: semantic-test\n"
             "description: Has model on non-skill step\n"
-            "constraints:\n"
+            "kitchen_rules:\n"
             "  - test\n"
             "steps:\n"
             "  check:\n"
@@ -951,7 +956,7 @@ class TestValidateScript:
             "    action: stop\n"
             '    message: "Done."\n'
         )
-        result = json.loads(await validate_script(script_path=str(script)))
+        result = json.loads(await validate_recipe(script_path=str(script)))
         assert "semantic" in result
         assert isinstance(result["semantic"], list)
         assert any(f["rule"] == "model-on-non-skill-step" for f in result["semantic"])
@@ -970,14 +975,14 @@ class TestToolSchemas:
     }
 
     REQUIRED_CROSS_REFS: dict[str, list[str]] = {
-        "list_skill_scripts": [
-            "make-script-skill",
+        "list_recipes": [
+            "write-recipe",
         ],
-        "load_skill_script": [
-            "make-script-skill",
+        "load_recipe": [
+            "write-recipe",
         ],
-        "validate_script": [
-            "make-script-skill",
+        "validate_recipe": [
+            "write-recipe",
         ],
     }
 
@@ -1038,8 +1043,8 @@ class TestToolSchemas:
         # Must mention at least one skill as routing target
         assert "investigate" in desc or "implement" in desc
 
-    def test_script_tools_have_disambiguation(self):
-        """All script-related tools must carry the 'NOT slash commands' disclaimer."""
+    def test_recipe_tools_have_disambiguation(self):
+        """All recipe-related tools must carry the 'NOT slash commands' disclaimer."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -1047,8 +1052,8 @@ class TestToolSchemas:
         tools = {
             c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
         }
-        script_tools = ["list_skill_scripts", "load_skill_script", "validate_script"]
-        for tool_name in script_tools:
+        recipe_tools = ["list_recipes", "load_recipe", "validate_recipe"]
+        for tool_name in recipe_tools:
             tool = tools.get(tool_name)
             assert tool is not None, f"Tool '{tool_name}' not found"
             desc = tool.description or ""
@@ -1056,8 +1061,8 @@ class TestToolSchemas:
                 f"Tool '{tool_name}' must contain 'NOT slash commands' disclaimer"
             )
 
-    def test_load_skill_script_names_all_forbidden_tools(self):
-        """load_skill_script must enumerate all forbidden native tools."""
+    def test_load_recipe_names_all_forbidden_tools(self):
+        """load_recipe must enumerate all forbidden native tools."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -1065,11 +1070,11 @@ class TestToolSchemas:
         tools = {
             c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
         }
-        desc = tools["load_skill_script"].description or ""
+        desc = tools["load_recipe"].description or ""
 
         missing = [t for t in self.FORBIDDEN_NATIVE_TOOLS if t not in desc]
         assert not missing, (
-            f"load_skill_script docstring must name all forbidden tools. Missing: {missing}"
+            f"load_recipe docstring must name all forbidden tools. Missing: {missing}"
         )
 
     def test_pipeline_tools_have_orchestrator_guidance(self):
@@ -1129,17 +1134,17 @@ class TestToolSchemas:
                 f"{tool_name} docstring must name all forbidden tools. Missing: {missing}"
             )
 
-    def test_bundled_workflow_constraints_name_all_forbidden_tools(self):
-        """All bundled workflow constraint blocks must name every forbidden tool."""
+    def test_bundled_recipe_kitchen_rules_name_all_forbidden_tools(self):
+        """All bundled recipe kitchen_rules blocks must name every forbidden tool."""
+        from autoskillit.recipe_parser import builtin_recipes_dir, load_recipe
         from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
-        from autoskillit.workflow_loader import builtin_workflows_dir, load_workflow
 
-        wf_dir = builtin_workflows_dir()
+        wf_dir = builtin_recipes_dir()
         for path in sorted(wf_dir.glob("*.yaml")):
-            wf = load_workflow(path)
-            all_constraint_text = " ".join(wf.constraints)
+            wf = load_recipe(path)
+            all_constraint_text = " ".join(wf.kitchen_rules)
             missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in all_constraint_text]
-            assert not missing, f"{path.name} constraints missing forbidden tools: {missing}"
+            assert not missing, f"{path.name} kitchen_rules missing forbidden tools: {missing}"
 
 
 def _extract_docstring_sections(desc: str) -> dict[str, str]:
@@ -1202,8 +1207,8 @@ class TestDocstringSemantics:
     routing, and cross-section consistency.
     """
 
-    def test_load_skill_script_action_protocol_routes_through_skill(self):
-        """After loading section must route modifications through make-script-skill."""
+    def test_load_recipe_action_protocol_routes_through_skill(self):
+        """After loading section must route modifications through write-recipe."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -1211,18 +1216,18 @@ class TestDocstringSemantics:
         tools = {
             c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
         }
-        desc = tools["load_skill_script"].description or ""
+        desc = tools["load_recipe"].description or ""
         sections = _extract_docstring_sections(desc)
 
         after_loading = sections.get("after loading", "")
-        assert after_loading, "load_skill_script missing 'After loading' section"
+        assert after_loading, "load_recipe missing 'After loading' section"
 
-        # Modification requests must route through make-script-skill
-        assert "make-script-skill" in after_loading, (
-            "After loading section must route script modifications through make-script-skill"
+        # Modification requests must route through write-recipe
+        assert "write-recipe" in after_loading, (
+            "After loading section must route recipe modifications through write-recipe"
         )
 
-    def test_load_skill_script_after_loading_does_not_instruct_direct_modification(self):
+    def test_load_recipe_after_loading_does_not_instruct_direct_modification(self):
         """After loading section must not instruct direct file modification."""
         from fastmcp.tools import Tool
 
@@ -1231,22 +1236,22 @@ class TestDocstringSemantics:
         tools = {
             c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
         }
-        desc = tools["load_skill_script"].description or ""
+        desc = tools["load_recipe"].description or ""
         sections = _extract_docstring_sections(desc)
 
         after_loading = sections.get("after loading", "")
-        assert after_loading, "load_skill_script missing 'After loading' section"
+        assert after_loading, "load_recipe missing 'After loading' section"
 
         direct_edit_phrases = [
             "apply them",
             "Save changes to the original file",
-            "Save as a new script",
+            "Save as a new recipe",
         ]
         found = [p for p in direct_edit_phrases if p.lower() in after_loading.lower()]
         assert not found, f"After loading section instructs direct modification: {found}"
 
-    def test_validate_script_has_failure_routing(self):
-        """validate_script must route validation failures to make-script-skill."""
+    def test_validate_recipe_has_failure_routing(self):
+        """validate_recipe must route validation failures to write-recipe."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -1254,24 +1259,24 @@ class TestDocstringSemantics:
         tools = {
             c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
         }
-        desc = tools["validate_script"].description or ""
+        desc = tools["validate_recipe"].description or ""
 
         # Must reference the failure return case
         assert "false" in desc.lower(), (
-            "validate_script must document the failure case (e.g. {valid: false})"
+            "validate_recipe must document the failure case (e.g. {valid: false})"
         )
 
-        # Failure routing must direct to make-script-skill for remediation
+        # Failure routing must direct to write-recipe for remediation
         desc_lower = desc.lower()
         has_remediation_context = any(
             phrase in desc_lower for phrase in ["fix", "remediat", "correct the"]
         )
         assert has_remediation_context, (
-            "validate_script must route failures to make-script-skill for remediation"
+            "validate_recipe must route failures to write-recipe for remediation"
         )
 
-    def test_validate_script_does_not_endorse_direct_editing(self):
-        """validate_script must not normalize direct script editing."""
+    def test_validate_recipe_does_not_endorse_direct_editing(self):
+        """validate_recipe must not normalize direct recipe editing."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -1279,13 +1284,13 @@ class TestDocstringSemantics:
         tools = {
             c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
         }
-        desc = tools["validate_script"].description or ""
+        desc = tools["validate_recipe"].description or ""
 
-        # "or editing a script" without qualifying through make-script-skill
+        # "or editing a recipe" without qualifying through write-recipe
         # normalizes the model directly editing YAML files
-        assert "or editing a script" not in desc, (
-            "validate_script normalizes direct editing with 'or editing a script'; "
-            "should qualify as going through make-script-skill"
+        assert "or editing a recipe" not in desc, (
+            "validate_recipe normalizes direct editing with 'or editing a recipe'; "
+            "should qualify as going through write-recipe"
         )
 
     def test_tool_description_sections_are_not_contradictory(self):
@@ -1297,7 +1302,7 @@ class TestDocstringSemantics:
         tools = {
             c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
         }
-        desc = tools["load_skill_script"].description or ""
+        desc = tools["load_recipe"].description or ""
         sections = _extract_docstring_sections(desc)
 
         after_loading = sections.get("after loading", "")
@@ -1320,8 +1325,8 @@ class TestDocstringSemantics:
                 f"but 'After loading' instructs: {found}"
             )
 
-    def test_load_skill_script_has_preview_format_spec(self):
-        """load_skill_script must specify presentation format for loaded scripts."""
+    def test_load_recipe_has_preview_format_spec(self):
+        """load_recipe must specify presentation format for loaded recipes."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -1329,17 +1334,17 @@ class TestDocstringSemantics:
         tools = {
             c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
         }
-        desc = tools["load_skill_script"].description or ""
+        desc = tools["load_recipe"].description or ""
 
-        required_fields = ["constraints", "note", "retry", "capture"]
+        required_fields = ["kitchen_rules", "note", "retry", "capture"]
         found = [f for f in required_fields if f in desc.lower()]
         assert len(found) >= 3, (
-            f"load_skill_script must specify a preview format naming critical script "
+            f"load_recipe must specify a preview format naming critical recipe "
             f"fields. Found only: {found}"
         )
 
-    def test_script_tool_descriptions_are_coherent(self):
-        """Script tools must form a coherent policy about script modification."""
+    def test_recipe_tool_descriptions_are_coherent(self):
+        """Recipe tools must form a coherent policy about recipe modification."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -1350,31 +1355,29 @@ class TestDocstringSemantics:
 
         failures = []
 
-        # load_skill_script: modifications must route through make-script-skill
-        load_desc = tools["load_skill_script"].description or ""
+        # load_recipe: modifications must route through write-recipe
+        load_desc = tools["load_recipe"].description or ""
         load_sections = _extract_docstring_sections(load_desc)
         after_loading = load_sections.get("after loading", "")
         if "apply them" in after_loading.lower():
-            failures.append(
-                "load_skill_script 'After loading' instructs direct editing ('apply them')"
-            )
+            failures.append("load_recipe 'After loading' instructs direct editing ('apply them')")
 
-        # validate_script: failure must route through make-script-skill
-        validate_desc = tools["validate_script"].description or ""
+        # validate_recipe: failure must route through write-recipe
+        validate_desc = tools["validate_recipe"].description or ""
         validate_lower = validate_desc.lower()
         has_failure_routing = (
-            "make-script-skill" in validate_desc
+            "write-recipe" in validate_desc
             and any(w in validate_lower for w in ["fix", "fail", "invalid", "error"])
             and "false" in validate_lower
         )
         if not has_failure_routing:
-            failures.append("validate_script has no failure routing through make-script-skill")
+            failures.append("validate_recipe has no failure routing through write-recipe")
 
-        # validate_script: must not normalize direct editing
-        if "or editing a script" in validate_desc:
-            failures.append("validate_script normalizes direct editing ('or editing a script')")
+        # validate_recipe: must not normalize direct editing
+        if "or editing a recipe" in validate_desc:
+            failures.append("validate_recipe normalizes direct editing ('or editing a recipe')")
 
-        assert not failures, "Script tools lack coherent modification policy:\n" + "\n".join(
+        assert not failures, "Recipe tools lack coherent modification policy:\n" + "\n".join(
             f"  - {f}" for f in failures
         )
 
@@ -2199,17 +2202,17 @@ class TestGatedToolAccess:
     @pytest.mark.asyncio
     @patch("autoskillit.server.run_managed_async")
     async def test_tools_work_after_enable(self, mock_run):
-        """After enable_tools prompt handler sets the flag, tools execute normally."""
-        _enable_tools_handler()
+        """After open_kitchen prompt handler sets the flag, tools execute normally."""
+        _open_kitchen_handler()
         mock_run.return_value = _make_result(0, "hello\n", "")
         result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))
         assert result["success"] is True
 
     @pytest.mark.asyncio
     async def test_disable_reverses_enable(self):
-        """After disable_tools prompt handler, tools return error again."""
-        _enable_tools_handler()
-        _disable_tools_handler()
+        """After close_kitchen prompt handler, tools return error again."""
+        _open_kitchen_handler()
+        _close_kitchen_handler()
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
         assert result["success"] is False
         assert result["is_error"] is True
@@ -2221,17 +2224,17 @@ class TestGatedToolAccess:
         assert server._tools_enabled is False
 
     def test_prompts_registered(self):
-        """enable_tools and disable_tools prompts are registered on the server."""
+        """open_kitchen and close_kitchen prompts are registered on the server."""
         from fastmcp.prompts import Prompt
 
         from autoskillit.server import mcp
 
         prompts = [c for c in mcp._local_provider._components.values() if isinstance(c, Prompt)]
         prompt_names = {p.name for p in prompts}
-        assert prompt_names == {"enable_tools", "disable_tools"}
+        assert prompt_names == {"open_kitchen", "close_kitchen"}
 
     def test_all_tools_still_registered(self):
-        """All 15 tools remain registered (gated + ungated)."""
+        """All 16 tools remain registered (gated + ungated)."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -2247,12 +2250,12 @@ class TestGatedToolAccess:
             "merge_worktree",
             "reset_test_dir",
             "classify_fix",
-            "autoskillit_status",
+            "kitchen_status",
             "reset_workspace",
             "read_db",
-            "list_skill_scripts",
-            "load_skill_script",
-            "validate_script",
+            "list_recipes",
+            "load_recipe",
+            "validate_recipe",
             "get_pipeline_report",
             "get_token_summary",
         }
@@ -2274,7 +2277,7 @@ class TestGatedToolAccess:
         assert parsed["success"] is False
         assert parsed["is_error"] is True
         assert parsed["subtype"] == "gate_error"
-        assert "enable_tools" in parsed["result"]
+        assert "open_kitchen" in parsed["result"] or "open_kitchen" in parsed["result"]
 
     def test_all_tools_tagged_automation(self):
         """All 8 tools have the 'automation' tag for future visibility control."""
@@ -2287,8 +2290,8 @@ class TestGatedToolAccess:
             assert "automation" in tool.tags, f"{tool.name} missing 'automation' tag"
 
 
-class TestEnableToolsVersionReporting:
-    """enable_tools returns version info and warns on mismatch."""
+class TestOpenKitchenVersionReporting:
+    """open_kitchen returns version info and warns on mismatch."""
 
     @pytest.fixture(autouse=True)
     def _disable_tools(self, monkeypatch):
@@ -2302,40 +2305,40 @@ class TestEnableToolsVersionReporting:
         content = result.messages[0].content
         return content.text if hasattr(content, "text") else str(content)
 
-    def test_enable_tools_instructs_status_call(self):
-        from autoskillit.server import enable_tools
+    def test_open_kitchen_instructs_status_call(self):
+        from autoskillit.server import open_kitchen
 
-        result = enable_tools()
+        result = open_kitchen()
         msg = self._prompt_text(result)
-        assert "autoskillit_status" in msg
+        assert "kitchen_status" in msg
 
-    def test_enable_tools_carries_orchestrator_contract(self):
-        """enable_tools prompt must use prohibition framing and name all forbidden tools."""
-        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS, enable_tools
+    def test_open_kitchen_carries_orchestrator_contract(self):
+        """open_kitchen prompt must use prohibition framing and name all forbidden tools."""
+        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS, open_kitchen
 
-        result = enable_tools()
+        result = open_kitchen()
         msg = self._prompt_text(result)
 
         # Must name every forbidden tool
         missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in msg]
-        assert not missing, f"enable_tools prompt missing forbidden tools: {missing}"
+        assert not missing, f"open_kitchen prompt missing forbidden tools: {missing}"
 
         # Must use prohibition framing
         prohibition_terms = ["NEVER", "Do NOT", "MUST NOT", "are prohibited"]
         assert any(term in msg for term in prohibition_terms), (
-            "enable_tools prompt must use prohibition framing "
+            "open_kitchen prompt must use prohibition framing "
             f"(one of {prohibition_terms}), got: {msg[:200]}"
         )
 
         # Must NOT use the conditional escape-hatch phrasing
         assert "During pipeline execution, only use" not in msg, (
-            "enable_tools prompt must not use conditional 'During pipeline execution, only use' "
+            "open_kitchen prompt must not use conditional 'During pipeline execution, only use' "
             "phrasing — the restriction should be unconditional"
         )
 
-    def test_enable_tools_still_enables_on_mismatch(self, tmp_path, monkeypatch):
+    def test_open_kitchen_still_enables_on_mismatch(self, tmp_path, monkeypatch):
         from autoskillit import server
-        from autoskillit.server import enable_tools
+        from autoskillit.server import open_kitchen
 
         plugin_dir = tmp_path / ".claude-plugin"
         plugin_dir.mkdir()
@@ -2343,7 +2346,7 @@ class TestEnableToolsVersionReporting:
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
         monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
-        enable_tools()
+        open_kitchen()
         assert server._tools_enabled is True
 
 
@@ -3399,7 +3402,7 @@ class TestRunSkillPrefix:
         )
         await run_skill("/investigate error", "/tmp")
         cmd = mock_run.call_args[0][0]
-        assert "%%AUTOSKILLIT_COMPLETE%%" in cmd[2]
+        assert "%%ORDER_UP%%" in cmd[2]
 
 
 class TestRunSkillRetryPrefix:
@@ -3497,7 +3500,7 @@ class TestRunSkillInjectsCompletionDirective:
         cmd = mock_run.call_args[0][0]
         # The -p argument is at index 2
         skill_arg = cmd[2]
-        assert "%%AUTOSKILLIT_COMPLETE%%" in skill_arg
+        assert "%%ORDER_UP%%" in skill_arg
         assert "ORCHESTRATION DIRECTIVE" in skill_arg
 
 
@@ -4012,7 +4015,7 @@ class TestRetryResponseFieldsIncludesStderr:
 
 
 class TestLoadSkillScriptFailurePredicates:
-    """The load_skill_script tool description documents failure predicates."""
+    """The load_recipe tool description documents failure predicates."""
 
     def test_description_documents_run_skill_failure(self):
         """The routing rules must define failure for run_skill, not just test_check."""
@@ -4023,7 +4026,7 @@ class TestLoadSkillScriptFailurePredicates:
         tools = {
             c.name: c for c in mcp._local_provider._components.values() if isinstance(c, Tool)
         }
-        desc = tools["load_skill_script"].description or ""
+        desc = tools["load_recipe"].description or ""
         assert "run_skill" in desc
         assert "success" in desc.lower()
 
@@ -4097,7 +4100,7 @@ class TestParseFallbackRejectsUntypedJson:
 class TestCompletionViaMonitorKill:
     """Completion detected by monitor + kill returncode is not failure."""
 
-    MARKER = "%%AUTOSKILLIT_COMPLETE%%"
+    MARKER = "%%ORDER_UP%%"
 
     def test_completion_via_monitor_kill_is_not_failure(self):
         """When the session monitor detects completion and kills the process,
@@ -4142,7 +4145,7 @@ class TestCompletionViaMonitorKill:
 class TestMarkerCrossValidation:
     """Completion marker cross-validation catches misclassified sessions."""
 
-    MARKER = "%%AUTOSKILLIT_COMPLETE%%"
+    MARKER = "%%ORDER_UP%%"
 
     def test_marker_only_result_is_not_success(self):
         """Result containing only the marker with no real content is failure."""
@@ -4476,7 +4479,7 @@ def _write_minimal_script(scripts_dir: Path, name: str = "test-script") -> Path:
 
 
 class TestMigrationSuggestions:
-    """MSUG1-MSUG4: load_skill_script and validate_script surface migration warnings."""
+    """MSUG1-MSUG4: load_recipe and validate_recipe surface migration warnings."""
 
     @pytest.fixture(autouse=True)
     def _disable_tools(self, monkeypatch):
@@ -4488,9 +4491,9 @@ class TestMigrationSuggestions:
     # MSUG1
     @pytest.mark.asyncio
     async def test_load_includes_outdated_version_when_not_suppressed(self, tmp_path, monkeypatch):
-        """MSUG1: load_skill_script includes outdated-script-version when not suppressed."""
+        """MSUG1: load_recipe includes outdated-script-version when not suppressed."""
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         _write_minimal_script(scripts_dir, "test-script")
 
         from autoskillit import server
@@ -4502,30 +4505,30 @@ class TestMigrationSuggestions:
             AutomationConfig(migration=MigrationConfig(suppressed=[])),
         )
 
-        result = json.loads(await load_skill_script(name="test-script"))
+        result = json.loads(await load_recipe(name="test-script"))
         assert "content" in result
         assert "suggestions" in result
         rules = [s["rule"] for s in result["suggestions"]]
-        assert "outdated-script-version" in rules
+        assert "outdated-recipe-version" in rules
 
     # MSUG2
     @pytest.mark.asyncio
     async def test_validate_always_includes_outdated_version(self, tmp_path):
-        """MSUG2: validate_script always includes outdated-script-version in semantic results."""
+        """MSUG2: validate_recipe always includes outdated-script-version in semantic results."""
         script = tmp_path / "test-script.yaml"
         script.write_text(_MINIMAL_SCRIPT_YAML)
 
-        result = json.loads(await validate_script(script_path=str(script)))
+        result = json.loads(await validate_recipe(script_path=str(script)))
         assert "semantic" in result
         rules = [s["rule"] for s in result["semantic"]]
-        assert "outdated-script-version" in rules
+        assert "outdated-recipe-version" in rules
 
     # MSUG3
     @pytest.mark.asyncio
     async def test_load_includes_migration_note_description(self, tmp_path, monkeypatch):
         """MSUG3: Suggestions include migration note description when available."""
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         _write_minimal_script(scripts_dir, "test-script")
 
         # Create a fake migrations directory with a migration YAML that applies
@@ -4557,7 +4560,7 @@ class TestMigrationSuggestions:
             AutomationConfig(migration=MigrationConfig(suppressed=[])),
         )
 
-        result = json.loads(await load_skill_script(name="test-script"))
+        result = json.loads(await load_recipe(name="test-script"))
         assert "suggestions" in result
         migration_suggestions = [
             s for s in result["suggestions"] if s["rule"].startswith("migration-")
@@ -4572,7 +4575,7 @@ class TestMigrationSuggestions:
     async def test_load_outdated_version_message_includes_ask_user(self, tmp_path, monkeypatch):
         """MSUG4: Suggestion message includes agent instructions for user."""
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         _write_minimal_script(scripts_dir, "test-script")
 
         from autoskillit import server
@@ -4584,14 +4587,14 @@ class TestMigrationSuggestions:
             AutomationConfig(migration=MigrationConfig(suppressed=[])),
         )
 
-        result = json.loads(await load_skill_script(name="test-script"))
-        outdated = [s for s in result["suggestions"] if s["rule"] == "outdated-script-version"]
+        result = json.loads(await load_recipe(name="test-script"))
+        outdated = [s for s in result["suggestions"] if s["rule"] == "outdated-recipe-version"]
         assert len(outdated) == 1
         assert "Ask the user: migrate now or suppress?" in outdated[0]["message"]
 
 
 class TestMigrationSuppression:
-    """SUP1-SUP4: load_skill_script respects migration.suppressed config."""
+    """SUP1-SUP4: load_recipe respects migration.suppressed config."""
 
     @pytest.fixture(autouse=True)
     def _disable_tools(self, monkeypatch):
@@ -4607,7 +4610,7 @@ class TestMigrationSuppression:
     ):
         """SUP1: outdated-script-version absent when script is suppressed."""
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         _write_minimal_script(scripts_dir, "test-script")
 
         from autoskillit import server
@@ -4619,10 +4622,10 @@ class TestMigrationSuppression:
             AutomationConfig(migration=MigrationConfig(suppressed=["test-script"])),
         )
 
-        result = json.loads(await load_skill_script(name="test-script"))
+        result = json.loads(await load_recipe(name="test-script"))
         assert "suggestions" in result
         rules = [s["rule"] for s in result["suggestions"]]
-        assert "outdated-script-version" not in rules
+        assert "outdated-recipe-version" not in rules
 
     # SUP2
     @pytest.mark.asyncio
@@ -4631,7 +4634,7 @@ class TestMigrationSuppression:
     ):
         """SUP2: outdated-script-version present when script is not suppressed."""
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         _write_minimal_script(scripts_dir, "test-script")
 
         from autoskillit import server
@@ -4643,10 +4646,10 @@ class TestMigrationSuppression:
             AutomationConfig(migration=MigrationConfig(suppressed=["other-script"])),
         )
 
-        result = json.loads(await load_skill_script(name="test-script"))
+        result = json.loads(await load_recipe(name="test-script"))
         assert "suggestions" in result
         rules = [s["rule"] for s in result["suggestions"]]
-        assert "outdated-script-version" in rules
+        assert "outdated-recipe-version" in rules
 
     # SUP3
     @pytest.mark.asyncio
@@ -4655,7 +4658,7 @@ class TestMigrationSuppression:
     ):
         """SUP3: migration-{id} suggestions also filtered when script is suppressed."""
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         _write_minimal_script(scripts_dir, "test-script")
 
         import autoskillit
@@ -4684,7 +4687,7 @@ class TestMigrationSuppression:
             AutomationConfig(migration=MigrationConfig(suppressed=["test-script"])),
         )
 
-        result = json.loads(await load_skill_script(name="test-script"))
+        result = json.loads(await load_recipe(name="test-script"))
         assert "suggestions" in result
         migration_rules = [
             s["rule"] for s in result["suggestions"] if s["rule"].startswith("migration-")
@@ -4698,24 +4701,24 @@ class TestMigrationSuppression:
     async def test_validate_always_includes_outdated_version_regardless_of_suppression(
         self, tmp_path, monkeypatch
     ):
-        """SUP4: validate_script includes outdated-script-version even when suppressed."""
+        """SUP4: validate_recipe includes outdated-script-version even when suppressed."""
         script = tmp_path / "test-script.yaml"
         script.write_text(_MINIMAL_SCRIPT_YAML)
 
         from autoskillit import server
         from autoskillit.config import MigrationConfig
 
-        # Even with script suppressed in config, validate_script does not filter
+        # Even with script suppressed in config, validate_recipe does not filter
         monkeypatch.setattr(
             server,
             "_config",
             AutomationConfig(migration=MigrationConfig(suppressed=["test-script"])),
         )
 
-        result = json.loads(await validate_script(script_path=str(script)))
+        result = json.loads(await validate_recipe(script_path=str(script)))
         assert "semantic" in result
         rules = [s["rule"] for s in result["semantic"]]
-        assert "outdated-script-version" in rules
+        assert "outdated-recipe-version" in rules
 
 
 class TestExtractTokenUsage:

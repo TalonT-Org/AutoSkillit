@@ -2,7 +2,7 @@ name: implementation-pipeline
 description: Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
 summary: (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part)
 
-inputs:
+ingredients:
   task:
     description: Description of what to implement (required when make_groups is false)
     required: false
@@ -25,7 +25,7 @@ inputs:
     description: Run /review-approach before implementation? (true/false)
     default: "false"
 
-constraints:
+kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
     Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
     orchestrator. All work is delegated through run_skill/run_skill_retry."

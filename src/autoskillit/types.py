@@ -43,7 +43,7 @@ class SkillSource(StrEnum):
     BUNDLED = "bundled"
 
 
-class WorkflowSource(StrEnum):
+class RecipeSource(StrEnum):
     PROJECT = "project"
     BUILTIN = "builtin"
 

@@ -20,9 +20,9 @@ BUNDLED_SKILLS = [
     "investigate",
     "make-groups",
     "make-plan",
-    "make-script-skill",
+    "write-recipe",
     "mermaid",
-    "migrate-scripts",
+    "migrate-recipes",
     "pipeline-summary",
     "rectify",
     "retry-worktree",
@@ -94,7 +94,12 @@ class TestSkillResolver:
         import yaml as _yaml
 
         import autoskillit
-        from autoskillit.workflow_loader import _parse_workflow, validate_workflow
+        from autoskillit.recipe_parser import (
+            _parse_recipe as _parse_workflow,
+        )
+        from autoskillit.recipe_parser import (
+            validate_recipe as validate_workflow,
+        )
 
         skills_dir = Path(autoskillit.__file__).parent / "skills"
         yaml_block_re = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
@@ -113,7 +118,7 @@ class TestSkillResolver:
                 if not isinstance(data, dict) or "steps" not in data:
                     continue
                 wf = _parse_workflow(data)
-                errors = [e for e in validate_workflow(wf) if "constraints" not in e.lower()]
+                errors = [e for e in validate_workflow(wf) if "kitchen_rules" not in e.lower()]
                 assert not errors, (
                     f"{skill_md.parent.name}/SKILL.md has invalid YAML example:\n  {errors}"
                 )
@@ -142,7 +147,7 @@ class TestSkillResolver:
             "investigate": "temp/investigate/",
             "make-groups": "temp/make-groups/",
             "make-plan": "temp/make-plan/",
-            "make-script-skill": ".autoskillit/scripts/",
+            "write-recipe": ".autoskillit/recipes/",
             "rectify": "temp/rectify/",
             "review-approach": "temp/review-approach/",
             "setup-project": "temp/setup-project/",
@@ -197,7 +202,7 @@ class TestSkillResolver:
 
     def test_bundled_skills_list_matches_filesystem(self) -> None:
         """make-script-skill SKILL.md bundled skills list must match filesystem."""
-        skill_md = bundled_skills_dir() / "make-script-skill" / "SKILL.md"
+        skill_md = bundled_skills_dir() / "write-recipe" / "SKILL.md"
         content = skill_md.read_text()
 
         # Extract the bundled skills list section

@@ -59,7 +59,7 @@ class DataflowEntry:
 
 
 @dataclasses.dataclass
-class PipelineContract:
+class RecipeCard:
     generated_at: str
     bundled_manifest_version: str
     skill_hashes: dict[str, str]
@@ -178,29 +178,29 @@ def count_positional_args(skill_command: str) -> int:
 _SKILL_TOOLS = frozenset({"run_skill", "run_skill_retry"})
 
 
-def generate_pipeline_contract(pipeline_path: Path, scripts_dir: Path) -> Path:
-    """Generate a contract file for a pipeline script.
+def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
+    """Generate a recipe card file for a recipe.
 
     Walks each step, resolves skill names, looks up contracts in the manifest,
-    computes SKILL.md hashes, and builds dataflow entries. Writes the contract
-    to ``scripts_dir / "contracts" / "{pipeline_stem}.yaml"``.
+    computes SKILL.md hashes, and builds dataflow entries. Writes the recipe card
+    to ``recipes_dir / "contracts" / "{pipeline_stem}.yaml"``.
     """
     import datetime
 
-    from autoskillit.workflow_loader import _parse_workflow
+    from autoskillit.recipe_parser import _parse_recipe
 
     data = yaml.safe_load(pipeline_path.read_text())
-    wf = _parse_workflow(data)
+    recipe = _parse_recipe(data)
     manifest = load_bundled_manifest()
 
     skill_hashes: dict[str, str] = {}
     skills: dict[str, dict] = {}
     dataflow: list[dict] = []
 
-    input_names = set(wf.inputs.keys())
-    available: set[str] = set(input_names)
+    ingredient_names = set(recipe.ingredients.keys())
+    available: set[str] = set(ingredient_names)
 
-    for step_name, step in wf.steps.items():
+    for step_name, step in recipe.steps.items():
         entry: dict[str, Any] = {
             "step": step_name,
             "available": sorted(available),
@@ -242,7 +242,7 @@ def generate_pipeline_contract(pipeline_path: Path, scripts_dir: Path) -> Path:
         available.update(produced)
         dataflow.append(entry)
 
-    contracts_dir = scripts_dir / "contracts"
+    contracts_dir = recipes_dir / "contracts"
     contracts_dir.mkdir(parents=True, exist_ok=True)
 
     contract_data = {
@@ -258,22 +258,22 @@ def generate_pipeline_contract(pipeline_path: Path, scripts_dir: Path) -> Path:
     return out_path
 
 
-def load_pipeline_contract(script_name: str, scripts_dir: Path) -> dict | None:
-    """Load a previously generated pipeline contract file.
+def load_recipe_card(recipe_name: str, recipes_dir: Path) -> dict | None:
+    """Load a previously generated recipe card file.
 
-    Returns the parsed YAML dict, or None if the contract file doesn't exist.
+    Returns the parsed YAML dict, or None if the recipe card doesn't exist.
     """
-    contract_path = scripts_dir / "contracts" / f"{script_name}.yaml"
+    contract_path = recipes_dir / "contracts" / f"{recipe_name}.yaml"
     if not contract_path.is_file():
         return None
     return yaml.safe_load(contract_path.read_text())
 
 
-def validate_pipeline_contracts(wf: Any, contract: dict[str, Any]) -> list[dict[str, str]]:
-    """Validate pipeline dataflow using a pre-computed contract.
+def validate_recipe_cards(recipe: Any, contract: dict[str, Any]) -> list[dict[str, str]]:
+    """Validate recipe dataflow using a pre-computed recipe card.
 
     For each dataflow entry, checks that all required inputs are in the
-    available set at that point in the pipeline.
+    available set at that point in the recipe.
 
     Returns a list of finding dicts with keys: rule, severity, step, message.
     """
@@ -305,7 +305,7 @@ def validate_pipeline_contracts(wf: Any, contract: dict[str, Any]) -> list[dict[
                         "step": entry.get("step", ""),
                         "message": (
                             f"Step '{entry['step']}' requires '{req}' but it is not "
-                            f"available at this point in the pipeline."
+                            f"available at this point in the recipe."
                         ),
                     }
                 )

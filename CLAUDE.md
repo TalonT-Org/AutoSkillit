@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 16 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db + ungated autoskillit_status, list_skill_scripts, load_skill_script, validate_script, get_pipeline_report, get_token_summary) with 10 gated behind MCP prompts for user-only activation, and 13 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 16 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 10 gated behind MCP prompts for user-only activation, and 13 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -37,7 +37,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
 
 ### **3.3. Pipeline Execution**
 
-  * **Orchestrator Discipline**: When executing a pipeline script (loaded via `load_skill_script`), NEVER use native Claude Code tools directly. The following tools are prohibited for the orchestrator: Read, Grep, Glob, Edit, Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit.
+  * **Orchestrator Discipline**: When executing a pipeline script (loaded via `load_recipe`), NEVER use native Claude Code tools directly. The following tools are prohibited for the orchestrator: Read, Grep, Glob, Edit, Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit.
   * **Delegate Through Headless Sessions**: All code reading, searching, editing, and investigation MUST go through `run_skill` or `run_skill_retry`, which launch headless sessions with full tool access.
   * **Route Failures, Do Not Investigate**: When a pipeline step fails, follow the step's `on_failure` route. Do NOT use native tools to diagnose failures — the downstream skill has diagnostic access that the orchestrator does not.
   * **Use `run_cmd` for Shell Access**: If shell commands are needed during a pipeline, use the `run_cmd` MCP tool, not the native Bash tool.
@@ -74,20 +74,20 @@ src/autoskillit/
 ├── _logging.py              # Centralized structlog configuration (get_logger, configure_logging)
 ├── cli.py                   # CLI: serve, init, config show, skills, workflows
 ├── config.py                # Dataclass config + YAML loading (layered resolution)
-├── script_loader.py         # Pipeline script discovery from .autoskillit/scripts/
+├── recipe_loader.py         # Pipeline recipe discovery from .autoskillit/recipes/
 ├── server.py                # FastMCP server with 15 MCP tools + 2 prompts
 ├── skill_resolver.py        # Bundled skill listing
-├── workflow_loader.py       # Workflow YAML loading, validation, listing
+├── recipe_parser.py         # Recipe YAML loading, validation, listing
 ├── process_lifecycle.py     # Subprocess management (kill trees, temp I/O, timeouts)
 ├── skills/                  # 14 bundled skills (SKILL.md per skill)
 │   ├── assess-and-merge/    │   ├── audit-impl/
 │   ├── dry-walkthrough/     │   ├── implement-worktree/
 │   ├── implement-worktree-no-merge/ │   ├── investigate/
 │   ├── make-groups/         │   ├── make-plan/
-│   ├── make-script-skill/   │   ├── mermaid/
+│   ├── write-recipe/        │   ├── mermaid/
 │   ├── rectify/             │   ├── retry-worktree/
 │   ├── review-approach/     │   └── setup-project/
-└── workflows/               # 4 bundled workflow YAML definitions
+└── recipes/                 # 4 bundled recipe YAML definitions
     ├── audit-and-fix.yaml
     ├── bugfix-loop.yaml
     ├── implementation.yaml
@@ -101,11 +101,11 @@ tests/
 ├── test_config.py           # Config loading tests
 ├── test_logging.py          # Logging infrastructure tests
 ├── test_process_lifecycle.py # Subprocess integration tests
-├── test_script_loader.py    # Script loader tests
+├── test_recipe_loader.py    # Recipe loader tests
 ├── test_server.py           # Server unit tests
 ├── test_skill_resolver.py   # Skill resolution tests
 ├── test_token_log.py        # Token usage tracking tests
-└── test_workflow_loader.py  # Workflow loading/validation tests
+└── test_recipe_parser.py    # Recipe loading/validation tests
 
 temp/                        # Temporary/working files (gitignored)
 ```
@@ -113,11 +113,11 @@ temp/                        # Temporary/working files (gitignored)
 ### **Key Components**
 
   * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
-  * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `skills list`, `workflows list/show`, `workspace init`, `update`, and `doctor`.
-  * **script_loader.py**: Discovers and loads pipeline scripts from `.autoskillit/scripts/`. Scripts use the workflow YAML schema (inputs, steps, routing, retry) with an added `summary` field. `list_scripts` returns `ScriptInfo` records for listing. `load_script` returns raw YAML for agent consumption. On server startup, `sync_bundled_scripts()` overwrites any `.autoskillit/scripts/*.yaml` that shares a name with a file in `src/autoskillit/workflows/` — **edit the `workflows/` source, not the local copy**. Project-specific scripts (no bundled counterpart) are never touched.
-  * **server.py**: FastMCP server. 10 gated tools require user activation via MCP prompts. 6 ungated tools (`autoskillit_status`, `list_skill_scripts`, `load_skill_script`, `validate_script`, `get_pipeline_report`, `get_token_summary`) are always available. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/autoskillit:implement-worktree` without a verified plan. `_plugin_dir` is passed to headless sessions via `--plugin-dir`. Registers `workflow://` resource handler.
+  * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `skills list`, `recipes list/show`, `workspace init`, `update`, and `doctor`.
+  * **recipe_loader.py**: Discovers and loads pipeline recipes from `.autoskillit/recipes/`. Recipes use the recipe YAML schema (ingredients, steps, routing, retry) with an added `summary` field. `list_recipes` returns `RecipeInfo` records for listing. `load_recipe` returns raw YAML for agent consumption. On server startup, `sync_bundled_recipes()` overwrites any `.autoskillit/recipes/*.yaml` that shares a name with a file in `src/autoskillit/recipes/` — **edit the `recipes/` source, not the local copy**. Project-specific recipes (no bundled counterpart) are never touched.
+  * **server.py**: FastMCP server. 10 gated tools require user activation via MCP prompts. 6 ungated tools (`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) are always available. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/autoskillit:implement-worktree` without a verified plan. `_plugin_dir` is passed to headless sessions via `--plugin-dir`. Registers `recipe://` resource handler.
   * **skill_resolver.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
-  * **workflow_loader.py**: YAML workflow loading, validation, and listing. Discovers workflows from `.autoskillit/workflows/` (project) and bundled package directory. `WorkflowStep` supports an optional `model` field for per-step model selection.
+  * **recipe_parser.py**: YAML recipe loading, validation, and listing. Discovers recipes from `.autoskillit/recipes/` (project) and bundled package directory. `RecipeStep` supports an optional `model` field for per-step model selection.
   * **process_lifecycle.py**: Subprocess utilities for process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts. Uses `get_logger()` from `_logging.py`.
   * **_logging.py**: Centralized structlog configuration. `get_logger(name)` is the single import point for all production modules. `configure_logging()` is called once by the CLI `serve` command — routes all output to stderr via `WriteLoggerFactory`, never stdout.
   * **_audit.py**: Pipeline failure tracking. `AuditLog` captures every non-success result from `_build_skill_result()` into an in-memory list. `_audit_log` is the module-level singleton used by `server.py`. `get_pipeline_report` retrieves the accumulated failures.
@@ -133,9 +133,9 @@ The Python package directory (`src/autoskillit/`) is the plugin root:
 
 ### **Skills**
 
-13 bundled skills, invoked as `/autoskillit:<name>`. These are the building blocks that project-specific pipeline scripts (generated by `setup-project`) compose together.
+13 bundled skills, invoked as `/autoskillit:<name>`. These are the building blocks that project-specific pipeline recipes (generated by `setup-project`) compose together.
 
-Skills are discovered by Claude Code via the plugin structure. Headless sessions receive `--plugin-dir` automatically via `run_skill` and `run_skill_retry`. Project-specific pipeline scripts go in `.autoskillit/scripts/` as YAML files, discovered via `list_skill_scripts` and loaded via `load_skill_script`.
+Skills are discovered by Claude Code via the plugin structure. Headless sessions receive `--plugin-dir` automatically via `run_skill` and `run_skill_retry`. Project-specific pipeline recipes go in `.autoskillit/recipes/` as YAML files, discovered via `list_recipes` and loaded via `load_recipe`.
 
 ### **MCP Tools**
 
@@ -151,24 +151,24 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 | `classify_fix` | Analyze worktree diff to determine restart scope (full vs partial) |
 | `reset_workspace` | Reset workspace, preserving configured directories |
 | `read_db` | Run read-only SQL query against SQLite database |
-| `autoskillit_status` | Return version health and config status (ungated) |
-| `list_skill_scripts` | List pipeline scripts from .autoskillit/scripts/ (ungated) |
-| `load_skill_script` | Load a script by name as raw YAML (ungated) |
-| `validate_script` | Validate a pipeline script against the workflow schema (ungated) |
+| `kitchen_status` | Return version health and config status (ungated) |
+| `list_recipes` | List pipeline recipes from .autoskillit/recipes/ (ungated) |
+| `load_recipe` | Load a recipe by name as raw YAML (ungated) |
+| `validate_recipe` | Validate a pipeline recipe against the recipe schema (ungated) |
 | `get_pipeline_report` | Return accumulated run_skill/run_skill_retry failure report (ungated) |
 | `get_token_summary` | Return accumulated token usage grouped by step name (ungated) |
-| `enable_tools` (prompt) | User-only activation — type the enable_tools prompt from the MCP prompt list |
-| `disable_tools` (prompt) | User-only deactivation — type the disable_tools prompt from the MCP prompt list |
+| `open_kitchen` (prompt) | User-only activation — type the open_kitchen prompt from the MCP prompt list |
+| `close_kitchen` (prompt) | User-only deactivation — type the close_kitchen prompt from the MCP prompt list |
 
 ### **Tool Activation**
 
 10 tools are gated by default. At the start of a session, the user must type
-the `enable_tools` prompt to activate. The exact prompt name is prefixed by
+the `open_kitchen` prompt to activate. The exact prompt name is prefixed by
 Claude Code based on how the server was loaded (e.g. `plugin_autoskillit_autoskillit`
 for plugin installs). This uses MCP prompts (user-only, model cannot invoke)
 and survives `--dangerously-skip-permissions`.
 
-`autoskillit_status`, `list_skill_scripts`, `load_skill_script`, `validate_script`, `get_pipeline_report`, and `get_token_summary` are ungated — available without calling `enable_tools`.
+`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, and `get_token_summary` are ungated — available without calling `open_kitchen`.
 
 ### **Configuration**
 

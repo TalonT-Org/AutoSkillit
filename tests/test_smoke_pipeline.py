@@ -29,20 +29,20 @@ from autoskillit import server
 from autoskillit.config import AutomationConfig, TestCheckConfig
 from autoskillit.server import (
     classify_fix,
-    list_skill_scripts,
-    load_skill_script,
+    list_recipes,
+    load_recipe,
     merge_worktree,
     run_cmd,
     run_skill,
     run_skill_retry,
     test_check,
-    validate_script,
+    validate_recipe,
 )
 
 test_check.__test__ = False  # type: ignore[attr-defined]
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SMOKE_SCRIPT = PROJECT_ROOT / ".autoskillit" / "scripts" / "smoke-test.yaml"
+SMOKE_SCRIPT = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
 
 _TOOL_MAP = {
     "run_cmd": run_cmd,
@@ -213,24 +213,24 @@ class TestSmokeScriptValidation:
     """Validate the smoke-test pipeline YAML structure and executor logic."""
 
     async def test_script_validates(self, smoke_script_path: Path) -> None:
-        result = json.loads(await validate_script(script_path=str(smoke_script_path)))
+        result = json.loads(await validate_recipe(script_path=str(smoke_script_path)))
         assert result["valid"] is True
         assert result["errors"] == []
 
     async def test_script_discoverable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(PROJECT_ROOT)
-        result = json.loads(await list_skill_scripts())
-        names = [s["name"] for s in result["scripts"]]
+        result = json.loads(await list_recipes())
+        names = [s["name"] for s in result["recipes"]]
         assert "smoke-test" in names
 
     async def test_script_loads_with_expected_structure(self) -> None:
-        result = json.loads(await load_skill_script(name="smoke-test"))
+        result = json.loads(await load_recipe(name="smoke-test"))
         assert "content" in result
         assert "suggestions" in result
         pipeline = yaml.safe_load(result["content"])
         assert "steps" in pipeline
-        assert "inputs" in pipeline
-        assert "constraints" in pipeline
+        assert "ingredients" in pipeline
+        assert "kitchen_rules" in pipeline
         expected_steps = {
             "setup",
             "seed_task",
@@ -321,9 +321,9 @@ class TestSmokeScriptValidation:
         assert result["success"] is True
 
     async def test_script_has_collect_on_branch_input(self) -> None:
-        result = json.loads(await load_skill_script(name="smoke-test"))
+        result = json.loads(await load_recipe(name="smoke-test"))
         pipeline = yaml.safe_load(result["content"])
-        inputs = pipeline["inputs"]
+        inputs = pipeline["ingredients"]
         assert "collect_on_branch" in inputs
         assert inputs["collect_on_branch"]["default"] == "true"
         assert "original_base_branch" in inputs

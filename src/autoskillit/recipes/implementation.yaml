@@ -1,7 +1,7 @@
-name: investigate-first
-description: Investigate a problem deeply, plan architectural fix, implement and merge.
+name: implementation
+description: Plan, verify, and implement a feature in an isolated worktree.
 
-constraints:
+kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
     Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
     orchestrator. All code changes and investigation happen through
@@ -10,41 +10,38 @@ constraints:
     assess-and-merge) has diagnostic access that the orchestrator does not.
     Do not investigate or attempt to fix failures directly."
 
-inputs:
-  topic:
-    description: Description of the bug, error, or question to investigate
+ingredients:
+  task:
+    description: Description of the feature or change to implement
     required: true
   work_dir:
     description: Working directory for agent sessions
     required: true
-  target_dir:
-    description: Optional additional project directory for context
-    default: ""
   base_branch:
-    description: Branch to merge fixes into
+    description: Branch to merge into
     default: main
   audit:
     description: Run /autoskillit:audit-impl before merge to gate on implementation quality
     default: "false"
 
 steps:
-  investigate:
+  plan:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:investigate ${{ inputs.topic }}"
+      skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
       cwd: ${{ inputs.work_dir }}
-      step_name: "investigate"
-    on_success: rectify
-    on_failure: escalate
-
-  rectify:
-    tool: run_skill
-    with:
-      skill_command: "/autoskillit:rectify"
-      cwd: ${{ inputs.work_dir }}
-      step_name: "rectify"
+      step_name: "plan"
     capture:
       plan_path: "${{ result.plan_path }}"
+    on_success: review
+    on_failure: escalate
+
+  review:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:review-approach the plan"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "review"
     on_success: dry_walkthrough
     on_failure: escalate
 
@@ -55,8 +52,8 @@ steps:
       cwd: ${{ inputs.work_dir }}
       step_name: "dry_walkthrough"
     on_success: implement
-    on_failure: rectify
-    note: If walkthrough finds issues, re-plan via rectify.
+    on_failure: plan
+    note: If walkthrough finds issues, re-plan.
 
   implement:
     tool: run_skill_retry
@@ -70,7 +67,7 @@ steps:
       max_attempts: 1
       on: needs_retry
       on_exhausted: retry_worktree
-    on_success: verify
+    on_success: audit_impl
     on_failure: escalate
 
   retry_worktree:
@@ -83,24 +80,7 @@ steps:
       max_attempts: 3
       on: needs_retry
       on_exhausted: escalate
-    on_success: verify
-    on_failure: escalate
-
-  verify:
-    tool: test_check
-    with:
-      worktree_path: ${{ inputs.work_dir }}
     on_success: audit_impl
-    on_failure: assess
-
-  assess:
-    tool: run_skill
-    model: sonnet
-    with:
-      skill_command: "/autoskillit:assess-and-merge fix test failures"
-      cwd: ${{ inputs.work_dir }}
-      step_name: "assess"
-    on_success: verify
     on_failure: escalate
 
   audit_impl:
@@ -109,22 +89,14 @@ steps:
       skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: ${{ inputs.work_dir }}
       step_name: "audit_impl"
-    note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
-    on_success: merge
-    on_failure: escalate
-
-  merge:
-    tool: merge_worktree
-    with:
-      worktree_path: ${{ inputs.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+    note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to done.
     on_success: done
     on_failure: escalate
 
   done:
     action: stop
-    message: "Investigation complete. Fix implemented and merged."
+    message: "Implementation complete. Worktree ready for review and merge."
 
   escalate:
     action: stop
-    message: "Human intervention needed. Review the latest output for details."
+    message: "Human intervention needed."

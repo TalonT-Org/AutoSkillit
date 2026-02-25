@@ -1,21 +1,21 @@
 ---
-name: make-script-skill
-description: Generate YAML pipeline scripts for .autoskillit/scripts/. Use when user says "make script skill", "generate script", "script a workflow", "write a script", "create a script", "new pipeline script", "write a pipeline", or when loaded by other skills for script formatting.
+name: write-recipe
+description: Generate YAML recipes for .autoskillit/recipes/. Use when user says "make script skill", "generate script", "script a workflow", "write a script", "create a script", "new recipe", "write a pipeline", or when loaded by other skills for script formatting.
 ---
 
 # Make Script Skill
 
-Format a workflow into a YAML pipeline script following the workflow schema.
+Format a workflow into a YAML recipe following the workflow schema.
 
 ## When to Use
 
-- **Standalone**: User wants to create a new pipeline script from scratch
+- **Standalone**: User wants to create a new recipe from scratch
 - **Loaded by another skill**: Another skill (e.g., setup-project) loads this via the Skill tool to format a workflow it has already discovered
 
 ## Arguments (standalone mode)
 
 ```
-/autoskillit:make-script-skill
+/autoskillit:write-recipe
 ```
 
 No positional arguments. The skill prompts interactively for workflow details.
@@ -25,27 +25,27 @@ No positional arguments. The skill prompts interactively for workflow details.
 **NEVER:**
 - Create SKILL.md files (not in `.claude/commands/`, `.claude/skills/`, or anywhere else)
 - Create Markdown companion files alongside the YAML script
-- Create files outside `.autoskillit/scripts/` directory
+- Create files outside `.autoskillit/recipes/` directory
 - Tell the user to run a script with `/autoskillit:<name>` syntax
 
 **ALWAYS:**
-- Save the script to `.autoskillit/scripts/{name}.yaml` as the ONLY output
-- Call `validate_script` after saving and fix any errors
-- Use "pipeline script" terminology (not "skill script")
+- Save the script to `.autoskillit/recipes/{name}.yaml` as the ONLY output
+- Call `validate_recipe` after saving and fix any errors
+- Use "recipe" terminology (not "skill script")
 
 ## How Scripts Are Loaded
 
-Pipeline scripts have their own discovery and invocation mechanism — completely
+Recipes have their own discovery and invocation mechanism — completely
 separate from the skill system. You do not need to create anything else for the
 script to be usable. The lifecycle is:
 
-1. **You save** the YAML file to `.autoskillit/scripts/{name}.yaml`
-2. **The user discovers it** via `list_skill_scripts` MCP tool (lists all scripts in that directory)
-3. **The user loads it** via `load_skill_script("{name}")` MCP tool (returns raw YAML)
+1. **You save** the YAML file to `.autoskillit/recipes/{name}.yaml`
+2. **The user discovers it** via `list_recipes` MCP tool (lists all scripts in that directory)
+3. **The user loads it** via `load_recipe("{name}")` MCP tool (returns raw YAML)
 4. **An agent executes it** by interpreting the YAML steps and calling MCP tools directly
 
 No SKILL.md, no slash command registration, no Markdown companion file — the YAML file
-in `.autoskillit/scripts/` is the only artifact needed. The MCP tools handle everything else.
+in `.autoskillit/recipes/` is the only artifact needed. The MCP tools handle everything else.
 
 ## The Script Format
 
@@ -57,7 +57,7 @@ autoskillit_version: "{version}"  # from autoskillit_status.package_version
 description: {One line description.}
 summary: {Concise pipeline chain, e.g. "plan > verify > implement > test > merge"}
 
-inputs:
+ingredients:
   var_name:
     description: {What this input is for}
     required: true          # or false
@@ -106,9 +106,9 @@ steps:
 | `name` | Yes | string | Unique identifier; validation fails if empty |
 | `autoskillit_version` | No | string | Package version that generated this script. Set from `autoskillit_status.package_version`. Used by migration system to detect outdated scripts. |
 | `description` | Yes | string | Human-readable, shown in listings |
-| `summary` | Yes | string | Pipeline chain shown in `list_skill_scripts` output |
+| `summary` | Yes | string | Pipeline chain shown in `list_recipes` output |
 | `inputs` | No | mapping | Omit if the script has no configurable values |
-| `constraints` | Yes | list[str] | Orchestrator discipline rules. Must enumerate forbidden native tools (Read, Grep, Glob, Edit, Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit). |
+| `kitchen_rules` | Yes | list[str] | Orchestrator discipline rules. Must enumerate forbidden native tools (Read, Grep, Glob, Edit, Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit). |
 | `steps` | Yes | mapping | At least one step required |
 
 ### Input Fields
@@ -208,14 +208,14 @@ Available tools for use in `tool:` fields:
 | `classify_fix` | `worktree_path`, `base_branch` | Analyze diff for restart scope (full vs partial) |
 | `reset_workspace` | `test_dir` | Reset workspace, preserving configured directories |
 | `run_cmd` | `cmd`, `cwd`, `timeout` (optional) | Execute arbitrary shell command |
-| `validate_script` | `script_path` | Validate a script file against the workflow schema |
+| `validate_recipe` | `script_path` | Validate a script file against the workflow schema |
 
 ## Bundled AutoSkillit Skills
 
 These skills ship with the autoskillit plugin and are invoked as `/autoskillit:<name>`:
 
 assess-and-merge, audit-friction, audit-impl, dry-walkthrough, implement-worktree, implement-worktree-no-merge,
-investigate, make-groups, make-plan, make-script-skill, mermaid, migrate-scripts,
+investigate, make-groups, make-plan, write-recipe, mermaid, migrate-recipes,
 pipeline-summary, rectify, retry-worktree, review-approach, setup-project
 
 ## Skill Reference Disambiguation
@@ -254,13 +254,13 @@ name: implementation
 description: Plan, verify, implement, test, and merge a task.
 summary: make-plan > dry-walk > implement > test > merge
 
-constraints:
+kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
     Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
     orchestrator. All work is delegated through run_skill/run_skill_retry."
   - "Route to on_failure when a step fails — do not investigate directly."
 
-inputs:
+ingredients:
   task:
     description: What to implement
     required: true
@@ -346,13 +346,13 @@ name: bugfix-loop
 description: Test, fix, and merge with automatic retry.
 summary: test > investigate > plan > implement > verify > merge
 
-constraints:
+kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
     Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
     orchestrator. All work is delegated through run_skill/run_skill_retry."
   - "Route to on_failure when a step fails — do not investigate directly."
 
-inputs:
+ingredients:
   test_dir:
     description: Directory containing the project to test
     required: true
@@ -435,7 +435,7 @@ steps:
 
 ## Converting Legacy Markdown Commands to YAML
 
-When converting old `.claude/commands/` or `.claude/skills/` Markdown pipeline scripts to YAML:
+When converting old `.claude/commands/` or `.claude/skills/` Markdown recipes to YAML:
 
 ### Mapping Table
 
@@ -478,7 +478,7 @@ Some Markdown patterns require agent interpretation rather than YAML structure:
 
 ## Standalone Invocation Flow
 
-When called directly as `/autoskillit:make-script-skill`:
+When called directly as `/autoskillit:write-recipe`:
 
 1. Ask the user what workflow they want to script (name, what it does)
 2. Ask whether it's a linear pipeline or a loop with a fix step
@@ -486,18 +486,18 @@ When called directly as `/autoskillit:make-script-skill`:
 4. Ask for inputs (what's configurable)
 5. Generate the script in the YAML format above
 6. Before saving, call `autoskillit_status` to get `package_version` and stamp `autoskillit_version: "{package_version}"` as the second top-level field (after `name`). This is required for the migration system to track script age.
-7. Save to `.autoskillit/scripts/{name}.yaml` (create the directory if needed)
-8. Call `validate_script` with the saved file path. If errors are returned, fix them and re-validate until clean. Review the `quality.warnings` in the response:
+7. Save to `.autoskillit/recipes/{name}.yaml` (create the directory if needed)
+8. Call `validate_recipe` with the saved file path. If errors are returned, fix them and re-validate until clean. Review the `quality.warnings` in the response:
    - `DEAD_OUTPUT`: A `capture:` key is never referenced by any reachable downstream step via `${{ context.X }}`. Either add a `${{ context.X }}` reference in the downstream step's `with:` block, or remove the unused capture.
    - `IMPLICIT_HANDOFF`: A `run_skill` or `run_skill_retry` step has no `capture:` block. Add a `capture:` block to explicitly wire outputs to downstream steps via `${{ context.X }}`, or confirm the skill's output is intentionally unused.
    - Present the quality summary to the user and fix any warnings that indicate broken wiring.
-9. After validation passes, generate the pipeline contract file by calling `generate_pipeline_contract` on the saved script. This creates `.autoskillit/scripts/contracts/{name}.yaml` alongside the pipeline script. Use `run_python` with `autoskillit.contract_validator.generate_pipeline_contract` passing the script path and scripts directory, or rely on `load_skill_script` which auto-generates contracts on first load.
-10. Tell the user: "Saved to `.autoskillit/scripts/{name}.yaml`. Load it with `load_skill_script("{name}")` via the MCP tool."
+9. After validation passes, generate the pipeline contract file by calling `generate_pipeline_contract` on the saved script. This creates `.autoskillit/recipes/contracts/{name}.yaml` alongside the recipe. Use `run_python` with `autoskillit.contract_validator.generate_pipeline_contract` passing the script path and scripts directory, or rely on `load_recipe` which auto-generates contracts on first load.
+10. Tell the user: "Saved to `.autoskillit/recipes/{name}.yaml`. Load it with `load_recipe("{name}")` via the MCP tool."
 
 ## CRITICAL: Scripts Are NOT Skills
 
-Pipeline scripts are YAML workflow files in `.autoskillit/scripts/`. They are:
-- **Loaded** via the `load_skill_script` MCP tool
+Recipes are YAML workflow files in `.autoskillit/recipes/`. They are:
+- **Loaded** via the `load_recipe` MCP tool
 - **Executed** by the agent interpreting the YAML steps
 
 They are NOT:
@@ -506,7 +506,7 @@ They are NOT:
 - Markdown files (they are `.yaml` files)
 
 Never tell the user to run a script with `/autoskillit:<name>`. The correct
-invocation is always via `load_skill_script("<name>")`.
+invocation is always via `load_recipe("<name>")`.
 
 ## Loaded by Another Skill
 
@@ -529,10 +529,10 @@ When the agent is given an existing script's YAML content and a requested change
    - Save changes to the original file
    - Save as a new script (prompt for name)
    - Use temporarily without saving
-5. Call `validate_script` on the saved path
+5. Call `validate_recipe` on the saved path
 6. If errors, fix and re-validate until clean
 7. Review quality warnings and fix data-flow issues before reporting changes
-8. After validation passes, regenerate the pipeline contract file to reflect the changes. Use `run_python` with `autoskillit.contract_validator.generate_pipeline_contract` or rely on `load_skill_script` auto-generation on next load.
+8. After validation passes, regenerate the pipeline contract file to reflect the changes. Use `run_python` with `autoskillit.contract_validator.generate_pipeline_contract` or rely on `load_recipe` auto-generation on next load.
 9. Report the changes made
 
-This edit mode is invoked when `load_skill_script` routes the user's modification request through this skill. The skill receives the existing YAML as context.
+This edit mode is invoked when `load_recipe` routes the user's modification request through this skill. The skill receives the existing YAML as context.

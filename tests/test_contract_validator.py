@@ -9,11 +9,11 @@ import yaml
 from autoskillit.contract_validator import (
     check_contract_staleness,
     compute_skill_hash,
-    generate_pipeline_contract,
+    generate_recipe_card,
     load_bundled_manifest,
-    load_pipeline_contract,
+    load_recipe_card,
     resolve_skill_name,
-    validate_pipeline_contracts,
+    validate_recipe_cards,
 )
 
 # ---------------------------------------------------------------------------
@@ -101,16 +101,16 @@ constraints:
 """
 
 
-def test_generate_pipeline_contract(tmp_path: Path):
+def test_generate_recipe_card(tmp_path: Path):
     """Generates a contract file with expected structure."""
-    scripts_dir = tmp_path / ".autoskillit" / "scripts"
-    scripts_dir.mkdir(parents=True)
-    pipeline = scripts_dir / "test-pipeline.yaml"
+    recipes_dir = tmp_path / ".autoskillit" / "scripts"
+    recipes_dir.mkdir(parents=True)
+    pipeline = recipes_dir / "test-pipeline.yaml"
     pipeline.write_text(SAMPLE_PIPELINE_YAML)
 
-    generate_pipeline_contract(pipeline, scripts_dir)
+    generate_recipe_card(pipeline, recipes_dir)
 
-    contract_path = scripts_dir / "contracts" / "test-pipeline.yaml"
+    contract_path = recipes_dir / "contracts" / "test-pipeline.yaml"
     assert contract_path.exists()
     contract = yaml.safe_load(contract_path.read_text())
     assert "generated_at" in contract
@@ -120,23 +120,23 @@ def test_generate_pipeline_contract(tmp_path: Path):
     assert "dataflow" in contract
 
 
-def test_load_pipeline_contract(tmp_path: Path):
+def test_load_recipe_card(tmp_path: Path):
     """Loads a previously generated contract."""
-    scripts_dir = tmp_path / ".autoskillit" / "scripts"
-    scripts_dir.mkdir(parents=True)
-    pipeline = scripts_dir / "test-pipeline.yaml"
+    recipes_dir = tmp_path / ".autoskillit" / "scripts"
+    recipes_dir.mkdir(parents=True)
+    pipeline = recipes_dir / "test-pipeline.yaml"
     pipeline.write_text(SAMPLE_PIPELINE_YAML)
 
-    generate_pipeline_contract(pipeline, scripts_dir)
+    generate_recipe_card(pipeline, recipes_dir)
 
-    contract = load_pipeline_contract("test-pipeline", scripts_dir)
+    contract = load_recipe_card("test-pipeline", recipes_dir)
     assert contract is not None
     assert contract["bundled_manifest_version"] == "0.1.0"
 
 
-def test_load_pipeline_contract_missing():
+def test_load_recipe_card_missing():
     """Returns None when no contract file exists."""
-    contract = load_pipeline_contract("nonexistent", Path("/tmp/no-scripts"))
+    contract = load_recipe_card("nonexistent", Path("/tmp/no-scripts"))
     assert contract is None
 
 
@@ -247,30 +247,30 @@ constraints:
 """
 
 
-def test_validate_pipeline_contracts_clean(tmp_path: Path):
+def test_validate_recipe_cards_clean(tmp_path: Path):
     """Pipeline with correct dataflow produces no findings."""
-    scripts_dir = tmp_path / ".autoskillit" / "scripts"
-    scripts_dir.mkdir(parents=True)
-    pipeline = scripts_dir / "clean.yaml"
+    recipes_dir = tmp_path / ".autoskillit" / "scripts"
+    recipes_dir.mkdir(parents=True)
+    pipeline = recipes_dir / "clean.yaml"
     pipeline.write_text(CLEAN_PIPELINE_YAML)
 
-    contract_path = generate_pipeline_contract(pipeline, scripts_dir)
+    contract_path = generate_recipe_card(pipeline, recipes_dir)
     contract = yaml.safe_load(contract_path.read_text())
 
-    findings = validate_pipeline_contracts(None, contract)
+    findings = validate_recipe_cards(None, contract)
     assert len(findings) == 0
 
 
-def test_validate_pipeline_contracts_missing_input(tmp_path: Path):
+def test_validate_recipe_cards_missing_input(tmp_path: Path):
     """Pipeline with missing skill input produces finding."""
-    scripts_dir = tmp_path / ".autoskillit" / "scripts"
-    scripts_dir.mkdir(parents=True)
-    pipeline = scripts_dir / "bad.yaml"
+    recipes_dir = tmp_path / ".autoskillit" / "scripts"
+    recipes_dir.mkdir(parents=True)
+    pipeline = recipes_dir / "bad.yaml"
     pipeline.write_text(BAD_PIPELINE_YAML)
 
-    contract_path = generate_pipeline_contract(pipeline, scripts_dir)
+    contract_path = generate_recipe_card(pipeline, recipes_dir)
     contract = yaml.safe_load(contract_path.read_text())
 
-    findings = validate_pipeline_contracts(None, contract)
+    findings = validate_recipe_cards(None, contract)
     assert len(findings) > 0
     assert any("worktree_path" in f["message"] for f in findings)

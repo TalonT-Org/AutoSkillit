@@ -2,7 +2,7 @@ name: smoke-test
 description: End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
 summary: setup > seed_task > create_branch? > investigate > rectify > implement > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
 
-inputs:
+ingredients:
   workspace:
     description: Absolute path to temp workspace directory (must be a git repo with initial commit)
     required: true
@@ -16,7 +16,7 @@ inputs:
     description: The original base branch for PR target (set automatically from base_branch when collect_on_branch is true)
     default: "main"
 
-constraints:
+kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
     Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
     orchestrator. All work is delegated through run_skill/run_skill_retry."

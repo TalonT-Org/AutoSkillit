@@ -1,22 +1,14 @@
-"""Pipeline script discovery from .autoskillit/scripts/."""
+"""Recipe discovery from .autoskillit/recipes/."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
+from autoskillit import recipe_parser
+from autoskillit.recipe_parser import RecipeInfo, RecipeSource
 from autoskillit.types import LoadReport, LoadResult
-
-
-@dataclass
-class ScriptInfo:
-    name: str
-    description: str
-    summary: str
-    path: Path
-    version: str | None = None
 
 
 def _extract_frontmatter(text: str) -> str:
@@ -35,8 +27,8 @@ def _extract_frontmatter(text: str) -> str:
     return text[after_open:close]
 
 
-def _parse_script_metadata(path: Path) -> ScriptInfo:
-    """Extract script metadata from a YAML file.
+def _parse_recipe_metadata(path: Path) -> RecipeInfo:
+    """Extract recipe metadata from a YAML file.
 
     Handles both single-document YAML and frontmatter format
     (YAML between --- delimiters, followed by arbitrary content).
@@ -48,62 +40,57 @@ def _parse_script_metadata(path: Path) -> ScriptInfo:
         raise ValueError(f"YAML metadata must be a mapping: {path}")
     name = data.get("name", "")
     if not name:
-        raise ValueError(f"Script missing required 'name' field: {path}")
-    return ScriptInfo(
+        raise ValueError(f"Recipe missing required 'name' field: {path}")
+    return RecipeInfo(
         name=name,
         description=data.get("description", ""),
         summary=data.get("summary", ""),
         path=path,
+        source=RecipeSource.PROJECT,
         version=data.get("autoskillit_version"),
     )
 
 
-def list_scripts(project_dir: Path) -> LoadResult[ScriptInfo]:
-    """Discover pipeline scripts from .autoskillit/scripts/."""
-    scripts_dir = project_dir / ".autoskillit" / "scripts"
-    if not scripts_dir.is_dir():
+def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
+    """Discover recipes from .autoskillit/recipes/."""
+    recipes_dir = project_dir / ".autoskillit" / "recipes"
+    if not recipes_dir.is_dir():
         return LoadResult(items=[], errors=[])
 
-    items: list[ScriptInfo] = []
+    items: list[RecipeInfo] = []
     errors: list[LoadReport] = []
-    for f in sorted(scripts_dir.iterdir()):
+    for f in sorted(recipes_dir.iterdir()):
         if f.suffix in (".yaml", ".yml") and f.is_file():
             try:
-                info = _parse_script_metadata(f)
+                info = _parse_recipe_metadata(f)
                 items.append(info)
             except Exception as exc:
                 errors.append(LoadReport(path=f, error=str(exc)))
     return LoadResult(items=items, errors=errors)
 
 
-def load_script(project_dir: Path, name: str) -> str | None:
-    """Load a pipeline script by name, returning raw YAML content."""
-    result = list_scripts(project_dir)
-    match = next((s for s in result.items if s.name == name), None)
+def load_recipe(project_dir: Path, name: str) -> str | None:
+    """Load a recipe by name, returning raw YAML content."""
+    result = list_recipes(project_dir)
+    match = next((r for r in result.items if r.name == name), None)
     if match is None:
         return None
     return match.path.read_text()
 
 
-def _bundled_workflows_dir() -> Path:
-    import autoskillit
-
-    return Path(autoskillit.__file__).parent / "workflows"
-
-
-def sync_bundled_scripts(project_dir: Path) -> None:
-    """Overwrite .autoskillit/scripts/ with bundled workflow YAMLs of the same name.
+def sync_bundled_recipes(project_dir: Path) -> None:
+    """Overwrite .autoskillit/recipes/ with bundled recipe YAMLs of the same name.
 
     Only runs if .autoskillit/ already exists in the project directory.
-    Project-specific scripts with no bundled counterpart are left untouched.
+    Project-specific recipes with no bundled counterpart are left untouched.
     """
     autoskillit_dir = project_dir / ".autoskillit"
     if not autoskillit_dir.is_dir():
         return
-    scripts_dir = autoskillit_dir / "scripts"
-    scripts_dir.mkdir(exist_ok=True)
-    workflows_dir = _bundled_workflows_dir()
-    if not workflows_dir.is_dir():
+    recipes_dir = autoskillit_dir / "recipes"
+    recipes_dir.mkdir(exist_ok=True)
+    bundled_dir = recipe_parser.builtin_recipes_dir()
+    if not bundled_dir.is_dir():
         return
-    for src in workflows_dir.glob("*.yaml"):
-        (scripts_dir / src.name).write_text(src.read_text())
+    for src in bundled_dir.glob("*.yaml"):
+        (recipes_dir / src.name).write_text(src.read_text())

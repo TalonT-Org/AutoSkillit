@@ -71,10 +71,10 @@ skills:
       - name: plan_path
         type: file_path
 
-  make-script-skill:
+  write-recipe:
     inputs: []
     outputs:
-      - name: script_path
+      - name: recipe_path
         type: file_path
 
   mermaid:

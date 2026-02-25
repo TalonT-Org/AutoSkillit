@@ -52,23 +52,21 @@ class TestMakeScriptSkillContract:
     """make-script-skill SKILL.md must document the constraints field."""
 
     def _skill_md_text(self) -> str:
-        skill_md = (
-            _project_root() / "src" / "autoskillit" / "skills" / "make-script-skill" / "SKILL.md"
-        )
+        skill_md = _project_root() / "src" / "autoskillit" / "skills" / "write-recipe" / "SKILL.md"
         return skill_md.read_text()
 
     def test_schema_table_includes_constraints(self):
         text = self._skill_md_text()
-        assert "| `constraints`" in text, (
-            "make-script-skill SKILL.md schema table must include a 'constraints' row"
+        assert "| `kitchen_rules`" in text, (
+            "make-script-skill SKILL.md schema table must include a 'kitchen_rules' row"
         )
 
     def test_example_yaml_includes_constraints(self):
         text = self._skill_md_text()
         yaml_blocks = re.findall(r"```yaml\s*\n(.*?)```", text, re.DOTALL)
-        has_constraints = any("constraints:" in block for block in yaml_blocks)
+        has_constraints = any("kitchen_rules:" in block for block in yaml_blocks)
         assert has_constraints, (
-            "make-script-skill SKILL.md must include 'constraints:' in at least one "
+            "make-script-skill SKILL.md must include .kitchen_rules:' in at least one "
             "example YAML block"
         )
 
@@ -89,19 +87,19 @@ class TestServerToolSurfaceContract:
 
         monkeypatch.setattr(srv, "_tools_enabled", False)
 
-    def test_enable_tools_prompt_names_all_forbidden_tools(self):
-        """enable_tools prompt text must name every forbidden tool with prohibition framing."""
-        from autoskillit.server import enable_tools
+    def test_open_kitchen_prompt_names_all_forbidden_tools(self):
+        """open_kitchen prompt text must name every forbidden tool with prohibition framing."""
+        from autoskillit.server import open_kitchen
 
-        result = enable_tools()
+        result = open_kitchen()
         content = result.messages[0].content
         text = content.text if hasattr(content, "text") else str(content)
 
         missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in text]
-        assert not missing, f"enable_tools prompt missing tools: {missing}"
+        assert not missing, f"open_kitchen prompt missing tools: {missing}"
 
         has_framing = any(term in text for term in ("NEVER", "Do NOT", "MUST NOT"))
-        assert has_framing, "enable_tools prompt lacks prohibition framing (NEVER/Do NOT/MUST NOT)"
+        assert has_framing, "open_kitchen prompt lacks prohibition framing (NEVER/Do NOT/MUST NOT)"
 
     def test_run_skill_docstring_names_all_forbidden_tools(self):
         """run_skill docstring must name every forbidden tool."""
@@ -121,14 +119,14 @@ class TestServerToolSurfaceContract:
         missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in doc]
         assert not missing, f"run_skill_retry docstring missing tools: {missing}"
 
-    def test_load_skill_script_docstring_names_all_forbidden_tools(self):
-        """load_skill_script docstring must name every forbidden tool."""
-        from autoskillit.server import load_skill_script
+    def test_load_recipe_docstring_names_all_forbidden_tools(self):
+        """load_recipe docstring must name every forbidden tool."""
+        from autoskillit.server import load_recipe
 
-        doc = load_skill_script.__doc__
+        doc = load_recipe.__doc__
         assert doc, "load_skill_script has no docstring"
         missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in doc]
-        assert not missing, f"load_skill_script docstring missing tools: {missing}"
+        assert not missing, f"load_recipe docstring missing tools: {missing}"
 
 
 class TestBundledWorkflowContract:
@@ -136,7 +134,12 @@ class TestBundledWorkflowContract:
 
     def test_bundled_workflows_constraints_name_all_forbidden_tools(self):
         """All bundled workflow YAML files must name every forbidden tool in constraints."""
-        from autoskillit.workflow_loader import list_workflows, load_workflow
+        from autoskillit.recipe_parser import (
+            list_recipes as list_workflows,
+        )
+        from autoskillit.recipe_parser import (
+            load_recipe as load_workflow,
+        )
 
         workflows = list_workflows(Path("/nonexistent"))
         bundled = [w for w in workflows.items if w.source.value == "builtin"]
@@ -144,7 +147,7 @@ class TestBundledWorkflowContract:
 
         for wf_info in bundled:
             wf = load_workflow(wf_info.path)
-            assert wf.constraints, f"{wf_info.name} has no constraints"
-            all_text = " ".join(wf.constraints)
+            assert wf.kitchen_rules, f"{wf_info.name} has no constraints"
+            all_text = " ".join(wf.kitchen_rules)
             missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in all_text]
             assert not missing, f"{wf_info.name} constraints missing tools: {missing}"

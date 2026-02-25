@@ -4,23 +4,23 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.recipe_parser import (
+    Recipe,
+    RecipeIngredient,
+    _parse_step,
+    load_recipe,
+)
 from autoskillit.semantic_rules import (
     RuleFinding,
     Severity,
     run_semantic_rules,
 )
-from autoskillit.workflow_loader import (
-    Workflow,
-    WorkflowInput,
-    _parse_step,
-    load_workflow,
-)
 
 
-def _make_workflow(steps: dict[str, dict]) -> Workflow:
-    """Build a minimal Workflow from step dicts using _parse_step."""
+def _make_workflow(steps: dict[str, dict]) -> Recipe:
+    """Build a minimal Recipe from step dicts using _parse_step."""
     parsed_steps = {name: _parse_step(data) for name, data in steps.items()}
-    return Workflow(name="test", description="test", steps=parsed_steps, constraints=["test"])
+    return Recipe(name="test", description="test", steps=parsed_steps, kitchen_rules=["test"])
 
 
 # ---------------------------------------------------------------------------
@@ -77,9 +77,7 @@ def test_unsatisfied_input_replaces_worktree_path_check():
     )
     findings = run_semantic_rules(wf)
     errors = [f for f in findings if f.severity == Severity.ERROR]
-    assert any(
-        f.rule == "unsatisfied-skill-input" and "worktree_path" in f.message for f in errors
-    )
+    assert any(f.rule == "missing-ingredient" and "worktree_path" in f.message for f in errors)
 
 
 def test_unsatisfied_input_clean_when_provided():
@@ -111,7 +109,7 @@ def test_unsatisfied_input_clean_when_provided():
         }
     )
     findings = run_semantic_rules(wf)
-    assert not any(f.rule == "unsatisfied-skill-input" for f in findings)
+    assert not any(f.rule == "missing-ingredient" for f in findings)
 
 
 def test_unsatisfied_input_not_available():
@@ -131,7 +129,7 @@ def test_unsatisfied_input_not_available():
     )
     findings = run_semantic_rules(wf)
     errors = [
-        f for f in findings if f.rule == "unsatisfied-skill-input" and f.severity == Severity.ERROR
+        f for f in findings if f.rule == "missing-ingredient" and f.severity == Severity.ERROR
     ]
     assert any("worktree_path" in f.message for f in errors)
 
@@ -149,17 +147,17 @@ def test_unsatisfied_input_unknown_skill_ignored():
         }
     )
     findings = run_semantic_rules(wf)
-    assert not any(f.rule == "unsatisfied-skill-input" for f in findings)
+    assert not any(f.rule == "missing-ingredient" for f in findings)
 
 
 def test_unsatisfied_input_from_pipeline_inputs():
     """Skill inputs satisfied by pipeline inputs (not just captures) -> no finding."""
-    wf = Workflow(
+    wf = Recipe(
         name="test",
         description="test",
-        inputs={
-            "plan_path": WorkflowInput(description="Plan file", required=True),
-            "worktree_path": WorkflowInput(description="Worktree", required=True),
+        ingredients={
+            "plan_path": RecipeIngredient(description="Plan file", required=True),
+            "worktree_path": RecipeIngredient(description="Worktree", required=True),
         },
         steps={
             "retry_step": _parse_step(
@@ -177,10 +175,10 @@ def test_unsatisfied_input_from_pipeline_inputs():
             ),
             "done": _parse_step({"action": "stop", "message": "Done."}),
         },
-        constraints=["test"],
+        kitchen_rules=["test"],
     )
     findings = run_semantic_rules(wf)
-    assert not any(f.rule == "unsatisfied-skill-input" for f in findings)
+    assert not any(f.rule == "missing-ingredient" for f in findings)
 
 
 def test_unsatisfied_input_non_skill_tool_ignored():
@@ -196,7 +194,7 @@ def test_unsatisfied_input_non_skill_tool_ignored():
         }
     )
     findings = run_semantic_rules(wf)
-    assert not any(f.rule == "unsatisfied-skill-input" for f in findings)
+    assert not any(f.rule == "missing-ingredient" for f in findings)
 
 
 def test_unsatisfied_input_inline_positional_args_skipped():
@@ -214,7 +212,7 @@ def test_unsatisfied_input_inline_positional_args_skipped():
         }
     )
     findings = run_semantic_rules(wf)
-    assert not any(f.rule == "unsatisfied-skill-input" for f in findings)
+    assert not any(f.rule == "missing-ingredient" for f in findings)
 
 
 # ---------------------------------------------------------------------------
@@ -401,14 +399,14 @@ def test_old_rule_removed():
 
 def test_bundled_workflows_pass_semantic_rules():
     """All bundled workflow YAML files produce no error-severity findings."""
-    from autoskillit.workflow_loader import builtin_workflows_dir
+    from autoskillit.recipe_parser import builtin_recipes_dir
 
-    wf_dir = builtin_workflows_dir()
+    wf_dir = builtin_recipes_dir()
     yaml_files = list(wf_dir.glob("*.yaml"))
     assert yaml_files, "Expected at least one bundled workflow"
 
     for path in yaml_files:
-        wf = load_workflow(path)
+        wf = load_recipe(path)
         findings = run_semantic_rules(wf)
         errors = [f for f in findings if f.severity == Severity.ERROR]
         assert not errors, (
@@ -441,7 +439,7 @@ class TestOutdatedScriptVersionRule:
         )
         wf.version = "0.1.0"
         findings = run_semantic_rules(wf)
-        version_findings = [f for f in findings if f.rule == "outdated-script-version"]
+        version_findings = [f for f in findings if f.rule == "outdated-recipe-version"]
         assert len(version_findings) == 1
 
     # MSR2: outdated-script-version does NOT fire when wf.version == installed
@@ -461,7 +459,7 @@ class TestOutdatedScriptVersionRule:
         )
         wf.version = "0.2.0"
         findings = run_semantic_rules(wf)
-        version_findings = [f for f in findings if f.rule == "outdated-script-version"]
+        version_findings = [f for f in findings if f.rule == "outdated-recipe-version"]
         assert len(version_findings) == 0
 
     # MSR3: outdated-script-version fires when wf.version is None
@@ -482,7 +480,7 @@ class TestOutdatedScriptVersionRule:
         # wf.version is None by default from _make_workflow
         assert wf.version is None
         findings = run_semantic_rules(wf)
-        version_findings = [f for f in findings if f.rule == "outdated-script-version"]
+        version_findings = [f for f in findings if f.rule == "outdated-recipe-version"]
         assert len(version_findings) == 1
 
     # MSR4: Rule produces WARNING severity (not ERROR)
@@ -502,7 +500,7 @@ class TestOutdatedScriptVersionRule:
         )
         wf.version = "0.1.0"
         findings = run_semantic_rules(wf)
-        version_findings = [f for f in findings if f.rule == "outdated-script-version"]
+        version_findings = [f for f in findings if f.rule == "outdated-recipe-version"]
         assert len(version_findings) == 1
         assert version_findings[0].severity == Severity.WARNING
 

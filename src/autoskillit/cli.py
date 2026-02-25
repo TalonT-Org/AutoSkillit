@@ -1,4 +1,4 @@
-"""CLI for autoskillit: serve, init, install, orchestrate, config, skills, workflows, update."""
+"""CLI for autoskillit: serve, init, install, cook, config, skills, recipes, update."""
 
 from __future__ import annotations
 
@@ -32,17 +32,17 @@ class DoctorResult:
 
 app = App(
     name="autoskillit",
-    help="MCP server for orchestrating automated workflows with Claude Code.",
+    help="MCP server for executing recipes with Claude Code.",
 )
 
 config_app = App(name="config", help="Configuration commands.")
 skills_app = App(name="skills", help="Skill management.")
-workflows_app = App(name="workflows", help="Workflow management.")
-workspace_app = App(name="workspace", help="Workspace management.")
+recipes_app = App(name="recipes", help="Recipe management.")
+workspace_app = App(name="prep-station", help="Prep station management.")
 
 app.command(config_app)
 app.command(skills_app)
-app.command(workflows_app)
+app.command(recipes_app)
 app.command(workspace_app)
 
 
@@ -52,10 +52,10 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     import logging as _stdlib_logging
 
     from autoskillit._logging import configure_logging
-    from autoskillit.script_loader import sync_bundled_scripts
+    from autoskillit.recipe_loader import sync_bundled_recipes
     from autoskillit.server import mcp
 
-    sync_bundled_scripts(Path.cwd())
+    sync_bundled_recipes(Path.cwd())
 
     configure_logging(
         level=_stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO,
@@ -104,12 +104,12 @@ def init(
 
     ensure_project_temp(project_dir)
 
-    print("\nReady! Start Claude Code and enable tools:")
+    print("\nReady! Start Claude Code and open the kitchen:")
     print("  claude")
     if _is_plugin_installed():
-        print("  /mcp__plugin_autoskillit_autoskillit__enable_tools")
+        print("  /mcp__plugin_autoskillit_autoskillit__open_kitchen")
     else:
-        print("  /mcp__autoskillit__enable_tools")
+        print("  /mcp__autoskillit__open_kitchen")
 
 
 _VALID_SCOPES = {"user", "project", "local"}
@@ -221,20 +221,20 @@ def _ensure_marketplace() -> Path:
 
 @app.command
 def update():
-    """Refresh built-in workflows, preserving customized ones."""
-    from autoskillit.workflow_loader import builtin_workflows_dir
+    """Refresh built-in recipes, preserving customized ones."""
+    from autoskillit.recipe_parser import builtin_recipes_dir
 
-    project_wf_dir = Path.cwd() / ".autoskillit" / "workflows"
-    if not project_wf_dir.is_dir():
-        print("No project workflows directory found. Nothing to update.")
+    project_recipe_dir = Path.cwd() / ".autoskillit" / "recipes"
+    if not project_recipe_dir.is_dir():
+        print("No project recipes directory found. Nothing to update.")
         return
 
-    builtin_dir = builtin_workflows_dir()
+    builtin_dir = builtin_recipes_dir()
     updated = []
     skipped = []
 
     for builtin_file in sorted(builtin_dir.glob("*.yaml")):
-        project_file = project_wf_dir / builtin_file.name
+        project_file = project_recipe_dir / builtin_file.name
         if not project_file.exists():
             shutil.copy2(builtin_file, project_file)
             updated.append(builtin_file.stem)
@@ -249,7 +249,45 @@ def update():
     if skipped:
         print(f"Skipped (customized): {', '.join(skipped)}")
     if not updated and not skipped:
-        print("No built-in workflows found.")
+        print("No built-in recipes found.")
+
+
+@app.command
+def upgrade():
+    """Migrate a project from .autoskillit/scripts/ to .autoskillit/recipes/.
+
+    Renames the directory and rewrites YAML top-level keys:
+      inputs: -> ingredients:
+      constraints: -> kitchen_rules:
+
+    Idempotent: safe to run multiple times.
+    """
+    import re
+
+    project_dir = Path.cwd()
+    scripts_dir = project_dir / ".autoskillit" / "scripts"
+    recipes_dir = project_dir / ".autoskillit" / "recipes"
+
+    if not scripts_dir.exists():
+        print("Nothing to do — .autoskillit/scripts/ not found.")
+        return
+
+    if recipes_dir.exists():
+        print("Nothing to do — .autoskillit/recipes/ already present.")
+        return
+
+    scripts_dir.rename(recipes_dir)
+
+    changed = 0
+    for yaml_file in sorted(recipes_dir.rglob("*.yaml")):
+        text = yaml_file.read_text()
+        new_text = re.sub(r"^inputs:", "ingredients:", text, flags=re.MULTILINE)
+        new_text = re.sub(r"^constraints:", "kitchen_rules:", new_text, flags=re.MULTILINE)
+        if new_text != text:
+            yaml_file.write_text(new_text)
+            changed += 1
+
+    print(f"Upgraded: directory renamed, {changed} file(s) updated.")
 
 
 def _is_plugin_installed() -> bool:
@@ -455,9 +493,9 @@ def doctor(*, output_json: bool = False):
 
     # Check 7: Script version health
     from autoskillit import __version__
-    from autoskillit.script_loader import list_scripts
+    from autoskillit.recipe_loader import list_recipes
 
-    scripts_result = list_scripts(Path.cwd())
+    scripts_result = list_recipes(Path.cwd())
     if not scripts_result.items:
         results.append(
             DoctorResult(
@@ -518,40 +556,46 @@ def doctor(*, output_json: bool = False):
 
 @app.command
 def migrate(*, check: bool = False):
-    """Report outdated pipeline scripts and their available migrations.
+    """Report outdated recipes and their available migrations.
 
     Parameters
     ----------
     check
-        Exit with code 1 if any scripts need migration (useful for CI).
+        Exit with code 1 if any recipes need migration (useful for CI).
     """
     from autoskillit import __version__
     from autoskillit.migration_loader import applicable_migrations
-    from autoskillit.script_loader import list_scripts
+    from autoskillit.recipe_loader import list_recipes
 
     project_dir = Path.cwd()
-    scripts = list_scripts(project_dir)
+    scripts_dir = project_dir / ".autoskillit" / "scripts"
+    recipes_dir = project_dir / ".autoskillit" / "recipes"
+    if scripts_dir.exists() and not recipes_dir.exists():
+        print("Project not upgraded — run 'autoskillit upgrade' first.")
+        return
 
-    if not scripts.items:
-        print("No pipeline scripts found in .autoskillit/scripts/")
+    recipes = list_recipes(project_dir)
+
+    if not recipes.items:
+        print("No recipes found in .autoskillit/recipes/")
         return
 
     pending = []
-    for script in scripts.items:
-        applicable = applicable_migrations(script.version, __version__)
+    for recipe in recipes.items:
+        applicable = applicable_migrations(recipe.version, __version__)
         if applicable:
-            pending.append((script, applicable))
+            pending.append((recipe, applicable))
 
     if not pending:
-        print(f"All {len(scripts.items)} script(s) are at version {__version__}.")
+        print(f"All {len(recipes.items)} recipe(s) are at version {__version__}.")
         return
 
-    print(f"{len(pending)} script(s) need migration:\n")
-    for script, migrations in pending:
-        current = script.version or "(no version)"
+    print(f"{len(pending)} recipe(s) need migration:\n")
+    for recipe, migrations in pending:
+        current = recipe.version or "(no version)"
         target = migrations[-1].to_version
         total_changes = sum(len(m.changes) for m in migrations)
-        print(f"  {script.name}: {current} -> {target} ({total_changes} change(s))")
+        print(f"  {recipe.name}: {current} -> {target} ({total_changes} change(s))")
         for mig in migrations:
             for change in mig.changes:
                 print(f"    - {change.description}")
@@ -560,8 +604,8 @@ def migrate(*, check: bool = False):
         raise SystemExit(1)
 
     print(
-        "\nTo apply migrations, start a Claude Code session and load each script "
-        "with load_skill_script. The agent will prompt you to migrate or suppress."
+        "\nTo apply migrations, start a Claude Code session and load each recipe "
+        "with load_recipe. The agent will prompt you to migrate or suppress."
     )
 
 
@@ -604,14 +648,14 @@ _MARKER_CONTENT = """\
 
 @workspace_app.command(name="init")
 def workspace_init(path: str):
-    """Create a workspace directory with the reset guard marker.
+    """Create a prep station directory with the reset guard marker.
 
     The directory must not exist or must be empty (or contain only the marker).
 
     Parameters
     ----------
     path
-        Path to the workspace directory to initialize.
+        Path to the prep station directory to initialize.
     """
     from datetime import datetime
 
@@ -626,7 +670,7 @@ def workspace_init(path: str):
         contents = [f for f in target.iterdir() if f.name != marker_name]
         if contents:
             print(f"Directory is not empty: {target}", file=sys.stderr)
-            print("workspace init only works on empty or new directories.", file=sys.stderr)
+            print("prep-station init only works on empty or new directories.", file=sys.stderr)
             sys.exit(1)
 
     target.mkdir(parents=True, exist_ok=True)
@@ -637,55 +681,55 @@ def workspace_init(path: str):
             version=__version__,
         )
     )
-    print(f"Workspace initialized: {target}")
+    print(f"Prep station initialized: {target}")
     print(f"Reset guard marker created: {marker}")
 
 
-@workflows_app.command(name="list")
-def workflows_list():
-    """List available workflows with sources."""
-    from autoskillit.workflow_loader import list_workflows
+@recipes_app.command(name="list")
+def recipes_list():
+    """List available recipes with sources."""
+    from autoskillit.recipe_parser import list_recipes
 
-    workflows = list_workflows(Path.cwd()).items
-    if not workflows:
-        print("No workflows found.")
+    recipes = list_recipes(Path.cwd()).items
+    if not recipes:
+        print("No recipes found.")
         return
 
-    name_w = max(len(w.name) for w in workflows)
-    src_w = max(len(w.source) for w in workflows)
+    name_w = max(len(r.name) for r in recipes)
+    src_w = max(len(r.source) for r in recipes)
     print(f"{'NAME':<{name_w}}  {'SOURCE':<{src_w}}  DESCRIPTION")
     print(f"{'-' * name_w}  {'-' * src_w}  {'-' * 11}")
-    for w in workflows:
-        print(f"{w.name:<{name_w}}  {w.source:<{src_w}}  {w.description}")
+    for r in recipes:
+        print(f"{r.name:<{name_w}}  {r.source:<{src_w}}  {r.description}")
 
 
-@workflows_app.command(name="show")
-def workflows_show(name: str):
-    """Print the YAML content of a named workflow."""
-    from autoskillit.workflow_loader import list_workflows
+@recipes_app.command(name="show")
+def recipes_show(name: str):
+    """Print the YAML content of a named recipe."""
+    from autoskillit.recipe_parser import list_recipes
 
-    workflows = list_workflows(Path.cwd()).items
-    match = next((w for w in workflows if w.name == name), None)
+    recipes = list_recipes(Path.cwd()).items
+    match = next((r for r in recipes if r.name == name), None)
     if match is None:
-        print(f"No workflow named '{name}'.", file=sys.stderr)
+        print(f"No recipe named '{name}'.", file=sys.stderr)
         sys.exit(1)
     print(match.path.read_text())
 
 
 def _build_orchestrator_prompt(script_yaml: str) -> str:
-    """Build the --append-system-prompt content for an orchestrate session."""
+    """Build the --append-system-prompt content for a cook session."""
     return f"""\
-You are a pipeline orchestrator. Execute the pipeline script below step-by-step.
+You are a pipeline orchestrator. Execute the recipe below step-by-step.
 
-FIRST: Type the enable_tools prompt to activate AutoSkillit MCP tools before \
+FIRST: Type the open_kitchen prompt to activate AutoSkillit MCP tools before \
 executing any pipeline steps. The exact prompt name depends on how the server \
 was loaded — for example, plugin installs use \
-/mcp__plugin_autoskillit_autoskillit__enable_tools while --plugin-dir loading \
+/mcp__plugin_autoskillit_autoskillit__open_kitchen while --plugin-dir loading \
 uses a different prefix. Check the available MCP prompts to find the correct \
-enable_tools prompt name.
+open_kitchen prompt name.
 
-After enabling tools:
-1. Present the script to the user using the preview format below
+After opening the kitchen:
+1. Present the recipe to the user using the preview format below
 2. Prompt for input values using AskUserQuestion
 3. Execute the pipeline steps by calling MCP tools directly
 
@@ -696,9 +740,9 @@ Preview format:
 
     **Flow:** {{summary}}
 
-    ### Inputs
-    For each input show: name, description, required/optional, default value.
-    Distinguish user-supplied inputs (required=true or meaningful defaults)
+    ### Ingredients
+    For each ingredient show: name, description, required/optional, default value.
+    Distinguish user-supplied ingredients (required=true or meaningful defaults)
     from agent-managed state (default="" or default=null with description
     indicating it is set by a prior step or the agent).
 
@@ -713,9 +757,9 @@ Preview format:
     - If note exists, show it (notes contain critical agent instructions)
     - If capture exists, show what values are extracted
 
-    ### Constraints
-    If present, list all constraint strings.
-    If absent, note: "No constraints defined"
+    ### Kitchen Rules
+    If present, list all kitchen_rules strings.
+    If absent, note: "No kitchen rules defined"
 
 During pipeline execution, only use AutoSkillit MCP tools:
 - Read, Grep, Glob (code investigation) — not used here because investigation
@@ -751,64 +795,64 @@ FAILURE PREDICATES — when to follow on_failure:
 - run_skill / run_skill_retry: {{"success": false}}
 - classify_fix: "error" key present in response
 
---- PIPELINE SCRIPT ---
+--- RECIPE ---
 {script_yaml}
---- END PIPELINE SCRIPT ---
+--- END RECIPE ---
 """
 
 
 @app.command
-def orchestrate(script: str):
-    """Launch an interactive Claude Code session to execute a pipeline script.
+def cook(recipe: str):
+    """Launch an interactive Claude Code session to execute a recipe.
 
     Starts Claude Code with hard tool restrictions: only AskUserQuestion
-    (built-in) and AutoSkillit MCP tools are available. The script is
+    (built-in) and AutoSkillit MCP tools are available. The recipe is
     injected via --append-system-prompt so the session starts ready to
     execute.
 
     Parameters
     ----------
-    script
-        Name of the pipeline script (from .autoskillit/scripts/).
+    recipe
+        Name of the recipe (from .autoskillit/recipes/).
     """
     if os.environ.get("CLAUDECODE"):
-        print("ERROR: 'orchestrate' cannot run inside a Claude Code session.")
+        print("ERROR: 'cook' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
-    from autoskillit.script_loader import list_scripts, load_script
+    from autoskillit.recipe_loader import list_recipes, load_recipe
 
-    script_yaml = load_script(Path.cwd(), script)
-    if script_yaml is None:
-        available = list_scripts(Path.cwd()).items
-        print(f"Script not found: '{script}'")
+    recipe_yaml = load_recipe(Path.cwd(), recipe)
+    if recipe_yaml is None:
+        available = list_recipes(Path.cwd()).items
+        print(f"Recipe not found: '{recipe}'")
         if available:
-            print("Available scripts:")
-            for s in available:
-                print(f"  - {s.name}")
+            print("Available recipes:")
+            for r in available:
+                print(f"  - {r.name}")
         else:
-            print("No scripts found in .autoskillit/scripts/")
+            print("No recipes found in .autoskillit/recipes/")
         sys.exit(1)
 
-    # Validate script before launching session
+    # Validate recipe before launching session
     import yaml
 
-    from autoskillit.workflow_loader import _parse_workflow, validate_workflow
+    from autoskillit.recipe_parser import _parse_recipe, validate_recipe
 
     try:
-        data = yaml.safe_load(script_yaml)
+        data = yaml.safe_load(recipe_yaml)
     except yaml.YAMLError as exc:
-        print(f"Script YAML parse error: {exc}")
+        print(f"Recipe YAML parse error: {exc}")
         sys.exit(1)
 
     if not isinstance(data, dict):
-        print("Script must contain a YAML mapping.")
+        print("Recipe must contain a YAML mapping.")
         sys.exit(1)
 
-    wf = _parse_workflow(data)
-    errors = validate_workflow(wf)
+    parsed = _parse_recipe(data)
+    errors = validate_recipe(parsed)
     if errors:
-        print(f"Script '{script}' failed validation:")
+        print(f"Recipe '{recipe}' failed validation:")
         for err in errors:
             print(f"  - {err}")
         sys.exit(1)
@@ -819,7 +863,7 @@ def orchestrate(script: str):
         sys.exit(1)
 
     plugin_dir = Path(__file__).parent
-    system_prompt = _build_orchestrator_prompt(script_yaml)
+    system_prompt = _build_orchestrator_prompt(recipe_yaml)
 
     cmd = [
         "claude",
@@ -841,7 +885,7 @@ def _print_next_steps() -> None:
     print("\nNext steps:")
     print("  1. cd into your project and run: autoskillit init")
     print("  2. Start Claude Code: claude")
-    print("  3. Enable tools: /mcp__plugin_autoskillit_autoskillit__enable_tools")
+    print("  3. Open the kitchen: /mcp__plugin_autoskillit_autoskillit__open_kitchen")
 
 
 # --- Init helpers ---
@@ -883,13 +927,13 @@ safety:
 #   timeout: 3600
 #   heartbeat_marker: '"type":"result"'
 #   stale_threshold: 1200
-#   completion_marker: "%%AUTOSKILLIT_COMPLETE%%"
+#   completion_marker: "%%ORDER_UP%%"
 #
 # run_skill_retry:
 #   timeout: 7200
 #   heartbeat_marker: '"type":"result"'
 #   stale_threshold: 1200
-#   completion_marker: "%%AUTOSKILLIT_COMPLETE%%"
+#   completion_marker: "%%ORDER_UP%%"
 """
 
 

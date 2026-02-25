@@ -60,7 +60,7 @@ class RunSkillConfig:
     timeout: int = 3600
     heartbeat_marker: str = '"type":"result"'
     stale_threshold: int = 1200  # 20 minutes
-    completion_marker: str = "%%AUTOSKILLIT_COMPLETE%%"
+    completion_marker: str = "%%ORDER_UP%%"
 
 
 @dataclass
@@ -68,7 +68,7 @@ class RunSkillRetryConfig:
     timeout: int = 7200
     heartbeat_marker: str = '"type":"result"'
     stale_threshold: int = 1200
-    completion_marker: str = "%%AUTOSKILLIT_COMPLETE%%"
+    completion_marker: str = "%%ORDER_UP%%"
 
 
 @dataclass

@@ -1,6 +1,6 @@
 ---
 name: setup-project
-description: Explore a target project and generate tailored pipeline scripts and config through an interactive workflow. Use when user wants to onboard a new project to AutoSkillit, says "setup project", or wants a starting point config.
+description: Explore a target project and generate tailored recipes and config through an interactive workflow. Use when user wants to onboard a new project to AutoSkillit, says "setup project", or wants a starting point config.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -12,12 +12,12 @@ hooks:
 
 # Setup Project Skill
 
-Explore a target project and generate tailored pipeline scripts and AutoSkillit config through an interactive, workflow-first UX.
+Explore a target project and generate tailored recipes and AutoSkillit config through an interactive, workflow-first UX.
 
 ## When to Use
 
 - User wants to onboard a new project to AutoSkillit
-- User passes a project path and wants ready-to-use pipeline scripts
+- User passes a project path and wants ready-to-use recipes
 - User has no `.autoskillit/config.yaml` and wants a starting point
 
 ## Arguments
@@ -45,7 +45,7 @@ Explore a target project and generate tailored pipeline scripts and AutoSkillit 
 - Detect language, test framework, build system, and CI from actual files
 - Present candidate workflows one by one for user approval before generating scripts
 - Show a summary confirmation gate before writing anything to disk
-- Use the two-directory model (project_dir + work_dir) in generated pipeline scripts
+- Use the two-directory model (project_dir + work_dir) in generated recipes
 
 ## Workflow
 
@@ -55,7 +55,7 @@ Extract `project_dir` from the prompt. Invocation: `/autoskillit:setup-project {
 
 Then prompt the user:
 
-> "Would you like me to also scan your Claude Code conversation history for this project to identify recurring patterns that could become pipeline scripts?"
+> "Would you like me to also scan your Claude Code conversation history for this project to identify recurring patterns that could become recipes?"
 
 Store the answer for Step 1.
 
@@ -85,7 +85,7 @@ Launch parallel Explore subagents against `project_dir`. If the user opted into 
 
 **Subagent D — Existing AutoSkillit Config:**
 - Check for `.autoskillit/config.yaml` — read if present
-- Check for `.autoskillit/scripts/` — list any pipeline scripts
+- Check for `.autoskillit/recipes/` — list any recipes
 - Check for `CLAUDE.md` — extract project constraints
 - Check for `.autoskillit/workflows/` — list any custom workflows
 
@@ -122,7 +122,7 @@ Consolidate subagent findings into a structured profile:
 - Worktree setup command (command to run after `git worktree add`)
 - Existing config state (none / partial / complete)
 - Current git branch (for `base_branch` default)
-- Discovered workflow patterns from conversation history (if opted in) — recurring tool sequences and skill chains, ranked by frequency, with candidate pipeline script drafts
+- Discovered workflow patterns from conversation history (if opted in) — recurring tool sequences and skill chains, ranked by frequency, with candidate recipe drafts
 
 ### Step 3: Write Analysis to temp/
 
@@ -142,7 +142,7 @@ Interactive flow. For each candidate workflow discovered:
 
 2. For each candidate workflow (including the standard one):
    - Present the workflow chain and explain what it automates
-   - Ask the user: "Would you like me to generate a pipeline script for this workflow?"
+   - Ask the user: "Would you like me to generate a recipe for this workflow?"
    - Before generating, resolve skill references in the workflow:
      - For each skill in the detected chain, check if it exists both locally
        (`.claude/skills/<name>/SKILL.md`) and as a bundled autoskillit skill
@@ -152,9 +152,9 @@ Interactive flow. For each candidate workflow discovered:
        > Local versions are recommended. Should I use local for all, or do you want
        > to pick individually?"
        List each conflicting skill name on its own line in the prompt.
-     - Record the user's preferences and pass them as context to make-script-skill
-   - If yes: LOAD `/autoskillit:make-script-skill` using the Skill tool to generate the script. The agent already has full context from the exploration phases (workflow name, detected variables like project_dir/work_dir/base_branch, tool call sequence, routing logic) — no explicit parameter passing is needed. make-script-skill uses that context directly to produce a clean script.
-   - Explain what a pipeline script is (discovered via `list_skill_scripts` MCP tool, loaded via `load_skill_script`, the agent interprets the YAML and executes the steps), show the generated script content
+     - Record the user's preferences and pass them as context to write-recipe
+   - If yes: LOAD `/autoskillit:write-recipe` using the Skill tool to generate the script. The agent already has full context from the exploration phases (workflow name, detected variables like project_dir/work_dir/base_branch, tool call sequence, routing logic) — no explicit parameter passing is needed. write-recipe uses that context directly to produce a clean script.
+   - Explain what a recipe is (discovered via `list_recipes` MCP tool, loaded via `load_recipe`, the agent interprets the YAML and executes the steps), show the generated script content
    - Track the user's approval — do NOT write to disk yet
    - Move to the next candidate workflow
 
@@ -193,13 +193,13 @@ test_check:
 
 Following the Terraform plan→apply pattern, show a summary of everything approved before touching disk:
 
-1. For each approved pipeline script, save to `.autoskillit/scripts/{name}.yaml`
-2. List all approved pipeline scripts with their save paths
+1. For each approved recipe, save to `.autoskillit/recipes/{name}.yaml`
+2. List all approved recipes with their save paths
 3. List all approved config changes
 4. Ask one final question: "Write all of the above?"
 5. If confirmed:
    - Create target directories as needed
-   - Write all approved pipeline scripts to their chosen paths
+   - Write all approved recipes to their chosen paths
    - Apply all approved config changes
 6. If declined: abort without writing anything
 
@@ -221,5 +221,5 @@ Do NOT include:
 
 Artifacts created:
 - `temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
-- `.autoskillit/scripts/{name}.yaml` — approved pipeline scripts
+- `.autoskillit/recipes/{name}.yaml` — approved recipes
 - `.autoskillit/config.yaml` — updated config (if changes approved)

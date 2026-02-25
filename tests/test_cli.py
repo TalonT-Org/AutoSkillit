@@ -93,12 +93,12 @@ class TestCLI:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        wf_dir = tmp_path / ".autoskillit" / "workflows"
+        wf_dir = tmp_path / ".autoskillit" / "recipes"
         wf_dir.mkdir(parents=True)
 
-        from autoskillit.workflow_loader import builtin_workflows_dir
+        from autoskillit.recipe_parser import builtin_recipes_dir
 
-        builtin_dir = builtin_workflows_dir()
+        builtin_dir = builtin_recipes_dir()
         for f in builtin_dir.glob("*.yaml"):
             shutil.copy2(f, wf_dir / f.name)
 
@@ -183,20 +183,20 @@ class TestCLI:
 
     # --- workspace init ---
 
-    def test_workspace_init_creates_dir_with_marker(
+    def test_prep_station_init_creates_dir_with_marker(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """workspace init creates directory and drops marker file."""
+        """prep station init creates directory and drops marker file."""
         monkeypatch.chdir(tmp_path)
         target = tmp_path / "test-workspace"
         cli.workspace_init(str(target))
         assert target.is_dir()
         assert (target / ".autoskillit-workspace").is_file()
 
-    def test_workspace_init_refuses_nonempty_dir(
+    def test_prep_station_init_refuses_nonempty_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """workspace init refuses to initialize a non-empty directory."""
+        """prep station init refuses to initialize a non-empty directory."""
         monkeypatch.chdir(tmp_path)
         target = tmp_path / "existing"
         target.mkdir()
@@ -204,22 +204,22 @@ class TestCLI:
         with pytest.raises(SystemExit):
             cli.workspace_init(str(target))
 
-    def test_workspace_init_idempotent_on_empty_with_marker(
+    def test_prep_station_init_idempotent_on_empty_with_marker(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """workspace init is safe to re-run on a directory that only has the marker."""
+        """prep station init is safe to re-run on a directory that only has the marker."""
         monkeypatch.chdir(tmp_path)
-        target = tmp_path / "workspace"
+        target = tmp_path / "prep-station"
         cli.workspace_init(str(target))
         cli.workspace_init(str(target))  # second run — should not fail
         assert (target / ".autoskillit-workspace").is_file()
 
-    def test_workspace_init_marker_has_content(
+    def test_prep_station_init_marker_has_content(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Marker file contains human-readable identifying content."""
         monkeypatch.chdir(tmp_path)
-        target = tmp_path / "workspace"
+        target = tmp_path / "prep-station"
         cli.workspace_init(str(target))
         content = (target / ".autoskillit-workspace").read_text()
         assert "autoskillit" in content
@@ -607,13 +607,13 @@ class TestCLI:
 
         assert (tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit").is_symlink()
 
-    # --- orchestrate ---
+    # --- cook ---
 
     _SCRIPT_YAML = """\
 name: test-script
 description: A test script
 summary: Test flow
-inputs:
+ingredients:
   target:
     description: Target path
     required: true
@@ -627,112 +627,112 @@ steps:
   done:
     action: stop
     message: Finished
-constraints:
+kitchen_rules:
   - Only use AutoSkillit MCP tools during pipeline execution
 """
 
-    def test_orchestrate_blocked_inside_claude_session(
+    def test_cook_blocked_inside_claude_session(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """orchestrate exits 1 when CLAUDECODE env var is set."""
+        """cook exits 1 when CLAUDECODE env var is set."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("CLAUDECODE", "1")
         with pytest.raises(SystemExit) as exc_info:
-            cli.orchestrate("any-script")
+            cli.cook("any-script")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "regular terminal" in captured.out.lower()
 
-    def test_orchestrate_script_not_found(
+    def test_cook_script_not_found(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """orchestrate exits 1 when script name doesn't match any entry."""
+        """cook exits 1 when script name doesn't match any entry."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.orchestrate("nonexistent")
+            cli.cook("nonexistent")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "nonexistent" in captured.out
 
-    def test_orchestrate_no_scripts_dir(
+    def test_cook_no_scripts_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """orchestrate exits 1 when no .autoskillit/scripts/ directory exists."""
+        """cook exits 1 when no .autoskillit/recipes/ directory exists."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.orchestrate("anything")
+            cli.cook("anything")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
-        assert "No scripts found" in captured.out
+        assert "No recipes found" in captured.out
 
-    def test_orchestrate_available_scripts_listed(
+    def test_cook_available_scripts_listed(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """orchestrate lists available scripts when name doesn't match."""
+        """cook lists available scripts when name doesn't match."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.orchestrate("nonexistent")
+            cli.cook("nonexistent")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
-        assert "Available scripts:" in captured.out
+        assert "Available recipes:" in captured.out
         assert "test-script" in captured.out
 
-    def test_orchestrate_claude_not_on_path(
+    def test_cook_claude_not_on_path(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """orchestrate exits 1 when claude command is not found."""
+        """cook exits 1 when claude command is not found."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.orchestrate("test-script")
+            cli.cook("test-script")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "claude" in captured.out.lower()
 
-    def test_orchestrate_invalid_script_exits(
+    def test_cook_invalid_script_exits(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """orchestrate exits 1 when script YAML fails validation."""
+        """cook exits 1 when script YAML fails validation."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         # Script with no steps (empty mapping) — will fail validation
         (scripts_dir / "bad-script.yaml").write_text("name: bad-script\nsteps: {}\n")
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.orchestrate("bad-script")
+            cli.cook("bad-script")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "validation" in captured.out.lower() or "error" in captured.out.lower()
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_orchestrate_builds_correct_command(
+    def test_cook_builds_correct_command(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """orchestrate passes correct flags to subprocess.run."""
+        """cook passes correct flags to subprocess.run."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
@@ -740,7 +740,7 @@ constraints:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        cli.orchestrate("test-script")
+        cli.cook("test-script")
 
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
@@ -763,16 +763,16 @@ constraints:
         assert "stdin" not in kwargs
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_orchestrate_system_prompt_contains_script(
+    def test_cook_system_prompt_contains_script(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """orchestrate injects script YAML and orchestrator contract into system prompt."""
+        """cook injects script YAML and orchestrator contract into system prompt."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
@@ -780,7 +780,7 @@ constraints:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        cli.orchestrate("test-script")
+        cli.cook("test-script")
 
         cmd = mock_run.call_args[0][0]
         prompt_idx = cmd.index("--append-system-prompt")
@@ -792,8 +792,8 @@ constraints:
         assert "ROUTING RULES" in system_prompt
         # Contains failure predicates
         assert "FAILURE PREDICATES" in system_prompt
-        # Contains enable_tools reference
-        assert "enable_tools" in system_prompt
+        # Contains open_kitchen reference
+        assert "open_kitchen" in system_prompt
         # Contains tool discipline block
         assert "capture:" in system_prompt
         assert "${{ context." in system_prompt
@@ -802,16 +802,16 @@ constraints:
         assert "--plugin-dir" in system_prompt
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_orchestrate_propagates_exit_code(
+    def test_cook_propagates_exit_code(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """orchestrate does not raise SystemExit on returncode 0."""
+        """cook does not raise SystemExit on returncode 0."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
@@ -819,20 +819,20 @@ constraints:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        cli.orchestrate("test-script")  # should not raise
+        cli.cook("test-script")  # should not raise
         mock_run.assert_called_once()
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_orchestrate_subprocess_failure_propagates(
+    def test_cook_subprocess_failure_propagates(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """orchestrate propagates non-zero subprocess exit codes."""
+        """cook propagates non-zero subprocess exit codes."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(self._SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
@@ -841,7 +841,7 @@ constraints:
         )
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.orchestrate("test-script")
+            cli.cook("test-script")
         assert exc_info.value.code == 42
 
 
@@ -861,7 +861,7 @@ steps:
   done:
     action: stop
     message: Done
-constraints:
+kitchen_rules:
   - Only use AutoSkillit MCP tools during pipeline execution
 """
 
@@ -869,14 +869,14 @@ constraints:
 class TestDoctorScriptHealth:
     """Doctor check for script version staleness."""
 
-    # DOC1: No .autoskillit/scripts/ -> OK result
+    # DOC1: No .autoskillit/recipes/ -> OK result
     def test_no_scripts_dir_reports_ok(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """doctor reports OK for script_version_health when no scripts directory exists."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        # No .autoskillit/scripts/ directory created
+        # No .autoskillit/recipes/ directory created
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
@@ -894,7 +894,7 @@ class TestDoctorScriptHealth:
         current_version = autoskillit.__version__
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "up-to-date.yaml").write_text(
             f"name: up-to-date\ndescription: Current version\n"
@@ -918,7 +918,7 @@ class TestDoctorScriptHealth:
         monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "old-script.yaml").write_text(
             'name: old-script\ndescription: Old\nautoskillit_version: "0.1.0"\n'
@@ -941,7 +941,7 @@ class TestDoctorScriptHealth:
         """doctor reports WARNING when script YAML has no autoskillit_version field."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "no-version.yaml").write_text(
             "name: no-version\ndescription: No version field\n"
@@ -971,7 +971,7 @@ class TestMigrateCommand:
 
         monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         script_content = 'name: my-pipeline\ndescription: Test\nautoskillit_version: "0.1.0"\n'
         (scripts_dir / "my-pipeline.yaml").write_text(script_content)
@@ -994,7 +994,7 @@ class TestMigrateCommand:
 
         current_version = autoskillit.__version__
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "current.yaml").write_text(
             f'name: current\ndescription: Up to date\nautoskillit_version: "{current_version}"\n'
@@ -1015,7 +1015,7 @@ class TestMigrateCommand:
 
         monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "old1.yaml").write_text(
             'name: old1\ndescription: Old\nautoskillit_version: "0.1.0"\n'
@@ -1027,7 +1027,7 @@ class TestMigrateCommand:
         cli.migrate(check=False)
 
         captured = capsys.readouterr()
-        assert "2 script(s) need migration" in captured.out
+        assert "2 recipe(s) need migration" in captured.out
 
     # MIG4: --check returns exit code 1 when migrations pending
     def test_check_exits_1_when_pending(
@@ -1038,7 +1038,7 @@ class TestMigrateCommand:
 
         monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "outdated.yaml").write_text(
             'name: outdated\ndescription: Old\nautoskillit_version: "0.1.0"\n'
@@ -1057,7 +1057,7 @@ class TestMigrateCommand:
 
         current_version = autoskillit.__version__
         monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "current.yaml").write_text(
             f'name: current\ndescription: Up to date\nautoskillit_version: "{current_version}"\n'

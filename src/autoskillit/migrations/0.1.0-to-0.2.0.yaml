@@ -30,3 +30,62 @@ changes:
           cwd: "${{ context.worktree_path }}"
         on_success: done
         on_failure: escalate
+
+  - id: rename-tool-list-skill-scripts
+    description: "list_skill_scripts renamed to list_recipes"
+    instruction: |
+      Find every step where `tool: list_skill_scripts` and rename the tool value
+      to `list_recipes`. Leave all other step fields unchanged.
+    detect:
+      tool: "list_skill_scripts"
+      rename_to: "list_recipes"
+    example_before: |
+      my_step:
+        tool: list_skill_scripts
+        on_success: done
+    example_after: |
+      my_step:
+        tool: list_recipes
+        on_success: done
+
+  - id: rename-tool-load-skill-script
+    description: "load_skill_script renamed to load_recipe"
+    instruction: |
+      Find every step where `tool: load_skill_script` and rename to `load_recipe`.
+    detect:
+      tool: "load_skill_script"
+      rename_to: "load_recipe"
+    example_before: |
+      my_step:
+        tool: load_skill_script
+    example_after: |
+      my_step:
+        tool: load_recipe
+
+  - id: rename-tool-validate-script
+    description: "validate_script renamed to validate_recipe"
+    instruction: |
+      Find every step where `tool: validate_script` and rename to `validate_recipe`.
+    detect:
+      tool: "validate_script"
+      rename_to: "validate_recipe"
+    example_before: |
+      my_step:
+        tool: validate_script
+    example_after: |
+      my_step:
+        tool: validate_recipe
+
+  - id: rename-tool-autoskillit-status
+    description: "autoskillit_status renamed to kitchen_status"
+    instruction: |
+      Find every step where `tool: autoskillit_status` and rename to `kitchen_status`.
+    detect:
+      tool: "autoskillit_status"
+      rename_to: "kitchen_status"
+    example_before: |
+      my_step:
+        tool: autoskillit_status
+    example_after: |
+      my_step:
+        tool: kitchen_status

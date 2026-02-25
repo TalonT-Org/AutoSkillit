@@ -110,7 +110,7 @@ def _require_enabled() -> str | None:
     if not _tools_enabled:
         return _gate_error_result(
             "AutoSkillit tools are not enabled. "
-            "User must type the enable_tools prompt to activate. "
+            "User must type the open_kitchen prompt to activate. "
             "Check the MCP prompt list for the exact name."
         )
     return None
@@ -1455,14 +1455,14 @@ async def reset_workspace(test_dir: str) -> str:
 
 
 @mcp.tool(tags={"automation"})
-async def autoskillit_status() -> str:
+async def kitchen_status() -> str:
     """Return version health and configuration status for the running server.
 
     Reports package version, plugin.json version, version match status,
     tools enabled state, and active configuration summary. Call this after
     enabling tools or anytime you need to verify the server is healthy.
 
-    This tool is always available (not gated by enable_tools).
+    This tool is always available (not gated by open_kitchen).
     """
     info = _version_info()
     status = {
@@ -1536,29 +1536,29 @@ async def get_token_summary(clear: bool = False) -> str:
 
 
 @mcp.tool(tags={"automation"})
-async def list_skill_scripts() -> str:
-    """List available pipeline scripts from .autoskillit/scripts/.
+async def list_recipes() -> str:
+    """List available recipes from .autoskillit/recipes/.
 
-    Returns a JSON array of scripts with name, description, and summary.
-    Scripts are YAML workflow definitions that agents follow as orchestration
-    instructions. Use load_skill_script to load a specific script.
-    To create a new script, use the /autoskillit:make-script-skill skill.
-    To generate scripts as part of project onboarding, use /autoskillit:setup-project.
+    Returns a JSON array of recipes with name, description, and summary.
+    Recipes are YAML workflow definitions that agents follow as orchestration
+    instructions. Use load_recipe to load a specific recipe.
+    To create a new recipe, use the /autoskillit:write-recipe skill.
+    To generate recipes as part of project onboarding, use /autoskillit:setup-project.
 
-    IMPORTANT: Pipeline scripts are NOT slash commands. They cannot be invoked
-    as /autoskillit:<name>. They are loaded via load_skill_script and executed
-    step-by-step by the agent. Scripts live in .autoskillit/scripts/ (NOT in
+    IMPORTANT: Recipes are NOT slash commands. They cannot be invoked
+    as /autoskillit:<name>. They are loaded via load_recipe and executed
+    step-by-step by the agent. Recipes live in .autoskillit/recipes/ (NOT in
     .autoskillit/skills/ or any other directory).
 
-    This tool is always available (not gated by enable_tools).
+    This tool is always available (not gated by open_kitchen).
     """
-    from autoskillit.script_loader import list_scripts
+    from autoskillit.recipe_loader import list_recipes as _list_recipes
 
-    result = list_scripts(Path.cwd())
+    result = _list_recipes(Path.cwd())
     response: dict[str, object] = {
-        "scripts": [
-            {"name": s.name, "description": s.description, "summary": s.summary}
-            for s in result.items
+        "recipes": [
+            {"name": r.name, "description": r.description, "summary": r.summary}
+            for r in result.items
         ],
     }
     if result.errors:
@@ -1567,19 +1567,19 @@ async def list_skill_scripts() -> str:
 
 
 @mcp.tool(tags={"automation"})
-async def load_skill_script(name: str) -> str:
-    """Load a pipeline script by name and return its raw YAML content.
+async def load_recipe(name: str) -> str:
+    """Load a recipe by name and return its raw YAML content.
 
-    The YAML follows the workflow schema (inputs, steps with tool/action,
+    The YAML follows the recipe schema (ingredients, steps with tool/action,
     on_success/on_failure routing, retry blocks). The agent should interpret
     the YAML and execute the steps using the appropriate MCP tools.
 
     After loading:
-    1. Present the script to the user using the preview format below
-    2. If the user requests changes, use the /autoskillit:make-script-skill skill
+    1. Present the recipe to the user using the preview format below
+    2. If the user requests changes, use the /autoskillit:write-recipe skill
        to apply modifications. That skill has the complete schema, validation rules,
        and formatting constraints needed for correct changes. Do NOT edit the YAML
-       file directly — always delegate modifications to make-script-skill.
+       file directly — always delegate modifications to write-recipe.
     3. Prompt for input values using AskUserQuestion
     4. Execute the pipeline steps by calling MCP tools directly
 
@@ -1615,9 +1615,9 @@ async def load_skill_script(name: str) -> str:
               {name}  "{message}"
         - Close the table with the same ─── rule used to open it.
 
-        ### Inputs
-        For each input show: name, description, required/optional, default value.
-        Distinguish user-supplied inputs (required=true or meaningful defaults)
+        ### Ingredients
+        For each ingredient show: name, description, required/optional, default value.
+        Distinguish user-supplied ingredients (required=true or meaningful defaults)
         from agent-managed state (default="" or default=null with description
         indicating it is set by a prior step or the agent).
 
@@ -1630,9 +1630,9 @@ async def load_skill_script(name: str) -> str:
         - If capture exists, show what values are extracted
         - If model: show the model value (e.g., "Model: sonnet")
 
-        ### Constraints
-        If present, list all constraint strings.
-        If absent, note: "No constraints defined"
+        ### Kitchen Rules
+        If present, list all kitchen_rules strings.
+        If absent, note: "No kitchen rules defined"
 
     NEVER use native Claude Code tools from the orchestrator during pipeline
     execution. The following are prohibited: Read, Grep, Glob, Edit, Write,
@@ -1699,15 +1699,15 @@ async def load_skill_script(name: str) -> str:
     - run_skill / run_skill_retry: {"success": false}
     - classify_fix: "error" key present in response
 
-    To CREATE a new script, use the /autoskillit:make-script-skill skill.
-    This tool is for loading and executing existing scripts.
+    To CREATE a new recipe, use the /autoskillit:write-recipe skill.
+    This tool is for loading and executing existing recipes.
 
-    IMPORTANT: Pipeline scripts are NOT slash commands. They cannot be invoked
-    as /autoskillit:<name>. The correct way to run a script is to call this
-    tool, then follow the YAML steps. Scripts live in .autoskillit/scripts/
+    IMPORTANT: Recipes are NOT slash commands. They cannot be invoked
+    as /autoskillit:<name>. The correct way to run a recipe is to call this
+    tool, then follow the YAML steps. Recipes live in .autoskillit/recipes/
     as .yaml files (NOT in .autoskillit/skills/ or any other directory).
 
-    This tool is always available (not gated by enable_tools).
+    This tool is always available (not gated by open_kitchen).
 
     Response format: always JSON with ``content`` (raw YAML string) and
     ``suggestions`` (list of semantic findings, possibly empty) keys.
@@ -1717,24 +1717,24 @@ async def load_skill_script(name: str) -> str:
 
     from autoskillit.contract_validator import (
         check_contract_staleness,
-        generate_pipeline_contract,
-        load_pipeline_contract,
-        validate_pipeline_contracts,
+        generate_recipe_card,
+        load_recipe_card,
+        validate_recipe_cards,
     )
-    from autoskillit.script_loader import load_script
+    from autoskillit.recipe_loader import load_recipe as _load_recipe
+    from autoskillit.recipe_parser import _parse_recipe
     from autoskillit.semantic_rules import run_semantic_rules
-    from autoskillit.workflow_loader import _parse_workflow
 
-    content = load_script(Path.cwd(), name)
+    content = _load_recipe(Path.cwd(), name)
     if content is None:
-        return json.dumps({"error": f"No script named '{name}' in .autoskillit/scripts/"})
+        return json.dumps({"error": f"No recipe named '{name}' in .autoskillit/recipes/"})
 
     suggestions: list[dict[str, str]] = []
     try:
         data = yaml.safe_load(content)
         if isinstance(data, dict) and "steps" in data:
-            wf = _parse_workflow(data)
-            findings = run_semantic_rules(wf)
+            recipe = _parse_recipe(data)
+            findings = run_semantic_rules(recipe)
             suggestions = [f.to_dict() for f in findings]
 
             # Migration awareness — filter suppressed, add migration note context
@@ -1745,20 +1745,20 @@ async def load_skill_script(name: str) -> str:
 
             if is_suppressed:
                 suggestions = [
-                    s for s in suggestions if s.get("rule") != "outdated-script-version"
+                    s for s in suggestions if s.get("rule") != "outdated-recipe-version"
                 ]
             else:
                 for s in suggestions:
-                    if s.get("rule") == "outdated-script-version":
+                    if s.get("rule") == "outdated-recipe-version":
                         s["message"] += (
                             " Ask the user: migrate now or suppress? "
-                            "If migrate: invoke /autoskillit:migrate-scripts. "
-                            "If suppress: add this script name to migration.suppressed "
+                            "If migrate: invoke /autoskillit:migrate-recipes. "
+                            "If suppress: add this recipe name to migration.suppressed "
                             "in .autoskillit/config.yaml."
                         )
 
             if not is_suppressed:
-                migrations = applicable_migrations(wf.version, __version__)
+                migrations = applicable_migrations(recipe.version, __version__)
                 for note in migrations:
                     for change in note.changes:
                         suggestions.append(
@@ -1772,22 +1772,22 @@ async def load_skill_script(name: str) -> str:
                         )
 
             # Contract validation
-            scripts_dir = Path.cwd() / ".autoskillit" / "scripts"
-            contract = load_pipeline_contract(name, scripts_dir)
+            recipes_dir = Path.cwd() / ".autoskillit" / "recipes"
+            contract = load_recipe_card(name, recipes_dir)
             if contract is None:
                 # Auto-generate for first load
-                script_path = scripts_dir / f"{name}.yaml"
-                if not script_path.exists():
-                    script_path = scripts_dir / f"{name}.yml"
-                if script_path.exists():
+                recipe_path = recipes_dir / f"{name}.yaml"
+                if not recipe_path.exists():
+                    recipe_path = recipes_dir / f"{name}.yml"
+                if recipe_path.exists():
                     try:
-                        generate_pipeline_contract(script_path, scripts_dir)
-                        contract = load_pipeline_contract(name, scripts_dir)
+                        generate_recipe_card(recipe_path, recipes_dir)
+                        contract = load_recipe_card(name, recipes_dir)
                     except Exception:
                         pass  # Non-blocking
 
             if contract:
-                contract_findings = validate_pipeline_contracts(wf, contract)
+                contract_findings = validate_recipe_cards(recipe, contract)
                 suggestions.extend(contract_findings)
 
                 # Staleness check
@@ -1813,42 +1813,44 @@ async def load_skill_script(name: str) -> str:
 
 
 @mcp.tool(tags={"automation"})
-async def validate_script(script_path: str) -> str:
-    """Validate a pipeline script YAML file against the workflow schema.
+async def validate_recipe(script_path: str) -> str:
+    """Validate a recipe YAML file against the recipe schema.
 
     Parses the file, checks all validation rules (name, steps, routing,
-    retry fields, input references), and returns structured results.
-    Use after generating or modifying a script (via make-script-skill)
-    to confirm it is valid. The /autoskillit:make-script-skill skill
-    calls this tool automatically after generating a script.
+    retry fields, ingredient references), and returns structured results.
+    Use after generating or modifying a recipe (via write-recipe)
+    to confirm it is valid. The /autoskillit:write-recipe skill
+    calls this tool automatically after generating a recipe.
 
     When validation fails ({"valid": false}), do NOT edit the YAML file
-    directly to fix errors. Use the /autoskillit:make-script-skill skill
+    directly to fix errors. Use the /autoskillit:write-recipe skill
     to apply corrections — it has the complete schema, validation rules,
     and formatting constraints needed for correct modifications.
 
-    IMPORTANT: Pipeline scripts are NOT slash commands. They cannot be invoked
-    as /autoskillit:<name>. They are loaded via load_skill_script and executed
-    step-by-step by the agent. Scripts live in .autoskillit/scripts/
+    IMPORTANT: Recipes are NOT slash commands. They cannot be invoked
+    as /autoskillit:<name>. They are loaded via load_recipe and executed
+    step-by-step by the agent. Recipes live in .autoskillit/recipes/
     as .yaml files.
 
-    This tool is always available (not gated by enable_tools).
+    This tool is always available (not gated by open_kitchen).
 
     Args:
-        script_path: Absolute path to the .yaml script file to validate.
+        script_path: Absolute path to the .yaml recipe file to validate.
     """
     import yaml
 
     from autoskillit.contract_validator import (
-        load_pipeline_contract,
-        validate_pipeline_contracts,
+        load_recipe_card,
+        validate_recipe_cards,
+    )
+    from autoskillit.recipe_parser import (
+        _parse_recipe,
+        analyze_dataflow,
+    )
+    from autoskillit.recipe_parser import (
+        validate_recipe as _validate_recipe,
     )
     from autoskillit.semantic_rules import Severity, run_semantic_rules
-    from autoskillit.workflow_loader import (
-        _parse_workflow,
-        analyze_dataflow,
-        validate_workflow,
-    )
 
     path = Path(script_path)
     if not path.is_file():
@@ -1862,10 +1864,10 @@ async def validate_script(script_path: str) -> str:
     if not isinstance(data, dict):
         return json.dumps({"error": "File must contain a YAML mapping"})
 
-    wf = _parse_workflow(data)
-    errors = validate_workflow(wf)
-    report = analyze_dataflow(wf)
-    semantic_findings = run_semantic_rules(wf)
+    recipe = _parse_recipe(data)
+    errors = _validate_recipe(recipe)
+    report = analyze_dataflow(recipe)
+    semantic_findings = run_semantic_rules(recipe)
 
     quality = {
         "warnings": [
@@ -1883,11 +1885,11 @@ async def validate_script(script_path: str) -> str:
 
     # Contract validation
     contract_findings: list[dict] = []
-    scripts_dir = path.parent
-    script_name = path.stem
-    contract = load_pipeline_contract(script_name, scripts_dir)
+    recipes_dir = path.parent
+    recipe_name = path.stem
+    contract = load_recipe_card(recipe_name, recipes_dir)
     if contract:
-        contract_findings = validate_pipeline_contracts(wf, contract)
+        contract_findings = validate_recipe_cards(recipe, contract)
 
     has_schema_errors = bool(errors)
     has_semantic_errors = any(f.severity == Severity.ERROR for f in semantic_findings)
@@ -1905,40 +1907,40 @@ async def validate_script(script_path: str) -> str:
     )
 
 
-def _enable_tools_handler() -> None:
+def _open_kitchen_handler() -> None:
     """Set the tools-enabled flag. Extracted for testability."""
     global _tools_enabled
     _tools_enabled = True
 
 
-def _disable_tools_handler() -> None:
+def _close_kitchen_handler() -> None:
     """Clear the tools-enabled flag. Extracted for testability."""
     global _tools_enabled
     _tools_enabled = False
 
 
-@mcp.resource("workflow://{name}")
-def get_workflow(name: str) -> str:
-    """Return workflow YAML for the orchestrating agent to follow."""
-    from autoskillit.workflow_loader import list_workflows
+@mcp.resource("recipe://{name}")
+def get_recipe(name: str) -> str:
+    """Return recipe YAML for the orchestrating agent to follow."""
+    from autoskillit.recipe_parser import list_recipes
 
-    result = list_workflows(Path.cwd())
-    match = next((w for w in result.items if w.name == name), None)
+    result = list_recipes(Path.cwd())
+    match = next((r for r in result.items if r.name == name), None)
     if match is None:
-        return json.dumps({"error": f"No workflow named '{name}'."})
+        return json.dumps({"error": f"No recipe named '{name}'."})
     return match.path.read_text()
 
 
 @mcp.prompt()
-def enable_tools() -> PromptResult:
+def open_kitchen() -> PromptResult:
     """Enable AutoSkillit MCP tools for this session."""
-    _enable_tools_handler()
+    _open_kitchen_handler()
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
 
     text = (
-        "AutoSkillit tools are now enabled for this session. "
-        "Call the autoskillit_status tool now to display version "
+        "Kitchen is open. AutoSkillit tools are ready for service. "
+        "Call the kitchen_status tool now to display version "
         "and health information to the user.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
@@ -1949,11 +1951,21 @@ def enable_tools() -> PromptResult:
         "route to on_failure and let the downstream skill handle diagnosis."
     )
 
+    # Check if the project needs an upgrade
+    scripts_dir = Path.cwd() / ".autoskillit" / "scripts"
+    recipes_dir = Path.cwd() / ".autoskillit" / "recipes"
+    if scripts_dir.exists() and not recipes_dir.exists():
+        text += (
+            "\n\n⚠️ UPGRADE NEEDED: This project has not been migrated to the new recipe format.\n"
+            "`.autoskillit/scripts/` still exists. Run `autoskillit upgrade` in this directory\n"
+            "to migrate automatically, or ask me to do it for you."
+        )
+
     return PromptResult([Message(text, role="user")])
 
 
 @mcp.prompt()
-def disable_tools() -> PromptResult:
+def close_kitchen() -> PromptResult:
     """Disable AutoSkillit MCP tools for this session."""
-    _disable_tools_handler()
-    return PromptResult([Message("AutoSkillit tools are now disabled.", role="assistant")])
+    _close_kitchen_handler()
+    return PromptResult([Message("Kitchen is closed.", role="assistant")])

@@ -1,7 +1,7 @@
 name: audit-and-fix
 description: Audit codebase, investigate findings, plan fixes, and implement.
 
-constraints:
+kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
     Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
     orchestrator. All code changes and investigation happen through
@@ -10,7 +10,7 @@ constraints:
     assess-and-merge) has diagnostic access that the orchestrator does not.
     Do not investigate or attempt to fix failures directly."
 
-inputs:
+ingredients:
   work_dir:
     description: Working directory for agent sessions
     required: true

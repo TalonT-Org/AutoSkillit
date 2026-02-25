@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 14 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db + ungated autoskillit_status, list_skill_scripts, load_skill_script, validate_script) with 10 gated behind MCP prompts for user-only activation, and 13 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 15 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db + ungated autoskillit_status, list_skill_scripts, load_skill_script, validate_script, get_pipeline_report) with 10 gated behind MCP prompts for user-only activation, and 13 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -65,10 +65,12 @@ Configured hooks: ruff format (auto-fix), ruff check (auto-fix), mypy type check
 
 ```
 src/autoskillit/
-├── __init__.py              # Package version
+├── __init__.py              # Package version + NullHandler for stdlib compat
 ├── __main__.py              # python -m autoskillit entry point (delegates to cli)
 ├── .claude-plugin/          # Plugin metadata (plugin.json)
 ├── .mcp.json                # MCP server config for plugin loading
+├── _audit.py                # FailureRecord, AuditLog, _audit_log singleton
+├── _logging.py              # Centralized structlog configuration (get_logger, configure_logging)
 ├── cli.py                   # CLI: serve, init, config show, skills, workflows
 ├── config.py                # Dataclass config + YAML loading (layered resolution)
 ├── script_loader.py         # Pipeline script discovery from .autoskillit/scripts/
@@ -145,6 +147,7 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 | `list_skill_scripts` | List pipeline scripts from .autoskillit/scripts/ (ungated) |
 | `load_skill_script` | Load a script by name as raw YAML (ungated) |
 | `validate_script` | Validate a pipeline script against the workflow schema (ungated) |
+| `get_pipeline_report` | Return accumulated run_skill/run_skill_retry failure report (ungated) |
 | `enable_tools` (prompt) | User-only activation — type the enable_tools prompt from the MCP prompt list |
 | `disable_tools` (prompt) | User-only deactivation — type the disable_tools prompt from the MCP prompt list |
 
@@ -156,7 +159,7 @@ Claude Code based on how the server was loaded (e.g. `plugin_autoskillit_autoski
 for plugin installs). This uses MCP prompts (user-only, model cannot invoke)
 and survives `--dangerously-skip-permissions`.
 
-`autoskillit_status`, `list_skill_scripts`, `load_skill_script`, and `validate_script` are ungated — available without calling `enable_tools`.
+`autoskillit_status`, `list_skill_scripts`, `load_skill_script`, `validate_script`, and `get_pipeline_report` are ungated — available without calling `enable_tools`.
 
 ### **Configuration**
 

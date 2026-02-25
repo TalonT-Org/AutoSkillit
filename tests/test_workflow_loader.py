@@ -1264,10 +1264,11 @@ class TestWeakConstraintRule:
     def test_detailed_constraints_pass(self):
         """Constraints naming core forbidden tools should not trigger the warning."""
         from autoskillit.semantic_rules import run_semantic_rules
+        from autoskillit.types import PIPELINE_FORBIDDEN_TOOLS
 
-        wf = self._make_workflow_with_constraints(
-            ["NEVER use native tools (Read, Grep, Glob, Edit, Write, Bash) from the orchestrator."]
-        )
+        tool_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
+        constraint = f"NEVER use native tools ({tool_list}) from the orchestrator."
+        wf = self._make_workflow_with_constraints([constraint])
         findings = run_semantic_rules(wf)
         weak = [f for f in findings if f.rule == "weak-constraint-text"]
         assert not weak, "Detailed constraint should not trigger weak-constraint-text"

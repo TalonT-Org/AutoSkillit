@@ -12,6 +12,7 @@ from autoskillit.types import SkillSource
 
 BUNDLED_SKILLS = [
     "assess-and-merge",
+    "audit-friction",
     "dry-walkthrough",
     "implement-worktree",
     "implement-worktree-no-merge",

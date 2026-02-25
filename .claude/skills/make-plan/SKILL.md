@@ -144,11 +144,17 @@ Before writing the final plan, verify:
 
 ## Output
 
-If the plan exceeds 500 lines, split it into two files (`_part_a` and `_part_b`) at a natural section boundary. Never cross-reference between parts — each file must stand alone without linking to the other.
+If the plan exceeds 500 lines, split it into multiple files (`_part_a`, `_part_b`, etc.) at natural section boundaries. Use as many parts as needed.
+
+**CRITICAL — Multi-part plan rules:**
+- **Never include file paths or guessable names for other parts.** No paths, no filenames, no references that allow an agent to locate other part files.
+- Include only a brief plain-text note about what subsequent parts cover (e.g., "Part B will cover X and Y — implement as a separate task").
+- The title of each part file MUST include `— PART A ONLY` (or B, C, etc.) so scope is immediately visible.
+- Each part file MUST open with the scope warning block shown in the multi-part template below.
 
 Save the plan to: `temp/make-plan/{task_name}_plan_{YYYY-MM-DD_HHMMSS}.md`
 
-**Plan structure:**
+**Plan structure (single-part):**
 ```markdown
 # Implementation Plan: {Task Name}
 
@@ -168,4 +174,28 @@ Save the plan to: `temp/make-plan/{task_name}_plan_{YYYY-MM-DD_HHMMSS}.md`
 
 ## Verification
 {How to verify the implementation is correct}
+```
+
+**Plan structure (multi-part — use for EACH part file):**
+```markdown
+# Implementation Plan: {Task Name} — PART {X} ONLY
+
+> **PART {X} ONLY. Do not implement any other part. Other parts are separate tasks requiring explicit authorization.**
+
+## Summary
+{What THIS part covers. Explicitly note what is deferred: "Part B will cover X (separate task). Part C will cover Y (separate task)."}
+
+## Proposed Architecture
+{Mermaid diagram showing the proposed changes using the selected lens}
+
+**Lens Used:** {lens name} - {why this lens was chosen}
+
+## Tests
+{Tests for THIS part only — should fail now, pass after THIS part's implementation}
+
+## Implementation Steps
+{Steps for THIS part only}
+
+## Verification
+{How to verify THIS part's implementation is correct}
 ```

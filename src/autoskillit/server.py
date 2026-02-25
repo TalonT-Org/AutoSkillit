@@ -22,15 +22,19 @@ import os
 import re
 import shutil
 import sqlite3
-import sys
 import threading
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastmcp import FastMCP
+import structlog
+from fastmcp import Context, FastMCP
+from fastmcp.dependencies import CurrentContext
 from fastmcp.prompts.prompt import Message, PromptResult
 
+from autoskillit._audit import FailureRecord, _audit_log
+from autoskillit._logging import get_logger
 from autoskillit.config import AutomationConfig, load_config
 from autoskillit.process_lifecycle import (
     SubprocessResult,
@@ -54,6 +58,8 @@ _config: AutomationConfig = load_config(Path.cwd())
 _plugin_dir = str(Path(__file__).parent)
 
 _tools_enabled = False
+
+logger = get_logger(__name__)
 
 
 def _version_info() -> dict:
@@ -107,10 +113,6 @@ def _require_enabled() -> str | None:
             "Check the MCP prompt list for the exact name."
         )
     return None
-
-
-def _log(msg: str) -> None:
-    print(msg, file=sys.stderr)
 
 
 async def _run_subprocess(
@@ -248,9 +250,45 @@ def _compute_retry(
     return False, RetryReason.NONE
 
 
-def _build_skill_result(result: SubprocessResult, completion_marker: str = "") -> str:
+def _capture_failure(
+    skill_command: str,
+    exit_code: int,
+    subtype: str,
+    needs_retry: bool,
+    retry_reason: str,
+    stderr: str,
+) -> None:
+    """Record a failure in the audit log. No-op if skill_command is empty."""
+    if not skill_command:
+        return
+    _audit_log.record_failure(
+        FailureRecord(
+            timestamp=datetime.now(UTC).isoformat(),
+            skill_command=skill_command,
+            exit_code=exit_code,
+            subtype=subtype,
+            needs_retry=needs_retry,
+            retry_reason=retry_reason,
+            stderr=stderr,
+        )
+    )
+
+
+def _build_skill_result(
+    result: SubprocessResult,
+    completion_marker: str = "",
+    skill_command: str = "",
+) -> str:
     """Route SubprocessResult fields into the standard run_skill JSON response."""
     if result.termination == TerminationReason.STALE:
+        _capture_failure(
+            skill_command,
+            exit_code=result.returncode if result.returncode is not None else -1,
+            subtype="stale",
+            needs_retry=True,
+            retry_reason=RetryReason.RESUME,
+            stderr=result.stderr if result.stderr else "",
+        )
         return json.dumps(
             {
                 "success": False,
@@ -282,6 +320,16 @@ def _build_skill_result(result: SubprocessResult, completion_marker: str = "") -
 
     success = _compute_success(session, returncode, result.termination, completion_marker)
     needs_retry, retry_reason = _compute_retry(session, returncode, result.termination)
+
+    if not success or needs_retry:
+        _capture_failure(
+            skill_command,
+            exit_code=returncode,
+            subtype=session.subtype,
+            needs_retry=needs_retry,
+            retry_reason=retry_reason.value,
+            stderr=result.stderr if result.stderr else "",
+        )
 
     result_text = _truncate(session.agent_result)
     if completion_marker:
@@ -574,7 +622,7 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    _log(f"run_cmd: cmd={cmd[:80]}... cwd={cwd}")
+    logger.info("run_cmd", cmd=cmd[:80], cwd=cwd)
     returncode, stdout, stderr = await _run_subprocess(
         ["bash", "-c", cmd],
         cwd=cwd,
@@ -662,7 +710,7 @@ async def run_python(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    _log(f"run_python: callable={callable} timeout={timeout}")
+    logger.info("run_python", callable=callable, timeout=timeout)
     result = await _import_and_call(callable, args=args, timeout=float(timeout))
     return json.dumps(result)
 
@@ -780,7 +828,7 @@ async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    _log(f"read_db: db_path={db_path} query={query[:80]}")
+    logger.info("read_db", db_path=db_path, query=query[:80])
 
     # Parse params
     try:
@@ -838,7 +886,13 @@ def _resolve_model(step_model: str) -> str | None:
 
 
 @mcp.tool(tags={"automation"})
-async def run_skill(skill_command: str, cwd: str, add_dir: str = "", model: str = "") -> str:
+async def run_skill(
+    skill_command: str,
+    cwd: str,
+    add_dir: str = "",
+    model: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
     """Run a Claude Code headless session with a skill command.
 
     Returns JSON with: success, result, session_id, subtype, is_error, exit_code,
@@ -859,13 +913,24 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "", model: str 
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    _log(f"run_skill: command={skill_command[:80]}... cwd={cwd}")
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="run_skill", cwd=cwd)
+    logger.info("run_skill", command=skill_command[:80], cwd=cwd)
+    try:
+        await ctx.info(
+            f"run_skill: {skill_command[:80]}",
+            logger_name="autoskillit.run_skill",
+            extra={"cwd": cwd, "model": model or "default"},
+        )
+    except AttributeError:
+        pass
 
     if _config.safety.require_dry_walkthrough:
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
     cfg = _config.run_skill
+    original_skill_command = skill_command
     skill_command = _inject_completion_directive(
         _ensure_skill_prefix(skill_command), cfg.completion_marker
     )
@@ -897,11 +962,29 @@ async def run_skill(skill_command: str, cwd: str, add_dir: str = "", model: str 
         stale_threshold=cfg.stale_threshold,
     )
 
-    return _build_skill_result(result, completion_marker=cfg.completion_marker)
+    result_str = _build_skill_result(
+        result, completion_marker=cfg.completion_marker, skill_command=original_skill_command
+    )
+    parsed = json.loads(result_str)
+    if not parsed.get("success"):
+        try:
+            await ctx.error(
+                "run_skill failed",
+                logger_name="autoskillit.run_skill",
+                extra={"exit_code": parsed.get("exit_code"), "subtype": parsed.get("subtype")},
+            )
+        except AttributeError:
+            pass
+    return result_str
 
 
 @mcp.tool(tags={"automation"})
-async def run_skill_retry(skill_command: str, cwd: str, model: str = "") -> str:
+async def run_skill_retry(
+    skill_command: str,
+    cwd: str,
+    model: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
     """Run a Claude Code headless session with retry detection.
 
     Use this for long-running skill sessions that may hit the context limit.
@@ -928,13 +1011,24 @@ async def run_skill_retry(skill_command: str, cwd: str, model: str = "") -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    _log(f"run_skill_retry: command={skill_command[:80]}...")
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="run_skill_retry", cwd=cwd)
+    logger.info("run_skill_retry", command=skill_command[:80], cwd=cwd)
+    try:
+        await ctx.info(
+            f"run_skill_retry: {skill_command[:80]}",
+            logger_name="autoskillit.run_skill_retry",
+            extra={"cwd": cwd, "model": model or "default"},
+        )
+    except AttributeError:
+        pass
 
     if _config.safety.require_dry_walkthrough:
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
     cfg = _config.run_skill_retry
+    original_skill_command = skill_command
     skill_command = _inject_completion_directive(
         _ensure_skill_prefix(skill_command), cfg.completion_marker
     )
@@ -964,7 +1058,20 @@ async def run_skill_retry(skill_command: str, cwd: str, model: str = "") -> str:
         stale_threshold=cfg.stale_threshold,
     )
 
-    return _build_skill_result(result, completion_marker=cfg.completion_marker)
+    result_str = _build_skill_result(
+        result, completion_marker=cfg.completion_marker, skill_command=original_skill_command
+    )
+    parsed = json.loads(result_str)
+    if not parsed.get("success"):
+        try:
+            await ctx.error(
+                "run_skill_retry failed",
+                logger_name="autoskillit.run_skill_retry",
+                extra={"exit_code": parsed.get("exit_code"), "subtype": parsed.get("subtype")},
+            )
+        except AttributeError:
+            pass
+    return result_str
 
 
 _OUTCOME_PATTERN = re.compile(
@@ -1028,7 +1135,7 @@ async def test_check(worktree_path: str) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    _log(f"test_check: worktree={worktree_path}")
+    logger.info("test_check", worktree=worktree_path)
     returncode, stdout, stderr = await _run_subprocess(
         _config.test_check.command,
         cwd=worktree_path,
@@ -1055,7 +1162,7 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    _log(f"merge_worktree: path={worktree_path} base={base_branch}")
+    logger.info("merge_worktree", path=worktree_path, base=base_branch)
 
     # Validate worktree path exists
     if not os.path.isdir(worktree_path):
@@ -1210,7 +1317,7 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     resolved = os.path.realpath(test_dir)
-    _log(f"reset_test_dir: resolved={resolved} force={force}")
+    logger.info("reset_test_dir", resolved=str(resolved), force=force)
 
     if not os.path.isdir(resolved):
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
@@ -1251,7 +1358,7 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    _log(f"classify_fix: worktree={worktree_path} base={base_branch}")
+    logger.info("classify_fix", worktree=worktree_path, base=base_branch)
 
     returncode, stdout, stderr = await _run_subprocess(
         ["git", "diff", "--name-only", f"origin/{base_branch}...HEAD"],
@@ -1298,7 +1405,7 @@ async def reset_workspace(test_dir: str) -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     resolved = os.path.realpath(test_dir)
-    _log(f"reset_workspace: resolved={resolved}")
+    logger.info("reset_workspace", resolved=str(resolved))
 
     if not os.path.isdir(resolved):
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
@@ -1361,6 +1468,32 @@ async def autoskillit_status() -> str:
             f"`autoskillit install` to refresh the plugin cache."
         )
     return json.dumps(status)
+
+
+@mcp.tool(tags={"automation"})
+async def get_pipeline_report(clear: bool = False) -> str:
+    """Return accumulated run_skill / run_skill_retry failures since last clear.
+
+    Orchestrators should call this at the end of a pipeline run to retrieve
+    a structured summary of every non-success result. Pass clear=True to
+    atomically retrieve and reset the store for the next pipeline run.
+
+    Returns JSON with:
+      - total_failures: int
+      - failures: list of {timestamp, skill_command, exit_code, subtype,
+                            needs_retry, retry_reason, stderr}
+
+    This tool is ungated — it does not require enable_tools.
+    """
+    report = _audit_log.get_report()
+    if clear:
+        _audit_log.clear()
+    return json.dumps(
+        {
+            "total_failures": len(report),
+            "failures": [r.to_dict() for r in report],
+        }
+    )
 
 
 @mcp.tool(tags={"automation"})

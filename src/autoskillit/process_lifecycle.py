@@ -12,7 +12,6 @@ Two composed functions wire the utilities together correctly:
 from __future__ import annotations
 
 import asyncio
-import logging
 import shlex
 import shutil
 import signal
@@ -27,7 +26,9 @@ from typing import IO
 
 import psutil
 
-logger = logging.getLogger(__name__)
+from autoskillit._logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class TerminationReason(StrEnum):

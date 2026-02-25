@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit._audit import FailureRecord
 from autoskillit.config import (
     AutomationConfig,
     ClassifyFixConfig,
@@ -42,6 +43,7 @@ from autoskillit.server import (
     autoskillit_status,
     classify_fix,
     extract_token_usage,
+    get_pipeline_report,
     list_skill_scripts,
     load_skill_script,
     merge_worktree,
@@ -68,13 +70,18 @@ from autoskillit.types import (
 test_check.__test__ = False  # type: ignore[attr-defined]
 
 
-def _make_result(returncode: int = 0, stdout: str = "", stderr: str = ""):
+def _make_result(
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+    termination_reason: TerminationReason = TerminationReason.NATURAL_EXIT,
+):
     """Create a SubprocessResult for mocking run_managed_async."""
     return SubprocessResult(
         returncode=returncode,
         stdout=stdout,
         stderr=stderr,
-        termination=TerminationReason.NATURAL_EXIT,
+        termination=termination_reason,
         pid=12345,
     )
 
@@ -88,6 +95,57 @@ def _make_timeout_result(stdout: str = "", stderr: str = ""):
         termination=TerminationReason.TIMED_OUT,
         pid=12345,
     )
+
+
+def _success_session_json(result_text: str) -> str:
+    return json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "result": result_text,
+            "session_id": "test-session",
+            "is_error": False,
+        }
+    )
+
+
+def _failed_session_json() -> str:
+    return json.dumps(
+        {
+            "type": "result",
+            "subtype": "error",
+            "result": "Task failed with an error",
+            "session_id": "test-session",
+            "is_error": True,
+        }
+    )
+
+
+def _context_exhausted_session_json() -> str:
+    """Session result that triggers context exhaustion / needs_retry detection."""
+    return json.dumps(
+        {
+            "type": "result",
+            "subtype": "error",
+            "result": "prompt is too long",
+            "session_id": "test-session",
+            "is_error": True,
+            "errors": ["prompt is too long"],
+        }
+    )
+
+
+def _make_failure_record(**overrides: object) -> FailureRecord:
+    defaults = dict(
+        timestamp="2026-02-24T16:00:00Z",
+        skill_command="/autoskillit:implement-worktree",
+        exit_code=1,
+        subtype="error",
+        needs_retry=False,
+        retry_reason="none",
+        stderr="something went wrong",
+    )
+    return FailureRecord(**{**defaults, **overrides})  # type: ignore[arg-type]
 
 
 class TestRunCmd:
@@ -561,7 +619,7 @@ class TestRunSkillRetryGate:
 
 
 class TestToolRegistration:
-    """All 14 tools are registered on the MCP server."""
+    """All 15 tools are registered on the MCP server."""
 
     def test_all_tools_exist(self):
         from fastmcp.tools import Tool
@@ -586,6 +644,7 @@ class TestToolRegistration:
             "load_skill_script",
             "autoskillit_status",
             "validate_script",
+            "get_pipeline_report",
         }
         assert expected == tool_names
 
@@ -2170,7 +2229,7 @@ class TestGatedToolAccess:
         assert prompt_names == {"enable_tools", "disable_tools"}
 
     def test_all_tools_still_registered(self):
-        """All 14 tools remain registered (gated + ungated)."""
+        """All 15 tools remain registered (gated + ungated)."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -2192,6 +2251,7 @@ class TestGatedToolAccess:
             "list_skill_scripts",
             "load_skill_script",
             "validate_script",
+            "get_pipeline_report",
         }
         assert expected == tool_names
 
@@ -5015,3 +5075,124 @@ class TestRetryResponseFieldsTokenUsage:
 
     def test_field_count(self):
         assert len(RETRY_RESPONSE_FIELDS) == 10
+
+
+class TestGetPipelineReport:
+    """get_pipeline_report is ungated and returns accumulated failures."""
+
+    # Override conftest to test WITHOUT enable_tools
+    @pytest.fixture(autouse=True)
+    def _disable_tools(self, monkeypatch):
+        import autoskillit.server as server_mod
+
+        monkeypatch.setattr(server_mod, "_tools_enabled", False)
+
+    @pytest.mark.asyncio
+    async def test_ungated_returns_empty_initially(self):
+        from autoskillit.server import _audit_log as al
+
+        al.clear()
+        result = json.loads(await get_pipeline_report())
+        assert result["total_failures"] == 0
+        assert result["failures"] == []
+
+    @pytest.mark.asyncio
+    async def test_ungated_does_not_require_enable_tools(self):
+        """Must succeed even when _tools_enabled is False."""
+        from autoskillit.server import _audit_log as al
+
+        al.clear()
+        result = json.loads(await get_pipeline_report())
+        assert "error" not in result
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server.run_managed_async")
+    async def test_accumulates_failures_from_run_skill(self, mock_run, monkeypatch):
+        import autoskillit.server as server_mod
+
+        monkeypatch.setattr(server_mod, "_tools_enabled", True)
+        from autoskillit.server import _audit_log as al
+
+        al.clear()
+        mock_run.return_value = _make_result(returncode=1, stdout=_failed_session_json())
+        await run_skill(skill_command="/autoskillit:test", cwd="/tmp")
+        result = json.loads(await get_pipeline_report())
+        assert result["total_failures"] == 1
+        assert result["failures"][0]["skill_command"].startswith("/autoskillit:test")
+
+    @pytest.mark.asyncio
+    async def test_clear_true_resets_after_returning(self):
+        from autoskillit.server import _audit_log as al
+
+        al.record_failure(_make_failure_record())
+        result = json.loads(await get_pipeline_report(clear=True))
+        assert result["total_failures"] == 1
+        result2 = json.loads(await get_pipeline_report())
+        assert result2["total_failures"] == 0
+
+
+class TestFailureCaptureInBuildSkillResult:
+    """_build_skill_result() must capture failures into _audit_log."""
+
+    def setup_method(self):
+        from autoskillit.server import _audit_log as al
+
+        al.clear()
+
+    def test_captures_non_zero_exit_code(self):
+        from autoskillit.server import _audit_log as al
+
+        result = _make_result(returncode=1, stdout=_failed_session_json())
+        _build_skill_result(result, skill_command="/test:cmd")
+        assert len(al.get_report()) == 1
+
+    def test_does_not_capture_clean_success(self):
+        from autoskillit.server import _audit_log as al
+
+        result = _make_result(returncode=0, stdout=_success_session_json("done"))
+        _build_skill_result(result, skill_command="/test:cmd")
+        assert al.get_report() == []
+
+    def test_captured_record_has_correct_skill_command(self):
+        from autoskillit.server import _audit_log as al
+
+        result = _make_result(returncode=1, stdout=_failed_session_json())
+        _build_skill_result(result, skill_command="/autoskillit:implement-worktree")
+        assert al.get_report()[0].skill_command == "/autoskillit:implement-worktree"
+
+    def test_captured_record_has_timestamp(self):
+        from datetime import datetime
+
+        from autoskillit.server import _audit_log as al
+
+        result = _make_result(returncode=1, stdout=_failed_session_json())
+        _build_skill_result(result, skill_command="/test")
+        record = al.get_report()[0]
+        assert record.timestamp  # non-empty ISO timestamp
+        datetime.fromisoformat(record.timestamp)  # must parse as ISO
+
+    def test_stale_termination_is_captured(self):
+        from autoskillit.server import _audit_log as al
+
+        result = _make_result(returncode=0, termination_reason=TerminationReason.STALE)
+        _build_skill_result(result, skill_command="/test")
+        report = al.get_report()
+        assert len(report) == 1
+        assert report[0].subtype == "stale"
+
+    def test_needs_retry_is_captured(self):
+        from autoskillit.server import _audit_log as al
+
+        result = _make_result(returncode=1, stdout=_context_exhausted_session_json())
+        _build_skill_result(result, skill_command="/test")
+        report = al.get_report()
+        assert len(report) == 1
+        assert report[0].needs_retry is True
+
+    def test_stderr_truncated_to_500_chars(self):
+        from autoskillit.server import _audit_log as al
+
+        long_stderr = "e" * 2000
+        result = _make_result(returncode=1, stderr=long_stderr, stdout=_failed_session_json())
+        _build_skill_result(result, skill_command="/test")
+        assert len(al.get_report()[0].stderr) <= 500

@@ -832,18 +832,18 @@ class TestDualWinnerRace:
 class TestReadTempOutputLogging:
     """OSError during temp file read should produce a warning log."""
 
-    def test_oserror_logs_warning(self, caplog):
+    def test_oserror_logs_warning(self):
         """OSError during temp file read should produce a warning log."""
-        import logging
+        import structlog
 
-        with caplog.at_level(logging.WARNING):
+        with structlog.testing.capture_logs() as logs:
             stdout, stderr = read_temp_output(
                 Path("/nonexistent/stdout.tmp"),
                 Path("/nonexistent/stderr.tmp"),
             )
         assert stdout == ""
         assert stderr == ""
-        assert "Failed to read" in caplog.text
+        assert any("Failed to read" in str(log.get("event", "")) for log in logs)
 
 
 class TestMarkerIsStandalone:
@@ -1226,10 +1226,11 @@ class TestSessionLogMonitorStaleSuppressionGate:
         mock_tcp.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_suppression_emits_warning(self, tmp_path, caplog):
+    async def test_suppression_emits_warning(self, tmp_path):
         """A suppression event must log a warning with elapsed time."""
         import asyncio
-        import logging
+
+        import structlog
 
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("")
@@ -1245,7 +1246,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
             "autoskillit.process_lifecycle._has_active_api_connection",
             side_effect=side_effect,
         ):
-            with caplog.at_level(logging.WARNING, logger="autoskillit.process_lifecycle"):
+            with structlog.testing.capture_logs() as logs:
                 await asyncio.wait_for(
                     _session_log_monitor(
                         tmp_path,
@@ -1257,8 +1258,8 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     timeout=12.0,
                 )
         assert any(
-            "port-443" in record.message or "ESTABLISHED" in record.message
-            for record in caplog.records
+            "port-443" in str(log.get("event", "")) or "ESTABLISHED" in str(log.get("event", ""))
+            for log in logs
         )
 
 

@@ -1478,6 +1478,7 @@ async def kitchen_status() -> str:
             f"Run `autoskillit doctor` for details or "
             f"`autoskillit install` to refresh the plugin cache."
         )
+    status["token_usage_verbosity"] = _config.token_usage.verbosity
     return json.dumps(status)
 
 
@@ -1655,23 +1656,19 @@ async def load_recipe(name: str) -> str:
       pass the step's `model` value as the `model` parameter to the tool.
 
     TOKEN USAGE TRACKING:
-    - Pass step_name (the YAML step key, e.g. "implement") in the with: block when
-      calling run_skill or run_skill_retry. The server accumulates token usage
-      server-side, grouped by step name.
-    - At pipeline completion, call get_token_summary(clear=True) to retrieve the
-      accumulated report, then render it as a markdown table.
-    - get_token_summary returns:
-        {
-          "steps": [
-            {"step_name": "investigate", "input_tokens": 7, "output_tokens": 5939,
-             "cache_creation_input_tokens": 8495, "cache_read_input_tokens": 252179,
-             "invocation_count": 1},
-            ...
-          ],
-          "total": {"input_tokens": ..., "output_tokens": ...,
-                    "cache_creation_input_tokens": ..., "cache_read_input_tokens": ...}
-        }
-    - Render as:
+    - BEFORE executing the pipeline, call kitchen_status() and read
+      token_usage_verbosity. This controls how you handle token reporting:
+        "summary" → call get_token_summary(clear=True) ONCE after the
+                     pipeline completes and render the table below.
+        "none"    → do NOT call get_token_summary. Skip token reporting entirely.
+    - Do NOT print or render a token usage table after individual steps.
+      Only one call to get_token_summary is permitted per pipeline run,
+      at the very end. Intermediate rendering is prohibited.
+    - Pass step_name (the YAML step key, e.g. "implement") in the with: block
+      when calling run_skill or run_skill_retry. The server accumulates token
+      usage server-side, grouped by step name.
+    - When verbosity is "summary", call get_token_summary(clear=True) at pipeline
+      completion and render as:
 
       ## Token Usage Summary
       | Step | input | output | cache_create | cache_read |

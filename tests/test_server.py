@@ -20,6 +20,7 @@ from autoskillit.config import (
     ResetWorkspaceConfig,
     RunSkillConfig,
     SafetyConfig,
+    TokenUsageConfig,
 )
 from autoskillit.process_lifecycle import SubprocessResult, TerminationReason
 from autoskillit.server import (
@@ -693,6 +694,24 @@ class TestKitchenStatus:
         result = json.loads(await kitchen_status())
         assert result["tools_enabled"] is False
         assert "package_version" in result
+
+    @pytest.mark.asyncio
+    async def test_status_includes_token_usage_verbosity_default(self):
+        """TU_S1: kitchen_status includes token_usage_verbosity key with default 'summary'."""
+        result = json.loads(await kitchen_status())
+        assert "token_usage_verbosity" in result
+        assert result["token_usage_verbosity"] == "summary"
+
+    @pytest.mark.asyncio
+    async def test_status_reflects_none_verbosity(self, monkeypatch):
+        """TU_S2: kitchen_status reflects 'none' verbosity from config."""
+        from autoskillit import server
+
+        cfg = AutomationConfig()
+        cfg.token_usage = TokenUsageConfig(verbosity="none")
+        monkeypatch.setattr(server, "_config", cfg)
+        result = json.loads(await kitchen_status())
+        assert result["token_usage_verbosity"] == "none"
 
 
 class TestRecipeTools:

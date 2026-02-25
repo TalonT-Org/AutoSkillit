@@ -35,10 +35,7 @@ artifacts = ["src/autoskillit/.claude-plugin/**", "src/autoskillit/.mcp.json", "
 testpaths = ["tests"]
 asyncio_mode = "auto"
 empty_parameter_set_mark = "fail_at_collect"
-cache_dir = "/dev/shm/pytest-cache"
-addopts = [
-    "--basetemp=/dev/shm/pytest-tmp",
-]
+addopts = []
 markers = [
     "smoke: end-to-end smoke tests requiring Claude API access (deselect with: -m 'not smoke')",
 ]

@@ -99,12 +99,25 @@ Verify the directory exists and contains `.jsonl` files. If the directory is mis
 Filter `.jsonl` files (top-level only, no subagent subdirs) modified since the target date:
 
 ```bash
-# File count
-find "$LOG_DIR" -maxdepth 1 -name "*.jsonl" -newermt "$SINCE_DATE" | wc -l
-
-# Total line count across all files
-find "$LOG_DIR" -maxdepth 1 -name "*.jsonl" -newermt "$SINCE_DATE" \
-  | xargs wc -l 2>/dev/null | tail -1
+# File count and list (portable — Python date comparison, no GNU findutils required)
+python3 - "$LOG_DIR" "$SINCE_DATE" <<'EOF'
+import os, sys, datetime
+log_dir, since_str = sys.argv[1], sys.argv[2]
+cutoff_ts = datetime.datetime.fromisoformat(since_str).timestamp()
+matched = [
+    os.path.join(log_dir, f)
+    for f in os.listdir(log_dir)
+    if f.endswith(".jsonl")
+    and os.path.isfile(os.path.join(log_dir, f))
+    and os.path.getmtime(os.path.join(log_dir, f)) > cutoff_ts
+]
+matched.sort()
+total_lines = sum(open(p).read().count("\n") for p in matched)
+print(f"File count: {len(matched)}")
+print(f"Total lines: {total_lines}")
+for p in matched:
+    print(p)
+EOF
 ```
 
 Report both counts to the terminal. If zero files match, extend the window by 15 days and retry, noting the adjustment.

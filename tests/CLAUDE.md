@@ -16,7 +16,5 @@ All tests run under `-n 4 --dist worksteal`. Every test must be safe for paralle
 
 ## Performance
 
-- `tmp_path` resolves to `/dev/shm/pytest-tmp` (RAM) via `--basetemp`
-- `TMPDIR=/dev/shm/pytest-tmp` is set via Taskfile — all `tempfile` calls go to tmpfs
-- `cache_dir = /dev/shm/pytest-cache` redirects pytest's internal cache to tmpfs
-- `PYTHONDONTWRITEBYTECODE=1` is set — no `.pyc` disk writes
+- `PYTHONDONTWRITEBYTECODE=1` is set via Taskfile — no `.pyc` disk writes
+- pytest uses its platform-aware default temp directory (`/tmp` on Linux/macOS)

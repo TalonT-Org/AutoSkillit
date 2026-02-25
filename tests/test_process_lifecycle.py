@@ -28,6 +28,7 @@ from autoskillit.process_lifecycle import (
     _session_log_monitor,
     async_kill_process_tree,
     kill_process_tree,
+    pty_wrap_command,
     read_temp_output,
     run_managed_async,
     run_managed_sync,
@@ -1463,3 +1464,50 @@ class TestHeartbeatScanPosition:
             timeout=10,
         )
         assert result == "completion"
+
+
+# ---------------------------------------------------------------------------
+# pty_wrap_command — platform-specific flag selection
+# ---------------------------------------------------------------------------
+
+
+class TestPtyWrapCommand:
+    """pty_wrap_command selects BSD or GNU script flags based on sys.platform."""
+
+    def test_pty_wrap_command_linux_uses_gnu_flags(self) -> None:
+        """On Linux, pty_wrap_command produces GNU script -qefc syntax."""
+        cmd = ["claude", "--no-color", "do something"]
+        fake_script = "/usr/bin/script"
+        with (
+            patch("autoskillit.process_lifecycle.sys.platform", "linux"),
+            patch("shutil.which", return_value=fake_script),
+        ):
+            result = pty_wrap_command(cmd)
+        assert result[0] == fake_script
+        assert result[1] == "-qefc"
+        # The shell-escaped command string is at index 2
+        assert "claude" in result[2]
+        assert result[3] == "/dev/null"
+        assert len(result) == 4
+
+    def test_pty_wrap_command_macos_uses_bsd_flags(self) -> None:
+        """On macOS, pty_wrap_command produces BSD script syntax: script -q /dev/null cmd..."""
+        cmd = ["claude", "--no-color", "do something"]
+        fake_script = "/usr/bin/script"
+        with (
+            patch("autoskillit.process_lifecycle.sys.platform", "darwin"),
+            patch("shutil.which", return_value=fake_script),
+        ):
+            result = pty_wrap_command(cmd)
+        assert result[0] == fake_script
+        assert result[1] == "-q"
+        assert result[2] == "/dev/null"
+        # Original cmd list follows as separate args (no shell escaping)
+        assert result[3:] == cmd
+
+    def test_pty_wrap_command_no_script_returns_original(self) -> None:
+        """When script is not found, pty_wrap_command returns the original command list."""
+        cmd = ["claude", "arg1"]
+        with patch("shutil.which", return_value=None):
+            result = pty_wrap_command(cmd)
+        assert result is cmd

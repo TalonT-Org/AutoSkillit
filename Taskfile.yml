@@ -5,7 +5,6 @@ tasks:
     desc: Run all tests with parallel workers
     env:
       PYTHONDONTWRITEBYTECODE: "1"
-      TMPDIR: /dev/shm/pytest-tmp
       OMP_NUM_THREADS: "1"
     cmds:
       - |
@@ -25,7 +24,6 @@ tasks:
     desc: Run all tests and return unambiguous PASS/FAIL (for automation)
     env:
       PYTHONDONTWRITEBYTECODE: "1"
-      TMPDIR: /dev/shm/pytest-tmp
       OMP_NUM_THREADS: "1"
     cmds:
       - |
@@ -61,7 +59,6 @@ tasks:
     desc: Run smoke tests (requires ANTHROPIC_API_KEY)
     env:
       PYTHONDONTWRITEBYTECODE: "1"
-      TMPDIR: /dev/shm/pytest-tmp
       OMP_NUM_THREADS: "1"
       SMOKE_TEST: "1"
     cmds:

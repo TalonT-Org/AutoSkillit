@@ -152,7 +152,13 @@ Before writing the final plan, verify:
 
 ## Output
 
-If the plan exceeds 500 lines, split it into two files (`_part_a` and `_part_b`). Each part must be a **self-contained, independently implementable plan** executed sequentially. Split by functional scope (e.g., Part A = "fix core bug + tests", Part B = "add guards + enforcement"), NOT by document structure (analysis vs plan). Each file must have its own failing tests, implementation steps, and verification. Reference the other part at the top.
+If the plan exceeds 500 lines, split it into multiple files (`_part_a`, `_part_b`, etc.). Each part must be a **self-contained, independently implementable plan** executed sequentially. Split by functional scope (e.g., Part A = "fix core bug + tests", Part B = "add guards + enforcement"), NOT by document structure. Each file must have its own failing tests, implementation steps, and verification.
+
+**Multi-part plan rules:**
+- Never include file paths or guessable names for other parts.
+- Include only a brief plain-text note about what subsequent parts cover (e.g., "Part B will cover X — implement as a separate task").
+- The title of each part file MUST include `— PART A ONLY` (or B, C, etc.).
+- Each part file MUST open with: `> **PART {X} ONLY. Do not implement any other part. Other parts are separate tasks requiring explicit authorization.**`
 
 Save the plan to: `temp/rectify/rectify_{topic}_{YYYY-MM-DD_HHMMSS}.md`
 

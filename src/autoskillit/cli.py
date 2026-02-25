@@ -624,8 +624,8 @@ def migrate(*, check: bool = False):
         raise SystemExit(1)
 
     print(
-        "\nTo apply migrations, start a Claude Code session and load each recipe "
-        "with load_recipe. The agent will prompt you to migrate or suppress."
+        "\nRecipes are auto-migrated when loaded. "
+        "Use `--check` in CI to gate on pending migrations."
     )
 
 

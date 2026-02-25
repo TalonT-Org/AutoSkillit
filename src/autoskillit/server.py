@@ -886,6 +886,61 @@ def _resolve_model(step_model: str) -> str | None:
     return None
 
 
+async def _run_headless_core(
+    skill_command: str,
+    cwd: str,
+    plugin_dir: str | None = None,
+    model: str | None = None,
+    step_name: str = "",
+    add_dir: str = "",
+) -> dict:
+    """Shared headless runner used by run_skill and load_recipe auto-migration.
+
+    Does NOT check open_kitchen gate — callers are responsible for authorization context.
+    Returns the raw result dict with at minimum a 'success' key.
+    """
+    cfg = _config.run_skill
+    original_skill_command = skill_command
+    skill_command = _inject_completion_directive(
+        _ensure_skill_prefix(skill_command), cfg.completion_marker
+    )
+    effective_plugin_dir = plugin_dir if plugin_dir is not None else _plugin_dir
+    cmd = [
+        "claude",
+        "-p",
+        skill_command,
+        "--plugin-dir",
+        effective_plugin_dir,
+        "--output-format",
+        "json",
+        "--dangerously-skip-permissions",
+    ]
+    if add_dir:
+        cmd.extend(["--add-dir", add_dir])
+    resolved_model = _resolve_model(model or "")
+    if resolved_model:
+        cmd.extend(["--model", resolved_model])
+
+    result = await run_managed_async(
+        cmd,
+        cwd=Path(cwd),
+        timeout=cfg.timeout,
+        pty_mode=True,
+        heartbeat_marker=cfg.heartbeat_marker,
+        session_log_dir=_session_log_dir(cwd),
+        completion_marker=cfg.completion_marker,
+        stale_threshold=cfg.stale_threshold,
+    )
+
+    result_str = _build_skill_result(
+        result, completion_marker=cfg.completion_marker, skill_command=original_skill_command
+    )
+    parsed = json.loads(result_str)
+    if step_name:
+        _token_log.record(step_name, parsed.get("token_usage"))
+    return parsed
+
+
 @mcp.tool(tags={"automation"})
 async def run_skill(
     skill_command: str,
@@ -933,43 +988,9 @@ async def run_skill(
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
-    cfg = _config.run_skill
-    original_skill_command = skill_command
-    skill_command = _inject_completion_directive(
-        _ensure_skill_prefix(skill_command), cfg.completion_marker
+    parsed = await _run_headless_core(
+        skill_command, cwd, model=model, add_dir=add_dir, step_name=step_name
     )
-
-    cmd = [
-        "claude",
-        "-p",
-        skill_command,
-        "--plugin-dir",
-        _plugin_dir,
-        "--output-format",
-        "json",
-        "--dangerously-skip-permissions",
-    ]
-    if add_dir:
-        cmd.extend(["--add-dir", add_dir])
-    resolved_model = _resolve_model(model)
-    if resolved_model:
-        cmd.extend(["--model", resolved_model])
-
-    result = await run_managed_async(
-        cmd,
-        cwd=Path(cwd),
-        timeout=cfg.timeout,
-        pty_mode=True,
-        heartbeat_marker=cfg.heartbeat_marker,
-        session_log_dir=_session_log_dir(cwd),
-        completion_marker=cfg.completion_marker,
-        stale_threshold=cfg.stale_threshold,
-    )
-
-    result_str = _build_skill_result(
-        result, completion_marker=cfg.completion_marker, skill_command=original_skill_command
-    )
-    parsed = json.loads(result_str)
     if not parsed.get("success"):
         try:
             await ctx.error(
@@ -979,9 +1000,7 @@ async def run_skill(
             )
         except AttributeError:
             pass
-    if step_name:
-        _token_log.record(step_name, parsed.get("token_usage"))
-    return result_str
+    return json.dumps(parsed)
 
 
 @mcp.tool(tags={"automation"})
@@ -1731,42 +1750,70 @@ async def load_recipe(name: str) -> str:
         data = yaml.safe_load(content)
         if isinstance(data, dict) and "steps" in data:
             recipe = _parse_recipe(data)
-            findings = run_semantic_rules(recipe)
-            suggestions = [f.to_dict() for f in findings]
 
-            # Migration awareness — filter suppressed, add migration note context
+            # --- Auto-migration block ---
             from autoskillit import __version__
+            from autoskillit.failure_store import FailureStore, default_store_path
+            from autoskillit.migration_engine import MigrationFile, default_migration_engine
             from autoskillit.migration_loader import applicable_migrations
 
-            is_suppressed = name in _config.migration.suppressed
+            migrations = applicable_migrations(recipe.version, __version__)
+            if migrations and name not in _config.migration.suppressed:
+                project_dir = Path.cwd()
+                temp_dir = project_dir / ".autoskillit" / "temp"
+                recipes_dir = project_dir / ".autoskillit" / "recipes"
+                recipe_path = recipes_dir / f"{name}.yaml"
+                failure_store = FailureStore(default_store_path(project_dir))
 
-            if is_suppressed:
-                suggestions = [
-                    s for s in suggestions if s.get("rule") != "outdated-recipe-version"
+                engine = default_migration_engine()
+                mfile = MigrationFile(
+                    name=name,
+                    path=recipe_path,
+                    file_type="recipe",
+                    current_version=recipe.version,
+                )
+                migration_result = await engine.migrate_file(
+                    mfile,
+                    run_headless=_run_headless_core,
+                    temp_dir=temp_dir,
+                    plugin_dir=Path(_plugin_dir),
+                )
+
+                if migration_result.success:
+                    content = recipe_path.read_text()
+                    data = yaml.safe_load(content)
+                    recipe = _parse_recipe(data)
+                    failure_store.clear(name)
+                else:
+                    failure_store.record(
+                        name=name,
+                        file_path=recipe_path,
+                        file_type="recipe",
+                        error=migration_result.error or "unknown",
+                        retries_attempted=migration_result.retries_attempted,
+                    )
+                    suggestions.append(
+                        {
+                            "rule": "migration-failed",
+                            "severity": "error",
+                            "step": "(auto-migration)",
+                            "message": (
+                                f"Auto-migration failed: {migration_result.error}. "
+                                "Check .autoskillit/temp/migrations/failures.json. "
+                                "Manual intervention required."
+                            ),
+                        }
+                    )
+            # --- End auto-migration block ---
+
+            findings = run_semantic_rules(recipe)
+            semantic_suggestions = [f.to_dict() for f in findings]
+
+            if name in _config.migration.suppressed:
+                semantic_suggestions = [
+                    s for s in semantic_suggestions if s.get("rule") != "outdated-recipe-version"
                 ]
-            else:
-                for s in suggestions:
-                    if s.get("rule") == "outdated-recipe-version":
-                        s["message"] += (
-                            " Ask the user: migrate now or suppress? "
-                            "If migrate: invoke /autoskillit:migrate-recipes. "
-                            "If suppress: add this recipe name to migration.suppressed "
-                            "in .autoskillit/config.yaml."
-                        )
-
-            if not is_suppressed:
-                migrations = applicable_migrations(recipe.version, __version__)
-                for note in migrations:
-                    for change in note.changes:
-                        suggestions.append(
-                            {
-                                "rule": f"migration-{change.id}",
-                                "severity": "warning",
-                                "step": "(migration)",
-                                "message": f"[Migration to {note.to_version}] "
-                                f"{change.description}",
-                            }
-                        )
+            suggestions.extend(semantic_suggestions)
 
             # Contract validation
             recipes_dir = Path.cwd() / ".autoskillit" / "recipes"

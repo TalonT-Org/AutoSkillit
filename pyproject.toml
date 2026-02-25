@@ -13,6 +13,7 @@ dependencies = [
     "psutil>=7.2.0",
     "pyyaml>=6.0",
     "cyclopts>=3.0",
+    "structlog>=25.0",
 ]
 
 [project.optional-dependencies]
@@ -47,4 +48,7 @@ target-version = "py311"
 line-length = 99
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+select = ["E", "F", "I", "UP", "TID251"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"logging.getLogger" = {msg = "Use get_logger() from autoskillit._logging instead."}

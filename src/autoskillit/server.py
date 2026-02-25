@@ -43,6 +43,7 @@ from autoskillit.process_lifecycle import (
     _extract_text_content,
     run_managed_async,
 )
+from autoskillit.recipe_loader import _get_pending_recipe_updates
 from autoskillit.types import (
     CONTEXT_EXHAUSTION_MARKER,
     PIPELINE_FORBIDDEN_TOOLS,
@@ -1985,6 +1986,19 @@ def open_kitchen() -> PromptResult:
             "\n\n⚠️ UPGRADE NEEDED: This project has not been migrated to the new recipe format.\n"
             "`.autoskillit/scripts/` still exists. Run `autoskillit upgrade` in this directory\n"
             "to migrate automatically, or ask me to do it for you."
+        )
+
+    # Bundled recipe update advisory
+    pending = _get_pending_recipe_updates(Path.cwd())
+    if pending:
+        names = ", ".join(f"`{n}`" for n in pending)
+        text += (
+            f"\n\n⚠️ RECIPE UPDATE AVAILABLE: The following bundled recipe(s) have newer versions "
+            f"available, but your local copies have been modified: {names}. "
+            "Your changes are preserved. If you want to adopt the bundle update, call "
+            "`run_python` with `autoskillit.sync_manifest.accept_recipe_update` for each recipe. "
+            "To decline and suppress this notice for the current bundle version, call "
+            "`autoskillit.sync_manifest.decline_recipe_update`."
         )
 
     return PromptResult([Message(text, role="user")])

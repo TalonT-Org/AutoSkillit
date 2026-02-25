@@ -5687,3 +5687,70 @@ class TestGetTokenSummary:
             "cache_creation_input_tokens",
             "cache_read_input_tokens",
         } <= total_keys
+
+
+class TestOpenKitchenAdvisory:
+    """OK1-OK4: open_kitchen advisory for locally modified bundled recipes."""
+
+    @pytest.fixture(autouse=True)
+    def _close_kitchen(self, monkeypatch):
+        from autoskillit import server
+
+        monkeypatch.setattr(server, "_tools_enabled", False)
+
+    @staticmethod
+    def _prompt_text(result) -> str:
+        content = result.messages[0].content
+        return content.text if hasattr(content, "text") else str(content)
+
+    def test_open_kitchen_includes_advisory_when_pending_updates(self, monkeypatch):
+        """OK1: Advisory text present; recipe name listed"""
+        from autoskillit.server import open_kitchen
+
+        monkeypatch.setattr(
+            "autoskillit.server._get_pending_recipe_updates",
+            lambda _: ["implementation"],
+        )
+        result = open_kitchen()
+        msg = self._prompt_text(result)
+        assert "RECIPE UPDATE AVAILABLE" in msg
+        assert "`implementation`" in msg
+
+    def test_open_kitchen_omits_advisory_when_no_pending_updates(self, monkeypatch):
+        """OK2: No advisory text when _get_pending_recipe_updates returns []"""
+        from autoskillit.server import open_kitchen
+
+        monkeypatch.setattr(
+            "autoskillit.server._get_pending_recipe_updates",
+            lambda _: [],
+        )
+        result = open_kitchen()
+        msg = self._prompt_text(result)
+        assert "RECIPE UPDATE AVAILABLE" not in msg
+
+    def test_open_kitchen_omits_advisory_for_declined_recipe(self, monkeypatch):
+        """OK3: Declined (name, hash) → advisory absent"""
+        from autoskillit.server import open_kitchen
+
+        # Empty list simulates all updates declined
+        monkeypatch.setattr(
+            "autoskillit.server._get_pending_recipe_updates",
+            lambda _: [],
+        )
+        result = open_kitchen()
+        msg = self._prompt_text(result)
+        assert "RECIPE UPDATE AVAILABLE" not in msg
+
+    def test_open_kitchen_advisory_reappears_after_bundle_hash_advances(self, monkeypatch):
+        """OK4: New bundle hash replaces declined hash → advisory reappears"""
+        from autoskillit.server import open_kitchen
+
+        # Simulate: new bundle hash → recipe reappears in pending list
+        monkeypatch.setattr(
+            "autoskillit.server._get_pending_recipe_updates",
+            lambda _: ["bugfix-loop"],
+        )
+        result = open_kitchen()
+        msg = self._prompt_text(result)
+        assert "RECIPE UPDATE AVAILABLE" in msg
+        assert "`bugfix-loop`" in msg

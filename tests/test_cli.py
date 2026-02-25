@@ -1085,6 +1085,115 @@ class TestDoctorScriptHealth:
 
 
 # ---------------------------------------------------------------------------
+# TestDoctorRecipeSync: recipe_sync_status check in autoskillit doctor
+# ---------------------------------------------------------------------------
+
+
+class TestDoctorRecipeSync:
+    """DR1-DR4: doctor recipe_sync_status check."""
+
+    def _setup_autoskillit_dir(self, tmp_path: Path) -> tuple[Path, Path]:
+        """Create .autoskillit/recipes/ under tmp_path, return (autoskillit_dir, recipes_dir)."""
+        autoskillit_dir = tmp_path / ".autoskillit"
+        recipes_dir = autoskillit_dir / "recipes"
+        recipes_dir.mkdir(parents=True)
+        return autoskillit_dir, recipes_dir
+
+    def test_doctor_recipe_sync_check_present(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """DR1: Doctor output includes a recipe_sync_status check."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        _, recipes_dir = self._setup_autoskillit_dir(tmp_path)
+        # Write current bundled content so at least one check is generated
+        from autoskillit.recipe_parser import builtin_recipes_dir
+
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        (recipes_dir / bundled.name).write_text(bundled.read_text())
+        cli.doctor(output_json=True)
+        data = json.loads(capsys.readouterr().out)
+        checks = [r for r in data["results"] if r["check"] == "recipe_sync_status"]
+        assert len(checks) >= 1
+
+    def test_doctor_recipe_sync_up_to_date(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """DR2: Unmodified, current recipe → status OK."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        _, recipes_dir = self._setup_autoskillit_dir(tmp_path)
+        from autoskillit.recipe_parser import builtin_recipes_dir
+
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        recipe_name = bundled.stem
+        (recipes_dir / bundled.name).write_text(bundled.read_text())
+        cli.doctor(output_json=True)
+        data = json.loads(capsys.readouterr().out)
+        recipe_checks = [
+            r
+            for r in data["results"]
+            if r["check"] == "recipe_sync_status" and recipe_name in r["message"]
+        ]
+        assert len(recipe_checks) >= 1
+        assert all(r["severity"] == "ok" for r in recipe_checks)
+
+    def test_doctor_recipe_sync_locally_modified(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """DR3: Modified recipe with no pending bundle update → status WARNING."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        _, recipes_dir = self._setup_autoskillit_dir(tmp_path)
+        from autoskillit.recipe_parser import builtin_recipes_dir
+
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        recipe_name = bundled.stem
+        # Write local with user modifications (no manifest hash recorded)
+        (recipes_dir / bundled.name).write_text("name: user-modified\ndescription: changed\n")
+        cli.doctor(output_json=True)
+        data = json.loads(capsys.readouterr().out)
+        recipe_checks = [
+            r
+            for r in data["results"]
+            if r["check"] == "recipe_sync_status" and recipe_name in r["message"]
+        ]
+        assert len(recipe_checks) >= 1
+        assert all(r["severity"] == "warning" for r in recipe_checks)
+
+    def test_doctor_recipe_sync_pending_update(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """DR4: Modified recipe with available bundle update → WARNING with descriptive message."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        autoskillit_dir, recipes_dir = self._setup_autoskillit_dir(tmp_path)
+        from autoskillit.recipe_parser import builtin_recipes_dir
+        from autoskillit.sync_manifest import SyncManifest, default_manifest_path
+
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        recipe_name = bundled.stem
+        # Simulate: local was synced to old content, then user edited it
+        old_content = "name: old-synced\ndescription: previously synced\n"
+        manifest = SyncManifest(default_manifest_path(tmp_path))
+        manifest.record(recipe_name, old_content)
+        # Write user-modified content (different from old_content AND bundled)
+        user_content = "name: user-edited\ndescription: i edited this\n"
+        (recipes_dir / bundled.name).write_text(user_content)
+        cli.doctor(output_json=True)
+        data = json.loads(capsys.readouterr().out)
+        recipe_checks = [
+            r
+            for r in data["results"]
+            if r["check"] == "recipe_sync_status" and recipe_name in r["message"]
+        ]
+        assert len(recipe_checks) >= 1
+        matching = [r for r in recipe_checks if "bundle update available" in r["message"]]
+        assert len(matching) >= 1
+        assert all(r["severity"] == "warning" for r in matching)
+
+
+# ---------------------------------------------------------------------------
 # TestMigrateCommand: migrate CLI command for reporting outdated scripts
 # ---------------------------------------------------------------------------
 

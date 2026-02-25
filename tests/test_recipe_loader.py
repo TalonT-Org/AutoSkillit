@@ -5,16 +5,25 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import structlog.testing
 import yaml
 
 from autoskillit.recipe_loader import (
     _extract_frontmatter,
+    _get_pending_recipe_updates,
     _parse_recipe_metadata,
     list_recipes,
     load_recipe,
     sync_bundled_recipes,
 )
 from autoskillit.recipe_parser import builtin_recipes_dir
+from autoskillit.sync_manifest import (
+    SyncDecisionStore,
+    SyncManifest,
+    compute_recipe_hash,
+    default_decision_path,
+    default_manifest_path,
+)
 
 SCRIPT_A = {
     "name": "implementation",
@@ -333,15 +342,20 @@ class TestSyncBundledRecipes:
         for src in bundled:
             assert (recipes_dir / src.name).exists()
 
-    def test_overwrites_existing_file(self, tmp_path: Path) -> None:
-        """sync_bundled_recipes overwrites same-named local recipes with bundled content."""
+    def test_overwrites_existing_file_when_manifest_matches(self, tmp_path: Path) -> None:
+        """Overwrites local when manifest shows it's unmodified (bundle advanced)."""
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         bundled = next(builtin_recipes_dir().glob("*.yaml"))
-        (recipes_dir / bundled.name).write_text("name: stale\ndescription: old\n")
+        recipe_name = bundled.stem
+        old_content = "name: old-version\ndescription: old bundled content\n"
+        (recipes_dir / bundled.name).write_text(old_content)
+        # Record old content in manifest to simulate a previous sync of an older bundle
+        manifest = SyncManifest(default_manifest_path(tmp_path))
+        manifest.record(recipe_name, old_content)
+        # Now sync — bundled content differs from old_content, manifest matches local → overwrite
         sync_bundled_recipes(tmp_path)
-        content = (recipes_dir / bundled.name).read_text()
-        assert "stale" not in content
+        assert (recipes_dir / bundled.name).read_text() == bundled.read_text()
 
     def test_leaves_project_specific_recipes_untouched(self, tmp_path: Path) -> None:
         """sync_bundled_recipes does not delete or modify project-specific recipes."""
@@ -361,6 +375,141 @@ class TestSyncBundledRecipes:
         for src in bundled:
             data = yaml.safe_load(src.read_text())
             assert data["name"] in names
+
+    # SC1
+    def test_preserves_locally_modified_recipe(self, tmp_path: Path) -> None:
+        """SC1: Local differs from bundled AND differs from manifest hash → not overwritten"""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        custom_content = "name: custom-version\ndescription: user modified\n"
+        (recipes_dir / bundled.name).write_text(custom_content)
+        # No manifest → manifest_hash is None → local treated as user-modified
+        sync_bundled_recipes(tmp_path)
+        assert (recipes_dir / bundled.name).read_text() == custom_content
+
+    # SC2
+    def test_updates_recipe_when_local_matches_manifest_hash(self, tmp_path: Path) -> None:
+        """SC2: Local matches manifest hash (old bundle) → overwritten with current bundled"""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        recipe_name = bundled.stem
+        old_content = "name: old-version\ndescription: previously synced bundle\n"
+        (recipes_dir / bundled.name).write_text(old_content)
+        manifest = SyncManifest(default_manifest_path(tmp_path))
+        manifest.record(recipe_name, old_content)
+        sync_bundled_recipes(tmp_path)
+        assert (recipes_dir / bundled.name).read_text() == bundled.read_text()
+
+    # SC3
+    def test_warning_logged_for_skipped_modified_recipe(self, tmp_path: Path) -> None:
+        """SC3: WARNING-level log captured including the recipe name"""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        recipe_name = bundled.stem
+        custom_content = "name: custom-version\ndescription: user modified\n"
+        (recipes_dir / bundled.name).write_text(custom_content)
+        with structlog.testing.capture_logs() as cap_logs:
+            sync_bundled_recipes(tmp_path)
+        warning_logs = [log for log in cap_logs if log.get("log_level") == "warning"]
+        assert any(log.get("recipe_name") == recipe_name for log in warning_logs)
+
+    # SC4
+    def test_manifest_updated_after_sync_write(self, tmp_path: Path) -> None:
+        """SC4: After sync writes, SyncManifest.get_hash(name) equals hash of bundled content"""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        recipe_name = bundled.stem
+        # New file → sync writes it
+        sync_bundled_recipes(tmp_path)
+        manifest = SyncManifest(default_manifest_path(tmp_path))
+        assert manifest.get_hash(recipe_name) == compute_recipe_hash(bundled.read_text())
+
+    # SC5
+    def test_excluded_recipe_never_overwritten(self, tmp_path: Path) -> None:
+        """SC5: Recipe in config.sync.excluded_recipes is preserved even if unmodified"""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        recipe_name = bundled.stem
+        custom_content = "name: kept\ndescription: excluded from sync\n"
+        (recipes_dir / bundled.name).write_text(custom_content)
+        # Write config with excluded recipe
+        config_dir = tmp_path / ".autoskillit"
+        (config_dir / "config.yaml").write_text(
+            yaml.dump({"sync": {"excluded_recipes": [recipe_name]}})
+        )
+        sync_bundled_recipes(tmp_path)
+        assert (recipes_dir / bundled.name).read_text() == custom_content
+
+    # SC6
+    def test_pending_updates_excludes_excluded_recipes(self, tmp_path: Path) -> None:
+        """SC6: _get_pending_recipe_updates never returns recipes in excluded_recipes config"""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        recipe_name = bundled.stem
+        # Write modified local (differs from bundled, no manifest)
+        (recipes_dir / bundled.name).write_text("name: user-modified\ndescription: local\n")
+        # Exclude this recipe
+        config_dir = tmp_path / ".autoskillit"
+        (config_dir / "config.yaml").write_text(
+            yaml.dump({"sync": {"excluded_recipes": [recipe_name]}})
+        )
+        result = _get_pending_recipe_updates(tmp_path)
+        assert recipe_name not in result
+
+    # SC7
+    def test_pending_updates_returns_modified_with_available_bundle_update(
+        self, tmp_path: Path
+    ) -> None:
+        """SC7: Modified local + differing bundle + not declined → appears in result"""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        recipe_name = bundled.stem
+        # Write local with manifest hash recorded (simulates previous sync), then user modified it
+        old_synced_content = "name: old-synced\ndescription: old\n"
+        (recipes_dir / bundled.name).write_text(old_synced_content)
+        manifest = SyncManifest(default_manifest_path(tmp_path))
+        manifest.record(recipe_name, old_synced_content)
+        # Now user modifies local beyond old_synced_content
+        user_content = "name: user-edited\ndescription: i changed this\n"
+        (recipes_dir / bundled.name).write_text(user_content)
+        result = _get_pending_recipe_updates(tmp_path)
+        assert recipe_name in result
+
+    # SC8
+    def test_pending_updates_omits_declined_recipe(self, tmp_path: Path) -> None:
+        """SC8: Declined (name, bundled_hash) → not returned"""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        recipe_name = bundled.stem
+        bundled_content = bundled.read_text()
+        user_content = "name: user-edited\ndescription: i changed this\n"
+        (recipes_dir / bundled.name).write_text(user_content)
+        manifest = SyncManifest(default_manifest_path(tmp_path))
+        manifest.record(recipe_name, user_content)
+        # Decline the current bundled hash
+        decisions = SyncDecisionStore(default_decision_path(tmp_path))
+        decisions.record_decline(recipe_name, compute_recipe_hash(bundled_content))
+        result = _get_pending_recipe_updates(tmp_path)
+        assert recipe_name not in result
+
+    # SC9
+    def test_pending_updates_empty_when_local_matches_bundled(self, tmp_path: Path) -> None:
+        """SC9: Local already matches bundle → empty list"""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        bundled = next(builtin_recipes_dir().glob("*.yaml"))
+        # Write exact bundled content to local
+        (recipes_dir / bundled.name).write_text(bundled.read_text())
+        result = _get_pending_recipe_updates(tmp_path)
+        assert bundled.stem not in result
 
 
 class TestRecipeVersion:

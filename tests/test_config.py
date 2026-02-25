@@ -271,3 +271,22 @@ class TestMigrationConfig:
         cfg = AutomationConfig()
         assert hasattr(cfg, "migration")
         assert cfg.migration.suppressed == []
+
+
+class TestSyncConfig:
+    """SyncConfig dataclass and YAML loading."""
+
+    def test_sync_config_defaults_to_empty_excluded_list(self):
+        """CFG1: AutomationConfig().sync.excluded_recipes == []"""
+        cfg = AutomationConfig()
+        assert cfg.sync.excluded_recipes == []
+        assert isinstance(cfg.sync.excluded_recipes, list)
+
+    def test_sync_config_loads_excluded_recipes_from_yaml(self, tmp_path):
+        """CFG2: _merge_into populates excluded_recipes from sync.excluded_recipes in YAML"""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"sync": {"excluded_recipes": ["implementation", "bugfix-loop"]}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.sync.excluded_recipes == ["implementation", "bugfix-loop"]

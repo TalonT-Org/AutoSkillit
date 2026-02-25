@@ -94,6 +94,11 @@ class TokenUsageConfig:
 
 
 @dataclass
+class SyncConfig:
+    excluded_recipes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
@@ -107,6 +112,7 @@ class AutomationConfig:
     worktree_setup: WorktreeSetupConfig = field(default_factory=WorktreeSetupConfig)
     migration: MigrationConfig = field(default_factory=MigrationConfig)
     token_usage: TokenUsageConfig = field(default_factory=TokenUsageConfig)
+    sync: SyncConfig = field(default_factory=SyncConfig)
 
 
 def load_config(project_dir: Path | None = None) -> AutomationConfig:

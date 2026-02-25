@@ -1,6 +1,7 @@
 name: implementation-pipeline
 description: Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
 summary: (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part)
+autoskillit_version: "0.2.0"
 
 ingredients:
   task:
@@ -110,6 +111,8 @@ steps:
       skill_command: "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}"
       cwd: "${{ inputs.work_dir }}"
       step_name: "retry_worktree"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
     on_success: test
     on_failure: escalate
     retry:
@@ -154,6 +157,12 @@ steps:
 
   next_or_done:
     action: route
+    on_result:
+      field: next
+      routes:
+        more_parts: verify
+        more_groups: plan
+        all_done: done
     note: >
       Routing step — no tool call. The agent evaluates what comes next:
       1. If more plan_parts remain for the current group → go to verify with next part.

@@ -80,7 +80,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cyclopts", specifier = ">=3.0" },
+    { name = "cyclopts", specifier = ">=4.0" },
     { name = "fastmcp", specifier = ">=3.0.2" },
     { name = "packaging", specifier = ">=23.0" },
     { name = "psutil", specifier = ">=7.2.0" },

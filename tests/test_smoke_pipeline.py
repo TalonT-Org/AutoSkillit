@@ -18,6 +18,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -27,6 +28,7 @@ import yaml
 
 from autoskillit import server
 from autoskillit.config import AutomationConfig, TestCheckConfig
+from autoskillit.recipe_parser import builtin_recipes_dir
 from autoskillit.server import (
     classify_fix,
     list_recipes,
@@ -42,7 +44,7 @@ from autoskillit.server import (
 test_check.__test__ = False  # type: ignore[attr-defined]
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SMOKE_SCRIPT = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
+SMOKE_SCRIPT = builtin_recipes_dir() / "smoke-test.yaml"
 
 _TOOL_MAP = {
     "run_cmd": run_cmd,
@@ -182,6 +184,20 @@ def smoke_script_path() -> Path:
 
 
 @pytest.fixture()
+def smoke_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Create a temp project dir with smoke-test recipe in .autoskillit/recipes/.
+
+    Used by tests that invoke the server's list_recipes/load_recipe tools,
+    which only discover recipes in the project-level .autoskillit/recipes/ dir.
+    """
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    shutil.copy(SMOKE_SCRIPT, recipes_dir / "smoke-test.yaml")
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+@pytest.fixture()
 def smoke_workspace(tmp_path: Path) -> Path:
     ws = tmp_path / "smoke_ws"
     ws.mkdir()
@@ -217,13 +233,12 @@ class TestSmokeScriptValidation:
         assert result["valid"] is True
         assert result["errors"] == []
 
-    async def test_script_discoverable(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(PROJECT_ROOT)
+    async def test_script_discoverable(self, smoke_project: Path) -> None:
         result = json.loads(await list_recipes())
         names = [s["name"] for s in result["recipes"]]
         assert "smoke-test" in names
 
-    async def test_script_loads_with_expected_structure(self) -> None:
+    async def test_script_loads_with_expected_structure(self, smoke_project: Path) -> None:
         result = json.loads(await load_recipe(name="smoke-test"))
         assert "content" in result
         assert "suggestions" in result
@@ -320,7 +335,7 @@ class TestSmokeScriptValidation:
         assert call_count == 2
         assert result["success"] is True
 
-    async def test_script_has_collect_on_branch_input(self) -> None:
+    async def test_script_has_collect_on_branch_input(self, smoke_project: Path) -> None:
         result = json.loads(await load_recipe(name="smoke-test"))
         pipeline = yaml.safe_load(result["content"])
         inputs = pipeline["ingredients"]

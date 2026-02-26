@@ -122,7 +122,7 @@ class TestRecipeParser:
         recipes = list_recipes(tmp_path).items
         names = {w.name for w in recipes}
         assert "bugfix-loop" in names
-        assert "implementation" in names
+        assert "implementation-pipeline" in names
         assert "audit-and-fix" in names
         assert "investigate-first" in names
 
@@ -891,7 +891,7 @@ class TestListRecipes:
         recipes = list_recipes(tmp_path).items
         names = {w.name for w in recipes}
         assert "bugfix-loop" in names
-        assert "implementation" in names
+        assert "implementation-pipeline" in names
 
 
 class TestBuiltinRecipesDir:

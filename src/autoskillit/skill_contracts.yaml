@@ -11,18 +11,35 @@ skills:
       - name: base_branch
         type: string
         required: true
-    outputs:
-      - name: merged_branch
+    outputs: []
+
+  audit-impl:
+    inputs:
+      - name: plan_path
+        type: file_path
+        required: true
+      - name: implementation_ref
         type: string
+        required: false
+      - name: base_branch
+        type: string
+        required: false
+    outputs:
+      - name: verdict
+        type: string
+        description: '"GO" or "NO GO"'
+      - name: remediation_path
+        type: file_path
+        description: >
+          Present only on NO GO. Path to the generated remediation plan in
+          temp/audit-impl/. Null/absent on GO outcome.
 
   dry-walkthrough:
     inputs:
       - name: plan_path
         type: file_path
         required: true
-    outputs:
-      - name: verified_plan_path
-        type: file_path
+    outputs: []
 
   implement-worktree:
     inputs:
@@ -47,9 +64,7 @@ skills:
       - name: topic
         type: string
         required: true
-    outputs:
-      - name: investigation_path
-        type: file_path
+    outputs: []
 
   make-groups:
     inputs:

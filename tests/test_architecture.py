@@ -340,3 +340,16 @@ def test_contract_validator_imports_regex_from_recipe_parser():
         and node.targets[0].id in ("_CONTEXT_REF_RE", "_INPUT_REF_RE")
     ]
     assert assigns == [], f"contract_validator defines its own regex patterns: {assigns}"
+
+
+# T-P3-4-A — contract_validator must not import from process_lifecycle
+def test_contract_validator_no_process_lifecycle_import():
+    """contract_validator.py must not import from process_lifecycle."""
+    tree = _get_module_ast("contract_validator.py")
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            module = getattr(node, "module", "") or ""
+            assert "process_lifecycle" not in module, (
+                "contract_validator.py imports from process_lifecycle — "
+                "move the subprocess-dependent code to _llm_triage.py"
+            )

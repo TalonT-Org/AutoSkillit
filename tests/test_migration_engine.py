@@ -290,7 +290,13 @@ class TestContractMigrationAdapter:
 
         monkeypatch.setattr(
             "autoskillit.contract_validator.generate_recipe_card",
-            lambda *a, **kw: contract_path,
+            lambda *a, **kw: {
+                "generated_at": "2026-01-01T00:00:00+00:00",
+                "bundled_manifest_version": "0.1.0",
+                "skill_hashes": {},
+                "skills": {},
+                "dataflow": [],
+            },
         )
 
         file = MigrationFile(

@@ -552,6 +552,25 @@ def test_gated_tools_call_require_enabled_first() -> None:
     )
 
 
+def test_server_imports_gate_registry() -> None:
+    """server.py must import GATED_TOOLS and UNGATED_TOOLS from autoskillit._gate.
+
+    N6 requirement: server.py is the authoritative runtime consumer of the
+    gate registry, not only the test suite.
+    """
+    server_src = SRC_ROOT / "server.py"
+    tree = ast.parse(server_src.read_text())
+
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "autoskillit._gate":
+            for alias in node.names:
+                imported.add(alias.name)
+
+    missing = {"GATED_TOOLS", "UNGATED_TOOLS"} - imported
+    assert not missing, f"server.py must import from autoskillit._gate: {sorted(missing)}"
+
+
 # ── Rule 1: test_import_layer_enforcement ─────────────────────────────────────
 
 

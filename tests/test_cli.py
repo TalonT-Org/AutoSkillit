@@ -1199,6 +1199,88 @@ class TestMigrateCommand:
         assert "Claude Code session" not in captured.out
 
 
+class TestEnsureProjectTemp:
+    """N5: ensure_project_temp moved from config.py to _io.py."""
+
+    def test_ensure_project_temp_importable_from_io(self):
+        from autoskillit._io import ensure_project_temp
+
+        assert callable(ensure_project_temp)
+
+    def test_ensure_project_temp_creates_temp_dir(self, tmp_path):
+        from autoskillit._io import ensure_project_temp
+
+        result = ensure_project_temp(tmp_path)
+        assert result == tmp_path / ".autoskillit" / "temp"
+        assert result.is_dir()
+
+    def test_ensure_project_temp_writes_gitignore(self, tmp_path):
+        from autoskillit._io import ensure_project_temp
+
+        ensure_project_temp(tmp_path)
+        gitignore = tmp_path / ".autoskillit" / ".gitignore"
+        assert gitignore.read_text() == "temp/\n"
+
+    def test_ensure_project_temp_is_idempotent(self, tmp_path):
+        from autoskillit._io import ensure_project_temp
+
+        ensure_project_temp(tmp_path)
+        ensure_project_temp(tmp_path)  # second call must not raise
+        assert (tmp_path / ".autoskillit" / "temp").is_dir()
+
+
+class TestServeStartupLog:
+    """N11: serve() logs startup info including resolved config path and test command."""
+
+    def test_serve_logs_startup_with_config_path(self, tmp_path, monkeypatch):
+        from unittest.mock import patch
+
+        import structlog.testing
+
+        import autoskillit.cli as cli_mod
+        import autoskillit.server as server_mod
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".autoskillit").mkdir()
+        (tmp_path / ".autoskillit" / "config.yaml").write_text(
+            "test_check:\n  command: [make, test]\n"
+        )
+
+        with (
+            patch.object(server_mod.mcp, "run"),
+            patch("autoskillit._logging.configure_logging"),
+            structlog.testing.capture_logs() as logs,
+        ):
+            cli_mod.serve()
+
+        startup = next((entry for entry in logs if entry.get("event") == "serve_startup"), None)
+        assert startup is not None
+        assert startup["test_check_command"] == ["make", "test"]
+        assert str(tmp_path / ".autoskillit" / "config.yaml") in startup["config_path"]
+
+    def test_serve_logs_startup_config_path_none_when_no_config(self, tmp_path, monkeypatch):
+        from unittest.mock import patch
+
+        import structlog.testing
+
+        import autoskillit.cli as cli_mod
+        import autoskillit.server as server_mod
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            patch.object(server_mod.mcp, "run"),
+            patch("autoskillit._logging.configure_logging"),
+            patch("autoskillit.cli.Path.home", return_value=tmp_path),
+            structlog.testing.capture_logs() as logs,
+        ):
+            cli_mod.serve()
+
+        startup = next((entry for entry in logs if entry.get("event") == "serve_startup"), None)
+        assert startup is not None
+        assert startup["config_path"] is None
+
+
 class TestSyncRemovalCLI:
     def test_update_command_does_not_exist(self):
         """REQ-APP-002: 'autoskillit update' is not a registered command."""

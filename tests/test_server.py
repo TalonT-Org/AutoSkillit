@@ -2374,6 +2374,46 @@ class TestGatedToolAccess:
             assert "automation" in tool.tags, f"{tool.name} missing 'automation' tag"
 
 
+class TestGateTransitionLogs:
+    """N11: open_kitchen and close_kitchen handlers emit structured log events."""
+
+    def test_open_kitchen_logs_gate_open(self):
+        with structlog.testing.capture_logs() as logs:
+            _open_kitchen_handler()
+        assert any(
+            entry.get("event") == "open_kitchen" and entry.get("gate_state") == "open"
+            for entry in logs
+        )
+
+    def test_close_kitchen_logs_gate_closed(self):
+        with structlog.testing.capture_logs() as logs:
+            _close_kitchen_handler()
+        assert any(
+            entry.get("event") == "close_kitchen" and entry.get("gate_state") == "closed"
+            for entry in logs
+        )
+
+    def test_session_log_dir_warns_when_missing(self):
+        with structlog.testing.capture_logs() as logs:
+            _session_log_dir("/nonexistent/project/99999999")
+        warning_entries = [entry for entry in logs if entry.get("log_level") == "warning"]
+        assert any(entry.get("event") == "session_log_dir_missing" for entry in warning_entries)
+
+    def test_session_log_dir_no_warning_when_present(self, tmp_path):
+        import shutil
+
+        cwd = str(tmp_path)
+        project_hash = cwd.replace("/", "-").replace("_", "-")
+        log_dir = Path.home() / ".claude" / "projects" / project_hash
+        log_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            with structlog.testing.capture_logs() as logs:
+                _session_log_dir(cwd)
+            assert not any(entry.get("event") == "session_log_dir_missing" for entry in logs)
+        finally:
+            shutil.rmtree(log_dir, ignore_errors=True)
+
+
 class TestPromptSchemas:
     """Prompt descriptions must be accurate, current, and cooking-themed."""
 
@@ -3047,6 +3087,94 @@ class TestMergeWorktreeCleanupReporting:
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.FETCH
+
+
+class TestMergeWorktreeCleanupWarnings:
+    """merge_worktree emits logger.warning when cleanup steps fail post-merge."""
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server._run_subprocess")
+    async def test_warns_on_worktree_remove_failure(self, mock_run, tmp_path):
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),
+            (0, "impl-branch\n", ""),
+            (0, "PASS\n= 100 passed =", ""),
+            (0, "", ""),  # fetch
+            (0, "", ""),  # rebase
+            (0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", ""),
+            (0, "", ""),  # merge
+            (1, "", "error: untracked files"),  # worktree remove FAILS
+            (0, "", ""),  # branch -D
+        ]
+
+        with structlog.testing.capture_logs() as logs:
+            result = json.loads(await merge_worktree(str(wt), "main"))
+
+        assert result["success"] is True
+        assert result["worktree_removed"] is False
+        warning_entries = [entry for entry in logs if entry.get("log_level") == "warning"]
+        assert any(entry.get("operation") == "worktree_remove" for entry in warning_entries)
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server._run_subprocess")
+    async def test_warns_on_branch_delete_failure(self, mock_run, tmp_path):
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),
+            (0, "impl-branch\n", ""),
+            (0, "PASS\n= 100 passed =", ""),
+            (0, "", ""),  # fetch
+            (0, "", ""),  # rebase
+            (0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", ""),
+            (0, "", ""),  # merge
+            (0, "", ""),  # worktree remove
+            (1, "", "error: branch not found"),  # branch -D FAILS
+        ]
+
+        with structlog.testing.capture_logs() as logs:
+            result = json.loads(await merge_worktree(str(wt), "main"))
+
+        assert result["success"] is True
+        assert result["branch_deleted"] is False
+        warning_entries = [entry for entry in logs if entry.get("log_level") == "warning"]
+        assert any(entry.get("operation") == "branch_delete" for entry in warning_entries)
+
+    @pytest.mark.asyncio
+    @patch("autoskillit.server._run_subprocess")
+    async def test_no_warning_on_clean_cleanup(self, mock_run, tmp_path):
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        mock_run.side_effect = [
+            (0, "/repo/.git/worktrees/wt\n", ""),
+            (0, "impl-branch\n", ""),
+            (0, "PASS\n= 100 passed =", ""),
+            (0, "", ""),  # fetch
+            (0, "", ""),  # rebase
+            (0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", ""),
+            (0, "", ""),  # merge
+            (0, "", ""),  # worktree remove — success
+            (0, "", ""),  # branch -D — success
+        ]
+
+        with structlog.testing.capture_logs() as logs:
+            result = json.loads(await merge_worktree(str(wt), "main"))
+
+        assert result["success"] is True
+        cleanup_warnings = [
+            entry
+            for entry in logs
+            if entry.get("log_level") == "warning" and "cleanup" in str(entry.get("event", ""))
+        ]
+        assert cleanup_warnings == []
 
 
 # ---------------------------------------------------------------------------

@@ -1770,27 +1770,24 @@ async def load_recipe(name: str) -> str:
     ``suggestions`` (list of semantic findings, possibly empty) keys.
     On error: JSON with ``error`` key.
     """
-    import yaml
-
+    from autoskillit._io import _load_yaml
     from autoskillit.contract_validator import (
         check_contract_staleness,
         generate_recipe_card,
         load_recipe_card,
         validate_recipe_cards,
     )
-    from autoskillit.recipe_parser import _parse_recipe
-    from autoskillit.recipe_parser import list_recipes as _list_recipes_all
+    from autoskillit.recipe_parser import _parse_recipe, find_recipe_by_name
     from autoskillit.semantic_rules import run_semantic_rules
 
-    _all = _list_recipes_all(Path.cwd())
-    _match = next((r for r in _all.items if r.name == name), None)
+    _match = find_recipe_by_name(name, Path.cwd())
     if _match is None:
         return json.dumps({"error": f"No recipe named '{name}' found"})
     content = _match.path.read_text()
 
     suggestions: list[dict[str, str]] = []
     try:
-        data = yaml.safe_load(content)
+        data = _load_yaml(content)
         if isinstance(data, dict) and "steps" in data:
             recipe = _parse_recipe(data)
 
@@ -1823,7 +1820,7 @@ async def load_recipe(name: str) -> str:
 
                 if migration_result.success:
                     content = recipe_path.read_text()
-                    data = yaml.safe_load(content)
+                    data = _load_yaml(content)
                     recipe = _parse_recipe(data)
                     failure_store.clear(name)
                 else:
@@ -1933,6 +1930,7 @@ async def validate_recipe(script_path: str) -> str:
     """
     import yaml
 
+    from autoskillit._io import _load_yaml
     from autoskillit.contract_validator import (
         load_recipe_card,
         validate_recipe_cards,
@@ -1952,7 +1950,7 @@ async def validate_recipe(script_path: str) -> str:
         return json.dumps({"error": f"File not found: {script_path}"})
 
     try:
-        data = yaml.safe_load(path.read_text())
+        data = _load_yaml(path)
     except yaml.YAMLError as exc:
         return json.dumps({"error": f"YAML parse error: {exc}"})
 
@@ -2017,10 +2015,9 @@ def _close_kitchen_handler() -> None:
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
-    from autoskillit.recipe_parser import list_recipes
+    from autoskillit.recipe_parser import find_recipe_by_name
 
-    result = list_recipes(Path.cwd())
-    match = next((r for r in result.items if r.name == name), None)
+    match = find_recipe_by_name(name, Path.cwd())
     if match is None:
         return json.dumps({"error": f"No recipe named '{name}'."})
     return match.path.read_text()

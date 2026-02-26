@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import dataclasses
+import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
-import yaml
-
+from autoskillit._io import _load_yaml
 from autoskillit._logging import get_logger
 from autoskillit.types import (
     RETRY_RESPONSE_FIELDS,
@@ -19,6 +20,13 @@ from autoskillit.types import (
 )
 
 logger = get_logger(__name__)
+
+_CONTEXT_REF_RE: re.Pattern[str] = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
+_INPUT_REF_RE: re.Pattern[str] = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
+_RESULT_REF_RE: re.Pattern[str] = re.compile(r"\$\{\{\s*result\.([\w.]+)\s*\}\}")
+_TEMPLATE_REF_RE: re.Pattern[str] = re.compile(r"\$\{\{[^}]+\}\}")
+
+AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
 
 
 @dataclass
@@ -101,7 +109,7 @@ class DataFlowReport:
 
 def load_recipe(path: Path) -> Recipe:
     """Parse a YAML recipe file into a Recipe dataclass."""
-    data = yaml.safe_load(path.read_text())
+    data = _load_yaml(path)
     if not isinstance(data, dict):
         raise ValueError(f"Recipe file must contain a YAML mapping: {path}")
     return _parse_recipe(data)
@@ -170,44 +178,40 @@ def validate_recipe(recipe: Recipe) -> list[str]:
     # Validate capture values: must contain ${{ result.* }} expressions
     for step_name, step in recipe.steps.items():
         for cap_key, cap_val in step.capture.items():
-            refs = _extract_refs(cap_val)
-            if not refs:
+            if not _RESULT_REF_RE.search(cap_val):
                 errors.append(
                     f"Step '{step_name}'.capture.{cap_key} must contain "
                     f"a ${{{{ result.* }}}} expression."
                 )
-            for ref in refs:
-                if not ref.startswith("result."):
-                    errors.append(
-                        f"Step '{step_name}'.capture.{cap_key} references "
-                        f"'{ref}'; capture values must use the 'result.' namespace."
-                    )
+            for inp_name in _INPUT_REF_RE.findall(cap_val):
+                errors.append(
+                    f"Step '{step_name}'.capture.{cap_key} references "
+                    f"'inputs.{inp_name}'; capture values must use the 'result.' namespace."
+                )
+            for ctx_var in _CONTEXT_REF_RE.findall(cap_val):
+                errors.append(
+                    f"Step '{step_name}'.capture.{cap_key} references "
+                    f"'context.{ctx_var}'; capture values must use the 'result.' namespace."
+                )
 
     # Validate input and context references in with_args
     ingredient_names = set(recipe.ingredients.keys())
-    available_context: set[str] = set()
 
-    for step_name, step in recipe.steps.items():
+    for step_name, step, available_context in iter_steps_with_context(recipe):
         for arg_key, arg_val in step.with_args.items():
-            for ref in _extract_refs(arg_val):
-                if ref.startswith("inputs."):
-                    input_name = ref[len("inputs.") :]
-                    if input_name not in ingredient_names:
-                        errors.append(
-                            f"Step '{step_name}'.with.{arg_key} references "
-                            f"undeclared input '{input_name}'."
-                        )
-                elif ref.startswith("context."):
-                    ctx_var = ref[len("context.") :]
-                    if ctx_var not in available_context:
-                        errors.append(
-                            f"Step '{step_name}'.with.{arg_key} references "
-                            f"context variable '{ctx_var}' which has not been "
-                            f"captured by a preceding step."
-                        )
-
-        # After validating this step's with_args, add its captures for subsequent steps
-        available_context.update(step.capture.keys())
+            for inp_name in _INPUT_REF_RE.findall(arg_val):
+                if inp_name not in ingredient_names:
+                    errors.append(
+                        f"Step '{step_name}'.with.{arg_key} references "
+                        f"undeclared input '{inp_name}'."
+                    )
+            for ctx_var in _CONTEXT_REF_RE.findall(arg_val):
+                if ctx_var not in available_context:
+                    errors.append(
+                        f"Step '{step_name}'.with.{arg_key} references "
+                        f"context variable '{ctx_var}' which has not been "
+                        f"captured by a preceding step."
+                    )
 
     if not recipe.kitchen_rules:
         errors.append(
@@ -236,6 +240,28 @@ def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
 def builtin_recipes_dir() -> Path:
     """Return the path to the built-in recipes directory."""
     return Path(__file__).parent / "recipes"
+
+
+def find_recipe_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
+    """Return the RecipeInfo for the named recipe, or None if not found."""
+    return next(
+        (r for r in list_recipes(project_dir).items if r.name == name),
+        None,
+    )
+
+
+def iter_steps_with_context(
+    recipe: Recipe,
+) -> Iterator[tuple[str, RecipeStep, frozenset[str]]]:
+    """Yield (step_name, step, available_context) in declaration order.
+
+    ``available_context`` is a frozenset of context variable names captured
+    by all preceding steps. It does not include the current step's own captures.
+    """
+    available: set[str] = set()
+    for step_name, step in recipe.steps.items():
+        yield step_name, step, frozenset(available)
+        available.update(step.capture.keys())
 
 
 # --- internal helpers ---
@@ -271,7 +297,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
         ingredients=ingredients,
         steps=steps,
         kitchen_rules=kitchen_rules,
-        version=data.get("autoskillit_version"),
+        version=data.get(AUTOSKILLIT_VERSION_KEY),
     )
 
 
@@ -308,18 +334,6 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         optional=bool(data.get("optional", False)),
         model=data.get("model"),
     )
-
-
-def _extract_refs(value: str) -> list[str]:
-    """Extract ${{ X }} references from a string."""
-    refs: list[str] = []
-    rest = value
-    while "${{" in rest:
-        start = rest.index("${{") + 3
-        end = rest.index("}}", start)
-        refs.append(rest[start:end].strip())
-        rest = rest[end + 2 :]
-    return refs
 
 
 def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
@@ -369,9 +383,8 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         for reachable_name in reachable:
             reachable_step = recipe.steps[reachable_name]
             for arg_val in reachable_step.with_args.values():
-                for ref in _extract_refs(arg_val):
-                    if ref.startswith("context."):
-                        consumed.add(ref[len("context.") :])
+                for ctx_var in _CONTEXT_REF_RE.findall(arg_val):
+                    consumed.add(ctx_var)
 
         # Flag captured vars not consumed on any path
         for cap_key in step.capture:

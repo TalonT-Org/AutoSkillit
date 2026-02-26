@@ -694,10 +694,9 @@ def recipes_list():
 @recipes_app.command(name="show")
 def recipes_show(name: str):
     """Print the YAML content of a named recipe."""
-    from autoskillit.recipe_parser import list_recipes
+    from autoskillit.recipe_parser import find_recipe_by_name
 
-    recipes = list_recipes(Path.cwd()).items
-    match = next((r for r in recipes if r.name == name), None)
+    match = find_recipe_by_name(name, Path.cwd())
     if match is None:
         print(f"No recipe named '{name}'.", file=sys.stderr)
         sys.exit(1)
@@ -808,12 +807,16 @@ def cook(recipe: str):
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
-    from autoskillit.recipe_parser import list_recipes as _list_all_recipes_for_cook
+    import yaml
 
-    _all = _list_all_recipes_for_cook(Path.cwd())
-    _match = next((r for r in _all.items if r.name == recipe), None)
+    from autoskillit._io import _load_yaml
+    from autoskillit.recipe_parser import _parse_recipe, find_recipe_by_name, validate_recipe
+
+    _match = find_recipe_by_name(recipe, Path.cwd())
     if _match is None:
-        available = _all.items
+        from autoskillit.recipe_parser import list_recipes as _list_all_recipes_for_cook
+
+        available = _list_all_recipes_for_cook(Path.cwd()).items
         print(f"Recipe not found: '{recipe}'")
         if available:
             print("Available recipes:")
@@ -825,12 +828,8 @@ def cook(recipe: str):
     recipe_yaml = _match.path.read_text()
 
     # Validate recipe before launching session
-    import yaml
-
-    from autoskillit.recipe_parser import _parse_recipe, validate_recipe
-
     try:
-        data = yaml.safe_load(recipe_yaml)
+        data = _load_yaml(recipe_yaml)
     except yaml.YAMLError as exc:
         print(f"Recipe YAML parse error: {exc}")
         sys.exit(1)

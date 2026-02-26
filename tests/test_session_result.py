@@ -373,6 +373,40 @@ class TestExtractTokenUsage:
         assert result["input_tokens"] == 10
 
 
+class TestExtractTokenUsageArchitecture:
+    """Contract tests asserting extract_token_usage's construction-time role."""
+
+    def test_token_usage_on_parsed_result_matches_standalone_extract(self):
+        """parse_session_result.token_usage == extract_token_usage(stdout).
+
+        This is the architectural contract that makes extract_token_usage(stdout: str)
+        the correct signature: the function is called during ClaudeSessionResult
+        construction, before the object exists. A (result: ClaudeSessionResult)
+        parameter would create a circular bootstrapping dependency.
+        """
+        assistant = _assistant_ndjson(input_tokens=100, output_tokens=50, cache_create=10)
+        result_rec = _result_ndjson(
+            usage={
+                "input_tokens": 999,
+                "output_tokens": 888,
+                "cache_creation_input_tokens": 10,
+                "cache_read_input_tokens": 0,
+            }
+        )
+        stdout = assistant + "\n" + result_rec
+
+        parsed = parse_session_result(stdout)
+        standalone = extract_token_usage(stdout)
+
+        assert parsed.token_usage == standalone
+
+    def test_token_usage_none_when_no_usage_in_stdout(self):
+        """ClaudeSessionResult.token_usage is None when stdout has no usage data."""
+        stdout = _result_ndjson()  # no usage key in result record
+        parsed = parse_session_result(stdout)
+        assert parsed.token_usage is None
+
+
 # ---------------------------------------------------------------------------
 # _compute_success
 # ---------------------------------------------------------------------------

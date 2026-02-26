@@ -150,9 +150,14 @@ class SkillResult:
 def extract_token_usage(stdout: str) -> dict[str, Any] | None:
     """Extract token usage from Claude CLI NDJSON output.
 
-    Scans assistant records for per-model usage and the result record
-    for authoritative aggregated totals.  Returns None if no usage
-    data is found.
+    Takes raw NDJSON *stdout* (not a parsed ClaudeSessionResult) because this
+    function is called inside parse_session_result() *during construction* of
+    ClaudeSessionResult — before that object exists. A (result: ClaudeSessionResult)
+    parameter would create a circular bootstrapping dependency and is therefore
+    architecturally incorrect for this call site.
+
+    Scans assistant records for per-model usage and the result record for
+    authoritative aggregated totals. Returns None if no usage data is found.
     """
     if not stdout.strip():
         return None

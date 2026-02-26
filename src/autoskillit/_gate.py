@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class GateState:
-    """Runtime gate state. Used by groupE's ToolContext (not yet, but prepared)."""
+    """Gate enable/disable state consumed by ToolContext (_context.py)."""
 
     enabled: bool = False
 

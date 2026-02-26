@@ -6,20 +6,8 @@ from pathlib import Path
 
 import yaml
 
-from autoskillit import recipe_parser
-from autoskillit._logging import get_logger
-from autoskillit.config import load_config
 from autoskillit.recipe_parser import RecipeInfo, RecipeSource
-from autoskillit.sync_manifest import (
-    SyncDecisionStore,
-    SyncManifest,
-    compute_recipe_hash,
-    default_decision_path,
-    default_manifest_path,
-)
 from autoskillit.types import LoadReport, LoadResult
-
-logger = get_logger(__name__)
 
 
 def _extract_frontmatter(text: str) -> str:
@@ -87,83 +75,3 @@ def load_recipe(project_dir: Path, name: str) -> str | None:
     if match is None:
         return None
     return match.path.read_text()
-
-
-def sync_bundled_recipes(project_dir: Path) -> None:
-    """Sync bundled recipe YAMLs into .autoskillit/recipes/ with content-aware logic.
-
-    Only runs if .autoskillit/ already exists in the project directory.
-    Project-specific recipes with no bundled counterpart are left untouched.
-    Locally modified recipes are preserved with a WARNING log.
-    """
-    autoskillit_dir = project_dir / ".autoskillit"
-    if not autoskillit_dir.is_dir():
-        return
-    recipes_dir = autoskillit_dir / "recipes"
-    recipes_dir.mkdir(exist_ok=True)
-    bundled_dir = recipe_parser.builtin_recipes_dir()
-    if not bundled_dir.is_dir():
-        return
-
-    config = load_config(project_dir)
-    excluded = set(config.sync.excluded_recipes)
-    manifest = SyncManifest(default_manifest_path(project_dir))
-
-    for src in bundled_dir.glob("*.yaml"):
-        recipe_name = src.stem
-        if recipe_name in excluded:
-            continue
-        bundled_content = src.read_text()
-        local_path = recipes_dir / src.name
-        if not local_path.exists():
-            local_path.write_text(bundled_content)
-            manifest.record(recipe_name, bundled_content)
-            continue
-        local_content = local_path.read_text()
-        bundled_hash = compute_recipe_hash(bundled_content)
-        local_hash = compute_recipe_hash(local_content)
-        manifest_hash = manifest.get_hash(recipe_name)
-        is_unmodified = (local_hash == bundled_hash) or (
-            manifest_hash is not None and local_hash == manifest_hash
-        )
-        if is_unmodified:
-            if local_content != bundled_content:
-                local_path.write_text(bundled_content)
-                manifest.record(recipe_name, bundled_content)
-        else:
-            logger.warning("sync_skipped_modified_recipe", recipe_name=recipe_name)
-
-
-def _get_pending_recipe_updates(project_dir: Path) -> list[str]:
-    """Return bundled recipe names where a newer bundle is available but local copy is modified."""
-    autoskillit_dir = project_dir / ".autoskillit"
-    if not autoskillit_dir.is_dir():
-        return []
-    recipes_dir = autoskillit_dir / "recipes"
-    config = load_config(project_dir)
-    excluded = set(config.sync.excluded_recipes)
-    manifest = SyncManifest(default_manifest_path(project_dir))
-    decisions = SyncDecisionStore(default_decision_path(project_dir))
-    bundled_dir = recipe_parser.builtin_recipes_dir()
-    pending: list[str] = []
-    for src in sorted(bundled_dir.glob("*.yaml")):
-        recipe_name = src.stem
-        if recipe_name in excluded:
-            continue
-        local_path = recipes_dir / src.name
-        if not local_path.exists():
-            continue
-        bundled_content = src.read_text()
-        local_content = local_path.read_text()
-        bundled_hash = compute_recipe_hash(bundled_content)
-        local_hash = compute_recipe_hash(local_content)
-        if local_hash == bundled_hash:
-            continue
-        manifest_hash = manifest.get_hash(recipe_name)
-        is_unmodified = manifest_hash is not None and local_hash == manifest_hash
-        if is_unmodified:
-            continue
-        if decisions.is_declined(recipe_name, bundled_hash):
-            continue
-        pending.append(recipe_name)
-    return pending

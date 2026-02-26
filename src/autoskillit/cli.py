@@ -217,39 +217,6 @@ def _ensure_marketplace() -> Path:
 
 
 @app.command
-def update():
-    """Refresh built-in recipes, preserving customized ones."""
-    from autoskillit.recipe_parser import builtin_recipes_dir
-
-    project_recipe_dir = Path.cwd() / ".autoskillit" / "recipes"
-    if not project_recipe_dir.is_dir():
-        print("No project recipes directory found. Nothing to update.")
-        return
-
-    builtin_dir = builtin_recipes_dir()
-    updated = []
-    skipped = []
-
-    for builtin_file in sorted(builtin_dir.glob("*.yaml")):
-        project_file = project_recipe_dir / builtin_file.name
-        if not project_file.exists():
-            shutil.copy2(builtin_file, project_file)
-            updated.append(builtin_file.stem)
-        elif project_file.read_text() == builtin_file.read_text():
-            shutil.copy2(builtin_file, project_file)
-            updated.append(builtin_file.stem)
-        else:
-            skipped.append(builtin_file.stem)
-
-    if updated:
-        print(f"Updated: {', '.join(updated)}")
-    if skipped:
-        print(f"Skipped (customized): {', '.join(skipped)}")
-    if not updated and not skipped:
-        print("No built-in recipes found.")
-
-
-@app.command
 def upgrade():
     """Migrate a project from .autoskillit/scripts/ to .autoskillit/recipes/.
 
@@ -546,56 +513,6 @@ def doctor(*, output_json: bool = False):
                     "All recipes up to date",
                 )
             )
-
-    # Check 8: Recipe sync status
-    from autoskillit import recipe_parser as _rp
-    from autoskillit.sync_manifest import SyncManifest, compute_recipe_hash, default_manifest_path
-
-    bundled_dir = _rp.builtin_recipes_dir()
-    if bundled_dir.is_dir():
-        recipes_dir = Path.cwd() / ".autoskillit" / "recipes"
-        manifest = SyncManifest(default_manifest_path(Path.cwd()))
-        for src in sorted(bundled_dir.glob("*.yaml")):
-            recipe_name = src.stem
-            local_path = recipes_dir / src.name
-            if not local_path.exists():
-                continue
-            bundled_content = src.read_text()
-            local_content = local_path.read_text()
-            bundled_hash = compute_recipe_hash(bundled_content)
-            local_hash = compute_recipe_hash(local_content)
-            manifest_hash = manifest.get_hash(recipe_name)
-            is_unmodified = (local_hash == bundled_hash) or (
-                manifest_hash is not None and local_hash == manifest_hash
-            )
-            if local_hash == bundled_hash:
-                results.append(
-                    DoctorResult(
-                        Severity.OK,
-                        "recipe_sync_status",
-                        f"{recipe_name}: up to date",
-                    )
-                )
-            elif is_unmodified:
-                results.append(
-                    DoctorResult(
-                        Severity.WARNING,
-                        "recipe_sync_status",
-                        f"{recipe_name}: pending auto-update (will sync on next server start)",
-                    )
-                )
-            else:
-                if bundled_hash != local_hash:
-                    msg = f"{recipe_name}: locally modified — bundle update available"
-                else:
-                    msg = f"{recipe_name}: locally modified"
-                results.append(
-                    DoctorResult(
-                        Severity.WARNING,
-                        "recipe_sync_status",
-                        msg,
-                    )
-                )
 
     # Output
     if output_json:

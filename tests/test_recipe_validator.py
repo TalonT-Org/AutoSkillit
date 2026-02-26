@@ -1424,8 +1424,7 @@ def test_validate_recipe_cards_clean(tmp_path: Path) -> None:
     pipeline = recipes_dir / "clean.yaml"
     pipeline.write_text(CLEAN_PIPELINE_YAML)
 
-    contract_path = generate_recipe_card(pipeline, recipes_dir)
-    contract = yaml.safe_load(contract_path.read_text())
+    contract = generate_recipe_card(pipeline, recipes_dir)
 
     findings = validate_recipe_cards(None, contract)
     assert len(findings) == 0
@@ -1437,8 +1436,7 @@ def test_validate_recipe_cards_missing_input(tmp_path: Path) -> None:
     pipeline = recipes_dir / "bad.yaml"
     pipeline.write_text(BAD_PIPELINE_YAML)
 
-    contract_path = generate_recipe_card(pipeline, recipes_dir)
-    contract = yaml.safe_load(contract_path.read_text())
+    contract = generate_recipe_card(pipeline, recipes_dir)
 
     findings = validate_recipe_cards(None, contract)
     assert len(findings) > 0

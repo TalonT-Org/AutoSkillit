@@ -224,6 +224,10 @@ def smoke_workspace(tmp_path: Path) -> Path:
 class TestSmokeScriptValidation:
     """Validate the smoke-test pipeline YAML structure and executor logic."""
 
+    @pytest.fixture(autouse=True)
+    def _setup_ctx(self, tool_ctx):
+        """Initialize ToolContext for smoke script validation tests."""
+
     async def test_script_validates(self, smoke_script_path: Path) -> None:
         result = json.loads(await validate_recipe(script_path=str(smoke_script_path)))
         assert result["valid"] is True

@@ -57,6 +57,7 @@ from autoskillit.server import (
 )
 from autoskillit.session_result import (
     ClaudeSessionResult,
+    SkillResult,
     _compute_retry,
     _compute_success,
     extract_token_usage,
@@ -476,7 +477,7 @@ class TestResetWorkspace:
 class TestCheckDryWalkthrough:
     """Dry-walkthrough gate blocks both /autoskillit:implement-worktree variants."""
 
-    def test_dry_walkthrough_gate_blocks_implement_no_merge(self, tmp_path):
+    def test_dry_walkthrough_gate_blocks_implement_no_merge(self, tool_ctx, tmp_path):
         """Gate blocks /autoskillit:implement-worktree-no-merge when plan lacks marker."""
         plan = tmp_path / "plan.md"
         plan.write_text("# My Plan\n\nSome content")
@@ -489,7 +490,7 @@ class TestCheckDryWalkthrough:
         assert parsed["is_error"] is True
         assert "dry-walked" in parsed["result"].lower()
 
-    def test_dry_walkthrough_gate_passes_implement_no_merge(self, tmp_path):
+    def test_dry_walkthrough_gate_passes_implement_no_merge(self, tool_ctx, tmp_path):
         """Gate allows /autoskillit:implement-worktree-no-merge when plan has marker."""
         plan = tmp_path / "plan.md"
         plan.write_text("Dry-walkthrough verified = TRUE\n# My Plan")
@@ -498,7 +499,7 @@ class TestCheckDryWalkthrough:
         )
         assert result is None
 
-    def test_dry_walkthrough_gate_still_works_for_implement_worktree(self, tmp_path):
+    def test_dry_walkthrough_gate_still_works_for_implement_worktree(self, tool_ctx, tmp_path):
         """Original /autoskillit:implement-worktree gating is not broken."""
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
@@ -508,7 +509,7 @@ class TestCheckDryWalkthrough:
         assert parsed["success"] is False
         assert parsed["is_error"] is True
 
-    def test_dry_walkthrough_gate_ignores_unrelated_skills(self):
+    def test_dry_walkthrough_gate_ignores_unrelated_skills(self, tool_ctx):
         """Gate ignores skills that are not implement-worktree variants."""
         result = _check_dry_walkthrough("/autoskillit:investigate some-error", "/tmp")
         assert result is None
@@ -582,13 +583,13 @@ class TestMergeWorktree:
         assert result["state"] == MergeState.WORKTREE_INTACT_REBASE_ABORTED
 
     @pytest.mark.asyncio
-    async def test_merge_worktree_rejects_nonexistent_path(self):
+    async def test_merge_worktree_rejects_nonexistent_path(self, tool_ctx):
         """merge_worktree rejects non-existent paths."""
         result = json.loads(await merge_worktree("/nonexistent/path", "main"))
         assert "error" in result
 
     @pytest.mark.asyncio
-    async def test_merge_worktree_rejects_non_worktree(self, tmp_path):
+    async def test_merge_worktree_rejects_non_worktree(self, tool_ctx, tmp_path):
         """merge_worktree rejects paths that aren't git worktrees."""
         result = json.loads(await merge_worktree(str(tmp_path), "main"))
         assert "error" in result
@@ -598,7 +599,7 @@ class TestRunSkillRetryGate:
     """run_skill_retry applies dry-walkthrough gate to implement skills."""
 
     @pytest.mark.asyncio
-    async def test_run_skill_retry_gates_implement_no_merge(self, tmp_path):
+    async def test_run_skill_retry_gates_implement_no_merge(self, tool_ctx, tmp_path):
         """run_skill_retry gates /autoskillit:implement-worktree-no-merge."""
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
@@ -867,10 +868,10 @@ class TestRecipeTools:
         )
 
         with (
-            patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
+            patch("autoskillit.server.applicable_migrations", return_value=[]),
             patch(
                 "autoskillit.recipe_validator.run_semantic_rules",
-                side_effect=RuntimeError("injected parse failure"),
+                side_effect=ValueError("injected parse failure"),
             ),
             structlog.testing.capture_logs() as logs,
         ):
@@ -955,6 +956,10 @@ class TestContractMigrationAdapterValidate:
 class TestLoadRecipeExceptionHandling:
     """CC-1: Outer except in load_recipe must catch anticipated exceptions only."""
 
+    @pytest.fixture(autouse=True)
+    def _setup_ctx(self, tool_ctx):
+        """Initialize ToolContext so load_recipe can call _get_config()."""
+
     @pytest.mark.asyncio
     async def test_yaml_error_surfaces_as_suggestion(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -979,17 +984,26 @@ class TestLoadRecipeExceptionHandling:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """ValueError (malformed recipe structure) is caught and returned as error suggestion."""
+        from autoskillit.recipe_schema import RecipeInfo
+        from autoskillit.types import RecipeSource
+
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
-        (recipes_dir / "test.yaml").write_text(
+        recipe_path = recipes_dir / "test.yaml"
+        recipe_path.write_text(
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
+        )
+        fake_match = RecipeInfo(
+            name="test",
+            description="Test",
+            source=RecipeSource.PROJECT,
+            path=recipe_path,
         )
         with (
             patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
-            patch(
-                "autoskillit.recipe_parser._parse_recipe", side_effect=ValueError("bad structure")
-            ),
+            patch("autoskillit.recipe_io.find_recipe_by_name", return_value=fake_match),
+            patch("autoskillit.recipe_io._parse_recipe", side_effect=ValueError("bad structure")),
         ):
             result = json.loads(await load_recipe(name="test"))
         assert "error" not in result
@@ -1010,9 +1024,9 @@ class TestLoadRecipeExceptionHandling:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with (
-            patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
+            patch("autoskillit.server.applicable_migrations", return_value=[]),
             patch(
-                "autoskillit.contract_validator.load_recipe_card",
+                "autoskillit.recipe_validator.load_recipe_card",
                 side_effect=FileNotFoundError("missing"),
             ),
         ):
@@ -1035,7 +1049,7 @@ class TestLoadRecipeExceptionHandling:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with (
-            patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
+            patch("autoskillit.server.applicable_migrations", return_value=[]),
             patch(
                 "autoskillit.recipe_validator.run_semantic_rules",
                 side_effect=AttributeError("programming error"),
@@ -1615,7 +1629,7 @@ class TestResetGuard:
     """Marker-file-based reset guard for destructive operations."""
 
     @pytest.mark.asyncio
-    async def test_reset_test_dir_refuses_without_marker(self, tmp_path):
+    async def test_reset_test_dir_refuses_without_marker(self, tool_ctx, tmp_path):
         """Directory without marker file is refused."""
         target = tmp_path / "workspace"
         target.mkdir()
@@ -1625,7 +1639,7 @@ class TestResetGuard:
         assert "marker" in result["error"].lower() or "reset guard" in result["error"].lower()
 
     @pytest.mark.asyncio
-    async def test_reset_test_dir_allows_with_marker(self, tmp_path):
+    async def test_reset_test_dir_allows_with_marker(self, tool_ctx, tmp_path):
         """Directory with marker file is cleared."""
         target = tmp_path / "workspace"
         target.mkdir()
@@ -1636,7 +1650,7 @@ class TestResetGuard:
         assert not (target / "some_file.txt").exists()
 
     @pytest.mark.asyncio
-    async def test_reset_test_dir_preserves_marker(self, tmp_path):
+    async def test_reset_test_dir_preserves_marker(self, tool_ctx, tmp_path):
         """Reset preserves the marker file so the workspace is reusable."""
         target = tmp_path / "workspace"
         target.mkdir()
@@ -1679,7 +1693,7 @@ class TestResetGuard:
         assert result["success"] is True
 
     @pytest.mark.asyncio
-    async def test_force_overrides_marker_check(self, tmp_path):
+    async def test_force_overrides_marker_check(self, tool_ctx, tmp_path):
         """force=True on reset_test_dir bypasses marker requirement."""
         target = tmp_path / "workspace"
         target.mkdir()
@@ -1689,7 +1703,7 @@ class TestResetGuard:
         assert result["success"] is True
 
     @pytest.mark.asyncio
-    async def test_rejects_nonexistent(self, tmp_path):
+    async def test_rejects_nonexistent(self, tool_ctx, tmp_path):
         result = json.loads(await reset_test_dir(test_dir=str(tmp_path / "nope")))
         assert "does not exist" in result["error"]
 
@@ -2476,7 +2490,7 @@ class TestGatedToolAccess:
 class TestGateTransitionLogs:
     """N11: open_kitchen and close_kitchen handlers emit structured log events."""
 
-    def test_open_kitchen_logs_gate_open(self):
+    def test_open_kitchen_logs_gate_open(self, tool_ctx):
         with structlog.testing.capture_logs() as logs:
             _open_kitchen_handler()
         assert any(
@@ -2484,7 +2498,7 @@ class TestGateTransitionLogs:
             for entry in logs
         )
 
-    def test_close_kitchen_logs_gate_closed(self):
+    def test_close_kitchen_logs_gate_closed(self, tool_ctx):
         with structlog.testing.capture_logs() as logs:
             _close_kitchen_handler()
         assert any(
@@ -2553,7 +2567,7 @@ class TestPromptSchemas:
                 f"('kitchen'): {desc!r}"
             )
 
-    def test_close_kitchen_returns_cooking_confirmation(self):
+    def test_close_kitchen_returns_cooking_confirmation(self, tool_ctx):
         """close_kitchen must return a cooking-themed closing message."""
         from autoskillit.server import _close_kitchen_handler
 
@@ -2821,6 +2835,10 @@ class TestCleanupResult:
 class TestDeleteDirectoryContents:
     """_delete_directory_contents never-raise contract."""
 
+    @pytest.fixture(autouse=True)
+    def _setup_ctx(self, tool_ctx):
+        """Initialize ToolContext for delete_directory_contents tests."""
+
     def test_continues_after_permission_error(self, tmp_path):
         """1a: PermissionError on one item does not abort the loop."""
         target = tmp_path / "testdir"
@@ -2837,7 +2855,7 @@ class TestDeleteDirectoryContents:
                 raise PermissionError("Permission denied")
             real_rmtree(path, *args, **kwargs)
 
-        with patch("autoskillit.server.shutil.rmtree", side_effect=selective_rmtree):
+        with patch("autoskillit.workspace.shutil.rmtree", side_effect=selective_rmtree):
             result = _delete_directory_contents(target)
 
         assert "dir_a" in result.deleted
@@ -2950,7 +2968,7 @@ class TestSafetyConfigWiring:
     """Safety config fields are read at the point of enforcement."""
 
     @pytest.mark.asyncio
-    async def test_reset_test_dir_allows_with_marker(self, tmp_path):
+    async def test_reset_test_dir_allows_with_marker(self, tool_ctx, tmp_path):
         """2a: Directory with marker passes the reset guard."""
         target = tmp_path / "my_project"
         target.mkdir()
@@ -2961,7 +2979,7 @@ class TestSafetyConfigWiring:
         assert result["success"] is True
 
     @pytest.mark.asyncio
-    async def test_reset_test_dir_enforces_marker_when_missing(self, tmp_path):
+    async def test_reset_test_dir_enforces_marker_when_missing(self, tool_ctx, tmp_path):
         """2b: Missing marker blocks reset_test_dir."""
         target = tmp_path / "unmarked"
         target.mkdir()
@@ -3232,6 +3250,10 @@ class TestMergeWorktreeCleanupWarnings:
 class TestRunPython:
     """run_python tool: import, call, timeout, async support."""
 
+    @pytest.fixture(autouse=True)
+    def _setup_ctx(self, tool_ctx):
+        """Initialize ToolContext for all run_python tests."""
+
     @pytest.mark.asyncio
     async def test_calls_function(self):
         """run_python imports module, calls function, returns JSON result."""
@@ -3458,6 +3480,10 @@ class TestSelectOnlyAuthorizer:
 
 class TestReadDb:
     """Integration tests for read_db tool with real SQLite databases."""
+
+    @pytest.fixture(autouse=True)
+    def _setup_ctx(self, tool_ctx):
+        """Initialize ToolContext for all read_db tests."""
 
     @pytest.fixture
     def sample_db(self, tmp_path):
@@ -3773,7 +3799,7 @@ class TestDryWalkthroughGateWithPrefix:
     """Dry-walkthrough gate still receives raw command before prefix is applied."""
 
     @pytest.mark.asyncio
-    async def test_gate_still_fires_for_implement_skill(self, tmp_path):
+    async def test_gate_still_fires_for_implement_skill(self, tool_ctx, tmp_path):
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
         result = json.loads(
@@ -4084,7 +4110,7 @@ class TestGateErrorSchemaNormalization:
         assert response["needs_retry"] is False
         assert "result" in response
 
-    def test_dry_walkthrough_gate_returns_standard_schema(self, tmp_path):
+    def test_dry_walkthrough_gate_returns_standard_schema(self, tool_ctx, tmp_path):
         """Dry-walkthrough gate errors must use the standard response schema."""
         plan = tmp_path / "plan.md"
         plan.write_text("No marker here")
@@ -4596,22 +4622,25 @@ class TestBuildSkillResultCompleted:
 class TestRunSkillRetryConsolidation:
     """run_skill_retry delegates to _run_headless_core with retry-specific config."""
 
+    @pytest.fixture(autouse=True)
+    def _setup_ctx(self, tool_ctx):
+        """Initialize ToolContext for run_skill_retry consolidation tests."""
+
     @pytest.mark.asyncio
     async def test_run_skill_retry_passes_add_dir_to_subprocess(self):
         """add_dir is forwarded to _run_headless_core (was silently absent before)."""
-        success_dict = {
-            "success": True,
-            "result": "ok",
-            "session_id": "s1",
-            "subtype": "success",
-            "is_error": False,
-            "exit_code": 0,
-            "needs_retry": False,
-            "retry_reason": "none",
-            "stderr": "",
-            "token_usage": None,
-        }
-        mock_core = AsyncMock(return_value=success_dict)
+        mock_result = SkillResult(
+            success=True,
+            result="ok",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        mock_core = AsyncMock(return_value=mock_result)
         with patch("autoskillit.server._run_headless_core", mock_core):
             await run_skill_retry("/investigate something", "/tmp", add_dir="/extra/dir")
 
@@ -4620,19 +4649,18 @@ class TestRunSkillRetryConsolidation:
     @pytest.mark.asyncio
     async def test_run_skill_retry_uses_retry_timeout_not_skill_timeout(self):
         """run_skill_retry passes RunSkillRetryConfig.timeout (7200) not RunSkillConfig (3600)."""
-        success_dict = {
-            "success": True,
-            "result": "ok",
-            "session_id": "s1",
-            "subtype": "success",
-            "is_error": False,
-            "exit_code": 0,
-            "needs_retry": False,
-            "retry_reason": "none",
-            "stderr": "",
-            "token_usage": None,
-        }
-        mock_core = AsyncMock(return_value=success_dict)
+        mock_result = SkillResult(
+            success=True,
+            result="ok",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        mock_core = AsyncMock(return_value=mock_result)
         with patch("autoskillit.server._run_headless_core", mock_core):
             await run_skill_retry("/investigate something", "/tmp")
 
@@ -5018,7 +5046,19 @@ class TestMigrationSuppression:
 
         tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=["test-script"]))
 
-        mock_headless = AsyncMock(return_value={"success": True})
+        mock_headless = AsyncMock(
+            return_value=SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+        )
         with patch("autoskillit.server._run_headless_core", mock_headless):
             result = json.loads(await load_recipe(name="test-script"))
 
@@ -5111,7 +5151,19 @@ class TestLoadRecipeAutoMigration:
         ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
 
-        mock_headless = AsyncMock(return_value={"success": True})
+        mock_headless = AsyncMock(
+            return_value=SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+        )
         with patch("autoskillit.server._run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
@@ -5124,7 +5176,19 @@ class TestLoadRecipeAutoMigration:
         ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
 
-        mock_headless = AsyncMock(return_value={"success": True})
+        mock_headless = AsyncMock(
+            return_value=SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+        )
         with patch("autoskillit.server._run_headless_core", mock_headless):
             result = json.loads(await load_recipe(name="test-script"))
 
@@ -5138,7 +5202,19 @@ class TestLoadRecipeAutoMigration:
         ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
 
-        mock_headless = AsyncMock(return_value={"success": True})
+        mock_headless = AsyncMock(
+            return_value=SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+        )
         with patch("autoskillit.server._run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
@@ -5165,11 +5241,25 @@ class TestLoadRecipeAutoMigration:
         )
         assert store.has_failure("test-script")
 
-        mock_headless = AsyncMock(return_value={"success": True})
+        mock_headless = AsyncMock(
+            return_value=SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+        )
         with patch("autoskillit.server._run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
-        assert not store.has_failure("test-script")
+        # Reload the store from disk to get the post-migration state
+        fresh_store = FailureStore(default_store_path(tmp_path))
+        assert not fresh_store.has_failure("test-script")
 
     # LR5
     @pytest.mark.asyncio
@@ -5179,7 +5269,19 @@ class TestLoadRecipeAutoMigration:
 
         self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
 
-        mock_headless = AsyncMock(return_value={"success": False, "result": "headless failed"})
+        mock_headless = AsyncMock(
+            return_value=SkillResult(
+                success=False,
+                result="headless failed",
+                session_id="",
+                subtype="error",
+                is_error=True,
+                exit_code=1,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+        )
         with patch("autoskillit.server._run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
@@ -5192,7 +5294,19 @@ class TestLoadRecipeAutoMigration:
         """LR6: Returned suggestions contains a migration-failed entry with error severity."""
         self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
 
-        mock_headless = AsyncMock(return_value={"success": False, "result": "headless failed"})
+        mock_headless = AsyncMock(
+            return_value=SkillResult(
+                success=False,
+                result="headless failed",
+                session_id="",
+                subtype="error",
+                is_error=True,
+                exit_code=1,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+        )
         with patch("autoskillit.server._run_headless_core", mock_headless):
             result = json.loads(await load_recipe(name="test-script"))
 
@@ -5208,7 +5322,19 @@ class TestLoadRecipeAutoMigration:
         """LR7: When name in migration.suppressed, headless is never called."""
         self._setup_migration_env(tmp_path, monkeypatch, tool_ctx, suppressed=["test-script"])
 
-        mock_headless = AsyncMock(return_value={"success": True})
+        mock_headless = AsyncMock(
+            return_value=SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+        )
         with patch("autoskillit.server._run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
@@ -5235,7 +5361,19 @@ class TestLoadRecipeAutoMigration:
         monkeypatch.setattr(ml, "_migrations_dir", lambda: empty_mig_dir)
         tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=[]))
 
-        mock_headless = AsyncMock(return_value={"success": True})
+        mock_headless = AsyncMock(
+            return_value=SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+        )
         with patch("autoskillit.server._run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
@@ -5250,7 +5388,19 @@ class TestLoadRecipeAutoMigration:
         ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
 
-        mock_headless = AsyncMock(return_value={"success": True})
+        mock_headless = AsyncMock(
+            return_value=SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+        )
         with patch("autoskillit.server._run_headless_core", mock_headless):
             result = json.loads(await load_recipe(name="test-script"))
 
@@ -5264,14 +5414,14 @@ class TestLoadRecipeAutoMigration:
     # LR10
     @pytest.mark.asyncio
     async def test_uses_migrated_content_not_disk_when_engine_provides_content(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, tool_ctx
     ):
         """LR10: migrated_content is used directly; no disk fallback when content is not None."""
         from unittest.mock import AsyncMock, patch
 
         from autoskillit.migration_engine import MigrationResult
 
-        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         original_disk_content = ctx["recipe_path"].read_text()
         migrated_content = ctx["migrated_content"]
         assert original_disk_content != migrated_content  # precondition

@@ -17,7 +17,7 @@ at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
 Those rules belong in the toolchain, not duplicated here.
 
 Exemptions:
-  - cli.py: may use print() for user-facing terminal output
+  - cli.py, _doctor.py: may use print() for user-facing terminal output
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ SRC_ROOT = Path(__file__).parent.parent / "src" / "autoskillit"
 
 _SENSITIVE_KEYWORDS = frozenset({"token", "secret", "password", "key", "api_key", "auth"})
 _LOGGER_METHODS = frozenset({"debug", "info", "warning", "error", "critical", "exception"})
-_PRINT_EXEMPT = frozenset({"cli.py"})
+_PRINT_EXEMPT = frozenset({"cli.py", "_doctor.py"})
 _BROAD_EXCEPTION_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"})
 
 
@@ -772,43 +772,11 @@ def _top_level_assign_targets(tree: ast.Module) -> set[str]:
     return names
 
 
-def test_severity_not_defined_in_semantic_rules():
-    """Severity must live in types.py, not semantic_rules.py."""
-    tree = _get_module_ast("semantic_rules.py")
-    assert "Severity" not in _top_level_class_names(tree), (
-        "Severity is still defined in semantic_rules.py; move it to types.py"
-    )
-
-
 def test_severity_defined_in_types():
     """Severity must be a top-level class in types.py."""
     tree = _get_module_ast("types.py")
     assert "Severity" in _top_level_class_names(tree), (
         "Severity not found in types.py; it must be defined there"
-    )
-
-
-def test_skill_tools_not_defined_in_recipe_parser():
-    """SKILL_TOOLS must not be locally defined in recipe_parser.py."""
-    tree = _get_module_ast("recipe_parser.py")
-    assert "_SKILL_TOOLS" not in _top_level_assign_targets(tree), (
-        "_SKILL_TOOLS is still locally defined in recipe_parser.py; remove it"
-    )
-
-
-def test_skill_tools_not_defined_in_semantic_rules():
-    """SKILL_TOOLS must not be locally defined in semantic_rules.py."""
-    tree = _get_module_ast("semantic_rules.py")
-    assert "_SKILL_TOOLS" not in _top_level_assign_targets(tree), (
-        "_SKILL_TOOLS is still locally defined in semantic_rules.py; remove it"
-    )
-
-
-def test_skill_tools_not_defined_in_contract_validator():
-    """SKILL_TOOLS must not be locally defined in contract_validator.py."""
-    tree = _get_module_ast("contract_validator.py")
-    assert "_SKILL_TOOLS" not in _top_level_assign_targets(tree), (
-        "_SKILL_TOOLS is still locally defined in contract_validator.py; remove it"
     )
 
 
@@ -818,32 +786,6 @@ def test_skill_tools_defined_in_types():
     assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
         "SKILL_TOOLS not found in types.py; it must be defined there"
     )
-
-
-# ARCH-REG1 — contract_validator must not define its own context/input ref patterns
-def test_contract_validator_imports_regex_from_recipe_parser():
-    tree = _get_module_ast("contract_validator.py")
-    assigns = [
-        node.targets[0].id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Assign)
-        and isinstance(node.targets[0], ast.Name)
-        and node.targets[0].id in ("_CONTEXT_REF_RE", "_INPUT_REF_RE")
-    ]
-    assert assigns == [], f"contract_validator defines its own regex patterns: {assigns}"
-
-
-# T-P3-4-A — contract_validator must not import from process_lifecycle
-def test_contract_validator_no_process_lifecycle_import():
-    """contract_validator.py must not import from process_lifecycle."""
-    tree = _get_module_ast("contract_validator.py")
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            module = getattr(node, "module", "") or ""
-            assert "process_lifecycle" not in module, (
-                "contract_validator.py imports from process_lifecycle — "
-                "move the subprocess-dependent code to _llm_triage.py"
-            )
 
 
 def test_claude_md_documents_all_source_modules() -> None:

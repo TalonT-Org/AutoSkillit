@@ -140,7 +140,9 @@ class TestTokenLogModuleSingleton:
 
         assert isinstance(_token_log, TokenLog)
 
-    def test_singleton_importable_from_server(self):
-        from autoskillit.server import _token_log
+    def test_singleton_importable_from_token_log(self):
+        from autoskillit._token_log import (
+            _token_log,
+        )  # always in _token_log, injected into ToolContext
 
         assert isinstance(_token_log, TokenLog)

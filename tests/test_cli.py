@@ -329,17 +329,19 @@ class TestCLI:
         assert severities <= {"ok", "warning", "error"}
 
     def test_doctor_warns_version_mismatch(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+        tool_ctx,
     ) -> None:
         """doctor reports error when plugin.json version differs from package."""
-        from autoskillit import server
-
         plugin_dir = tmp_path / "fake_plugin" / ".claude-plugin"
         plugin_dir.mkdir(parents=True)
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path / "fake_plugin"))
+        tool_ctx.plugin_dir = str(tmp_path / "fake_plugin")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         cli.doctor(output_json=True)
@@ -411,17 +413,19 @@ class TestCLI:
         assert expected <= check_names
 
     def test_doctor_human_output_shows_severity(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+        tool_ctx,
     ) -> None:
         """doctor human output includes severity prefixes for problems."""
-        from autoskillit import server
-
         plugin_dir = tmp_path / "fake_plugin" / ".claude-plugin"
         plugin_dir.mkdir(parents=True)
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path / "fake_plugin"))
+        tool_ctx.plugin_dir = str(tmp_path / "fake_plugin")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         cli.doctor()

@@ -90,7 +90,8 @@ def _get_config() -> AutomationConfig:
 
 def version_info() -> dict:
     """Return version health information for the running server."""
-    plugin_json_path = Path(_get_ctx().plugin_dir) / ".claude-plugin" / "plugin.json"
+    plugin_dir = _ctx.plugin_dir if _ctx is not None else str(Path(__file__).parent)
+    plugin_json_path = Path(plugin_dir) / ".claude-plugin" / "plugin.json"
     plugin_version = None
     if plugin_json_path.is_file():
         data = json.loads(plugin_json_path.read_text())
@@ -375,7 +376,7 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600, ctx: Context = Current
             logger_name="autoskillit.run_cmd",
             extra={"cwd": cwd},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
     returncode, stdout, stderr = await _run_subprocess(
         ["bash", "-c", cmd],
@@ -395,7 +396,7 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600, ctx: Context = Current
                 logger_name="autoskillit.run_cmd",
                 extra={"exit_code": returncode},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
     return json.dumps(result)
 
@@ -494,7 +495,7 @@ async def run_python(
             logger_name="autoskillit.run_python",
             extra={"callable": callable},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
     result = await _import_and_call(callable, args=args, timeout=float(timeout))
     if not result.get("success"):
@@ -504,7 +505,7 @@ async def run_python(
                 logger_name="autoskillit.run_python",
                 extra={"callable": callable},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
     return json.dumps(result)
 
@@ -540,7 +541,7 @@ async def read_db(
             logger_name="autoskillit.read_db",
             extra={"db_path": db_path},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
 
     # Parse params
@@ -553,7 +554,7 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={"error": str(exc)},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Invalid params JSON: {exc}"})
     if not isinstance(parsed_params, (list, dict)):
@@ -563,7 +564,7 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": "params must be a JSON array or object"})
 
@@ -576,7 +577,7 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={"db_path": db_path},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Database does not exist: {db}"})
     if not db.is_file():
@@ -586,7 +587,7 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={"db_path": db_path},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Path is not a file: {db}"})
 
@@ -600,7 +601,7 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={"error": str(exc)},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": str(exc), "hint": "Only SELECT queries are allowed"})
 
@@ -628,7 +629,7 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={"timeout": effective_timeout},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Query exceeded {effective_timeout}s timeout"})
     except Exception as exc:
@@ -639,7 +640,7 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={"error": type(exc).__name__},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Query failed: {exc}"})
 
@@ -927,7 +928,7 @@ async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str
             logger_name="autoskillit.test_check",
             extra={"worktree": worktree_path},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
     returncode, stdout, stderr = await _run_subprocess(
         _get_config().test_check.command,
@@ -944,7 +945,7 @@ async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str
                 logger_name="autoskillit.test_check",
                 extra={"worktree": worktree_path},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
 
     return json.dumps({"passed": passed})
@@ -976,7 +977,7 @@ async def merge_worktree(
             logger_name="autoskillit.merge_worktree",
             extra={"worktree": worktree_path, "base": base_branch},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
 
     # Validate worktree path exists
@@ -987,7 +988,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "path does not exist"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Path does not exist: {worktree_path}"})
 
@@ -1004,7 +1005,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "not a git worktree"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Not a git worktree: {worktree_path}", "stderr": stderr})
 
@@ -1021,7 +1022,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "could not determine branch"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Could not determine branch: {stderr}"})
     worktree_branch = branch_out.strip()
@@ -1040,7 +1041,7 @@ async def merge_worktree(
                     logger_name="autoskillit.merge_worktree",
                     extra={"reason": "tests failed"},
                 )
-            except RuntimeError:
+            except (RuntimeError, AttributeError):
                 pass
             return json.dumps(
                 {
@@ -1064,7 +1065,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "git fetch failed"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps(
             {
@@ -1093,7 +1094,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "rebase failed"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps(
             {
@@ -1124,7 +1125,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "could not determine main repo path"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": "Could not determine main repo path from worktree list"})
 
@@ -1146,7 +1147,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "merge failed"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps(
             {
@@ -1222,7 +1223,7 @@ async def reset_test_dir(
             logger_name="autoskillit.reset_test_dir",
             extra={"resolved": resolved, "force": force},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
 
     if not os.path.isdir(resolved):
@@ -1232,7 +1233,7 @@ async def reset_test_dir(
                 logger_name="autoskillit.reset_test_dir",
                 extra={"reason": "directory does not exist"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
@@ -1245,7 +1246,7 @@ async def reset_test_dir(
                 logger_name="autoskillit.reset_test_dir",
                 extra={"reason": "marker missing"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps(
             {
@@ -1291,7 +1292,7 @@ async def classify_fix(
             logger_name="autoskillit.classify_fix",
             extra={"worktree": worktree_path, "base": base_branch},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
 
     returncode, stdout, stderr = await _run_subprocess(
@@ -1307,7 +1308,7 @@ async def classify_fix(
                 logger_name="autoskillit.classify_fix",
                 extra={"worktree": worktree_path},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"git diff failed: {stderr}"})
 
@@ -1356,7 +1357,7 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
             logger_name="autoskillit.reset_workspace",
             extra={"resolved": resolved},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
 
     if not os.path.isdir(resolved):
@@ -1366,7 +1367,7 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
                 logger_name="autoskillit.reset_workspace",
                 extra={"reason": "directory does not exist"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
@@ -1379,7 +1380,7 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
                 logger_name="autoskillit.reset_workspace",
                 extra={"reason": "marker missing"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps(
             {
@@ -1396,7 +1397,7 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
                 logger_name="autoskillit.reset_workspace",
                 extra={"reason": "not configured"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": "reset_workspace not configured for this project"})
 
@@ -1413,7 +1414,7 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
                 logger_name="autoskillit.reset_workspace",
                 extra={"reason": "reset command failed", "exit_code": returncode},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps(
             {
@@ -1701,6 +1702,10 @@ async def load_recipe(name: str) -> str:
         return json.dumps({"error": f"No recipe named '{name}' found"})
     content = _match.path.read_text()
 
+    # Resolve migration suppression list once before the try block.
+    # Ungated tool: gracefully handle missing context (e.g. tests without tool_ctx).
+    _migration_suppressed: list[str] = _ctx.config.migration.suppressed if _ctx is not None else []
+
     suggestions: list[dict[str, str]] = []
     try:
         data = _load_yaml(content)
@@ -1709,7 +1714,7 @@ async def load_recipe(name: str) -> str:
 
             # --- Auto-migration block ---
             migrations = applicable_migrations(recipe.version, __version__)
-            if migrations and name not in _get_config().migration.suppressed:
+            if migrations and name not in _migration_suppressed:
                 project_dir = Path.cwd()
                 temp_dir = project_dir / ".autoskillit" / "temp"
                 recipes_dir = project_dir / ".autoskillit" / "recipes"
@@ -1763,7 +1768,7 @@ async def load_recipe(name: str) -> str:
             findings = run_semantic_rules(recipe)
             semantic_suggestions = [f.to_dict() for f in findings]
 
-            if name in _get_config().migration.suppressed:
+            if name in _migration_suppressed:
                 semantic_suggestions = [
                     s for s in semantic_suggestions if s.get("rule") != "outdated-recipe-version"
                 ]
@@ -1859,6 +1864,7 @@ async def load_recipe(name: str) -> str:
                 "message": f"File error: {exc}",
             }
         )
+    # Unexpected exceptions (AttributeError, RuntimeError, etc.) propagate uncaught
 
     return json.dumps({"content": content, "suggestions": suggestions})
 

@@ -204,17 +204,20 @@ LAYER_ASSIGNMENTS: dict[str, int] = {
     "_context": 2,
     "recipe_io": 2,
     "recipe_loader": 2,
+    "db_tools": 2,
+    "workspace": 2,
     # ── Layer 3: Orchestration + Server ── import L0–L2 ───────────────────────
     "recipe_validator": 3,
     "migration_engine": 3,
     "server": 3,
+    "_doctor": 3,
 }
 _LAYER_EXEMPT: frozenset[str] = frozenset({"cli", "__init__", "__main__"})
 
 # ── Rule 2: Singleton definition locality ─────────────────────────────────────
 # "server" allows mcp = FastMCP(...); "cli" allows app = App(...) etc.
 SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
-    {"_audit", "_token_log", "failure_store", "server", "cli"}
+    {"_audit", "_token_log", "failure_store", "server", "cli", "recipe_validator"}
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
     {
@@ -850,3 +853,64 @@ def test_pytest_asyncio_version_bound() -> None:
     deps = data["project"]["optional-dependencies"]["dev"]
     asyncio_dep = next(d for d in deps if d.startswith("pytest-asyncio"))
     assert ">=0.23" in asyncio_dep, f"Expected pytest-asyncio>=0.23.x, got: {asyncio_dep!r}"
+
+
+def test_severity_not_defined_locally_in_recipe_validator() -> None:
+    """Severity must be imported from types, not defined in recipe_validator."""
+    ast_module = _get_module_ast("recipe_validator.py")
+    class_names = _top_level_class_names(ast_module)
+    assert "Severity" not in class_names, "Severity must live in types.py, not recipe_validator.py"
+
+
+def test_skill_tools_not_defined_in_recipe_io() -> None:
+    """SKILL_TOOLS must not be defined locally in recipe_io.py."""
+    ast_module = _get_module_ast("recipe_io.py")
+    assigns = _top_level_assign_targets(ast_module)
+    assert "SKILL_TOOLS" not in assigns and "_SKILL_TOOLS" not in assigns, (
+        "SKILL_TOOLS must be imported from types, not defined in recipe_io.py"
+    )
+
+
+def test_skill_tools_not_defined_in_recipe_validator() -> None:
+    """SKILL_TOOLS must not be defined locally in recipe_validator.py."""
+    ast_module = _get_module_ast("recipe_validator.py")
+    assigns = _top_level_assign_targets(ast_module)
+    assert "SKILL_TOOLS" not in assigns and "_SKILL_TOOLS" not in assigns, (
+        "SKILL_TOOLS must be imported from types, not defined in recipe_validator.py"
+    )
+
+
+def test_contract_validator_module_deleted() -> None:
+    """contract_validator.py must not exist — functionality merged into recipe_validator.py."""
+    cv_path = SRC_ROOT / "contract_validator.py"
+    assert not cv_path.exists(), (
+        "contract_validator.py should be deleted; its code lives in recipe_validator.py"
+    )
+
+
+def test_recipe_validator_has_regex_patterns() -> None:
+    """recipe_validator.py must define context/input regex patterns (not scattered)."""
+    ast_module = _get_module_ast("recipe_validator.py")
+    assigns = _top_level_assign_targets(ast_module)
+    assert "_CONTEXT_REF_RE" in assigns, "recipe_validator.py must define _CONTEXT_REF_RE"
+    assert "_INPUT_REF_RE" in assigns, "recipe_validator.py must define _INPUT_REF_RE"
+
+
+def test_recipe_validator_no_process_lifecycle_import() -> None:
+    """recipe_validator.py must not import from process_lifecycle (triage_staleness removed)."""
+    import_pairs = _extract_module_level_internal_imports(SRC_ROOT / "recipe_validator.py")
+    import_stems = [stem for stem, _ in import_pairs]
+    assert "process_lifecycle" not in import_stems, (
+        "recipe_validator.py must not import from process_lifecycle"
+    )
+
+
+def test_server_uses_recipe_io_not_recipe_loader_for_discovery() -> None:
+    """server.py must import find_recipe_by_name from recipe_io, not from recipe_loader."""
+    server_path = SRC_ROOT / "server.py"
+    src = server_path.read_text()
+    assert "from autoskillit.recipe_io import" in src or "from .recipe_io import" in src, (
+        "server.py must import recipe discovery functions from recipe_io"
+    )
+    assert "from autoskillit.recipe_loader import list_recipes" not in src
+    assert "from autoskillit.recipe_loader import load_recipe" not in src

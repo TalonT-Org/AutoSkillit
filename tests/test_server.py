@@ -6193,3 +6193,107 @@ class TestServerLazyInit:
         monkeypatch.setattr(srv, "_ctx", None)
         with pytest.raises(RuntimeError, match="serve\\(\\) must be called"):
             srv._get_config()
+
+
+class TestGatedToolObservability:
+    """Each gated tool binds structlog contextvars and calls ctx.info/ctx.error."""
+
+    @pytest.fixture
+    def mock_ctx(self):
+        """AsyncMock ctx for verifying ctx.info/ctx.error calls."""
+        ctx = AsyncMock()
+        ctx.info = AsyncMock()
+        ctx.error = AsyncMock()
+        return ctx
+
+    @pytest.mark.asyncio
+    async def test_run_cmd_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
+        """run_cmd binds tool='run_cmd' contextvar and calls ctx.info on success."""
+        tool_ctx.runner.push(_make_result(0, "ok\n", ""))
+        with structlog.testing.capture_logs() as logs:
+            await run_cmd(cmd="echo ok", cwd="/tmp", ctx=mock_ctx)
+        assert any(entry.get("tool") == "run_cmd" for entry in logs)
+        mock_ctx.info.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_run_cmd_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
+        """run_cmd calls ctx.error when subprocess exits non-zero."""
+        tool_ctx.runner.push(_make_result(1, "", "err"))
+        await run_cmd(cmd="false", cwd="/tmp", ctx=mock_ctx)
+        mock_ctx.error.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_run_python_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
+        """run_python binds tool='run_python' contextvar and calls ctx.info on success."""
+        with structlog.testing.capture_logs() as logs:
+            await run_python(callable="json.dumps", args={"obj": 1}, ctx=mock_ctx)
+        assert any(entry.get("tool") == "run_python" for entry in logs)
+        mock_ctx.info.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_run_python_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
+        """run_python calls ctx.error when callable import fails."""
+        await run_python(callable="nonexistent.module.func", ctx=mock_ctx)
+        mock_ctx.error.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_run_skill_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
+        """run_skill binds tool='run_skill' contextvar and calls ctx.info on success."""
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false,'
+                ' "result": "done", "session_id": "s1"}',
+                "",
+            )
+        )
+        with structlog.testing.capture_logs() as logs:
+            await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
+        assert any(entry.get("tool") == "run_skill" for entry in logs)
+        mock_ctx.info.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_run_skill_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
+        """run_skill calls ctx.error when headless session fails."""
+        tool_ctx.runner.push(
+            _make_result(
+                1,
+                '{"type": "result", "subtype": "error", "is_error": true,'
+                ' "result": "failed", "session_id": "s1"}',
+                "",
+            )
+        )
+        await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
+        mock_ctx.error.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_run_skill_retry_binds_tool_contextvar_and_calls_ctx_info(
+        self, tool_ctx, mock_ctx
+    ):
+        """run_skill_retry binds tool='run_skill_retry' contextvar and calls ctx.info."""
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false,'
+                ' "result": "done", "session_id": "s1"}',
+                "",
+            )
+        )
+        with structlog.testing.capture_logs() as logs:
+            await run_skill_retry("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
+        assert any(entry.get("tool") == "run_skill_retry" for entry in logs)
+        mock_ctx.info.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_run_skill_retry_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
+        """run_skill_retry calls ctx.error when headless session fails."""
+        tool_ctx.runner.push(
+            _make_result(
+                1,
+                '{"type": "result", "subtype": "error", "is_error": true,'
+                ' "result": "failed", "session_id": "s1"}',
+                "",
+            )
+        )
+        await run_skill_retry("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
+        mock_ctx.error.assert_awaited_once()

@@ -14,49 +14,60 @@ Transport: stdio (default for FastMCP).
 from __future__ import annotations
 
 import asyncio
-import base64
 import importlib
 import inspect
 import json
 import os
 import re
-import shutil
-import sqlite3
-import threading
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import structlog
 from fastmcp import Context, FastMCP
 from fastmcp.dependencies import CurrentContext
-from fastmcp.prompts.prompt import Message, PromptResult
+from fastmcp.prompts import Message, PromptResult
 
+from autoskillit import __version__
 from autoskillit._audit import FailureRecord, _audit_log
 from autoskillit._logging import get_logger
 from autoskillit._token_log import _token_log
 from autoskillit.config import AutomationConfig, load_config
+from autoskillit.db_tools import _execute_readonly_query, _validate_select_only
+from autoskillit.failure_store import FailureStore, default_store_path
+from autoskillit.migration_engine import MigrationFile, default_migration_engine
+from autoskillit.migration_loader import applicable_migrations
 from autoskillit.process_lifecycle import (
     SubprocessResult,
     TerminationReason,
-    _extract_text_content,
     run_managed_async,
 )
+from autoskillit.session_parser import (
+    ClaudeSessionResult,
+    parse_session_result,
+)
 from autoskillit.types import (
-    CONTEXT_EXHAUSTION_MARKER,
     PIPELINE_FORBIDDEN_TOOLS,
     MergeFailedStep,
     MergeState,
     RestartScope,
     RetryReason,
 )
+from autoskillit.workspace import _delete_directory_contents
+
+# Migration subsystem (Layer B — domain logic).
+# These modules have no dependency on FastMCP or server state.
+# Originally deferred to avoid circular imports; safe to promote after groupA/groupC cleanup.
 
 mcp = FastMCP("autoskillit")
 
 _config: AutomationConfig = load_config(Path.cwd())
 
 _plugin_dir = str(Path(__file__).parent)
+
+_plugin_version: str | None = None
+_plugin_json_path = Path(_plugin_dir) / ".claude-plugin" / "plugin.json"
+if _plugin_json_path.is_file():
+    _plugin_version = json.loads(_plugin_json_path.read_text()).get("version")
 
 _tools_enabled = False
 
@@ -65,18 +76,10 @@ logger = get_logger(__name__)
 
 def _version_info() -> dict:
     """Return version health information for the running server."""
-    from autoskillit import __version__
-
-    plugin_json_path = Path(_plugin_dir) / ".claude-plugin" / "plugin.json"
-    plugin_version = None
-    if plugin_json_path.is_file():
-        data = json.loads(plugin_json_path.read_text())
-        plugin_version = data.get("version")
-
     return {
         "package_version": __version__,
-        "plugin_json_version": plugin_version,
-        "match": __version__ == plugin_version,
+        "plugin_json_version": _plugin_version,
+        "match": __version__ == _plugin_version,
     }
 
 
@@ -399,266 +402,6 @@ def _build_skill_result(
     )
 
 
-@dataclass
-class ClaudeSessionResult:
-    """Parsed result from a Claude Code headless session."""
-
-    subtype: str  # "success", "error_max_turns", "error_during_execution", etc.
-    is_error: bool
-    result: str
-    session_id: str
-    errors: list[str] = field(default_factory=list)
-    token_usage: dict[str, Any] | None = None
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.result, str):
-            self.result = _extract_text_content(self.result)
-        if not isinstance(self.errors, list):
-            self.errors = [] if self.errors is None else [str(self.errors)]
-        if not isinstance(self.subtype, str):
-            self.subtype = "unknown" if self.subtype is None else str(self.subtype)
-        if not isinstance(self.session_id, str):
-            self.session_id = "" if self.session_id is None else str(self.session_id)
-
-    def _is_context_exhausted(self) -> bool:
-        """Detect context window exhaustion from Claude's error output.
-
-        Requires both ``is_error=True`` AND the marker to appear in the
-        ``errors`` list (structured CLI signal).  Falls back to checking
-        ``result`` only when the subtype is a known error subtype, to
-        narrow false-positives from model prose that happens to contain
-        the marker phrase.
-        """
-        if not self.is_error:
-            return False
-        # Primary: check the structured errors list from Claude CLI
-        marker = CONTEXT_EXHAUSTION_MARKER
-        if any(marker in e.lower() for e in self.errors):
-            return True
-        # Fallback: only trust result text for error subtypes, not execution errors
-        # where the model's own output could contain the marker phrase
-        if self.subtype in ("success", "error_max_turns") and marker in self.result.lower():
-            return True
-        return False
-
-    @property
-    def agent_result(self) -> str:
-        """Result text rewritten for LLM agent consumption.
-
-        When the session ended due to a retriable condition (context exhaustion,
-        max turns), the raw result text from Claude CLI can be misleading to
-        LLM callers. This property returns semantically correct, actionable text.
-        The raw result is preserved in self.result for debugging.
-        """
-        if self._is_context_exhausted():
-            return (
-                "Context limit reached during session execution. "
-                "The session made partial progress. "
-                "Use needs_retry and retry_reason to continue from where it left off."
-            )
-        if self.subtype == "error_max_turns":
-            return (
-                "Turn limit reached during session execution. "
-                "The session made partial progress. "
-                "Use needs_retry and retry_reason to continue from where it left off."
-            )
-        return self.result
-
-    @property
-    def needs_retry(self) -> bool:
-        """Whether the session didn't finish and should be retried."""
-        if self.subtype == "error_max_turns":
-            return True
-        if self._is_context_exhausted():
-            return True
-        return False
-
-    @property
-    def retry_reason(self) -> RetryReason:
-        """Why retry is needed. NONE if needs_retry is False."""
-        if self.needs_retry:
-            return RetryReason.RESUME
-        return RetryReason.NONE
-
-
-_TOKEN_FIELDS = (
-    "input_tokens",
-    "output_tokens",
-    "cache_creation_input_tokens",
-    "cache_read_input_tokens",
-)
-
-
-def extract_token_usage(stdout: str) -> dict[str, Any] | None:
-    """Extract token usage from Claude CLI NDJSON output.
-
-    Scans assistant records for per-model usage and the result record
-    for authoritative aggregated totals.  Returns None if no usage
-    data is found.
-    """
-    if not stdout.strip():
-        return None
-
-    model_buckets: dict[str, dict[str, int]] = {}
-    result_usage: dict[str, int] | None = None
-
-    for line in stdout.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict):
-            continue
-
-        record_type = obj.get("type")
-
-        if record_type == "assistant":
-            msg = obj.get("message")
-            if not isinstance(msg, dict):
-                continue
-            usage = msg.get("usage")
-            if not isinstance(usage, dict):
-                continue
-            model = msg.get("model", "unknown")
-            bucket = model_buckets.setdefault(model, {f: 0 for f in _TOKEN_FIELDS})
-            for f in _TOKEN_FIELDS:
-                bucket[f] += usage.get(f, 0)
-
-        elif record_type == "result":
-            usage = obj.get("usage")
-            if isinstance(usage, dict):
-                result_usage = {f: usage.get(f, 0) for f in _TOKEN_FIELDS}
-
-    if not model_buckets and result_usage is None:
-        return None
-
-    # Aggregated totals: prefer result record, fall back to assistant sum
-    if result_usage is not None:
-        totals = dict(result_usage)
-    else:
-        totals = {f: 0 for f in _TOKEN_FIELDS}
-        for bucket in model_buckets.values():
-            for f in _TOKEN_FIELDS:
-                totals[f] += bucket[f]
-
-    return {
-        **totals,
-        "model_breakdown": dict(model_buckets) if model_buckets else {},
-    }
-
-
-def parse_session_result(stdout: str) -> ClaudeSessionResult:
-    """Parse Claude Code's --output-format json stdout into a typed result.
-
-    Handles multi-line NDJSON (Claude Code may emit multiple JSON objects;
-    the last 'result' type object is authoritative).
-    Falls back gracefully for non-JSON or missing fields.
-    """
-    if not stdout.strip():
-        return ClaudeSessionResult(
-            subtype="empty_output",
-            is_error=True,
-            result="",
-            session_id="",
-            errors=[],
-        )
-
-    result_obj = None
-    for line in stdout.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-            if isinstance(obj, dict) and obj.get("type") == "result":
-                result_obj = obj
-        except json.JSONDecodeError:
-            continue
-
-    if result_obj is None:
-        try:
-            fallback = json.loads(stdout)
-            if isinstance(fallback, dict) and fallback.get("type") == "result":
-                result_obj = fallback
-            else:
-                return ClaudeSessionResult(
-                    subtype="unparseable",
-                    is_error=True,
-                    result=stdout,
-                    session_id="",
-                    errors=[],
-                )
-        except json.JSONDecodeError:
-            return ClaudeSessionResult(
-                subtype="unparseable",
-                is_error=True,
-                result=stdout,
-                session_id="",
-                errors=[],
-            )
-
-    token_usage = extract_token_usage(stdout)
-
-    return ClaudeSessionResult(
-        subtype=result_obj.get("subtype", "unknown"),
-        is_error=result_obj.get("is_error", False),
-        result=result_obj.get("result", ""),
-        session_id=result_obj.get("session_id", ""),
-        errors=result_obj.get("errors", []),
-        token_usage=token_usage,
-    )
-
-
-@dataclass
-class CleanupResult:
-    deleted: list[str] = field(default_factory=list)
-    failed: list[tuple[str, str]] = field(default_factory=list)
-    skipped: list[str] = field(default_factory=list)
-
-    @property
-    def success(self) -> bool:
-        return len(self.failed) == 0
-
-    def to_dict(self) -> dict:
-        return {
-            "success": self.success,
-            "deleted": self.deleted,
-            "failed": [{"path": p, "error": e} for p, e in self.failed],
-            "skipped": self.skipped,
-        }
-
-
-def _delete_directory_contents(
-    directory: Path,
-    preserve: set[str] | None = None,
-) -> CleanupResult:
-    """Delete all items in directory, skipping preserved names.
-
-    Never raises. All errors captured in CleanupResult.failed.
-    FileNotFoundError treated as success (item already gone).
-    """
-    result = CleanupResult()
-    for item_name in os.listdir(directory):
-        if preserve and item_name in preserve:
-            result.skipped.append(item_name)
-            continue
-        path = directory / item_name
-        try:
-            if path.is_dir():
-                shutil.rmtree(path)
-            else:
-                path.unlink()
-            result.deleted.append(item_name)
-        except FileNotFoundError:
-            result.deleted.append(item_name)  # gone = success
-        except OSError as exc:
-            result.failed.append((item_name, f"{type(exc).__name__}: {exc}"))
-    return result
-
-
 @mcp.tool(tags={"automation"})
 async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
     """Run an arbitrary shell command in the specified directory.
@@ -771,103 +514,6 @@ async def run_python(
     logger.info("run_python", callable=callable, timeout=timeout)
     result = await _import_and_call(callable, args=args, timeout=float(timeout))
     return json.dumps(result)
-
-
-_FORBIDDEN_SQL = re.compile(
-    r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE|ATTACH|DETACH|PRAGMA|VACUUM|REINDEX)\b",
-    re.IGNORECASE,
-)
-_STRIP_SQL_COMMENTS = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
-
-
-def _validate_select_only(sql: str) -> None:
-    """Raise ValueError if the query is not a valid SELECT statement."""
-    if not sql or not sql.strip():
-        raise ValueError("Query must not be empty")
-    cleaned = _STRIP_SQL_COMMENTS.sub("", sql).strip()
-    if _FORBIDDEN_SQL.search(cleaned):
-        raise ValueError(
-            f"Query contains forbidden keyword: {_FORBIDDEN_SQL.search(cleaned).group()}"  # type: ignore[union-attr]
-        )
-    if not re.match(r"(?i)^\s*SELECT\b", cleaned):
-        raise ValueError("Query must begin with SELECT")
-
-
-_ALLOWED_ACTIONS: frozenset[int] = frozenset(
-    {
-        sqlite3.SQLITE_SELECT,
-        sqlite3.SQLITE_READ,
-        sqlite3.SQLITE_FUNCTION,
-    }
-)
-
-
-def _select_only_authorizer(
-    action: int,
-    arg1: str | None,
-    arg2: str | None,
-    db_name: str | None,
-    trigger_name: str | None,
-) -> int:
-    """SQLite authorizer callback allowing only SELECT, READ, and FUNCTION."""
-    if action in _ALLOWED_ACTIONS:
-        return sqlite3.SQLITE_OK
-    return sqlite3.SQLITE_DENY
-
-
-def _row_to_dict(columns: list[str], row: tuple) -> dict:  # type: ignore[type-arg]
-    """Convert a SQLite row tuple to a dict, base64-encoding bytes values."""
-    result: dict[str, object] = {}
-    for col, val in zip(columns, row):
-        if isinstance(val, bytes):
-            result[col] = base64.b64encode(val).decode("ascii")
-        else:
-            result[col] = val
-    return result
-
-
-def _execute_readonly_query(
-    db_path: str,
-    query: str,
-    params: list | dict,  # type: ignore[type-arg]
-    timeout_sec: int,
-    max_rows: int,
-) -> dict:  # type: ignore[type-arg]
-    """Execute a read-only query against a SQLite database (synchronous)."""
-    uri = f"file:{db_path}?mode=ro"
-    conn = sqlite3.connect(uri, uri=True)
-    try:
-        conn.set_authorizer(_select_only_authorizer)
-
-        timer = threading.Timer(timeout_sec, conn.interrupt)
-        timer.start()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(query, params)
-
-            column_names = [desc[0] for desc in cursor.description] if cursor.description else []
-            rows: list[dict] = []  # type: ignore[type-arg]
-            truncated = False
-            for i, row in enumerate(cursor):
-                if i >= max_rows:
-                    truncated = True
-                    break
-                rows.append(_row_to_dict(column_names, row))
-
-            return {
-                "column_names": column_names,
-                "rows": rows,
-                "row_count": len(rows),
-                "truncated": truncated,
-            }
-        except sqlite3.OperationalError as exc:
-            if "interrupted" in str(exc):
-                raise TimeoutError from exc
-            raise
-        finally:
-            timer.cancel()
-    finally:
-        conn.close()
 
 
 @mcp.tool(tags={"automation"})
@@ -1792,11 +1438,6 @@ async def load_recipe(name: str) -> str:
             recipe = _parse_recipe(data)
 
             # --- Auto-migration block ---
-            from autoskillit import __version__
-            from autoskillit.failure_store import FailureStore, default_store_path
-            from autoskillit.migration_engine import MigrationFile, default_migration_engine
-            from autoskillit.migration_loader import applicable_migrations
-
             migrations = applicable_migrations(recipe.version, __version__)
             if migrations and name not in _config.migration.suppressed:
                 project_dir = Path.cwd()
@@ -1819,7 +1460,7 @@ async def load_recipe(name: str) -> str:
                 )
 
                 if migration_result.success:
-                    content = recipe_path.read_text()
+                    content = migration_result.migrated_content or recipe_path.read_text()
                     data = _load_yaml(content)
                     recipe = _parse_recipe(data)
                     failure_store.clear(name)

@@ -896,7 +896,7 @@ class TestRecipeTools:
             patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
             patch(
                 "autoskillit.semantic_rules.run_semantic_rules",
-                side_effect=RuntimeError("injected parse failure"),
+                side_effect=ValueError("injected parse failure"),
             ),
             structlog.testing.capture_logs() as logs,
         ):
@@ -925,7 +925,7 @@ class TestRecipeTools:
             patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
             patch(
                 "autoskillit.semantic_rules.run_semantic_rules",
-                side_effect=RuntimeError("injected crash"),
+                side_effect=ValueError("injected crash"),
             ),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -933,7 +933,142 @@ class TestRecipeTools:
         assert "content" in result
         findings = [s for s in result["suggestions"] if s.get("rule") == "validation-error"]
         assert findings, "Expected at least one validation-error finding"
-        assert "RuntimeError" in findings[0]["message"]
+        assert "Invalid recipe structure: injected crash" == findings[0]["message"]
+
+
+class TestContractMigrationAdapterValidate:
+    """P7-2: ContractMigrationAdapter.validate uses _load_yaml, not yaml.safe_load."""
+
+    def test_valid_contract_returns_true(self, tmp_path: Path) -> None:
+        from autoskillit.migration_engine import ContractMigrationAdapter
+
+        f = tmp_path / "contract.yaml"
+        f.write_text("skill_hashes:\n  my-skill: abc123\n")
+        adapter = ContractMigrationAdapter()
+        ok, msg = adapter.validate(f)
+        assert ok is True
+        assert msg == ""
+
+    def test_missing_skill_hashes_returns_false(self, tmp_path: Path) -> None:
+        from autoskillit.migration_engine import ContractMigrationAdapter
+
+        f = tmp_path / "contract.yaml"
+        f.write_text("other_field: value\n")
+        adapter = ContractMigrationAdapter()
+        ok, msg = adapter.validate(f)
+        assert ok is False
+        assert "skill_hashes" in msg
+
+    def test_invalid_yaml_returns_false(self, tmp_path: Path) -> None:
+        from autoskillit.migration_engine import ContractMigrationAdapter
+
+        f = tmp_path / "contract.yaml"
+        f.write_bytes(b":\tbad: yaml: [unclosed\n")
+        adapter = ContractMigrationAdapter()
+        ok, msg = adapter.validate(f)
+        assert ok is False
+        assert msg != ""
+
+    def test_missing_file_returns_false(self, tmp_path: Path) -> None:
+        from autoskillit.migration_engine import ContractMigrationAdapter
+
+        adapter = ContractMigrationAdapter()
+        ok, msg = adapter.validate(tmp_path / "nonexistent.yaml")
+        assert ok is False
+        assert msg != ""
+
+
+class TestLoadRecipeExceptionHandling:
+    """CC-1: Outer except in load_recipe must catch anticipated exceptions only."""
+
+    @pytest.mark.asyncio
+    async def test_yaml_error_surfaces_as_suggestion(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """yaml.YAMLError is caught and returned as an error suggestion."""
+        import yaml
+
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text("name: test\n")
+        with patch("autoskillit._io._load_yaml", side_effect=yaml.YAMLError("bad yaml")):
+            result = json.loads(await load_recipe(name="test"))
+        assert "error" not in result
+        assert any(
+            s.get("rule") == "validation-error" and s.get("severity") == "error"
+            for s in result["suggestions"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_value_error_surfaces_as_suggestion(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ValueError (malformed recipe structure) is caught and returned as error suggestion."""
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text(
+            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
+        )
+        with (
+            patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
+            patch(
+                "autoskillit.recipe_parser._parse_recipe", side_effect=ValueError("bad structure")
+            ),
+        ):
+            result = json.loads(await load_recipe(name="test"))
+        assert "error" not in result
+        assert any(
+            s.get("rule") == "validation-error" and s.get("severity") == "error"
+            for s in result["suggestions"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_file_not_found_surfaces_as_suggestion(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """FileNotFoundError is caught and returned as an error suggestion."""
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text(
+            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
+        )
+        with (
+            patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
+            patch(
+                "autoskillit.contract_validator.load_recipe_card",
+                side_effect=FileNotFoundError("missing"),
+            ),
+        ):
+            result = json.loads(await load_recipe(name="test"))
+        assert "error" not in result
+        assert any(
+            s.get("rule") == "validation-error" and s.get("severity") == "error"
+            for s in result["suggestions"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_unexpected_exception_propagates(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Unexpected exceptions (not in specific catches) must propagate, not be swallowed."""
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text(
+            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
+        )
+        with (
+            patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
+            patch(
+                "autoskillit.semantic_rules.run_semantic_rules",
+                side_effect=AttributeError("programming error"),
+            ),
+        ):
+            with pytest.raises(AttributeError, match="programming error"):
+                await load_recipe(name="test")
 
 
 class TestValidateRecipe:

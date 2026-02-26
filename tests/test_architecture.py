@@ -327,3 +327,16 @@ def test_skill_tools_defined_in_types():
     assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
         "SKILL_TOOLS not found in types.py; it must be defined there"
     )
+
+
+# ARCH-REG1 — contract_validator must not define its own context/input ref patterns
+def test_contract_validator_imports_regex_from_recipe_parser():
+    tree = _get_module_ast("contract_validator.py")
+    assigns = [
+        node.targets[0].id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id in ("_CONTEXT_REF_RE", "_INPUT_REF_RE")
+    ]
+    assert assigns == [], f"contract_validator defines its own regex patterns: {assigns}"

@@ -1407,3 +1407,157 @@ def test_recipe_source_enum_values() -> None:
 
     assert hasattr(RecipeSource, "PROJECT")
     assert hasattr(RecipeSource, "BUILTIN")
+
+
+# RP-REG1
+def test_context_ref_re_is_compiled_pattern():
+    from autoskillit.recipe_parser import _CONTEXT_REF_RE
+
+    assert isinstance(_CONTEXT_REF_RE, re.Pattern)
+    assert _CONTEXT_REF_RE.findall("${{ context.foo }}") == ["foo"]
+
+
+# RP-REG2
+def test_input_ref_re_is_compiled_pattern():
+    from autoskillit.recipe_parser import _INPUT_REF_RE
+
+    assert isinstance(_INPUT_REF_RE, re.Pattern)
+    assert _INPUT_REF_RE.findall("${{ inputs.bar }}") == ["bar"]
+
+
+# RP-REG3
+def test_extract_refs_function_removed():
+    import autoskillit.recipe_parser as rp
+
+    assert not hasattr(rp, "_extract_refs")
+
+
+# RP-GEN1
+def test_iter_steps_with_context_is_importable():
+    from autoskillit.recipe_parser import iter_steps_with_context
+
+    assert callable(iter_steps_with_context)
+
+
+# RP-GEN2
+def test_iter_steps_with_context_first_step_empty_context():
+    from autoskillit.recipe_parser import iter_steps_with_context
+
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "description": "d",
+            "steps": {
+                "step_a": {
+                    "tool": "run_cmd",
+                    "with": {"cmd": "echo hi"},
+                    "on_success": "done",
+                    "on_failure": "done",
+                },
+            },
+        }
+    )
+    tuples = list(iter_steps_with_context(recipe))
+    assert len(tuples) == 1
+    name, step, ctx = tuples[0]
+    assert name == "step_a"
+    assert ctx == frozenset()
+
+
+# RP-GEN3
+def test_iter_steps_with_context_accumulates_captures():
+    from autoskillit.recipe_parser import iter_steps_with_context
+
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "description": "d",
+            "steps": {
+                "step_a": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:investigate q"},
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                    "on_success": "step_b",
+                    "on_failure": "done",
+                },
+                "step_b": {
+                    "tool": "run_cmd",
+                    "with": {"cmd": "echo hi"},
+                    "on_success": "done",
+                    "on_failure": "done",
+                },
+            },
+        }
+    )
+    tuples = list(iter_steps_with_context(recipe))
+    _, _, ctx_a = tuples[0]
+    _, _, ctx_b = tuples[1]
+    assert "worktree_path" not in ctx_a
+    assert "worktree_path" in ctx_b
+
+
+# RP-GEN4
+def test_iter_steps_with_context_yields_frozenset():
+    from autoskillit.recipe_parser import iter_steps_with_context
+
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "description": "d",
+            "steps": {
+                "only": {
+                    "tool": "run_cmd",
+                    "with": {"cmd": "x"},
+                    "on_success": "done",
+                    "on_failure": "done",
+                },
+            },
+        }
+    )
+    _, _, ctx = next(iter_steps_with_context(recipe))
+    assert isinstance(ctx, frozenset)
+
+
+# RP-FIND1
+def test_find_recipe_by_name_returns_match(tmp_path):
+    from autoskillit.recipe_parser import find_recipe_by_name
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "my-flow.yaml").write_text("name: my-flow\ndescription: test\nsteps: {}\n")
+    result = find_recipe_by_name("my-flow", tmp_path)
+    assert result is not None
+    assert result.name == "my-flow"
+
+
+# RP-FIND2
+def test_find_recipe_by_name_returns_none_for_unknown(tmp_path):
+    from autoskillit.recipe_parser import find_recipe_by_name
+
+    result = find_recipe_by_name("does-not-exist", tmp_path)
+    assert result is None
+
+
+# RP-FIND3
+def test_find_recipe_by_name_finds_builtins():
+    from autoskillit.recipe_parser import find_recipe_by_name
+
+    result = find_recipe_by_name("bugfix-loop", Path.cwd())
+    assert result is not None
+
+
+# RP-VK1
+def test_autoskillit_version_key_constant_exists():
+    from autoskillit.recipe_parser import AUTOSKILLIT_VERSION_KEY
+
+    assert AUTOSKILLIT_VERSION_KEY == "autoskillit_version"
+
+
+# RP-VK2
+def test_version_field_uses_key_constant(tmp_path):
+    from autoskillit.recipe_parser import AUTOSKILLIT_VERSION_KEY, load_recipe
+
+    p = tmp_path / "r.yaml"
+    p.write_text(f"name: r\ndescription: d\n{AUTOSKILLIT_VERSION_KEY}: 0.9.0\nsteps: {{}}\n")
+    recipe = load_recipe(p)
+    assert recipe.version == "0.9.0"

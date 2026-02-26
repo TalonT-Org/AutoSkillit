@@ -49,6 +49,11 @@ class RecipeSource(StrEnum):
     BUILTIN = "builtin"
 
 
+class Severity(StrEnum):
+    ERROR = "error"
+    WARNING = "warning"
+
+
 class TerminationReason(StrEnum):
     """How a managed subprocess ended.
 
@@ -129,6 +134,10 @@ PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
     "WebSearch",
     "NotebookEdit",
 )
+
+# Skill tools that route headless Claude sessions — canonical constant used by
+# recipe_parser, semantic_rules, and contract_validator.
+SKILL_TOOLS: frozenset[str] = frozenset({"run_skill", "run_skill_retry"})
 
 # Known field names in run_skill_retry response — used by workflow validation
 RETRY_RESPONSE_FIELDS: frozenset[str] = frozenset(

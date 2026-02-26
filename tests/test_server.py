@@ -7,9 +7,10 @@ import re
 import shutil
 import sqlite3
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import structlog.contextvars
 import structlog.testing
 
 from autoskillit._audit import FailureRecord
@@ -24,22 +25,19 @@ from autoskillit.config import (
     SafetyConfig,
     TokenUsageConfig,
 )
+from autoskillit.db_tools import _select_only_authorizer, _validate_select_only
 from autoskillit.process_lifecycle import SubprocessResult
 from autoskillit.server import (
-    CleanupResult,
     _build_skill_result,
     _check_dry_walkthrough,
     _close_kitchen_handler,
-    _delete_directory_contents,
     _ensure_skill_prefix,
     _open_kitchen_handler,
     _parse_pytest_summary,
     _require_enabled,
     _resolve_model,
     _run_subprocess,
-    _select_only_authorizer,
     _session_log_dir,
-    _validate_select_only,
     classify_fix,
     get_pipeline_report,
     get_token_summary,
@@ -73,6 +71,7 @@ from autoskillit.types import (
     RetryReason,
     TerminationReason,
 )
+from autoskillit.workspace import CleanupResult, _delete_directory_contents
 
 test_check.__test__ = False  # type: ignore[attr-defined]
 
@@ -284,20 +283,20 @@ class TestPluginDirConstant:
 
 
 class TestVersionInfo:
-    """_version_info() returns package and plugin.json versions."""
+    """version_info() returns package and plugin.json versions."""
 
     def test_version_info_returns_package_and_plugin_versions(self):
         from autoskillit import __version__
-        from autoskillit.server import _version_info
+        from autoskillit.server import version_info
 
-        info = _version_info()
+        info = version_info()
         assert isinstance(info["package_version"], str)
         assert isinstance(info["plugin_json_version"], str)
         assert info["package_version"] == __version__
         assert info["match"] is True
 
     def test_version_info_detects_mismatch(self, tmp_path, tool_ctx):
-        from autoskillit.server import _version_info
+        from autoskillit.server import version_info
 
         plugin_dir = tmp_path / ".claude-plugin"
         plugin_dir.mkdir()
@@ -305,18 +304,27 @@ class TestVersionInfo:
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
         tool_ctx.plugin_dir = str(tmp_path)
-        info = _version_info()
+        info = version_info()
         assert info["match"] is False
         assert info["package_version"] != info["plugin_json_version"]
         assert info["plugin_json_version"] == "0.0.0"
 
     def test_version_info_handles_missing_plugin_json(self, tmp_path, tool_ctx):
-        from autoskillit.server import _version_info
+        from autoskillit.server import version_info
 
         tool_ctx.plugin_dir = str(tmp_path)
-        info = _version_info()
+        info = version_info()
         assert info["plugin_json_version"] is None
         assert info["match"] is False
+
+    def test_version_info_is_public(self):
+        """version_info must be a public function — no underscore prefix."""
+        from autoskillit import server
+
+        assert hasattr(server, "version_info"), "server.version_info must exist"
+        assert not hasattr(server, "_version_info"), "server._version_info must be removed"
+        result = server.version_info()
+        assert set(result.keys()) >= {"package_version", "plugin_json_version", "match"}
 
 
 class TestClassifyFix:
@@ -846,10 +854,10 @@ class TestRecipeTools:
         assert len(result["content"]) > 0
 
     @pytest.mark.asyncio
-    async def test_load_recipe_parse_failure_is_logged(
+    async def test_load_recipe_parse_failure_is_logged_and_surfaced(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """load_recipe emits a warning log when validation pipeline raises."""
+        """load_recipe emits a warning log and surfaces a validation-error finding."""
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
@@ -872,6 +880,169 @@ class TestRecipeTools:
         assert any(log.get("log_level") == "warning" for log in logs), (
             f"Expected a warning log entry for parse failure, got: {logs}"
         )
+        assert any(s.get("rule") == "validation-error" for s in result["suggestions"]), (
+            "Unexpected exception must appear as a validation-error finding in suggestions"
+        )
+
+    @pytest.mark.asyncio
+    async def test_load_recipe_validation_error_message_includes_exception_type(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The validation-error finding message names the exception type."""
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text(
+            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
+        )
+        with (
+            patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
+            patch(
+                "autoskillit.recipe_validator.run_semantic_rules",
+                side_effect=ValueError("injected crash"),
+            ),
+        ):
+            result = json.loads(await load_recipe(name="test"))
+
+        assert "content" in result
+        findings = [s for s in result["suggestions"] if s.get("rule") == "validation-error"]
+        assert findings, "Expected at least one validation-error finding"
+        assert "Invalid recipe structure: injected crash" == findings[0]["message"]
+
+
+class TestContractMigrationAdapterValidate:
+    """P7-2: ContractMigrationAdapter.validate uses _load_yaml, not yaml.safe_load."""
+
+    def test_valid_contract_returns_true(self, tmp_path: Path) -> None:
+        from autoskillit.migration_engine import ContractMigrationAdapter
+
+        f = tmp_path / "contract.yaml"
+        f.write_text("skill_hashes:\n  my-skill: abc123\n")
+        adapter = ContractMigrationAdapter()
+        ok, msg = adapter.validate(f)
+        assert ok is True
+        assert msg == ""
+
+    def test_missing_skill_hashes_returns_false(self, tmp_path: Path) -> None:
+        from autoskillit.migration_engine import ContractMigrationAdapter
+
+        f = tmp_path / "contract.yaml"
+        f.write_text("other_field: value\n")
+        adapter = ContractMigrationAdapter()
+        ok, msg = adapter.validate(f)
+        assert ok is False
+        assert "skill_hashes" in msg
+
+    def test_invalid_yaml_returns_false(self, tmp_path: Path) -> None:
+        from autoskillit.migration_engine import ContractMigrationAdapter
+
+        f = tmp_path / "contract.yaml"
+        f.write_bytes(b":\tbad: yaml: [unclosed\n")
+        adapter = ContractMigrationAdapter()
+        ok, msg = adapter.validate(f)
+        assert ok is False
+        assert msg != ""
+
+    def test_missing_file_returns_false(self, tmp_path: Path) -> None:
+        from autoskillit.migration_engine import ContractMigrationAdapter
+
+        adapter = ContractMigrationAdapter()
+        ok, msg = adapter.validate(tmp_path / "nonexistent.yaml")
+        assert ok is False
+        assert msg != ""
+
+
+class TestLoadRecipeExceptionHandling:
+    """CC-1: Outer except in load_recipe must catch anticipated exceptions only."""
+
+    @pytest.mark.asyncio
+    async def test_yaml_error_surfaces_as_suggestion(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """yaml.YAMLError is caught and returned as an error suggestion."""
+        import yaml
+
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text("name: test\n")
+        with patch("autoskillit._io._load_yaml", side_effect=yaml.YAMLError("bad yaml")):
+            result = json.loads(await load_recipe(name="test"))
+        assert "error" not in result
+        assert any(
+            s.get("rule") == "validation-error" and s.get("severity") == "error"
+            for s in result["suggestions"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_value_error_surfaces_as_suggestion(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ValueError (malformed recipe structure) is caught and returned as error suggestion."""
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text(
+            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
+        )
+        with (
+            patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
+            patch(
+                "autoskillit.recipe_parser._parse_recipe", side_effect=ValueError("bad structure")
+            ),
+        ):
+            result = json.loads(await load_recipe(name="test"))
+        assert "error" not in result
+        assert any(
+            s.get("rule") == "validation-error" and s.get("severity") == "error"
+            for s in result["suggestions"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_file_not_found_surfaces_as_suggestion(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """FileNotFoundError is caught and returned as an error suggestion."""
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text(
+            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
+        )
+        with (
+            patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
+            patch(
+                "autoskillit.contract_validator.load_recipe_card",
+                side_effect=FileNotFoundError("missing"),
+            ),
+        ):
+            result = json.loads(await load_recipe(name="test"))
+        assert "error" not in result
+        assert any(
+            s.get("rule") == "validation-error" and s.get("severity") == "error"
+            for s in result["suggestions"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_unexpected_exception_propagates(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Unexpected exceptions (not in specific catches) must propagate, not be swallowed."""
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text(
+            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
+        )
+        with (
+            patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
+            patch(
+                "autoskillit.recipe_validator.run_semantic_rules",
+                side_effect=AttributeError("programming error"),
+            ),
+        ):
+            with pytest.raises(AttributeError, match="programming error"):
+                await load_recipe(name="test")
 
 
 class TestValidateRecipe:
@@ -3102,7 +3273,7 @@ class TestRunPython:
     async def test_timeout(self):
         """run_python returns error on timeout."""
         import asyncio as _aio
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
 
         async def _hang(**_kw: object) -> None:
             await _aio.sleep(300)
@@ -3136,7 +3307,6 @@ class TestRunPython:
     async def test_sync_timeout_logs_warning(self):
         """run_python emits a warning log when TimeoutError is raised."""
         import asyncio as _aio
-        from unittest.mock import MagicMock
 
         async def _hang(**_kw: object) -> None:
             await _aio.sleep(300)
@@ -5090,6 +5260,36 @@ class TestLoadRecipeAutoMigration:
         assert migration_warnings == [], (
             f"Expected no migration-* suggestions after success, got: {migration_warnings}"
         )
+
+    # LR10
+    @pytest.mark.asyncio
+    async def test_uses_migrated_content_not_disk_when_engine_provides_content(
+        self, tmp_path, monkeypatch
+    ):
+        """LR10: migrated_content is used directly; no disk fallback when content is not None."""
+        from unittest.mock import AsyncMock, patch
+
+        from autoskillit.migration_engine import MigrationResult
+
+        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        original_disk_content = ctx["recipe_path"].read_text()
+        migrated_content = ctx["migrated_content"]
+        assert original_disk_content != migrated_content  # precondition
+
+        mock_engine = MagicMock()
+        mock_engine.migrate_file = AsyncMock(
+            return_value=MigrationResult(
+                success=True,
+                name="test-script",
+                migrated_content=migrated_content,
+            )
+        )
+
+        with patch("autoskillit.server.default_migration_engine", return_value=mock_engine):
+            result = json.loads(await load_recipe(name="test-script"))
+
+        assert result["content"] == migrated_content
+        assert ctx["recipe_path"].read_text() == original_disk_content
 
 
 class TestExtractTokenUsage:

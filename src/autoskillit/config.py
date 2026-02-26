@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
+from autoskillit._io import _load_yaml
 
 
 @dataclass
@@ -67,9 +67,7 @@ class RunSkillConfig:
 @dataclass
 class RunSkillRetryConfig:
     timeout: int = 7200
-    heartbeat_marker: str = '"type":"result"'
     stale_threshold: int = 1200
-    completion_marker: str = "%%ORDER_UP%%"
 
 
 @dataclass
@@ -115,20 +113,18 @@ def load_config(project_dir: Path | None = None) -> AutomationConfig:
 
     user_path = Path.home() / ".autoskillit" / "config.yaml"
     if user_path.is_file():
-        _merge_into(config, _load_yaml(user_path))
+        data = _load_yaml(user_path)
+        if isinstance(data, dict):
+            _merge_into(config, data)
 
     if project_dir is not None:
         project_path = project_dir / ".autoskillit" / "config.yaml"
         if project_path.is_file():
-            _merge_into(config, _load_yaml(project_path))
+            data = _load_yaml(project_path)
+            if isinstance(data, dict):
+                _merge_into(config, data)
 
     return config
-
-
-def _load_yaml(path: Path) -> dict[str, Any]:
-    """Read a YAML file and return its contents as a dict."""
-    data = yaml.safe_load(path.read_text())
-    return data if isinstance(data, dict) else {}
 
 
 def _merge_into(config: AutomationConfig, data: dict[str, Any]) -> None:

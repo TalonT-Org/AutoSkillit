@@ -1,8 +1,10 @@
 """Tests for configuration loading and resolution."""
 
+from dataclasses import fields as dc_fields
+
 import yaml
 
-from autoskillit.config import AutomationConfig, load_config
+from autoskillit.config import AutomationConfig, RunSkillRetryConfig, load_config
 
 
 class TestDefaultConfig:
@@ -301,3 +303,21 @@ class TestSyncConfigRemoval:
         config_file.write_text("sync:\n  excluded_recipes:\n    - some-recipe\n")
         cfg = load_config(tmp_path)
         assert isinstance(cfg, AutomationConfig)
+
+
+class TestRunSkillRetryConfigFields:
+    def test_heartbeat_marker_removed(self):
+        assert not hasattr(RunSkillRetryConfig(), "heartbeat_marker"), (
+            "heartbeat_marker is dead code in RunSkillRetryConfig — remove it"
+        )
+
+    def test_completion_marker_removed(self):
+        assert not hasattr(RunSkillRetryConfig(), "completion_marker"), (
+            "completion_marker is dead code in RunSkillRetryConfig — remove it"
+        )
+
+    def test_has_only_timeout_and_stale_threshold(self):
+        field_names = {f.name for f in dc_fields(RunSkillRetryConfig)}
+        assert field_names == {"timeout", "stale_threshold"}, (
+            f"Unexpected fields: {field_names - {'timeout', 'stale_threshold'}}"
+        )

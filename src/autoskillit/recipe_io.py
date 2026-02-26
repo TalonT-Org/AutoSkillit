@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 from autoskillit._logging import get_logger
 from autoskillit._yaml import load_yaml
 from autoskillit.recipe_schema import (
+    AUTOSKILLIT_VERSION_KEY,
     Recipe,
     RecipeInfo,
     RecipeIngredient,
@@ -48,6 +50,26 @@ def builtin_recipes_dir() -> Path:
     return Path(__file__).parent / "recipes"
 
 
+def iter_steps_with_context(
+    recipe: Recipe,
+) -> Iterator[tuple[str, RecipeStep, frozenset[str]]]:
+    """Yield (name, step, available_context) with accumulated captures."""
+    available: set[str] = set()
+    for step_name, step in recipe.steps.items():
+        yield step_name, step, frozenset(available)
+        if step.capture:
+            available.update(step.capture.keys())
+
+
+def find_recipe_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
+    """Find a recipe by name from project and built-in sources.
+
+    Returns the first match (project takes precedence), or None if not found.
+    """
+    result = list_recipes(project_dir)
+    return next((r for r in result.items if r.name == name), None)
+
+
 # --- internal helpers ---
 
 
@@ -81,7 +103,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
         ingredients=ingredients,
         steps=steps,
         kitchen_rules=kitchen_rules,
-        version=data.get("autoskillit_version"),
+        version=data.get(AUTOSKILLIT_VERSION_KEY),
     )
 
 
@@ -118,18 +140,6 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         optional=bool(data.get("optional", False)),
         model=data.get("model"),
     )
-
-
-def _extract_refs(value: str) -> list[str]:
-    """Extract ${{ X }} references from a string."""
-    refs: list[str] = []
-    rest = value
-    while "${{" in rest:
-        start = rest.index("${{") + 3
-        end = rest.index("}}", start)
-        refs.append(rest[start:end].strip())
-        rest = rest[end + 2 :]
-    return refs
 
 
 def _collect_recipes(

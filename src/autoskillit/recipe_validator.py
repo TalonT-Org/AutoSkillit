@@ -7,31 +7,32 @@ semantic_rules and contract_validator by co-locating all validation logic.
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses
 import hashlib
-import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from autoskillit._io import _atomic_write, _load_yaml
 from autoskillit._logging import get_logger
-from autoskillit.process_lifecycle import create_temp_io, read_temp_output
-from autoskillit.recipe_io import _extract_refs
+from autoskillit.recipe_io import iter_steps_with_context
 from autoskillit.recipe_schema import (
-    _SKILL_TOOLS,
     DataFlowReport,
     DataFlowWarning,
     Recipe,
 )
 from autoskillit.skill_resolver import bundled_skills_dir
-from autoskillit.types import PIPELINE_FORBIDDEN_TOOLS, RETRY_RESPONSE_FIELDS
+from autoskillit.types import (
+    PIPELINE_FORBIDDEN_TOOLS,
+    RETRY_RESPONSE_FIELDS,
+    SKILL_TOOLS,
+    Severity,
+)
 
 logger = get_logger(__name__)
 
@@ -101,11 +102,6 @@ _RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
 # ---------------------------------------------------------------------------
 
 
-class Severity(StrEnum):
-    ERROR = "error"
-    WARNING = "warning"
-
-
 @dataclass
 class RuleFinding:
     """A single finding produced by a semantic rule."""
@@ -172,7 +168,7 @@ def run_semantic_rules(wf: Recipe) -> list[RuleFinding]:
 def load_bundled_manifest() -> dict[str, Any]:
     """Load the bundled skill_contracts.yaml from the package directory."""
     manifest_path = Path(__file__).parent / "skill_contracts.yaml"
-    return yaml.safe_load(manifest_path.read_text())
+    return _load_yaml(manifest_path)
 
 
 def resolve_skill_name(skill_command: str) -> str | None:
@@ -325,44 +321,37 @@ def validate_recipe(recipe: Recipe) -> list[str]:
     # Validate capture values: must contain ${{ result.* }} expressions
     for step_name, step in recipe.steps.items():
         for cap_key, cap_val in step.capture.items():
-            refs = _extract_refs(cap_val)
-            if not refs:
+            all_refs = _TEMPLATE_REF_RE.findall(cap_val)
+            if not all_refs:
                 errors.append(
                     f"Step '{step_name}'.capture.{cap_key} must contain "
                     f"a ${{{{ result.* }}}} expression."
                 )
-            for ref in refs:
-                if not ref.startswith("result."):
+            for ref_match in all_refs:
+                inner = ref_match[3:-2].strip()
+                if not inner.startswith("result."):
                     errors.append(
                         f"Step '{step_name}'.capture.{cap_key} references "
-                        f"'{ref}'; capture values must use the 'result.' namespace."
+                        f"'{inner}'; capture values must use the 'result.' namespace."
                     )
 
-    # Validate input and context references in with_args
+    # Validate input and context references in with_args using iter_steps_with_context
     ingredient_names = set(recipe.ingredients.keys())
-    available_context: set[str] = set()
 
-    for step_name, step in recipe.steps.items():
+    for step_name, step, available_context in iter_steps_with_context(recipe):
         for arg_key, arg_val in step.with_args.items():
-            for ref in _extract_refs(arg_val):
-                if ref.startswith("inputs."):
-                    input_name = ref[len("inputs.") :]
-                    if input_name not in ingredient_names:
-                        errors.append(
-                            f"Step '{step_name}'.with.{arg_key} references "
-                            f"undeclared input '{input_name}'."
-                        )
-                elif ref.startswith("context."):
-                    ctx_var = ref[len("context.") :]
-                    if ctx_var not in available_context:
-                        errors.append(
-                            f"Step '{step_name}'.with.{arg_key} references "
-                            f"context variable '{ctx_var}' which has not been "
-                            f"captured by a preceding step."
-                        )
-
-        # After validating this step's with_args, add its captures for subsequent steps
-        available_context.update(step.capture.keys())
+            for ref in _INPUT_REF_RE.findall(arg_val):
+                if ref not in ingredient_names:
+                    errors.append(
+                        f"Step '{step_name}'.with.{arg_key} references undeclared input '{ref}'."
+                    )
+            for ref in _CONTEXT_REF_RE.findall(arg_val):
+                if ref not in available_context:
+                    errors.append(
+                        f"Step '{step_name}'.with.{arg_key} references "
+                        f"context variable '{ref}' which has not been "
+                        f"captured by a preceding step."
+                    )
 
     if not recipe.kitchen_rules:
         errors.append(
@@ -425,9 +414,7 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         for reachable_name in reachable:
             reachable_step = recipe.steps[reachable_name]
             for arg_val in reachable_step.with_args.values():
-                for ref in _extract_refs(arg_val):
-                    if ref.startswith("context."):
-                        consumed.add(ref[len("context.") :])
+                consumed.update(_CONTEXT_REF_RE.findall(arg_val))
 
         # Flag captured vars not consumed on any path
         for cap_key in step.capture:
@@ -453,7 +440,7 @@ def _detect_implicit_handoffs(recipe: Recipe) -> list[DataFlowWarning]:
     warnings: list[DataFlowWarning] = []
 
     for step_name, step in recipe.steps.items():
-        if step.tool in _SKILL_TOOLS and not step.capture:
+        if step.tool in SKILL_TOOLS and not step.capture:
             warnings.append(
                 DataFlowWarning(
                     code="IMPLICIT_HANDOFF",
@@ -501,18 +488,20 @@ def analyze_dataflow(recipe: Recipe) -> DataFlowReport:
 # ---------------------------------------------------------------------------
 
 
-def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
+def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> dict:
     """Generate a recipe card file for a recipe.
 
     Walks each step, resolves skill names, looks up contracts in the manifest,
     computes SKILL.md hashes, and builds dataflow entries. Writes the recipe card
     to ``recipes_dir / "contracts" / "{pipeline_stem}.yaml"``.
+
+    Returns the contract data dict directly (no disk re-read required by callers).
     """
     import datetime
 
     from autoskillit.recipe_io import _parse_recipe
 
-    data = yaml.safe_load(pipeline_path.read_text())
+    data = _load_yaml(pipeline_path)
     recipe = _parse_recipe(data)
     manifest = load_bundled_manifest()
 
@@ -531,7 +520,7 @@ def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
             "produced": [],
         }
 
-        if step.tool in _SKILL_TOOLS:
+        if step.tool in SKILL_TOOLS:
             skill_cmd = step.with_args.get("skill_command", "")
             skill_name = resolve_skill_name(skill_cmd)
             if skill_name:
@@ -565,9 +554,6 @@ def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
         available.update(produced)
         dataflow.append(entry)
 
-    contracts_dir = recipes_dir / "contracts"
-    contracts_dir.mkdir(parents=True, exist_ok=True)
-
     contract_data = {
         "generated_at": datetime.datetime.now(datetime.UTC).isoformat(),
         "bundled_manifest_version": manifest["version"],
@@ -576,9 +562,10 @@ def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
         "dataflow": dataflow,
     }
 
-    out_path = contracts_dir / f"{pipeline_path.stem}.yaml"
-    out_path.write_text(yaml.dump(contract_data, default_flow_style=False, sort_keys=False))
-    return out_path
+    card_path = recipes_dir / "contracts" / f"{pipeline_path.stem}.yaml"
+    card_path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(card_path, yaml.dump(contract_data, default_flow_style=False, sort_keys=False))
+    return contract_data
 
 
 def load_recipe_card(recipe_name: str, recipes_dir: Path) -> dict | None:
@@ -589,7 +576,7 @@ def load_recipe_card(recipe_name: str, recipes_dir: Path) -> dict | None:
     contract_path = recipes_dir / "contracts" / f"{recipe_name}.yaml"
     if not contract_path.is_file():
         return None
-    return yaml.safe_load(contract_path.read_text())
+    return _load_yaml(contract_path)
 
 
 def validate_recipe_cards(recipe: Any, contract: dict[str, Any]) -> list[dict[str, str]]:
@@ -673,103 +660,6 @@ def check_contract_staleness(contract: dict[str, Any]) -> list[StaleItem]:
     return stale
 
 
-async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]:
-    """Use Haiku to determine if stale contracts changed meaningfully.
-
-    For each stale item with reason="hash_mismatch", reads the current
-    SKILL.md and asks Haiku whether the inputs or outputs changed.
-
-    Returns a list of dicts with keys: skill, meaningful (bool), summary (str).
-    """
-    results: list[dict[str, Any]] = []
-
-    for item in stale_items:
-        if item.reason == "version_mismatch":
-            results.append(
-                {
-                    "skill": item.skill,
-                    "meaningful": True,
-                    "summary": (
-                        f"Manifest version changed from {item.stored_value} "
-                        f"to {item.current_value}. Structure may have changed."
-                    ),
-                }
-            )
-            continue
-
-        if item.reason != "hash_mismatch":
-            continue
-
-        skill_md_path = bundled_skills_dir() / item.skill / "SKILL.md"
-        if not skill_md_path.is_file():
-            results.append(
-                {
-                    "skill": item.skill,
-                    "meaningful": True,
-                    "summary": f"SKILL.md for {item.skill} not found.",
-                }
-            )
-            continue
-
-        skill_content = skill_md_path.read_text()
-        manifest = load_bundled_manifest()
-        contract_data = manifest.get("skills", {}).get(item.skill, {})
-
-        prompt = (
-            f"Compare the stored skill contract with the current SKILL.md content.\n\n"
-            f"Stored contract:\n{json.dumps(contract_data, indent=2)}\n\n"
-            f"Current SKILL.md:\n{skill_content[:3000]}\n\n"
-            f"Did the inputs or outputs change? Respond with JSON only: "
-            f'{{"meaningful_change": true/false, "summary": "brief explanation"}}'
-        )
-
-        proc: asyncio.subprocess.Process | None = None
-        try:
-            with create_temp_io() as (stdout_file, stderr_file, _stdin_path):
-                stdout_path = Path(stdout_file.name)
-                stderr_path = Path(stderr_file.name)
-                proc = await asyncio.create_subprocess_exec(
-                    "claude",
-                    "-p",
-                    prompt,
-                    "--model",
-                    "haiku",
-                    "--output-format",
-                    "json",
-                    stdout=stdout_file,
-                    stderr=stderr_file,
-                )
-                await asyncio.wait_for(proc.wait(), timeout=30)
-                stdout_str, _ = read_temp_output(stdout_path, stderr_path)
-            response = json.loads(stdout_str)
-            results.append(
-                {
-                    "skill": item.skill,
-                    "meaningful": response.get("meaningful_change", True),
-                    "summary": response.get("summary", "No summary provided."),
-                }
-            )
-        except (TimeoutError, json.JSONDecodeError, OSError):
-            logger.warning(
-                "triage_staleness failed; treating skill as meaningful",
-                skill=item.skill,
-                exc_info=True,
-            )
-            results.append(
-                {
-                    "skill": item.skill,
-                    "meaningful": True,
-                    "summary": f"Triage failed for {item.skill}; treating as meaningful.",
-                }
-            )
-        finally:
-            if proc is not None and proc.returncode is None:
-                proc.kill()
-                await proc.wait()
-
-    return results
-
-
 # ---------------------------------------------------------------------------
 # Semantic rules (from semantic_rules)
 # ---------------------------------------------------------------------------
@@ -836,10 +726,9 @@ def _check_unsatisfied_skill_input(wf: Recipe) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     manifest = load_bundled_manifest()
     ingredient_names = set(wf.ingredients.keys())
-    available_context: set[str] = set()
 
-    for step_name, step in wf.steps.items():
-        if step.tool in _SKILL_TOOLS:
+    for step_name, step, available_context in iter_steps_with_context(wf):
+        if step.tool in SKILL_TOOLS:
             skill_cmd = step.with_args.get("skill_command", "")
             skill_name = resolve_skill_name(skill_cmd)
             if skill_name:
@@ -851,7 +740,6 @@ def _check_unsatisfied_skill_input(wf: Recipe) -> list[RuleFinding]:
                     # inputs they satisfy. Skip checking — only check steps
                     # that use explicit ${{ }} references for all arguments.
                     if count_positional_args(skill_cmd) > 0:
-                        available_context.update(step.capture.keys())
                         continue
 
                     ctx_refs = extract_context_refs(step)
@@ -886,9 +774,6 @@ def _check_unsatisfied_skill_input(wf: Recipe) -> list[RuleFinding]:
                                     message=msg,
                                 )
                             )
-
-        # Accumulate captures for subsequent steps
-        available_context.update(step.capture.keys())
 
     return findings
 
@@ -940,7 +825,7 @@ def _check_unreachable_steps(wf: Recipe) -> list[RuleFinding]:
 def _check_model_on_non_skill(wf: Recipe) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
-        if step.model and step.tool not in _SKILL_TOOLS:
+        if step.model and step.tool not in SKILL_TOOLS:
             findings.append(
                 RuleFinding(
                     rule="model-on-non-skill-step",
@@ -1014,7 +899,7 @@ def _check_worktree_retry_creates_new(
 ) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
-        if step.tool not in _SKILL_TOOLS:
+        if step.tool not in SKILL_TOOLS:
             continue
         if not step.retry or step.retry.max_attempts <= 1:
             continue
@@ -1086,7 +971,7 @@ def _check_capture_output_coverage(wf: Recipe) -> list[RuleFinding]:
     manifest = load_bundled_manifest()
 
     for step_name, step in wf.steps.items():
-        if step.tool not in _SKILL_TOOLS:
+        if step.tool not in SKILL_TOOLS:
             continue
         if not step.capture:
             continue

@@ -1294,3 +1294,52 @@ class TestSyncRemovalCLI:
         cli.doctor()
         captured = capsys.readouterr()
         assert "recipe_sync_status" not in captured.out
+
+
+class TestGroupFRefactoring:
+    """P8-2, P3-2, P5-4: CLI refactoring — doctor delegation, public version_info, atomic write."""
+
+    def test_doctor_delegates_to_doctor_module(self, monkeypatch, capsys):
+        """cli.doctor() must delegate to _doctor.run_doctor(), not contain the logic itself."""
+        from autoskillit import _doctor
+
+        called_with: dict = {}
+
+        def mock_run_doctor(*, output_json: bool = False) -> None:
+            called_with["output_json"] = output_json
+
+        monkeypatch.setattr(_doctor, "run_doctor", mock_run_doctor)
+        cli.doctor(output_json=True)
+        assert called_with == {"output_json": True}
+
+    def test_severity_and_doctorresult_in_doctor_module(self):
+        """Severity and DoctorResult must be importable from autoskillit._doctor."""
+        from autoskillit._doctor import DoctorResult, Severity
+
+        r = DoctorResult(severity=Severity.OK, check="test", message="ok")
+        assert r.severity == Severity.OK
+        assert r.check == "test"
+
+    def test_upgrade_uses_atomic_write(self, tmp_path, monkeypatch):
+        """upgrade() must call _io._atomic_write, not yaml_file.write_text."""
+        from autoskillit import _io
+
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "test.yaml").write_text("inputs:\n  foo: bar\n")
+
+        atomic_calls: list[tuple] = []
+        original = _io._atomic_write
+
+        def capture(path, content):
+            atomic_calls.append((path, content))
+            return original(path, content)
+
+        monkeypatch.setattr(_io, "_atomic_write", capture)
+        cli.upgrade()
+
+        assert len(atomic_calls) == 1, "Expected exactly one _atomic_write call"
+        _, content = atomic_calls[0]
+        assert "ingredients:" in content
+        assert "inputs:" not in content

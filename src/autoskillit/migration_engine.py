@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import json
 import shutil
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
 
 import yaml as _yaml
 
 from autoskillit import __version__
+from autoskillit._io import _atomic_write, _load_yaml
 from autoskillit._logging import get_logger
-from autoskillit.failure_store import _atomic_write
 from autoskillit.migration_loader import applicable_migrations
 from autoskillit.recipe_io import load_recipe as _parse_recipe
-from autoskillit.recipe_loader import _parse_recipe_metadata
+from autoskillit.recipe_loader import parse_recipe_metadata
 from autoskillit.recipe_validator import validate_recipe
 from autoskillit.session_result import SkillResult
 
@@ -41,19 +41,28 @@ class MigrationResult:
     retries_attempted: int = 0
 
 
-class MigrationAdapter(Protocol):
-    """Contract for file-type-specific migration adapters."""
+class MigrationAdapter(ABC):
+    """Abstract base for file-type-specific migration adapters."""
 
     file_type: str
 
+    @abstractmethod
     def discover(self, project_dir: Path) -> list[MigrationFile]:
         """Discover all files of this type in the project."""
-        ...
 
+    @abstractmethod
     def needs_migration(self, file: MigrationFile) -> bool:
         """Return True if this file requires migration."""
-        ...
 
+    @abstractmethod
+    def validate(self, path: Path) -> tuple[bool, str]:
+        """Return (is_valid, error_message). Called after write-back."""
+
+
+class HeadlessMigrationAdapter(MigrationAdapter):
+    """Adapter that uses a headless Claude session for LLM-driven migration."""
+
+    @abstractmethod
     async def migrate(
         self,
         file: MigrationFile,
@@ -61,19 +70,30 @@ class MigrationAdapter(Protocol):
         run_headless: Callable[..., Awaitable[SkillResult]],
         temp_dir: Path,
     ) -> MigrationResult:
-        """Apply migration and return the result. Write-back handled by MigrationEngine."""
-        ...
+        """Apply migration via run_headless; write-back handled by MigrationEngine."""
 
-    def validate(self, path: Path) -> tuple[bool, str]:
-        """Return (is_valid, error_message). Called after write-back."""
-        ...
+
+class DeterministicMigrationAdapter(MigrationAdapter):
+    """Adapter that uses deterministic (non-LLM) migration logic."""
+
+    @abstractmethod
+    async def migrate(
+        self,
+        file: MigrationFile,
+        *,
+        temp_dir: Path,
+    ) -> MigrationResult:
+        """Apply migration deterministically; write-back handled by MigrationEngine."""
+
+
+_AnyAdapter = HeadlessMigrationAdapter | DeterministicMigrationAdapter
 
 
 class MigrationEngine:
-    def __init__(self, adapters: list[MigrationAdapter]) -> None:
-        self._adapters: dict[str, MigrationAdapter] = {a.file_type: a for a in adapters}
+    def __init__(self, adapters: list[_AnyAdapter]) -> None:
+        self._adapters: dict[str, _AnyAdapter] = {a.file_type: a for a in adapters}
 
-    def get_adapter(self, file_type: str) -> MigrationAdapter | None:
+    def get_adapter(self, file_type: str) -> _AnyAdapter | None:
         return self._adapters.get(file_type)
 
     async def migrate_file(
@@ -93,7 +113,10 @@ class MigrationEngine:
         if not adapter.needs_migration(file):
             return MigrationResult(success=True, name=file.name)
 
-        result = await adapter.migrate(file, run_headless=run_headless, temp_dir=temp_dir)
+        if isinstance(adapter, DeterministicMigrationAdapter):
+            result = await adapter.migrate(file, temp_dir=temp_dir)
+        else:
+            result = await adapter.migrate(file, run_headless=run_headless, temp_dir=temp_dir)
 
         if not result.success:
             return result
@@ -107,7 +130,7 @@ class MigrationEngine:
         return result
 
 
-class RecipeMigrationAdapter:
+class RecipeMigrationAdapter(HeadlessMigrationAdapter):
     file_type = "recipe"
 
     def discover(self, project_dir: Path) -> list[MigrationFile]:
@@ -116,7 +139,7 @@ class RecipeMigrationAdapter:
             return []
         files = []
         for p in sorted(recipes_dir.glob("*.yaml")):
-            meta = _parse_recipe_metadata(p)
+            meta = parse_recipe_metadata(p)
             files.append(
                 MigrationFile(
                     name=meta.name,
@@ -213,7 +236,7 @@ class RecipeMigrationAdapter:
             return False, str(exc)
 
 
-class ContractMigrationAdapter:
+class ContractMigrationAdapter(DeterministicMigrationAdapter):
     file_type = "contract"
 
     def discover(self, project_dir: Path) -> list[MigrationFile]:
@@ -245,7 +268,6 @@ class ContractMigrationAdapter:
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[SkillResult]],  # unused — deterministic regeneration
         temp_dir: Path,
     ) -> MigrationResult:
         from autoskillit.recipe_validator import generate_recipe_card
@@ -267,9 +289,7 @@ class ContractMigrationAdapter:
 
     def validate(self, path: Path) -> tuple[bool, str]:
         try:
-            import yaml as _y
-
-            data = _y.safe_load(path.read_text())
+            data = _load_yaml(path)
             if not isinstance(data, dict) or "skill_hashes" not in data:
                 return False, "missing skill_hashes field"
             return True, ""

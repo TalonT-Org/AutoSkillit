@@ -5,10 +5,11 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Final
 
 from autoskillit.types import RecipeSource
 
-_SKILL_TOOLS: frozenset[str] = frozenset({"run_skill", "run_skill_retry"})
+AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
 
 
 @dataclass

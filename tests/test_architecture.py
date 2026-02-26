@@ -746,3 +746,165 @@ def test_fstring_secret_safe_for_nonsensitive(tmp_path: Path) -> None:
     f.write_text("logger.info(f'Count: {count}')\n")
     violations = _scan(f)
     assert not any("f-string" in v.message for v in violations)
+
+
+def _get_module_ast(filename: str) -> ast.Module:
+    return ast.parse((SRC_ROOT / filename).read_text())
+
+
+def _top_level_class_names(tree: ast.Module) -> set[str]:
+    return {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.col_offset == 0
+    }
+
+
+def _top_level_assign_targets(tree: ast.Module) -> set[str]:
+    names = set()
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    names.add(t.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    return names
+
+
+def test_severity_not_defined_in_semantic_rules():
+    """Severity must live in types.py, not semantic_rules.py."""
+    tree = _get_module_ast("semantic_rules.py")
+    assert "Severity" not in _top_level_class_names(tree), (
+        "Severity is still defined in semantic_rules.py; move it to types.py"
+    )
+
+
+def test_severity_defined_in_types():
+    """Severity must be a top-level class in types.py."""
+    tree = _get_module_ast("types.py")
+    assert "Severity" in _top_level_class_names(tree), (
+        "Severity not found in types.py; it must be defined there"
+    )
+
+
+def test_skill_tools_not_defined_in_recipe_parser():
+    """SKILL_TOOLS must not be locally defined in recipe_parser.py."""
+    tree = _get_module_ast("recipe_parser.py")
+    assert "_SKILL_TOOLS" not in _top_level_assign_targets(tree), (
+        "_SKILL_TOOLS is still locally defined in recipe_parser.py; remove it"
+    )
+
+
+def test_skill_tools_not_defined_in_semantic_rules():
+    """SKILL_TOOLS must not be locally defined in semantic_rules.py."""
+    tree = _get_module_ast("semantic_rules.py")
+    assert "_SKILL_TOOLS" not in _top_level_assign_targets(tree), (
+        "_SKILL_TOOLS is still locally defined in semantic_rules.py; remove it"
+    )
+
+
+def test_skill_tools_not_defined_in_contract_validator():
+    """SKILL_TOOLS must not be locally defined in contract_validator.py."""
+    tree = _get_module_ast("contract_validator.py")
+    assert "_SKILL_TOOLS" not in _top_level_assign_targets(tree), (
+        "_SKILL_TOOLS is still locally defined in contract_validator.py; remove it"
+    )
+
+
+def test_skill_tools_defined_in_types():
+    """SKILL_TOOLS must be a top-level assignment in types.py."""
+    tree = _get_module_ast("types.py")
+    assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
+        "SKILL_TOOLS not found in types.py; it must be defined there"
+    )
+
+
+# ARCH-REG1 — contract_validator must not define its own context/input ref patterns
+def test_contract_validator_imports_regex_from_recipe_parser():
+    tree = _get_module_ast("contract_validator.py")
+    assigns = [
+        node.targets[0].id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id in ("_CONTEXT_REF_RE", "_INPUT_REF_RE")
+    ]
+    assert assigns == [], f"contract_validator defines its own regex patterns: {assigns}"
+
+
+# T-P3-4-A — contract_validator must not import from process_lifecycle
+def test_contract_validator_no_process_lifecycle_import():
+    """contract_validator.py must not import from process_lifecycle."""
+    tree = _get_module_ast("contract_validator.py")
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            module = getattr(node, "module", "") or ""
+            assert "process_lifecycle" not in module, (
+                "contract_validator.py imports from process_lifecycle — "
+                "move the subprocess-dependent code to _llm_triage.py"
+            )
+
+
+def test_claude_md_documents_all_source_modules() -> None:
+    """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
+
+    Prevents undocumented modules from silently accumulating after
+    a new module is added without updating the Architecture section.
+    """
+    claude_path = Path(__file__).parent.parent / "CLAUDE.md"
+    content = claude_path.read_text()
+    src_root = Path(__file__).parent.parent / "src" / "autoskillit"
+
+    missing = [
+        py_file.name for py_file in sorted(src_root.glob("*.py")) if py_file.name not in content
+    ]
+
+    assert not missing, (
+        f"Modules not documented in CLAUDE.md: {', '.join(missing)}. "
+        "Update the Architecture section in CLAUDE.md."
+    )
+
+
+def test_pyproject_cyclopts_minimum_version() -> None:
+    """cyclopts lower bound in pyproject.toml must be >=4.0, not >=3.0.
+
+    cyclopts 3.x and 4.x have incompatible APIs. A >=3.0 constraint allows
+    a conservative resolver to silently install 3.x, which fails at runtime.
+    """
+    import re
+
+    toml_path = Path(__file__).parent.parent / "pyproject.toml"
+    content = toml_path.read_text()
+    match = re.search(r'"cyclopts>=([\d.]+)"', content)
+    assert match is not None, "cyclopts dependency not found in pyproject.toml"
+    major = int(match.group(1).split(".")[0])
+    assert major >= 4, (
+        f"cyclopts minimum version is {match.group(1)}, expected >=4.0. "
+        "cyclopts 3.x API is incompatible with the 4.x API used in this codebase."
+    )
+
+
+def test_no_yaml_safe_load_in_migration_engine() -> None:
+    """P7-2: ContractMigrationAdapter.validate must use _load_yaml, not yaml.safe_load."""
+    src = (Path(__file__).parent.parent / "src/autoskillit/migration_engine.py").read_text()
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr == "safe_load":
+                pytest.fail(
+                    f"migration_engine.py line {node.lineno}: "
+                    f"direct yaml.safe_load call found; use _load_yaml from _io instead"
+                )
+
+
+def test_pytest_asyncio_version_bound() -> None:
+    """P11-2: pytest-asyncio lower bound must match the published 0.x stable series."""
+    import tomllib
+
+    pyproject = Path(__file__).parent.parent / "pyproject.toml"
+    data = tomllib.loads(pyproject.read_text())
+    deps = data["project"]["optional-dependencies"]["dev"]
+    asyncio_dep = next(d for d in deps if d.startswith("pytest-asyncio"))
+    assert ">=0.23" in asyncio_dep, f"Expected pytest-asyncio>=0.23.x, got: {asyncio_dep!r}"

@@ -1,9 +1,11 @@
-"""Tests for failure_store.py — FS1 through FS11."""
+"""Tests for failure_store.py — FS1 through FS11 and FS-IM1 through FS-IM4."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from autoskillit.failure_store import (
     FailureStore,
@@ -152,3 +154,53 @@ def test_default_store_path(tmp_path: Path) -> None:
     result = default_store_path(tmp_path)
     expected = tmp_path / ".autoskillit" / "temp" / "migrations" / "failures.json"
     assert result == expected
+
+
+# ---------------------------------------------------------------------------
+# FS-IM1: has_failure() reads _state, not disk
+# ---------------------------------------------------------------------------
+def test_has_failure_reads_in_memory_state(tmp_path: Path) -> None:
+    """After record(), removing the file does not fool has_failure()."""
+    store_path = tmp_path / "failures.json"
+    store = FailureStore(store_path)
+    store.record("alpha", Path("/a.yaml"), "recipe", "err", 1)
+    store_path.unlink()  # kill the file — old impl would return False
+    assert store.has_failure("alpha") is True  # _state still knows
+
+
+# ---------------------------------------------------------------------------
+# FS-IM2: load() returns a copy of _state, not a fresh disk read
+# ---------------------------------------------------------------------------
+def test_load_returns_in_memory_copy(tmp_path: Path) -> None:
+    """load() reflects in-memory state even when the backing file is gone."""
+    store_path = tmp_path / "failures.json"
+    store = FailureStore(store_path)
+    store.record("beta", Path("/b.yaml"), "recipe", "err", 2)
+    store_path.unlink()
+    result = store.load()
+    assert "beta" in result
+
+
+# ---------------------------------------------------------------------------
+# FS-IM3: disk write still occurs; new instance reads persisted data
+# ---------------------------------------------------------------------------
+def test_record_persists_to_disk(tmp_path: Path) -> None:
+    """record() updates _state AND writes to disk — separate instance sees it."""
+    store_path = tmp_path / "failures.json"
+    store_a = FailureStore(store_path)
+    store_a.record("gamma", Path("/g.yaml"), "recipe", "err", 1)
+    # Fresh instance bootstraps _state from disk
+    store_b = FailureStore(store_path)
+    assert store_b.has_failure("gamma") is True
+
+
+# ---------------------------------------------------------------------------
+# FS-IM4: failed disk write does not corrupt in-memory state
+# ---------------------------------------------------------------------------
+def test_record_does_not_mutate_state_on_disk_failure(tmp_path: Path) -> None:
+    """If _atomic_write raises, _state remains unchanged."""
+    store = FailureStore(tmp_path / "failures.json")
+    with patch("autoskillit.failure_store._atomic_write", side_effect=OSError("disk full")):
+        with pytest.raises(OSError):
+            store.record("alpha", Path("/a.yaml"), "recipe", "err", 1)
+    assert not store.has_failure("alpha")

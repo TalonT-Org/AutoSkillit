@@ -121,3 +121,17 @@ class TestArchitectureEnforcement:
                 f"Architectural violations in {_rel(source_file)}:\n{report}",
                 pytrace=False,
             )
+
+
+def test_sync_manifest_module_deleted():
+    """REQ-SYNC-002: sync_manifest.py does not exist."""
+    sync_path = Path(__file__).parent.parent / "src" / "autoskillit" / "sync_manifest.py"
+    assert not sync_path.exists()
+
+
+def test_no_sync_manifest_imports_in_production_code():
+    """REQ-SYNC-001: No production module imports from autoskillit.sync_manifest."""
+    src_dir = Path(__file__).parent.parent / "src"
+    for py_file in src_dir.rglob("*.py"):
+        content = py_file.read_text()
+        assert "sync_manifest" not in content, f"Found sync_manifest reference in {py_file}"

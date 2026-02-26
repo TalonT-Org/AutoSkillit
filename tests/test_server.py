@@ -5824,6 +5824,26 @@ class TestOpenKitchenAdvisory:
         assert "`bugfix-loop`" in msg
 
 
+def test_open_kitchen_has_no_update_advisory():
+    """REQ-APP-004: open_kitchen prompt contains no recipe update advisory."""
+    from autoskillit import server
+    from autoskillit.server import open_kitchen
+
+    # Ensure kitchen is closed before calling open_kitchen
+    original = server._tools_enabled
+    server._tools_enabled = False
+    try:
+        result = open_kitchen()
+    finally:
+        server._tools_enabled = original
+
+    content = result.messages[0].content
+    text = content.text if hasattr(content, "text") else str(content)
+    assert "RECIPE UPDATE AVAILABLE" not in text
+    assert "accept_recipe_update" not in text
+    assert "decline_recipe_update" not in text
+
+
 class TestStalePathStdoutCheck:
     """STALE termination recovers from stdout when a valid result record is present."""
 

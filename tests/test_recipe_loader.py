@@ -555,3 +555,29 @@ class TestRecipeVersion:
         by_name = {s.name: s for s in result.items}
         assert by_name["versioned-recipe"].version == "0.2.0"
         assert by_name["unversioned-recipe"].version is None
+
+
+class TestSyncRemoval:
+    def test_no_sync_bundled_recipes_function(self):
+        """REQ-SYNC-004: sync_bundled_recipes does not exist in recipe_loader."""
+        import autoskillit.recipe_loader as rl
+
+        assert not hasattr(rl, "sync_bundled_recipes")
+
+    def test_no_get_pending_recipe_updates_function(self):
+        """REQ-SYNC-004: _get_pending_recipe_updates does not exist in recipe_loader."""
+        import autoskillit.recipe_loader as rl
+
+        assert not hasattr(rl, "_get_pending_recipe_updates")
+
+    def test_recipe_loader_has_no_sync_manifest_import(self):
+        """REQ-SYNC-005: recipe_loader does not import from sync_manifest."""
+        import ast
+        from pathlib import Path
+
+        src = Path(__file__).parent.parent / "src" / "autoskillit" / "recipe_loader.py"
+        tree = ast.parse(src.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    assert "sync_manifest" not in node.module

@@ -1325,3 +1325,18 @@ class TestMigrateCommand:
         captured = capsys.readouterr()
         assert "old" in captured.out
         assert "Claude Code session" not in captured.out
+
+
+class TestSyncRemovalCLI:
+    def test_update_command_does_not_exist(self):
+        """REQ-APP-002: 'autoskillit update' is not a registered command."""
+        assert not hasattr(cli, "update")
+
+    def test_doctor_has_no_recipe_sync_check(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ):
+        """REQ-APP-006: doctor output does not include recipe_sync_status."""
+        monkeypatch.chdir(tmp_path)
+        cli.doctor()
+        captured = capsys.readouterr()
+        assert "recipe_sync_status" not in captured.out

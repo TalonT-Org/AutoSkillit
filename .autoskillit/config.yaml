@@ -1,3 +1,11 @@
+sync:
+  excluded_recipes:
+    - audit-and-fix
+    - bugfix-loop
+    - implementation-pipeline
+    - investigate-first
+    - smoke-test
+
 test_check:
   command: ["task", "test-all"]
   # timeout: 600

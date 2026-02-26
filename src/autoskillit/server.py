@@ -154,6 +154,13 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
     if not plan_path.is_file():
         return _gate_error_result(f"Plan file not found: {plan_path}")
 
+    # TOCTOU acceptance (option c, per P1-5): This function reads the plan file
+    # once here. If the file is modified or deleted between this gate check and
+    # the headless session acting on it, the gate condition will be stale.
+    # This is an accepted limitation: the plan file is user-controlled, and
+    # modification between check and execution is a user error. Options (a) and
+    # (b) — passing file content via stdin or re-verifying via content hash —
+    # involve significant scope and are deferred.
     first_line = plan_path.read_text().split("\n", 1)[0].strip()
     if first_line != _config.implement_gate.marker:
         return _gate_error_result(
@@ -403,7 +410,7 @@ def _build_skill_result(
 
 
 @mcp.tool(tags={"automation"})
-async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
+async def run_cmd(cmd: str, cwd: str, timeout: int = 600, ctx: Context = CurrentContext()) -> str:
     """Run an arbitrary shell command in the specified directory.
 
     Args:
@@ -413,20 +420,38 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="run_cmd", cwd=cwd)
     logger.info("run_cmd", cmd=cmd[:80], cwd=cwd)
+    try:
+        await ctx.info(
+            f"run_cmd: {cmd[:80]}",
+            logger_name="autoskillit.run_cmd",
+            extra={"cwd": cwd},
+        )
+    except RuntimeError:
+        pass
     returncode, stdout, stderr = await _run_subprocess(
         ["bash", "-c", cmd],
         cwd=cwd,
         timeout=float(timeout),
     )
-    return json.dumps(
-        {
-            "success": returncode == 0,
-            "exit_code": returncode,
-            "stdout": _truncate(stdout),
-            "stderr": _truncate(stderr),
-        }
-    )
+    result = {
+        "success": returncode == 0,
+        "exit_code": returncode,
+        "stdout": _truncate(stdout),
+        "stderr": _truncate(stderr),
+    }
+    if not result["success"]:
+        try:
+            await ctx.error(
+                "run_cmd failed",
+                logger_name="autoskillit.run_cmd",
+                extra={"exit_code": returncode},
+            )
+        except RuntimeError:
+            pass
+    return json.dumps(result)
 
 
 async def _import_and_call(
@@ -492,7 +517,10 @@ async def _import_and_call(
 
 @mcp.tool(tags={"automation"})
 async def run_python(
-    callable: str, args: dict[str, object] | None = None, timeout: int = 30
+    callable: str,
+    args: dict[str, object] | None = None,
+    timeout: int = 30,
+    ctx: Context = CurrentContext(),
 ) -> str:
     """Call a Python function directly by dotted module path.
 
@@ -511,13 +539,38 @@ async def run_python(
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="run_python")
     logger.info("run_python", callable=callable, timeout=timeout)
+    try:
+        await ctx.info(
+            f"run_python: {callable}",
+            logger_name="autoskillit.run_python",
+            extra={"callable": callable},
+        )
+    except RuntimeError:
+        pass
     result = await _import_and_call(callable, args=args, timeout=float(timeout))
+    if not result.get("success"):
+        try:
+            await ctx.error(
+                "run_python failed",
+                logger_name="autoskillit.run_python",
+                extra={"callable": callable},
+            )
+        except RuntimeError:
+            pass
     return json.dumps(result)
 
 
 @mcp.tool(tags={"automation"})
-async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0) -> str:
+async def read_db(
+    db_path: str,
+    query: str,
+    params: str = "[]",
+    timeout: int = 0,
+    ctx: Context = CurrentContext(),
+) -> str:
     """Run a read-only SQL query against a SQLite database, return JSON.
 
     Defense-in-depth: regex pre-validation rejects non-SELECT queries, the connection
@@ -532,27 +585,77 @@ async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="read_db")
     logger.info("read_db", db_path=db_path, query=query[:80])
+    try:
+        await ctx.info(
+            f"read_db: {query[:80]}",
+            logger_name="autoskillit.read_db",
+            extra={"db_path": db_path},
+        )
+    except RuntimeError:
+        pass
 
     # Parse params
     try:
         parsed_params = json.loads(params)
     except json.JSONDecodeError as exc:
+        try:
+            await ctx.error(
+                "read_db: invalid params JSON",
+                logger_name="autoskillit.read_db",
+                extra={"error": str(exc)},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Invalid params JSON: {exc}"})
     if not isinstance(parsed_params, (list, dict)):
+        try:
+            await ctx.error(
+                "read_db: params must be JSON array or object",
+                logger_name="autoskillit.read_db",
+                extra={},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": "params must be a JSON array or object"})
 
     # Validate db_path
     db = Path(db_path).resolve()
     if not db.exists():
+        try:
+            await ctx.error(
+                "read_db: database does not exist",
+                logger_name="autoskillit.read_db",
+                extra={"db_path": db_path},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Database does not exist: {db}"})
     if not db.is_file():
+        try:
+            await ctx.error(
+                "read_db: path is not a file",
+                logger_name="autoskillit.read_db",
+                extra={"db_path": db_path},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Path is not a file: {db}"})
 
     # SQL validation (regex pre-check)
     try:
         _validate_select_only(query)
     except ValueError as exc:
+        try:
+            await ctx.error(
+                "read_db: non-SELECT query rejected",
+                logger_name="autoskillit.read_db",
+                extra={"error": str(exc)},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": str(exc), "hint": "Only SELECT queries are allowed"})
 
     # Resolve timeout
@@ -573,9 +676,25 @@ async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0
         )
         return json.dumps(result)
     except TimeoutError:
+        try:
+            await ctx.error(
+                "read_db: query timed out",
+                logger_name="autoskillit.read_db",
+                extra={"timeout": effective_timeout},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Query exceeded {effective_timeout}s timeout"})
     except Exception as exc:
         logger.warning("read_db query failed", error=type(exc).__name__)
+        try:
+            await ctx.error(
+                "read_db: query failed",
+                logger_name="autoskillit.read_db",
+                extra={"error": type(exc).__name__},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Query failed: {exc}"})
 
 
@@ -836,7 +955,7 @@ def _check_test_passed(returncode: int, stdout: str) -> bool:
 
 
 @mcp.tool(tags={"automation"})
-async def test_check(worktree_path: str) -> str:
+async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str:
     """Run the configured test command in a worktree directory. Returns unambiguous PASS/FAIL.
 
     CRITICAL: This tool is a pipeline gate, not a diagnostic tool. When it
@@ -852,7 +971,17 @@ async def test_check(worktree_path: str) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="test_check", cwd=worktree_path)
     logger.info("test_check", worktree=worktree_path)
+    try:
+        await ctx.info(
+            f"test_check: {worktree_path}",
+            logger_name="autoskillit.test_check",
+            extra={"worktree": worktree_path},
+        )
+    except RuntimeError:
+        pass
     returncode, stdout, stderr = await _run_subprocess(
         _config.test_check.command,
         cwd=worktree_path,
@@ -861,11 +990,23 @@ async def test_check(worktree_path: str) -> str:
 
     passed = _check_test_passed(returncode, stdout)
 
+    if not passed:
+        try:
+            await ctx.error(
+                "test_check: tests failed",
+                logger_name="autoskillit.test_check",
+                extra={"worktree": worktree_path},
+            )
+        except RuntimeError:
+            pass
+
     return json.dumps({"passed": passed})
 
 
 @mcp.tool(tags={"automation"})
-async def merge_worktree(worktree_path: str, base_branch: str) -> str:
+async def merge_worktree(
+    worktree_path: str, base_branch: str, ctx: Context = CurrentContext()
+) -> str:
     """Merge a worktree branch into the base branch after verifying tests pass.
 
     Programmatic gate: runs the configured test command in the worktree before allowing merge.
@@ -879,10 +1020,28 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="merge_worktree", cwd=worktree_path)
     logger.info("merge_worktree", path=worktree_path, base=base_branch)
+    try:
+        await ctx.info(
+            f"merge_worktree: {worktree_path} -> {base_branch}",
+            logger_name="autoskillit.merge_worktree",
+            extra={"worktree": worktree_path, "base": base_branch},
+        )
+    except RuntimeError:
+        pass
 
     # Validate worktree path exists
     if not os.path.isdir(worktree_path):
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "path does not exist"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Path does not exist: {worktree_path}"})
 
     # Verify it's a git worktree
@@ -892,6 +1051,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         timeout=10,
     )
     if rc != 0 or "/worktrees/" not in git_dir:
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "not a git worktree"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Not a git worktree: {worktree_path}", "stderr": stderr})
 
     # Get branch name
@@ -901,6 +1068,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         timeout=10,
     )
     if rc != 0:
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "could not determine branch"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Could not determine branch: {stderr}"})
     worktree_branch = branch_out.strip()
 
@@ -912,6 +1087,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
             timeout=_config.test_check.timeout,
         )
         if not _check_test_passed(rc, test_stdout):
+            try:
+                await ctx.error(
+                    "merge_worktree failed",
+                    logger_name="autoskillit.merge_worktree",
+                    extra={"reason": "tests failed"},
+                )
+            except RuntimeError:
+                pass
             return json.dumps(
                 {
                     "error": "Tests failed in worktree — merge blocked",
@@ -928,6 +1111,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         timeout=60,
     )
     if fetch_rc != 0:
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "git fetch failed"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps(
             {
                 "error": "git fetch origin failed",
@@ -949,6 +1140,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
             cwd=worktree_path,
             timeout=30,
         )
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "rebase failed"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps(
             {
                 "error": "Rebase failed — aborted to clean state",
@@ -972,6 +1171,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
             break  # First entry is always the main working tree
 
     if not main_repo:
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "could not determine main repo path"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": "Could not determine main repo path from worktree list"})
 
     # Merge from main repo
@@ -986,6 +1193,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
             cwd=main_repo,
             timeout=30,
         )
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "merge failed"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps(
             {
                 "error": "Merge failed — aborted to clean state",
@@ -1020,7 +1235,9 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
 
 
 @mcp.tool(tags={"automation"})
-async def reset_test_dir(test_dir: str, force: bool = False) -> str:
+async def reset_test_dir(
+    test_dir: str, force: bool = False, ctx: Context = CurrentContext()
+) -> str:
     """Remove all files from a test directory. Only works on directories with a reset guard marker.
 
     The directory must contain the configured marker file (default: .autoskillit-workspace)
@@ -1034,14 +1251,40 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     resolved = os.path.realpath(test_dir)
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="reset_test_dir", cwd=resolved)
     logger.info("reset_test_dir", resolved=str(resolved), force=force)
+    try:
+        await ctx.info(
+            f"reset_test_dir: {resolved}",
+            logger_name="autoskillit.reset_test_dir",
+            extra={"resolved": resolved, "force": force},
+        )
+    except RuntimeError:
+        pass
 
     if not os.path.isdir(resolved):
+        try:
+            await ctx.error(
+                "reset_test_dir failed",
+                logger_name="autoskillit.reset_test_dir",
+                extra={"reason": "directory does not exist"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
     marker_name = _config.safety.reset_guard_marker
     marker_path = Path(resolved) / marker_name
     if not force and not marker_path.is_file():
+        try:
+            await ctx.error(
+                "reset_test_dir failed",
+                logger_name="autoskillit.reset_test_dir",
+                extra={"reason": "marker missing"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps(
             {
                 "error": f"Safety: directory missing reset guard marker ({marker_name})",
@@ -1055,7 +1298,9 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
 
 
 @mcp.tool(tags={"automation"})
-async def classify_fix(worktree_path: str, base_branch: str) -> str:
+async def classify_fix(
+    worktree_path: str, base_branch: str, ctx: Context = CurrentContext()
+) -> str:
     """Analyze a worktree's changes to determine if the fix requires restarting
     from plan creation or just re-running the implementation.
 
@@ -1075,7 +1320,17 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="classify_fix", cwd=worktree_path)
     logger.info("classify_fix", worktree=worktree_path, base=base_branch)
+    try:
+        await ctx.info(
+            f"classify_fix: {worktree_path}",
+            logger_name="autoskillit.classify_fix",
+            extra={"worktree": worktree_path, "base": base_branch},
+        )
+    except RuntimeError:
+        pass
 
     returncode, stdout, stderr = await _run_subprocess(
         ["git", "diff", "--name-only", f"origin/{base_branch}...HEAD"],
@@ -1084,6 +1339,14 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
     )
 
     if returncode != 0:
+        try:
+            await ctx.error(
+                "classify_fix: git diff failed",
+                logger_name="autoskillit.classify_fix",
+                extra={"worktree": worktree_path},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"git diff failed: {stderr}"})
 
     changed_files = [f.strip() for f in stdout.splitlines() if f.strip()]
@@ -1112,7 +1375,7 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
 
 
 @mcp.tool(tags={"automation"})
-async def reset_workspace(test_dir: str) -> str:
+async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str:
     """Runs a configured reset command then deletes directory contents,
     preserving configured directories and the reset guard marker.
 
@@ -1122,14 +1385,40 @@ async def reset_workspace(test_dir: str) -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     resolved = os.path.realpath(test_dir)
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="reset_workspace", cwd=resolved)
     logger.info("reset_workspace", resolved=str(resolved))
+    try:
+        await ctx.info(
+            f"reset_workspace: {resolved}",
+            logger_name="autoskillit.reset_workspace",
+            extra={"resolved": resolved},
+        )
+    except RuntimeError:
+        pass
 
     if not os.path.isdir(resolved):
+        try:
+            await ctx.error(
+                "reset_workspace failed",
+                logger_name="autoskillit.reset_workspace",
+                extra={"reason": "directory does not exist"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
     marker_name = _config.safety.reset_guard_marker
     marker_path = Path(resolved) / marker_name
     if not marker_path.is_file():
+        try:
+            await ctx.error(
+                "reset_workspace failed",
+                logger_name="autoskillit.reset_workspace",
+                extra={"reason": "marker missing"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps(
             {
                 "error": f"Safety: directory missing reset guard marker ({marker_name})",
@@ -1138,6 +1427,14 @@ async def reset_workspace(test_dir: str) -> str:
         )
 
     if _config.reset_workspace.command is None:
+        try:
+            await ctx.error(
+                "reset_workspace failed",
+                logger_name="autoskillit.reset_workspace",
+                extra={"reason": "not configured"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": "reset_workspace not configured for this project"})
 
     returncode, stdout, stderr = await _run_subprocess(
@@ -1147,6 +1444,14 @@ async def reset_workspace(test_dir: str) -> str:
     )
 
     if returncode != 0:
+        try:
+            await ctx.error(
+                "reset_workspace failed",
+                logger_name="autoskillit.reset_workspace",
+                extra={"reason": "reset command failed", "exit_code": returncode},
+            )
+        except RuntimeError:
+            pass
         return json.dumps(
             {
                 "error": "reset command failed",
@@ -1506,11 +1811,21 @@ async def load_recipe(name: str) -> str:
                 if recipe_path.exists():
                     try:
                         contract = generate_recipe_card(recipe_path, recipes_dir)
-                    except Exception:
+                    except Exception as exc:
                         logger.warning(
                             "Recipe contract card generation failed",
                             name=name,
                             exc_info=True,
+                        )
+                        suggestions.append(
+                            {
+                                "rule": "validation-error",
+                                "severity": "warning",
+                                "step": "(contract-generation)",
+                                "message": (
+                                    f"Contract generation failed: {type(exc).__name__}: {exc}"
+                                ),
+                            }
                         )
 
             if contract:
@@ -1533,11 +1848,19 @@ async def load_recipe(name: str) -> str:
                             ),
                         }
                     )
-    except Exception:
+    except Exception as exc:
         logger.warning(
             "Recipe validation pipeline failed",
             name=name,
             exc_info=True,
+        )
+        suggestions.append(
+            {
+                "rule": "validation-error",
+                "severity": "error",
+                "step": "(validation-pipeline)",
+                "message": f"Validation pipeline crashed: {type(exc).__name__}: {exc}",
+            }
         )
 
     return json.dumps({"content": content, "suggestions": suggestions})

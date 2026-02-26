@@ -636,9 +636,7 @@ safety:
 #
 # run_skill_retry:
 #   timeout: 7200
-#   heartbeat_marker: '"type":"result"'
 #   stale_threshold: 1200
-#   completion_marker: "%%ORDER_UP%%"
 """
 
 

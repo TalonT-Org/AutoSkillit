@@ -67,9 +67,7 @@ class RunSkillConfig:
 @dataclass
 class RunSkillRetryConfig:
     timeout: int = 7200
-    heartbeat_marker: str = '"type":"result"'
     stale_threshold: int = 1200
-    completion_marker: str = "%%ORDER_UP%%"
 
 
 @dataclass

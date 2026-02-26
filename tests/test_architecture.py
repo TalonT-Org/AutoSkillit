@@ -353,3 +353,42 @@ def test_contract_validator_no_process_lifecycle_import():
                 "contract_validator.py imports from process_lifecycle — "
                 "move the subprocess-dependent code to _llm_triage.py"
             )
+
+
+def test_claude_md_documents_all_source_modules() -> None:
+    """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
+
+    Prevents undocumented modules from silently accumulating after
+    a new module is added without updating the Architecture section.
+    """
+    claude_path = Path(__file__).parent.parent / "CLAUDE.md"
+    content = claude_path.read_text()
+    src_root = Path(__file__).parent.parent / "src" / "autoskillit"
+
+    missing = [
+        py_file.name for py_file in sorted(src_root.glob("*.py")) if py_file.name not in content
+    ]
+
+    assert not missing, (
+        f"Modules not documented in CLAUDE.md: {', '.join(missing)}. "
+        "Update the Architecture section in CLAUDE.md."
+    )
+
+
+def test_pyproject_cyclopts_minimum_version() -> None:
+    """cyclopts lower bound in pyproject.toml must be >=4.0, not >=3.0.
+
+    cyclopts 3.x and 4.x have incompatible APIs. A >=3.0 constraint allows
+    a conservative resolver to silently install 3.x, which fails at runtime.
+    """
+    import re
+
+    toml_path = Path(__file__).parent.parent / "pyproject.toml"
+    content = toml_path.read_text()
+    match = re.search(r'"cyclopts>=([\d.]+)"', content)
+    assert match is not None, "cyclopts dependency not found in pyproject.toml"
+    major = int(match.group(1).split(".")[0])
+    assert major >= 4, (
+        f"cyclopts minimum version is {match.group(1)}, expected >=4.0. "
+        "cyclopts 3.x API is incompatible with the 4.x API used in this codebase."
+    )

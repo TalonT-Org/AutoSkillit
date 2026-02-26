@@ -74,9 +74,11 @@ def _reset_structlog():
     reset_defaults() creates a new processor list but does not remove the
     cached finalized_bind closure from existing BoundLoggerLazyProxy instances.
     """
+    structlog.contextvars.clear_contextvars()
     structlog.reset_defaults()
     _flush_logger_proxy_caches()
     yield
+    structlog.contextvars.clear_contextvars()
     structlog.reset_defaults()
     _flush_logger_proxy_caches()
 

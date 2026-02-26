@@ -8,10 +8,11 @@ misclassification from string typos or unhandled values.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import Generic, Protocol, TypeVar, runtime_checkable
 
 T = TypeVar("T")
 
@@ -59,6 +60,37 @@ class TerminationReason(StrEnum):
     COMPLETED = "completed"
     STALE = "stale"
     TIMED_OUT = "timed_out"
+
+
+@dataclass
+class SubprocessResult:
+    """Result from a managed subprocess execution."""
+
+    returncode: int
+    stdout: str
+    stderr: str
+    termination: TerminationReason
+    pid: int
+
+
+@runtime_checkable
+class SubprocessRunner(Protocol):
+    """Protocol for async subprocess execution. Matches run_managed_async signature."""
+
+    def __call__(
+        self,
+        cmd: list[str],
+        *,
+        cwd: Path,
+        timeout: float,
+        heartbeat_marker: str = "",
+        stale_threshold: float = 1200,
+        completion_marker: str = "",
+        session_log_dir: Path | None = None,
+        pty_mode: bool = True,
+        input_data: str | None = None,
+        completion_drain_timeout: float = 5.0,
+    ) -> Awaitable[SubprocessResult]: ...
 
 
 @dataclass

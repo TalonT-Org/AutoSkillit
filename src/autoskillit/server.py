@@ -32,11 +32,11 @@ from fastmcp import Context, FastMCP
 from fastmcp.dependencies import CurrentContext
 from fastmcp.prompts.prompt import Message, PromptResult
 
-from autoskillit._audit import FailureRecord, _audit_log
-from autoskillit._gate import gate_error_result
+from autoskillit._audit import FailureRecord
+from autoskillit._context import ToolContext
+from autoskillit._gate import GateState, gate_error_result
 from autoskillit._logging import get_logger
-from autoskillit._token_log import _token_log
-from autoskillit.config import AutomationConfig, load_config
+from autoskillit.config import AutomationConfig
 from autoskillit.process_lifecycle import (
     SubprocessResult,
     run_managed_async,
@@ -59,20 +59,37 @@ from autoskillit.types import (
 
 mcp = FastMCP("autoskillit")
 
-_config: AutomationConfig = load_config(Path.cwd())
-
-_plugin_dir = str(Path(__file__).parent)
-
-_tools_enabled = False
+_ctx: ToolContext | None = None
 
 logger = get_logger(__name__)
+
+
+def _initialize(ctx: ToolContext) -> None:
+    """Set the server's ToolContext. Called by cli.py serve() before mcp.run()."""
+    global _ctx
+    _ctx = ctx
+
+
+def _get_ctx() -> ToolContext:
+    """Return the active ToolContext. Raises if _initialize() has not been called."""
+    if _ctx is None:
+        raise RuntimeError(
+            "serve() must be called before accessing context. "
+            "Call server._initialize(ctx) before mcp.run()."
+        )
+    return _ctx
+
+
+def _get_config() -> AutomationConfig:
+    """Return the active AutomationConfig from the ToolContext."""
+    return _get_ctx().config
 
 
 def _version_info() -> dict:
     """Return version health information for the running server."""
     from autoskillit import __version__
 
-    plugin_json_path = Path(_plugin_dir) / ".claude-plugin" / "plugin.json"
+    plugin_json_path = Path(_get_ctx().plugin_dir) / ".claude-plugin" / "plugin.json"
     plugin_version = None
     if plugin_json_path.is_file():
         data = json.loads(plugin_json_path.read_text())
@@ -112,7 +129,7 @@ def _require_enabled() -> str | None:
     This survives --dangerously-skip-permissions because MCP prompts are
     outside the permission system.
     """
-    if not _tools_enabled:
+    if not _get_ctx().gate.enabled:
         return gate_error_result()
     return None
 
@@ -140,7 +157,7 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
     Returns an error JSON string if validation fails, None if OK.
     """
     parts = skill_command.strip().split(None, 1)
-    if not parts or parts[0] not in _config.implement_gate.skill_names:
+    if not parts or parts[0] not in _get_config().implement_gate.skill_names:
         return None
 
     skill_name = parts[0]
@@ -153,10 +170,10 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
         return _gate_error_result(f"Plan file not found: {plan_path}")
 
     first_line = plan_path.read_text().split("\n", 1)[0].strip()
-    if first_line != _config.implement_gate.marker:
+    if first_line != _get_config().implement_gate.marker:
         return _gate_error_result(
             f"Plan has NOT been dry-walked. Run /dry-walkthrough on the plan first. "
-            f"Expected first line: {_config.implement_gate.marker!r}, "
+            f"Expected first line: {_get_config().implement_gate.marker!r}, "
             f"actual: {first_line[:100]!r}"
         )
 
@@ -206,7 +223,7 @@ def _capture_failure(
     """Record a failure in the audit log. No-op if skill_command is empty."""
     if not skill_command:
         return
-    _audit_log.record_failure(
+    _get_ctx().audit.record_failure(
         FailureRecord(
             timestamp=datetime.now(UTC).isoformat(),
             skill_command=skill_command,
@@ -627,8 +644,8 @@ async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0
         return json.dumps({"error": str(exc), "hint": "Only SELECT queries are allowed"})
 
     # Resolve timeout
-    effective_timeout = timeout if timeout > 0 else _config.read_db.timeout
-    max_rows = _config.read_db.max_rows
+    effective_timeout = timeout if timeout > 0 else _get_config().read_db.timeout
+    max_rows = _get_config().read_db.max_rows
 
     # Execute in thread (sqlite3 is blocking)
     loop = asyncio.get_running_loop()
@@ -652,12 +669,12 @@ async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0
 
 def _resolve_model(step_model: str) -> str | None:
     """Resolve model selection: config override > step > config default."""
-    if _config.model.override:
-        return _config.model.override
+    if _get_config().model.override:
+        return _get_config().model.override
     if step_model:
         return step_model
-    if _config.model.default:
-        return _config.model.default
+    if _get_config().model.default:
+        return _get_config().model.default
     return None
 
 
@@ -681,12 +698,12 @@ async def _run_headless_core(
             to pass its longer timeout without a separate subprocess-building path.
         stale_threshold: Override the default stale threshold. Used by run_skill_retry.
     """
-    cfg = _config.run_skill
+    cfg = _get_config().run_skill
     original_skill_command = skill_command
     skill_command = _inject_completion_directive(
         _ensure_skill_prefix(skill_command), cfg.completion_marker
     )
-    effective_plugin_dir = plugin_dir if plugin_dir is not None else _plugin_dir
+    effective_plugin_dir = plugin_dir if plugin_dir is not None else _get_ctx().plugin_dir
     cmd = [
         "claude",
         "-p",
@@ -719,7 +736,7 @@ async def _run_headless_core(
         result, completion_marker=cfg.completion_marker, skill_command=original_skill_command
     )
     if step_name:
-        _token_log.record(step_name, skill_result.token_usage)
+        _get_ctx().token_log.record(step_name, skill_result.token_usage)
     return skill_result
 
 
@@ -766,7 +783,7 @@ async def run_skill(
     except AttributeError:
         pass
 
-    if _config.safety.require_dry_walkthrough:
+    if _get_config().safety.require_dry_walkthrough:
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
@@ -835,11 +852,11 @@ async def run_skill_retry(
     except AttributeError:
         pass
 
-    if _config.safety.require_dry_walkthrough:
+    if _get_config().safety.require_dry_walkthrough:
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
-    cfg = _config.run_skill_retry
+    cfg = _get_config().run_skill_retry
     skill_result = await _run_headless_core(
         skill_command,
         cwd,
@@ -924,9 +941,9 @@ async def test_check(worktree_path: str) -> str:
         return gate
     logger.info("test_check", worktree=worktree_path)
     returncode, stdout, stderr = await _run_subprocess(
-        _config.test_check.command,
+        _get_config().test_check.command,
         cwd=worktree_path,
-        timeout=_config.test_check.timeout,
+        timeout=_get_config().test_check.timeout,
     )
 
     passed = _check_test_passed(returncode, stdout)
@@ -975,11 +992,11 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
     worktree_branch = branch_out.strip()
 
     # Test gate
-    if _config.safety.test_gate_on_merge:
+    if _get_config().safety.test_gate_on_merge:
         rc, test_stdout, test_stderr = await _run_subprocess(
-            _config.test_check.command,
+            _get_config().test_check.command,
             cwd=worktree_path,
-            timeout=_config.test_check.timeout,
+            timeout=_get_config().test_check.timeout,
         )
         if not _check_test_passed(rc, test_stdout):
             return json.dumps(
@@ -1124,7 +1141,7 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
     if not os.path.isdir(resolved):
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
-    marker_name = _config.safety.reset_guard_marker
+    marker_name = _get_config().safety.reset_guard_marker
     marker_path = Path(resolved) / marker_name
     if not force and not marker_path.is_file():
         return json.dumps(
@@ -1173,7 +1190,7 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
 
     changed_files = [f.strip() for f in stdout.splitlines() if f.strip()]
 
-    prefixes = _config.classify_fix.path_prefixes
+    prefixes = _get_config().classify_fix.path_prefixes
     critical_files = [f for f in changed_files if any(f.startswith(prefix) for prefix in prefixes)]
 
     if critical_files:
@@ -1212,7 +1229,7 @@ async def reset_workspace(test_dir: str) -> str:
     if not os.path.isdir(resolved):
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
-    marker_name = _config.safety.reset_guard_marker
+    marker_name = _get_config().safety.reset_guard_marker
     marker_path = Path(resolved) / marker_name
     if not marker_path.is_file():
         return json.dumps(
@@ -1222,11 +1239,12 @@ async def reset_workspace(test_dir: str) -> str:
             }
         )
 
-    if _config.reset_workspace.command is None:
+    reset_cmd = _get_config().reset_workspace.command
+    if reset_cmd is None:
         return json.dumps({"error": "reset_workspace not configured for this project"})
 
     returncode, stdout, stderr = await _run_subprocess(
-        _config.reset_workspace.command,
+        reset_cmd,
         cwd=resolved,
         timeout=60,
     )
@@ -1240,7 +1258,7 @@ async def reset_workspace(test_dir: str) -> str:
             }
         )
 
-    preserve = set(_config.reset_workspace.preserve_dirs) | {marker_name}
+    preserve = set(_get_config().reset_workspace.preserve_dirs) | {marker_name}
     cleanup = _delete_directory_contents(Path(resolved), preserve=preserve)
     return json.dumps(cleanup.to_dict())
 
@@ -1260,7 +1278,7 @@ async def kitchen_status() -> str:
         "package_version": info["package_version"],
         "plugin_json_version": info["plugin_json_version"],
         "versions_match": info["match"],
-        "tools_enabled": _tools_enabled,
+        "tools_enabled": _get_ctx().gate.enabled,
     }
     if not info["match"]:
         status["warning"] = (
@@ -1269,7 +1287,7 @@ async def kitchen_status() -> str:
             f"Run `autoskillit doctor` for details or "
             f"`autoskillit install` to refresh the plugin cache."
         )
-    status["token_usage_verbosity"] = _config.token_usage.verbosity
+    status["token_usage_verbosity"] = _get_config().token_usage.verbosity
     return json.dumps(status)
 
 
@@ -1288,9 +1306,9 @@ async def get_pipeline_report(clear: bool = False) -> str:
 
     This tool is always available (not gated by open_kitchen).
     """
-    report = _audit_log.get_report()
+    report = _get_ctx().audit.get_report()
     if clear:
-        _audit_log.clear()
+        _get_ctx().audit.clear()
     return json.dumps(
         {
             "total_failures": len(report),
@@ -1315,9 +1333,9 @@ async def get_token_summary(clear: bool = False) -> str:
     Args:
         clear: If True, reset the token log after returning current data.
     """
-    steps = _token_log.get_report()
+    steps = _get_ctx().token_log.get_report()
     if clear:
-        _token_log.clear()
+        _get_ctx().token_log.clear()
     total: dict[str, int] = {
         "input_tokens": sum(s["input_tokens"] for s in steps),
         "output_tokens": sum(s["output_tokens"] for s in steps),
@@ -1532,7 +1550,7 @@ async def load_recipe(name: str) -> str:
             from autoskillit.migration_loader import applicable_migrations
 
             migrations = applicable_migrations(recipe.version, __version__)
-            if migrations and name not in _config.migration.suppressed:
+            if migrations and name not in _get_config().migration.suppressed:
                 project_dir = Path.cwd()
                 temp_dir = project_dir / ".autoskillit" / "temp"
                 recipes_dir = project_dir / ".autoskillit" / "recipes"
@@ -1582,7 +1600,7 @@ async def load_recipe(name: str) -> str:
             findings = run_semantic_rules(recipe)
             semantic_suggestions = [f.to_dict() for f in findings]
 
-            if name in _config.migration.suppressed:
+            if name in _get_config().migration.suppressed:
                 semantic_suggestions = [
                     s for s in semantic_suggestions if s.get("rule") != "outdated-recipe-version"
                 ]
@@ -1733,15 +1751,13 @@ async def validate_recipe(script_path: str) -> str:
 
 def _open_kitchen_handler() -> None:
     """Set the tools-enabled flag. Extracted for testability."""
-    global _tools_enabled
-    _tools_enabled = True
+    _get_ctx().gate = GateState(enabled=True)
     logger.info("open_kitchen", gate_state="open")
 
 
 def _close_kitchen_handler() -> None:
     """Clear the tools-enabled flag. Extracted for testability."""
-    global _tools_enabled
-    _tools_enabled = False
+    _get_ctx().gate = GateState(enabled=False)
     logger.info("close_kitchen", gate_state="closed")
 
 

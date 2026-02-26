@@ -1602,7 +1602,7 @@ async def list_recipes() -> str:
 
     This tool is always available (not gated by open_kitchen).
     """
-    from autoskillit.recipe_loader import list_recipes as _list_recipes
+    from autoskillit.recipe_parser import list_recipes as _list_recipes
 
     result = _list_recipes(Path.cwd())
     response: dict[str, object] = {
@@ -1767,13 +1767,15 @@ async def load_recipe(name: str) -> str:
         load_recipe_card,
         validate_recipe_cards,
     )
-    from autoskillit.recipe_loader import load_recipe as _load_recipe
     from autoskillit.recipe_parser import _parse_recipe
+    from autoskillit.recipe_parser import list_recipes as _list_recipes_all
     from autoskillit.semantic_rules import run_semantic_rules
 
-    content = _load_recipe(Path.cwd(), name)
-    if content is None:
-        return json.dumps({"error": f"No recipe named '{name}' in .autoskillit/recipes/"})
+    _all = _list_recipes_all(Path.cwd())
+    _match = next((r for r in _all.items if r.name == name), None)
+    if _match is None:
+        return json.dumps({"error": f"No recipe named '{name}' found"})
+    content = _match.path.read_text()
 
     suggestions: list[dict[str, str]] = []
     try:

@@ -135,3 +135,27 @@ def test_no_sync_manifest_imports_in_production_code():
     for py_file in src_dir.rglob("*.py"):
         content = py_file.read_text()
         assert "sync_manifest" not in content, f"Found sync_manifest reference in {py_file}"
+
+
+def test_server_does_not_import_list_recipes_or_load_recipe_from_recipe_loader() -> None:
+    """server.py must route all recipe discovery through recipe_parser, not recipe_loader.
+
+    recipe_loader.list_recipes() is project-only. recipe_parser.list_recipes() covers
+    both project and bundled sources. This AST check prevents future refactors from
+    silently reintroducing the wrong-module caller pattern.
+    """
+    src = (Path(__file__).parent.parent / "src" / "autoskillit" / "server.py").read_text()
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module and "recipe_loader" in node.module:
+                names = [alias.name for alias in node.names]
+                assert "list_recipes" not in names, (
+                    "server.py imports list_recipes from recipe_loader. "
+                    "Use recipe_parser.list_recipes — it covers both project and bundled sources."
+                )
+                assert "load_recipe" not in names, (
+                    "server.py imports load_recipe from recipe_loader. "
+                    "Use recipe_parser.list_recipes to find RecipeInfo.path, "
+                    "then path.read_text()."
+                )

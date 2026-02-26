@@ -640,7 +640,7 @@ kitchen_rules:
     def test_cook_no_scripts_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """cook exits 1 when no .autoskillit/recipes/ directory exists."""
+        """cook exits 1 with available bundled recipes listed when name not found."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
@@ -648,7 +648,9 @@ kitchen_rules:
             cli.cook("anything")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
-        assert "No recipes found" in captured.out
+        assert "Recipe not found: 'anything'" in captured.out
+        assert "Available recipes:" in captured.out
+        assert "implementation-pipeline" in captured.out
 
     def test_cook_available_scripts_listed(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture

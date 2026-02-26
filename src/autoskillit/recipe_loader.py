@@ -1,4 +1,4 @@
-"""Recipe discovery from .autoskillit/recipes/."""
+"""Path-based recipe metadata utilities for migration_engine."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from pathlib import Path
 import yaml
 
 from autoskillit.recipe_parser import RecipeInfo, RecipeSource
-from autoskillit.types import LoadReport, LoadResult
 
 
 def _extract_frontmatter(text: str) -> str:
@@ -48,30 +47,3 @@ def _parse_recipe_metadata(path: Path) -> RecipeInfo:
         source=RecipeSource.PROJECT,
         version=data.get("autoskillit_version"),
     )
-
-
-def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
-    """Discover recipes from .autoskillit/recipes/."""
-    recipes_dir = project_dir / ".autoskillit" / "recipes"
-    if not recipes_dir.is_dir():
-        return LoadResult(items=[], errors=[])
-
-    items: list[RecipeInfo] = []
-    errors: list[LoadReport] = []
-    for f in sorted(recipes_dir.iterdir()):
-        if f.suffix in (".yaml", ".yml") and f.is_file():
-            try:
-                info = _parse_recipe_metadata(f)
-                items.append(info)
-            except Exception as exc:
-                errors.append(LoadReport(path=f, error=str(exc)))
-    return LoadResult(items=items, errors=errors)
-
-
-def load_recipe(project_dir: Path, name: str) -> str | None:
-    """Load a recipe by name, returning raw YAML content."""
-    result = list_recipes(project_dir)
-    match = next((r for r in result.items if r.name == name), None)
-    if match is None:
-        return None
-    return match.path.read_text()

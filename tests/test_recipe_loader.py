@@ -1,191 +1,15 @@
-"""Tests for recipe discovery from .autoskillit/recipes/."""
+"""Tests for path-based recipe metadata utilities in recipe_loader."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-import yaml
 
 from autoskillit.recipe_loader import (
     _extract_frontmatter,
     _parse_recipe_metadata,
-    list_recipes,
-    load_recipe,
 )
-
-SCRIPT_A = {
-    "name": "implementation",
-    "description": "Plan and implement a task end-to-end.",
-    "summary": "make-plan > review > for each part: dry-walk > implement > test > merge",
-    "ingredients": {
-        "task": {"description": "What to implement", "required": True},
-        "base_branch": {"description": "Branch to merge into", "default": "main"},
-    },
-    "steps": {
-        "plan": {
-            "tool": "run_skill",
-            "with": {"skill_command": "/autoskillit:make-plan ${{ inputs.task }}", "cwd": "."},
-            "on_success": "done",
-            "on_failure": "escalate",
-        },
-        "done": {"action": "stop", "message": "Done."},
-        "escalate": {"action": "stop", "message": "Failed."},
-    },
-}
-
-SCRIPT_B = {
-    "name": "investigate-fix",
-    "description": "Investigate and fix a bug.",
-    "ingredients": {
-        "problem": {"description": "Error description", "required": True},
-    },
-    "steps": {
-        "investigate": {
-            "tool": "run_skill",
-            "with": {
-                "skill_command": "/autoskillit:investigate ${{ inputs.problem }}",
-                "cwd": ".",
-            },
-            "on_success": "done",
-            "on_failure": "escalate",
-        },
-        "done": {"action": "stop", "message": "Done."},
-        "escalate": {"action": "stop", "message": "Failed."},
-    },
-}
-
-
-def _make_recipes_dir(tmp_path: Path) -> Path:
-    """Create .autoskillit/recipes/ with two test YAML files."""
-    recipes_dir = tmp_path / ".autoskillit" / "recipes"
-    recipes_dir.mkdir(parents=True)
-    (recipes_dir / "implementation.yaml").write_text(yaml.dump(SCRIPT_A, default_flow_style=False))
-    (recipes_dir / "investigate.yaml").write_text(yaml.dump(SCRIPT_B, default_flow_style=False))
-    return recipes_dir
-
-
-class TestListRecipes:
-    # SL1
-    def test_empty_when_dir_missing(self, tmp_path: Path) -> None:
-        """list_recipes returns empty result when .autoskillit/recipes/ doesn't exist."""
-        result = list_recipes(tmp_path)
-        assert result.items == []
-        assert result.errors == []
-
-    # SL2
-    def test_discovers_yaml_files(self, tmp_path: Path) -> None:
-        """list_recipes discovers .yaml files in .autoskillit/recipes/."""
-        _make_recipes_dir(tmp_path)
-        recipes = list_recipes(tmp_path).items
-        names = {s.name for s in recipes}
-        assert "implementation" in names
-        assert "investigate-fix" in names
-
-    # SL3
-    def test_ignores_non_yaml_and_reports_malformed(self, tmp_path: Path) -> None:
-        """list_recipes ignores non-yaml files and reports malformed yaml as errors."""
-        recipes_dir = _make_recipes_dir(tmp_path)
-        (recipes_dir / "readme.txt").write_text("not a yaml recipe")
-        (recipes_dir / "broken.yaml").write_text(":: invalid yaml {{[")
-        result = list_recipes(tmp_path)
-        names = {s.name for s in result.items}
-        assert "readme" not in names
-        assert "broken" not in names
-        assert len(result.items) == 2  # only the two valid ones
-        assert len(result.errors) == 1  # broken.yaml reported
-        assert "broken.yaml" in result.errors[0].path.name
-
-    # SL4
-    def test_extracts_summary_field(self, tmp_path: Path) -> None:
-        """list_recipes extracts summary field from YAML."""
-        _make_recipes_dir(tmp_path)
-        recipes = list_recipes(tmp_path).items
-        impl = next(s for s in recipes if s.name == "implementation")
-        assert impl.summary == SCRIPT_A["summary"]
-
-    # SL5
-    def test_empty_summary_when_absent(self, tmp_path: Path) -> None:
-        """list_recipes returns empty summary when field absent."""
-        _make_recipes_dir(tmp_path)
-        recipes = list_recipes(tmp_path).items
-        inv = next(s for s in recipes if s.name == "investigate-fix")
-        assert inv.summary == ""
-
-    # SL8
-    def test_sorted_by_name(self, tmp_path: Path) -> None:
-        """list_recipes sorts results by name."""
-        _make_recipes_dir(tmp_path)
-        recipes = list_recipes(tmp_path).items
-        names = [s.name for s in recipes]
-        assert names == sorted(names)
-
-    def test_discovers_frontmatter_format(self, tmp_path: Path) -> None:
-        """Recipes in YAML frontmatter format must be discovered."""
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "pipeline.yaml").write_text(
-            "---\nname: my-pipeline\ndescription: A pipeline\n"
-            "summary: plan > implement\n---\n\n# Pipeline\nDo stuff.\n"
-        )
-        result = list_recipes(tmp_path)
-        assert len(result.items) == 1
-        assert result.items[0].name == "my-pipeline"
-        assert result.items[0].summary == "plan > implement"
-
-    def test_discovers_frontmatter_with_adversarial_body(self, tmp_path: Path) -> None:
-        """Recipes with YAML-like Markdown bodies must be discovered, not errored."""
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "pipeline.yaml").write_text(
-            "---\nname: adv-pipeline\ndescription: Test\n---\n\n"
-            "# Steps\n\nSETUP:\n  - item: value\n  - key: other\n"
-        )
-        result = list_recipes(tmp_path)
-        assert len(result.items) == 1
-        assert len(result.errors) == 0
-        assert result.items[0].name == "adv-pipeline"
-
-    def test_reports_errors(self, tmp_path: Path) -> None:
-        """Malformed recipes must produce error reports, not silent skips."""
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "good.yaml").write_text("name: good\ndescription: Valid\n")
-        (recipes_dir / "bad.yaml").write_text(":: invalid {{[\n")
-        result = list_recipes(tmp_path)
-        assert len(result.items) == 1
-        assert len(result.errors) == 1
-        assert "bad.yaml" in result.errors[0].path.name
-
-    def test_list_recipes_discovers_from_recipes_dir(self, tmp_path: Path) -> None:
-        """list_recipes discovers from .autoskillit/recipes/ not scripts/."""
-        _make_recipes_dir(tmp_path)
-        result = list_recipes(tmp_path)
-        assert len(result.items) > 0
-
-    def test_recipe_info_has_source_field(self, tmp_path: Path) -> None:
-        """RecipeInfo has a source field set to RecipeSource.PROJECT."""
-        from autoskillit.recipe_parser import RecipeSource
-
-        _make_recipes_dir(tmp_path)
-        result = list_recipes(tmp_path)
-        for item in result.items:
-            assert item.source == RecipeSource.PROJECT
-
-    def test_load_recipe_raw_returns_yaml(self, tmp_path: Path) -> None:
-        """load_recipe returns raw YAML string."""
-        _make_recipes_dir(tmp_path)
-        content = load_recipe(tmp_path, "implementation")
-        assert content is not None
-        assert isinstance(content, str)
-        data = yaml.safe_load(content)
-        assert data["name"] == "implementation"
-
-    def test_list_recipes_empty_when_dir_missing(self, tmp_path: Path) -> None:
-        """list_recipes returns empty result when .autoskillit/recipes/ missing."""
-        result = list_recipes(tmp_path)
-        assert result.items == []
-        assert result.errors == []
 
 
 class TestParseRecipeMetadata:
@@ -287,23 +111,6 @@ class TestExtractFrontmatter:
             _extract_frontmatter(text)
 
 
-class TestLoadRecipe:
-    # SL6
-    def test_returns_raw_yaml(self, tmp_path: Path) -> None:
-        """load_recipe returns raw YAML content for existing recipe name."""
-        _make_recipes_dir(tmp_path)
-        content = load_recipe(tmp_path, "implementation")
-        assert content is not None
-        parsed = yaml.safe_load(content)
-        assert parsed["name"] == "implementation"
-
-    # SL7
-    def test_returns_none_for_nonexistent(self, tmp_path: Path) -> None:
-        """load_recipe returns None for nonexistent recipe name."""
-        _make_recipes_dir(tmp_path)
-        assert load_recipe(tmp_path, "nonexistent") is None
-
-
 # ---------------------------------------------------------------------------
 # TestRecipeVersion: RecipeInfo includes version from autoskillit_version field
 # ---------------------------------------------------------------------------
@@ -327,31 +134,6 @@ class TestRecipeVersion:
         path.write_text('name: my-recipe\ndescription: A recipe\nautoskillit_version: "0.2.0"\n')
         info = _parse_recipe_metadata(path)
         assert info.version == "0.2.0"
-
-    # SV3: list_recipes returns version in RecipeInfo items
-    def test_list_recipes_includes_version(self, tmp_path: Path) -> None:
-        """list_recipes propagates autoskillit_version into the returned RecipeInfo items."""
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "versioned.yaml").write_text(
-            "name: versioned-recipe\n"
-            "description: Has version\n"
-            'autoskillit_version: "0.2.0"\n'
-            "steps:\n"
-            "  do_it:\n"
-            "    tool: run_cmd\n"
-            "    on_success: done\n"
-            "  done:\n"
-            "    action: stop\n"
-            "    message: Done.\n"
-        )
-        (recipes_dir / "unversioned.yaml").write_text(
-            "name: unversioned-recipe\ndescription: No version\n"
-        )
-        result = list_recipes(tmp_path)
-        by_name = {s.name: s for s in result.items}
-        assert by_name["versioned-recipe"].version == "0.2.0"
-        assert by_name["unversioned-recipe"].version is None
 
 
 class TestSyncRemoval:

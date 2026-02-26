@@ -18,7 +18,6 @@ import asyncio
 import json
 import os
 import re
-import shutil
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -185,14 +184,11 @@ def smoke_script_path() -> Path:
 
 @pytest.fixture()
 def smoke_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Create a temp project dir with smoke-test recipe in .autoskillit/recipes/.
+    """Create a temp project dir for smoke tests.
 
-    Used by tests that invoke the server's list_recipes/load_recipe tools,
-    which only discover recipes in the project-level .autoskillit/recipes/ dir.
+    Bundled recipes (including smoke-test) are discovered via recipe_parser,
+    so no recipe files need to be copied into the project dir.
     """
-    recipes_dir = tmp_path / ".autoskillit" / "recipes"
-    recipes_dir.mkdir(parents=True)
-    shutil.copy(SMOKE_SCRIPT, recipes_dir / "smoke-test.yaml")
     monkeypatch.chdir(tmp_path)
     return tmp_path
 

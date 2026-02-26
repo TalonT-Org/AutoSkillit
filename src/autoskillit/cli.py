@@ -458,10 +458,12 @@ def doctor(*, output_json: bool = False):
     # Check 7: Script version health
     from autoskillit import __version__
     from autoskillit.failure_store import FailureStore, default_store_path
-    from autoskillit.recipe_loader import list_recipes
+    from autoskillit.recipe_parser import list_recipes as _list_all_recipes
+    from autoskillit.types import RecipeSource
 
-    scripts_result = list_recipes(Path.cwd())
-    if not scripts_result.items:
+    _all_result = _list_all_recipes(Path.cwd())
+    scripts_result_items = [r for r in _all_result.items if r.source == RecipeSource.PROJECT]
+    if not scripts_result_items:
         results.append(
             DoctorResult(
                 Severity.OK,
@@ -477,7 +479,7 @@ def doctor(*, output_json: bool = False):
 
         failed_migrations: list[str] = []
         outdated: list[str] = []
-        for script in scripts_result.items:
+        for script in scripts_result_items:
             if script.name in known_failures:
                 f = known_failures[script.name]
                 failed_migrations.append(
@@ -549,7 +551,8 @@ def migrate(*, check: bool = False):
     """
     from autoskillit import __version__
     from autoskillit.migration_loader import applicable_migrations
-    from autoskillit.recipe_loader import list_recipes
+    from autoskillit.recipe_parser import list_recipes as _list_all_recipes
+    from autoskillit.types import RecipeSource
 
     project_dir = Path.cwd()
     scripts_dir = project_dir / ".autoskillit" / "scripts"
@@ -558,20 +561,21 @@ def migrate(*, check: bool = False):
         print("Project not upgraded — run 'autoskillit upgrade' first.")
         return
 
-    recipes = list_recipes(project_dir)
+    all_result = _list_all_recipes(project_dir)
+    project_items = [r for r in all_result.items if r.source == RecipeSource.PROJECT]
 
-    if not recipes.items:
+    if not project_items:
         print("No recipes found in .autoskillit/recipes/")
         return
 
     pending = []
-    for recipe in recipes.items:
+    for recipe in project_items:
         applicable = applicable_migrations(recipe.version, __version__)
         if applicable:
             pending.append((recipe, applicable))
 
     if not pending:
-        print(f"All {len(recipes.items)} recipe(s) are at version {__version__}.")
+        print(f"All {len(project_items)} recipe(s) are at version {__version__}.")
         return
 
     print(f"{len(pending)} recipe(s) need migration:\n")
@@ -804,19 +808,21 @@ def cook(recipe: str):
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
-    from autoskillit.recipe_loader import list_recipes, load_recipe
+    from autoskillit.recipe_parser import list_recipes as _list_all_recipes_for_cook
 
-    recipe_yaml = load_recipe(Path.cwd(), recipe)
-    if recipe_yaml is None:
-        available = list_recipes(Path.cwd()).items
+    _all = _list_all_recipes_for_cook(Path.cwd())
+    _match = next((r for r in _all.items if r.name == recipe), None)
+    if _match is None:
+        available = _all.items
         print(f"Recipe not found: '{recipe}'")
         if available:
             print("Available recipes:")
             for r in available:
                 print(f"  - {r.name}")
         else:
-            print("No recipes found in .autoskillit/recipes/")
+            print("No recipes found")
         sys.exit(1)
+    recipe_yaml = _match.path.read_text()
 
     # Validate recipe before launching session
     import yaml

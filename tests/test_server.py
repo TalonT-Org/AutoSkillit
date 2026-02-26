@@ -726,11 +726,10 @@ class TestRecipeTools:
 
     # SS1
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe_loader.list_recipes")
+    @patch("autoskillit.recipe_parser.list_recipes")
     async def test_list_returns_json_object(self, mock_list):
         """list_recipes returns JSON object with scripts array (not gated)."""
-        from autoskillit.recipe_loader import RecipeInfo
-        from autoskillit.recipe_parser import RecipeSource
+        from autoskillit.recipe_parser import RecipeInfo, RecipeSource
         from autoskillit.types import LoadResult
 
         mock_list.return_value = LoadResult(
@@ -755,11 +754,14 @@ class TestRecipeTools:
 
     # SS2
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe_loader.load_recipe")
-    async def test_load_returns_json_with_content(self, mock_load):
+    async def test_load_returns_json_with_content(self, tmp_path, monkeypatch):
         """load_recipe returns JSON with content and suggestions (not gated)."""
-        mock_load.return_value = "name: test\ndescription: Test recipe\n"
-        result = json.loads(await load_recipe(name="test"))
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text("name: test\ndescription: Test recipe\n")
+        with patch("autoskillit.migration_loader.applicable_migrations", return_value=[]):
+            result = json.loads(await load_recipe(name="test"))
         assert "content" in result
         assert "suggestions" in result
         assert "name: test" in result["content"]
@@ -767,17 +769,16 @@ class TestRecipeTools:
 
     # SS3
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe_loader.load_recipe")
-    async def test_load_unknown_returns_error(self, mock_load):
+    async def test_load_unknown_returns_error(self, tmp_path, monkeypatch):
         """load_recipe returns error JSON for unknown recipe name."""
-        mock_load.return_value = None
+        monkeypatch.chdir(tmp_path)
         result = json.loads(await load_recipe(name="nonexistent"))
         assert "error" in result
         assert "nonexistent" in result["error"]
 
     # SS4
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe_loader.list_recipes")
+    @patch("autoskillit.recipe_parser.list_recipes")
     async def test_list_reports_errors_in_response(self, mock_list):
         """list_recipes includes errors in JSON when recipes fail to parse."""
         from autoskillit.types import LoadReport, LoadResult
@@ -794,18 +795,18 @@ class TestRecipeTools:
 
     # SS5
     @pytest.mark.asyncio
-    async def test_list_integration_discovers_frontmatter(self, tmp_path, monkeypatch):
-        """Server tool discovers recipes even when body has YAML-like syntax."""
+    async def test_list_integration_discovers_project_recipe(self, tmp_path, monkeypatch):
+        """Server tool returns project recipes alongside bundled recipes."""
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         (recipes_dir / "pipeline.yaml").write_text(
-            "---\nname: test-pipe\ndescription: Test\nsummary: a > b\n---\n\n"
-            "# Pipeline\n\nSETUP:\n  - project_dir = /path/to/project\n"
+            "name: test-pipe\ndescription: Test\nsummary: a > b\n"
+            "steps:\n  done:\n    action: stop\n    message: Done\n"
         )
         result = json.loads(await list_recipes())
-        assert len(result["recipes"]) == 1
-        assert result["recipes"][0]["name"] == "test-pipe"
+        names = {r["name"] for r in result["recipes"]}
+        assert "test-pipe" in names
 
     # SS6
     @pytest.mark.asyncio
@@ -814,17 +815,19 @@ class TestRecipeTools:
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
-        (recipes_dir / "broken.yaml").write_text(":: bad yaml {{[\n")
+        (recipes_dir / "broken.yaml").write_text("[unclosed bracket\n")
         result = json.loads(await list_recipes())
         assert "errors" in result
         assert len(result["errors"]) == 1
 
     # SS7
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe_loader.load_recipe")
-    async def test_load_returns_json_with_suggestions(self, mock_load):
+    async def test_load_returns_json_with_suggestions(self, tmp_path, monkeypatch):
         """load_recipe response always has 'content' and 'suggestions' keys."""
-        mock_load.return_value = (
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text(
             "name: test\ndescription: Test\nkitchen_rules:\n  - test\n"
             "steps:\n  do:\n    tool: test_check\n    model: sonnet\n"
             "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
@@ -835,6 +838,35 @@ class TestRecipeTools:
         assert "suggestions" in result
         assert isinstance(result["suggestions"], list)
         assert any(s["rule"] == "model-on-non-skill-step" for s in result["suggestions"])
+
+    # SS8
+    @pytest.mark.asyncio
+    async def test_list_recipes_includes_builtins_with_empty_project_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """list_recipes MCP returns bundled recipes when .autoskillit/recipes/ is absent."""
+        monkeypatch.chdir(tmp_path)
+        # No .autoskillit/recipes/ created — simulates a fresh project with no local recipes
+        result = json.loads(await list_recipes())
+        names = {r["name"] for r in result["recipes"]}
+        assert "implementation-pipeline" in names
+        assert "bugfix-loop" in names
+        assert "audit-and-fix" in names
+        assert "investigate-first" in names
+        assert "smoke-test" in names
+
+    # SS9
+    @pytest.mark.asyncio
+    async def test_load_recipe_mcp_returns_builtin_recipe(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """load_recipe MCP finds bundled recipes when no project .autoskillit/recipes/ dir."""
+        monkeypatch.chdir(tmp_path)
+        with patch("autoskillit.migration_loader.applicable_migrations", return_value=[]):
+            result = json.loads(await load_recipe(name="implementation-pipeline"))
+        assert "error" not in result, f"Unexpected error: {result.get('error')}"
+        assert "content" in result
+        assert len(result["content"]) > 0
 
 
 class TestValidateRecipe:

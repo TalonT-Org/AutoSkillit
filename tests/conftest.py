@@ -1,37 +1,79 @@
 """Shared test fixtures for autoskillit."""
 
-from collections.abc import Generator
+from pathlib import Path as _Path
 
 import pytest
 import structlog
 
+from autoskillit.types import SubprocessResult, SubprocessRunner, TerminationReason
 
-@pytest.fixture(autouse=True)
-def _server_ctx(monkeypatch):
-    """Provide an isolated ToolContext for each test. Gate enabled by default.
 
-    Replaces _open_kitchen_for_tests (which set _tools_enabled=True) and
-    _test_config (which set _config). monkeypatch auto-resets _ctx to None
-    after each test, so no separate reset fixture is needed.
+class MockSubprocessRunner(SubprocessRunner):
+    """Test double for SubprocessRunner. Queues predetermined results.
+
+    Inherits from SubprocessRunner (Protocol) so mypy verifies the __call__
+    signature matches the protocol at class definition, not just at call sites.
     """
-    from pathlib import Path
 
-    from autoskillit import server
+    def __init__(self) -> None:
+        self._queue: list[SubprocessResult] = []
+        self._default = SubprocessResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=99999,
+        )
+        self.call_args_list: list[tuple] = []
+
+    def push(self, result: SubprocessResult) -> None:
+        """Queue a result to be returned by the next __call__."""
+        self._queue.append(result)
+
+    def set_default(self, result: SubprocessResult) -> None:
+        """Set the result returned when the queue is empty."""
+        self._default = result
+
+    async def __call__(
+        self,
+        cmd: list[str],
+        *,
+        cwd: _Path,
+        timeout: float,
+        **kwargs: object,
+    ) -> SubprocessResult:
+        self.call_args_list.append((cmd, cwd, timeout, kwargs))
+        if self._queue:
+            return self._queue.pop(0)
+        return self._default
+
+
+@pytest.fixture
+def tool_ctx(monkeypatch, tmp_path):
+    """Provide a fully isolated ToolContext for server tests.
+
+    Monkeypatches server._ctx so all server tool calls use this context.
+    Gate is enabled (open kitchen) by default — tests that need a closed
+    gate should do: tool_ctx.gate = GateState(enabled=False) locally.
+    """
+    from autoskillit import server as _server
     from autoskillit._audit import AuditLog
     from autoskillit._context import ToolContext
     from autoskillit._gate import GateState
     from autoskillit._token_log import TokenLog
     from autoskillit.config import AutomationConfig
 
+    mock_runner = MockSubprocessRunner()
     ctx = ToolContext(
         config=AutomationConfig(),
         audit=AuditLog(),
         token_log=TokenLog(),
         gate=GateState(enabled=True),
-        plugin_dir=str(Path(__file__).parent.parent / "src" / "autoskillit"),
-        runner=None,
+        plugin_dir=str(tmp_path),
+        runner=mock_runner,
     )
-    monkeypatch.setattr(server, "_ctx", ctx)
+    monkeypatch.setattr(_server, "_ctx", ctx)
+    return ctx
 
 
 def _flush_logger_proxy_caches() -> None:
@@ -87,27 +129,3 @@ def _reset_structlog():
     yield
     structlog.reset_defaults()
     _flush_logger_proxy_caches()
-
-
-@pytest.fixture(autouse=True)
-def _reset_audit_log():
-    """Clear the module-level _audit_log singleton before each test.
-
-    Without this, failures recorded in one test class bleed into assertions
-    in the next. The singleton is process-global — autouse ensures isolation.
-    """
-    from autoskillit._audit import _audit_log
-
-    _audit_log.clear()
-    yield
-    _audit_log.clear()
-
-
-@pytest.fixture(autouse=True)
-def _reset_token_log() -> Generator[None, None, None]:
-    """Clear the module-level _token_log singleton before each test."""
-    from autoskillit._token_log import _token_log
-
-    _token_log.clear()
-    yield
-    _token_log.clear()

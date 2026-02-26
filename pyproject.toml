@@ -34,6 +34,7 @@ artifacts = ["src/autoskillit/.claude-plugin/**", "src/autoskillit/.mcp.json", "
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 empty_parameter_set_mark = "fail_at_collect"
 addopts = []
 markers = [

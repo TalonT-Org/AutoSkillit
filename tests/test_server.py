@@ -13,6 +13,7 @@ import pytest
 import structlog.testing
 
 from autoskillit._audit import FailureRecord
+from autoskillit._gate import GateState
 from autoskillit.config import (
     AutomationConfig,
     ClassifyFixConfig,
@@ -158,81 +159,70 @@ class TestRunCmd:
     """T1, T2: run_cmd executes commands and returns exit code semantics."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_successful_command(self, mock_run):
-        mock_run.return_value = _make_result(0, "hello\n", "")
+    async def test_successful_command(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "hello\n", ""))
         result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))
 
         assert result["success"] is True
         assert result["exit_code"] == 0
         assert "hello" in result["stdout"]
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args
-        assert call_args[0][0] == ["bash", "-c", "echo hello"]
+        assert len(tool_ctx.runner.call_args_list) == 1
+        assert tool_ctx.runner.call_args_list[0][0] == ["bash", "-c", "echo hello"]
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_failing_command(self, mock_run):
-        mock_run.return_value = _make_result(1, "", "error")
+    async def test_failing_command(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(1, "", "error"))
         result = json.loads(await run_cmd(cmd="false", cwd="/tmp"))
 
         assert result["success"] is False
         assert result["exit_code"] == 1
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_custom_timeout(self, mock_run):
-        mock_run.return_value = _make_result(0, "", "")
+    async def test_custom_timeout(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "", ""))
         await run_cmd(cmd="sleep 1", cwd="/tmp", timeout=30)
 
-        call_kwargs = mock_run.call_args[1]
-        assert call_kwargs["timeout"] == 30.0
+        assert tool_ctx.runner.call_args_list[-1][2] == 30.0
 
 
 class TestRunSkillPluginDir:
     """T2: run_skill and run_skill_retry pass --plugin-dir to the claude command."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_passes_plugin_dir(self, mock_run):
-        """run_skill includes --plugin-dir and the package path in the command."""
-        import autoskillit
-        from autoskillit import server
-
-        mock_run.return_value = _make_result(
-            0,
-            '{"type": "result", "subtype": "success", "is_error": false,'
-            ' "result": "done", "session_id": "s1"}',
-            "",
+    async def test_run_skill_passes_plugin_dir(self, tool_ctx):
+        """run_skill includes --plugin-dir and the plugin_dir from tool_ctx in the command."""
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false,'
+                ' "result": "done", "session_id": "s1"}',
+                "",
+            )
         )
         await run_skill("/investigate some-error", "/tmp")
 
-        cmd = mock_run.call_args[0][0]
+        cmd = tool_ctx.runner.call_args_list[0][0]
         assert "--plugin-dir" in cmd
         plugin_dir_idx = cmd.index("--plugin-dir")
-        assert cmd[plugin_dir_idx + 1] == server._plugin_dir
-        assert server._plugin_dir == str(Path(autoskillit.__file__).parent)
+        assert cmd[plugin_dir_idx + 1] == tool_ctx.plugin_dir
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_retry_passes_plugin_dir(self, mock_run):
-        """run_skill_retry includes --plugin-dir and the package path in the command."""
-        import autoskillit
-        from autoskillit import server
-
-        mock_run.return_value = _make_result(
-            0,
-            '{"type": "result", "subtype": "success", "is_error": false,'
-            ' "result": "done", "session_id": "s1"}',
-            "",
+    async def test_run_skill_retry_passes_plugin_dir(self, tool_ctx):
+        """run_skill_retry includes --plugin-dir from tool_ctx in the command."""
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false,'
+                ' "result": "done", "session_id": "s1"}',
+                "",
+            )
         )
         await run_skill_retry("/investigate some-error", "/tmp")
 
-        cmd = mock_run.call_args[0][0]
+        cmd = tool_ctx.runner.call_args_list[0][0]
         assert "--plugin-dir" in cmd
         plugin_dir_idx = cmd.index("--plugin-dir")
-        assert cmd[plugin_dir_idx + 1] == server._plugin_dir
-        assert server._plugin_dir == str(Path(autoskillit.__file__).parent)
+        assert cmd[plugin_dir_idx + 1] == tool_ctx.plugin_dir
 
 
 class TestPluginMetadataExists:
@@ -273,14 +263,24 @@ class TestNoSkillsDirectoryProvider:
 
 
 class TestPluginDirConstant:
-    """T6: _plugin_dir points to the package root directory."""
+    """T6: tool_ctx.plugin_dir defaults to the package root directory."""
 
-    def test_plugin_dir_returns_package_root(self):
-        """_plugin_dir equals the autoskillit package directory."""
+    def test_plugin_dir_returns_package_root(self, tool_ctx):
+        """By default tool_ctx.plugin_dir is set to tmp_path by the fixture.
+
+        The real package dir is what the server uses at runtime (set by cli.py serve()).
+        This test verifies that the fixture wires plugin_dir through _ctx correctly.
+        """
         import autoskillit
-        from autoskillit.server import _plugin_dir
 
-        assert _plugin_dir == str(Path(autoskillit.__file__).parent)
+        # The real package dir is what the server sets at startup.
+        # We verify the attribute path works (tool_ctx.plugin_dir is accessible).
+        real_pkg_dir = str(Path(autoskillit.__file__).parent)
+        # tool_ctx uses tmp_path; set it to verify end-to-end wiring
+        tool_ctx.plugin_dir = real_pkg_dir
+        from autoskillit.server import _get_ctx
+
+        assert _get_ctx().plugin_dir == real_pkg_dir
 
 
 class TestVersionInfo:
@@ -296,8 +296,7 @@ class TestVersionInfo:
         assert info["package_version"] == __version__
         assert info["match"] is True
 
-    def test_version_info_detects_mismatch(self, tmp_path, monkeypatch):
-        from autoskillit import server
+    def test_version_info_detects_mismatch(self, tmp_path, tool_ctx):
         from autoskillit.server import _version_info
 
         plugin_dir = tmp_path / ".claude-plugin"
@@ -305,17 +304,16 @@ class TestVersionInfo:
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
+        tool_ctx.plugin_dir = str(tmp_path)
         info = _version_info()
         assert info["match"] is False
         assert info["package_version"] != info["plugin_json_version"]
         assert info["plugin_json_version"] == "0.0.0"
 
-    def test_version_info_handles_missing_plugin_json(self, tmp_path, monkeypatch):
-        from autoskillit import server
+    def test_version_info_handles_missing_plugin_json(self, tmp_path, tool_ctx):
         from autoskillit.server import _version_info
 
-        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
+        tool_ctx.plugin_dir = str(tmp_path)
         info = _version_info()
         assert info["plugin_json_version"] is None
         assert info["match"] is False
@@ -325,11 +323,9 @@ class TestClassifyFix:
     """T4, T5: classify_fix returns correct restart scope based on changed files."""
 
     @pytest.fixture(autouse=True)
-    def _set_prefixes(self, monkeypatch):
+    def _set_prefixes(self, tool_ctx):
         """Configure critical path prefixes for classify_fix tests."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(
+        tool_ctx.config = AutomationConfig(
             classify_fix=ClassifyFixConfig(
                 path_prefixes=[
                     "src/core/",
@@ -338,13 +334,11 @@ class TestClassifyFix:
                 ]
             )
         )
-        monkeypatch.setattr(server, "_config", cfg)
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_critical_files_return_full_restart(self, mock_run):
+    async def test_critical_files_return_full_restart(self, tool_ctx):
         changed = "src/core/handler.py\nlib/utils/helpers.py\n"
-        mock_run.return_value = _make_result(0, changed, "")
+        tool_ctx.runner.push(_make_result(0, changed, ""))
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
@@ -354,10 +348,9 @@ class TestClassifyFix:
         assert len(result["all_changed_files"]) == 2
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_non_critical_returns_partial_restart(self, mock_run):
+    async def test_non_critical_returns_partial_restart(self, tool_ctx):
         changed = "src/workers/runner.py\nlib/utils/helpers.py\n"
-        mock_run.return_value = _make_result(0, changed, "")
+        tool_ctx.runner.push(_make_result(0, changed, ""))
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
@@ -366,9 +359,8 @@ class TestClassifyFix:
         assert len(result["all_changed_files"]) == 2
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_git_diff_failure(self, mock_run):
-        mock_run.return_value = _make_result(128, "", "fatal: bad revision")
+    async def test_git_diff_failure(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(128, "", "fatal: bad revision"))
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
@@ -376,10 +368,9 @@ class TestClassifyFix:
         assert "git diff failed" in result["error"]
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_critical_path_in_diff_triggers_full_restart(self, mock_run):
+    async def test_critical_path_in_diff_triggers_full_restart(self, tool_ctx):
         changed = "src/api/routes.py\n"
-        mock_run.return_value = _make_result(0, changed, "")
+        tool_ctx.runner.push(_make_result(0, changed, ""))
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
@@ -390,17 +381,14 @@ class TestResetWorkspace:
     """T6, T7: reset_workspace preserves configured dirs, requires marker."""
 
     @pytest.fixture(autouse=True)
-    def _set_reset_command(self, monkeypatch):
+    def _set_reset_command(self, tool_ctx):
         """Configure reset_workspace with a command for these tests."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(
+        tool_ctx.config = AutomationConfig(
             reset_workspace=ResetWorkspaceConfig(
                 command=["make", "clean"],
                 preserve_dirs={".cache", "reports"},
             )
         )
-        monkeypatch.setattr(server, "_config", cfg)
 
     @pytest.mark.asyncio
     async def test_rejects_without_marker(self, tmp_path):
@@ -418,8 +406,7 @@ class TestResetWorkspace:
         assert "does not exist" in result["error"]
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_preserves_configured_dirs(self, mock_run, tmp_path):
+    async def test_preserves_configured_dirs(self, tool_ctx, tmp_path):
         workspace = tmp_path / "workspace"
         workspace.mkdir(parents=True)
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
@@ -432,7 +419,7 @@ class TestResetWorkspace:
         (workspace / "temp_dir").mkdir()
         (workspace / "temp_dir" / "file.txt").touch()
 
-        mock_run.return_value = _make_result(0, "", "")
+        tool_ctx.runner.push(_make_result(0, "", ""))
 
         result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
@@ -448,13 +435,12 @@ class TestResetWorkspace:
         assert not (workspace / "temp_dir").exists()
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_reset_command_failure(self, mock_run, tmp_path):
+    async def test_reset_command_failure(self, tool_ctx, tmp_path):
         workspace = tmp_path / "workspace"
         workspace.mkdir(parents=True)
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
 
-        mock_run.return_value = _make_result(1, "", "command not found")
+        tool_ctx.runner.push(_make_result(1, "", "command not found"))
 
         result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
@@ -463,17 +449,16 @@ class TestResetWorkspace:
         assert result["exit_code"] == 1
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_runs_correct_reset_command(self, mock_run, tmp_path):
+    async def test_runs_correct_reset_command(self, tool_ctx, tmp_path):
         workspace = tmp_path / "workspace"
         workspace.mkdir(parents=True)
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
 
-        mock_run.return_value = _make_result(0, "", "")
+        tool_ctx.runner.push(_make_result(0, "", ""))
 
         await reset_workspace(test_dir=str(workspace))
 
-        call_args = mock_run.call_args[0][0]
+        call_args = tool_ctx.runner.call_args_list[0][0]
         assert call_args == [
             "make",
             "clean",
@@ -525,18 +510,17 @@ class TestMergeWorktree:
     """merge_worktree enforces test gate, rebases, and merges."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_merge_worktree_blocks_on_failing_tests(self, mock_run, tmp_path):
+    async def test_merge_worktree_blocks_on_failing_tests(self, tool_ctx, tmp_path):
         """merge_worktree returns error with failed_step when test-check fails."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse --git-dir
-            (0, "impl-branch\n", ""),  # branch --show-current
-            (1, "FAIL\n= 3 failed, 97 passed =", ""),  # test-check
-        ]
+        tool_ctx.runner.push(
+            _make_result(0, "/repo/.git/worktrees/wt\n", "")
+        )  # rev-parse --git-dir
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch --show-current
+        tool_ctx.runner.push(_make_result(1, "FAIL\n= 3 failed, 97 passed =", ""))  # test-check
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
@@ -544,50 +528,46 @@ class TestMergeWorktree:
         assert "test_summary" not in result
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_merge_worktree_merges_on_green(self, mock_run, tmp_path):
+    async def test_merge_worktree_merges_on_green(self, tool_ctx, tmp_path):
         """merge_worktree performs rebase+merge when tests pass."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
-            (0, "impl-branch\n", ""),  # branch
-            (0, "PASS\n= 100 passed =", ""),  # test-check
-            (0, "", ""),  # git fetch
-            (0, "", ""),  # git rebase
-            (
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
+        tool_ctx.runner.push(
+            _make_result(
                 0,
                 "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n"
                 "worktree /wt\nHEAD def456\nbranch refs/heads/impl-branch\n\n",
                 "",
-            ),  # worktree list --porcelain
-            (0, "", ""),  # git merge
-            (0, "", ""),  # worktree remove
-            (0, "", ""),  # branch -D
-        ]
+            )
+        )  # worktree list --porcelain
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
+        tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
+        tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert result["success"] is True
         assert result["worktree_removed"] is True
         assert result["branch_deleted"] is True
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_merge_worktree_aborts_on_rebase_failure(self, mock_run, tmp_path):
+    async def test_merge_worktree_aborts_on_rebase_failure(self, tool_ctx, tmp_path):
         """merge_worktree runs rebase --abort and returns step-specific error."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
-            (0, "impl-branch\n", ""),  # branch
-            (0, "PASS\n= 100 passed =", ""),  # test-check
-            (0, "", ""),  # git fetch
-            (1, "", "CONFLICT (content): ..."),  # git rebase FAILS
-            (0, "", ""),  # git rebase --abort
-        ]
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(1, "", "CONFLICT (content): ..."))  # git rebase FAILS
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase --abort
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.REBASE
@@ -660,13 +640,14 @@ class TestKitchenStatus:
     """kitchen_status tool returns version health info (ungated)."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, monkeypatch):
-        from autoskillit import server
-
-        monkeypatch.setattr(server, "_tools_enabled", False)
+    def _close_kitchen(self, tool_ctx):
+        tool_ctx.gate = GateState(enabled=False)
 
     @pytest.mark.asyncio
-    async def test_status_returns_version_info(self):
+    async def test_status_returns_version_info(self, tool_ctx):
+        import autoskillit
+
+        tool_ctx.plugin_dir = str(Path(autoskillit.__file__).parent)
         from autoskillit import __version__
 
         result = json.loads(await kitchen_status())
@@ -676,25 +657,21 @@ class TestKitchenStatus:
         assert "warning" not in result
 
     @pytest.mark.asyncio
-    async def test_status_reports_mismatch(self, tmp_path, monkeypatch):
-        from autoskillit import server
-
+    async def test_status_reports_mismatch(self, tmp_path, tool_ctx):
         plugin_dir = tmp_path / ".claude-plugin"
         plugin_dir.mkdir()
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
+        tool_ctx.plugin_dir = str(tmp_path)
         result = json.loads(await kitchen_status())
         assert result["versions_match"] is False
         assert "warning" in result
         assert "mismatch" in result["warning"].lower()
 
     @pytest.mark.asyncio
-    async def test_status_works_without_enable(self):
-        from autoskillit import server
-
-        assert server._tools_enabled is False
+    async def test_status_works_without_enable(self, tool_ctx):
+        assert tool_ctx.gate.enabled is False
         result = json.loads(await kitchen_status())
         assert result["tools_enabled"] is False
         assert "package_version" in result
@@ -707,13 +684,11 @@ class TestKitchenStatus:
         assert result["token_usage_verbosity"] == "summary"
 
     @pytest.mark.asyncio
-    async def test_status_reflects_none_verbosity(self, monkeypatch):
+    async def test_status_reflects_none_verbosity(self, tool_ctx):
         """TU_S2: kitchen_status reflects 'none' verbosity from config."""
-        from autoskillit import server
-
         cfg = AutomationConfig()
         cfg.token_usage = TokenUsageConfig(verbosity="none")
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = cfg
         result = json.loads(await kitchen_status())
         assert result["token_usage_verbosity"] == "none"
 
@@ -722,11 +697,9 @@ class TestRecipeTools:
     """Tests for ungated list_recipes and load_recipe tools."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, monkeypatch):
+    def _close_kitchen(self, tool_ctx):
         """Verify these tools work WITHOUT tool activation."""
-        from autoskillit import server
-
-        monkeypatch.setattr(server, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
 
     # SS1
     @pytest.mark.asyncio
@@ -905,11 +878,9 @@ class TestValidateRecipe:
     """Tests for ungated validate_recipe tool."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, monkeypatch):
+    def _close_kitchen(self, tool_ctx):
         """Verify this tool works WITHOUT tool activation."""
-        from autoskillit import server
-
-        monkeypatch.setattr(server, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
 
     # VS1
     @pytest.mark.asyncio
@@ -1505,40 +1476,30 @@ class TestResetGuard:
         assert (target / ".autoskillit-workspace").is_file()
 
     @pytest.mark.asyncio
-    async def test_reset_workspace_refuses_without_marker(self, monkeypatch, tmp_path):
+    async def test_reset_workspace_refuses_without_marker(self, tool_ctx, tmp_path):
         """reset_workspace also checks for marker."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
         target = tmp_path / "workspace"
         target.mkdir()
         result = json.loads(await reset_workspace(test_dir=str(target)))
         assert "error" in result
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_reset_workspace_allows_with_marker(self, mock_run, monkeypatch, tmp_path):
+    async def test_reset_workspace_allows_with_marker(self, tool_ctx, tmp_path):
         """reset_workspace clears when marker is present."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
         target = tmp_path / "workspace"
         target.mkdir()
         (target / ".autoskillit-workspace").write_text("# autoskillit workspace\n")
         (target / "file.txt").touch()
-        mock_run.return_value = _make_result(0, "", "")
+        tool_ctx.runner.push(_make_result(0, "", ""))
         result = json.loads(await reset_workspace(test_dir=str(target)))
         assert result["success"] is True
 
     @pytest.mark.asyncio
-    async def test_custom_marker_name(self, monkeypatch, tmp_path):
+    async def test_custom_marker_name(self, tool_ctx, tmp_path):
         """Config can override marker file name."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(safety=SafetyConfig(reset_guard_marker=".my-workspace"))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(safety=SafetyConfig(reset_guard_marker=".my-workspace"))
         target = tmp_path / "workspace"
         target.mkdir()
         (target / ".my-workspace").touch()
@@ -1584,21 +1545,19 @@ class TestConfigDefaults:
 
 
 class TestRunSubprocessDelegatesToManaged:
-    """Verify _run_subprocess delegates to run_managed_async correctly."""
+    """Verify _run_subprocess delegates to the runner (ToolContext.runner) correctly."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_normal_completion(self, mock_run):
-        mock_run.return_value = _make_result(0, "output", "")
+    async def test_normal_completion(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "output", ""))
         rc, stdout, stderr = await _run_subprocess(["echo", "hi"], cwd="/tmp", timeout=10)
         assert rc == 0
         assert stdout == "output"
         assert stderr == ""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_timeout_returns_minus_one(self, mock_run):
-        mock_run.return_value = _make_timeout_result()
+    async def test_timeout_returns_minus_one(self, tool_ctx):
+        tool_ctx.runner.push(_make_timeout_result())
         rc, stdout, stderr = await _run_subprocess(["sleep", "999"], cwd="/tmp", timeout=1)
         assert rc == -1
         assert "timed out" in stderr
@@ -1608,37 +1567,33 @@ class TestTestCheck:
     """test_check returns unambiguous PASS/FAIL with cross-validation."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_passes_on_clean_run(self, mock_run):
+    async def test_passes_on_clean_run(self, tool_ctx):
         """returncode=0 with passing summary -> passed=True."""
-        mock_run.return_value = _make_result(0, "= 100 passed =\n", "")
+        tool_ctx.runner.push(_make_result(0, "= 100 passed =\n", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is True
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_fails_on_nonzero_exit(self, mock_run):
+    async def test_fails_on_nonzero_exit(self, tool_ctx):
         """returncode=1 -> passed=False regardless of output."""
-        mock_run.return_value = _make_result(1, "= 3 failed, 97 passed =\n", "")
+        tool_ctx.runner.push(_make_result(1, "= 3 failed, 97 passed =\n", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is False
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_cross_validates_exit_code_against_output(self, mock_run):
+    async def test_cross_validates_exit_code_against_output(self, tool_ctx):
         """returncode=0 but output contains 'failed' -> passed=False.
         This is THE bug: Taskfile PIPESTATUS fails silently, exit code is 0,
         but output clearly shows test failures."""
-        mock_run.return_value = _make_result(0, "= 3 failed, 8538 passed =\n", "")
+        tool_ctx.runner.push(_make_result(0, "= 3 failed, 8538 passed =\n", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is False
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_does_not_expose_summary(self, mock_run):
+    async def test_does_not_expose_summary(self, tool_ctx):
         """test_check returns ONLY passed boolean — no summary, no output_file."""
-        mock_run.return_value = _make_result(
-            0, "= 100 passed =\nTest output saved to: /tmp/out.txt\n", ""
+        tool_ctx.runner.push(
+            _make_result(0, "= 100 passed =\nTest output saved to: /tmp/out.txt\n", "")
         )
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert "summary" not in result
@@ -1646,50 +1601,44 @@ class TestTestCheck:
         assert list(result.keys()) == ["passed"]
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_cross_validates_error_in_output(self, mock_run):
+    async def test_cross_validates_error_in_output(self, tool_ctx):
         """returncode=0 but output contains 'error' -> passed=False."""
-        mock_run.return_value = _make_result(0, "= 1 error, 99 passed =\n", "")
+        tool_ctx.runner.push(_make_result(0, "= 1 error, 99 passed =\n", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is False
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_xfailed_not_treated_as_failure(self, mock_run):
+    async def test_xfailed_not_treated_as_failure(self, tool_ctx):
         """xfailed tests are expected failures — exit code 0, should pass."""
-        mock_run.return_value = _make_result(0, "= 8552 passed, 3 xfailed =\n", "")
+        tool_ctx.runner.push(_make_result(0, "= 8552 passed, 3 xfailed =\n", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is True
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_xpassed_not_treated_as_failure(self, mock_run):
+    async def test_xpassed_not_treated_as_failure(self, tool_ctx):
         """xpassed tests are unexpected passes — exit code 0, should pass."""
-        mock_run.return_value = _make_result(0, "= 99 passed, 1 xpassed =\n", "")
+        tool_ctx.runner.push(_make_result(0, "= 99 passed, 1 xpassed =\n", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is True
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_mixed_xfail_with_real_failure(self, mock_run):
+    async def test_mixed_xfail_with_real_failure(self, tool_ctx):
         """Real failure + xfailed — should still fail on the real failure."""
-        mock_run.return_value = _make_result(0, "= 1 failed, 2 xfailed, 97 passed =\n", "")
+        tool_ctx.runner.push(_make_result(0, "= 1 failed, 2 xfailed, 97 passed =\n", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is False
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_skipped_with_exit_zero_passes(self, mock_run):
+    async def test_skipped_with_exit_zero_passes(self, tool_ctx):
         """Skipped tests with exit 0 — parser trusts exit code."""
-        mock_run.return_value = _make_result(0, "= 97 passed, 3 skipped =\n", "")
+        tool_ctx.runner.push(_make_result(0, "= 97 passed, 3 skipped =\n", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is True
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_warnings_not_treated_as_failure(self, mock_run):
+    async def test_warnings_not_treated_as_failure(self, tool_ctx):
         """Warnings with exit 0 — should pass."""
-        mock_run.return_value = _make_result(0, "= 100 passed, 5 warnings =\n", "")
+        tool_ctx.runner.push(_make_result(0, "= 100 passed, 5 warnings =\n", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is True
 
@@ -1920,8 +1869,7 @@ class TestResponseFieldsAreTypeSafe:
     """Every discriminator field in MCP tool responses uses enum values."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_retry_reason_is_enum_value(self, mock_run):
+    async def test_retry_reason_is_enum_value(self, tool_ctx):
         stdout = json.dumps(
             {
                 "type": "result",
@@ -1932,13 +1880,12 @@ class TestResponseFieldsAreTypeSafe:
                 "errors": [],
             }
         )
-        mock_run.return_value = _make_result(1, stdout, "")
+        tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_retry_reason_none_is_enum_value(self, mock_run):
+    async def test_retry_reason_none_is_enum_value(self, tool_ctx):
         stdout = json.dumps(
             {
                 "type": "result",
@@ -1949,7 +1896,7 @@ class TestResponseFieldsAreTypeSafe:
                 "num_turns": 50,
             }
         )
-        mock_run.return_value = _make_result(0, stdout, "")
+        tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
 
@@ -1958,8 +1905,7 @@ class TestRunSkillRetrySessionOutcome:
     """run_skill_retry correctly classifies all Claude Code session outcomes."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_detects_max_turns_via_subtype(self, mock_run):
+    async def test_detects_max_turns_via_subtype(self, tool_ctx):
         """error_max_turns in JSON output -> needs_retry=True, retry_reason=RESUME."""
         stdout = json.dumps(
             {
@@ -1970,14 +1916,13 @@ class TestRunSkillRetrySessionOutcome:
                 "errors": ["Max turns reached"],
             }
         )
-        mock_run.return_value = _make_result(1, stdout, "")
+        tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is True
         assert result["retry_reason"] == RetryReason.RESUME
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_detects_context_limit(self, mock_run):
+    async def test_detects_context_limit(self, tool_ctx):
         """'Prompt is too long' -> needs_retry=True, retry_reason='retry'."""
         stdout = json.dumps(
             {
@@ -1988,14 +1933,13 @@ class TestRunSkillRetrySessionOutcome:
                 "session_id": "s1",
             }
         )
-        mock_run.return_value = _make_result(1, stdout, "")
+        tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is True
         assert result["retry_reason"] == RetryReason.RESUME
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_success_not_retriable(self, mock_run):
+    async def test_success_not_retriable(self, tool_ctx):
         """Normal success -> needs_retry=False."""
         stdout = json.dumps(
             {
@@ -2006,14 +1950,13 @@ class TestRunSkillRetrySessionOutcome:
                 "session_id": "s1",
             }
         )
-        mock_run.return_value = _make_result(0, stdout, "")
+        tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is False
         assert result["retry_reason"] == RetryReason.NONE
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_execution_error_not_retriable(self, mock_run):
+    async def test_execution_error_not_retriable(self, tool_ctx):
         """error_during_execution -> needs_retry=False."""
         stdout = json.dumps(
             {
@@ -2024,15 +1967,14 @@ class TestRunSkillRetrySessionOutcome:
                 "errors": ["crashed"],
             }
         )
-        mock_run.return_value = _make_result(1, stdout, "")
+        tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is False
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_unparseable_stdout_not_retriable(self, mock_run):
+    async def test_unparseable_stdout_not_retriable(self, tool_ctx):
         """Non-JSON stdout -> needs_retry=False."""
-        mock_run.return_value = _make_result(1, "crash dump", "segfault")
+        tool_ctx.runner.push(_make_result(1, "crash dump", "segfault"))
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is False
 
@@ -2041,8 +1983,7 @@ class TestRunSkillRetryAgentResult:
     """run_skill_retry result field contains actionable text."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_context_limit_result_is_actionable(self, mock_run):
+    async def test_context_limit_result_is_actionable(self, tool_ctx):
         """When context is exhausted, result text must NOT say 'Prompt is too long'."""
         stdout = json.dumps(
             {
@@ -2053,14 +1994,13 @@ class TestRunSkillRetryAgentResult:
                 "session_id": "s1",
             }
         )
-        mock_run.return_value = _make_result(1, stdout, "")
+        tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert "prompt is too long" not in result["result"].lower()
         assert result["needs_retry"] is True
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_normal_success_result_passes_through(self, mock_run):
+    async def test_normal_success_result_passes_through(self, tool_ctx):
         """Normal success result text is preserved."""
         stdout = json.dumps(
             {
@@ -2071,7 +2011,7 @@ class TestRunSkillRetryAgentResult:
                 "session_id": "s1",
             }
         )
-        mock_run.return_value = _make_result(0, stdout, "")
+        tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["result"] == "Done."
 
@@ -2080,8 +2020,7 @@ class TestRunSkillRetryFields:
     """run_skill includes needs_retry and retry_reason for parity."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_includes_needs_retry_false(self, mock_run):
+    async def test_includes_needs_retry_false(self, tool_ctx):
         """run_skill response includes needs_retry=False on normal success."""
         stdout = json.dumps(
             {
@@ -2092,14 +2031,13 @@ class TestRunSkillRetryFields:
                 "session_id": "s1",
             }
         )
-        mock_run.return_value = _make_result(0, stdout, "")
+        tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["needs_retry"] is False
         assert result["retry_reason"] == RetryReason.NONE
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_includes_needs_retry_true_on_context_limit(self, mock_run):
+    async def test_includes_needs_retry_true_on_context_limit(self, tool_ctx):
         """run_skill response includes needs_retry=True when context is exhausted."""
         stdout = json.dumps(
             {
@@ -2110,7 +2048,7 @@ class TestRunSkillRetryFields:
                 "session_id": "s1",
             }
         )
-        mock_run.return_value = _make_result(1, stdout, "")
+        tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["needs_retry"] is True
         assert result["retry_reason"] == RetryReason.RESUME
@@ -2121,8 +2059,7 @@ class TestRunSkillFailurePaths:
     """run_skill surfaces session outcome on failure."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_returns_subtype_on_incomplete_session(self, mock_run):
+    async def test_returns_subtype_on_incomplete_session(self, tool_ctx):
         """run_skill includes subtype when session didn't finish."""
         stdout = json.dumps(
             {
@@ -2132,14 +2069,13 @@ class TestRunSkillFailurePaths:
                 "session_id": "s1",
             }
         )
-        mock_run.return_value = _make_result(1, stdout, "")
+        tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["session_id"] == "s1"
         assert result["subtype"] == "error_max_turns"
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_returns_is_error_on_context_limit(self, mock_run):
+    async def test_returns_is_error_on_context_limit(self, tool_ctx):
         """run_skill includes is_error when context limit is hit."""
         stdout = json.dumps(
             {
@@ -2150,16 +2086,15 @@ class TestRunSkillFailurePaths:
                 "session_id": "s1",
             }
         )
-        mock_run.return_value = _make_result(1, stdout, "")
+        tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["is_error"] is True
         assert result["subtype"] == "success"
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_handles_empty_stdout(self, mock_run):
+    async def test_handles_empty_stdout(self, tool_ctx):
         """run_skill returns error result when stdout is empty."""
-        mock_run.return_value = _make_result(1, "", "segfault")
+        tool_ctx.runner.push(_make_result(1, "", "segfault"))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["exit_code"] == 1
         assert result["is_error"] is True
@@ -2167,10 +2102,9 @@ class TestRunSkillFailurePaths:
         assert result["success"] is False
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_empty_stdout_exit_zero_is_retriable(self, mock_run):
+    async def test_empty_stdout_exit_zero_is_retriable(self, tool_ctx):
         """Infrastructure failure (empty stdout, exit 0) is retriable with stderr."""
-        mock_run.return_value = _make_result(0, "", "session dropped")
+        tool_ctx.runner.push(_make_result(0, "", "session dropped"))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["subtype"] == "empty_output"
         assert result["success"] is False
@@ -2234,35 +2168,31 @@ class TestMergeWorktreeNoBypass:
             await merge_worktree("/tmp/wt", "main", skip_test_gate=True)
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_internal_gate_cross_validates_output(self, mock_run, tmp_path):
+    async def test_internal_gate_cross_validates_output(self, tool_ctx, tmp_path):
         """merge_worktree's internal gate catches rc=0 with failure text."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
-            (0, "impl-branch\n", ""),  # branch
-            (0, "= 3 failed, 97 passed =", ""),  # test-check: rc=0 but failed text
-        ]
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(
+            _make_result(0, "= 3 failed, 97 passed =", "")
+        )  # test-check: rc=0 but failed text
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_gate_failure_does_not_expose_summary(self, mock_run, tmp_path):
+    async def test_gate_failure_does_not_expose_summary(self, tool_ctx, tmp_path):
         """When gate blocks, response contains no test output details."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
-            (0, "impl-branch\n", ""),  # branch
-            (1, "= 3 failed, 97 passed =", ""),  # test-check
-        ]
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(1, "= 3 failed, 97 passed =", ""))  # test-check
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
         assert "test_summary" not in result
@@ -2272,31 +2202,28 @@ class TestGatedToolAccess:
     """Prompt-gated tool access: tools disabled by default, user-only activation."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, monkeypatch):
+    def _close_kitchen(self, tool_ctx):
         """Override the global autouse fixture — start disabled for gate tests."""
-        from autoskillit import server
-
-        monkeypatch.setattr(server, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
 
     @pytest.mark.asyncio
-    async def test_tools_return_error_when_disabled(self):
-        """All tools return standard gate error when _tools_enabled is False."""
+    async def test_tools_return_error_when_disabled(self, tool_ctx):
+        """All tools return standard gate error when gate is disabled."""
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
         assert result["success"] is False
         assert result["is_error"] is True
         assert "not enabled" in result["result"].lower()
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_tools_work_after_enable(self, mock_run):
+    async def test_tools_work_after_enable(self, tool_ctx):
         """After open_kitchen prompt handler sets the flag, tools execute normally."""
         _open_kitchen_handler()
-        mock_run.return_value = _make_result(0, "hello\n", "")
+        tool_ctx.runner.push(_make_result(0, "hello\n", ""))
         result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))
         assert result["success"] is True
 
     @pytest.mark.asyncio
-    async def test_disable_reverses_enable(self):
+    async def test_disable_reverses_enable(self, tool_ctx):
         """After close_kitchen prompt handler, tools return error again."""
         _open_kitchen_handler()
         _close_kitchen_handler()
@@ -2304,11 +2231,9 @@ class TestGatedToolAccess:
         assert result["success"] is False
         assert result["is_error"] is True
 
-    def test_tools_disabled_by_default(self):
-        """_tools_enabled defaults to False at module load."""
-        from autoskillit import server
-
-        assert server._tools_enabled is False
+    def test_tools_disabled_by_default(self, tool_ctx):
+        """Gate defaults to disabled (closed kitchen) per this test class's fixture."""
+        assert tool_ctx.gate.enabled is False
 
     def test_prompts_registered(self):
         """open_kitchen and close_kitchen prompts are registered on the server."""
@@ -2474,10 +2399,10 @@ class TestOpenKitchenVersionReporting:
     """open_kitchen returns version info and warns on mismatch."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, monkeypatch):
-        from autoskillit import server
+    def _close_kitchen(self, tool_ctx):
+        from autoskillit._gate import GateState
 
-        monkeypatch.setattr(server, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
 
     @staticmethod
     def _prompt_text(result) -> str:
@@ -2516,8 +2441,7 @@ class TestOpenKitchenVersionReporting:
             "phrasing — the restriction should be unconditional"
         )
 
-    def test_open_kitchen_still_enables_on_mismatch(self, tmp_path, monkeypatch):
-        from autoskillit import server
+    def test_open_kitchen_still_enables_on_mismatch(self, tmp_path, tool_ctx):
         from autoskillit.server import open_kitchen
 
         plugin_dir = tmp_path / ".claude-plugin"
@@ -2525,86 +2449,73 @@ class TestOpenKitchenVersionReporting:
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
+        tool_ctx.plugin_dir = str(tmp_path)
         open_kitchen()
-        assert server._tools_enabled is True
+        assert tool_ctx.gate.enabled is True
 
 
 class TestConfigDrivenBehavior:
     """S1-S10: Verify tools use config instead of hardcoded values."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_test_check_uses_config_command(self, mock_run, monkeypatch):
-        """S1: test_check runs _config.test_check.command."""
-        from autoskillit import server
+    async def test_test_check_uses_config_command(self, tool_ctx):
+        """S1: test_check runs config.test_check.command."""
         from autoskillit.config import TestCheckConfig
 
-        cfg = AutomationConfig(test_check=TestCheckConfig(command=["pytest", "-x"], timeout=300))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(
+            test_check=TestCheckConfig(command=["pytest", "-x"], timeout=300)
+        )
 
-        mock_run.return_value = _make_result(0, "= 100 passed =\n", "")
+        tool_ctx.runner.push(_make_result(0, "= 100 passed =\n", ""))
         await test_check(worktree_path="/tmp/wt")
 
-        call_args = mock_run.call_args
-        assert call_args[0][0] == ["pytest", "-x"]
-        assert call_args[1]["timeout"] == 300
+        assert tool_ctx.runner.call_args_list[0][0] == ["pytest", "-x"]
+        assert tool_ctx.runner.call_args_list[0][2] == 300.0
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_classify_fix_uses_config_prefixes(self, mock_run, monkeypatch):
-        """S2: classify_fix uses _config.classify_fix.path_prefixes."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(classify_fix=ClassifyFixConfig(path_prefixes=["src/custom/"]))
-        monkeypatch.setattr(server, "_config", cfg)
+    async def test_classify_fix_uses_config_prefixes(self, tool_ctx):
+        """S2: classify_fix uses config.classify_fix.path_prefixes."""
+        tool_ctx.config = AutomationConfig(
+            classify_fix=ClassifyFixConfig(path_prefixes=["src/custom/"])
+        )
 
         changed = "src/custom/handler.py\nsrc/other/util.py\n"
-        mock_run.return_value = _make_result(0, changed, "")
+        tool_ctx.runner.push(_make_result(0, changed, ""))
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
         assert result["restart_scope"] == RestartScope.FULL_RESTART
         assert "src/custom/handler.py" in result["critical_files"]
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_classify_fix_empty_prefixes_always_partial(self, mock_run, monkeypatch):
+    async def test_classify_fix_empty_prefixes_always_partial(self, tool_ctx):
         """S3: Empty prefix list -> always returns partial_restart."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(classify_fix=ClassifyFixConfig(path_prefixes=[]))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(classify_fix=ClassifyFixConfig(path_prefixes=[]))
 
         changed = "src/core/handler.py\n"
-        mock_run.return_value = _make_result(0, changed, "")
+        tool_ctx.runner.push(_make_result(0, changed, ""))
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
         assert result["restart_scope"] == RestartScope.PARTIAL_RESTART
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_reset_workspace_uses_config_command(self, mock_run, monkeypatch, tmp_path):
-        """S4: reset_workspace runs _config.reset_workspace.command."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["make", "reset"]))
-        monkeypatch.setattr(server, "_config", cfg)
+    async def test_reset_workspace_uses_config_command(self, tool_ctx, tmp_path):
+        """S4: reset_workspace runs config.reset_workspace.command."""
+        tool_ctx.config = AutomationConfig(
+            reset_workspace=ResetWorkspaceConfig(command=["make", "reset"])
+        )
 
         workspace = tmp_path / "workspace"
         workspace.mkdir(parents=True)
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
-        mock_run.return_value = _make_result(0, "", "")
+        tool_ctx.runner.push(_make_result(0, "", ""))
 
         await reset_workspace(test_dir=str(workspace))
-        assert mock_run.call_args[0][0] == ["make", "reset"]
+        assert tool_ctx.runner.call_args_list[0][0] == ["make", "reset"]
 
     @pytest.mark.asyncio
-    async def test_reset_workspace_not_configured_returns_error(self, monkeypatch, tmp_path):
+    async def test_reset_workspace_not_configured_returns_error(self, tool_ctx, tmp_path):
         """S5: command=None -> returns not-configured error."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
 
         workspace = tmp_path / "workspace"
         workspace.mkdir(parents=True)
@@ -2614,27 +2525,21 @@ class TestConfigDrivenBehavior:
         assert result["error"] == "reset_workspace not configured for this project"
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_reset_workspace_uses_config_preserve_dirs(
-        self, mock_run, monkeypatch, tmp_path
-    ):
-        """S6: Preserves _config.reset_workspace.preserve_dirs."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(
+    async def test_reset_workspace_uses_config_preserve_dirs(self, tool_ctx, tmp_path):
+        """S6: Preserves config.reset_workspace.preserve_dirs."""
+        tool_ctx.config = AutomationConfig(
             reset_workspace=ResetWorkspaceConfig(
                 command=["true"],
                 preserve_dirs={"keep_me"},
             )
         )
-        monkeypatch.setattr(server, "_config", cfg)
 
         workspace = tmp_path / "workspace"
         workspace.mkdir(parents=True)
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
         (workspace / "keep_me").mkdir()
         (workspace / "delete_me").touch()
-        mock_run.return_value = _make_result(0, "", "")
+        tool_ctx.runner.push(_make_result(0, "", ""))
 
         result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
@@ -2643,13 +2548,13 @@ class TestConfigDrivenBehavior:
         assert (workspace / "keep_me").exists()
         assert not (workspace / "delete_me").exists()
 
-    def test_dry_walkthrough_uses_config_marker(self, monkeypatch, tmp_path):
-        """S7: Gate checks _config.implement_gate.marker."""
-        from autoskillit import server
+    def test_dry_walkthrough_uses_config_marker(self, tool_ctx, tmp_path):
+        """S7: Gate checks config.implement_gate.marker."""
         from autoskillit.config import ImplementGateConfig
 
-        cfg = AutomationConfig(implement_gate=ImplementGateConfig(marker="CUSTOM MARKER"))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(
+            implement_gate=ImplementGateConfig(marker="CUSTOM MARKER")
+        )
 
         plan = tmp_path / "plan.md"
         plan.write_text("CUSTOM MARKER\n# Plan content")
@@ -2660,13 +2565,13 @@ class TestConfigDrivenBehavior:
         result = _check_dry_walkthrough(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         assert result is not None  # fails — marker doesn't match
 
-    def test_dry_walkthrough_uses_config_skill_names(self, monkeypatch, tmp_path):
-        """S8: Gate checks _config.implement_gate.skill_names."""
-        from autoskillit import server
+    def test_dry_walkthrough_uses_config_skill_names(self, tool_ctx, tmp_path):
+        """S8: Gate checks config.implement_gate.skill_names."""
         from autoskillit.config import ImplementGateConfig
 
-        cfg = AutomationConfig(implement_gate=ImplementGateConfig(skill_names={"/custom-impl"}))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(
+            implement_gate=ImplementGateConfig(skill_names={"/custom-impl"})
+        )
 
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker")
@@ -2678,37 +2583,32 @@ class TestConfigDrivenBehavior:
         assert result is None  # /autoskillit:implement-worktree is NOT gated (not in skill_names)
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_merge_worktree_uses_config_test_command(self, mock_run, monkeypatch, tmp_path):
-        """S9: Merge's test gate runs _config.test_check.command."""
-        from autoskillit import server
+    async def test_merge_worktree_uses_config_test_command(self, tool_ctx, tmp_path):
+        """S9: Merge's test gate runs config.test_check.command."""
         from autoskillit.config import TestCheckConfig
 
-        cfg = AutomationConfig(test_check=TestCheckConfig(command=["make", "test"], timeout=120))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(
+            test_check=TestCheckConfig(command=["make", "test"], timeout=120)
+        )
 
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
-            (0, "impl-branch\n", ""),  # branch
-            (1, "FAIL", ""),  # test gate fails
-        ]
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(1, "FAIL", ""))  # test gate fails
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
 
         # Verify the test command was ["make", "test"]
-        test_call = mock_run.call_args_list[2]
-        assert test_call[0][0] == ["make", "test"]
+        test_call = tool_ctx.runner.call_args_list[2]
+        assert test_call[0] == ["make", "test"]
 
     @pytest.mark.asyncio
-    async def test_require_enabled_still_gates_execution(self, monkeypatch):
+    async def test_require_enabled_still_gates_execution(self, tool_ctx):
         """S10: _require_enabled() defense-in-depth still works with config."""
-        from autoskillit import server
-
-        monkeypatch.setattr(server, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
         assert result["success"] is False
         assert result["is_error"] is True
@@ -2846,21 +2746,17 @@ class TestDeleteDirectoryContents:
         assert "ok_file" in result["deleted"]
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_reset_workspace_returns_partial_failure_json(
-        self, mock_run, monkeypatch, tmp_path
-    ):
+    async def test_reset_workspace_returns_partial_failure_json(self, tool_ctx, tmp_path):
         """1f: reset_workspace returns structured JSON on partial failure."""
-        from autoskillit import server
+        import autoskillit.server as server
 
-        cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
 
         workspace = tmp_path / "workspace"
         workspace.mkdir(parents=True)
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
 
-        mock_run.return_value = _make_result(0, "", "")
+        tool_ctx.runner.push(_make_result(0, "", ""))
 
         mock_result = CleanupResult(
             deleted=["ok_file"],
@@ -2903,12 +2799,9 @@ class TestSafetyConfigWiring:
         assert "marker" in result["error"].lower()
 
     @pytest.mark.asyncio
-    async def test_reset_workspace_enforces_marker(self, monkeypatch, tmp_path):
+    async def test_reset_workspace_enforces_marker(self, tool_ctx, tmp_path):
         """2c: reset_workspace requires marker, then checks command config."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
 
         target = tmp_path / "my_project"
         target.mkdir()
@@ -2919,57 +2812,45 @@ class TestSafetyConfigWiring:
         assert result["error"] == "reset_workspace not configured for this project"
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_merge_worktree_skips_test_gate_when_disabled(
-        self, mock_run, monkeypatch, tmp_path
-    ):
+    async def test_merge_worktree_skips_test_gate_when_disabled(self, tool_ctx, tmp_path):
         """2d: test_gate_on_merge=False skips test execution."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(safety=SafetyConfig(test_gate_on_merge=False))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(safety=SafetyConfig(test_gate_on_merge=False))
 
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
-            (0, "impl-branch\n", ""),  # branch
-            # NO test-check call — skipped
-            (0, "", ""),  # git fetch
-            (0, "", ""),  # git rebase
-            (
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        # NO test-check call — skipped
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
+        tool_ctx.runner.push(
+            _make_result(
                 0,
                 "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n",
                 "",
-            ),  # worktree list
-            (0, "", ""),  # git merge
-            (0, "", ""),  # worktree remove
-            (0, "", ""),  # branch -D
-        ]
+            )
+        )  # worktree list
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
+        tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
+        tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert result["success"] is True
 
         # Verify no test command was called — the 3rd call should be git fetch, not test
-        third_call_cmd = mock_run.call_args_list[2][0][0]
+        third_call_cmd = tool_ctx.runner.call_args_list[2][0]
         assert third_call_cmd == ["git", "fetch", "origin"]
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_retry_skips_dry_walkthrough_when_disabled(
-        self, mock_run, monkeypatch, tmp_path
-    ):
+    async def test_run_skill_retry_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
         """2e: require_dry_walkthrough=False bypasses dry-walkthrough gate."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(safety=SafetyConfig(require_dry_walkthrough=False))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(safety=SafetyConfig(require_dry_walkthrough=False))
 
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
 
-        mock_run.return_value = _make_result(0, '{"result": "done"}', "")
+        tool_ctx.runner.push(_make_result(0, '{"result": "done"}', ""))
         result = json.loads(
             await run_skill_retry(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         )
@@ -2977,7 +2858,7 @@ class TestSafetyConfigWiring:
         assert result["exit_code"] == 0
 
     @pytest.mark.asyncio
-    async def test_run_skill_enforces_dry_walkthrough_when_enabled(self, tmp_path):
+    async def test_run_skill_enforces_dry_walkthrough_when_enabled(self, tool_ctx, tmp_path):
         """2f: run_skill enforces dry-walkthrough gate when enabled (default)."""
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
@@ -2990,20 +2871,14 @@ class TestSafetyConfigWiring:
         assert "dry-walked" in result["result"].lower()
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_skips_dry_walkthrough_when_disabled(
-        self, mock_run, monkeypatch, tmp_path
-    ):
+    async def test_run_skill_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
         """2g: run_skill skips dry-walkthrough gate when disabled."""
-        from autoskillit import server
-
-        cfg = AutomationConfig(safety=SafetyConfig(require_dry_walkthrough=False))
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = AutomationConfig(safety=SafetyConfig(require_dry_walkthrough=False))
 
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
 
-        mock_run.return_value = _make_result(0, '{"result": "done"}', "")
+        tool_ctx.runner.push(_make_result(0, '{"result": "done"}', ""))
         result = json.loads(
             await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         )
@@ -3019,74 +2894,73 @@ class TestMergeWorktreeCleanupReporting:
     """merge_worktree reports accurate cleanup results."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_reports_worktree_remove_failure(self, mock_run, tmp_path):
+    async def test_reports_worktree_remove_failure(self, tool_ctx, tmp_path):
         """3a: worktree_removed reflects actual git worktree remove result."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
-            (0, "impl-branch\n", ""),  # branch
-            (0, "PASS\n= 100 passed =", ""),  # test-check
-            (0, "", ""),  # git fetch
-            (0, "", ""),  # git rebase
-            (
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
+        tool_ctx.runner.push(
+            _make_result(
                 0,
                 "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n",
                 "",
-            ),  # worktree list
-            (0, "", ""),  # git merge
-            (1, "", "error: untracked files"),  # worktree remove FAILS
-            (0, "", ""),  # branch -D
-        ]
+            )
+        )  # worktree list
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
+        tool_ctx.runner.push(
+            _make_result(1, "", "error: untracked files")
+        )  # worktree remove FAILS
+        tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert result["success"] is True
         assert result["worktree_removed"] is False
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_reports_branch_delete_failure(self, mock_run, tmp_path):
+    async def test_reports_branch_delete_failure(self, tool_ctx, tmp_path):
         """3b: branch_deleted reflects actual git branch -D result."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
-            (0, "impl-branch\n", ""),  # branch
-            (0, "PASS\n= 100 passed =", ""),  # test-check
-            (0, "", ""),  # git fetch
-            (0, "", ""),  # git rebase
-            (
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
+        tool_ctx.runner.push(
+            _make_result(
                 0,
                 "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n",
                 "",
-            ),  # worktree list
-            (0, "", ""),  # git merge
-            (0, "", ""),  # worktree remove
-            (1, "", "error: branch not found"),  # branch -D FAILS
-        ]
+            )
+        )  # worktree list
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
+        tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
+        tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert result["success"] is True
         assert result["worktree_removed"] is True
         assert result["branch_deleted"] is False
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_checks_fetch_result(self, mock_run, tmp_path):
+    async def test_checks_fetch_result(self, tool_ctx, tmp_path):
         """3c: git fetch failure returns error before rebase attempt."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),  # rev-parse
-            (0, "impl-branch\n", ""),  # branch
-            (0, "PASS\n= 100 passed =", ""),  # test-check
-            (1, "", "fatal: could not connect to remote"),  # git fetch FAILS
-        ]
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
+        tool_ctx.runner.push(
+            _make_result(1, "", "fatal: could not connect to remote")
+        )  # git fetch FAILS
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.FETCH
@@ -3096,23 +2970,24 @@ class TestMergeWorktreeCleanupWarnings:
     """merge_worktree emits logger.warning when cleanup steps fail post-merge."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_warns_on_worktree_remove_failure(self, mock_run, tmp_path):
+    async def test_warns_on_worktree_remove_failure(self, tool_ctx, tmp_path):
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),
-            (0, "impl-branch\n", ""),
-            (0, "PASS\n= 100 passed =", ""),
-            (0, "", ""),  # fetch
-            (0, "", ""),  # rebase
-            (0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", ""),
-            (0, "", ""),  # merge
-            (1, "", "error: untracked files"),  # worktree remove FAILS
-            (0, "", ""),  # branch -D
-        ]
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
+        tool_ctx.runner.push(
+            _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
+        )
+        tool_ctx.runner.push(_make_result(0, "", ""))  # merge
+        tool_ctx.runner.push(
+            _make_result(1, "", "error: untracked files")
+        )  # worktree remove FAILS
+        tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
 
         with structlog.testing.capture_logs() as logs:
             result = json.loads(await merge_worktree(str(wt), "main"))
@@ -3123,23 +2998,22 @@ class TestMergeWorktreeCleanupWarnings:
         assert any(entry.get("operation") == "worktree_remove" for entry in warning_entries)
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_warns_on_branch_delete_failure(self, mock_run, tmp_path):
+    async def test_warns_on_branch_delete_failure(self, tool_ctx, tmp_path):
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),
-            (0, "impl-branch\n", ""),
-            (0, "PASS\n= 100 passed =", ""),
-            (0, "", ""),  # fetch
-            (0, "", ""),  # rebase
-            (0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", ""),
-            (0, "", ""),  # merge
-            (0, "", ""),  # worktree remove
-            (1, "", "error: branch not found"),  # branch -D FAILS
-        ]
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
+        tool_ctx.runner.push(
+            _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
+        )
+        tool_ctx.runner.push(_make_result(0, "", ""))  # merge
+        tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
+        tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS
 
         with structlog.testing.capture_logs() as logs:
             result = json.loads(await merge_worktree(str(wt), "main"))
@@ -3150,23 +3024,22 @@ class TestMergeWorktreeCleanupWarnings:
         assert any(entry.get("operation") == "branch_delete" for entry in warning_entries)
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server._run_subprocess")
-    async def test_no_warning_on_clean_cleanup(self, mock_run, tmp_path):
+    async def test_no_warning_on_clean_cleanup(self, tool_ctx, tmp_path):
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
-        mock_run.side_effect = [
-            (0, "/repo/.git/worktrees/wt\n", ""),
-            (0, "impl-branch\n", ""),
-            (0, "PASS\n= 100 passed =", ""),
-            (0, "", ""),  # fetch
-            (0, "", ""),  # rebase
-            (0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", ""),
-            (0, "", ""),  # merge
-            (0, "", ""),  # worktree remove — success
-            (0, "", ""),  # branch -D — success
-        ]
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
+        tool_ctx.runner.push(
+            _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
+        )
+        tool_ctx.runner.push(_make_result(0, "", ""))  # merge
+        tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove — success
+        tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D — success
 
         with structlog.testing.capture_logs() as logs:
             result = json.loads(await merge_worktree(str(wt), "main"))
@@ -3540,10 +3413,10 @@ class TestReadDb:
         assert "params" in result["error"].lower()
 
     @pytest.mark.asyncio
-    async def test_gated_when_disabled(self, sample_db, monkeypatch):
-        from autoskillit import server
+    async def test_gated_when_disabled(self, sample_db, tool_ctx):
+        from autoskillit._gate import GateState
 
-        monkeypatch.setattr(server, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
         result = json.loads(
             await read_db(
                 db_path=str(sample_db),
@@ -3555,12 +3428,8 @@ class TestReadDb:
         assert "not enabled" in result["result"].lower()
 
     @pytest.mark.asyncio
-    async def test_max_rows_truncation(self, sample_db, monkeypatch):
-        from autoskillit import server
-        from autoskillit.config import AutomationConfig
-
-        cfg = AutomationConfig(read_db=ReadDbConfig(max_rows=2))
-        monkeypatch.setattr(server, "_config", cfg)
+    async def test_max_rows_truncation(self, sample_db, tool_ctx):
+        tool_ctx.config = AutomationConfig(read_db=ReadDbConfig(max_rows=2))
         result = json.loads(
             await read_db(
                 db_path=str(sample_db),
@@ -3589,12 +3458,8 @@ class TestReadDb:
         assert base64.b64decode(result["rows"][0]["content"]) == b"\x00\x01\x02\xff"
 
     @pytest.mark.asyncio
-    async def test_query_timeout(self, sample_db, monkeypatch):
-        from autoskillit import server
-        from autoskillit.config import AutomationConfig
-
-        cfg = AutomationConfig(read_db=ReadDbConfig(timeout=1))
-        monkeypatch.setattr(server, "_config", cfg)
+    async def test_query_timeout(self, sample_db, tool_ctx):
+        tool_ctx.config = AutomationConfig(read_db=ReadDbConfig(timeout=1))
         # Cross join 3 rows^18 = ~387 million rows — guaranteed to exceed 1s timeout
         slow_query = "SELECT count(*) FROM " + ", ".join(f"users t{i}" for i in range(18))
         result = json.loads(
@@ -3621,10 +3486,10 @@ class TestReadDbGating:
     """read_db gating test in disabled-tools context."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, monkeypatch):
-        from autoskillit import server
+    def _close_kitchen(self, tool_ctx):
+        from autoskillit._gate import GateState
 
-        monkeypatch.setattr(server, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
 
     @pytest.mark.asyncio
     async def test_read_db_gated(self):
@@ -3660,42 +3525,45 @@ class TestRunSkillPrefix:
     """run_skill passes prefixed command to subprocess."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_prefixes_skill_command(self, mock_run):
-        mock_run.return_value = _make_result(
-            0,
-            '{"type": "result", "subtype": "success", "is_error": false, '
-            '"result": "done", "session_id": "s1"}',
-            "",
+    async def test_run_skill_prefixes_skill_command(self, tool_ctx):
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false, '
+                '"result": "done", "session_id": "s1"}',
+                "",
+            )
         )
         await run_skill("/investigate error", "/tmp")
-        cmd = mock_run.call_args[0][0]
+        cmd = tool_ctx.runner.call_args_list[0][0]
         assert cmd[2].startswith("Use /investigate error")
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_no_prefix_for_plain_prompt(self, mock_run):
-        mock_run.return_value = _make_result(
-            0,
-            '{"type": "result", "subtype": "success", "is_error": false, '
-            '"result": "done", "session_id": "s1"}',
-            "",
+    async def test_run_skill_no_prefix_for_plain_prompt(self, tool_ctx):
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false, '
+                '"result": "done", "session_id": "s1"}',
+                "",
+            )
         )
         await run_skill("Fix the bug in main.py", "/tmp")
-        cmd = mock_run.call_args[0][0]
+        cmd = tool_ctx.runner.call_args_list[0][0]
         assert cmd[2].startswith("Fix the bug in main.py")
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_includes_completion_directive(self, mock_run):
-        mock_run.return_value = _make_result(
-            0,
-            '{"type": "result", "subtype": "success", "is_error": false, '
-            '"result": "done", "session_id": "s1"}',
-            "",
+    async def test_run_skill_includes_completion_directive(self, tool_ctx):
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false, '
+                '"result": "done", "session_id": "s1"}',
+                "",
+            )
         )
         await run_skill("/investigate error", "/tmp")
-        cmd = mock_run.call_args[0][0]
+        cmd = tool_ctx.runner.call_args_list[0][0]
         assert "%%ORDER_UP%%" in cmd[2]
 
 
@@ -3703,29 +3571,31 @@ class TestRunSkillRetryPrefix:
     """run_skill_retry passes prefixed command to subprocess."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_retry_prefixes_skill_command(self, mock_run):
-        mock_run.return_value = _make_result(
-            0,
-            '{"type": "result", "subtype": "success", "is_error": false, '
-            '"result": "done", "session_id": "s1"}',
-            "",
+    async def test_run_skill_retry_prefixes_skill_command(self, tool_ctx):
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false, '
+                '"result": "done", "session_id": "s1"}',
+                "",
+            )
         )
         await run_skill_retry("/investigate error", "/tmp")
-        cmd = mock_run.call_args[0][0]
+        cmd = tool_ctx.runner.call_args_list[0][0]
         assert cmd[2].startswith("Use /investigate error")
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_retry_no_prefix_for_plain_prompt(self, mock_run):
-        mock_run.return_value = _make_result(
-            0,
-            '{"type": "result", "subtype": "success", "is_error": false, '
-            '"result": "done", "session_id": "s1"}',
-            "",
+    async def test_run_skill_retry_no_prefix_for_plain_prompt(self, tool_ctx):
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false, '
+                '"result": "done", "session_id": "s1"}',
+                "",
+            )
         )
         await run_skill_retry("Fix the bug in main.py", "/tmp")
-        cmd = mock_run.call_args[0][0]
+        cmd = tool_ctx.runner.call_args_list[0][0]
         assert cmd[2].startswith("Fix the bug in main.py")
 
 
@@ -3748,50 +3618,47 @@ class TestRunSkillTimeoutFromConfig:
     """run_skill and run_skill_retry use configurable timeouts."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_timeout_from_config(self, mock_run, monkeypatch):
+    async def test_run_skill_timeout_from_config(self, tool_ctx):
         """run_skill uses _config.run_skill.timeout instead of hardcoded value."""
-        from autoskillit import server
-
         cfg = AutomationConfig()
         cfg.run_skill = RunSkillConfig(timeout=120)
         cfg.safety.require_dry_walkthrough = False
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = cfg
 
-        mock_run.return_value = _make_result(
-            0,
-            '{"type": "result", "subtype": "success", "is_error": false,'
-            ' "result": "done", "session_id": "s1"}',
-            "",
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false,'
+                ' "result": "done", "session_id": "s1"}',
+                "",
+            )
         )
         await run_skill("/investigate foo", "/tmp")
 
-        call_kwargs = mock_run.call_args[1]
-        assert call_kwargs["timeout"] == 120
+        assert tool_ctx.runner.call_args_list[-1][2] == 120.0
 
 
 class TestRunSkillInjectsCompletionDirective:
     """run_skill injects completion directive into the skill command."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_injects_completion_directive(self, mock_run, monkeypatch):
+    async def test_run_skill_injects_completion_directive(self, tool_ctx):
         """Skill command passed to claude -p contains the completion marker instruction."""
-        from autoskillit import server
-
         cfg = AutomationConfig()
         cfg.safety.require_dry_walkthrough = False
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = cfg
 
-        mock_run.return_value = _make_result(
-            0,
-            '{"type": "result", "subtype": "success", "is_error": false,'
-            ' "result": "done", "session_id": "s1"}',
-            "",
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false,'
+                ' "result": "done", "session_id": "s1"}',
+                "",
+            )
         )
         await run_skill("/investigate foo", "/tmp")
 
-        cmd = mock_run.call_args[0][0]
+        cmd = tool_ctx.runner.call_args_list[-1][0]
         # The -p argument is at index 2
         skill_arg = cmd[2]
         assert "%%ORDER_UP%%" in skill_arg
@@ -3821,24 +3688,23 @@ class TestRunSkillPassesSessionLogDir:
     """run_skill passes session_log_dir derived from cwd."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_passes_session_log_dir(self, mock_run, monkeypatch):
-        """run_managed_async receives session_log_dir derived from cwd."""
-        from autoskillit import server
-
+    async def test_run_skill_passes_session_log_dir(self, tool_ctx):
+        """runner receives session_log_dir derived from cwd."""
         cfg = AutomationConfig()
         cfg.safety.require_dry_walkthrough = False
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = cfg
 
-        mock_run.return_value = _make_result(
-            0,
-            '{"type": "result", "subtype": "success", "is_error": false,'
-            ' "result": "done", "session_id": "s1"}',
-            "",
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false,'
+                ' "result": "done", "session_id": "s1"}',
+                "",
+            )
         )
         await run_skill("/investigate foo", "/some/project")
 
-        call_kwargs = mock_run.call_args[1]
+        call_kwargs = tool_ctx.runner.call_args_list[-1][3]
         expected_dir = _session_log_dir("/some/project")
         assert call_kwargs["session_log_dir"] == expected_dir
         assert "-some-project" in str(expected_dir)
@@ -3848,24 +3714,23 @@ class TestRunSkillRetryPassesSessionLogDir:
     """run_skill_retry passes session_log_dir derived from cwd."""
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_retry_passes_session_log_dir(self, mock_run, monkeypatch):
+    async def test_run_skill_retry_passes_session_log_dir(self, tool_ctx):
         """run_skill_retry must pass session_log_dir just like run_skill."""
-        from autoskillit import server
-
         cfg = AutomationConfig()
         cfg.safety.require_dry_walkthrough = False
-        monkeypatch.setattr(server, "_config", cfg)
+        tool_ctx.config = cfg
 
-        mock_run.return_value = _make_result(
-            0,
-            '{"type": "result", "subtype": "success", "is_error": false,'
-            ' "result": "done", "session_id": "s1"}',
-            "",
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                '{"type": "result", "subtype": "success", "is_error": false,'
+                ' "result": "done", "session_id": "s1"}',
+                "",
+            )
         )
         await run_skill_retry("/investigate foo", "/some/project")
 
-        call_kwargs = mock_run.call_args[1]
+        call_kwargs = tool_ctx.runner.call_args_list[-1][3]
         expected_dir = _session_log_dir("/some/project")
         assert call_kwargs["session_log_dir"] == expected_dir
 
@@ -3977,17 +3842,14 @@ class TestBuildSkillResultCrossValidation:
         response = json.loads(_build_skill_result(result_obj).to_json())
         assert response["success"] is False
 
-    def test_gate_disabled_schema(self):
+    def test_gate_disabled_schema(self, tool_ctx):
         """Gate-disabled response has standard keys."""
         import autoskillit.server as srv
+        from autoskillit._gate import GateState
 
-        original = srv._tools_enabled
-        try:
-            srv._tools_enabled = False
-            response = json.loads(srv._require_enabled())
-            assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
-        finally:
-            srv._tools_enabled = original
+        tool_ctx.gate = GateState(enabled=False)
+        response = json.loads(srv._require_enabled())
+        assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
 
     def test_stale_schema(self):
         """Stale response has standard keys."""
@@ -4038,22 +3900,19 @@ class TestBuildSkillResultCrossValidation:
 class TestGateErrorSchemaNormalization:
     """Gate errors use the standard 9-field response schema."""
 
-    def test_require_enabled_gate_returns_standard_schema(self):
+    def test_require_enabled_gate_returns_standard_schema(self, tool_ctx):
         """Gate errors must use the same schema as normal responses."""
         import autoskillit.server as srv
+        from autoskillit._gate import GateState
 
-        original = srv._tools_enabled
-        try:
-            srv._tools_enabled = False
-            gate_result = srv._require_enabled()
-            assert gate_result is not None
-            response = json.loads(gate_result)
-            assert response["success"] is False
-            assert response["is_error"] is True
-            assert response["needs_retry"] is False
-            assert "result" in response
-        finally:
-            srv._tools_enabled = original
+        tool_ctx.gate = GateState(enabled=False)
+        gate_result = srv._require_enabled()
+        assert gate_result is not None
+        response = json.loads(gate_result)
+        assert response["success"] is False
+        assert response["is_error"] is True
+        assert response["needs_retry"] is False
+        assert "result" in response
 
     def test_dry_walkthrough_gate_returns_standard_schema(self, tmp_path):
         """Dry-walkthrough gate errors must use the standard response schema."""
@@ -4846,31 +4705,28 @@ class TestRunSkillModel:
 
     # MOD_S1
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_passes_model_flag(self, mock_run):
-        mock_run.return_value = _make_result(0, self._MOCK_STDOUT, "")
+    async def test_run_skill_passes_model_flag(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="sonnet")
-        cmd = mock_run.call_args[0][0]
+        cmd = tool_ctx.runner.call_args_list[0][0]
         assert "--model" in cmd
         assert cmd[cmd.index("--model") + 1] == "sonnet"
 
     # MOD_S2
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_retry_passes_model_flag(self, mock_run):
-        mock_run.return_value = _make_result(0, self._MOCK_STDOUT, "")
+    async def test_run_skill_retry_passes_model_flag(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill_retry("/investigate error", "/tmp", model="sonnet")
-        cmd = mock_run.call_args[0][0]
+        cmd = tool_ctx.runner.call_args_list[0][0]
         assert "--model" in cmd
         assert cmd[cmd.index("--model") + 1] == "sonnet"
 
     # MOD_S3
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_run_skill_no_model_flag_when_empty(self, mock_run):
-        mock_run.return_value = _make_result(0, self._MOCK_STDOUT, "")
+    async def test_run_skill_no_model_flag_when_empty(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="")
-        cmd = mock_run.call_args[0][0]
+        cmd = tool_ctx.runner.call_args_list[0][0]
         assert "--model" not in cmd
 
 
@@ -4878,15 +4734,12 @@ class TestResolveModel:
     """Tests for _resolve_model resolution chain."""
 
     @pytest.fixture(autouse=True)
-    def _set_config(self, monkeypatch):
-        from autoskillit import server
-
-        self._server = server
-        self._monkeypatch = monkeypatch
+    def _set_config(self, tool_ctx):
+        self._tool_ctx = tool_ctx
 
     def _set_model_config(self, default=None, override=None):
         cfg = AutomationConfig(model=ModelConfig(default=default, override=override))
-        self._monkeypatch.setattr(self._server, "_config", cfg)
+        self._tool_ctx.config = cfg
 
     # MOD_R1
     def test_resolve_model_override_wins(self):
@@ -4952,11 +4805,11 @@ class TestMigrationSuggestions:
     """MSUG2: validate_recipe surfaces migration warnings."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, monkeypatch):
+    def _close_kitchen(self, tool_ctx):
         """Verify these tools work WITHOUT tool activation."""
-        from autoskillit import server
+        from autoskillit._gate import GateState
 
-        monkeypatch.setattr(server, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
 
     # MSUG2
     @pytest.mark.asyncio
@@ -4975,30 +4828,25 @@ class TestMigrationSuppression:
     """SUP1, SUP4: load_recipe respects migration.suppressed config."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, monkeypatch):
+    def _close_kitchen(self, tool_ctx):
         """Verify these tools work WITHOUT tool activation."""
-        from autoskillit import server
+        from autoskillit._gate import GateState
 
-        monkeypatch.setattr(server, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
 
     # SUP1
     @pytest.mark.asyncio
     async def test_outdated_version_not_in_suggestions_when_suppressed(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, tool_ctx
     ):
         """SUP1: outdated-recipe-version absent when recipe is suppressed; headless not called."""
+        from autoskillit.config import MigrationConfig
+
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         _write_minimal_script(scripts_dir, "test-script")
 
-        from autoskillit import server
-        from autoskillit.config import MigrationConfig
-
-        monkeypatch.setattr(
-            server,
-            "_config",
-            AutomationConfig(migration=MigrationConfig(suppressed=["test-script"])),
-        )
+        tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=["test-script"]))
 
         mock_headless = AsyncMock(return_value={"success": True})
         with patch("autoskillit.server._run_headless_core", mock_headless):
@@ -5012,21 +4860,16 @@ class TestMigrationSuppression:
     # SUP4
     @pytest.mark.asyncio
     async def test_validate_always_includes_outdated_version_regardless_of_suppression(
-        self, tmp_path, monkeypatch
+        self, tmp_path, tool_ctx
     ):
         """SUP4: validate_recipe includes outdated-script-version even when suppressed."""
+        from autoskillit.config import MigrationConfig
+
         script = tmp_path / "test-script.yaml"
         script.write_text(_MINIMAL_SCRIPT_YAML)
 
-        from autoskillit import server
-        from autoskillit.config import MigrationConfig
-
         # Even with script suppressed in config, validate_recipe does not filter
-        monkeypatch.setattr(
-            server,
-            "_config",
-            AutomationConfig(migration=MigrationConfig(suppressed=["test-script"])),
-        )
+        tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=["test-script"]))
 
         result = json.loads(await validate_recipe(script_path=str(script)))
         assert "semantic" in result
@@ -5038,17 +4881,23 @@ class TestLoadRecipeAutoMigration:
     """LR1-LR9: load_recipe auto-migrates outdated recipes via _run_headless_core."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, monkeypatch):
+    def _close_kitchen(self, tool_ctx):
         """Verify load_recipe works WITHOUT tool activation."""
-        from autoskillit import server
+        from autoskillit._gate import GateState
 
-        monkeypatch.setattr(server, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
 
-    def _setup_migration_env(self, tmp_path, monkeypatch, *, suppressed: list[str] | None = None):
+    def _setup_migration_env(
+        self,
+        tmp_path,
+        monkeypatch,
+        tool_ctx,
+        *,
+        suppressed: list[str] | None = None,
+    ):
         """Create directory structure, fake migration YAML, and config."""
         import autoskillit
         import autoskillit.migration_loader as ml
-        from autoskillit import server
         from autoskillit.config import MigrationConfig
 
         monkeypatch.chdir(tmp_path)
@@ -5072,11 +4921,7 @@ class TestLoadRecipeAutoMigration:
         (fake_mig_dir / "0.0.0-migration.yaml").write_text(migration_yaml)
         monkeypatch.setattr(ml, "_migrations_dir", lambda: fake_mig_dir)
 
-        monkeypatch.setattr(
-            server,
-            "_config",
-            AutomationConfig(migration=MigrationConfig(suppressed=suppressed or [])),
-        )
+        tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=suppressed or []))
 
         temp_mig_dir = tmp_path / ".autoskillit" / "temp" / "migrations"
         temp_mig_dir.mkdir(parents=True)
@@ -5091,9 +4936,9 @@ class TestLoadRecipeAutoMigration:
 
     # LR1
     @pytest.mark.asyncio
-    async def test_auto_migrates_outdated_recipe(self, tmp_path, monkeypatch):
+    async def test_auto_migrates_outdated_recipe(self, tmp_path, monkeypatch, tool_ctx):
         """LR1: When recipe version < installed, _run_headless_core is called once."""
-        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
 
         mock_headless = AsyncMock(return_value={"success": True})
@@ -5104,9 +4949,9 @@ class TestLoadRecipeAutoMigration:
 
     # LR2
     @pytest.mark.asyncio
-    async def test_returns_migrated_content_on_success(self, tmp_path, monkeypatch):
+    async def test_returns_migrated_content_on_success(self, tmp_path, monkeypatch, tool_ctx):
         """LR2: After successful migration, returned content equals migrated file content."""
-        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
 
         mock_headless = AsyncMock(return_value={"success": True})
@@ -5118,9 +4963,9 @@ class TestLoadRecipeAutoMigration:
 
     # LR3
     @pytest.mark.asyncio
-    async def test_writes_back_to_original_on_success(self, tmp_path, monkeypatch):
+    async def test_writes_back_to_original_on_success(self, tmp_path, monkeypatch, tool_ctx):
         """LR3: Original .autoskillit/recipes/{name}.yaml is overwritten with migrated content."""
-        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
 
         mock_headless = AsyncMock(return_value={"success": True})
@@ -5131,11 +4976,13 @@ class TestLoadRecipeAutoMigration:
 
     # LR4
     @pytest.mark.asyncio
-    async def test_clears_failure_record_after_successful_migration(self, tmp_path, monkeypatch):
+    async def test_clears_failure_record_after_successful_migration(
+        self, tmp_path, monkeypatch, tool_ctx
+    ):
         """LR4: FailureStore.clear(name) is called when migration succeeds."""
         from autoskillit.failure_store import FailureStore, default_store_path
 
-        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
 
         store = FailureStore(default_store_path(tmp_path))
@@ -5156,11 +5003,11 @@ class TestLoadRecipeAutoMigration:
 
     # LR5
     @pytest.mark.asyncio
-    async def test_records_failure_when_migration_fails(self, tmp_path, monkeypatch):
+    async def test_records_failure_when_migration_fails(self, tmp_path, monkeypatch, tool_ctx):
         """LR5: When headless returns success=False, failure is recorded to failures.json."""
         from autoskillit.failure_store import FailureStore, default_store_path
 
-        self._setup_migration_env(tmp_path, monkeypatch)
+        self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
 
         mock_headless = AsyncMock(return_value={"success": False, "result": "headless failed"})
         with patch("autoskillit.server._run_headless_core", mock_headless):
@@ -5171,9 +5018,9 @@ class TestLoadRecipeAutoMigration:
 
     # LR6
     @pytest.mark.asyncio
-    async def test_migration_failed_suggestion_added(self, tmp_path, monkeypatch):
+    async def test_migration_failed_suggestion_added(self, tmp_path, monkeypatch, tool_ctx):
         """LR6: Returned suggestions contains a migration-failed entry with error severity."""
-        self._setup_migration_env(tmp_path, monkeypatch)
+        self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
 
         mock_headless = AsyncMock(return_value={"success": False, "result": "headless failed"})
         with patch("autoskillit.server._run_headless_core", mock_headless):
@@ -5187,9 +5034,9 @@ class TestLoadRecipeAutoMigration:
 
     # LR7
     @pytest.mark.asyncio
-    async def test_suppressed_recipe_not_auto_migrated(self, tmp_path, monkeypatch):
+    async def test_suppressed_recipe_not_auto_migrated(self, tmp_path, monkeypatch, tool_ctx):
         """LR7: When name in migration.suppressed, headless is never called."""
-        self._setup_migration_env(tmp_path, monkeypatch, suppressed=["test-script"])
+        self._setup_migration_env(tmp_path, monkeypatch, tool_ctx, suppressed=["test-script"])
 
         mock_headless = AsyncMock(return_value={"success": True})
         with patch("autoskillit.server._run_headless_core", mock_headless):
@@ -5199,11 +5046,10 @@ class TestLoadRecipeAutoMigration:
 
     # LR8
     @pytest.mark.asyncio
-    async def test_up_to_date_recipe_not_migrated(self, tmp_path, monkeypatch):
+    async def test_up_to_date_recipe_not_migrated(self, tmp_path, monkeypatch, tool_ctx):
         """LR8: When applicable_migrations returns [], headless is never called."""
         import autoskillit
         import autoskillit.migration_loader as ml
-        from autoskillit import server
         from autoskillit.config import MigrationConfig
 
         monkeypatch.chdir(tmp_path)
@@ -5217,11 +5063,7 @@ class TestLoadRecipeAutoMigration:
         empty_mig_dir = tmp_path / "migrations"
         empty_mig_dir.mkdir()
         monkeypatch.setattr(ml, "_migrations_dir", lambda: empty_mig_dir)
-        monkeypatch.setattr(
-            server,
-            "_config",
-            AutomationConfig(migration=MigrationConfig(suppressed=[])),
-        )
+        tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=[]))
 
         mock_headless = AsyncMock(return_value={"success": True})
         with patch("autoskillit.server._run_headless_core", mock_headless):
@@ -5231,9 +5073,11 @@ class TestLoadRecipeAutoMigration:
 
     # LR9
     @pytest.mark.asyncio
-    async def test_no_migration_suggestions_injected_after_success(self, tmp_path, monkeypatch):
+    async def test_no_migration_suggestions_injected_after_success(
+        self, tmp_path, monkeypatch, tool_ctx
+    ):
         """LR9: Returned suggestions contain no migration-* warning entries after success."""
-        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
 
         mock_headless = AsyncMock(return_value={"success": True})
@@ -5615,49 +5459,37 @@ class TestGetPipelineReport:
 
     # Override conftest to test WITHOUT open_kitchen
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, monkeypatch):
-        import autoskillit.server as server_mod
+    def _close_kitchen(self, tool_ctx):
+        from autoskillit._gate import GateState
 
-        monkeypatch.setattr(server_mod, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
 
     @pytest.mark.asyncio
-    async def test_ungated_returns_empty_initially(self):
-        from autoskillit.server import _audit_log as al
-
-        al.clear()
+    async def test_ungated_returns_empty_initially(self, tool_ctx):
         result = json.loads(await get_pipeline_report())
         assert result["total_failures"] == 0
         assert result["failures"] == []
 
     @pytest.mark.asyncio
-    async def test_ungated_does_not_require_open_kitchen(self):
-        """Must succeed even when _tools_enabled is False."""
-        from autoskillit.server import _audit_log as al
-
-        al.clear()
+    async def test_ungated_does_not_require_open_kitchen(self, tool_ctx):
+        """Must succeed even when gate is disabled."""
         result = json.loads(await get_pipeline_report())
         assert "error" not in result
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_accumulates_failures_from_run_skill(self, mock_run, monkeypatch):
-        import autoskillit.server as server_mod
+    async def test_accumulates_failures_from_run_skill(self, tool_ctx):
+        from autoskillit._gate import GateState
 
-        monkeypatch.setattr(server_mod, "_tools_enabled", True)
-        from autoskillit.server import _audit_log as al
-
-        al.clear()
-        mock_run.return_value = _make_result(returncode=1, stdout=_failed_session_json())
+        tool_ctx.gate = GateState(enabled=True)
+        tool_ctx.runner.push(_make_result(returncode=1, stdout=_failed_session_json()))
         await run_skill(skill_command="/autoskillit:test", cwd="/tmp")
         result = json.loads(await get_pipeline_report())
         assert result["total_failures"] == 1
         assert result["failures"][0]["skill_command"].startswith("/autoskillit:test")
 
     @pytest.mark.asyncio
-    async def test_clear_true_resets_after_returning(self):
-        from autoskillit.server import _audit_log as al
-
-        al.record_failure(_make_failure_record())
+    async def test_clear_true_resets_after_returning(self, tool_ctx):
+        tool_ctx.audit.record_failure(_make_failure_record())
         result = json.loads(await get_pipeline_report(clear=True))
         assert result["total_failures"] == 1
         result2 = json.loads(await get_pipeline_report())
@@ -5665,70 +5497,51 @@ class TestGetPipelineReport:
 
 
 class TestFailureCaptureInBuildSkillResult:
-    """_build_skill_result() must capture failures into _audit_log."""
+    """_build_skill_result() must capture failures into tool_ctx.audit."""
 
-    def setup_method(self):
-        from autoskillit.server import _audit_log as al
-
-        al.clear()
-
-    def test_captures_non_zero_exit_code(self):
-        from autoskillit.server import _audit_log as al
-
+    def test_captures_non_zero_exit_code(self, tool_ctx):
         result = _make_result(returncode=1, stdout=_failed_session_json())
         _build_skill_result(result, skill_command="/test:cmd")
-        assert len(al.get_report()) == 1
+        assert len(tool_ctx.audit.get_report()) == 1
 
-    def test_does_not_capture_clean_success(self):
-        from autoskillit.server import _audit_log as al
-
+    def test_does_not_capture_clean_success(self, tool_ctx):
         result = _make_result(returncode=0, stdout=_success_session_json("done"))
         _build_skill_result(result, skill_command="/test:cmd")
-        assert al.get_report() == []
+        assert tool_ctx.audit.get_report() == []
 
-    def test_captured_record_has_correct_skill_command(self):
-        from autoskillit.server import _audit_log as al
-
+    def test_captured_record_has_correct_skill_command(self, tool_ctx):
         result = _make_result(returncode=1, stdout=_failed_session_json())
         _build_skill_result(result, skill_command="/autoskillit:implement-worktree")
-        assert al.get_report()[0].skill_command == "/autoskillit:implement-worktree"
+        assert tool_ctx.audit.get_report()[0].skill_command == "/autoskillit:implement-worktree"
 
-    def test_captured_record_has_timestamp(self):
+    def test_captured_record_has_timestamp(self, tool_ctx):
         from datetime import datetime
-
-        from autoskillit.server import _audit_log as al
 
         result = _make_result(returncode=1, stdout=_failed_session_json())
         _build_skill_result(result, skill_command="/test")
-        record = al.get_report()[0]
+        record = tool_ctx.audit.get_report()[0]
         assert record.timestamp  # non-empty ISO timestamp
         datetime.fromisoformat(record.timestamp)  # must parse as ISO
 
-    def test_stale_termination_is_captured(self):
-        from autoskillit.server import _audit_log as al
-
+    def test_stale_termination_is_captured(self, tool_ctx):
         result = _make_result(returncode=0, termination_reason=TerminationReason.STALE)
         _build_skill_result(result, skill_command="/test")
-        report = al.get_report()
+        report = tool_ctx.audit.get_report()
         assert len(report) == 1
         assert report[0].subtype == "stale"
 
-    def test_needs_retry_is_captured(self):
-        from autoskillit.server import _audit_log as al
-
+    def test_needs_retry_is_captured(self, tool_ctx):
         result = _make_result(returncode=1, stdout=_context_exhausted_session_json())
         _build_skill_result(result, skill_command="/test")
-        report = al.get_report()
+        report = tool_ctx.audit.get_report()
         assert len(report) == 1
         assert report[0].needs_retry is True
 
-    def test_stderr_truncated_to_500_chars(self):
-        from autoskillit.server import _audit_log as al
-
+    def test_stderr_truncated_to_500_chars(self, tool_ctx):
         long_stderr = "e" * 2000
         result = _make_result(returncode=1, stderr=long_stderr, stdout=_failed_session_json())
         _build_skill_result(result, skill_command="/test")
-        assert len(al.get_report()[0].stderr) <= 500
+        assert len(tool_ctx.audit.get_report()[0].stderr) <= 500
 
 
 class TestRunSkillStepName:
@@ -5753,45 +5566,24 @@ class TestRunSkillStepName:
         return result_rec
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_step_name_records_token_usage(self, mock_run, monkeypatch):
-        import autoskillit.server as server_mod
-
-        monkeypatch.setattr(server_mod, "_tools_enabled", True)
-        from autoskillit.server import _token_log as tl
-
-        tl.clear()
-        mock_run.return_value = _make_result(returncode=0, stdout=self._make_ndjson())
+    async def test_step_name_records_token_usage(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill(
             skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="plan"
         )
-        report = tl.get_report()
+        report = tool_ctx.token_log.get_report()
         assert len(report) == 1
         assert report[0]["step_name"] == "plan"
         assert report[0]["input_tokens"] == 200
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_no_step_name_does_not_record(self, mock_run, monkeypatch):
-        import autoskillit.server as server_mod
-
-        monkeypatch.setattr(server_mod, "_tools_enabled", True)
-        from autoskillit.server import _token_log as tl
-
-        tl.clear()
-        mock_run.return_value = _make_result(returncode=0, stdout=self._make_ndjson())
+    async def test_no_step_name_does_not_record(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill(skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="")
-        assert tl.get_report() == []
+        assert tool_ctx.token_log.get_report() == []
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_null_token_usage_does_not_record(self, mock_run, monkeypatch):
-        import autoskillit.server as server_mod
-
-        monkeypatch.setattr(server_mod, "_tools_enabled", True)
-        from autoskillit.server import _token_log as tl
-
-        tl.clear()
+    async def test_null_token_usage_does_not_record(self, tool_ctx):
         # Return NDJSON with no usage field → token_usage will be null
         no_usage_ndjson = json.dumps(
             {
@@ -5802,28 +5594,21 @@ class TestRunSkillStepName:
                 "session_id": "s1",
             }
         )
-        mock_run.return_value = _make_result(returncode=0, stdout=no_usage_ndjson)
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=no_usage_ndjson))
         await run_skill(
             skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="plan"
         )
-        assert tl.get_report() == []
+        assert tool_ctx.token_log.get_report() == []
 
     @pytest.mark.asyncio
-    @patch("autoskillit.server.run_managed_async")
-    async def test_step_name_run_skill_retry(self, mock_run, monkeypatch):
-        import autoskillit.server as server_mod
-
-        monkeypatch.setattr(server_mod, "_tools_enabled", True)
-        from autoskillit.server import _token_log as tl
-
-        tl.clear()
-        mock_run.return_value = _make_result(returncode=0, stdout=self._make_ndjson())
+    async def test_step_name_run_skill_retry(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill_retry(
             skill_command="/autoskillit:investigate the test failures",
             cwd="/tmp",
             step_name="implement",
         )
-        report = tl.get_report()
+        report = tool_ctx.token_log.get_report()
         assert len(report) == 1
         assert report[0]["step_name"] == "implement"
         assert report[0]["input_tokens"] == 200
@@ -5833,21 +5618,18 @@ class TestGetTokenSummary:
     """get_token_summary is ungated and returns accumulated token usage."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, monkeypatch):
-        import autoskillit.server as server_mod
+    def _close_kitchen(self, tool_ctx):
+        from autoskillit._gate import GateState
 
-        monkeypatch.setattr(server_mod, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
 
     @pytest.mark.asyncio
-    async def test_ungated_does_not_require_open_kitchen(self):
+    async def test_ungated_does_not_require_open_kitchen(self, tool_ctx):
         result = json.loads(await get_token_summary())
         assert "error" not in result
 
     @pytest.mark.asyncio
-    async def test_returns_empty_steps_initially(self):
-        from autoskillit.server import _token_log as tl
-
-        tl.clear()
+    async def test_returns_empty_steps_initially(self, tool_ctx):
         result = json.loads(await get_token_summary())
         assert result["steps"] == []
         assert result["total"]["input_tokens"] == 0
@@ -5856,11 +5638,8 @@ class TestGetTokenSummary:
         assert result["total"]["cache_read_input_tokens"] == 0
 
     @pytest.mark.asyncio
-    async def test_returns_entry_per_step_name(self):
-        from autoskillit.server import _token_log as tl
-
-        tl.clear()
-        tl.record(
+    async def test_returns_entry_per_step_name(self, tool_ctx):
+        tool_ctx.token_log.record(
             "investigate",
             {
                 "input_tokens": 100,
@@ -5869,7 +5648,7 @@ class TestGetTokenSummary:
                 "cache_read_input_tokens": 5,
             },
         )
-        tl.record(
+        tool_ctx.token_log.record(
             "implement",
             {
                 "input_tokens": 200,
@@ -5884,30 +5663,24 @@ class TestGetTokenSummary:
         assert result["steps"][1]["step_name"] == "implement"
 
     @pytest.mark.asyncio
-    async def test_multiple_invocations_same_step_are_summed(self):
-        from autoskillit.server import _token_log as tl
-
-        tl.clear()
+    async def test_multiple_invocations_same_step_are_summed(self, tool_ctx):
         usage = {
             "input_tokens": 100,
             "output_tokens": 50,
             "cache_creation_input_tokens": 0,
             "cache_read_input_tokens": 0,
         }
-        tl.record("implement", usage)
-        tl.record("implement", usage)
-        tl.record("implement", usage)
+        tool_ctx.token_log.record("implement", usage)
+        tool_ctx.token_log.record("implement", usage)
+        tool_ctx.token_log.record("implement", usage)
         result = json.loads(await get_token_summary())
         assert len(result["steps"]) == 1
         assert result["steps"][0]["input_tokens"] == 300
         assert result["steps"][0]["invocation_count"] == 3
 
     @pytest.mark.asyncio
-    async def test_total_field_sums_all_steps(self):
-        from autoskillit.server import _token_log as tl
-
-        tl.clear()
-        tl.record(
+    async def test_total_field_sums_all_steps(self, tool_ctx):
+        tool_ctx.token_log.record(
             "plan",
             {
                 "input_tokens": 100,
@@ -5916,7 +5689,7 @@ class TestGetTokenSummary:
                 "cache_read_input_tokens": 5,
             },
         )
-        tl.record(
+        tool_ctx.token_log.record(
             "implement",
             {
                 "input_tokens": 200,
@@ -5932,11 +5705,8 @@ class TestGetTokenSummary:
         assert result["total"]["cache_read_input_tokens"] == 15
 
     @pytest.mark.asyncio
-    async def test_clear_true_resets_after_returning(self):
-        from autoskillit.server import _token_log as tl
-
-        tl.clear()
-        tl.record(
+    async def test_clear_true_resets_after_returning(self, tool_ctx):
+        tool_ctx.token_log.record(
             "plan",
             {
                 "input_tokens": 100,
@@ -5951,11 +5721,8 @@ class TestGetTokenSummary:
         assert result2["steps"] == []
 
     @pytest.mark.asyncio
-    async def test_response_shape(self):
-        from autoskillit.server import _token_log as tl
-
-        tl.clear()
-        tl.record(
+    async def test_response_shape(self, tool_ctx):
+        tool_ctx.token_log.record(
             "plan",
             {
                 "input_tokens": 10,
@@ -5977,18 +5744,14 @@ class TestGetTokenSummary:
         } <= total_keys
 
 
-def test_open_kitchen_has_no_update_advisory():
+def test_open_kitchen_has_no_update_advisory(tool_ctx):
     """REQ-APP-004: open_kitchen prompt contains no recipe update advisory."""
-    from autoskillit import server
+    from autoskillit._gate import GateState
     from autoskillit.server import open_kitchen
 
     # Ensure kitchen is closed before calling open_kitchen
-    original = server._tools_enabled
-    server._tools_enabled = False
-    try:
-        result = open_kitchen()
-    finally:
-        server._tools_enabled = original
+    tool_ctx.gate = GateState(enabled=False)
+    result = open_kitchen()
 
     content = result.messages[0].content
     text = content.text if hasattr(content, "text") else str(content)

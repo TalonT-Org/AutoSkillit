@@ -37,10 +37,7 @@ from autoskillit._context import ToolContext
 from autoskillit._gate import GateState, gate_error_result
 from autoskillit._logging import get_logger
 from autoskillit.config import AutomationConfig
-from autoskillit.process_lifecycle import (
-    SubprocessResult,
-    run_managed_async,
-)
+from autoskillit.process_lifecycle import SubprocessResult
 from autoskillit.session_result import (
     ClaudeSessionResult,
     SkillResult,
@@ -145,7 +142,9 @@ async def _run_subprocess(
     Delegates to run_managed_async which uses temp file I/O (immune to
     pipe-blocking from child FD inheritance) and psutil process tree cleanup.
     """
-    result = await run_managed_async(cmd, cwd=Path(cwd), timeout=timeout)
+    runner = _get_ctx().runner
+    assert runner is not None, "No subprocess runner configured"
+    result = await runner(cmd, cwd=Path(cwd), timeout=timeout)
     if result.termination == TerminationReason.TIMED_OUT:
         return -1, result.stdout, f"Process timed out after {timeout}s"
     return result.returncode, result.stdout, result.stderr
@@ -720,7 +719,9 @@ async def _run_headless_core(
     if resolved_model:
         cmd.extend(["--model", resolved_model])
 
-    result = await run_managed_async(
+    runner = _get_ctx().runner
+    assert runner is not None, "No subprocess runner configured"
+    result = await runner(
         cmd,
         cwd=Path(cwd),
         timeout=timeout if timeout is not None else cfg.timeout,

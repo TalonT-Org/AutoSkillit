@@ -76,6 +76,60 @@ def test_parse_recipe_accepts_raw_dict() -> None:
     assert recipe.name == "test"
 
 
+def test_iter_steps_with_context_empty_for_first_step() -> None:
+    """iter_steps_with_context yields frozenset() for the first step."""
+    from autoskillit.recipe_io import iter_steps_with_context
+
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "steps": {
+                "step1": {"tool": "run_cmd", "on_success": "done"},
+                "done": {"action": "stop", "message": "ok"},
+            },
+        }
+    )
+    first_name, first_step, ctx = next(iter_steps_with_context(recipe))
+    assert ctx == frozenset()
+
+
+def test_iter_steps_with_context_accumulates_captures() -> None:
+    """iter_steps_with_context accumulates captures from preceding steps."""
+    from autoskillit.recipe_io import iter_steps_with_context
+
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "steps": {
+                "impl": {
+                    "tool": "run_skill",
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                    "on_success": "check",
+                },
+                "check": {
+                    "tool": "test_check",
+                    "with": {"worktree_path": "${{ context.worktree_path }}"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+        }
+    )
+    steps = list(iter_steps_with_context(recipe))
+    # First step: no captures yet
+    assert steps[0][2] == frozenset()
+    # Second step: worktree_path should be available from impl's capture
+    assert steps[1][2] == frozenset({"worktree_path"})
+
+
+def test_find_recipe_by_name_returns_none_for_unknown() -> None:
+    """find_recipe_by_name returns None when the recipe name does not exist."""
+    from autoskillit.recipe_io import find_recipe_by_name
+
+    result = find_recipe_by_name("nonexistent_xyz_recipe_abc", Path("/tmp"))
+    assert result is None
+
+
 class TestRecipeParser:
     # WF1
     def test_load_valid_recipe(self, tmp_path: Path) -> None:

@@ -1269,6 +1269,50 @@ def test_generate_recipe_card(tmp_path: Path) -> None:
     assert "dataflow" in contract
 
 
+def test_generate_recipe_card_returns_dict(tmp_path: Path) -> None:
+    """generate_recipe_card returns a dict directly (not a Path)."""
+    recipes_dir = tmp_path / ".autoskillit" / "scripts"
+    recipes_dir.mkdir(parents=True)
+    pipeline = recipes_dir / "test-dict-pipeline.yaml"
+    pipeline.write_text(SAMPLE_PIPELINE_YAML)
+
+    result = generate_recipe_card(pipeline, recipes_dir)
+
+    assert isinstance(result, dict)
+    assert "skill_hashes" in result
+
+
+def test_validate_recipe_uses_iter_steps_with_context_for_capture_refs(tmp_path: Path) -> None:
+    """validate_recipe catches context refs not captured by preceding steps."""
+    from autoskillit.recipe_io import iter_steps_with_context
+
+    data = {
+        "name": "ctx-test",
+        "description": "Context validation test",
+        "kitchen_rules": ["test"],
+        "steps": {
+            "step1": {
+                "tool": "run_cmd",
+                "with": {"cmd": "echo hello"},
+                "on_success": "step2",
+            },
+            "step2": {
+                "tool": "test_check",
+                "with": {"worktree_path": "${{ context.worktree_path }}"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "ok"},
+        },
+    }
+    wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
+    # step1 has no captures, so step2 should see empty context
+    steps = list(iter_steps_with_context(wf))
+    assert steps[1][2] == frozenset()
+    # validate_recipe should catch the unsatisfied context reference
+    errors = validate_recipe(wf)
+    assert any("worktree_path" in e for e in errors)
+
+
 def test_load_recipe_card(tmp_path: Path) -> None:
     recipes_dir = tmp_path / ".autoskillit" / "scripts"
     recipes_dir.mkdir(parents=True)

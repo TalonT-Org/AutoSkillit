@@ -41,6 +41,13 @@ def test_recipe_schema_has_zero_non_stdlib_logic_imports() -> None:
             )
 
 
+def test_autoskillit_version_key_constant_exists() -> None:
+    """AUTOSKILLIT_VERSION_KEY constant is exported from recipe_schema."""
+    from autoskillit.recipe_schema import AUTOSKILLIT_VERSION_KEY
+
+    assert AUTOSKILLIT_VERSION_KEY == "autoskillit_version"
+
+
 def test_recipe_step_has_expected_fields() -> None:
     """RecipeStep has expected fields: tool, action, python, model, note, capture, etc."""
     from autoskillit.recipe_schema import RecipeStep

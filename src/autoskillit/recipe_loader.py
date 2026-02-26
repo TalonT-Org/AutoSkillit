@@ -6,7 +6,8 @@ from pathlib import Path
 
 import yaml
 
-from autoskillit.recipe_parser import RecipeInfo, RecipeSource
+from autoskillit.recipe_schema import RecipeInfo
+from autoskillit.types import RecipeSource
 
 
 def _extract_frontmatter(text: str) -> str:

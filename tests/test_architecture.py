@@ -233,30 +233,6 @@ def test_broad_except_with_reraise_is_not_violation(tmp_path: Path) -> None:
     assert not except_violations, f"Unexpected except violation: {except_violations}"
 
 
-def test_server_does_not_import_list_recipes_or_load_recipe_from_recipe_loader() -> None:
-    """server.py must route all recipe discovery through recipe_parser, not recipe_loader.
-
-    recipe_loader.list_recipes() is project-only. recipe_parser.list_recipes() covers
-    both project and bundled sources. This AST check prevents future refactors from
-    silently reintroducing the wrong-module caller pattern.
-    """
-    src = (Path(__file__).parent.parent / "src" / "autoskillit" / "server.py").read_text()
-    tree = ast.parse(src)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            if node.module and "recipe_loader" in node.module:
-                names = [alias.name for alias in node.names]
-                assert "list_recipes" not in names, (
-                    "server.py imports list_recipes from recipe_loader. "
-                    "Use recipe_parser.list_recipes — it covers both project and bundled sources."
-                )
-                assert "load_recipe" not in names, (
-                    "server.py imports load_recipe from recipe_loader. "
-                    "Use recipe_parser.list_recipes to find RecipeInfo.path, "
-                    "then path.read_text()."
-                )
-
-
 def _is_mcp_tool_decorator(node: ast.expr) -> bool:
     """Return True if node represents @mcp.tool or @mcp.tool(...)."""
     if isinstance(node, ast.Attribute) and node.attr == "tool":

@@ -94,10 +94,10 @@ class TestSkillResolver:
         import yaml as _yaml
 
         import autoskillit
-        from autoskillit.recipe_parser import (
+        from autoskillit.recipe_io import (
             _parse_recipe as _parse_workflow,
         )
-        from autoskillit.recipe_parser import (
+        from autoskillit.recipe_validator import (
             validate_recipe as validate_workflow,
         )
 

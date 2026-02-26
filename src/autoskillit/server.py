@@ -1628,7 +1628,7 @@ async def list_recipes() -> str:
 
     This tool is always available (not gated by open_kitchen).
     """
-    from autoskillit.recipe_parser import list_recipes as _list_recipes
+    from autoskillit.recipe_io import list_recipes as _list_recipes
 
     result = _list_recipes(Path.cwd())
     response: dict[str, object] = {
@@ -1787,15 +1787,15 @@ async def load_recipe(name: str) -> str:
     """
     import yaml
 
-    from autoskillit.contract_validator import (
+    from autoskillit.recipe_io import _parse_recipe
+    from autoskillit.recipe_io import list_recipes as _list_recipes_all
+    from autoskillit.recipe_validator import (
         check_contract_staleness,
         generate_recipe_card,
         load_recipe_card,
+        run_semantic_rules,
         validate_recipe_cards,
     )
-    from autoskillit.recipe_parser import _parse_recipe
-    from autoskillit.recipe_parser import list_recipes as _list_recipes_all
-    from autoskillit.semantic_rules import run_semantic_rules
 
     _all = _list_recipes_all(Path.cwd())
     _match = next((r for r in _all.items if r.name == name), None)
@@ -1948,18 +1948,17 @@ async def validate_recipe(script_path: str) -> str:
     """
     import yaml
 
-    from autoskillit.contract_validator import (
+    from autoskillit.recipe_io import _parse_recipe
+    from autoskillit.recipe_validator import (
+        Severity,
+        analyze_dataflow,
         load_recipe_card,
+        run_semantic_rules,
         validate_recipe_cards,
     )
-    from autoskillit.recipe_parser import (
-        _parse_recipe,
-        analyze_dataflow,
-    )
-    from autoskillit.recipe_parser import (
+    from autoskillit.recipe_validator import (
         validate_recipe as _validate_recipe,
     )
-    from autoskillit.semantic_rules import Severity, run_semantic_rules
 
     path = Path(script_path)
     if not path.is_file():
@@ -2033,7 +2032,7 @@ def _close_kitchen_handler() -> None:
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
-    from autoskillit.recipe_parser import list_recipes
+    from autoskillit.recipe_io import list_recipes
 
     result = list_recipes(Path.cwd())
     match = next((r for r in result.items if r.name == name), None)

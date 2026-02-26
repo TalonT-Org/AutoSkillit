@@ -1,0 +1,443 @@
+"""Tests for recipe I/O and parsing (recipe_io module)."""
+
+from __future__ import annotations
+
+import importlib
+import re
+from pathlib import Path
+
+import pytest
+import yaml
+
+from autoskillit.recipe_io import (
+    _parse_recipe,
+    _parse_step,
+    builtin_recipes_dir,
+    list_recipes,
+    load_recipe,
+)
+from autoskillit.recipe_schema import (
+    Recipe,
+    RecipeIngredient,
+    RecipeStep,
+    StepResultRoute,
+)
+from autoskillit.types import RecipeSource
+
+VALID_RECIPE = {
+    "name": "test-recipe",
+    "description": "A test recipe",
+    "ingredients": {
+        "test_dir": {"description": "Dir to test", "required": True},
+        "branch": {"description": "Branch", "default": "main"},
+    },
+    "kitchen_rules": ["NEVER use native tools"],
+    "steps": {
+        "run_tests": {
+            "tool": "test_check",
+            "with": {"worktree_path": "${{ inputs.test_dir }}"},
+            "on_success": "done",
+            "on_failure": "escalate",
+        },
+        "done": {"action": "stop", "message": "Tests passed."},
+        "escalate": {"action": "stop", "message": "Need help."},
+    },
+}
+
+
+def _write_yaml(path: Path, data: dict) -> Path:
+    path.write_text(yaml.dump(data, default_flow_style=False))
+    return path
+
+
+def test_recipe_parser_module_no_longer_exists() -> None:
+    """recipe_parser module must be gone — ModuleNotFoundError expected."""
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("autoskillit.recipe_parser")
+
+
+def test_load_recipe_smoke() -> None:
+    """load_recipe(path) returns a Recipe with correct name."""
+    path = next(builtin_recipes_dir().glob("*.yaml"))
+    recipe = load_recipe(path)
+    assert recipe.name
+
+
+def test_list_recipes_discovers_builtins() -> None:
+    """list_recipes discovers bundled recipes from builtin source."""
+    result = list_recipes(Path("/nonexistent"))
+    assert len(result.items) > 0
+    assert all(r.source.value in ("project", "builtin") for r in result.items)
+
+
+def test_parse_recipe_accepts_raw_dict() -> None:
+    """_parse_recipe accepts a raw dict and returns a Recipe."""
+    recipe = _parse_recipe({"name": "test", "steps": {"step1": {"tool": "run_cmd"}}})
+    assert recipe.name == "test"
+
+
+class TestRecipeParser:
+    # WF1
+    def test_load_valid_recipe(self, tmp_path: Path) -> None:
+        f = _write_yaml(tmp_path / "recipe.yaml", VALID_RECIPE)
+        wf = load_recipe(f)
+        assert wf.name == "test-recipe"
+        assert wf.description == "A test recipe"
+        assert "test_dir" in wf.ingredients
+        assert wf.ingredients["test_dir"].required is True
+        assert wf.ingredients["branch"].default == "main"
+        assert "run_tests" in wf.steps
+        assert wf.steps["run_tests"].tool == "test_check"
+        assert wf.steps["run_tests"].with_args["worktree_path"] == "${{ inputs.test_dir }}"
+        assert wf.steps["done"].action == "stop"
+
+    # WF4
+    def test_ingredient_defaults_applied(self, tmp_path: Path) -> None:
+        f = _write_yaml(tmp_path / "recipe.yaml", VALID_RECIPE)
+        wf = load_recipe(f)
+        assert wf.ingredients["branch"].default == "main"
+        assert wf.ingredients["branch"].required is False
+
+    # WF7
+    def test_list_recipes_finds_builtins(self, tmp_path: Path) -> None:
+        recipes = list_recipes(tmp_path).items
+        names = {w.name for w in recipes}
+        assert "bugfix-loop" in names
+        assert "implementation-pipeline" in names
+        assert "audit-and-fix" in names
+        assert "investigate-first" in names
+
+    # WF8
+    def test_project_recipe_overrides_builtin(self, tmp_path: Path) -> None:
+        wf_dir = tmp_path / ".autoskillit" / "recipes"
+        wf_dir.mkdir(parents=True)
+        override = {**VALID_RECIPE, "name": "bugfix-loop", "description": "Custom override"}
+        _write_yaml(wf_dir / "bugfix-loop.yaml", override)
+
+        recipes = list_recipes(tmp_path).items
+        match = next(w for w in recipes if w.name == "bugfix-loop")
+        assert match.source == RecipeSource.PROJECT
+        assert match.description == "Custom override"
+
+    # WF9
+    def test_step_with_retry_parsed(self, tmp_path: Path) -> None:
+        data = {
+            "name": "retry-recipe",
+            "description": "Has retry",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "impl": {
+                    "tool": "run_skill_retry",
+                    "retry": {"max_attempts": 5, "on": "needs_retry", "on_exhausted": "fail"},
+                },
+                "fail": {"action": "stop", "message": "Failed."},
+            },
+        }
+        f = _write_yaml(tmp_path / "recipe.yaml", data)
+        wf = load_recipe(f)
+        assert wf.steps["impl"].retry is not None
+        assert wf.steps["impl"].retry.max_attempts == 5
+        assert wf.steps["impl"].retry.on == "needs_retry"
+        assert wf.steps["impl"].retry.on_exhausted == "fail"
+
+    def test_load_recipe_rejects_non_dict(self, tmp_path: Path) -> None:
+        """YAML that parses to a non-dict must raise ValueError."""
+        path = tmp_path / "list.yaml"
+        path.write_text("- item1\n- item2\n")
+        with pytest.raises(ValueError, match="YAML mapping"):
+            load_recipe(path)
+
+    def test_list_recipes_reports_malformed_files(self, tmp_path: Path) -> None:
+        """Malformed recipe files must produce error reports."""
+        wf_dir = tmp_path / ".autoskillit" / "recipes"
+        wf_dir.mkdir(parents=True)
+        (wf_dir / "broken.yaml").write_text("{invalid: [unclosed\n")
+        result = list_recipes(tmp_path)
+        assert len(result.errors) >= 1
+
+    # WF_SUM1
+    def test_recipe_summary_defaults_to_empty(self) -> None:
+        wf = Recipe(name="test", description="desc")
+        assert wf.summary == ""
+
+    # WF_SUM2
+    def test_parse_recipe_extracts_summary(self, tmp_path: Path) -> None:
+        data = {**VALID_RECIPE, "summary": "run tests then merge"}
+        f = _write_yaml(tmp_path / "recipe.yaml", data)
+        wf = load_recipe(f)
+        assert wf.summary == "run tests then merge"
+
+    # WF_SUM3
+    def test_builtin_recipes_summary_is_str(self) -> None:
+        bd = builtin_recipes_dir()
+        for f in bd.glob("*.yaml"):
+            wf = load_recipe(f)
+            assert isinstance(wf.summary, str), f"{f.name}: summary is not str"
+
+    def test_python_step_parsed(self, tmp_path: Path) -> None:
+        data = {
+            "name": "py-recipe",
+            "description": "Has python step",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "check": {
+                    "python": "mymod.check_fn",
+                    "on_success": "done",
+                    "on_failure": "fail",
+                },
+                "done": {"action": "stop", "message": "OK"},
+                "fail": {"action": "stop", "message": "Failed"},
+            },
+        }
+        wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
+        assert wf.steps["check"].python == "mymod.check_fn"
+        assert wf.steps["check"].tool is None
+        assert wf.steps["check"].action is None
+
+    # CAP1
+    def test_capture_field_parsed(self, tmp_path: Path) -> None:
+        data = {
+            "name": "cap-recipe",
+            "description": "Capture test",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "run": {
+                    "tool": "run_skill",
+                    "with": {"cwd": "/tmp"},
+                    "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+        }
+        wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
+        assert wf.steps["run"].capture == {"worktree_path": "${{ result.worktree_path }}"}
+
+    # CAP2
+    def test_capture_defaults_empty(self, tmp_path: Path) -> None:
+        wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", VALID_RECIPE))
+        for step in wf.steps.values():
+            assert step.capture == {}
+
+    # T4
+    def test_recipe_skill_commands_are_namespaced(self) -> None:
+        import autoskillit
+
+        wf_dir = Path(autoskillit.__file__).parent / "recipes"
+        for wf_path in wf_dir.glob("*.yaml"):
+            content = wf_path.read_text()
+            for match in re.finditer(r'skill_command:\s*"(/\S+)', content):
+                ref = match.group(1)
+                if "${{" in ref:
+                    continue
+                assert ref.startswith("/autoskillit:"), (
+                    f"{wf_path.name}: {ref} should use /autoskillit: namespace"
+                )
+
+    # T_OR1
+    def test_on_result_parsed(self, tmp_path: Path) -> None:
+        data = {
+            "name": "result-recipe",
+            "description": "Has on_result",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "classify": {
+                    "tool": "classify_fix",
+                    "on_result": {
+                        "field": "restart_scope",
+                        "routes": {
+                            "full_restart": "investigate",
+                            "partial_restart": "implement",
+                        },
+                    },
+                    "on_failure": "escalate",
+                },
+                "investigate": {"action": "stop", "message": "Investigating."},
+                "implement": {"action": "stop", "message": "Implementing."},
+                "escalate": {"action": "stop", "message": "Escalating."},
+            },
+        }
+        f = _write_yaml(tmp_path / "recipe.yaml", data)
+        wf = load_recipe(f)
+        assert wf.steps["classify"].on_result is not None
+        assert isinstance(wf.steps["classify"].on_result, StepResultRoute)
+        assert wf.steps["classify"].on_result.field == "restart_scope"
+        assert wf.steps["classify"].on_result.routes == {
+            "full_restart": "investigate",
+            "partial_restart": "implement",
+        }
+
+    # T_OR9
+    def test_on_result_defaults_to_none(self, tmp_path: Path) -> None:
+        f = _write_yaml(tmp_path / "recipe.yaml", VALID_RECIPE)
+        wf = load_recipe(f)
+        assert wf.steps["run_tests"].on_result is None
+
+    # CON2
+    def test_parse_recipe_extracts_kitchen_rules(self, tmp_path: Path) -> None:
+        data = {
+            **VALID_RECIPE,
+            "kitchen_rules": [
+                "ONLY use AutoSkillit MCP tools",
+                "NEVER use Edit, Write, Read",
+            ],
+        }
+        wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
+        assert wf.kitchen_rules == [
+            "ONLY use AutoSkillit MCP tools",
+            "NEVER use Edit, Write, Read",
+        ]
+
+    # OPT2
+    def test_parse_step_preserves_optional(self) -> None:
+        step_with = _parse_step({"tool": "test_check", "optional": True})
+        assert step_with.optional is True
+
+        step_without = _parse_step({"tool": "test_check"})
+        assert step_without.optional is False
+
+    # MOD2
+    def test_parse_step_extracts_model(self) -> None:
+        step = _parse_step({"tool": "run_skill", "model": "sonnet"})
+        assert step.model == "sonnet"
+
+    # MOD3
+    def test_parse_step_model_absent(self) -> None:
+        step = _parse_step({"tool": "run_skill"})
+        assert step.model is None
+
+    # MOD4
+    def test_bundled_assess_steps_use_sonnet(self) -> None:
+        bd = builtin_recipes_dir()
+        for f in bd.glob("*.yaml"):
+            wf = load_recipe(f)
+            for step_name, step in wf.steps.items():
+                if (
+                    step.with_args.get("skill_command")
+                    and "assess-and-merge" in step.with_args["skill_command"]
+                ):
+                    assert step.model == "sonnet", (
+                        f"{f.name} step '{step_name}' should have model='sonnet'"
+                    )
+
+
+class TestListRecipes:
+    """TestListRecipes: discovery from project and builtin sources."""
+
+    def test_finds_builtins(self, tmp_path: Path) -> None:
+        recipes = list_recipes(tmp_path).items
+        names = {w.name for w in recipes}
+        assert "bugfix-loop" in names
+        assert "implementation-pipeline" in names
+
+
+class TestBuiltinRecipesDir:
+    """Tests for builtin_recipes_dir() function."""
+
+    def test_returns_existing_directory(self) -> None:
+        d = builtin_recipes_dir()
+        assert d.is_dir(), f"builtin_recipes_dir() {d} is not a directory"
+
+    def test_points_to_recipes(self) -> None:
+        d = builtin_recipes_dir()
+        assert d.name == "recipes", (
+            f"builtin_recipes_dir() should point to 'recipes', got '{d.name}'"
+        )
+
+    def test_contains_yaml_files(self) -> None:
+        d = builtin_recipes_dir()
+        yaml_files = list(d.glob("*.yaml"))
+        assert len(yaml_files) > 0, "builtin_recipes_dir() contains no YAML files"
+
+
+class TestVersionField:
+    """autoskillit_version field on Recipe dataclass."""
+
+    # VER1
+    def test_version_none_when_absent(self) -> None:
+        data = {
+            "name": "version-test-recipe",
+            "description": "A recipe for testing the version field",
+            "kitchen_rules": ["Only use AutoSkillit MCP tools during pipeline execution"],
+            "steps": {
+                "do_it": {"tool": "run_cmd", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            },
+        }
+        wf = _parse_recipe(data)
+        assert wf.version is None
+
+    # VER2
+    def test_version_set_when_present(self) -> None:
+        data = {
+            "name": "version-test-recipe",
+            "description": "A recipe for testing the version field",
+            "kitchen_rules": ["Only use AutoSkillit MCP tools during pipeline execution"],
+            "steps": {
+                "do_it": {"tool": "run_cmd", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            },
+            "autoskillit_version": "0.2.0",
+        }
+        wf = _parse_recipe(data)
+        assert wf.version == "0.2.0"
+
+    # VER4
+    def test_version_preserved_in_round_trip(self, tmp_path: Path) -> None:
+        data = {
+            "name": "version-test-recipe",
+            "description": "A recipe for testing the version field",
+            "kitchen_rules": ["Only use AutoSkillit MCP tools during pipeline execution"],
+            "steps": {
+                "do_it": {"tool": "run_cmd", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            },
+            "autoskillit_version": "1.3.0",
+        }
+        path = _write_yaml(tmp_path / "recipe.yaml", data)
+        wf = load_recipe(path)
+        assert wf.version == "1.3.0"
+
+
+def test_recipe_replaces_workflow_class() -> None:
+    wf = Recipe(name="test", description="test")
+    assert isinstance(wf, Recipe)
+
+
+def test_recipe_step_replaces_workflow_step() -> None:
+    step = RecipeStep(tool="run_skill")
+    assert isinstance(step, RecipeStep)
+
+
+def test_recipe_ingredient_importable() -> None:
+    ing = RecipeIngredient(description="test")
+    assert isinstance(ing, RecipeIngredient)
+
+
+def test_bundled_recipes_use_ingredients_field() -> None:
+    bd = builtin_recipes_dir()
+    for path in bd.glob("*.yaml"):
+        data = yaml.safe_load(path.read_text())
+        assert isinstance(data, dict)
+        if "inputs" in data and "ingredients" not in data:
+            assert False, f"{path.name} still uses 'inputs' field instead of 'ingredients'"
+
+
+def test_bundled_recipes_use_kitchen_rules_field() -> None:
+    bd = builtin_recipes_dir()
+    for path in bd.glob("*.yaml"):
+        data = yaml.safe_load(path.read_text())
+        assert isinstance(data, dict)
+        if "constraints" in data and "kitchen_rules" not in data:
+            assert False, f"{path.name} still uses 'constraints' field instead of 'kitchen_rules'"
+
+
+def test_builtin_recipes_dir_points_to_recipes() -> None:
+    d = builtin_recipes_dir()
+    assert d.name == "recipes"
+
+
+def test_recipe_source_enum_values() -> None:
+    from autoskillit.types import RecipeSource
+
+    assert hasattr(RecipeSource, "PROJECT")
+    assert hasattr(RecipeSource, "BUILTIN")

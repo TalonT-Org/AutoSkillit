@@ -257,11 +257,11 @@ class TestContractMigrationAdapter:
         mock_contract = {"skill_hashes": {}}
         stale_item = Mock()
         monkeypatch.setattr(
-            "autoskillit.contract_validator.load_recipe_card",
+            "autoskillit.recipe_validator.load_recipe_card",
             lambda *a, **kw: mock_contract,
         )
         monkeypatch.setattr(
-            "autoskillit.contract_validator.check_contract_staleness",
+            "autoskillit.recipe_validator.check_contract_staleness",
             lambda *a, **kw: [stale_item],
         )
 
@@ -286,7 +286,7 @@ class TestContractMigrationAdapter:
         contract_path.write_text("skill_hashes: {}")
 
         monkeypatch.setattr(
-            "autoskillit.contract_validator.generate_recipe_card",
+            "autoskillit.recipe_validator.generate_recipe_card",
             lambda *a, **kw: contract_path,
         )
 

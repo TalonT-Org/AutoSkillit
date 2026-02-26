@@ -13,9 +13,9 @@ from autoskillit import __version__
 from autoskillit._logging import get_logger
 from autoskillit.failure_store import _atomic_write
 from autoskillit.migration_loader import applicable_migrations
+from autoskillit.recipe_io import load_recipe as _parse_recipe
 from autoskillit.recipe_loader import _parse_recipe_metadata
-from autoskillit.recipe_parser import load_recipe as _parse_recipe
-from autoskillit.recipe_parser import validate_recipe
+from autoskillit.recipe_validator import validate_recipe
 
 logger = get_logger(__name__)
 
@@ -232,7 +232,7 @@ class ContractMigrationAdapter:
         return files
 
     def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.contract_validator import check_contract_staleness, load_recipe_card
+        from autoskillit.recipe_validator import check_contract_staleness, load_recipe_card
 
         recipes_dir = file.path.parent.parent
         contract = load_recipe_card(file.name, recipes_dir)
@@ -247,7 +247,7 @@ class ContractMigrationAdapter:
         run_headless: Callable[..., Awaitable[dict]],  # unused — deterministic regeneration
         temp_dir: Path,
     ) -> MigrationResult:
-        from autoskillit.contract_validator import generate_recipe_card
+        from autoskillit.recipe_validator import generate_recipe_card
 
         recipes_dir = file.path.parent.parent
         recipe_path = recipes_dir / f"{file.name}.yaml"

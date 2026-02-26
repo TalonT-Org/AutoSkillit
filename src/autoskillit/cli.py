@@ -478,7 +478,7 @@ def doctor(*, output_json: bool = False):
     # Check 7: Script version health
     from autoskillit import __version__
     from autoskillit.failure_store import FailureStore, default_store_path
-    from autoskillit.recipe_parser import list_recipes as _list_all_recipes
+    from autoskillit.recipe_io import list_recipes as _list_all_recipes
     from autoskillit.types import RecipeSource
 
     _all_result = _list_all_recipes(Path.cwd())
@@ -571,7 +571,7 @@ def migrate(*, check: bool = False):
     """
     from autoskillit import __version__
     from autoskillit.migration_loader import applicable_migrations
-    from autoskillit.recipe_parser import list_recipes as _list_all_recipes
+    from autoskillit.recipe_io import list_recipes as _list_all_recipes
     from autoskillit.types import RecipeSource
 
     project_dir = Path.cwd()
@@ -696,7 +696,7 @@ def workspace_init(path: str):
 @recipes_app.command(name="list")
 def recipes_list():
     """List available recipes with sources."""
-    from autoskillit.recipe_parser import list_recipes
+    from autoskillit.recipe_io import list_recipes
 
     recipes = list_recipes(Path.cwd()).items
     if not recipes:
@@ -714,7 +714,7 @@ def recipes_list():
 @recipes_app.command(name="show")
 def recipes_show(name: str):
     """Print the YAML content of a named recipe."""
-    from autoskillit.recipe_parser import list_recipes
+    from autoskillit.recipe_io import list_recipes
 
     recipes = list_recipes(Path.cwd()).items
     match = next((r for r in recipes if r.name == name), None)
@@ -828,7 +828,7 @@ def cook(recipe: str):
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
-    from autoskillit.recipe_parser import list_recipes as _list_all_recipes_for_cook
+    from autoskillit.recipe_io import list_recipes as _list_all_recipes_for_cook
 
     _all = _list_all_recipes_for_cook(Path.cwd())
     _match = next((r for r in _all.items if r.name == recipe), None)
@@ -847,7 +847,8 @@ def cook(recipe: str):
     # Validate recipe before launching session
     import yaml
 
-    from autoskillit.recipe_parser import _parse_recipe, validate_recipe
+    from autoskillit.recipe_io import _parse_recipe
+    from autoskillit.recipe_validator import validate_recipe
 
     try:
         data = yaml.safe_load(recipe_yaml)

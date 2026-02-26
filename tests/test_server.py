@@ -727,11 +727,11 @@ class TestRecipeTools:
 
     # SS1
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe_parser.list_recipes")
+    @patch("autoskillit.recipe_io.list_recipes")
     async def test_list_returns_json_object(self, mock_list):
         """list_recipes returns JSON object with scripts array (not gated)."""
-        from autoskillit.recipe_parser import RecipeInfo, RecipeSource
-        from autoskillit.types import LoadResult
+        from autoskillit.recipe_schema import RecipeInfo
+        from autoskillit.types import LoadResult, RecipeSource
 
         mock_list.return_value = LoadResult(
             items=[
@@ -779,7 +779,7 @@ class TestRecipeTools:
 
     # SS4
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe_parser.list_recipes")
+    @patch("autoskillit.recipe_io.list_recipes")
     async def test_list_reports_errors_in_response(self, mock_list):
         """list_recipes includes errors in JSON when recipes fail to parse."""
         from autoskillit.types import LoadReport, LoadResult
@@ -885,7 +885,7 @@ class TestRecipeTools:
         with (
             patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
             patch(
-                "autoskillit.semantic_rules.run_semantic_rules",
+                "autoskillit.recipe_validator.run_semantic_rules",
                 side_effect=RuntimeError("injected parse failure"),
             ),
             structlog.testing.capture_logs() as logs,
@@ -1220,7 +1220,7 @@ class TestToolSchemas:
 
     def test_bundled_recipe_kitchen_rules_name_all_forbidden_tools(self):
         """All bundled recipe kitchen_rules blocks must name every forbidden tool."""
-        from autoskillit.recipe_parser import builtin_recipes_dir, load_recipe
+        from autoskillit.recipe_io import builtin_recipes_dir, load_recipe
         from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
 
         wf_dir = builtin_recipes_dir()

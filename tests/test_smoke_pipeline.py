@@ -27,7 +27,7 @@ import yaml
 
 from autoskillit import server
 from autoskillit.config import AutomationConfig, TestCheckConfig
-from autoskillit.recipe_parser import builtin_recipes_dir
+from autoskillit.recipe_io import builtin_recipes_dir
 from autoskillit.server import (
     classify_fix,
     list_recipes,

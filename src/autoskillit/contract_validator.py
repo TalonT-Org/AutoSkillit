@@ -187,12 +187,13 @@ def count_positional_args(skill_command: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
+def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> dict:
     """Generate a recipe card file for a recipe.
 
     Walks each step, resolves skill names, looks up contracts in the manifest,
     computes SKILL.md hashes, and builds dataflow entries. Writes the recipe card
-    to ``recipes_dir / "contracts" / "{pipeline_stem}.yaml"``.
+    to ``recipes_dir / "contracts" / "{pipeline_stem}.yaml"`` and returns the
+    contract data dict directly so callers avoid a redundant disk read.
     """
     import datetime
 
@@ -262,7 +263,7 @@ def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
 
     out_path = contracts_dir / f"{pipeline_path.stem}.yaml"
     out_path.write_text(yaml.dump(contract_data, default_flow_style=False, sort_keys=False))
-    return out_path
+    return contract_data
 
 
 def load_recipe_card(recipe_name: str, recipes_dir: Path) -> dict | None:

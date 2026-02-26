@@ -10,8 +10,8 @@ from typing import Protocol
 import yaml as _yaml
 
 from autoskillit import __version__
+from autoskillit._io import _atomic_write
 from autoskillit._logging import get_logger
-from autoskillit.failure_store import _atomic_write
 from autoskillit.migration_loader import applicable_migrations
 from autoskillit.recipe_loader import _parse_recipe_metadata
 from autoskillit.recipe_parser import load_recipe as _parse_recipe

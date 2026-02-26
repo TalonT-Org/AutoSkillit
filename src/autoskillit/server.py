@@ -74,7 +74,7 @@ _tools_enabled = False
 logger = get_logger(__name__)
 
 
-def _version_info() -> dict:
+def version_info() -> dict:
     """Return version health information for the running server."""
     return {
         "package_version": __version__,
@@ -1170,7 +1170,7 @@ async def kitchen_status() -> str:
 
     This tool is always available (not gated by open_kitchen).
     """
-    info = _version_info()
+    info = version_info()
     status = {
         "package_version": info["package_version"],
         "plugin_json_version": info["plugin_json_version"],

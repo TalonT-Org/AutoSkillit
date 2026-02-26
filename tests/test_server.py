@@ -281,13 +281,13 @@ class TestPluginDirConstant:
 
 
 class TestVersionInfo:
-    """_version_info() returns package and plugin.json versions."""
+    """version_info() returns package and plugin.json versions."""
 
     def test_version_info_returns_package_and_plugin_versions(self):
         from autoskillit import __version__
-        from autoskillit.server import _version_info
+        from autoskillit.server import version_info
 
-        info = _version_info()
+        info = version_info()
         assert isinstance(info["package_version"], str)
         assert isinstance(info["plugin_json_version"], str)
         assert info["package_version"] == __version__
@@ -295,7 +295,7 @@ class TestVersionInfo:
 
     def test_version_info_detects_mismatch(self, tmp_path, monkeypatch):
         from autoskillit import server
-        from autoskillit.server import _version_info
+        from autoskillit.server import version_info
 
         plugin_dir = tmp_path / ".claude-plugin"
         plugin_dir.mkdir()
@@ -303,19 +303,28 @@ class TestVersionInfo:
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
         monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
-        info = _version_info()
+        info = version_info()
         assert info["match"] is False
         assert info["package_version"] != info["plugin_json_version"]
         assert info["plugin_json_version"] == "0.0.0"
 
     def test_version_info_handles_missing_plugin_json(self, tmp_path, monkeypatch):
         from autoskillit import server
-        from autoskillit.server import _version_info
+        from autoskillit.server import version_info
 
         monkeypatch.setattr(server, "_plugin_dir", str(tmp_path))
-        info = _version_info()
+        info = version_info()
         assert info["plugin_json_version"] is None
         assert info["match"] is False
+
+    def test_version_info_is_public(self):
+        """version_info must be a public function — no underscore prefix."""
+        from autoskillit import server
+
+        assert hasattr(server, "version_info"), "server.version_info must exist"
+        assert not hasattr(server, "_version_info"), "server._version_info must be removed"
+        result = server.version_info()
+        assert set(result.keys()) >= {"package_version", "plugin_json_version", "match"}
 
 
 class TestClassifyFix:

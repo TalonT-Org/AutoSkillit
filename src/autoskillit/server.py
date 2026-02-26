@@ -154,6 +154,13 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
     if not plan_path.is_file():
         return _gate_error_result(f"Plan file not found: {plan_path}")
 
+    # TOCTOU acceptance (option c, per P1-5): This function reads the plan file
+    # once here. If the file is modified or deleted between this gate check and
+    # the headless session acting on it, the gate condition will be stale.
+    # This is an accepted limitation: the plan file is user-controlled, and
+    # modification between check and execution is a user error. Options (a) and
+    # (b) — passing file content via stdin or re-verifying via content hash —
+    # involve significant scope and are deferred.
     first_line = plan_path.read_text().split("\n", 1)[0].strip()
     if first_line != _config.implement_gate.marker:
         return _gate_error_result(
@@ -1804,11 +1811,21 @@ async def load_recipe(name: str) -> str:
                 if recipe_path.exists():
                     try:
                         contract = generate_recipe_card(recipe_path, recipes_dir)
-                    except Exception:
+                    except Exception as exc:
                         logger.warning(
                             "Recipe contract card generation failed",
                             name=name,
                             exc_info=True,
+                        )
+                        suggestions.append(
+                            {
+                                "rule": "validation-error",
+                                "severity": "warning",
+                                "step": "(contract-generation)",
+                                "message": (
+                                    f"Contract generation failed: {type(exc).__name__}: {exc}"
+                                ),
+                            }
                         )
 
             if contract:
@@ -1831,11 +1848,19 @@ async def load_recipe(name: str) -> str:
                             ),
                         }
                     )
-    except Exception:
+    except Exception as exc:
         logger.warning(
             "Recipe validation pipeline failed",
             name=name,
             exc_info=True,
+        )
+        suggestions.append(
+            {
+                "rule": "validation-error",
+                "severity": "error",
+                "step": "(validation-pipeline)",
+                "message": f"Validation pipeline crashed: {type(exc).__name__}: {exc}",
+            }
         )
 
     return json.dumps({"content": content, "suggestions": suggestions})

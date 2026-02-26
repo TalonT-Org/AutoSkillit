@@ -7,9 +7,10 @@ import re
 import shutil
 import sqlite3
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import structlog.contextvars
 import structlog.testing
 
 from autoskillit._audit import FailureRecord
@@ -879,10 +880,10 @@ class TestRecipeTools:
         assert len(result["content"]) > 0
 
     @pytest.mark.asyncio
-    async def test_load_recipe_parse_failure_is_logged(
+    async def test_load_recipe_parse_failure_is_logged_and_surfaced(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """load_recipe emits a warning log when validation pipeline raises."""
+        """load_recipe emits a warning log and surfaces a validation-error finding."""
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
@@ -905,6 +906,34 @@ class TestRecipeTools:
         assert any(log.get("log_level") == "warning" for log in logs), (
             f"Expected a warning log entry for parse failure, got: {logs}"
         )
+        assert any(s.get("rule") == "validation-error" for s in result["suggestions"]), (
+            "Unexpected exception must appear as a validation-error finding in suggestions"
+        )
+
+    @pytest.mark.asyncio
+    async def test_load_recipe_validation_error_message_includes_exception_type(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The validation-error finding message names the exception type."""
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text(
+            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
+        )
+        with (
+            patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
+            patch(
+                "autoskillit.semantic_rules.run_semantic_rules",
+                side_effect=RuntimeError("injected crash"),
+            ),
+        ):
+            result = json.loads(await load_recipe(name="test"))
+
+        assert "content" in result
+        findings = [s for s in result["suggestions"] if s.get("rule") == "validation-error"]
+        assert findings, "Expected at least one validation-error finding"
+        assert "RuntimeError" in findings[0]["message"]
 
 
 class TestValidateRecipe:
@@ -5923,3 +5952,160 @@ class TestStalePathStdoutCheck:
         parsed = json.loads(_build_skill_result(result_obj))
         assert parsed["success"] is False
         assert parsed["subtype"] == "stale"
+
+
+@pytest.mark.asyncio
+class TestGatedToolObservability:
+    """Each of the 8 gated tools emits ctx.info on invocation, ctx.error on
+    failure, and binds structlog contextvars with tool= and cwd=."""
+
+    @pytest.fixture
+    def _ctx(self):
+        ctx = MagicMock()
+        ctx.info = AsyncMock()
+        ctx.error = AsyncMock()
+        return ctx
+
+    # --- run_cmd ---
+    async def test_run_cmd_ctx_info(self, _ctx):
+        with patch("autoskillit.server._run_subprocess", return_value=(0, "ok", "")):
+            await run_cmd(cmd="echo hi", cwd="/tmp", ctx=_ctx)
+        _ctx.info.assert_awaited_once()
+
+    async def test_run_cmd_ctx_error_on_failure(self, _ctx):
+        with patch("autoskillit.server._run_subprocess", return_value=(1, "", "err")):
+            await run_cmd(cmd="false", cwd="/tmp", ctx=_ctx)
+        _ctx.error.assert_awaited_once()
+
+    async def test_run_cmd_binds_contextvars(self):
+        with patch("autoskillit.server._run_subprocess", return_value=(0, "ok", "")):
+            await run_cmd(cmd="echo hi", cwd="/my/dir")
+        assert structlog.contextvars.get_contextvars().get("tool") == "run_cmd"
+        assert structlog.contextvars.get_contextvars().get("cwd") == "/my/dir"
+
+    # --- run_python ---
+    async def test_run_python_ctx_info(self, _ctx):
+        with patch("autoskillit.server._import_and_call", return_value={"success": True}):
+            await run_python(callable="mod.fn", ctx=_ctx)
+        _ctx.info.assert_awaited_once()
+
+    async def test_run_python_ctx_error_on_failure(self, _ctx):
+        with patch(
+            "autoskillit.server._import_and_call",
+            return_value={"success": False, "error": "fail"},
+        ):
+            await run_python(callable="mod.fn", ctx=_ctx)
+        _ctx.error.assert_awaited_once()
+
+    async def test_run_python_binds_tool_contextvar(self):
+        with patch("autoskillit.server._import_and_call", return_value={"success": True}):
+            await run_python(callable="mod.fn")
+        assert structlog.contextvars.get_contextvars().get("tool") == "run_python"
+
+    # --- test_check ---
+    async def test_test_check_ctx_info(self, _ctx):
+        with patch("autoskillit.server._run_subprocess", return_value=(0, "ok", "")):
+            await test_check(worktree_path="/tmp/wt", ctx=_ctx)
+        _ctx.info.assert_awaited_once()
+
+    async def test_test_check_ctx_error_when_failed(self, _ctx):
+        with patch("autoskillit.server._run_subprocess", return_value=(1, "FAILED", "")):
+            await test_check(worktree_path="/tmp/wt", ctx=_ctx)
+        _ctx.error.assert_awaited_once()
+
+    async def test_test_check_binds_contextvars(self):
+        with patch("autoskillit.server._run_subprocess", return_value=(0, "ok", "")):
+            await test_check(worktree_path="/tmp/wt")
+        ctx_vars = structlog.contextvars.get_contextvars()
+        assert ctx_vars.get("tool") == "test_check"
+        assert ctx_vars.get("cwd") == "/tmp/wt"
+
+    # --- merge_worktree ---
+    async def test_merge_worktree_ctx_info(self, tmp_path, _ctx):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        # Stub all subprocess calls — ctx.info fires before any subprocess
+        with patch("autoskillit.server._run_subprocess", return_value=(0, "ok", "")):
+            await merge_worktree(worktree_path=str(wt), base_branch="main", ctx=_ctx)
+        _ctx.info.assert_awaited_once()
+
+    async def test_merge_worktree_ctx_error_on_error_return(self, _ctx):
+        # Non-existent path → immediate error return
+        await merge_worktree(worktree_path="/nonexistent", base_branch="main", ctx=_ctx)
+        _ctx.error.assert_awaited_once()
+
+    # --- reset_test_dir ---
+    async def test_reset_test_dir_ctx_info(self, tmp_path, _ctx):
+        marker = tmp_path / ".autoskillit-workspace"
+        marker.touch()
+        with patch(
+            "autoskillit.server._delete_directory_contents",
+            return_value=MagicMock(to_dict=lambda: {"deleted": []}),
+        ):
+            await reset_test_dir(test_dir=str(tmp_path), ctx=_ctx)
+        _ctx.info.assert_awaited_once()
+
+    async def test_reset_test_dir_ctx_error_when_marker_missing(self, tmp_path, _ctx):
+        await reset_test_dir(test_dir=str(tmp_path), ctx=_ctx)
+        _ctx.error.assert_awaited_once()
+
+    # --- classify_fix ---
+    async def test_classify_fix_ctx_info(self, tmp_path, _ctx):
+        with patch("autoskillit.server._run_subprocess", return_value=(0, "", "")):
+            await classify_fix(worktree_path=str(tmp_path), base_branch="main", ctx=_ctx)
+        _ctx.info.assert_awaited_once()
+
+    async def test_classify_fix_ctx_error_on_git_failure(self, tmp_path, _ctx):
+        with patch("autoskillit.server._run_subprocess", return_value=(1, "", "git error")):
+            await classify_fix(worktree_path=str(tmp_path), base_branch="main", ctx=_ctx)
+        _ctx.error.assert_awaited_once()
+
+    # --- reset_workspace ---
+    async def test_reset_workspace_ctx_info(self, tmp_path, _ctx):
+        marker = tmp_path / ".autoskillit-workspace"
+        marker.touch()
+        with (
+            patch("autoskillit.server._config") as cfg,
+            patch("autoskillit.server._run_subprocess", return_value=(0, "", "")),
+            patch(
+                "autoskillit.server._delete_directory_contents",
+                return_value=MagicMock(to_dict=lambda: {}),
+            ),
+        ):
+            cfg.safety.reset_guard_marker = ".autoskillit-workspace"
+            cfg.reset_workspace.command = ["true"]
+            cfg.reset_workspace.preserve_dirs = []
+            await reset_workspace(test_dir=str(tmp_path), ctx=_ctx)
+        _ctx.info.assert_awaited_once()
+
+    async def test_reset_workspace_ctx_error_when_not_configured(self, tmp_path, _ctx):
+        marker = tmp_path / ".autoskillit-workspace"
+        marker.touch()
+        # Default config has reset_workspace.command = None → error return
+        await reset_workspace(test_dir=str(tmp_path), ctx=_ctx)
+        _ctx.error.assert_awaited_once()
+
+    # --- read_db ---
+    async def test_read_db_ctx_info(self, tmp_path, _ctx):
+        db = tmp_path / "test.db"
+        sqlite3.connect(str(db)).close()
+        with patch(
+            "autoskillit.server._execute_readonly_query",
+            return_value={"rows": [], "columns": []},
+        ):
+            await read_db(db_path=str(db), query="SELECT 1", ctx=_ctx)
+        _ctx.info.assert_awaited_once()
+
+    async def test_read_db_ctx_error_on_missing_db(self, _ctx):
+        await read_db(db_path="/nonexistent.db", query="SELECT 1", ctx=_ctx)
+        _ctx.error.assert_awaited_once()
+
+    async def test_read_db_binds_tool_contextvar(self, tmp_path):
+        db = tmp_path / "test.db"
+        sqlite3.connect(str(db)).close()
+        with patch(
+            "autoskillit.server._execute_readonly_query",
+            return_value={"rows": [], "columns": []},
+        ):
+            await read_db(db_path=str(db), query="SELECT 1")
+        assert structlog.contextvars.get_contextvars().get("tool") == "read_db"

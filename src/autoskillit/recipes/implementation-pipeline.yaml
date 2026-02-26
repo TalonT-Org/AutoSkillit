@@ -62,6 +62,7 @@ steps:
       cwd: "${{ inputs.work_dir }}"
       step_name: "plan"
       group_files: "${{ context.group_files }}"
+      remediation_path: "${{ context.remediation_path }}"
     capture:
       plan_path: "${{ result.plan_path }}"
     on_success: review
@@ -185,29 +186,22 @@ steps:
       step_name: "audit_impl"
     capture:
       remediation_path: "${{ result.remediation_path }}"
-    on_success: done
-    on_failure: remediate
+      verdict: "${{ result.verdict }}"
+    on_result:
+      field: verdict
+      routes:
+        GO: done
+        NO GO: plan
     optional: true
     note: >
       Only execute if inputs.audit is 'true'. If false, skip directly to done.
       All groups and parts have been merged at this point — no worktree exists.
       For plans_input: if make_groups was true, pass context.group_files (the ordered list of
-      per-group file paths). For manifest-level audit-impl contract, see Part B.
-      Otherwise pass context.plan_path (or the temp/make-plan/ directory for multi-part plans).
-      For implementation_ref: pass inputs.base_branch — the skill will run
+      per-group file paths). Otherwise pass context.plan_path (or the temp/make-plan/ directory
+      for multi-part plans). For implementation_ref: pass inputs.base_branch — the skill will run
       git diff against the upstream of that branch to capture everything merged.
-      On NO GO: the skill generates a remediation file in temp/audit-impl/. Pass that
-      remediation file path as the task to the plan step for another full cycle.
-
-  remediate:
-    action: route
-    with:
-      remediation_path: "${{ context.remediation_path }}"
-    on_success: plan
-    on_failure: escalate
-    note: >
-      Routing step after audit_impl NO GO. Threads context.remediation_path to the plan step.
-      The plan step will use context.remediation_path as the task argument instead of inputs.task.
+      On NO GO: the skill generates a remediation file in temp/audit-impl/; the path is captured
+      in context.remediation_path and threaded directly to the plan step via on_result routing.
 
   done:
     action: stop

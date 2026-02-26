@@ -265,8 +265,8 @@ class TestSmokeScriptValidation:
         assert pipeline["steps"]["test"]["tool"] == "test_check"
         assert pipeline["steps"]["merge"]["tool"] == "merge_worktree"
         assert pipeline["steps"]["classify"]["tool"] == "classify_fix"
-        assert pipeline["steps"]["create_branch"]["action"] == "route"
-        assert pipeline["steps"]["check_summary"]["action"] == "route"
+        assert pipeline["steps"]["create_branch"]["tool"] == "run_cmd"
+        assert pipeline["steps"]["check_summary"]["tool"] == "run_python"
         assert pipeline["steps"]["create_summary"]["tool"] == "run_skill"
 
     def test_executor_interpolation(self) -> None:

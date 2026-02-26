@@ -9,8 +9,11 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Callable
 
+from autoskillit._logging import get_logger
 from autoskillit.recipe_parser import Recipe, analyze_dataflow, iter_steps_with_context
 from autoskillit.types import PIPELINE_FORBIDDEN_TOOLS, SKILL_TOOLS, Severity
+
+logger = get_logger(__name__)
 
 
 @dataclasses.dataclass
@@ -376,6 +379,57 @@ def _check_weak_constraint_text(wf: Recipe) -> list[RuleFinding]:
             )
         ]
     return []
+
+
+@semantic_rule(
+    name="implicit-handoff",
+    description=(
+        "Skill steps with declared outputs but no capture: block force orchestrators "
+        "to infer result paths from agent output text instead of structured context wiring."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_implicit_handoffs(wf: Recipe) -> list[RuleFinding]:
+    from autoskillit.contract_validator import (
+        count_positional_args,
+        load_bundled_manifest,
+        resolve_skill_name,
+    )
+
+    try:
+        manifest = load_bundled_manifest()
+    except Exception:
+        logger.warning("implicit-handoff rule: failed to load bundled manifest, skipping check")
+        return []
+
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        if count_positional_args(skill_cmd) > 0:
+            continue
+        skill_contract = manifest["skills"].get(skill_name, {})
+        outputs = skill_contract.get("outputs", [])
+        if outputs and not step.capture:
+            output_names = [o["name"] for o in outputs]
+            findings.append(
+                RuleFinding(
+                    rule="implicit-handoff",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls '/autoskillit:{skill_name}' which declares "
+                        f"outputs {output_names!r} but has no capture: block. "
+                        f"Without a capture: block the orchestrator must infer result paths "
+                        f"from agent output text — an implicit handoff."
+                    ),
+                )
+            )
+    return findings
 
 
 @semantic_rule(

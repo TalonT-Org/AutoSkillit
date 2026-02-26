@@ -1597,3 +1597,59 @@ def test_implementation_pipeline_plan_step_consumes_group_files():
     assert "context.group_files" in all_values, (
         f"plan step with_args values: {list(plan_step.with_args.values())}"
     )
+
+
+# ---------------------------------------------------------------------------
+# RP-IP4: implementation-pipeline.yaml audit_impl capture
+# ---------------------------------------------------------------------------
+
+
+def test_implementation_pipeline_audit_impl_captures_remediation_path_and_verdict():
+    """audit_impl step must have a capture block with remediation_path and verdict."""
+    wf = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+    audit_impl_step = wf.steps["audit_impl"]
+    assert "remediation_path" in audit_impl_step.capture, (
+        f"audit_impl step capture keys: {list(audit_impl_step.capture.keys())}"
+    )
+    assert "verdict" in audit_impl_step.capture, (
+        f"audit_impl step capture keys: {list(audit_impl_step.capture.keys())}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# RP-ST1-ST4: smoke-test.yaml structural tests
+# ---------------------------------------------------------------------------
+
+
+def test_smoke_test_create_branch_is_not_action_route():
+    """create_branch step must not be an action: route step."""
+    wf = load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
+    create_branch = wf.steps["create_branch"]
+    assert create_branch.action != "route", "create_branch must be a tool step, not action: route"
+
+
+def test_smoke_test_create_branch_captures_feature_branch():
+    """create_branch step must capture feature_branch."""
+    wf = load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
+    create_branch = wf.steps["create_branch"]
+    assert "feature_branch" in create_branch.capture, (
+        f"create_branch capture keys: {list(create_branch.capture.keys())}"
+    )
+
+
+def test_smoke_test_merge_steps_use_context_feature_branch():
+    """All merge_worktree steps must use context.feature_branch as base_branch."""
+    wf = load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
+    for name, step in wf.steps.items():
+        if step.tool == "merge_worktree":
+            with_values = " ".join(str(v) for v in step.with_args.values())
+            assert "context.feature_branch" in with_values, (
+                f"merge step '{name}' must use context.feature_branch, got: {with_values}"
+            )
+
+
+def test_smoke_test_check_summary_is_not_action_route():
+    """check_summary step must not be an action: route step."""
+    wf = load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
+    check_summary = wf.steps["check_summary"]
+    assert check_summary.action != "route", "check_summary must be a tool step, not action: route"

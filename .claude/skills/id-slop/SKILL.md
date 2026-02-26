@@ -222,7 +222,7 @@ After subagents complete, organize findings by:
 
 ### Step 3: Generate Removal Plan
 
-Write a structured removal plan to: `temp/id-slop/slop_removal_plan.md`
+Write a structured removal plan to: `temp/id-slop/slop_removal_plan_{YYYY-MM-DD_HHMMSS}.md`
 
 The plan should follow this format:
 
@@ -301,7 +301,7 @@ Output to terminal:
 ```
 ## Slop Identification Complete
 
-**Plan:** temp/id-slop/slop_removal_plan.md
+**Plan:** temp/id-slop/slop_removal_plan_{YYYY-MM-DD_HHMMSS}.md
 **Total Findings:** {count}
 
 ### By Priority
@@ -319,7 +319,7 @@ Output to terminal:
 7. Dead Code: {count}
 
 ### Next Steps
-1. Review the plan at temp/slop_removal_plan.md
+1. Review the plan at temp/id-slop/slop_removal_plan_{YYYY-MM-DD_HHMMSS}.md
 2. Dry walkthrough has been run - check for any issues
 3. Implement the plan phase by phase
 ```

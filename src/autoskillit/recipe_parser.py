@@ -199,6 +199,8 @@ def validate_recipe(recipe: Recipe) -> list[str]:
 
     for step_name, step, available_context in iter_steps_with_context(recipe):
         for arg_key, arg_val in step.with_args.items():
+            if not isinstance(arg_val, str):
+                continue
             for inp_name in _INPUT_REF_RE.findall(arg_val):
                 if inp_name not in ingredient_names:
                     errors.append(
@@ -383,8 +385,16 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         for reachable_name in reachable:
             reachable_step = recipe.steps[reachable_name]
             for arg_val in reachable_step.with_args.values():
+                if not isinstance(arg_val, str):
+                    continue
                 for ctx_var in _CONTEXT_REF_RE.findall(arg_val):
                     consumed.add(ctx_var)
+
+        # on_result routing that branches on a captured field is a structural consumption:
+        # the field value drives the routing decision, so it is not dead even if no
+        # downstream with_args references it.
+        if step.on_result and step.on_result.field in step.capture:
+            consumed.add(step.on_result.field)
 
         # Flag captured vars not consumed on any path
         for cap_key in step.capture:

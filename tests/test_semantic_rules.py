@@ -745,3 +745,92 @@ def test_bundled_recipes_have_no_dead_output_errors():
         assert not dead_errors, (
             f"Bundled recipe {path.name} has dead-output ERROR findings: {dead_errors}"
         )
+
+
+# ---------------------------------------------------------------------------
+# T_IH1-T_IH4: implicit-handoff rule
+# ---------------------------------------------------------------------------
+
+
+def test_implicit_handoff_rule_is_registered():
+    """implicit-handoff rule must appear in the rule registry."""
+    from autoskillit.semantic_rules import _RULE_REGISTRY
+
+    assert "implicit-handoff" in [r.name for r in _RULE_REGISTRY]
+
+
+def test_implicit_handoff_fires_for_skill_with_no_capture(tmp_path):
+    """Step calls a skill with declared outputs but no capture: block -> ERROR."""
+    import yaml
+
+    recipe_yaml = {
+        "name": "implicit-handoff-test",
+        "description": "test",
+        "kitchen_rules": ["test"],
+        "steps": {
+            "plan": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:make-plan ${{ inputs.task }}"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        },
+    }
+    p = tmp_path / "implicit.yaml"
+    p.write_text(yaml.dump(recipe_yaml))
+    wf = load_recipe(p)
+    findings = run_semantic_rules(wf)
+    ih_errors = [
+        f for f in findings if f.rule == "implicit-handoff" and f.severity == Severity.ERROR
+    ]
+    assert ih_errors, "Expected at least one implicit-handoff ERROR finding"
+
+
+def test_implicit_handoff_does_not_fire_when_capture_present(tmp_path):
+    """Step calls skill with declared outputs AND has capture: -> no implicit-handoff."""
+    import yaml
+
+    recipe_yaml = {
+        "name": "explicit-handoff-test",
+        "description": "test",
+        "kitchen_rules": ["test"],
+        "steps": {
+            "plan": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:make-plan ${{ inputs.task }}"},
+                "capture": {"plan_path": "${{ result.plan_path }}"},
+                "on_success": "consume",
+            },
+            "consume": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:dry-walkthrough ${{ context.plan_path }}"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        },
+    }
+    p = tmp_path / "explicit.yaml"
+    p.write_text(yaml.dump(recipe_yaml))
+    wf = load_recipe(p)
+    findings = run_semantic_rules(wf)
+    ih_errors = [f for f in findings if f.rule == "implicit-handoff"]
+    assert not ih_errors, f"Expected no implicit-handoff findings, got: {ih_errors}"
+
+
+def test_bundled_recipes_have_no_implicit_handoff_errors():
+    """All bundled recipes must produce zero implicit-handoff ERROR findings."""
+    from autoskillit.recipe_parser import builtin_recipes_dir
+
+    wf_dir = builtin_recipes_dir()
+    yaml_files = list(wf_dir.glob("*.yaml"))
+    assert yaml_files, "Expected at least one bundled recipe"
+
+    for path in yaml_files:
+        wf = load_recipe(path)
+        findings = run_semantic_rules(wf)
+        ih_errors = [
+            f for f in findings if f.rule == "implicit-handoff" and f.severity == Severity.ERROR
+        ]
+        assert not ih_errors, (
+            f"Bundled recipe {path.name} has implicit-handoff ERROR findings: {ih_errors}"
+        )

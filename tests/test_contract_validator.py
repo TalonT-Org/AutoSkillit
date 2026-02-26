@@ -20,10 +20,10 @@ from autoskillit.contract_validator import (
 
 
 def test_load_bundled_manifest():
-    """Bundled manifest loads successfully and contains all 14 skills."""
+    """Bundled manifest loads successfully and contains all 15 skills."""
     manifest = load_bundled_manifest()
     assert manifest["version"] == "0.1.0"
-    assert len(manifest["skills"]) == 14
+    assert len(manifest["skills"]) == 15
 
 
 def test_load_bundled_manifest_skill_inputs_typed():
@@ -286,3 +286,25 @@ def test_skill_contracts_make_groups_declares_group_files():
     manifest = load_bundled_manifest()
     output_names = [o["name"] for o in manifest["skills"]["make-groups"]["outputs"]]
     assert "group_files" in output_names
+
+
+# ---------------------------------------------------------------------------
+# CV-AI1-AI2: audit-impl contract entry
+# ---------------------------------------------------------------------------
+
+
+def test_skill_contracts_has_audit_impl_entry():
+    """skill_contracts.yaml must have audit-impl with verdict and remediation_path outputs."""
+    manifest = load_bundled_manifest()
+    assert "audit-impl" in manifest["skills"], "audit-impl entry missing from skill_contracts.yaml"
+    output_names = [o["name"] for o in manifest["skills"]["audit-impl"]["outputs"]]
+    assert "remediation_path" in output_names, f"audit-impl outputs: {output_names}"
+    assert "verdict" in output_names, f"audit-impl outputs: {output_names}"
+
+
+def test_skill_contracts_count_includes_audit_impl():
+    """skill_contracts.yaml must have at least 15 skills (was 14 before audit-impl added)."""
+    manifest = load_bundled_manifest()
+    assert len(manifest["skills"]) >= 15, (
+        f"Expected >= 15 skills, got {len(manifest['skills'])}: {list(manifest['skills'].keys())}"
+    )

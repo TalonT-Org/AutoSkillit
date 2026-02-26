@@ -58,6 +58,10 @@ steps:
       plan_path: "${{ result.plan_path }}"
     on_success: implement
     on_failure: escalate
+    note: >
+      REMEDIATION MODE: when context.remediation_path is set (re-entry after audit_impl NO GO),
+      pass context.remediation_path as the task argument to the rectify skill instead of
+      the original investigation findings.
 
   implement:
     tool: run_skill_retry
@@ -122,9 +126,24 @@ steps:
       skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: ${{ inputs.helper_dir }}
       step_name: "audit_impl"
+    capture:
+      remediation_path: "${{ result.remediation_path }}"
+    on_result:
+      field: verdict
+      routes:
+        GO: merge
+        NO GO: remediate
     note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
-    on_success: merge
+
+  remediate:
+    action: route
+    with:
+      remediation_path: "${{ context.remediation_path }}"
+    on_success: plan
     on_failure: escalate
+    note: >
+      Routing step after audit_impl NO GO. Threads context.remediation_path to the plan step.
+      The plan step uses context.remediation_path as its task instead of the original investigation findings.
 
   merge:
     tool: merge_worktree

@@ -1,0 +1,130 @@
+name: investigate-first
+description: Investigate a problem deeply, plan architectural fix, implement and merge.
+
+kitchen_rules:
+  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
+    orchestrator. All code changes and investigation happen through
+    headless sessions via run_skill/run_skill_retry."
+  - "Route to on_failure when a step fails — the downstream skill (e.g.,
+    assess-and-merge) has diagnostic access that the orchestrator does not.
+    Do not investigate or attempt to fix failures directly."
+
+ingredients:
+  topic:
+    description: Description of the bug, error, or question to investigate
+    required: true
+  work_dir:
+    description: Working directory for agent sessions
+    required: true
+  target_dir:
+    description: Optional additional project directory for context
+    default: ""
+  base_branch:
+    description: Branch to merge fixes into
+    default: main
+  audit:
+    description: Run /autoskillit:audit-impl before merge to gate on implementation quality
+    default: "false"
+
+steps:
+  investigate:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:investigate ${{ inputs.topic }}"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "investigate"
+    on_success: rectify
+    on_failure: escalate
+
+  rectify:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:rectify"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "rectify"
+    capture:
+      plan_path: "${{ result.plan_path }}"
+    on_success: dry_walkthrough
+    on_failure: escalate
+
+  dry_walkthrough:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:dry-walkthrough the plan"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "dry_walkthrough"
+    on_success: implement
+    on_failure: rectify
+    note: If walkthrough finds issues, re-plan via rectify.
+
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:implement-worktree the verified plan"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "implement"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    retry:
+      max_attempts: 1
+      on: needs_retry
+      on_exhausted: retry_worktree
+    on_success: verify
+    on_failure: escalate
+
+  retry_worktree:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:retry-worktree the verified plan ${{ context.worktree_path }}"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "retry_worktree"
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: escalate
+    on_success: verify
+    on_failure: escalate
+
+  verify:
+    tool: test_check
+    with:
+      worktree_path: ${{ inputs.work_dir }}
+    on_success: audit_impl
+    on_failure: assess
+
+  assess:
+    tool: run_skill
+    model: sonnet
+    with:
+      skill_command: "/autoskillit:assess-and-merge fix test failures"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "assess"
+    on_success: verify
+    on_failure: escalate
+
+  audit_impl:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      cwd: ${{ inputs.work_dir }}
+      step_name: "audit_impl"
+    note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
+    on_success: merge
+    on_failure: escalate
+
+  merge:
+    tool: merge_worktree
+    with:
+      worktree_path: ${{ inputs.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+    on_success: done
+    on_failure: escalate
+
+  done:
+    action: stop
+    message: "Investigation complete. Fix implemented and merged."
+
+  escalate:
+    action: stop
+    message: "Human intervention needed. Review the latest output for details."

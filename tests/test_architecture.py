@@ -3,6 +3,14 @@
 Rules enforced here (compile-time, no execution required):
   1. No print() calls in production code
   2. No sensitive keyword arguments passed to logger calls
+  3. No broad except without logger call or re-raise
+  4. Import layer contract (each module only imports from same or lower layer)
+  5. Singleton definition locality (module-level constructors only in allowed modules)
+  6. MCP tool registry completeness (bidirectional equality with _gate registry)
+  7. No module-level I/O (open/load_config/yaml.safe_load at module scope)
+  8. asyncio.PIPE ban outside process_lifecycle.py
+  9. get_logger() must be called with __name__
+ 10. No f-string interpolation of sensitive variables in logger positional args
 
 Note: `import logging` and `logging.getLogger()` are enforced by ruff TID251
 at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
@@ -71,32 +79,83 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
         self.filepath = filepath
         self.violations: list[Violation] = []
         self._print_exempt = filepath.name in _PRINT_EXEMPT
+        self._asyncio_pipe_exempt = filepath.name in _ASYNCIO_PIPE_EXEMPT
 
     def _add(self, node: ast.AST, message: str) -> None:
         self.violations.append(
             Violation(
                 self.filepath,
-                node.lineno,
-                node.col_offset,
-                message,  # type: ignore[attr-defined]
+                node.lineno,  # type: ignore[attr-defined]
+                node.col_offset,  # type: ignore[attr-defined]
+                message,
             )
         )
 
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        """Rule 5 (visitor): asyncio.PIPE is banned outside process_lifecycle.py."""
+        if (
+            not self._asyncio_pipe_exempt
+            and node.attr == "PIPE"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "asyncio"
+        ):
+            self.violations.append(
+                Violation(
+                    self.filepath,
+                    node.lineno,
+                    node.col_offset,
+                    "asyncio.PIPE is banned; use create_temp_io() from process_lifecycle",
+                )
+            )
+        self.generic_visit(node)
+
     def visit_Call(self, node: ast.Call) -> None:
-        # Rule 1: no print() — ruff cannot enforce this in production-only files
+        # Rule 1 (visitor): no print() — ruff cannot enforce this in production-only files
         if not self._print_exempt and isinstance(node.func, ast.Name) and node.func.id == "print":
             self._add(node, "print() call — use logger instead")
 
-        # Rule 2: no sensitive kwargs in logger calls — not expressible in ruff
+        # Rule 2 (visitor): no sensitive kwargs in logger calls — not expressible in ruff
         if isinstance(node.func, ast.Attribute) and node.func.attr in _LOGGER_METHODS:
             for kw in node.keywords:
                 if kw.arg and any(s in kw.arg.lower() for s in _SENSITIVE_KEYWORDS):
                     self._add(node, f"sensitive kwarg '{kw.arg}' passed to logger")
 
+        # Rule 6 (visitor): get_logger must be called with __name__
+        func = node.func
+        func_name = func.id if isinstance(func, ast.Name) else None
+        if func_name == "get_logger" and node.args:
+            first_arg = node.args[0]
+            if not (isinstance(first_arg, ast.Name) and first_arg.id == "__name__"):
+                self._add(
+                    node,
+                    "get_logger() must be called with __name__, not a literal or other value",
+                )
+
+        # Rule 7 (visitor): no f-string with sensitive variable names in logger positional args
+        if isinstance(func, ast.Attribute) and func.attr in _LOGGER_METHODS:
+            for arg in node.args:
+                if isinstance(arg, ast.JoinedStr):  # f-string
+                    for fv in ast.walk(arg):
+                        if isinstance(fv, ast.FormattedValue):
+                            val = fv.value
+                            var_name = None
+                            if isinstance(val, ast.Name):
+                                var_name = val.id
+                            elif isinstance(val, ast.Attribute):
+                                var_name = val.attr
+                            if var_name and any(
+                                kw in var_name.lower() for kw in _SENSITIVE_KEYWORDS
+                            ):
+                                self._add(
+                                    node,
+                                    f"f-string log message interpolates sensitive variable "
+                                    f"'{var_name}' — use structlog kwargs instead",
+                                )
+
         self.generic_visit(node)
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
-        """Rule 3: broad except without logger call or re-raise → silent swallow."""
+        """Rule 3 (visitor): broad except without logger call or re-raise → silent swallow."""
         is_broad = node.type is None or (
             isinstance(node.type, ast.Name) and node.type.id in _BROAD_EXCEPTION_TYPES
         )
@@ -122,6 +181,171 @@ def _scan(path: Path) -> list[Violation]:
 
 
 _SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
+
+# ── Rule 1: Import layer enforcement ─────────────────────────────────────────
+LAYER_ASSIGNMENTS: dict[str, int] = {
+    # ── Layer 0: Foundation ── no autoskillit imports ─────────────────────────
+    "types": 0,
+    "config": 0,
+    "_gate": 0,
+    "_io": 0,
+    "_logging": 0,
+    "_yaml": 0,
+    "migration_loader": 0,
+    # ── Layer 1: Basic Services ── import only L0 ─────────────────────────────
+    "_audit": 1,
+    "_token_log": 1,
+    "session_result": 1,
+    "recipe_schema": 1,
+    "skill_resolver": 1,
+    "failure_store": 1,
+    "process_lifecycle": 1,
+    # ── Layer 2: Complex Services ── import L0 + L1 ───────────────────────────
+    "_context": 2,
+    "recipe_io": 2,
+    "recipe_loader": 2,
+    # ── Layer 3: Orchestration + Server ── import L0–L2 ───────────────────────
+    "recipe_validator": 3,
+    "migration_engine": 3,
+    "server": 3,
+}
+_LAYER_EXEMPT: frozenset[str] = frozenset({"cli", "__init__", "__main__"})
+
+# ── Rule 2: Singleton definition locality ─────────────────────────────────────
+# "server" allows mcp = FastMCP(...); "cli" allows app = App(...) etc.
+SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
+    {"_audit", "_token_log", "failure_store", "server", "cli"}
+)
+_SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
+    {
+        "frozenset",
+        "set",
+        "list",
+        "dict",
+        "tuple",
+        "str",
+        "int",
+        "float",
+        "bool",
+        "type",
+        "TypeVar",
+        "field",
+        "dataclass",
+        "get_logger",
+        "version",
+        "compile",
+    }
+)
+
+# ── Rule 4: No module-level I/O ───────────────────────────────────────────────
+_MODULE_LEVEL_IO_FUNC_NAMES: frozenset[str] = frozenset({"load_config", "open", "yaml.safe_load"})
+_MODULE_LEVEL_IO_ATTR_CALLS: frozenset[tuple[str, str]] = frozenset(
+    {("Path", "cwd"), ("os", "getcwd")}
+)
+_MODULE_LEVEL_IO_EXEMPT: frozenset[str] = frozenset({"__main__.py"})
+
+# ── Rule 5 (visitor): asyncio.PIPE ban ────────────────────────────────────────
+_ASYNCIO_PIPE_EXEMPT: frozenset[str] = frozenset({"process_lifecycle.py"})
+
+
+# ── Helpers for new rules ─────────────────────────────────────────────────────
+
+
+def _module_stem(path: Path) -> str:
+    """Return the stem (filename without .py) of a source file."""
+    return path.stem
+
+
+def _extract_module_level_internal_imports(path: Path) -> list[tuple[str, int]]:
+    """Return (imported_module_stem, lineno) for all autoskillit imports at module level.
+
+    Only iterates tree.body (module-level statements). Import nodes inside
+    function or class bodies are intentionally excluded.
+    """
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    results: list[tuple[str, int]] = []
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module:
+            parts = node.module.split(".")
+            if parts[0] == "autoskillit" and len(parts) > 1:
+                results.append((parts[1], node.lineno))
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if parts[0] == "autoskillit" and len(parts) > 1:
+                    results.append((parts[1], node.lineno))
+    return results
+
+
+def _get_call_func_name(node: ast.Call) -> str | None:
+    """Return the function name for simple calls, or None for complex expressions."""
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
+def _scan_module_level_io(path: Path) -> list[Violation]:
+    """Return Violations for module-level I/O calls in path.
+
+    Scans only tree.body (direct module-level statements). Does not descend
+    into nested function or class definitions.
+    """
+    source = path.read_text(encoding="utf-8")
+    try:
+        tree = ast.parse(source, filename=str(path))
+    except SyntaxError:
+        return []
+
+    violations: list[Violation] = []
+    for stmt in tree.body:
+        # Skip function/class definitions — their bodies are not module-level I/O
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        # Walk only the direct statement (not recursing into nested scopes)
+        for node in ast.walk(stmt):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            # Simple name calls: open(), load_config()
+            if isinstance(func, ast.Name) and func.id in _MODULE_LEVEL_IO_FUNC_NAMES:
+                violations.append(
+                    Violation(
+                        path,
+                        node.lineno,
+                        node.col_offset,
+                        f"module-level I/O call: {func.id}()",
+                    )
+                )
+            # Attribute calls: yaml.safe_load(), Path.cwd(), os.getcwd()
+            elif isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+                obj = func.value.id
+                attr = func.attr
+                if (obj, attr) in _MODULE_LEVEL_IO_ATTR_CALLS:
+                    violations.append(
+                        Violation(
+                            path,
+                            node.lineno,
+                            node.col_offset,
+                            f"module-level I/O call: {obj}.{attr}()",
+                        )
+                    )
+                elif attr == "safe_load" and obj == "yaml":
+                    violations.append(
+                        Violation(
+                            path,
+                            node.lineno,
+                            node.col_offset,
+                            "module-level I/O call: yaml.safe_load()",
+                        )
+                    )
+    return violations
+
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
 
 
 def test_tmp_path_is_ram_backed(tmp_path: Path) -> None:
@@ -267,25 +491,24 @@ def _has_await_or_return(stmt: ast.stmt) -> bool:
 
 
 def test_all_mcp_tools_are_registered() -> None:
-    """Every @mcp.tool-decorated function in server.py must appear in
-    GATED_TOOLS | UNGATED_TOOLS. No unregistered tool may exist."""
+    """Bidirectional check: every @mcp.tool function is in the _gate registry and
+    every registry entry has a corresponding @mcp.tool function in server.py."""
     from autoskillit._gate import GATED_TOOLS, UNGATED_TOOLS
 
-    src = (SRC_ROOT / "server.py").read_text()
-    tree = ast.parse(src)
-    all_tools = GATED_TOOLS | UNGATED_TOOLS
-    unregistered: list[str] = []
-
+    expected = GATED_TOOLS | UNGATED_TOOLS
+    server_src = SRC_ROOT / "server.py"
+    tree = ast.parse(server_src.read_text())
+    decorated: set[str] = set()
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
-                if node.name not in all_tools:
-                    unregistered.append(node.name)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            for dec in node.decorator_list:
+                if _is_mcp_tool_decorator(dec):
+                    decorated.add(node.name)
 
-    assert not unregistered, (
-        f"@mcp.tool-decorated functions not in GATED_TOOLS | UNGATED_TOOLS: "
-        f"{unregistered}. Add them to _gate.py."
-    )
+    unregistered = decorated - expected
+    missing = expected - decorated
+    assert not unregistered, f"@mcp.tool functions not in _gate registry: {sorted(unregistered)}"
+    assert not missing, f"_gate registry entries have no @mcp.tool function: {sorted(missing)}"
 
 
 def test_gated_tools_call_require_enabled_first() -> None:
@@ -327,3 +550,180 @@ def test_gated_tools_call_require_enabled_first() -> None:
         "Gated tools must call _require_enabled() before any await/return:\n"
         + "\n".join(f"  {v}" for v in violations)
     )
+
+
+# ── Rule 1: test_import_layer_enforcement ─────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "mod_name,layer",
+    [(k, v) for k, v in LAYER_ASSIGNMENTS.items()],
+)
+def test_import_layer_enforcement(mod_name: str, layer: int) -> None:
+    """Each module may only import from same or lower layer modules (no upward imports)."""
+    src_file = SRC_ROOT / f"{mod_name}.py"
+    if not src_file.exists():
+        pytest.skip(f"{mod_name}.py not found — prerequisite group not merged")
+
+    violations: list[str] = []
+    for imported_stem, lineno in _extract_module_level_internal_imports(src_file):
+        if imported_stem not in LAYER_ASSIGNMENTS:
+            # Unknown module — not in the assignment table; skip (new module, update table)
+            continue
+        imported_layer = LAYER_ASSIGNMENTS[imported_stem]
+        if imported_layer > layer:
+            violations.append(
+                f"  line {lineno}: {mod_name} (L{layer}) imports "
+                f"{imported_stem} (L{imported_layer}) — upward import"
+            )
+
+    assert not violations, f"Layer violations in {mod_name}.py:\n" + "\n".join(violations)
+
+
+# ── Rule 2: test_singleton_definition_locality ────────────────────────────────
+
+
+@pytest.mark.parametrize("source_file", _SOURCE_FILES)
+def test_singleton_definition_locality(source_file: Path) -> None:
+    """Module-level constructor calls are only permitted in SINGLETON_ALLOWED_MODULES."""
+    mod_stem = source_file.stem
+    if mod_stem in SINGLETON_ALLOWED_MODULES:
+        return  # exempt
+
+    tree = ast.parse(source_file.read_text())
+    violations: list[str] = []
+    for node in tree.body:  # module-level only
+        rhs: ast.expr | None = None
+        if isinstance(node, ast.Assign) and node.value:
+            rhs = node.value
+        elif isinstance(node, ast.AnnAssign) and node.value:
+            rhs = node.value
+        if rhs is None or not isinstance(rhs, ast.Call):
+            continue
+        func_name = _get_call_func_name(rhs)
+        if func_name in _SINGLETON_SAFE_CALL_NAMES:
+            continue
+        if func_name is None:
+            continue  # complex expression, skip
+        violations.append(
+            f"  line {node.lineno}: module-level call to '{func_name}()' — "
+            f"add {mod_stem!r} to SINGLETON_ALLOWED_MODULES if intentional"
+        )
+
+    assert not violations, f"Singleton locality violations in {_rel(source_file)}:\n" + "\n".join(
+        violations
+    )
+
+
+# ── Rule 4: test_no_module_level_io ───────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "source_file",
+    [f for f in _SOURCE_FILES if f.name not in _MODULE_LEVEL_IO_EXEMPT],
+)
+def test_no_module_level_io(source_file: Path) -> None:
+    """Production modules must not call open/load_config/yaml.safe_load at module scope."""
+    violations = _scan_module_level_io(source_file)
+    assert not violations, "Module-level I/O calls found:\n" + "\n".join(
+        str(v) for v in violations
+    )
+
+
+# ── Calibration tests ──────────────────────────────────────────────────────────
+
+
+# Rule 1 calibration
+
+
+def test_layer_enforcement_detects_upward_import(tmp_path: Path) -> None:
+    """A L1 module importing a L3 module triggers a violation."""
+    f = tmp_path / "fake_l1.py"
+    f.write_text("from autoskillit.server import mcp\n")
+    violations: list[str] = []
+    tree = ast.parse(f.read_text())
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module:
+            parts = node.module.split(".")
+            if parts[0] == "autoskillit" and len(parts) > 1:
+                imported = parts[1]
+                # synthetic module is L1; upward = strictly greater
+                if LAYER_ASSIGNMENTS.get(imported, 0) > 1:
+                    violations.append(imported)
+    assert violations  # must detect the upward import
+
+
+# Rule 2 calibration
+
+
+def test_singleton_locality_detects_non_allowed(tmp_path: Path) -> None:
+    snippet = "class Foo: pass\nfoo = Foo()\n"
+    f = tmp_path / "fake_module.py"
+    f.write_text(snippet)
+    tree = ast.parse(snippet)
+    found = False
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            func_name = _get_call_func_name(node.value)
+            if func_name and func_name not in _SINGLETON_SAFE_CALL_NAMES:
+                found = True
+    assert found
+
+
+# Rule 4 calibration
+
+
+def test_no_module_level_io_detects_open_call(tmp_path: Path) -> None:
+    f = tmp_path / "fake.py"
+    f.write_text("_f = open('config.yaml')\n")
+    assert _scan_module_level_io(f)
+
+
+def test_no_module_level_io_detects_yaml_load(tmp_path: Path) -> None:
+    f = tmp_path / "fake.py"
+    f.write_text("import yaml\n_data = yaml.safe_load(open('x'))\n")
+    assert _scan_module_level_io(f)
+
+
+# Rule 5 calibration (exercised via _scan + visitor)
+
+
+def test_asyncio_pipe_ban_detects_violation(tmp_path: Path) -> None:
+    f = tmp_path / "some_module.py"
+    f.write_text("import asyncio\nval = asyncio.PIPE\n")
+    violations = _scan(f)
+    assert any("asyncio.PIPE" in v.message for v in violations)
+
+
+def test_asyncio_pipe_ban_exempt_in_process_lifecycle(tmp_path: Path) -> None:
+    f = tmp_path / "process_lifecycle.py"
+    f.write_text("import asyncio\nval = asyncio.PIPE\n")
+    violations = _scan(f)
+    assert not any("asyncio.PIPE" in v.message for v in violations)
+
+
+# Rule 6 calibration
+
+
+def test_get_logger_name_enforcement_detects_literal(tmp_path: Path) -> None:
+    f = tmp_path / "some.py"
+    f.write_text("from autoskillit._logging import get_logger\nlogger = get_logger('mymodule')\n")
+    violations = _scan(f)
+    assert any("get_logger" in v.message for v in violations)
+
+
+# Rule 7 calibration
+
+
+def test_fstring_secret_detects_token_var(tmp_path: Path) -> None:
+    f = tmp_path / "some.py"
+    f.write_text("logger.info(f'Using {token}')\n")
+    violations = _scan(f)
+    assert any("token" in v.message for v in violations)
+
+
+def test_fstring_secret_safe_for_nonsensitive(tmp_path: Path) -> None:
+    f = tmp_path / "some.py"
+    f.write_text("logger.info(f'Count: {count}')\n")
+    violations = _scan(f)
+    assert not any("f-string" in v.message for v in violations)

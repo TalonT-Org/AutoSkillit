@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import importlib
+import textwrap
 from pathlib import Path
 
 import pytest
 import yaml
 
 from autoskillit.recipe_io import (
+    _parse_recipe,
     _parse_step,
     builtin_recipes_dir,
     list_recipes,
@@ -895,6 +897,10 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
         assert not errors, (
             f"Bundled workflow {path.name} has error-severity semantic findings: {errors}"
         )
+        undeclared_findings = [f for f in findings if f.rule == "undeclared-capture-key"]
+        assert undeclared_findings == [], (
+            f"Recipe '{wf.name}' has undeclared-capture-key findings: " + repr(undeclared_findings)
+        )
 
 
 class TestOutdatedScriptVersionRule:
@@ -1054,6 +1060,117 @@ class TestWeakConstraintRule:
 
 
 # ---------------------------------------------------------------------------
+# Capture output coverage — undeclared-capture-key rule
+# ---------------------------------------------------------------------------
+
+
+class TestCaptureOutputCoverageRule:
+    def test_capture_declared_output_key_no_warning(self) -> None:
+        """A capture that references a key declared in the skill's outputs contract
+        must not produce an undeclared-capture-key warning."""
+        recipe_yaml = textwrap.dedent("""\
+            name: capture-valid
+            description: test
+            steps:
+              implement:
+                tool: run_skill_retry
+                with:
+                  skill_command: /autoskillit:implement-worktree-no-merge ${{ inputs.plan }}
+                capture:
+                  worktree_path: "${{ result.worktree_path }}"
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
+        assert undeclared == []
+
+    def test_capture_undeclared_key_emits_warning(self) -> None:
+        """A capture that references a key NOT listed in the skill's outputs contract
+        must produce a Severity.WARNING finding with rule 'undeclared-capture-key'."""
+        recipe_yaml = textwrap.dedent("""\
+            name: capture-invalid-key
+            description: test
+            steps:
+              implement:
+                tool: run_skill_retry
+                with:
+                  skill_command: /autoskillit:implement-worktree-no-merge ${{ inputs.plan }}
+                capture:
+                  branch_name: "${{ result.branch_name }}"
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
+        assert len(undeclared) == 1
+        assert undeclared[0].severity == Severity.WARNING
+        assert "branch_name" in undeclared[0].message
+        assert "implement-worktree-no-merge" in undeclared[0].message
+
+    def test_capture_from_skill_with_no_contract_emits_warning(self) -> None:
+        """A capture step whose skill has no entry in skill_contracts.yaml at all
+        must produce a Severity.WARNING finding with rule 'undeclared-capture-key'."""
+        recipe_yaml = textwrap.dedent("""\
+            name: capture-unknown-skill
+            description: test
+            steps:
+              run_custom:
+                tool: run_skill
+                with:
+                  skill_command: /autoskillit:not-a-real-skill some_arg
+                capture:
+                  result_key: "${{ result.some_key }}"
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
+        assert len(undeclared) == 1
+        assert undeclared[0].severity == Severity.WARNING
+        assert "not-a-real-skill" in undeclared[0].message
+        assert "no outputs contract entry" in undeclared[0].message
+
+    def test_capture_key_from_empty_outputs_skill_emits_warning(self) -> None:
+        """audit-impl has outputs: [] — any capture key from it is undeclared."""
+        recipe_yaml = textwrap.dedent("""\
+            name: capture-empty-outputs
+            description: test
+            steps:
+              audit:
+                tool: run_skill
+                with:
+                  skill_command: /autoskillit:audit-impl ${{ inputs.plan }}
+                capture:
+                  verdict: "${{ result.verdict }}"
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
+        assert len(undeclared) == 1
+        assert undeclared[0].severity == Severity.WARNING
+        assert "verdict" in undeclared[0].message
+        assert "audit-impl" in undeclared[0].message
+
+
+# ---------------------------------------------------------------------------
 # Contract validation — migrated from test_contract_validator.py
 # ---------------------------------------------------------------------------
 
@@ -1061,7 +1178,7 @@ class TestWeakConstraintRule:
 def test_load_bundled_manifest() -> None:
     manifest = load_bundled_manifest()
     assert manifest["version"] == "0.1.0"
-    assert len(manifest["skills"]) == 14
+    assert len(manifest["skills"]) == 17
 
 
 def test_load_bundled_manifest_skill_inputs_typed() -> None:

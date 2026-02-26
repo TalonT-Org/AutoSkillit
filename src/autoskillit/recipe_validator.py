@@ -93,6 +93,7 @@ _SKILL_NAME_RE = re.compile(r"/autoskillit:([\w-]+)")
 _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
 _INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
 _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
+_RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
 
 
 # ---------------------------------------------------------------------------
@@ -1070,3 +1071,64 @@ def _check_weak_constraint_text(wf: Recipe) -> list[RuleFinding]:
             )
         ]
     return []
+
+
+@semantic_rule(
+    name="undeclared-capture-key",
+    description=(
+        "Capture references to result.X should match keys declared in the "
+        "skill's outputs contract in skill_contracts.yaml."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_capture_output_coverage(wf: Recipe) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for step_name, step in wf.steps.items():
+        if step.tool not in _SKILL_TOOLS:
+            continue
+        if not step.capture:
+            continue
+
+        skill_cmd = step.with_args.get("skill_command", "")
+        skill_name = resolve_skill_name(skill_cmd)
+        if not skill_name:
+            # Dynamic or non-autoskillit skill_command — cannot validate.
+            continue
+
+        contract = get_skill_contract(skill_name, manifest)
+        if contract is None:
+            findings.append(
+                RuleFinding(
+                    rule="undeclared-capture-key",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' captures from skill '{skill_name}' "
+                        f"which has no outputs contract entry in skill_contracts.yaml. "
+                        f"Add an outputs section to verify capture correctness."
+                    ),
+                )
+            )
+            continue
+
+        declared_keys = {out.name for out in contract.outputs}
+
+        for _capture_var, capture_expr in step.capture.items():
+            for ref_key in _RESULT_CAPTURE_RE.findall(capture_expr):
+                if ref_key not in declared_keys:
+                    findings.append(
+                        RuleFinding(
+                            rule="undeclared-capture-key",
+                            severity=Severity.WARNING,
+                            step_name=step_name,
+                            message=(
+                                f"Step '{step_name}' captures result.{ref_key} "
+                                f"but skill '{skill_name}' does not declare '{ref_key}' "
+                                f"in its outputs contract."
+                            ),
+                        )
+                    )
+
+    return findings

@@ -34,7 +34,12 @@ from fastmcp.prompts.prompt import Message, PromptResult
 
 from autoskillit._audit import FailureRecord
 from autoskillit._context import ToolContext
-from autoskillit._gate import GateState, gate_error_result
+from autoskillit._gate import (  # noqa: F401
+    GATED_TOOLS,
+    UNGATED_TOOLS,
+    GateState,
+    gate_error_result,
+)
 from autoskillit._logging import get_logger
 from autoskillit.config import AutomationConfig
 from autoskillit.process_lifecycle import SubprocessResult

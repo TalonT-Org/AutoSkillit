@@ -7,23 +7,31 @@ import structlog
 
 
 @pytest.fixture(autouse=True)
-def _open_kitchen_for_tests(monkeypatch):
-    """Enable AutoSkillit tools for all tests (mirrors production activation).
+def _server_ctx(monkeypatch):
+    """Provide an isolated ToolContext for each test. Gate enabled by default.
 
-    Tests that need the disabled state should use a local fixture to override.
+    Replaces _open_kitchen_for_tests (which set _tools_enabled=True) and
+    _test_config (which set _config). monkeypatch auto-resets _ctx to None
+    after each test, so no separate reset fixture is needed.
     """
+    from pathlib import Path
+
     from autoskillit import server
+    from autoskillit._audit import AuditLog
+    from autoskillit._context import ToolContext
+    from autoskillit._gate import GateState
+    from autoskillit._token_log import TokenLog
+    from autoskillit.config import AutomationConfig
 
-    monkeypatch.setattr(server, "_tools_enabled", True)
-
-
-@pytest.fixture(autouse=True)
-def _test_config(monkeypatch):
-    """Provide a default test config for all tests."""
-    from autoskillit import config, server
-
-    test_cfg = config.AutomationConfig()
-    monkeypatch.setattr(server, "_config", test_cfg)
+    ctx = ToolContext(
+        config=AutomationConfig(),
+        audit=AuditLog(),
+        token_log=TokenLog(),
+        gate=GateState(enabled=True),
+        plugin_dir=str(Path(__file__).parent.parent / "src" / "autoskillit"),
+        runner=None,
+    )
+    monkeypatch.setattr(server, "_ctx", ctx)
 
 
 def _flush_logger_proxy_caches() -> None:

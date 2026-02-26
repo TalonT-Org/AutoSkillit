@@ -60,6 +60,13 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         stream=sys.stderr,
     )
 
+    import autoskillit.server as _server
+    from autoskillit._audit import AuditLog
+    from autoskillit._context import ToolContext
+    from autoskillit._gate import GateState
+    from autoskillit._token_log import TokenLog
+    from autoskillit.process_lifecycle import RealSubprocessRunner
+
     project_dir = Path.cwd()
     cfg = load_config(project_dir)
     project_path = project_dir / ".autoskillit" / "config.yaml"
@@ -77,9 +84,16 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         test_check_command=cfg.test_check.command,
     )
 
-    from autoskillit.server import mcp
-
-    mcp.run()
+    ctx = ToolContext(
+        config=cfg,
+        audit=AuditLog(),
+        token_log=TokenLog(),
+        gate=GateState(enabled=False),
+        plugin_dir=str(Path(_server.__file__).parent),
+        runner=RealSubprocessRunner(),
+    )
+    _server._initialize(ctx)
+    _server.mcp.run()
 
 
 @app.command

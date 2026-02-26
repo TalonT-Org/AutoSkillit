@@ -6047,3 +6047,36 @@ class TestStalePathStdoutCheck:
         parsed = json.loads(_build_skill_result(result_obj).to_json())
         assert parsed["success"] is False
         assert parsed["subtype"] == "stale"
+
+
+class TestServerLazyInit:
+    """Tests for the _ctx / _initialize() / _get_ctx() / _get_config() pattern."""
+
+    def test_server_import_does_not_call_load_config(self):
+        """Importing server.py must not trigger load_config() as a side effect."""
+        import importlib
+        import sys
+        from unittest.mock import patch
+
+        with patch("autoskillit.config.load_config") as mock_load:
+            sys.modules.pop("autoskillit.server", None)
+            import autoskillit.server  # noqa: F401
+
+            importlib.import_module("autoskillit.server")
+        mock_load.assert_not_called()
+
+    def test_get_ctx_raises_before_initialize(self, monkeypatch):
+        """_get_ctx() raises RuntimeError when _ctx is None."""
+        import autoskillit.server as srv
+
+        monkeypatch.setattr(srv, "_ctx", None)
+        with pytest.raises(RuntimeError, match="serve\\(\\) must be called"):
+            srv._get_ctx()
+
+    def test_get_config_raises_before_initialize(self, monkeypatch):
+        """_get_config() raises RuntimeError when _ctx is None."""
+        import autoskillit.server as srv
+
+        monkeypatch.setattr(srv, "_ctx", None)
+        with pytest.raises(RuntimeError, match="serve\\(\\) must be called"):
+            srv._get_config()

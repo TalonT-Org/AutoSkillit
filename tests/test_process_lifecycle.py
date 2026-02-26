@@ -1481,3 +1481,23 @@ class TestPtyWrapCommand:
         with patch("shutil.which", return_value=None):
             result = pty_wrap_command(cmd)
         assert result is cmd
+
+
+class TestSubprocessResultAndRunnerTypes:
+    """Tests for SubprocessResult in types.py and SubprocessRunner protocol."""
+
+    def test_subprocess_result_importable_from_types(self):
+        """SubprocessResult must be importable from autoskillit.types."""
+        from autoskillit.types import SubprocessResult  # noqa: F401
+
+    def test_subprocess_result_still_importable_from_process_lifecycle(self):
+        """SubprocessResult remains importable from process_lifecycle for backward compat."""
+        from autoskillit.process_lifecycle import SubprocessResult  # noqa: F401
+
+    def test_subprocess_runner_protocol_satisfied_by_real(self):
+        """RealSubprocessRunner satisfies the SubprocessRunner protocol."""
+        from autoskillit.process_lifecycle import RealSubprocessRunner
+        from autoskillit.types import SubprocessRunner
+
+        runner = RealSubprocessRunner()
+        assert isinstance(runner, SubprocessRunner)

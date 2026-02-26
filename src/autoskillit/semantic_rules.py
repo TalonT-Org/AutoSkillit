@@ -9,7 +9,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Callable
 
-from autoskillit.recipe_parser import Recipe, iter_steps_with_context
+from autoskillit.recipe_parser import Recipe, analyze_dataflow, iter_steps_with_context
 from autoskillit.types import PIPELINE_FORBIDDEN_TOOLS, SKILL_TOOLS, Severity
 
 
@@ -376,3 +376,32 @@ def _check_weak_constraint_text(wf: Recipe) -> list[RuleFinding]:
             )
         ]
     return []
+
+
+@semantic_rule(
+    name="dead-output",
+    description=(
+        "Captured outputs never consumed by any downstream step force orchestrators "
+        "to read files directly."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_dead_outputs(wf: Recipe) -> list[RuleFinding]:
+    report = analyze_dataflow(wf)
+    findings: list[RuleFinding] = []
+    for warning in report.warnings:
+        if warning.code == "DEAD_OUTPUT":
+            findings.append(
+                RuleFinding(
+                    rule="dead-output",
+                    severity=Severity.ERROR,
+                    step_name=warning.step_name,
+                    message=(
+                        f"Step '{warning.step_name}' captures '{warning.field}' but no "
+                        f"downstream step references '${{{{ context.{warning.field} }}}}'."
+                        f" Dead captures force the orchestrator to read files directly "
+                        f"instead of consuming structured step outputs."
+                    ),
+                )
+            )
+    return findings

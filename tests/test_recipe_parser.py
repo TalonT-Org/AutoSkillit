@@ -1561,3 +1561,39 @@ def test_version_field_uses_key_constant(tmp_path):
     p.write_text(f"name: r\ndescription: d\n{AUTOSKILLIT_VERSION_KEY}: 0.9.0\nsteps: {{}}\n")
     recipe = load_recipe(p)
     assert recipe.version == "0.9.0"
+
+
+# ---------------------------------------------------------------------------
+# RP-IP1-IP3: implementation-pipeline.yaml structural capture tests
+# ---------------------------------------------------------------------------
+
+
+def test_implementation_pipeline_group_step_captures_group_files():
+    """group step capture must use group_files, not groups_path."""
+    wf = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+    group_step = wf.steps["group"]
+    assert "group_files" in group_step.capture, (
+        f"group step capture keys: {list(group_step.capture.keys())}"
+    )
+    assert "groups_path" not in group_step.capture, (
+        "group step must not capture the dead output groups_path"
+    )
+
+
+def test_implementation_pipeline_review_step_captures_review_path():
+    """review step must have a capture block with review_path."""
+    wf = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+    review_step = wf.steps["review"]
+    assert "review_path" in review_step.capture, (
+        f"review step capture keys: {list(review_step.capture.keys())}"
+    )
+
+
+def test_implementation_pipeline_plan_step_consumes_group_files():
+    """plan step with_args must reference context.group_files."""
+    wf = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+    plan_step = wf.steps["plan"]
+    all_values = " ".join(str(v) for v in plan_step.with_args.values())
+    assert "context.group_files" in all_values, (
+        f"plan step with_args values: {list(plan_step.with_args.values())}"
+    )

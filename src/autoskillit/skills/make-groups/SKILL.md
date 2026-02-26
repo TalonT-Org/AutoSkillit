@@ -205,6 +205,18 @@ temp/make-groups/
 └── ...
 ```
 
+## Result JSON
+
+The skill reports the following structured fields for pipeline capture:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `groups_path` | `file_path` | Absolute path to the consolidated index file (`groups_{topic}_{ts}.md`) |
+| `manifest_path` | `file_path` | Absolute path to the machine-readable manifest (`manifest_{topic}_{ts}.json`) |
+| `group_files` | `file_path_list` | Ordered list of absolute paths to per-group files (`groupA_*.md`, `groupB_*.md`, ...) in dependency order |
+
+When used in a pipeline recipe, capture `group_files` to pass individual group file paths to downstream steps (e.g., `make-plan`). Pass the file path directly — the headless session reads it. The orchestrator must not read file contents itself.
+
 ## Feature Branch Recommendation
 
 When implementing multiple groups from this skill's output, **always work on a feature branch**,

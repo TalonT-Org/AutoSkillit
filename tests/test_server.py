@@ -1181,7 +1181,8 @@ class TestValidateRecipe:
             '    message: "Done."\n'
         )
         result = json.loads(await validate_recipe(script_path=str(script)))
-        assert result["valid"] is True
+        # dead-output is now ERROR severity: recipe with dead captures is invalid
+        assert result["valid"] is False
         assert "quality" in result
         quality = result["quality"]
         assert "warnings" in quality
@@ -1190,6 +1191,8 @@ class TestValidateRecipe:
         assert len(dead) == 1
         assert dead[0]["step"] == "impl"
         assert dead[0]["field"] == "worktree_path"
+        # dead-output rule re-emits DEAD_OUTPUT as ERROR in semantic findings
+        assert any(f["rule"] == "dead-output" for f in result["semantic"])
 
     # SEM1
     @pytest.mark.asyncio

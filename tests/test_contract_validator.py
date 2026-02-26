@@ -272,3 +272,17 @@ def test_validate_recipe_cards_missing_input(tmp_path: Path):
     findings = validate_recipe_cards(None, contract)
     assert len(findings) > 0
     assert any("worktree_path" in f["message"] for f in findings)
+
+
+# ---------------------------------------------------------------------------
+# CV-GF1: make-groups declares group_files output
+# ---------------------------------------------------------------------------
+
+
+def test_skill_contracts_make_groups_declares_group_files():
+    """skill_contracts.yaml must declare group_files output for make-groups."""
+    from autoskillit.contract_validator import load_bundled_manifest
+
+    manifest = load_bundled_manifest()
+    output_names = [o["name"] for o in manifest["skills"]["make-groups"]["outputs"]]
+    assert "group_files" in output_names

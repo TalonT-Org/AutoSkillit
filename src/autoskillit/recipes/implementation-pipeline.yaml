@@ -46,16 +46,14 @@ steps:
       cwd: "${{ inputs.work_dir }}"
       step_name: "group"
     capture:
-      groups_path: "${{ result.groups_path }}"
+      group_files: "${{ result.group_files }}"
     on_success: plan
     on_failure: escalate
     note: >
       Only execute if make_groups input is 'true'. Otherwise skip directly to plan.
-      Produces a groups file in temp/make-groups/ containing sequenced groups (groupA, groupB, ...).
-      Parse the file to extract each group's Requirements + Planning Context sections.
-      ITERATION: The agent maintains a group queue. For each group, run the full cycle
-      (plan → review → verify → implement → test → merge) before advancing to the next group.
-      The current group's content becomes the task passed to the plan step.
+      Captures group_files: a list of per-group file paths. Maintain a group queue from
+      context.group_files. For each iteration, pop the next path and pass it to the plan
+      step. Pass the FILE PATH — the headless session reads it. No file reading in the orchestrator.
 
   plan:
     tool: run_skill
@@ -63,6 +61,7 @@ steps:
       skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
       cwd: "${{ inputs.work_dir }}"
       step_name: "plan"
+      group_files: "${{ context.group_files }}"
     capture:
       plan_path: "${{ result.plan_path }}"
     on_success: review
@@ -70,8 +69,10 @@ steps:
     note: >
       Produces plan in temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
       Sort alphabetically into plan_parts[].
-      GROUPS MODE: When running with groups, replace ${{ inputs.task }} with the current
-      group's description (Requirements + Planning Context) extracted from the groups file.
+      GROUPS MODE: use the next path from context.group_files as the make-plan argument.
+      Pass the FILE PATH directly. No content extraction in the orchestrator.
+      REMEDIATION MODE: when context.remediation_path is set (after audit_impl NO GO),
+      pass it as the make-plan task argument instead of inputs.task.
 
   review:
     tool: run_skill
@@ -79,6 +80,8 @@ steps:
       skill_command: "/autoskillit:review-approach ${{ context.plan_path }}"
       cwd: "${{ inputs.work_dir }}"
       step_name: "review"
+    capture:
+      review_path: "${{ result.review_path }}"
     on_success: verify
     on_failure: escalate
     note: "Only execute this step if review_approach input is 'true'. Otherwise skip directly to verify."
@@ -89,9 +92,10 @@ steps:
       skill_command: "/autoskillit:dry-walkthrough ${{ context.plan_path }}"
       cwd: "${{ inputs.work_dir }}"
       step_name: "verify"
+      review_path: "${{ context.review_path }}"
     on_success: implement
     on_failure: escalate
-    note: "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify → implement → test → merge — for that part before advancing to the next part. Never run verify for all parts first. If review produced a report, pass it as an additional arg to dry-walkthrough."
+    note: "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify → implement → test → merge — for that part before advancing to the next part. Never run verify for all parts first."
 
   implement:
     tool: run_skill_retry
@@ -179,18 +183,31 @@ steps:
       skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ inputs.work_dir }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.work_dir }}"
       step_name: "audit_impl"
+    capture:
+      remediation_path: "${{ result.remediation_path }}"
     on_success: done
-    on_failure: plan
+    on_failure: remediate
     optional: true
     note: >
       Only execute if inputs.audit is 'true'. If false, skip directly to done.
       All groups and parts have been merged at this point — no worktree exists.
-      For plans_input: if make_groups was true, pass context.groups_path (the manifest JSON);
-      otherwise pass context.plan_path (or the temp/make-plan/ directory for multi-part plans).
+      For plans_input: if make_groups was true, pass context.group_files (the ordered list of
+      per-group file paths). For manifest-level audit-impl contract, see Part B.
+      Otherwise pass context.plan_path (or the temp/make-plan/ directory for multi-part plans).
       For implementation_ref: pass inputs.base_branch — the skill will run
       git diff against the upstream of that branch to capture everything merged.
       On NO GO: the skill generates a remediation file in temp/audit-impl/. Pass that
       remediation file path as the task to the plan step for another full cycle.
+
+  remediate:
+    action: route
+    with:
+      remediation_path: "${{ context.remediation_path }}"
+    on_success: plan
+    on_failure: escalate
+    note: >
+      Routing step after audit_impl NO GO. Threads context.remediation_path to the plan step.
+      The plan step will use context.remediation_path as the task argument instead of inputs.task.
 
   done:
     action: stop

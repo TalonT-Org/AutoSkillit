@@ -87,11 +87,12 @@ src/autoskillit/
 │   ├── write-recipe/        │   ├── mermaid/
 │   ├── rectify/             │   ├── retry-worktree/
 │   ├── review-approach/     │   └── setup-project/
-└── recipes/                 # 4 bundled recipe YAML definitions
+└── recipes/                 # 5 bundled recipe YAML definitions
     ├── audit-and-fix.yaml
     ├── bugfix-loop.yaml
-    ├── implementation.yaml
-    └── investigate-first.yaml
+    ├── implementation-pipeline.yaml
+    ├── investigate-first.yaml
+    └── smoke-test.yaml
 
 tests/
 ├── conftest.py              # Shared fixtures (tools enabled + default config)
@@ -114,7 +115,7 @@ temp/                        # Temporary/working files (gitignored)
 
   * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
   * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `skills list`, `recipes list/show`, `workspace init`, `update`, and `doctor`.
-  * **recipe_loader.py**: Discovers and loads pipeline recipes from `.autoskillit/recipes/`. Recipes use the recipe YAML schema (ingredients, steps, routing, retry) with an added `summary` field. `list_recipes` returns `RecipeInfo` records for listing. `load_recipe` returns raw YAML for agent consumption. On server startup, `sync_bundled_recipes()` overwrites any `.autoskillit/recipes/*.yaml` that shares a name with a file in `src/autoskillit/recipes/` — **edit the `recipes/` source, not the local copy**. Project-specific recipes (no bundled counterpart) are never touched.
+  * **recipe_loader.py**: Discovers and loads pipeline recipes from `.autoskillit/recipes/`. Recipes use the recipe YAML schema (ingredients, steps, routing, retry) with an added `summary` field. `list_recipes` returns `RecipeInfo` records for listing. `load_recipe` returns raw YAML for agent consumption. On server startup, `sync_bundled_recipes()` performs a **content-aware sync** using `sync_manifest.json` to track what it last wrote: it only overwrites a local recipe if the local file has not been modified since autoskillit last wrote it (manifest hash check). Locally-modified files are preserved, a warning is logged, and an advisory is shown at `open_kitchen` time offering `accept_recipe_update` / `decline_recipe_update` via `run_python`. Project-specific recipes (no bundled counterpart) are never touched. Recipes can be hard-excluded from sync via `sync.excluded_recipes` in config. **For this repo specifically:** the sync direction is inverted — `.autoskillit/recipes/` is where you iterate and improve recipes; `src/autoskillit/recipes/` is the bundle source that ships to users. Keep them in sync manually by copying improved local recipes back to `src/autoskillit/recipes/` before releasing.
   * **server.py**: FastMCP server. 10 gated tools require user activation via MCP prompts. 6 ungated tools (`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) are always available. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/autoskillit:implement-worktree` without a verified plan. `_plugin_dir` is passed to headless sessions via `--plugin-dir`. Registers `recipe://` resource handler.
   * **skill_resolver.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
   * **recipe_parser.py**: YAML recipe loading, validation, and listing. Discovers recipes from `.autoskillit/recipes/` (project) and bundled package directory. `RecipeStep` supports an optional `model` field for per-step model selection.
@@ -195,5 +196,6 @@ All tool behavior is configurable via `.autoskillit/config.yaml`. No config file
 | `model` | `default` | `null` | Default model for run_skill/run_skill_retry when step has no model field |
 | `model` | `override` | `null` | Force all run_skill/run_skill_retry to use this model (overrides step YAML) |
 | `token_usage` | `verbosity` | `"summary"` | Token table behavior: `"summary"` = render once at pipeline end; `"none"` = suppress entirely |
+| `sync` | `excluded_recipes` | `[]` | Recipe names to hard-exclude from bundled sync entirely |
 | `worktree_setup` | `command` | `null` | Worktree env setup command (`null` = auto-detect) |
 | `run_skill` | `completion_drain_timeout` | `5.0` | Seconds to wait for Channel A (stdout heartbeat) to confirm data after Channel B (session log) signals completion. Prevents false-negative failures from the Channel B / Channel A race. |

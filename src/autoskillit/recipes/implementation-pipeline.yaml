@@ -12,10 +12,10 @@ ingredients:
     required: false
   project_dir:
     description: Path to the project
-    default: /home/talon/projects/generic_automation_mcp
+    required: true
   work_dir:
     description: Working directory (can be same as project_dir)
-    default: /home/talon/projects/generic_automation_mcp
+    required: true
   base_branch:
     description: Branch to merge into (defaults to current branch)
     default: main

@@ -1864,8 +1864,7 @@ async def load_recipe(name: str) -> str:
                     recipe_path = recipes_dir / f"{name}.yml"
                 if recipe_path.exists():
                     try:
-                        generate_recipe_card(recipe_path, recipes_dir)
-                        contract = load_recipe_card(name, recipes_dir)
+                        contract = generate_recipe_card(recipe_path, recipes_dir)
                     except Exception:
                         logger.warning(
                             "Recipe contract card generation failed",

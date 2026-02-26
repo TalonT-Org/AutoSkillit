@@ -16,6 +16,7 @@ from autoskillit.migration_loader import applicable_migrations
 from autoskillit.recipe_io import load_recipe as _parse_recipe
 from autoskillit.recipe_loader import _parse_recipe_metadata
 from autoskillit.recipe_validator import validate_recipe
+from autoskillit.session_result import SkillResult
 
 logger = get_logger(__name__)
 
@@ -57,7 +58,7 @@ class MigrationAdapter(Protocol):
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[dict]],
+        run_headless: Callable[..., Awaitable[SkillResult]],
         temp_dir: Path,
     ) -> MigrationResult:
         """Apply migration and return the result. Write-back handled by MigrationEngine."""
@@ -79,7 +80,7 @@ class MigrationEngine:
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[dict]],
+        run_headless: Callable[..., Awaitable[SkillResult]],
         temp_dir: Path,
     ) -> MigrationResult:
         adapter = self._adapters.get(file.file_type)
@@ -133,7 +134,7 @@ class RecipeMigrationAdapter:
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[dict]],
+        run_headless: Callable[..., Awaitable[SkillResult]],
         temp_dir: Path,
     ) -> MigrationResult:
         migrations = applicable_migrations(file.current_version, __version__)
@@ -175,11 +176,11 @@ class RecipeMigrationAdapter:
             skill_command=skill_command,
             cwd=str(file.path.parent.parent.parent),
         )
-        if not raw.get("success"):
+        if not raw.success:
             return MigrationResult(
                 success=False,
                 name=file.name,
-                error=raw.get("result", "headless session failed"),
+                error=raw.result or "headless session failed",
                 retries_attempted=MIGRATE_RECIPES_MAX_RETRIES,
             )
 
@@ -244,7 +245,7 @@ class ContractMigrationAdapter:
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[dict]],  # unused — deterministic regeneration
+        run_headless: Callable[..., Awaitable[SkillResult]],  # unused — deterministic regeneration
         temp_dir: Path,
     ) -> MigrationResult:
         from autoskillit.recipe_validator import generate_recipe_card

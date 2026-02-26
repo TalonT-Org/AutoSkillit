@@ -20,8 +20,6 @@ import psutil
 import pytest
 
 from autoskillit.process_lifecycle import (
-    TerminationReason,
-    _extract_text_content,
     _has_active_api_connection,
     _heartbeat,
     _jsonl_contains_marker,
@@ -34,6 +32,7 @@ from autoskillit.process_lifecycle import (
     run_managed_async,
     run_managed_sync,
 )
+from autoskillit.types import TerminationReason
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
@@ -983,40 +982,6 @@ class TestHeartbeatTerminationReason:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-
-
-class TestExtractTextContent:
-    """_extract_text_content normalizes Claude API content to plain text."""
-
-    def test_string_passthrough(self):
-        assert _extract_text_content("hello world") == "hello world"
-
-    def test_list_of_content_blocks(self):
-        blocks = [{"type": "text", "text": "done\n%%MARKER%%"}]
-        assert _extract_text_content(blocks) == "done\n%%MARKER%%"
-
-    def test_list_mixed_blocks(self):
-        blocks = [
-            {"type": "text", "text": "working"},
-            {"type": "tool_use", "id": "t1", "name": "Bash"},
-        ]
-        assert _extract_text_content(blocks) == "working\n"
-
-    def test_list_non_dict_element(self):
-        blocks = ["raw string", {"type": "text", "text": "ok"}]
-        assert _extract_text_content(blocks) == "raw string\nok"
-
-    def test_none_returns_empty(self):
-        assert _extract_text_content(None) == ""
-
-    def test_int_returns_str(self):
-        assert _extract_text_content(42) == "42"
-
-    def test_empty_list(self):
-        assert _extract_text_content([]) == ""
-
-    def test_empty_string(self):
-        assert _extract_text_content("") == ""
 
 
 class TestJsonlContainsMarkerContentBlocks:

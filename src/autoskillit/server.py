@@ -26,7 +26,6 @@ import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import structlog
 from fastmcp import Context, FastMCP
@@ -40,17 +39,22 @@ from autoskillit._token_log import _token_log
 from autoskillit.config import AutomationConfig, load_config
 from autoskillit.process_lifecycle import (
     SubprocessResult,
-    TerminationReason,
-    _extract_text_content,
     run_managed_async,
 )
+from autoskillit.session_result import (
+    ClaudeSessionResult,
+    SkillResult,
+    _compute_retry,
+    _compute_success,
+    parse_session_result,
+)
 from autoskillit.types import (
-    CONTEXT_EXHAUSTION_MARKER,
     PIPELINE_FORBIDDEN_TOOLS,
     MergeFailedStep,
     MergeState,
     RestartScope,
     RetryReason,
+    TerminationReason,
 )
 
 mcp = FastMCP("autoskillit")
@@ -191,76 +195,6 @@ def _inject_completion_directive(skill_command: str, marker: str) -> str:
     return skill_command + directive
 
 
-_FAILURE_SUBTYPES = frozenset({"unknown", "empty_output", "unparseable", "timeout"})
-
-
-def _compute_success(
-    session: ClaudeSessionResult,
-    returncode: int,
-    termination: TerminationReason,
-    completion_marker: str = "",
-) -> bool:
-    """Cross-validate all signals to determine unambiguous success/failure."""
-    if termination in (TerminationReason.TIMED_OUT, TerminationReason.STALE):
-        return False
-    if returncode != 0:
-        # COMPLETED path: the process was killed by our own async_kill_process_tree
-        # (signal -15 or -9), so a non-zero returncode is expected and trustworthy
-        # when the session envelope says "success". Trust the envelope.
-        #
-        # NATURAL_EXIT path: the process exited on its own with an error code.
-        # We cannot distinguish PTY-masking quirks from genuine CLI errors here,
-        # so we fail conservatively. The session result record (if any) may still
-        # be present in stdout — but a non-zero natural exit is treated as authoritative
-        # evidence of failure. No asymmetric bypass is applied.
-        if (
-            termination == TerminationReason.COMPLETED
-            and session.subtype == "success"
-            and session.result.strip()
-        ):
-            pass  # fall through to remaining checks
-        else:
-            return False
-    if session.is_error:
-        return False
-    if not session.result.strip():
-        return False
-    if session.subtype in _FAILURE_SUBTYPES:
-        return False
-
-    if completion_marker:
-        result_text = session.result.strip()
-        marker_stripped = result_text.replace(completion_marker, "").strip()
-        if not marker_stripped:
-            return False
-        if completion_marker not in result_text:
-            return False
-
-    return True
-
-
-def _compute_retry(
-    session: ClaudeSessionResult,
-    returncode: int,
-    termination: TerminationReason,
-) -> tuple[bool, RetryReason]:
-    """Cross-validate all signals to determine retry eligibility."""
-    # API-level retries (session knew it should be retried)
-    if session.needs_retry:
-        return True, RetryReason.RESUME
-
-    # Infrastructure failure: session never ran (empty stdout, clean exit)
-    if session.subtype == "empty_output" and returncode == 0:
-        return True, RetryReason.RESUME
-
-    # unparseable output under COMPLETED means the process was killed mid-write
-    # (drain timeout expired). The session likely completed; retry with resume.
-    if session.subtype == "unparseable" and termination == TerminationReason.COMPLETED:
-        return True, RetryReason.RESUME
-
-    return False, RetryReason.NONE
-
-
 def _capture_failure(
     skill_command: str,
     exit_code: int,
@@ -289,8 +223,8 @@ def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
     skill_command: str = "",
-) -> str:
-    """Route SubprocessResult fields into the standard run_skill JSON response."""
+) -> SkillResult:
+    """Route SubprocessResult fields into the standard run_skill response."""
     if result.termination == TerminationReason.STALE:
         # Attempt to recover from stdout before declaring stale failure.
         # A session that completed its result record before going quiet deserves
@@ -314,19 +248,17 @@ def _build_skill_result(
                 logger.warning(
                     "Session went stale but stdout contained a valid result; recovering"
                 )
-                return json.dumps(
-                    {
-                        "success": True,
-                        "result": _truncate(stale_session.agent_result),
-                        "session_id": stale_session.session_id,
-                        "subtype": "recovered_from_stale",
-                        "is_error": False,
-                        "exit_code": stale_returncode,
-                        "needs_retry": False,
-                        "retry_reason": RetryReason.NONE,
-                        "stderr": result.stderr if result.stderr else "",
-                        "token_usage": stale_session.token_usage,
-                    }
+                return SkillResult(
+                    success=True,
+                    result=_truncate(stale_session.agent_result),
+                    session_id=stale_session.session_id,
+                    subtype="recovered_from_stale",
+                    is_error=False,
+                    exit_code=stale_returncode,
+                    needs_retry=False,
+                    retry_reason=RetryReason.NONE,
+                    stderr=result.stderr if result.stderr else "",
+                    token_usage=stale_session.token_usage,
                 )
         # No valid result in stdout — fall through to original stale response
         _capture_failure(
@@ -337,20 +269,20 @@ def _build_skill_result(
             retry_reason=RetryReason.RESUME,
             stderr=result.stderr if result.stderr else "",
         )
-        return json.dumps(
-            {
-                "success": False,
-                "result": "Session went stale (no activity for configured threshold). "
-                "Partial progress may have been made. Retry to continue.",
-                "session_id": "",
-                "subtype": "stale",
-                "is_error": False,
-                "exit_code": -1,
-                "needs_retry": True,
-                "retry_reason": RetryReason.RESUME,
-                "stderr": "",
-                "token_usage": None,
-            }
+        return SkillResult(
+            success=False,
+            result=(
+                "Session went stale (no activity for configured threshold). "
+                "Partial progress may have been made. Retry to continue."
+            ),
+            session_id="",
+            subtype="stale",
+            is_error=False,
+            exit_code=-1,
+            needs_retry=True,
+            retry_reason=RetryReason.RESUME,
+            stderr="",
+            token_usage=None,
         )
 
     if result.termination == TerminationReason.TIMED_OUT:
@@ -383,232 +315,17 @@ def _build_skill_result(
     if completion_marker:
         result_text = result_text.replace(completion_marker, "").strip()
 
-    return json.dumps(
-        {
-            "success": success,
-            "result": result_text,
-            "session_id": session.session_id,
-            "subtype": session.subtype,
-            "is_error": session.is_error,
-            "exit_code": returncode,
-            "needs_retry": needs_retry,
-            "retry_reason": retry_reason,
-            "stderr": _truncate(result.stderr),
-            "token_usage": session.token_usage,
-        }
-    )
-
-
-@dataclass
-class ClaudeSessionResult:
-    """Parsed result from a Claude Code headless session."""
-
-    subtype: str  # "success", "error_max_turns", "error_during_execution", etc.
-    is_error: bool
-    result: str
-    session_id: str
-    errors: list[str] = field(default_factory=list)
-    token_usage: dict[str, Any] | None = None
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.result, str):
-            self.result = _extract_text_content(self.result)
-        if not isinstance(self.errors, list):
-            self.errors = [] if self.errors is None else [str(self.errors)]
-        if not isinstance(self.subtype, str):
-            self.subtype = "unknown" if self.subtype is None else str(self.subtype)
-        if not isinstance(self.session_id, str):
-            self.session_id = "" if self.session_id is None else str(self.session_id)
-
-    def _is_context_exhausted(self) -> bool:
-        """Detect context window exhaustion from Claude's error output.
-
-        Requires both ``is_error=True`` AND the marker to appear in the
-        ``errors`` list (structured CLI signal).  Falls back to checking
-        ``result`` only when the subtype is a known error subtype, to
-        narrow false-positives from model prose that happens to contain
-        the marker phrase.
-        """
-        if not self.is_error:
-            return False
-        # Primary: check the structured errors list from Claude CLI
-        marker = CONTEXT_EXHAUSTION_MARKER
-        if any(marker in e.lower() for e in self.errors):
-            return True
-        # Fallback: only trust result text for error subtypes, not execution errors
-        # where the model's own output could contain the marker phrase
-        if self.subtype in ("success", "error_max_turns") and marker in self.result.lower():
-            return True
-        return False
-
-    @property
-    def agent_result(self) -> str:
-        """Result text rewritten for LLM agent consumption.
-
-        When the session ended due to a retriable condition (context exhaustion,
-        max turns), the raw result text from Claude CLI can be misleading to
-        LLM callers. This property returns semantically correct, actionable text.
-        The raw result is preserved in self.result for debugging.
-        """
-        if self._is_context_exhausted():
-            return (
-                "Context limit reached during session execution. "
-                "The session made partial progress. "
-                "Use needs_retry and retry_reason to continue from where it left off."
-            )
-        if self.subtype == "error_max_turns":
-            return (
-                "Turn limit reached during session execution. "
-                "The session made partial progress. "
-                "Use needs_retry and retry_reason to continue from where it left off."
-            )
-        return self.result
-
-    @property
-    def needs_retry(self) -> bool:
-        """Whether the session didn't finish and should be retried."""
-        if self.subtype == "error_max_turns":
-            return True
-        if self._is_context_exhausted():
-            return True
-        return False
-
-    @property
-    def retry_reason(self) -> RetryReason:
-        """Why retry is needed. NONE if needs_retry is False."""
-        if self.needs_retry:
-            return RetryReason.RESUME
-        return RetryReason.NONE
-
-
-_TOKEN_FIELDS = (
-    "input_tokens",
-    "output_tokens",
-    "cache_creation_input_tokens",
-    "cache_read_input_tokens",
-)
-
-
-def extract_token_usage(stdout: str) -> dict[str, Any] | None:
-    """Extract token usage from Claude CLI NDJSON output.
-
-    Scans assistant records for per-model usage and the result record
-    for authoritative aggregated totals.  Returns None if no usage
-    data is found.
-    """
-    if not stdout.strip():
-        return None
-
-    model_buckets: dict[str, dict[str, int]] = {}
-    result_usage: dict[str, int] | None = None
-
-    for line in stdout.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict):
-            continue
-
-        record_type = obj.get("type")
-
-        if record_type == "assistant":
-            msg = obj.get("message")
-            if not isinstance(msg, dict):
-                continue
-            usage = msg.get("usage")
-            if not isinstance(usage, dict):
-                continue
-            model = msg.get("model", "unknown")
-            bucket = model_buckets.setdefault(model, {f: 0 for f in _TOKEN_FIELDS})
-            for f in _TOKEN_FIELDS:
-                bucket[f] += usage.get(f, 0)
-
-        elif record_type == "result":
-            usage = obj.get("usage")
-            if isinstance(usage, dict):
-                result_usage = {f: usage.get(f, 0) for f in _TOKEN_FIELDS}
-
-    if not model_buckets and result_usage is None:
-        return None
-
-    # Aggregated totals: prefer result record, fall back to assistant sum
-    if result_usage is not None:
-        totals = dict(result_usage)
-    else:
-        totals = {f: 0 for f in _TOKEN_FIELDS}
-        for bucket in model_buckets.values():
-            for f in _TOKEN_FIELDS:
-                totals[f] += bucket[f]
-
-    return {
-        **totals,
-        "model_breakdown": dict(model_buckets) if model_buckets else {},
-    }
-
-
-def parse_session_result(stdout: str) -> ClaudeSessionResult:
-    """Parse Claude Code's --output-format json stdout into a typed result.
-
-    Handles multi-line NDJSON (Claude Code may emit multiple JSON objects;
-    the last 'result' type object is authoritative).
-    Falls back gracefully for non-JSON or missing fields.
-    """
-    if not stdout.strip():
-        return ClaudeSessionResult(
-            subtype="empty_output",
-            is_error=True,
-            result="",
-            session_id="",
-            errors=[],
-        )
-
-    result_obj = None
-    for line in stdout.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-            if isinstance(obj, dict) and obj.get("type") == "result":
-                result_obj = obj
-        except json.JSONDecodeError:
-            continue
-
-    if result_obj is None:
-        try:
-            fallback = json.loads(stdout)
-            if isinstance(fallback, dict) and fallback.get("type") == "result":
-                result_obj = fallback
-            else:
-                return ClaudeSessionResult(
-                    subtype="unparseable",
-                    is_error=True,
-                    result=stdout,
-                    session_id="",
-                    errors=[],
-                )
-        except json.JSONDecodeError:
-            return ClaudeSessionResult(
-                subtype="unparseable",
-                is_error=True,
-                result=stdout,
-                session_id="",
-                errors=[],
-            )
-
-    token_usage = extract_token_usage(stdout)
-
-    return ClaudeSessionResult(
-        subtype=result_obj.get("subtype", "unknown"),
-        is_error=result_obj.get("is_error", False),
-        result=result_obj.get("result", ""),
-        session_id=result_obj.get("session_id", ""),
-        errors=result_obj.get("errors", []),
-        token_usage=token_usage,
+    return SkillResult(
+        success=success,
+        result=result_text,
+        session_id=session.session_id,
+        subtype=session.subtype,
+        is_error=session.is_error,
+        exit_code=returncode,
+        needs_retry=needs_retry,
+        retry_reason=retry_reason,
+        stderr=_truncate(result.stderr),
+        token_usage=session.token_usage,
     )
 
 
@@ -953,11 +670,11 @@ async def _run_headless_core(
     add_dir: str = "",
     timeout: int | None = None,
     stale_threshold: int | None = None,
-) -> dict:
+) -> SkillResult:
     """Shared headless runner used by run_skill, run_skill_retry, and load_recipe.
 
     Does NOT check open_kitchen gate — callers are responsible for authorization context.
-    Returns the raw result dict with at minimum a 'success' key.
+    Returns a SkillResult with at minimum a 'success' field.
 
     Args:
         timeout: Override the default run_skill timeout. Used by run_skill_retry
@@ -998,13 +715,12 @@ async def _run_headless_core(
         completion_drain_timeout=cfg.completion_drain_timeout,
     )
 
-    result_str = _build_skill_result(
+    skill_result = _build_skill_result(
         result, completion_marker=cfg.completion_marker, skill_command=original_skill_command
     )
-    parsed = json.loads(result_str)
     if step_name:
-        _token_log.record(step_name, parsed.get("token_usage"))
-    return parsed
+        _token_log.record(step_name, skill_result.token_usage)
+    return skill_result
 
 
 @mcp.tool(tags={"automation"})
@@ -1054,19 +770,19 @@ async def run_skill(
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
-    parsed = await _run_headless_core(
+    skill_result = await _run_headless_core(
         skill_command, cwd, model=model, add_dir=add_dir, step_name=step_name
     )
-    if not parsed.get("success"):
+    if not skill_result.success:
         try:
             await ctx.error(
                 "run_skill failed",
                 logger_name="autoskillit.run_skill",
-                extra={"exit_code": parsed.get("exit_code"), "subtype": parsed.get("subtype")},
+                extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
             )
         except AttributeError:
             pass
-    return json.dumps(parsed)
+    return skill_result.to_json()
 
 
 @mcp.tool(tags={"automation"})
@@ -1124,7 +840,7 @@ async def run_skill_retry(
             return gate_error
 
     cfg = _config.run_skill_retry
-    parsed = await _run_headless_core(
+    skill_result = await _run_headless_core(
         skill_command,
         cwd,
         model=model,
@@ -1133,16 +849,16 @@ async def run_skill_retry(
         timeout=cfg.timeout,
         stale_threshold=cfg.stale_threshold,
     )
-    if not parsed.get("success"):
+    if not skill_result.success:
         try:
             await ctx.error(
                 "run_skill_retry failed",
                 logger_name="autoskillit.run_skill_retry",
-                extra={"exit_code": parsed.get("exit_code"), "subtype": parsed.get("subtype")},
+                extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
             )
         except AttributeError:
             pass
-    return json.dumps(parsed)
+    return skill_result.to_json()
 
 
 _OUTCOME_PATTERN = re.compile(

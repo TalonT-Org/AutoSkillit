@@ -21,28 +21,15 @@ import tempfile
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 from typing import IO
 
 import psutil
 
 from autoskillit._logging import get_logger
+from autoskillit.types import TerminationReason
 
 logger = get_logger(__name__)
-
-
-class TerminationReason(StrEnum):
-    """How a managed subprocess ended.
-
-    Propagates termination provenance from run_managed_async to consumers,
-    replacing implicit inference from exit codes.
-    """
-
-    NATURAL_EXIT = "natural_exit"
-    COMPLETED = "completed"
-    STALE = "stale"
-    TIMED_OUT = "timed_out"
 
 
 @dataclass
@@ -134,25 +121,6 @@ def _marker_is_standalone(text: str, marker: str) -> bool:
     return False
 
 
-def _extract_text_content(raw: object) -> str:
-    """Normalize Claude API content to plain text.
-
-    Handles the three shapes that appear in Claude CLI output:
-    - ``str``: plain text (returned as-is)
-    - ``list[dict]``: content blocks — joins ``text`` fields
-    - ``None`` / other: coerced to string (``None`` → ``""``)
-    """
-    if isinstance(raw, str):
-        return raw
-    if isinstance(raw, list):
-        return "\n".join(
-            block.get("text", "") if isinstance(block, dict) else str(block) for block in raw
-        )
-    if raw is None:
-        return ""
-    return str(raw)
-
-
 def _jsonl_contains_marker(
     content: str,
     marker: str,
@@ -191,7 +159,12 @@ def _jsonl_contains_marker(
         else:
             raw = " ".join(v for v in obj.values() if isinstance(v, str))
 
-        text = _extract_text_content(raw)
+        if isinstance(raw, list):
+            text = "\n".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in raw)
+        elif not isinstance(raw, str):
+            text = "" if raw is None else str(raw)
+        else:
+            text = raw
         if _marker_is_standalone(text, marker):
             return True
     return False

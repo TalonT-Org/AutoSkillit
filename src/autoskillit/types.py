@@ -48,6 +48,19 @@ class RecipeSource(StrEnum):
     BUILTIN = "builtin"
 
 
+class TerminationReason(StrEnum):
+    """How a managed subprocess ended.
+
+    Propagates termination provenance from run_managed_async to consumers,
+    replacing implicit inference from exit codes.
+    """
+
+    NATURAL_EXIT = "natural_exit"
+    COMPLETED = "completed"
+    STALE = "stale"
+    TIMED_OUT = "timed_out"
+
+
 @dataclass
 class LoadReport:
     """A single file that failed to load, with the reason."""

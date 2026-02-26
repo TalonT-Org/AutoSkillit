@@ -23,15 +23,12 @@ from autoskillit.config import (
     SafetyConfig,
     TokenUsageConfig,
 )
-from autoskillit.process_lifecycle import SubprocessResult, TerminationReason
+from autoskillit.process_lifecycle import SubprocessResult
 from autoskillit.server import (
-    ClaudeSessionResult,
     CleanupResult,
     _build_skill_result,
     _check_dry_walkthrough,
     _close_kitchen_handler,
-    _compute_retry,
-    _compute_success,
     _delete_directory_contents,
     _ensure_skill_prefix,
     _open_kitchen_handler,
@@ -43,14 +40,12 @@ from autoskillit.server import (
     _session_log_dir,
     _validate_select_only,
     classify_fix,
-    extract_token_usage,
     get_pipeline_report,
     get_token_summary,
     kitchen_status,
     list_recipes,
     load_recipe,
     merge_worktree,
-    parse_session_result,
     read_db,
     reset_test_dir,
     reset_workspace,
@@ -61,6 +56,13 @@ from autoskillit.server import (
     test_check,
     validate_recipe,
 )
+from autoskillit.session_result import (
+    ClaudeSessionResult,
+    _compute_retry,
+    _compute_success,
+    extract_token_usage,
+    parse_session_result,
+)
 from autoskillit.types import (
     CONTEXT_EXHAUSTION_MARKER,
     RETRY_RESPONSE_FIELDS,
@@ -68,6 +70,7 @@ from autoskillit.types import (
     MergeState,
     RestartScope,
     RetryReason,
+    TerminationReason,
 )
 
 test_check.__test__ = False  # type: ignore[attr-defined]
@@ -3879,7 +3882,7 @@ class TestStalenessReturnsNeedsRetry:
             termination=TerminationReason.STALE,
             pid=12345,
         )
-        response = json.loads(_build_skill_result(stale_result))
+        response = json.loads(_build_skill_result(stale_result).to_json())
         assert response["needs_retry"] is True
         assert response["retry_reason"] == "resume"
         assert response["subtype"] == "stale"
@@ -3907,7 +3910,7 @@ class TestBuildSkillResultCrossValidation:
         result_obj = SubprocessResult(
             returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT, pid=1
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert response["success"] is False
         assert response["is_error"] is True
 
@@ -3916,7 +3919,7 @@ class TestBuildSkillResultCrossValidation:
         result_obj = SubprocessResult(
             returncode=-1, stdout="", stderr="", termination=TerminationReason.TIMED_OUT, pid=1
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert response["success"] is False
         assert response["is_error"] is True
         assert response["subtype"] == "timeout"
@@ -3926,7 +3929,7 @@ class TestBuildSkillResultCrossValidation:
         result_obj = SubprocessResult(
             returncode=-1, stdout="", stderr="", termination=TerminationReason.STALE, pid=1
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert response["success"] is False
         assert response["needs_retry"] is True
 
@@ -3948,7 +3951,7 @@ class TestBuildSkillResultCrossValidation:
             termination=TerminationReason.NATURAL_EXIT,
             pid=1,
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert response["success"] is True
         assert response["is_error"] is False
         assert response["result"] == "Task completed."
@@ -3971,7 +3974,7 @@ class TestBuildSkillResultCrossValidation:
             termination=TerminationReason.NATURAL_EXIT,
             pid=1,
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert response["success"] is False
 
     def test_gate_disabled_schema(self):
@@ -3991,7 +3994,7 @@ class TestBuildSkillResultCrossValidation:
         result_obj = SubprocessResult(
             returncode=-1, stdout="", stderr="", termination=TerminationReason.STALE, pid=1
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
 
     def test_timeout_schema(self):
@@ -3999,7 +4002,7 @@ class TestBuildSkillResultCrossValidation:
         result_obj = SubprocessResult(
             returncode=-1, stdout="", stderr="", termination=TerminationReason.TIMED_OUT, pid=1
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
 
     def test_normal_success_schema(self):
@@ -4020,7 +4023,7 @@ class TestBuildSkillResultCrossValidation:
             termination=TerminationReason.NATURAL_EXIT,
             pid=1,
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
 
     def test_empty_stdout_schema(self):
@@ -4028,7 +4031,7 @@ class TestBuildSkillResultCrossValidation:
         result_obj = SubprocessResult(
             returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT, pid=1
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
 
 
@@ -4307,7 +4310,7 @@ class TestBuildSkillResultStderr:
             termination=TerminationReason.NATURAL_EXIT,
             pid=1,
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert response["stderr"] == "queue contention"
 
     def test_stderr_truncated(self):
@@ -4329,7 +4332,7 @@ class TestBuildSkillResultStderr:
             termination=TerminationReason.NATURAL_EXIT,
             pid=1,
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert len(response["stderr"]) < len(long_stderr)
         assert "truncated" in response["stderr"]
 
@@ -4351,7 +4354,7 @@ class TestBuildSkillResultStderr:
             termination=TerminationReason.NATURAL_EXIT,
             pid=1,
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert response["stderr"] == ""
 
     def test_stale_branch_has_empty_stderr(self):
@@ -4359,7 +4362,7 @@ class TestBuildSkillResultStderr:
         result_obj = SubprocessResult(
             returncode=-1, stdout="", stderr="", termination=TerminationReason.STALE, pid=1
         )
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert response["stderr"] == ""
 
 
@@ -4520,7 +4523,7 @@ class TestBuildSkillResultCompleted:
             stdout=stdout,
             termination_reason=TerminationReason.COMPLETED,
         )
-        parsed = json.loads(_build_skill_result(result))
+        parsed = json.loads(_build_skill_result(result).to_json())
         assert parsed["success"] is True
 
     def test_build_skill_result_completed_empty_result_is_failure(self):
@@ -4534,7 +4537,7 @@ class TestBuildSkillResultCompleted:
             stdout="",
             termination_reason=TerminationReason.COMPLETED,
         )
-        parsed = json.loads(_build_skill_result(result))
+        parsed = json.loads(_build_skill_result(result).to_json())
         assert parsed["success"] is False
         assert parsed["needs_retry"] is False
 
@@ -4648,7 +4651,9 @@ class TestMarkerCrossValidation:
             termination=TerminationReason.NATURAL_EXIT,
             pid=1,
         )
-        response = json.loads(_build_skill_result(result_obj, completion_marker=self.MARKER))
+        response = json.loads(
+            _build_skill_result(result_obj, completion_marker=self.MARKER).to_json()
+        )
         assert self.MARKER not in response["result"]
         assert "Task completed." in response["result"]
 
@@ -5549,7 +5554,7 @@ class TestBuildSkillResultTokenUsage:
         """JSON response includes token_usage when session has usage data."""
         stdout = self._make_ndjson()
         result_obj = _make_result(0, stdout, "")
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert "token_usage" in response
         usage = response["token_usage"]
         assert usage is not None
@@ -5573,7 +5578,7 @@ class TestBuildSkillResultTokenUsage:
             }
         )
         result_obj = _make_result(0, stdout, "")
-        response = json.loads(_build_skill_result(result_obj))
+        response = json.loads(_build_skill_result(result_obj).to_json())
         assert response["token_usage"] is None
 
     def test_stale_result_has_null_token_usage(self):
@@ -5585,13 +5590,13 @@ class TestBuildSkillResultTokenUsage:
             termination=TerminationReason.STALE,
             pid=1,
         )
-        response = json.loads(_build_skill_result(stale_result))
+        response = json.loads(_build_skill_result(stale_result).to_json())
         assert response["token_usage"] is None
 
     def test_timeout_result_has_null_token_usage(self):
         """Timeout termination produces null token_usage."""
         timeout_result = _make_timeout_result(stdout="", stderr="")
-        response = json.loads(_build_skill_result(timeout_result))
+        response = json.loads(_build_skill_result(timeout_result).to_json())
         assert response["token_usage"] is None
 
 
@@ -6016,14 +6021,14 @@ class TestStalePathStdoutCheck:
             }
         )
         result_obj = self._make_stale_result(stdout=valid_completed_jsonl)
-        parsed = json.loads(_build_skill_result(result_obj))
+        parsed = json.loads(_build_skill_result(result_obj).to_json())
         assert parsed["success"] is True
         assert parsed["subtype"] == "recovered_from_stale"
 
     def test_stale_with_empty_stdout_returns_failure(self):
         """Stale session with no stdout — original failure response preserved."""
         result_obj = self._make_stale_result(stdout="")
-        parsed = json.loads(_build_skill_result(result_obj))
+        parsed = json.loads(_build_skill_result(result_obj).to_json())
         assert parsed["success"] is False
         assert parsed["subtype"] == "stale"
 
@@ -6039,6 +6044,6 @@ class TestStalePathStdoutCheck:
             }
         )
         result_obj = self._make_stale_result(stdout=error_jsonl)
-        parsed = json.loads(_build_skill_result(result_obj))
+        parsed = json.loads(_build_skill_result(result_obj).to_json())
         assert parsed["success"] is False
         assert parsed["subtype"] == "stale"

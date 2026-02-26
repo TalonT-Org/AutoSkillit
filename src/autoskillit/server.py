@@ -34,6 +34,7 @@ from fastmcp.dependencies import CurrentContext
 from fastmcp.prompts.prompt import Message, PromptResult
 
 from autoskillit._audit import FailureRecord, _audit_log
+from autoskillit._gate import gate_error_result
 from autoskillit._logging import get_logger
 from autoskillit._token_log import _token_log
 from autoskillit.config import AutomationConfig, load_config
@@ -108,11 +109,7 @@ def _require_enabled() -> str | None:
     outside the permission system.
     """
     if not _tools_enabled:
-        return _gate_error_result(
-            "AutoSkillit tools are not enabled. "
-            "User must type the open_kitchen prompt to activate. "
-            "Check the MCP prompt list for the exact name."
-        )
+        return gate_error_result()
     return None
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import sys
 
 import pytest
 import structlog
@@ -44,7 +45,51 @@ class TestGetLogger:
         assert "should_not_appear_before_configure" not in captured.out
 
 
+def _flush_logger_proxy_caches() -> None:
+    """Reconnect autoskillit module-level loggers to the current structlog config.
+
+    Two separate caching mechanisms break capture_logs() after configure_logging():
+
+    1. BoundLoggerLazyProxy: configure_logging() (cache_logger_on_first_use=True)
+       replaces proxy.bind with a finalized_bind closure. reset_defaults() creates
+       a new processor list but does NOT remove the closure. Fix: pop "bind" from
+       the proxy's __dict__ so the next call re-evaluates from global config.
+
+    2. BoundLoggerFilteringAtNotset (returned by proxy.bind()):
+       Holds _processors as a reference to the processor list at bind() time.
+       reset_defaults() creates a new list — _processors is orphaned. Fix: reset
+       _processors to the current default processor list (which capture_logs()
+       modifies in-place).
+    """
+    import structlog._config as _sc
+
+    current_procs = structlog.get_config()["processors"]
+
+    for mod_name in list(sys.modules):
+        if not mod_name.startswith("autoskillit"):
+            continue
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            continue
+        lg = getattr(mod, "logger", None)
+        if lg is None:
+            continue
+        if isinstance(lg, _sc.BoundLoggerLazyProxy):
+            lg.__dict__.pop("bind", None)
+        elif hasattr(lg, "_processors"):
+            # Resolved bound logger — reconnect to current processor list
+            lg._processors = current_procs
+
+
 class TestConfigureLogging:
+    @pytest.fixture(autouse=True)
+    def _reset_structlog(self):
+        structlog.reset_defaults()
+        _flush_logger_proxy_caches()
+        yield
+        structlog.reset_defaults()
+        _flush_logger_proxy_caches()
+
     def test_text_output_reaches_stream(self):
         """configure_logging() routes log records to the given stream."""
         from autoskillit._logging import configure_logging, get_logger

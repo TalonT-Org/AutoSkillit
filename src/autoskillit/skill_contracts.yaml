@@ -143,3 +143,15 @@ skills:
         type: file_path
       - name: config_path
         type: file_path
+
+  audit-friction:
+    inputs: []
+    outputs: []
+
+  audit-impl:
+    inputs: []
+    outputs: []
+
+  migrate-recipes:
+    inputs: []
+    outputs: []

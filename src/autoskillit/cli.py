@@ -80,7 +80,7 @@ def init(
     test_command
         Test command string for non-interactive init (e.g. "pytest -v").
     """
-    from autoskillit.config import ensure_project_temp
+    from autoskillit._io import ensure_project_temp
 
     project_dir = Path.cwd()
     config_dir = project_dir / ".autoskillit"

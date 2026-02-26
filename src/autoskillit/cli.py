@@ -51,14 +51,34 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     """Start the MCP server (default command)."""
     import logging as _stdlib_logging
 
-    from autoskillit._logging import configure_logging
-    from autoskillit.server import mcp
+    from autoskillit._logging import configure_logging, get_logger
+    from autoskillit.config import load_config
 
     configure_logging(
         level=_stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO,
         json_output=not sys.stderr.isatty(),
         stream=sys.stderr,
     )
+
+    project_dir = Path.cwd()
+    cfg = load_config(project_dir)
+    project_path = project_dir / ".autoskillit" / "config.yaml"
+    user_path = Path.home() / ".autoskillit" / "config.yaml"
+    resolved_path: str | None = (
+        str(project_path)
+        if project_path.is_file()
+        else str(user_path)
+        if user_path.is_file()
+        else None
+    )
+    get_logger(__name__).info(
+        "serve_startup",
+        config_path=resolved_path,
+        test_check_command=cfg.test_check.command,
+    )
+
+    from autoskillit.server import mcp
+
     mcp.run()
 
 

@@ -179,7 +179,10 @@ def _truncate(text: str, max_len: int = 5000) -> str:
 def _session_log_dir(cwd: str) -> Path:
     """Derive Claude Code session log directory from project cwd."""
     project_hash = cwd.replace("/", "-").replace("_", "-")
-    return Path.home() / ".claude" / "projects" / project_hash
+    log_dir = Path.home() / ".claude" / "projects" / project_hash
+    if not log_dir.exists():
+        logger.warning("session_log_dir_missing", path=str(log_dir), cwd=cwd)
+    return log_dir
 
 
 def _inject_completion_directive(skill_command: str, marker: str) -> str:
@@ -2005,12 +2008,14 @@ def _open_kitchen_handler() -> None:
     """Set the tools-enabled flag. Extracted for testability."""
     global _tools_enabled
     _tools_enabled = True
+    logger.info("open_kitchen", gate_state="open")
 
 
 def _close_kitchen_handler() -> None:
     """Clear the tools-enabled flag. Extracted for testability."""
     global _tools_enabled
     _tools_enabled = False
+    logger.info("close_kitchen", gate_state="closed")
 
 
 @mcp.resource("recipe://{name}")

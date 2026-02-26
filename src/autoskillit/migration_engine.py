@@ -13,7 +13,7 @@ from autoskillit import __version__
 from autoskillit._io import _atomic_write
 from autoskillit._logging import get_logger
 from autoskillit.migration_loader import applicable_migrations
-from autoskillit.recipe_loader import _parse_recipe_metadata
+from autoskillit.recipe_loader import parse_recipe_metadata
 from autoskillit.recipe_parser import load_recipe as _parse_recipe
 from autoskillit.recipe_parser import validate_recipe
 
@@ -115,7 +115,7 @@ class RecipeMigrationAdapter:
             return []
         files = []
         for p in sorted(recipes_dir.glob("*.yaml")):
-            meta = _parse_recipe_metadata(p)
+            meta = parse_recipe_metadata(p)
             files.append(
                 MigrationFile(
                     name=meta.name,

@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.recipe_loader import (
     _extract_frontmatter,
-    _parse_recipe_metadata,
+    parse_recipe_metadata,
 )
 
 
@@ -17,7 +17,7 @@ class TestParseRecipeMetadata:
         """Standard YAML without frontmatter."""
         path = tmp_path / "recipe.yaml"
         path.write_text("name: my-recipe\ndescription: A recipe\nsummary: do stuff\n")
-        info = _parse_recipe_metadata(path)
+        info = parse_recipe_metadata(path)
         assert info.name == "my-recipe"
         assert info.description == "A recipe"
         assert info.summary == "do stuff"
@@ -29,7 +29,7 @@ class TestParseRecipeMetadata:
             "---\nname: fm-recipe\ndescription: Frontmatter\n---\n\n"
             "# Title\n\nKey: value\n- list item\n"
         )
-        info = _parse_recipe_metadata(path)
+        info = parse_recipe_metadata(path)
         assert info.name == "fm-recipe"
         assert info.description == "Frontmatter"
 
@@ -40,7 +40,7 @@ class TestParseRecipeMetadata:
             "---\nname: step-recipe\ndescription: Has steps\n"
             "steps:\n  plan:\n    tool: run_skill\n---\n"
         )
-        info = _parse_recipe_metadata(path)
+        info = parse_recipe_metadata(path)
         assert info.name == "step-recipe"
 
     def test_frontmatter_with_yaml_like_body(self, tmp_path: Path) -> None:
@@ -60,7 +60,7 @@ class TestParseRecipeMetadata:
             "0. Run make-plan with the task:\n"
             "   task: ${{ inputs.task }}\n"
         )
-        info = _parse_recipe_metadata(path)
+        info = parse_recipe_metadata(path)
         assert info.name == "pipeline"
         assert info.description == "A pipeline"
 
@@ -69,21 +69,21 @@ class TestParseRecipeMetadata:
         path = tmp_path / "empty.yaml"
         path.write_text("")
         with pytest.raises(ValueError, match="mapping"):
-            _parse_recipe_metadata(path)
+            parse_recipe_metadata(path)
 
     def test_rejects_non_mapping(self, tmp_path: Path) -> None:
         """File with YAML list raises ValueError."""
         path = tmp_path / "list.yaml"
         path.write_text("- item1\n- item2\n")
         with pytest.raises(ValueError, match="mapping"):
-            _parse_recipe_metadata(path)
+            parse_recipe_metadata(path)
 
     def test_rejects_missing_name(self, tmp_path: Path) -> None:
         """File without name field raises ValueError."""
         path = tmp_path / "noname.yaml"
         path.write_text("description: No name here\n")
         with pytest.raises(ValueError, match="name"):
-            _parse_recipe_metadata(path)
+            parse_recipe_metadata(path)
 
 
 class TestExtractFrontmatter:
@@ -121,18 +121,18 @@ class TestRecipeVersion:
 
     # SV1: RecipeInfo.version is None when field absent
     def test_version_none_when_absent(self, tmp_path: Path) -> None:
-        """_parse_recipe_metadata sets version=None when autoskillit_version is absent."""
+        """parse_recipe_metadata sets version=None when autoskillit_version is absent."""
         path = tmp_path / "recipe.yaml"
         path.write_text("name: my-recipe\ndescription: A recipe\n")
-        info = _parse_recipe_metadata(path)
+        info = parse_recipe_metadata(path)
         assert info.version is None
 
     # SV2: RecipeInfo.version is "0.2.0" when field present
     def test_version_set_when_present(self, tmp_path: Path) -> None:
-        """_parse_recipe_metadata reads autoskillit_version and stores it as version."""
+        """parse_recipe_metadata reads autoskillit_version and stores it as version."""
         path = tmp_path / "recipe.yaml"
         path.write_text('name: my-recipe\ndescription: A recipe\nautoskillit_version: "0.2.0"\n')
-        info = _parse_recipe_metadata(path)
+        info = parse_recipe_metadata(path)
         assert info.version == "0.2.0"
 
 
@@ -179,3 +179,22 @@ def test_version_key_not_hardcoded_in_recipe_loader():
     assert literals == [], (
         "recipe_loader must import AUTOSKILLIT_VERSION_KEY, not hard-code the string"
     )
+
+
+# ---------------------------------------------------------------------------
+# RL-PUB1: parse_recipe_metadata exists as a public attribute
+# ---------------------------------------------------------------------------
+def test_parse_recipe_metadata_is_public() -> None:
+    import autoskillit.recipe_loader as rl
+
+    assert hasattr(rl, "parse_recipe_metadata")
+    assert callable(rl.parse_recipe_metadata)
+
+
+# ---------------------------------------------------------------------------
+# RL-PUB2: _parse_recipe_metadata no longer exists
+# ---------------------------------------------------------------------------
+def test_parse_recipe_metadata_private_removed() -> None:
+    import autoskillit.recipe_loader as rl
+
+    assert not hasattr(rl, "_parse_recipe_metadata")

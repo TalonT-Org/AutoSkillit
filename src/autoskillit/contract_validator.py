@@ -7,17 +7,22 @@ each skill step provides all required inputs.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import functools
 import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from autoskillit._logging import get_logger
 from autoskillit.process_lifecycle import create_temp_io, read_temp_output
 from autoskillit.skill_resolver import bundled_skills_dir
+
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -361,9 +366,6 @@ async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]
 
     Returns a list of dicts with keys: skill, meaningful (bool), summary (str).
     """
-    import asyncio
-    import json
-
     results: list[dict[str, Any]] = []
 
     for item in stale_items:
@@ -406,6 +408,7 @@ async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]
             f'{{"meaningful_change": true/false, "summary": "brief explanation"}}'
         )
 
+        proc: asyncio.subprocess.Process | None = None
         try:
             with create_temp_io() as (stdout_file, stderr_file, _stdin_path):
                 stdout_path = Path(stdout_file.name)
@@ -432,6 +435,11 @@ async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]
                 }
             )
         except (TimeoutError, json.JSONDecodeError, OSError):
+            logger.warning(
+                "triage_staleness failed; treating skill as meaningful",
+                skill=item.skill,
+                exc_info=True,
+            )
             results.append(
                 {
                     "skill": item.skill,
@@ -439,5 +447,9 @@ async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]
                     "summary": f"Triage failed for {item.skill}; treating as meaningful.",
                 }
             )
+        finally:
+            if proc is not None and proc.returncode is None:
+                proc.kill()
+                await proc.wait()
 
     return results

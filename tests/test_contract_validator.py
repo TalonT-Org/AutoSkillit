@@ -7,12 +7,14 @@ from pathlib import Path
 import yaml
 
 from autoskillit.contract_validator import (
+    StaleItem,
     check_contract_staleness,
     compute_skill_hash,
     generate_recipe_card,
     load_bundled_manifest,
     load_recipe_card,
     resolve_skill_name,
+    triage_staleness,
     validate_recipe_cards,
 )
 
@@ -302,4 +304,220 @@ class TestContractValidatorSubprocess:
         )
         assert "create_temp_io" in source, (
             "triage_staleness must use create_temp_io for subprocess stdout/stderr"
+        )
+
+
+# ---------------------------------------------------------------------------
+# T7: triage_staleness — subprocess lifecycle, logging, and error paths
+# ---------------------------------------------------------------------------
+
+
+class TestTriageStaleness:
+    """Executable test coverage for triage_staleness failure paths."""
+
+    async def test_triage_staleness_timeout_kills_subprocess(self, tmp_path: Path):
+        """On TimeoutError, proc.kill() is called and proc.wait() is called in the finally."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        skill_dir = tmp_path / "test-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Test Skill\nDummy content.")
+
+        proc_mock = MagicMock()
+        proc_mock.returncode = None
+        proc_mock.wait = AsyncMock(return_value=None)
+        proc_mock.kill = MagicMock()
+
+        item = StaleItem(
+            skill="test-skill",
+            reason="hash_mismatch",
+            stored_value="abc123",
+            current_value="def456",
+        )
+
+        with (
+            patch("autoskillit.contract_validator.bundled_skills_dir", return_value=tmp_path),
+            patch(
+                "autoskillit.contract_validator.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc_mock,
+            ),
+            patch(
+                "autoskillit.contract_validator.asyncio.wait_for",
+                side_effect=asyncio.TimeoutError,
+            ),
+        ):
+            result = await triage_staleness([item])
+
+        assert proc_mock.kill.called, "proc.kill() must be called on TimeoutError"
+        assert proc_mock.wait.call_count >= 1, "proc.wait() must be called in finally block"
+        assert len(result) == 1
+        assert result[0]["meaningful"] is True
+        assert result[0]["skill"] == "test-skill"
+
+    async def test_triage_staleness_timeout_is_logged(self, tmp_path: Path):
+        """On TimeoutError, a warning log is emitted."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        import structlog
+
+        skill_dir = tmp_path / "test-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Test Skill\nDummy content.")
+
+        proc_mock = MagicMock()
+        proc_mock.returncode = None
+        proc_mock.wait = AsyncMock(return_value=None)
+        proc_mock.kill = MagicMock()
+
+        item = StaleItem(
+            skill="test-skill",
+            reason="hash_mismatch",
+            stored_value="abc123",
+            current_value="def456",
+        )
+
+        with (
+            patch("autoskillit.contract_validator.bundled_skills_dir", return_value=tmp_path),
+            patch(
+                "autoskillit.contract_validator.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc_mock,
+            ),
+            patch(
+                "autoskillit.contract_validator.asyncio.wait_for",
+                side_effect=asyncio.TimeoutError,
+            ),
+            structlog.testing.capture_logs() as logs,
+        ):
+            await triage_staleness([item])
+
+        assert any(log["log_level"] == "warning" for log in logs), (
+            "A warning log must be emitted on TimeoutError"
+        )
+        assert any(
+            "triage" in log.get("event", "").lower() or "failed" in log.get("event", "").lower()
+            for log in logs
+        ), "Log event must mention triage or failed"
+
+    async def test_triage_staleness_json_decode_error_is_logged(self, tmp_path: Path):
+        """On JSONDecodeError, a warning log is emitted and meaningful=True is returned."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        import structlog
+
+        skill_dir = tmp_path / "test-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Test Skill\nDummy content.")
+
+        proc_mock = MagicMock()
+        proc_mock.returncode = 0
+        proc_mock.wait = AsyncMock(return_value=None)
+        proc_mock.kill = MagicMock()
+
+        item = StaleItem(
+            skill="test-skill",
+            reason="hash_mismatch",
+            stored_value="abc123",
+            current_value="def456",
+        )
+
+        with (
+            patch("autoskillit.contract_validator.bundled_skills_dir", return_value=tmp_path),
+            patch(
+                "autoskillit.contract_validator.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc_mock,
+            ),
+            patch(
+                "autoskillit.contract_validator.asyncio.wait_for",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "autoskillit.contract_validator.read_temp_output",
+                return_value=("not json at all", ""),
+            ),
+            structlog.testing.capture_logs() as logs,
+        ):
+            result = await triage_staleness([item])
+
+        assert result[0]["meaningful"] is True
+        assert any(log["log_level"] == "warning" for log in logs), (
+            "A warning log must be emitted on JSONDecodeError"
+        )
+
+    async def test_triage_staleness_success_does_not_kill_running_proc(self, tmp_path: Path):
+        """On success (proc.returncode == 0), proc.kill() is NOT called."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        skill_dir = tmp_path / "test-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Test Skill\nDummy content.")
+
+        proc_mock = MagicMock()
+        proc_mock.returncode = 0
+        proc_mock.wait = AsyncMock(return_value=None)
+        proc_mock.kill = MagicMock()
+
+        item = StaleItem(
+            skill="test-skill",
+            reason="hash_mismatch",
+            stored_value="abc123",
+            current_value="def456",
+        )
+
+        with (
+            patch("autoskillit.contract_validator.bundled_skills_dir", return_value=tmp_path),
+            patch(
+                "autoskillit.contract_validator.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc_mock,
+            ),
+            patch(
+                "autoskillit.contract_validator.asyncio.wait_for",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "autoskillit.contract_validator.read_temp_output",
+                return_value=('{"meaningful_change": false, "summary": "ok"}', ""),
+            ),
+        ):
+            result = await triage_staleness([item])
+
+        assert result[0]["meaningful"] is False
+        assert result[0]["summary"] == "ok"
+        assert not proc_mock.kill.called, (
+            "proc.kill() must NOT be called when process exits cleanly"
+        )
+
+    async def test_triage_staleness_missing_skill_md_returns_meaningful_true(self, tmp_path: Path):
+        """When SKILL.md is absent, returns meaningful=True without spawning a subprocess."""
+        from unittest.mock import AsyncMock, patch
+
+        # Do NOT create SKILL.md — the directory doesn't exist
+        item = StaleItem(
+            skill="test-skill",
+            reason="hash_mismatch",
+            stored_value="abc123",
+            current_value="def456",
+        )
+
+        with (
+            patch("autoskillit.contract_validator.bundled_skills_dir", return_value=tmp_path),
+            patch(
+                "autoskillit.contract_validator.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+            ) as mock_exec,
+        ):
+            result = await triage_staleness([item])
+
+        assert len(result) == 1
+        assert result[0]["meaningful"] is True
+        assert "not found" in result[0]["summary"].lower()
+        assert not mock_exec.called, (
+            "create_subprocess_exec must NOT be called when SKILL.md is missing"
         )

@@ -115,7 +115,7 @@ class LoadResult(Generic[T]):
 CONTEXT_EXHAUSTION_MARKER = "prompt is too long"
 
 # Native Claude Code tools that pipeline orchestrators must NEVER use directly.
-# Canonical source of truth — imported by server.py, semantic_rules.py, and tests.
+# Canonical source of truth — imported by server.py and tests.
 PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
     "Read",
     "Grep",

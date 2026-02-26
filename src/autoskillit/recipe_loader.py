@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-
-from autoskillit.recipe_parser import RecipeInfo
+from autoskillit._io import _load_yaml
+from autoskillit.recipe_parser import AUTOSKILLIT_VERSION_KEY, RecipeInfo
 from autoskillit.types import RecipeSource
 
 
@@ -34,7 +33,7 @@ def _parse_recipe_metadata(path: Path) -> RecipeInfo:
     """
     text = path.read_text()
     metadata_text = _extract_frontmatter(text)
-    data = yaml.safe_load(metadata_text)
+    data = _load_yaml(metadata_text)
     if not isinstance(data, dict):
         raise ValueError(f"YAML metadata must be a mapping: {path}")
     name = data.get("name", "")
@@ -46,5 +45,5 @@ def _parse_recipe_metadata(path: Path) -> RecipeInfo:
         summary=data.get("summary", ""),
         path=path,
         source=RecipeSource.PROJECT,
-        version=data.get("autoskillit_version"),
+        version=data.get(AUTOSKILLIT_VERSION_KEY),
     )

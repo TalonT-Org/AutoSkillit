@@ -160,3 +160,22 @@ class TestSyncRemoval:
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 if isinstance(node, ast.ImportFrom) and node.module:
                     assert "sync_manifest" not in node.module
+
+
+# RL-VK1 — AST: recipe_loader must not hard-code the version key string
+def test_version_key_not_hardcoded_in_recipe_loader():
+    import ast
+    import inspect
+
+    import autoskillit.recipe_loader as rl
+
+    source = inspect.getsource(rl)
+    tree = ast.parse(source)
+    literals = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and node.value == "autoskillit_version"
+    ]
+    assert literals == [], (
+        "recipe_loader must import AUTOSKILLIT_VERSION_KEY, not hard-code the string"
+    )

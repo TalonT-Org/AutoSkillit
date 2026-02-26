@@ -18,8 +18,15 @@ from typing import Any
 
 import yaml
 
+from autoskillit._io import _load_yaml
 from autoskillit._logging import get_logger
 from autoskillit.process_lifecycle import create_temp_io, read_temp_output
+from autoskillit.recipe_parser import (
+    _CONTEXT_REF_RE,
+    _INPUT_REF_RE,
+    _TEMPLATE_REF_RE,
+    _parse_recipe,
+)
 from autoskillit.skill_resolver import bundled_skills_dir
 from autoskillit.types import SKILL_TOOLS, Severity
 
@@ -79,9 +86,6 @@ class RecipeCard:
 # ---------------------------------------------------------------------------
 
 _SKILL_NAME_RE = re.compile(r"/autoskillit:([\w-]+)")
-_CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
-_INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
-_TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +97,7 @@ _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
 def load_bundled_manifest() -> dict[str, Any]:
     """Load the bundled skill_contracts.yaml from the package directory."""
     manifest_path = Path(__file__).parent / "skill_contracts.yaml"
-    return yaml.safe_load(manifest_path.read_text())
+    return _load_yaml(manifest_path)
 
 
 def resolve_skill_name(skill_command: str) -> str | None:
@@ -192,9 +196,7 @@ def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
     """
     import datetime
 
-    from autoskillit.recipe_parser import _parse_recipe
-
-    data = yaml.safe_load(pipeline_path.read_text())
+    data = _load_yaml(pipeline_path)
     recipe = _parse_recipe(data)
     manifest = load_bundled_manifest()
 
@@ -271,7 +273,7 @@ def load_recipe_card(recipe_name: str, recipes_dir: Path) -> dict | None:
     contract_path = recipes_dir / "contracts" / f"{recipe_name}.yaml"
     if not contract_path.is_file():
         return None
-    return yaml.safe_load(contract_path.read_text())
+    return _load_yaml(contract_path)
 
 
 def validate_recipe_cards(recipe: Any, contract: dict[str, Any]) -> list[dict[str, str]]:

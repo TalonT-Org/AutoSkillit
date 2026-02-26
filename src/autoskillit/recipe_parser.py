@@ -10,11 +10,15 @@ from typing import Any
 import yaml
 
 from autoskillit._logging import get_logger
-from autoskillit.types import RETRY_RESPONSE_FIELDS, LoadReport, LoadResult, RecipeSource
+from autoskillit.types import (
+    RETRY_RESPONSE_FIELDS,
+    SKILL_TOOLS,
+    LoadReport,
+    LoadResult,
+    RecipeSource,
+)
 
 logger = get_logger(__name__)
-
-_SKILL_TOOLS: frozenset[str] = frozenset({"run_skill", "run_skill_retry"})
 
 
 @dataclass
@@ -393,7 +397,7 @@ def _detect_implicit_handoffs(recipe: Recipe) -> list[DataFlowWarning]:
     warnings: list[DataFlowWarning] = []
 
     for step_name, step in recipe.steps.items():
-        if step.tool in _SKILL_TOOLS and not step.capture:
+        if step.tool in SKILL_TOOLS and not step.capture:
             warnings.append(
                 DataFlowWarning(
                     code="IMPLICIT_HANDOFF",

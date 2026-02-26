@@ -1944,7 +1944,8 @@ async def validate_recipe(script_path: str) -> str:
     from autoskillit.recipe_parser import (
         validate_recipe as _validate_recipe,
     )
-    from autoskillit.semantic_rules import Severity, run_semantic_rules
+    from autoskillit.semantic_rules import run_semantic_rules
+    from autoskillit.types import Severity
 
     path = Path(script_path)
     if not path.is_file():

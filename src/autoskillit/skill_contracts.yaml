@@ -20,7 +20,7 @@ skills:
         required: true
       - name: implementation_ref
         type: string
-        required: false
+        required: true
       - name: base_branch
         type: string
         required: false

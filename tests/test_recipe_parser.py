@@ -1604,11 +1604,14 @@ def test_implementation_pipeline_plan_step_consumes_group_files():
 # ---------------------------------------------------------------------------
 
 
-def test_implementation_pipeline_audit_impl_captures_remediation_path():
-    """audit_impl step must have a capture block with remediation_path."""
+def test_implementation_pipeline_audit_impl_captures_remediation_path_and_verdict():
+    """audit_impl step must have a capture block with remediation_path and verdict."""
     wf = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
     audit_impl_step = wf.steps["audit_impl"]
     assert "remediation_path" in audit_impl_step.capture, (
+        f"audit_impl step capture keys: {list(audit_impl_step.capture.keys())}"
+    )
+    assert "verdict" in audit_impl_step.capture, (
         f"audit_impl step capture keys: {list(audit_impl_step.capture.keys())}"
     )
 

@@ -255,3 +255,75 @@ def test_server_does_not_import_list_recipes_or_load_recipe_from_recipe_loader()
                     "Use recipe_parser.list_recipes to find RecipeInfo.path, "
                     "then path.read_text()."
                 )
+
+
+def _get_module_ast(filename: str) -> ast.Module:
+    return ast.parse((SRC_ROOT / filename).read_text())
+
+
+def _top_level_class_names(tree: ast.Module) -> set[str]:
+    return {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.col_offset == 0
+    }
+
+
+def _top_level_assign_targets(tree: ast.Module) -> set[str]:
+    names = set()
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    names.add(t.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    return names
+
+
+def test_severity_not_defined_in_semantic_rules():
+    """Severity must live in types.py, not semantic_rules.py."""
+    tree = _get_module_ast("semantic_rules.py")
+    assert "Severity" not in _top_level_class_names(tree), (
+        "Severity is still defined in semantic_rules.py; move it to types.py"
+    )
+
+
+def test_severity_defined_in_types():
+    """Severity must be a top-level class in types.py."""
+    tree = _get_module_ast("types.py")
+    assert "Severity" in _top_level_class_names(tree), (
+        "Severity not found in types.py; it must be defined there"
+    )
+
+
+def test_skill_tools_not_defined_in_recipe_parser():
+    """SKILL_TOOLS must not be locally defined in recipe_parser.py."""
+    tree = _get_module_ast("recipe_parser.py")
+    assert "_SKILL_TOOLS" not in _top_level_assign_targets(tree), (
+        "_SKILL_TOOLS is still locally defined in recipe_parser.py; remove it"
+    )
+
+
+def test_skill_tools_not_defined_in_semantic_rules():
+    """SKILL_TOOLS must not be locally defined in semantic_rules.py."""
+    tree = _get_module_ast("semantic_rules.py")
+    assert "_SKILL_TOOLS" not in _top_level_assign_targets(tree), (
+        "_SKILL_TOOLS is still locally defined in semantic_rules.py; remove it"
+    )
+
+
+def test_skill_tools_not_defined_in_contract_validator():
+    """SKILL_TOOLS must not be locally defined in contract_validator.py."""
+    tree = _get_module_ast("contract_validator.py")
+    assert "_SKILL_TOOLS" not in _top_level_assign_targets(tree), (
+        "_SKILL_TOOLS is still locally defined in contract_validator.py; remove it"
+    )
+
+
+def test_skill_tools_defined_in_types():
+    """SKILL_TOOLS must be a top-level assignment in types.py."""
+    tree = _get_module_ast("types.py")
+    assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
+        "SKILL_TOOLS not found in types.py; it must be defined there"
+    )

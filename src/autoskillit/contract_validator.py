@@ -21,6 +21,7 @@ import yaml
 from autoskillit._logging import get_logger
 from autoskillit.process_lifecycle import create_temp_io, read_temp_output
 from autoskillit.skill_resolver import bundled_skills_dir
+from autoskillit.types import SKILL_TOOLS, Severity
 
 logger = get_logger(__name__)
 
@@ -181,8 +182,6 @@ def count_positional_args(skill_command: str) -> int:
 # Pipeline contract generation, loading, and validation
 # ---------------------------------------------------------------------------
 
-_SKILL_TOOLS = frozenset({"run_skill", "run_skill_retry"})
-
 
 def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
     """Generate a recipe card file for a recipe.
@@ -214,7 +213,7 @@ def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
             "produced": [],
         }
 
-        if step.tool in _SKILL_TOOLS:
+        if step.tool in SKILL_TOOLS:
             skill_cmd = step.with_args.get("skill_command", "")
             skill_name = resolve_skill_name(skill_cmd)
             if skill_name:
@@ -283,8 +282,6 @@ def validate_recipe_cards(recipe: Any, contract: dict[str, Any]) -> list[dict[st
 
     Returns a list of finding dicts with keys: rule, severity, step, message.
     """
-    from autoskillit.semantic_rules import Severity
-
     findings: list[dict[str, str]] = []
     for entry in contract.get("dataflow", []):
         available = set(entry.get("available", []))

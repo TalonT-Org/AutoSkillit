@@ -8,15 +8,9 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable
-from enum import StrEnum
 
 from autoskillit.recipe_parser import Recipe
-from autoskillit.types import PIPELINE_FORBIDDEN_TOOLS
-
-
-class Severity(StrEnum):
-    ERROR = "error"
-    WARNING = "warning"
+from autoskillit.types import PIPELINE_FORBIDDEN_TOOLS, SKILL_TOOLS, Severity
 
 
 @dataclasses.dataclass
@@ -79,8 +73,6 @@ def run_semantic_rules(wf: Recipe) -> list[RuleFinding]:
 # ---------------------------------------------------------------------------
 # Rules
 # ---------------------------------------------------------------------------
-
-_SKILL_TOOLS = frozenset({"run_skill", "run_skill_retry"})
 
 
 @semantic_rule(
@@ -149,7 +141,7 @@ def _check_unsatisfied_skill_input(wf: Recipe) -> list[RuleFinding]:
     available_context: set[str] = set()
 
     for step_name, step in wf.steps.items():
-        if step.tool in _SKILL_TOOLS:
+        if step.tool in SKILL_TOOLS:
             skill_cmd = step.with_args.get("skill_command", "")
             skill_name = resolve_skill_name(skill_cmd)
             if skill_name:
@@ -250,7 +242,7 @@ def _check_unreachable_steps(wf: Recipe) -> list[RuleFinding]:
 def _check_model_on_non_skill(wf: Recipe) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
-        if step.model and step.tool not in _SKILL_TOOLS:
+        if step.model and step.tool not in SKILL_TOOLS:
             findings.append(
                 RuleFinding(
                     rule="model-on-non-skill-step",
@@ -334,7 +326,7 @@ def _check_worktree_retry_creates_new(
 
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
-        if step.tool not in _SKILL_TOOLS:
+        if step.tool not in SKILL_TOOLS:
             continue
         if not step.retry or step.retry.max_attempts <= 1:
             continue

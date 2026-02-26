@@ -392,3 +392,28 @@ def test_pyproject_cyclopts_minimum_version() -> None:
         f"cyclopts minimum version is {match.group(1)}, expected >=4.0. "
         "cyclopts 3.x API is incompatible with the 4.x API used in this codebase."
     )
+
+
+def test_no_yaml_safe_load_in_migration_engine() -> None:
+    """P7-2: ContractMigrationAdapter.validate must use _load_yaml, not yaml.safe_load."""
+    src = (Path(__file__).parent.parent / "src/autoskillit/migration_engine.py").read_text()
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr == "safe_load":
+                pytest.fail(
+                    f"migration_engine.py line {node.lineno}: "
+                    f"direct yaml.safe_load call found; use _load_yaml from _io instead"
+                )
+
+
+def test_pytest_asyncio_version_bound() -> None:
+    """P11-2: pytest-asyncio lower bound must match the published 0.x stable series."""
+    import tomllib
+
+    pyproject = Path(__file__).parent.parent / "pyproject.toml"
+    data = tomllib.loads(pyproject.read_text())
+    deps = data["project"]["optional-dependencies"]["dev"]
+    asyncio_dep = next(d for d in deps if d.startswith("pytest-asyncio"))
+    assert ">=0.23" in asyncio_dep, f"Expected pytest-asyncio>=0.23.x, got: {asyncio_dep!r}"

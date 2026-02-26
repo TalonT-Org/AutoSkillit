@@ -1721,6 +1721,8 @@ async def load_recipe(name: str) -> str:
     ``suggestions`` (list of semantic findings, possibly empty) keys.
     On error: JSON with ``error`` key.
     """
+    import yaml
+
     from autoskillit._io import _load_yaml
     from autoskillit.contract_validator import (
         check_contract_staleness,
@@ -1848,9 +1850,9 @@ async def load_recipe(name: str) -> str:
                             ),
                         }
                     )
-    except Exception as exc:
+    except yaml.YAMLError as exc:
         logger.warning(
-            "Recipe validation pipeline failed",
+            "Recipe YAML parse error",
             name=name,
             exc_info=True,
         )
@@ -1859,7 +1861,35 @@ async def load_recipe(name: str) -> str:
                 "rule": "validation-error",
                 "severity": "error",
                 "step": "(validation-pipeline)",
-                "message": f"Validation pipeline crashed: {type(exc).__name__}: {exc}",
+                "message": f"YAML parse error: {exc}",
+            }
+        )
+    except ValueError as exc:
+        logger.warning(
+            "Recipe structure invalid",
+            name=name,
+            exc_info=True,
+        )
+        suggestions.append(
+            {
+                "rule": "validation-error",
+                "severity": "error",
+                "step": "(validation-pipeline)",
+                "message": f"Invalid recipe structure: {exc}",
+            }
+        )
+    except (FileNotFoundError, OSError) as exc:
+        logger.warning(
+            "Recipe file not found or unreadable",
+            name=name,
+            exc_info=True,
+        )
+        suggestions.append(
+            {
+                "rule": "validation-error",
+                "severity": "error",
+                "step": "(validation-pipeline)",
+                "message": f"File error: {exc}",
             }
         )
 

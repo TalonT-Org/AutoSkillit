@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml as _yaml
 
 from autoskillit import __version__
-from autoskillit._io import _atomic_write
+from autoskillit._io import _atomic_write, _load_yaml
 from autoskillit._logging import get_logger
 from autoskillit.migration_loader import applicable_migrations
 from autoskillit.recipe_loader import parse_recipe_metadata
@@ -288,9 +288,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
 
     def validate(self, path: Path) -> tuple[bool, str]:
         try:
-            import yaml as _y
-
-            data = _y.safe_load(path.read_text())
+            data = _load_yaml(path)
             if not isinstance(data, dict) or "skill_hashes" not in data:
                 return False, "missing skill_hashes field"
             return True, ""

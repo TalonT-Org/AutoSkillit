@@ -8,15 +8,9 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable
-from enum import StrEnum
 
-from autoskillit.recipe_parser import Recipe
-from autoskillit.types import PIPELINE_FORBIDDEN_TOOLS
-
-
-class Severity(StrEnum):
-    ERROR = "error"
-    WARNING = "warning"
+from autoskillit.recipe_parser import Recipe, iter_steps_with_context
+from autoskillit.types import PIPELINE_FORBIDDEN_TOOLS, SKILL_TOOLS, Severity
 
 
 @dataclasses.dataclass
@@ -79,8 +73,6 @@ def run_semantic_rules(wf: Recipe) -> list[RuleFinding]:
 # ---------------------------------------------------------------------------
 # Rules
 # ---------------------------------------------------------------------------
-
-_SKILL_TOOLS = frozenset({"run_skill", "run_skill_retry"})
 
 
 @semantic_rule(
@@ -146,59 +138,52 @@ def _check_unsatisfied_skill_input(wf: Recipe) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     manifest = load_bundled_manifest()
     ingredient_names = set(wf.ingredients.keys())
-    available_context: set[str] = set()
 
-    for step_name, step in wf.steps.items():
-        if step.tool in _SKILL_TOOLS:
-            skill_cmd = step.with_args.get("skill_command", "")
-            skill_name = resolve_skill_name(skill_cmd)
-            if skill_name:
-                contract = get_skill_contract(skill_name, manifest)
-                if contract:
-                    # If the skill command has inline positional args beyond
-                    # the skill name (e.g., "/autoskillit:investigate the
-                    # test failures"), we cannot determine which named contract
-                    # inputs they satisfy. Skip checking — only check steps
-                    # that use explicit ${{ }} references for all arguments.
-                    if count_positional_args(skill_cmd) > 0:
-                        available_context.update(step.capture.keys())
-                        continue
+    for step_name, step, available_context in iter_steps_with_context(wf):
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        skill_name = resolve_skill_name(skill_cmd)
+        if not skill_name:
+            continue
+        contract = get_skill_contract(skill_name, manifest)
+        if not contract:
+            continue
+        if count_positional_args(skill_cmd) > 0:
+            continue
 
-                    ctx_refs = extract_context_refs(step)
-                    inp_refs = extract_input_refs(step)
-                    provided = ctx_refs | inp_refs
+        ctx_refs = extract_context_refs(step)
+        inp_refs = extract_input_refs(step)
+        provided = ctx_refs | inp_refs
 
-                    for req_input in contract.inputs:
-                        if not req_input.required:
-                            continue
-                        name = req_input.name
-                        if name not in provided:
-                            if name in available_context or name in ingredient_names:
-                                msg = (
-                                    f"Step '{step_name}' invokes {skill_name} which requires "
-                                    f"'{name}', and '{name}' is available in the recipe "
-                                    f"context, but the step does not reference it. Add "
-                                    f"'${{{{ context.{name} }}}}' to the step's skill_command "
-                                    f"or with: block."
-                                )
-                            else:
-                                msg = (
-                                    f"Step '{step_name}' invokes {skill_name} which requires "
-                                    f"'{name}', but '{name}' is not available at this point "
-                                    f"in the recipe. No prior step captures it and it is "
-                                    f"not a recipe ingredient."
-                                )
-                            findings.append(
-                                RuleFinding(
-                                    rule="missing-ingredient",
-                                    severity=Severity.ERROR,
-                                    step_name=step_name,
-                                    message=msg,
-                                )
-                            )
-
-        # Accumulate captures for subsequent steps
-        available_context.update(step.capture.keys())
+        for req_input in contract.inputs:
+            if not req_input.required:
+                continue
+            name = req_input.name
+            if name not in provided:
+                if name in available_context or name in ingredient_names:
+                    msg = (
+                        f"Step '{step_name}' invokes {skill_name} which requires "
+                        f"'{name}', and '{name}' is available in the recipe "
+                        f"context, but the step does not reference it. Add "
+                        f"'${{{{ context.{name} }}}}' to the step's skill_command "
+                        f"or with: block."
+                    )
+                else:
+                    msg = (
+                        f"Step '{step_name}' invokes {skill_name} which requires "
+                        f"'{name}', but '{name}' is not available at this point "
+                        f"in the recipe. No prior step captures it and it is "
+                        f"not a recipe ingredient."
+                    )
+                findings.append(
+                    RuleFinding(
+                        rule="missing-ingredient",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=msg,
+                    )
+                )
 
     return findings
 
@@ -250,7 +235,7 @@ def _check_unreachable_steps(wf: Recipe) -> list[RuleFinding]:
 def _check_model_on_non_skill(wf: Recipe) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
-        if step.model and step.tool not in _SKILL_TOOLS:
+        if step.model and step.tool not in SKILL_TOOLS:
             findings.append(
                 RuleFinding(
                     rule="model-on-non-skill-step",
@@ -334,7 +319,7 @@ def _check_worktree_retry_creates_new(
 
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
-        if step.tool not in _SKILL_TOOLS:
+        if step.tool not in SKILL_TOOLS:
             continue
         if not step.retry or step.retry.max_attempts <= 1:
             continue

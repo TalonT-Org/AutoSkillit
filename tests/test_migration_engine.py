@@ -10,6 +10,9 @@ import pytest
 from autoskillit.migration_engine import (
     MIGRATE_RECIPES_MAX_RETRIES,
     ContractMigrationAdapter,
+    DeterministicMigrationAdapter,
+    HeadlessMigrationAdapter,
+    MigrationAdapter,
     MigrationFile,
     RecipeMigrationAdapter,
     default_migration_engine,
@@ -287,17 +290,20 @@ class TestContractMigrationAdapter:
 
         monkeypatch.setattr(
             "autoskillit.contract_validator.generate_recipe_card",
-            lambda *a, **kw: contract_path,
+            lambda *a, **kw: {
+                "generated_at": "2026-01-01T00:00:00+00:00",
+                "bundled_manifest_version": "0.1.0",
+                "skill_hashes": {},
+                "skills": {},
+                "dataflow": [],
+            },
         )
 
         file = MigrationFile(
             name="test", path=contract_path, file_type="contract", current_version=None
         )
         adapter = ContractMigrationAdapter()
-        mock_headless = AsyncMock()
-        result = await adapter.migrate(
-            file, run_headless=mock_headless, temp_dir=tmp_path / "temp"
-        )
+        result = await adapter.migrate(file, temp_dir=tmp_path / "temp")
 
         assert result.success is True
         assert result.name == "test"
@@ -317,10 +323,7 @@ class TestContractMigrationAdapter:
             name="missing", path=contract_path, file_type="contract", current_version=None
         )
         adapter = ContractMigrationAdapter()
-        mock_headless = AsyncMock()
-        result = await adapter.migrate(
-            file, run_headless=mock_headless, temp_dir=tmp_path / "temp"
-        )
+        result = await adapter.migrate(file, temp_dir=tmp_path / "temp")
 
         assert result.success is False
         assert "not found" in (result.error or "")
@@ -459,6 +462,40 @@ class TestMigrationEngine:
         engine = default_migration_engine()
         assert engine.get_adapter("recipe") is not None
         assert engine.get_adapter("contract") is not None
+
+
+class TestAdapterHierarchy:
+    # ME-ADP1
+    def test_adapter_abcs_are_importable(self) -> None:
+        from abc import ABC
+
+        assert issubclass(HeadlessMigrationAdapter, MigrationAdapter)
+        assert issubclass(DeterministicMigrationAdapter, MigrationAdapter)
+        assert issubclass(MigrationAdapter, ABC)
+
+    # ME-ADP2
+    def test_recipe_adapter_is_headless(self) -> None:
+        assert isinstance(RecipeMigrationAdapter(), HeadlessMigrationAdapter)
+
+    # ME-ADP3
+    def test_contract_adapter_is_deterministic(self) -> None:
+        assert isinstance(ContractMigrationAdapter(), DeterministicMigrationAdapter)
+
+    # ME-ADP4
+    def test_contract_migrate_has_no_run_headless_param(self) -> None:
+        import inspect
+
+        sig = inspect.signature(ContractMigrationAdapter.migrate)
+        assert "run_headless" not in sig.parameters
+
+    # ME-RT1
+    def test_incomplete_adapter_raises_type_error(self) -> None:
+        class BrokenAdapter(HeadlessMigrationAdapter):
+            file_type = "broken"
+            # missing: discover, needs_migration, validate, migrate
+
+        with pytest.raises(TypeError):
+            BrokenAdapter()
 
 
 class TestMigrateRecipesConstant:

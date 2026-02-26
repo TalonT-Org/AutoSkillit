@@ -10,11 +10,8 @@ from autoskillit.recipe_parser import (
     _parse_step,
     load_recipe,
 )
-from autoskillit.semantic_rules import (
-    RuleFinding,
-    Severity,
-    run_semantic_rules,
-)
+from autoskillit.semantic_rules import RuleFinding, run_semantic_rules
+from autoskillit.types import Severity
 
 
 def _make_workflow(steps: dict[str, dict]) -> Recipe:

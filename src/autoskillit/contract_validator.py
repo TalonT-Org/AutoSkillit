@@ -7,20 +7,25 @@ each skill step provides all required inputs.
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses
 import functools
 import hashlib
-import json
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from autoskillit._io import _load_yaml
 from autoskillit._logging import get_logger
-from autoskillit.process_lifecycle import create_temp_io, read_temp_output
+from autoskillit.recipe_parser import (
+    _CONTEXT_REF_RE,
+    _INPUT_REF_RE,
+    _TEMPLATE_REF_RE,
+    _parse_recipe,
+)
 from autoskillit.skill_resolver import bundled_skills_dir
+from autoskillit.types import SKILL_TOOLS, Severity
 
 logger = get_logger(__name__)
 
@@ -78,9 +83,6 @@ class RecipeCard:
 # ---------------------------------------------------------------------------
 
 _SKILL_NAME_RE = re.compile(r"/autoskillit:([\w-]+)")
-_CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
-_INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
-_TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +94,7 @@ _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
 def load_bundled_manifest() -> dict[str, Any]:
     """Load the bundled skill_contracts.yaml from the package directory."""
     manifest_path = Path(__file__).parent / "skill_contracts.yaml"
-    return yaml.safe_load(manifest_path.read_text())
+    return _load_yaml(manifest_path)
 
 
 def resolve_skill_name(skill_command: str) -> str | None:
@@ -181,21 +183,18 @@ def count_positional_args(skill_command: str) -> int:
 # Pipeline contract generation, loading, and validation
 # ---------------------------------------------------------------------------
 
-_SKILL_TOOLS = frozenset({"run_skill", "run_skill_retry"})
 
-
-def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
+def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> dict:
     """Generate a recipe card file for a recipe.
 
     Walks each step, resolves skill names, looks up contracts in the manifest,
     computes SKILL.md hashes, and builds dataflow entries. Writes the recipe card
-    to ``recipes_dir / "contracts" / "{pipeline_stem}.yaml"``.
+    to ``recipes_dir / "contracts" / "{pipeline_stem}.yaml"`` and returns the
+    contract data dict directly so callers avoid a redundant disk read.
     """
     import datetime
 
-    from autoskillit.recipe_parser import _parse_recipe
-
-    data = yaml.safe_load(pipeline_path.read_text())
+    data = _load_yaml(pipeline_path)
     recipe = _parse_recipe(data)
     manifest = load_bundled_manifest()
 
@@ -214,7 +213,7 @@ def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
             "produced": [],
         }
 
-        if step.tool in _SKILL_TOOLS:
+        if step.tool in SKILL_TOOLS:
             skill_cmd = step.with_args.get("skill_command", "")
             skill_name = resolve_skill_name(skill_cmd)
             if skill_name:
@@ -261,7 +260,7 @@ def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> Path:
 
     out_path = contracts_dir / f"{pipeline_path.stem}.yaml"
     out_path.write_text(yaml.dump(contract_data, default_flow_style=False, sort_keys=False))
-    return out_path
+    return contract_data
 
 
 def load_recipe_card(recipe_name: str, recipes_dir: Path) -> dict | None:
@@ -272,7 +271,7 @@ def load_recipe_card(recipe_name: str, recipes_dir: Path) -> dict | None:
     contract_path = recipes_dir / "contracts" / f"{recipe_name}.yaml"
     if not contract_path.is_file():
         return None
-    return yaml.safe_load(contract_path.read_text())
+    return _load_yaml(contract_path)
 
 
 def validate_recipe_cards(recipe: Any, contract: dict[str, Any]) -> list[dict[str, str]]:
@@ -283,8 +282,6 @@ def validate_recipe_cards(recipe: Any, contract: dict[str, Any]) -> list[dict[st
 
     Returns a list of finding dicts with keys: rule, severity, step, message.
     """
-    from autoskillit.semantic_rules import Severity
-
     findings: list[dict[str, str]] = []
     for entry in contract.get("dataflow", []):
         available = set(entry.get("available", []))
@@ -356,100 +353,3 @@ def check_contract_staleness(contract: dict[str, Any]) -> list[StaleItem]:
             )
 
     return stale
-
-
-async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]:
-    """Use Haiku to determine if stale contracts changed meaningfully.
-
-    For each stale item with reason="hash_mismatch", reads the current
-    SKILL.md and asks Haiku whether the inputs or outputs changed.
-
-    Returns a list of dicts with keys: skill, meaningful (bool), summary (str).
-    """
-    results: list[dict[str, Any]] = []
-
-    for item in stale_items:
-        if item.reason == "version_mismatch":
-            results.append(
-                {
-                    "skill": item.skill,
-                    "meaningful": True,
-                    "summary": (
-                        f"Manifest version changed from {item.stored_value} "
-                        f"to {item.current_value}. Structure may have changed."
-                    ),
-                }
-            )
-            continue
-
-        if item.reason != "hash_mismatch":
-            continue
-
-        skill_md_path = bundled_skills_dir() / item.skill / "SKILL.md"
-        if not skill_md_path.is_file():
-            results.append(
-                {
-                    "skill": item.skill,
-                    "meaningful": True,
-                    "summary": f"SKILL.md for {item.skill} not found.",
-                }
-            )
-            continue
-
-        skill_content = skill_md_path.read_text()
-        manifest = load_bundled_manifest()
-        contract_data = manifest.get("skills", {}).get(item.skill, {})
-
-        prompt = (
-            f"Compare the stored skill contract with the current SKILL.md content.\n\n"
-            f"Stored contract:\n{json.dumps(contract_data, indent=2)}\n\n"
-            f"Current SKILL.md:\n{skill_content[:3000]}\n\n"
-            f"Did the inputs or outputs change? Respond with JSON only: "
-            f'{{"meaningful_change": true/false, "summary": "brief explanation"}}'
-        )
-
-        proc: asyncio.subprocess.Process | None = None
-        try:
-            with create_temp_io() as (stdout_file, stderr_file, _stdin_path):
-                stdout_path = Path(stdout_file.name)
-                stderr_path = Path(stderr_file.name)
-                proc = await asyncio.create_subprocess_exec(
-                    "claude",
-                    "-p",
-                    prompt,
-                    "--model",
-                    "haiku",
-                    "--output-format",
-                    "json",
-                    stdout=stdout_file,
-                    stderr=stderr_file,
-                )
-                await asyncio.wait_for(proc.wait(), timeout=30)
-                stdout_str, _ = read_temp_output(stdout_path, stderr_path)
-            response = json.loads(stdout_str)
-            results.append(
-                {
-                    "skill": item.skill,
-                    "meaningful": response.get("meaningful_change", True),
-                    "summary": response.get("summary", "No summary provided."),
-                }
-            )
-        except (TimeoutError, json.JSONDecodeError, OSError):
-            logger.warning(
-                "triage_staleness failed; treating skill as meaningful",
-                skill=item.skill,
-                exc_info=True,
-            )
-            results.append(
-                {
-                    "skill": item.skill,
-                    "meaningful": True,
-                    "summary": f"Triage failed for {item.skill}; treating as meaningful.",
-                }
-            )
-        finally:
-            if proc is not None and proc.returncode is None:
-                proc.kill()
-                await proc.wait()
-
-    return results

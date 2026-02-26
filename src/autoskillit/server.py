@@ -14,43 +14,49 @@ Transport: stdio (default for FastMCP).
 from __future__ import annotations
 
 import asyncio
-import base64
 import importlib
 import inspect
 import json
 import os
 import re
-import shutil
-import sqlite3
-import threading
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import structlog
 from fastmcp import Context, FastMCP
 from fastmcp.dependencies import CurrentContext
-from fastmcp.prompts.prompt import Message, PromptResult
+from fastmcp.prompts import Message, PromptResult
 
+from autoskillit import __version__
 from autoskillit._audit import FailureRecord, _audit_log
 from autoskillit._logging import get_logger
 from autoskillit._token_log import _token_log
 from autoskillit.config import AutomationConfig, load_config
+from autoskillit.db_tools import _execute_readonly_query, _validate_select_only
+from autoskillit.failure_store import FailureStore, default_store_path
+from autoskillit.migration_engine import MigrationFile, default_migration_engine
+from autoskillit.migration_loader import applicable_migrations
 from autoskillit.process_lifecycle import (
     SubprocessResult,
     TerminationReason,
-    _extract_text_content,
     run_managed_async,
 )
+from autoskillit.session_parser import (
+    ClaudeSessionResult,
+    parse_session_result,
+)
 from autoskillit.types import (
-    CONTEXT_EXHAUSTION_MARKER,
     PIPELINE_FORBIDDEN_TOOLS,
     MergeFailedStep,
     MergeState,
     RestartScope,
     RetryReason,
 )
+from autoskillit.workspace import _delete_directory_contents
+
+# Migration subsystem (Layer B — domain logic).
+# These modules have no dependency on FastMCP or server state.
+# Originally deferred to avoid circular imports; safe to promote after groupA/groupC cleanup.
 
 mcp = FastMCP("autoskillit")
 
@@ -58,25 +64,22 @@ _config: AutomationConfig = load_config(Path.cwd())
 
 _plugin_dir = str(Path(__file__).parent)
 
+_plugin_version: str | None = None
+_plugin_json_path = Path(_plugin_dir) / ".claude-plugin" / "plugin.json"
+if _plugin_json_path.is_file():
+    _plugin_version = json.loads(_plugin_json_path.read_text()).get("version")
+
 _tools_enabled = False
 
 logger = get_logger(__name__)
 
 
-def _version_info() -> dict:
+def version_info() -> dict:
     """Return version health information for the running server."""
-    from autoskillit import __version__
-
-    plugin_json_path = Path(_plugin_dir) / ".claude-plugin" / "plugin.json"
-    plugin_version = None
-    if plugin_json_path.is_file():
-        data = json.loads(plugin_json_path.read_text())
-        plugin_version = data.get("version")
-
     return {
         "package_version": __version__,
-        "plugin_json_version": plugin_version,
-        "match": __version__ == plugin_version,
+        "plugin_json_version": _plugin_version,
+        "match": __version__ == _plugin_version,
     }
 
 
@@ -151,6 +154,13 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
     if not plan_path.is_file():
         return _gate_error_result(f"Plan file not found: {plan_path}")
 
+    # TOCTOU acceptance (option c, per P1-5): This function reads the plan file
+    # once here. If the file is modified or deleted between this gate check and
+    # the headless session acting on it, the gate condition will be stale.
+    # This is an accepted limitation: the plan file is user-controlled, and
+    # modification between check and execution is a user error. Options (a) and
+    # (b) — passing file content via stdin or re-verifying via content hash —
+    # involve significant scope and are deferred.
     first_line = plan_path.read_text().split("\n", 1)[0].strip()
     if first_line != _config.implement_gate.marker:
         return _gate_error_result(
@@ -399,268 +409,8 @@ def _build_skill_result(
     )
 
 
-@dataclass
-class ClaudeSessionResult:
-    """Parsed result from a Claude Code headless session."""
-
-    subtype: str  # "success", "error_max_turns", "error_during_execution", etc.
-    is_error: bool
-    result: str
-    session_id: str
-    errors: list[str] = field(default_factory=list)
-    token_usage: dict[str, Any] | None = None
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.result, str):
-            self.result = _extract_text_content(self.result)
-        if not isinstance(self.errors, list):
-            self.errors = [] if self.errors is None else [str(self.errors)]
-        if not isinstance(self.subtype, str):
-            self.subtype = "unknown" if self.subtype is None else str(self.subtype)
-        if not isinstance(self.session_id, str):
-            self.session_id = "" if self.session_id is None else str(self.session_id)
-
-    def _is_context_exhausted(self) -> bool:
-        """Detect context window exhaustion from Claude's error output.
-
-        Requires both ``is_error=True`` AND the marker to appear in the
-        ``errors`` list (structured CLI signal).  Falls back to checking
-        ``result`` only when the subtype is a known error subtype, to
-        narrow false-positives from model prose that happens to contain
-        the marker phrase.
-        """
-        if not self.is_error:
-            return False
-        # Primary: check the structured errors list from Claude CLI
-        marker = CONTEXT_EXHAUSTION_MARKER
-        if any(marker in e.lower() for e in self.errors):
-            return True
-        # Fallback: only trust result text for error subtypes, not execution errors
-        # where the model's own output could contain the marker phrase
-        if self.subtype in ("success", "error_max_turns") and marker in self.result.lower():
-            return True
-        return False
-
-    @property
-    def agent_result(self) -> str:
-        """Result text rewritten for LLM agent consumption.
-
-        When the session ended due to a retriable condition (context exhaustion,
-        max turns), the raw result text from Claude CLI can be misleading to
-        LLM callers. This property returns semantically correct, actionable text.
-        The raw result is preserved in self.result for debugging.
-        """
-        if self._is_context_exhausted():
-            return (
-                "Context limit reached during session execution. "
-                "The session made partial progress. "
-                "Use needs_retry and retry_reason to continue from where it left off."
-            )
-        if self.subtype == "error_max_turns":
-            return (
-                "Turn limit reached during session execution. "
-                "The session made partial progress. "
-                "Use needs_retry and retry_reason to continue from where it left off."
-            )
-        return self.result
-
-    @property
-    def needs_retry(self) -> bool:
-        """Whether the session didn't finish and should be retried."""
-        if self.subtype == "error_max_turns":
-            return True
-        if self._is_context_exhausted():
-            return True
-        return False
-
-    @property
-    def retry_reason(self) -> RetryReason:
-        """Why retry is needed. NONE if needs_retry is False."""
-        if self.needs_retry:
-            return RetryReason.RESUME
-        return RetryReason.NONE
-
-
-_TOKEN_FIELDS = (
-    "input_tokens",
-    "output_tokens",
-    "cache_creation_input_tokens",
-    "cache_read_input_tokens",
-)
-
-
-def extract_token_usage(stdout: str) -> dict[str, Any] | None:
-    """Extract token usage from Claude CLI NDJSON output.
-
-    Scans assistant records for per-model usage and the result record
-    for authoritative aggregated totals.  Returns None if no usage
-    data is found.
-    """
-    if not stdout.strip():
-        return None
-
-    model_buckets: dict[str, dict[str, int]] = {}
-    result_usage: dict[str, int] | None = None
-
-    for line in stdout.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict):
-            continue
-
-        record_type = obj.get("type")
-
-        if record_type == "assistant":
-            msg = obj.get("message")
-            if not isinstance(msg, dict):
-                continue
-            usage = msg.get("usage")
-            if not isinstance(usage, dict):
-                continue
-            model = msg.get("model", "unknown")
-            bucket = model_buckets.setdefault(model, {f: 0 for f in _TOKEN_FIELDS})
-            for f in _TOKEN_FIELDS:
-                bucket[f] += usage.get(f, 0)
-
-        elif record_type == "result":
-            usage = obj.get("usage")
-            if isinstance(usage, dict):
-                result_usage = {f: usage.get(f, 0) for f in _TOKEN_FIELDS}
-
-    if not model_buckets and result_usage is None:
-        return None
-
-    # Aggregated totals: prefer result record, fall back to assistant sum
-    if result_usage is not None:
-        totals = dict(result_usage)
-    else:
-        totals = {f: 0 for f in _TOKEN_FIELDS}
-        for bucket in model_buckets.values():
-            for f in _TOKEN_FIELDS:
-                totals[f] += bucket[f]
-
-    return {
-        **totals,
-        "model_breakdown": dict(model_buckets) if model_buckets else {},
-    }
-
-
-def parse_session_result(stdout: str) -> ClaudeSessionResult:
-    """Parse Claude Code's --output-format json stdout into a typed result.
-
-    Handles multi-line NDJSON (Claude Code may emit multiple JSON objects;
-    the last 'result' type object is authoritative).
-    Falls back gracefully for non-JSON or missing fields.
-    """
-    if not stdout.strip():
-        return ClaudeSessionResult(
-            subtype="empty_output",
-            is_error=True,
-            result="",
-            session_id="",
-            errors=[],
-        )
-
-    result_obj = None
-    for line in stdout.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-            if isinstance(obj, dict) and obj.get("type") == "result":
-                result_obj = obj
-        except json.JSONDecodeError:
-            continue
-
-    if result_obj is None:
-        try:
-            fallback = json.loads(stdout)
-            if isinstance(fallback, dict) and fallback.get("type") == "result":
-                result_obj = fallback
-            else:
-                return ClaudeSessionResult(
-                    subtype="unparseable",
-                    is_error=True,
-                    result=stdout,
-                    session_id="",
-                    errors=[],
-                )
-        except json.JSONDecodeError:
-            return ClaudeSessionResult(
-                subtype="unparseable",
-                is_error=True,
-                result=stdout,
-                session_id="",
-                errors=[],
-            )
-
-    token_usage = extract_token_usage(stdout)
-
-    return ClaudeSessionResult(
-        subtype=result_obj.get("subtype", "unknown"),
-        is_error=result_obj.get("is_error", False),
-        result=result_obj.get("result", ""),
-        session_id=result_obj.get("session_id", ""),
-        errors=result_obj.get("errors", []),
-        token_usage=token_usage,
-    )
-
-
-@dataclass
-class CleanupResult:
-    deleted: list[str] = field(default_factory=list)
-    failed: list[tuple[str, str]] = field(default_factory=list)
-    skipped: list[str] = field(default_factory=list)
-
-    @property
-    def success(self) -> bool:
-        return len(self.failed) == 0
-
-    def to_dict(self) -> dict:
-        return {
-            "success": self.success,
-            "deleted": self.deleted,
-            "failed": [{"path": p, "error": e} for p, e in self.failed],
-            "skipped": self.skipped,
-        }
-
-
-def _delete_directory_contents(
-    directory: Path,
-    preserve: set[str] | None = None,
-) -> CleanupResult:
-    """Delete all items in directory, skipping preserved names.
-
-    Never raises. All errors captured in CleanupResult.failed.
-    FileNotFoundError treated as success (item already gone).
-    """
-    result = CleanupResult()
-    for item_name in os.listdir(directory):
-        if preserve and item_name in preserve:
-            result.skipped.append(item_name)
-            continue
-        path = directory / item_name
-        try:
-            if path.is_dir():
-                shutil.rmtree(path)
-            else:
-                path.unlink()
-            result.deleted.append(item_name)
-        except FileNotFoundError:
-            result.deleted.append(item_name)  # gone = success
-        except OSError as exc:
-            result.failed.append((item_name, f"{type(exc).__name__}: {exc}"))
-    return result
-
-
 @mcp.tool(tags={"automation"})
-async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
+async def run_cmd(cmd: str, cwd: str, timeout: int = 600, ctx: Context = CurrentContext()) -> str:
     """Run an arbitrary shell command in the specified directory.
 
     Args:
@@ -670,20 +420,38 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="run_cmd", cwd=cwd)
     logger.info("run_cmd", cmd=cmd[:80], cwd=cwd)
+    try:
+        await ctx.info(
+            f"run_cmd: {cmd[:80]}",
+            logger_name="autoskillit.run_cmd",
+            extra={"cwd": cwd},
+        )
+    except RuntimeError:
+        pass
     returncode, stdout, stderr = await _run_subprocess(
         ["bash", "-c", cmd],
         cwd=cwd,
         timeout=float(timeout),
     )
-    return json.dumps(
-        {
-            "success": returncode == 0,
-            "exit_code": returncode,
-            "stdout": _truncate(stdout),
-            "stderr": _truncate(stderr),
-        }
-    )
+    result = {
+        "success": returncode == 0,
+        "exit_code": returncode,
+        "stdout": _truncate(stdout),
+        "stderr": _truncate(stderr),
+    }
+    if not result["success"]:
+        try:
+            await ctx.error(
+                "run_cmd failed",
+                logger_name="autoskillit.run_cmd",
+                extra={"exit_code": returncode},
+            )
+        except RuntimeError:
+            pass
+    return json.dumps(result)
 
 
 async def _import_and_call(
@@ -749,7 +517,10 @@ async def _import_and_call(
 
 @mcp.tool(tags={"automation"})
 async def run_python(
-    callable: str, args: dict[str, object] | None = None, timeout: int = 30
+    callable: str,
+    args: dict[str, object] | None = None,
+    timeout: int = 30,
+    ctx: Context = CurrentContext(),
 ) -> str:
     """Call a Python function directly by dotted module path.
 
@@ -768,110 +539,38 @@ async def run_python(
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="run_python")
     logger.info("run_python", callable=callable, timeout=timeout)
+    try:
+        await ctx.info(
+            f"run_python: {callable}",
+            logger_name="autoskillit.run_python",
+            extra={"callable": callable},
+        )
+    except RuntimeError:
+        pass
     result = await _import_and_call(callable, args=args, timeout=float(timeout))
+    if not result.get("success"):
+        try:
+            await ctx.error(
+                "run_python failed",
+                logger_name="autoskillit.run_python",
+                extra={"callable": callable},
+            )
+        except RuntimeError:
+            pass
     return json.dumps(result)
 
 
-_FORBIDDEN_SQL = re.compile(
-    r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE|ATTACH|DETACH|PRAGMA|VACUUM|REINDEX)\b",
-    re.IGNORECASE,
-)
-_STRIP_SQL_COMMENTS = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
-
-
-def _validate_select_only(sql: str) -> None:
-    """Raise ValueError if the query is not a valid SELECT statement."""
-    if not sql or not sql.strip():
-        raise ValueError("Query must not be empty")
-    cleaned = _STRIP_SQL_COMMENTS.sub("", sql).strip()
-    if _FORBIDDEN_SQL.search(cleaned):
-        raise ValueError(
-            f"Query contains forbidden keyword: {_FORBIDDEN_SQL.search(cleaned).group()}"  # type: ignore[union-attr]
-        )
-    if not re.match(r"(?i)^\s*SELECT\b", cleaned):
-        raise ValueError("Query must begin with SELECT")
-
-
-_ALLOWED_ACTIONS: frozenset[int] = frozenset(
-    {
-        sqlite3.SQLITE_SELECT,
-        sqlite3.SQLITE_READ,
-        sqlite3.SQLITE_FUNCTION,
-    }
-)
-
-
-def _select_only_authorizer(
-    action: int,
-    arg1: str | None,
-    arg2: str | None,
-    db_name: str | None,
-    trigger_name: str | None,
-) -> int:
-    """SQLite authorizer callback allowing only SELECT, READ, and FUNCTION."""
-    if action in _ALLOWED_ACTIONS:
-        return sqlite3.SQLITE_OK
-    return sqlite3.SQLITE_DENY
-
-
-def _row_to_dict(columns: list[str], row: tuple) -> dict:  # type: ignore[type-arg]
-    """Convert a SQLite row tuple to a dict, base64-encoding bytes values."""
-    result: dict[str, object] = {}
-    for col, val in zip(columns, row):
-        if isinstance(val, bytes):
-            result[col] = base64.b64encode(val).decode("ascii")
-        else:
-            result[col] = val
-    return result
-
-
-def _execute_readonly_query(
+@mcp.tool(tags={"automation"})
+async def read_db(
     db_path: str,
     query: str,
-    params: list | dict,  # type: ignore[type-arg]
-    timeout_sec: int,
-    max_rows: int,
-) -> dict:  # type: ignore[type-arg]
-    """Execute a read-only query against a SQLite database (synchronous)."""
-    uri = f"file:{db_path}?mode=ro"
-    conn = sqlite3.connect(uri, uri=True)
-    try:
-        conn.set_authorizer(_select_only_authorizer)
-
-        timer = threading.Timer(timeout_sec, conn.interrupt)
-        timer.start()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(query, params)
-
-            column_names = [desc[0] for desc in cursor.description] if cursor.description else []
-            rows: list[dict] = []  # type: ignore[type-arg]
-            truncated = False
-            for i, row in enumerate(cursor):
-                if i >= max_rows:
-                    truncated = True
-                    break
-                rows.append(_row_to_dict(column_names, row))
-
-            return {
-                "column_names": column_names,
-                "rows": rows,
-                "row_count": len(rows),
-                "truncated": truncated,
-            }
-        except sqlite3.OperationalError as exc:
-            if "interrupted" in str(exc):
-                raise TimeoutError from exc
-            raise
-        finally:
-            timer.cancel()
-    finally:
-        conn.close()
-
-
-@mcp.tool(tags={"automation"})
-async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0) -> str:
+    params: str = "[]",
+    timeout: int = 0,
+    ctx: Context = CurrentContext(),
+) -> str:
     """Run a read-only SQL query against a SQLite database, return JSON.
 
     Defense-in-depth: regex pre-validation rejects non-SELECT queries, the connection
@@ -886,27 +585,77 @@ async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="read_db")
     logger.info("read_db", db_path=db_path, query=query[:80])
+    try:
+        await ctx.info(
+            f"read_db: {query[:80]}",
+            logger_name="autoskillit.read_db",
+            extra={"db_path": db_path},
+        )
+    except RuntimeError:
+        pass
 
     # Parse params
     try:
         parsed_params = json.loads(params)
     except json.JSONDecodeError as exc:
+        try:
+            await ctx.error(
+                "read_db: invalid params JSON",
+                logger_name="autoskillit.read_db",
+                extra={"error": str(exc)},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Invalid params JSON: {exc}"})
     if not isinstance(parsed_params, (list, dict)):
+        try:
+            await ctx.error(
+                "read_db: params must be JSON array or object",
+                logger_name="autoskillit.read_db",
+                extra={},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": "params must be a JSON array or object"})
 
     # Validate db_path
     db = Path(db_path).resolve()
     if not db.exists():
+        try:
+            await ctx.error(
+                "read_db: database does not exist",
+                logger_name="autoskillit.read_db",
+                extra={"db_path": db_path},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Database does not exist: {db}"})
     if not db.is_file():
+        try:
+            await ctx.error(
+                "read_db: path is not a file",
+                logger_name="autoskillit.read_db",
+                extra={"db_path": db_path},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Path is not a file: {db}"})
 
     # SQL validation (regex pre-check)
     try:
         _validate_select_only(query)
     except ValueError as exc:
+        try:
+            await ctx.error(
+                "read_db: non-SELECT query rejected",
+                logger_name="autoskillit.read_db",
+                extra={"error": str(exc)},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": str(exc), "hint": "Only SELECT queries are allowed"})
 
     # Resolve timeout
@@ -927,9 +676,25 @@ async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0
         )
         return json.dumps(result)
     except TimeoutError:
+        try:
+            await ctx.error(
+                "read_db: query timed out",
+                logger_name="autoskillit.read_db",
+                extra={"timeout": effective_timeout},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Query exceeded {effective_timeout}s timeout"})
     except Exception as exc:
         logger.warning("read_db query failed", error=type(exc).__name__)
+        try:
+            await ctx.error(
+                "read_db: query failed",
+                logger_name="autoskillit.read_db",
+                extra={"error": type(exc).__name__},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Query failed: {exc}"})
 
 
@@ -1190,7 +955,7 @@ def _check_test_passed(returncode: int, stdout: str) -> bool:
 
 
 @mcp.tool(tags={"automation"})
-async def test_check(worktree_path: str) -> str:
+async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str:
     """Run the configured test command in a worktree directory. Returns unambiguous PASS/FAIL.
 
     CRITICAL: This tool is a pipeline gate, not a diagnostic tool. When it
@@ -1206,7 +971,17 @@ async def test_check(worktree_path: str) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="test_check", cwd=worktree_path)
     logger.info("test_check", worktree=worktree_path)
+    try:
+        await ctx.info(
+            f"test_check: {worktree_path}",
+            logger_name="autoskillit.test_check",
+            extra={"worktree": worktree_path},
+        )
+    except RuntimeError:
+        pass
     returncode, stdout, stderr = await _run_subprocess(
         _config.test_check.command,
         cwd=worktree_path,
@@ -1215,11 +990,23 @@ async def test_check(worktree_path: str) -> str:
 
     passed = _check_test_passed(returncode, stdout)
 
+    if not passed:
+        try:
+            await ctx.error(
+                "test_check: tests failed",
+                logger_name="autoskillit.test_check",
+                extra={"worktree": worktree_path},
+            )
+        except RuntimeError:
+            pass
+
     return json.dumps({"passed": passed})
 
 
 @mcp.tool(tags={"automation"})
-async def merge_worktree(worktree_path: str, base_branch: str) -> str:
+async def merge_worktree(
+    worktree_path: str, base_branch: str, ctx: Context = CurrentContext()
+) -> str:
     """Merge a worktree branch into the base branch after verifying tests pass.
 
     Programmatic gate: runs the configured test command in the worktree before allowing merge.
@@ -1233,10 +1020,28 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="merge_worktree", cwd=worktree_path)
     logger.info("merge_worktree", path=worktree_path, base=base_branch)
+    try:
+        await ctx.info(
+            f"merge_worktree: {worktree_path} -> {base_branch}",
+            logger_name="autoskillit.merge_worktree",
+            extra={"worktree": worktree_path, "base": base_branch},
+        )
+    except RuntimeError:
+        pass
 
     # Validate worktree path exists
     if not os.path.isdir(worktree_path):
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "path does not exist"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Path does not exist: {worktree_path}"})
 
     # Verify it's a git worktree
@@ -1246,6 +1051,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         timeout=10,
     )
     if rc != 0 or "/worktrees/" not in git_dir:
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "not a git worktree"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Not a git worktree: {worktree_path}", "stderr": stderr})
 
     # Get branch name
@@ -1255,6 +1068,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         timeout=10,
     )
     if rc != 0:
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "could not determine branch"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Could not determine branch: {stderr}"})
     worktree_branch = branch_out.strip()
 
@@ -1266,6 +1087,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
             timeout=_config.test_check.timeout,
         )
         if not _check_test_passed(rc, test_stdout):
+            try:
+                await ctx.error(
+                    "merge_worktree failed",
+                    logger_name="autoskillit.merge_worktree",
+                    extra={"reason": "tests failed"},
+                )
+            except RuntimeError:
+                pass
             return json.dumps(
                 {
                     "error": "Tests failed in worktree — merge blocked",
@@ -1282,6 +1111,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         timeout=60,
     )
     if fetch_rc != 0:
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "git fetch failed"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps(
             {
                 "error": "git fetch origin failed",
@@ -1303,6 +1140,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
             cwd=worktree_path,
             timeout=30,
         )
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "rebase failed"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps(
             {
                 "error": "Rebase failed — aborted to clean state",
@@ -1326,6 +1171,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
             break  # First entry is always the main working tree
 
     if not main_repo:
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "could not determine main repo path"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": "Could not determine main repo path from worktree list"})
 
     # Merge from main repo
@@ -1340,6 +1193,14 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
             cwd=main_repo,
             timeout=30,
         )
+        try:
+            await ctx.error(
+                "merge_worktree failed",
+                logger_name="autoskillit.merge_worktree",
+                extra={"reason": "merge failed"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps(
             {
                 "error": "Merge failed — aborted to clean state",
@@ -1374,7 +1235,9 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
 
 
 @mcp.tool(tags={"automation"})
-async def reset_test_dir(test_dir: str, force: bool = False) -> str:
+async def reset_test_dir(
+    test_dir: str, force: bool = False, ctx: Context = CurrentContext()
+) -> str:
     """Remove all files from a test directory. Only works on directories with a reset guard marker.
 
     The directory must contain the configured marker file (default: .autoskillit-workspace)
@@ -1388,14 +1251,40 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     resolved = os.path.realpath(test_dir)
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="reset_test_dir", cwd=resolved)
     logger.info("reset_test_dir", resolved=str(resolved), force=force)
+    try:
+        await ctx.info(
+            f"reset_test_dir: {resolved}",
+            logger_name="autoskillit.reset_test_dir",
+            extra={"resolved": resolved, "force": force},
+        )
+    except RuntimeError:
+        pass
 
     if not os.path.isdir(resolved):
+        try:
+            await ctx.error(
+                "reset_test_dir failed",
+                logger_name="autoskillit.reset_test_dir",
+                extra={"reason": "directory does not exist"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
     marker_name = _config.safety.reset_guard_marker
     marker_path = Path(resolved) / marker_name
     if not force and not marker_path.is_file():
+        try:
+            await ctx.error(
+                "reset_test_dir failed",
+                logger_name="autoskillit.reset_test_dir",
+                extra={"reason": "marker missing"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps(
             {
                 "error": f"Safety: directory missing reset guard marker ({marker_name})",
@@ -1409,7 +1298,9 @@ async def reset_test_dir(test_dir: str, force: bool = False) -> str:
 
 
 @mcp.tool(tags={"automation"})
-async def classify_fix(worktree_path: str, base_branch: str) -> str:
+async def classify_fix(
+    worktree_path: str, base_branch: str, ctx: Context = CurrentContext()
+) -> str:
     """Analyze a worktree's changes to determine if the fix requires restarting
     from plan creation or just re-running the implementation.
 
@@ -1429,7 +1320,17 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="classify_fix", cwd=worktree_path)
     logger.info("classify_fix", worktree=worktree_path, base=base_branch)
+    try:
+        await ctx.info(
+            f"classify_fix: {worktree_path}",
+            logger_name="autoskillit.classify_fix",
+            extra={"worktree": worktree_path, "base": base_branch},
+        )
+    except RuntimeError:
+        pass
 
     returncode, stdout, stderr = await _run_subprocess(
         ["git", "diff", "--name-only", f"origin/{base_branch}...HEAD"],
@@ -1438,6 +1339,14 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
     )
 
     if returncode != 0:
+        try:
+            await ctx.error(
+                "classify_fix: git diff failed",
+                logger_name="autoskillit.classify_fix",
+                extra={"worktree": worktree_path},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"git diff failed: {stderr}"})
 
     changed_files = [f.strip() for f in stdout.splitlines() if f.strip()]
@@ -1466,7 +1375,7 @@ async def classify_fix(worktree_path: str, base_branch: str) -> str:
 
 
 @mcp.tool(tags={"automation"})
-async def reset_workspace(test_dir: str) -> str:
+async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str:
     """Runs a configured reset command then deletes directory contents,
     preserving configured directories and the reset guard marker.
 
@@ -1476,14 +1385,40 @@ async def reset_workspace(test_dir: str) -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     resolved = os.path.realpath(test_dir)
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="reset_workspace", cwd=resolved)
     logger.info("reset_workspace", resolved=str(resolved))
+    try:
+        await ctx.info(
+            f"reset_workspace: {resolved}",
+            logger_name="autoskillit.reset_workspace",
+            extra={"resolved": resolved},
+        )
+    except RuntimeError:
+        pass
 
     if not os.path.isdir(resolved):
+        try:
+            await ctx.error(
+                "reset_workspace failed",
+                logger_name="autoskillit.reset_workspace",
+                extra={"reason": "directory does not exist"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
     marker_name = _config.safety.reset_guard_marker
     marker_path = Path(resolved) / marker_name
     if not marker_path.is_file():
+        try:
+            await ctx.error(
+                "reset_workspace failed",
+                logger_name="autoskillit.reset_workspace",
+                extra={"reason": "marker missing"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps(
             {
                 "error": f"Safety: directory missing reset guard marker ({marker_name})",
@@ -1492,6 +1427,14 @@ async def reset_workspace(test_dir: str) -> str:
         )
 
     if _config.reset_workspace.command is None:
+        try:
+            await ctx.error(
+                "reset_workspace failed",
+                logger_name="autoskillit.reset_workspace",
+                extra={"reason": "not configured"},
+            )
+        except RuntimeError:
+            pass
         return json.dumps({"error": "reset_workspace not configured for this project"})
 
     returncode, stdout, stderr = await _run_subprocess(
@@ -1501,6 +1444,14 @@ async def reset_workspace(test_dir: str) -> str:
     )
 
     if returncode != 0:
+        try:
+            await ctx.error(
+                "reset_workspace failed",
+                logger_name="autoskillit.reset_workspace",
+                extra={"reason": "reset command failed", "exit_code": returncode},
+            )
+        except RuntimeError:
+            pass
         return json.dumps(
             {
                 "error": "reset command failed",
@@ -1524,7 +1475,7 @@ async def kitchen_status() -> str:
 
     This tool is always available (not gated by open_kitchen).
     """
-    info = _version_info()
+    info = version_info()
     status = {
         "package_version": info["package_version"],
         "plugin_json_version": info["plugin_json_version"],
@@ -1772,34 +1723,28 @@ async def load_recipe(name: str) -> str:
     """
     import yaml
 
+    from autoskillit._io import _load_yaml
     from autoskillit.contract_validator import (
         check_contract_staleness,
         generate_recipe_card,
         load_recipe_card,
         validate_recipe_cards,
     )
-    from autoskillit.recipe_parser import _parse_recipe
-    from autoskillit.recipe_parser import list_recipes as _list_recipes_all
+    from autoskillit.recipe_parser import _parse_recipe, find_recipe_by_name
     from autoskillit.semantic_rules import run_semantic_rules
 
-    _all = _list_recipes_all(Path.cwd())
-    _match = next((r for r in _all.items if r.name == name), None)
+    _match = find_recipe_by_name(name, Path.cwd())
     if _match is None:
         return json.dumps({"error": f"No recipe named '{name}' found"})
     content = _match.path.read_text()
 
     suggestions: list[dict[str, str]] = []
     try:
-        data = yaml.safe_load(content)
+        data = _load_yaml(content)
         if isinstance(data, dict) and "steps" in data:
             recipe = _parse_recipe(data)
 
             # --- Auto-migration block ---
-            from autoskillit import __version__
-            from autoskillit.failure_store import FailureStore, default_store_path
-            from autoskillit.migration_engine import MigrationFile, default_migration_engine
-            from autoskillit.migration_loader import applicable_migrations
-
             migrations = applicable_migrations(recipe.version, __version__)
             if migrations and name not in _config.migration.suppressed:
                 project_dir = Path.cwd()
@@ -1822,8 +1767,12 @@ async def load_recipe(name: str) -> str:
                 )
 
                 if migration_result.success:
-                    content = recipe_path.read_text()
-                    data = yaml.safe_load(content)
+                    content = (
+                        migration_result.migrated_content
+                        if migration_result.migrated_content is not None
+                        else recipe_path.read_text()
+                    )
+                    data = _load_yaml(content)
                     recipe = _parse_recipe(data)
                     failure_store.clear(name)
                 else:
@@ -1867,13 +1816,22 @@ async def load_recipe(name: str) -> str:
                     recipe_path = recipes_dir / f"{name}.yml"
                 if recipe_path.exists():
                     try:
-                        generate_recipe_card(recipe_path, recipes_dir)
-                        contract = load_recipe_card(name, recipes_dir)
-                    except Exception:
+                        contract = generate_recipe_card(recipe_path, recipes_dir)
+                    except Exception as exc:
                         logger.warning(
                             "Recipe contract card generation failed",
                             name=name,
                             exc_info=True,
+                        )
+                        suggestions.append(
+                            {
+                                "rule": "validation-error",
+                                "severity": "warning",
+                                "step": "(contract-generation)",
+                                "message": (
+                                    f"Contract generation failed: {type(exc).__name__}: {exc}"
+                                ),
+                            }
                         )
 
             if contract:
@@ -1896,11 +1854,47 @@ async def load_recipe(name: str) -> str:
                             ),
                         }
                     )
-    except Exception:
+    except yaml.YAMLError as exc:
         logger.warning(
-            "Recipe validation pipeline failed",
+            "Recipe YAML parse error",
             name=name,
             exc_info=True,
+        )
+        suggestions.append(
+            {
+                "rule": "validation-error",
+                "severity": "error",
+                "step": "(validation-pipeline)",
+                "message": f"YAML parse error: {exc}",
+            }
+        )
+    except ValueError as exc:
+        logger.warning(
+            "Recipe structure invalid",
+            name=name,
+            exc_info=True,
+        )
+        suggestions.append(
+            {
+                "rule": "validation-error",
+                "severity": "error",
+                "step": "(validation-pipeline)",
+                "message": f"Invalid recipe structure: {exc}",
+            }
+        )
+    except (FileNotFoundError, OSError) as exc:
+        logger.warning(
+            "Recipe file not found or unreadable",
+            name=name,
+            exc_info=True,
+        )
+        suggestions.append(
+            {
+                "rule": "validation-error",
+                "severity": "error",
+                "step": "(validation-pipeline)",
+                "message": f"File error: {exc}",
+            }
         )
 
     return json.dumps({"content": content, "suggestions": suggestions})
@@ -1933,6 +1927,7 @@ async def validate_recipe(script_path: str) -> str:
     """
     import yaml
 
+    from autoskillit._io import _load_yaml
     from autoskillit.contract_validator import (
         load_recipe_card,
         validate_recipe_cards,
@@ -1944,14 +1939,15 @@ async def validate_recipe(script_path: str) -> str:
     from autoskillit.recipe_parser import (
         validate_recipe as _validate_recipe,
     )
-    from autoskillit.semantic_rules import Severity, run_semantic_rules
+    from autoskillit.semantic_rules import run_semantic_rules
+    from autoskillit.types import Severity
 
     path = Path(script_path)
     if not path.is_file():
         return json.dumps({"error": f"File not found: {script_path}"})
 
     try:
-        data = yaml.safe_load(path.read_text())
+        data = _load_yaml(path)
     except yaml.YAMLError as exc:
         return json.dumps({"error": f"YAML parse error: {exc}"})
 
@@ -2016,10 +2012,9 @@ def _close_kitchen_handler() -> None:
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
-    from autoskillit.recipe_parser import list_recipes
+    from autoskillit.recipe_parser import find_recipe_by_name
 
-    result = list_recipes(Path.cwd())
-    match = next((r for r in result.items if r.name == name), None)
+    match = find_recipe_by_name(name, Path.cwd())
     if match is None:
         return json.dumps({"error": f"No recipe named '{name}'."})
     return match.path.read_text()

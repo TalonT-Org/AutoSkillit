@@ -255,3 +255,99 @@ def test_server_does_not_import_list_recipes_or_load_recipe_from_recipe_loader()
                     "Use recipe_parser.list_recipes to find RecipeInfo.path, "
                     "then path.read_text()."
                 )
+
+
+def _is_mcp_tool_decorator(node: ast.expr) -> bool:
+    """Return True if node represents @mcp.tool or @mcp.tool(...)."""
+    if isinstance(node, ast.Attribute) and node.attr == "tool":
+        return True
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "tool"
+    ):
+        return True
+    return False
+
+
+def _has_call_to(stmt: ast.stmt, func_name: str) -> bool:
+    """Return True if stmt (recursively) contains a call to func_name."""
+    for node in ast.walk(stmt):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == func_name
+        ):
+            return True
+    return False
+
+
+def _has_await_or_return(stmt: ast.stmt) -> bool:
+    """Return True if stmt (recursively) contains an await expression or return."""
+    for node in ast.walk(stmt):
+        if isinstance(node, (ast.Await, ast.Return)):
+            return True
+    return False
+
+
+def test_all_mcp_tools_are_registered() -> None:
+    """Every @mcp.tool-decorated function in server.py must appear in
+    GATED_TOOLS | UNGATED_TOOLS. No unregistered tool may exist."""
+    from autoskillit._gate import GATED_TOOLS, UNGATED_TOOLS
+
+    src = (SRC_ROOT / "server.py").read_text()
+    tree = ast.parse(src)
+    all_tools = GATED_TOOLS | UNGATED_TOOLS
+    unregistered: list[str] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
+                if node.name not in all_tools:
+                    unregistered.append(node.name)
+
+    assert not unregistered, (
+        f"@mcp.tool-decorated functions not in GATED_TOOLS | UNGATED_TOOLS: "
+        f"{unregistered}. Add them to _gate.py."
+    )
+
+
+def test_gated_tools_call_require_enabled_first() -> None:
+    """Every tool in GATED_TOOLS must call _require_enabled() before any
+    await expression or return statement in its function body."""
+    from autoskillit._gate import GATED_TOOLS
+
+    src = (SRC_ROOT / "server.py").read_text()
+    tree = ast.parse(src)
+    violations: list[str] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name not in GATED_TOOLS:
+                continue
+            if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
+                continue
+
+            # Find the statement index of first _require_enabled() call
+            # and first await/return in the function body.
+            require_idx: int | None = None
+            action_idx: int | None = None
+
+            for i, stmt in enumerate(node.body):
+                if require_idx is None and _has_call_to(stmt, "_require_enabled"):
+                    require_idx = i
+                if action_idx is None and _has_await_or_return(stmt):
+                    action_idx = i
+
+            if require_idx is None:
+                violations.append(f"{node.name}: _require_enabled() never called")
+            elif action_idx is not None and require_idx > action_idx:
+                violations.append(
+                    f"{node.name}: _require_enabled() called at stmt {require_idx} "
+                    f"but await/return found at stmt {action_idx} first"
+                )
+
+    assert not violations, (
+        "Gated tools must call _require_enabled() before any await/return:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )

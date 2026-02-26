@@ -25,7 +25,7 @@ def _extract_frontmatter(text: str) -> str:
     return text[after_open:close]
 
 
-def _parse_recipe_metadata(path: Path) -> RecipeInfo:
+def parse_recipe_metadata(path: Path) -> RecipeInfo:
     """Extract recipe metadata from a YAML file.
 
     Handles both single-document YAML and frontmatter format

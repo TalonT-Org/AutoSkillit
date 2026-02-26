@@ -21,12 +21,16 @@ class MigrationFailure:
 class FailureStore:
     def __init__(self, store_path: Path) -> None:
         self._path = store_path
+        self._state: dict[str, MigrationFailure] = self._load()
 
-    def load(self) -> dict[str, MigrationFailure]:
+    def _load(self) -> dict[str, MigrationFailure]:
         if not self._path.exists():
             return {}
         raw = json.loads(self._path.read_text())
         return {k: MigrationFailure(**v) for k, v in raw.items()}
+
+    def load(self) -> dict[str, MigrationFailure]:
+        return dict(self._state)
 
     def record(
         self,
@@ -36,30 +40,35 @@ class FailureStore:
         error: str,
         retries_attempted: int,
     ) -> None:
-        failures = self.load()
-        failures[name] = MigrationFailure(
-            name=name,
-            file_path=str(file_path),
-            file_type=file_type,
-            timestamp=datetime.now(UTC).isoformat(),
-            error=error,
-            retries_attempted=retries_attempted,
-        )
+        candidate = {
+            **self._state,
+            name: MigrationFailure(
+                name=name,
+                file_path=str(file_path),
+                file_type=file_type,
+                timestamp=datetime.now(UTC).isoformat(),
+                error=error,
+                retries_attempted=retries_attempted,
+            ),
+        }
         _atomic_write(
-            self._path, json.dumps({k: asdict(v) for k, v in failures.items()}, indent=2)
+            self._path,
+            json.dumps({k: asdict(v) for k, v in candidate.items()}, indent=2),
         )
+        self._state = candidate
 
     def clear(self, name: str) -> None:
-        failures = self.load()
-        if name not in failures:
+        if name not in self._state:
             return
-        del failures[name]
+        candidate = {k: v for k, v in self._state.items() if k != name}
         _atomic_write(
-            self._path, json.dumps({k: asdict(v) for k, v in failures.items()}, indent=2)
+            self._path,
+            json.dumps({k: asdict(v) for k, v in candidate.items()}, indent=2),
         )
+        self._state = candidate
 
     def has_failure(self, name: str) -> bool:
-        return name in self.load()
+        return name in self._state
 
 
 def default_store_path(project_dir: Path) -> Path:

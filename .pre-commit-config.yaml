@@ -18,3 +18,10 @@ repos:
         entry: mypy src/ --ignore-missing-imports
         language: system
         pass_filenames: false
+
+      - id: uv-lock-check
+        name: uv lock --check
+        entry: uv lock --check
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false

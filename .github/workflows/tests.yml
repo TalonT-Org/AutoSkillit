@@ -6,8 +6,26 @@ on:
   pull_request:
 
 jobs:
+  preflight:
+    name: Preflight checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Verify lockfile is up to date
+        run: uv lock --check
+
+      - name: Report tool versions
+        run: |
+          echo "uv: $(uv --version)"
+          uv run python --version
+
   test:
     name: Test on ${{ matrix.os }}
+    needs: preflight
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,6 +42,13 @@ jobs:
         uses: arduino/setup-task@v2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show environment
+        run: |
+          echo "OS: ${{ matrix.os }}"
+          echo "uv: $(uv --version)"
+          echo "task: $(task --version)"
+          uv run python --version
 
       - name: Install dependencies
         run: uv sync --locked

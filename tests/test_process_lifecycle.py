@@ -9,6 +9,7 @@ NO MOCKS — that's the whole point.
 
 from __future__ import annotations
 
+import shutil
 import sys
 import textwrap
 import time
@@ -742,6 +743,10 @@ class TestPtyWrapper:
     """PTY wrapping provides a TTY to the subprocess."""
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(
+        shutil.which("script") is None,
+        reason="script binary not available (util-linux required)",
+    )
     async def test_pty_wrapper_provides_tty(self, tmp_path):
         """With pty_mode=True, subprocess sees a TTY on stdout."""
         script = tmp_path / "isatty.py"

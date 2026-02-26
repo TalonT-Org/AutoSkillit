@@ -1359,11 +1359,26 @@ async def merge_worktree(worktree_path: str, base_branch: str) -> str:
         cwd=main_repo,
         timeout=30,
     )
+    if wt_rc != 0:
+        logger.warning(
+            "merge_worktree_cleanup_failed",
+            operation="worktree_remove",
+            path=worktree_path,
+            stderr=wt_stderr.strip(),
+        )
+
     br_rc, _, br_stderr = await _run_subprocess(
         ["git", "branch", "-D", worktree_branch],
         cwd=main_repo,
         timeout=10,
     )
+    if br_rc != 0:
+        logger.warning(
+            "merge_worktree_cleanup_failed",
+            operation="branch_delete",
+            branch=worktree_branch,
+            stderr=br_stderr.strip(),
+        )
 
     return json.dumps(
         {

@@ -10,11 +10,8 @@ from autoskillit.recipe_parser import (
     _parse_step,
     load_recipe,
 )
-from autoskillit.semantic_rules import (
-    RuleFinding,
-    Severity,
-    run_semantic_rules,
-)
+from autoskillit.semantic_rules import RuleFinding, run_semantic_rules
+from autoskillit.types import Severity
 
 
 def _make_workflow(steps: dict[str, dict]) -> Recipe:
@@ -654,3 +651,97 @@ def test_worktree_retry_creates_new_retry_worktree_ok():
     )
     findings = run_semantic_rules(wf)
     assert not any(f.rule == "worktree-retry-creates-new" for f in findings)
+
+
+# ---------------------------------------------------------------------------
+# T_DO1-T_DO4: dead-output rule
+# ---------------------------------------------------------------------------
+
+
+def test_dead_output_rule_is_registered():
+    """dead-output rule must appear in the rule registry."""
+    from autoskillit.semantic_rules import _RULE_REGISTRY
+
+    assert "dead-output" in [r.name for r in _RULE_REGISTRY]
+
+
+def test_dead_output_fires_as_error_for_dead_capture(tmp_path):
+    """Recipe captures result_path but no downstream step references it -> ERROR."""
+    import yaml
+
+    from autoskillit.recipe_parser import load_recipe
+
+    recipe_yaml = {
+        "name": "dead-capture-test",
+        "description": "test",
+        "kitchen_rules": ["test"],
+        "steps": {
+            "produce": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:make-plan task"},
+                "capture": {"result_path": "${{ result.plan_path }}"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        },
+    }
+    p = tmp_path / "dead.yaml"
+    p.write_text(yaml.dump(recipe_yaml))
+    wf = load_recipe(p)
+    findings = run_semantic_rules(wf)
+    dead_errors = [f for f in findings if f.rule == "dead-output" and f.severity == Severity.ERROR]
+    assert dead_errors, "Expected at least one dead-output ERROR finding"
+
+
+def test_dead_output_does_not_fire_when_capture_consumed(tmp_path):
+    """Recipe captures result_path AND downstream step references it -> no dead-output."""
+    import yaml
+
+    from autoskillit.recipe_parser import load_recipe
+
+    recipe_yaml = {
+        "name": "live-capture-test",
+        "description": "test",
+        "kitchen_rules": ["test"],
+        "steps": {
+            "produce": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:make-plan task"},
+                "capture": {"result_path": "${{ result.plan_path }}"},
+                "on_success": "consume",
+            },
+            "consume": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:dry-walkthrough ${{ context.result_path }}"
+                },
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        },
+    }
+    p = tmp_path / "live.yaml"
+    p.write_text(yaml.dump(recipe_yaml))
+    wf = load_recipe(p)
+    findings = run_semantic_rules(wf)
+    dead_errors = [f for f in findings if f.rule == "dead-output"]
+    assert not dead_errors, f"Expected no dead-output findings, got: {dead_errors}"
+
+
+def test_bundled_recipes_have_no_dead_output_errors():
+    """All bundled recipes must produce zero dead-output ERROR findings."""
+    from autoskillit.recipe_parser import builtin_recipes_dir
+
+    wf_dir = builtin_recipes_dir()
+    yaml_files = list(wf_dir.glob("*.yaml"))
+    assert yaml_files, "Expected at least one bundled recipe"
+
+    for path in yaml_files:
+        wf = load_recipe(path)
+        findings = run_semantic_rules(wf)
+        dead_errors = [
+            f for f in findings if f.rule == "dead-output" and f.severity == Severity.ERROR
+        ]
+        assert not dead_errors, (
+            f"Bundled recipe {path.name} has dead-output ERROR findings: {dead_errors}"
+        )

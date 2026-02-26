@@ -238,3 +238,16 @@ class TestSkillResolver:
             f"  Listed:  {listed_skills}\n"
             f"  On disk: {actual_skills}"
         )
+
+
+# ---------------------------------------------------------------------------
+# SR-GF1: make-groups SKILL.md documents group_files
+# ---------------------------------------------------------------------------
+
+
+def test_make_groups_skill_md_documents_group_files():
+    """make-groups SKILL.md must document the group_files output."""
+    from autoskillit.skill_resolver import bundled_skills_dir
+
+    skill_md = bundled_skills_dir() / "make-groups" / "SKILL.md"
+    assert "group_files" in skill_md.read_text()

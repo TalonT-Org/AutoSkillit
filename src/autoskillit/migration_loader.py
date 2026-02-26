@@ -9,8 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import yaml
 from packaging.version import Version
+
+from autoskillit._io import _load_yaml
 
 
 @dataclass
@@ -93,7 +94,7 @@ def applicable_migrations(
 
 def _parse_migration(path: Path) -> MigrationNote:
     """Parse a migration YAML file into a MigrationNote."""
-    data = yaml.safe_load(path.read_text())
+    data = _load_yaml(path)
     if not isinstance(data, dict):
         raise ValueError(f"Migration file must contain a YAML mapping: {path}")
 

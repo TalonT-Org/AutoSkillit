@@ -61,6 +61,9 @@ skills:
         type: file_path
       - name: manifest_path
         type: file_path
+      - name: group_files
+        type: file_path_list
+        description: Ordered list of paths to per-group files (groupA_*.md, etc.)
 
   make-plan:
     inputs:

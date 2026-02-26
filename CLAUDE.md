@@ -70,16 +70,28 @@ src/autoskillit/
 ├── .claude-plugin/          # Plugin metadata (plugin.json)
 ├── .mcp.json                # MCP server config for plugin loading
 ├── _audit.py                # FailureRecord, AuditLog, _audit_log singleton
-├── _token_log.py            # TokenEntry, TokenLog, _token_log singleton
+├── _doctor.py               # Doctor command — 7 project setup checks
+├── _io.py                   # _atomic_write and _load_yaml (infrastructure primitives)
+├── _llm_triage.py           # LLM-assisted contract staleness triage (Haiku subprocess)
 ├── _logging.py              # Centralized structlog configuration (get_logger, configure_logging)
-├── cli.py                   # CLI: serve, init, config show, skills, workflows
+├── _token_log.py            # TokenEntry, TokenLog, _token_log singleton
+├── cli.py                   # CLI: serve, init, config show, skills, workflows, doctor
 ├── config.py                # Dataclass config + YAML loading (layered resolution)
-├── recipe_loader.py         # Pipeline recipe discovery from .autoskillit/recipes/
-├── server.py                # FastMCP server with 15 MCP tools + 2 prompts
-├── skill_resolver.py        # Bundled skill listing
-├── recipe_parser.py         # Recipe YAML loading, validation, listing
+├── contract_validator.py    # Pipeline contract generation, dataflow validation, staleness
+├── db_tools.py              # Read-only SQLite execution with defence-in-depth
+├── failure_store.py         # Migration failure persistence (JSON, atomic writes)
+├── migration_engine.py      # Migration orchestration — engine + adapters (Layer B)
+├── migration_loader.py      # Migration note discovery and version chaining
 ├── process_lifecycle.py     # Subprocess management (kill trees, temp I/O, timeouts)
-├── skills/                  # 14 bundled skills (SKILL.md per skill)
+├── recipe_loader.py         # Pipeline recipe discovery from .autoskillit/recipes/
+├── recipe_parser.py         # Recipe YAML loading, validation, listing
+├── semantic_rules.py        # Semantic validation rule registry and runner
+├── server.py                # FastMCP server with 16 MCP tools + 2 prompts
+├── session_parser.py        # Claude CLI NDJSON parsing; ClaudeSessionResult; token usage
+├── skill_resolver.py        # Bundled skill listing
+├── types.py                 # Shared type contracts: StrEnums, constants, generics
+├── workspace.py             # Directory teardown utilities (CleanupResult, preserve list)
+├── skills/                  # 13 bundled skills (SKILL.md per skill)
 │   ├── assess-and-merge/    │   ├── audit-impl/
 │   ├── dry-walkthrough/     │   ├── implement-worktree/
 │   ├── implement-worktree-no-merge/ │   ├── investigate/
@@ -116,13 +128,25 @@ temp/                        # Temporary/working files (gitignored)
   * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
   * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `skills list`, `recipes list/show`, `workspace init`, and `doctor`.
   * **recipe_loader.py**: Provides `list_recipes(project_dir)` (discovers `.autoskillit/recipes/` only) and `load_recipe(project_dir, name)`. Bundled recipes are discovered by `recipe_parser.list_recipes()` directly from the package path; no sync or copy occurs at server startup. `.autoskillit/recipes/` contains only user-created recipes. **For this repo specifically:** `.autoskillit/recipes/` is where you iterate and improve recipes; `src/autoskillit/recipes/` is the bundle source that ships to users. Keep them in sync manually by copying improved local recipes back to `src/autoskillit/recipes/` before releasing.
-  * **server.py**: FastMCP server. 10 gated tools require user activation via MCP prompts. 6 ungated tools (`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) are always available. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/autoskillit:implement-worktree` without a verified plan. `_plugin_dir` is passed to headless sessions via `--plugin-dir`. Registers `recipe://` resource handler.
+  * **server.py**: FastMCP server. 10 gated tools require user activation via MCP prompts. 6 ungated tools (`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) are always available. Tools read settings from `_config` (module-level `AutomationConfig`). The `_check_dry_walkthrough` gate blocks `/autoskillit:implement-worktree` without a verified plan. `_plugin_dir` is passed to headless sessions via `--plugin-dir`. Registers `recipe://` resource handler. **Migration subsystem layer:** `migration_engine` (orchestration), `migration_loader` (version graph), and `failure_store` (persistence) are imported at module level — not deferred — because they have no FastMCP dependency (Layer B domain logic). `server.py` depends on them for the `load_recipe` migration-on-load path and the `migrate-recipes` code path; dependency direction is `server → migration subsystem`, never the reverse.
   * **skill_resolver.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
   * **recipe_parser.py**: YAML recipe loading, validation, and listing. Discovers recipes from `.autoskillit/recipes/` (project) and bundled package directory. `RecipeStep` supports an optional `model` field for per-step model selection.
   * **process_lifecycle.py**: Subprocess utilities for process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts. Uses `get_logger()` from `_logging.py`.
   * **_logging.py**: Centralized structlog configuration. `get_logger(name)` is the single import point for all production modules. `configure_logging()` is called once by the CLI `serve` command — routes all output to stderr via `WriteLoggerFactory`, never stdout.
   * **_audit.py**: Pipeline failure tracking. `AuditLog` captures every non-success result from `_build_skill_result()` into an in-memory list. `_audit_log` is the module-level singleton used by `server.py`. `get_pipeline_report` retrieves the accumulated failures.
   * **_token_log.py**: Pipeline token usage tracking. `TokenLog` accumulates token counts keyed by YAML step name. `_token_log` is the module-level singleton used by `server.py`. `get_token_summary` retrieves the accumulated per-step totals.
+  * **types.py**: Cross-cutting type contracts layer. StrEnum discriminators (`RetryReason`, `MergeFailedStep`, `MergeState`, `RestartScope`, `SkillSource`, `RecipeSource`, `Severity`) and canonical constants (`CONTEXT_EXHAUSTION_MARKER`, `PIPELINE_FORBIDDEN_TOOLS`, `SKILL_TOOLS`, `RETRY_RESPONSE_FIELDS`). Generic result wrappers (`LoadReport`, `LoadResult`). Zero autoskillit dependencies; imported by server.py, session_parser.py, semantic_rules.py, contract_validator.py, recipe_parser.py, and _doctor.py.
+  * **_io.py**: Infrastructure layer filesystem primitives. Two functions: `_atomic_write(path, content)` (crash-safe write via temp file + `os.replace`) and `_load_yaml(source)` (path-or-string YAML loader in binary mode for portable UTF-8 handling). Zero autoskillit dependencies. Imported by failure_store.py, migration_loader.py, contract_validator.py, and migration_engine.py.
+  * **failure_store.py**: Persistence layer for migration failure tracking. `FailureStore` persists `MigrationFailure` records to `.autoskillit/temp/migrations/failures.json` via atomic writes (`_io.py`). `record_from_skill()` is the `run_python` entry point invoked by the migrate-recipes skill when retries are exhausted. Depends on `_io.py`. Imported by migration_engine.py and `_doctor.py`.
+  * **migration_engine.py**: Orchestration layer for recipe and contract migration. Layer B domain logic — no FastMCP dependency, imported by server.py at module level. `MigrationEngine` dispatches to registered adapters: `RecipeMigrationAdapter` (LLM-driven via headless Claude session) and `ContractMigrationAdapter` (deterministic contract regeneration). `default_migration_engine()` factory builds the standard adapter set. Depends on `_io.py`, `migration_loader.py`, `recipe_loader.py`, `recipe_parser.py`, `_logging.py`.
+  * **migration_loader.py**: Data access layer for the migration version graph. Discovers and parses versioned migration YAML files from the bundled `migrations/` package directory. `list_migrations()` enumerates all notes; `applicable_migrations(script_version, installed_version)` chains applicable notes from the script's current version to the installed version using semver ordering. Depends on `_io.py` and `packaging`. Imported by `migration_engine.py`.
+  * **contract_validator.py**: Validation layer for pipeline contract generation and dataflow checking. Loads `skill_contracts.yaml` manifest, resolves skill contracts for recipe steps, generates recipe cards (`.autoskillit/recipes/contracts/*.yaml`), validates dataflow, and detects staleness by comparing stored SKILL.md hashes against current content. Depends on `_io.py`, `_logging.py`, `recipe_parser.py`, `skill_resolver.py`, `types.py`. Imported via deferred imports inside `load_recipe` and `validate_recipe` server tools; also by `_llm_triage.py` and `semantic_rules.py`.
+  * **semantic_rules.py**: Validation layer: semantic rule engine for recipe quality. Decorator-based `@semantic_rule` registry. `run_semantic_rules(recipe)` executes all registered rules: `outdated-recipe-version`, `missing-ingredient`, `unreachable-step`, `model-on-non-skill-step`, `retry-without-capture`, `worktree-retry-creates-new`, `weak-constraint-text`. Depends on `recipe_parser.py`, `types.py`. Imported via deferred imports inside `load_recipe` and `validate_recipe` server tools.
+  * **session_parser.py**: Data extraction layer for Claude CLI output. `ClaudeSessionResult` dataclass with computed properties: `needs_retry`, `retry_reason`, `agent_result`. `parse_session_result(stdout)` parses NDJSON output (last `type=result` record is authoritative). `extract_token_usage(stdout)` extracts per-model and aggregate token counts. Depends on `process_lifecycle.py`, `types.py`, `_logging.py`. Imported by server.py.
+  * **db_tools.py**: Data access layer: read-only SQLite execution with defence-in-depth. Regex pre-validation rejects non-SELECT queries; OS-level `file:...?mode=ro` connection; `set_authorizer` callback blocks any non-SELECT/READ/FUNCTION engine operation. `_execute_readonly_query` is the main entry point. Depends only on `_logging.py`. Imported by server.py.
+  * **workspace.py**: Infrastructure layer for directory teardown. `_delete_directory_contents(directory, preserve)` removes all items in a directory except preserved names, recording failures in `CleanupResult` without raising. Depends only on `_logging.py`. Imported by server.py.
+  * **_doctor.py**: CLI support layer: project health checks. `run_doctor()` runs 7 checks: stale MCP servers, duplicate autoskillit registrations, plugin metadata presence, PATH availability, project config existence, version consistency (package vs plugin.json), and recipe migration health (via failure_store.py). Depends on `server.py` (for `version_info`), `failure_store.py`, `recipe_parser.py`, `types.py`. Imported by `cli.py`.
+  * **_llm_triage.py**: AI orchestration layer for contract staleness semantic triage. `triage_staleness(stale_items)` spawns a `claude -p` subprocess via `process_lifecycle.run_managed_async` (Haiku model) to determine whether SKILL.md changes are semantically meaningful. Falls back to `meaningful=True` on timeout, JSON parse error, or OS error. Depends on `_logging.py`, `contract_validator.py`, `process_lifecycle.py`, `skill_resolver.py`. Present for integration with the `validate_recipe` triage path; not yet wired into server.py at module level.
 
 ### **Plugin Structure**
 

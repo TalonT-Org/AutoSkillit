@@ -26,6 +26,27 @@ SRC_ROOT = Path(__file__).parent.parent / "src" / "autoskillit"
 _SENSITIVE_KEYWORDS = frozenset({"token", "secret", "password", "key", "api_key", "auth"})
 _LOGGER_METHODS = frozenset({"debug", "info", "warning", "error", "critical", "exception"})
 _PRINT_EXEMPT = frozenset({"cli.py"})
+_BROAD_EXCEPTION_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"})
+
+
+def _has_log_call(body: list[ast.stmt]) -> bool:
+    """Return True if body contains any logger.<method>(…) call."""
+    for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in _LOGGER_METHODS
+        ):
+            return True
+    return False
+
+
+def _has_reraise(body: list[ast.stmt]) -> bool:
+    """Return True if body contains any raise statement (re-raise pattern)."""
+    for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+        if isinstance(node, ast.Raise):
+            return True
+    return False
 
 
 def _rel(path: Path) -> str:
@@ -72,6 +93,20 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
                 if kw.arg and any(s in kw.arg.lower() for s in _SENSITIVE_KEYWORDS):
                     self._add(node, f"sensitive kwarg '{kw.arg}' passed to logger")
 
+        self.generic_visit(node)
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        """Rule 3: broad except without logger call or re-raise → silent swallow."""
+        is_broad = node.type is None or (
+            isinstance(node.type, ast.Name) and node.type.id in _BROAD_EXCEPTION_TYPES
+        )
+        if is_broad and not _has_log_call(node.body) and not _has_reraise(node.body):
+            type_label = ast.unparse(node.type) if node.type else "bare except"
+            self._add(
+                node,
+                f"broad except ({type_label}) without any logger call"
+                " — add logger.warning/error with exc_info=True",
+            )
         self.generic_visit(node)
 
 
@@ -135,6 +170,67 @@ def test_no_sync_manifest_imports_in_production_code():
     for py_file in src_dir.rglob("*.py"):
         content = py_file.read_text()
         assert "sync_manifest" not in content, f"Found sync_manifest reference in {py_file}"
+
+
+def test_broad_except_exception_without_log_is_violation(tmp_path: Path) -> None:
+    """Rule 3: except Exception: pass with no logger call must be flagged."""
+    f = tmp_path / "bad.py"
+    f.write_text("try:\n    pass\nexcept Exception:\n    pass\n")
+    violations = _scan(f)
+    assert violations, "Expected violation for broad except Exception without logger"
+    messages = " ".join(v.message for v in violations)
+    assert "except" in messages.lower()
+    assert "logger" in messages.lower()
+
+
+def test_broad_except_base_exception_without_log_is_violation(tmp_path: Path) -> None:
+    """Rule 3: except BaseException: pass with no logger call must be flagged."""
+    f = tmp_path / "bad.py"
+    f.write_text("try:\n    pass\nexcept BaseException:\n    pass\n")
+    violations = _scan(f)
+    assert violations, "Expected violation for broad except BaseException without logger"
+
+
+def test_bare_except_without_log_is_violation(tmp_path: Path) -> None:
+    """Rule 3: bare except: pass with no logger call must be flagged."""
+    f = tmp_path / "bad.py"
+    f.write_text("try:\n    pass\nexcept:\n    pass\n")
+    violations = _scan(f)
+    assert violations, "Expected violation for bare except without logger"
+
+
+def test_broad_except_with_log_call_is_not_violation(tmp_path: Path) -> None:
+    """Rule 3: except Exception with a logger call is not a violation."""
+    f = tmp_path / "ok.py"
+    f.write_text(
+        "import logging\n"
+        "logger = logging.getLogger(__name__)\n"
+        "try:\n"
+        "    pass\n"
+        "except Exception:\n"
+        "    logger.warning('failed')\n"
+    )
+    violations = _scan(f)
+    except_violations = [v for v in violations if "except" in v.message.lower()]
+    assert not except_violations, f"Unexpected except violation: {except_violations}"
+
+
+def test_specific_except_without_log_is_not_violation(tmp_path: Path) -> None:
+    """Rule 3: except OSError (specific type) without logger is not a violation."""
+    f = tmp_path / "ok.py"
+    f.write_text("try:\n    pass\nexcept OSError:\n    pass\n")
+    violations = _scan(f)
+    except_violations = [v for v in violations if "except" in v.message.lower()]
+    assert not except_violations, f"Unexpected except violation: {except_violations}"
+
+
+def test_broad_except_with_reraise_is_not_violation(tmp_path: Path) -> None:
+    """Rule 3: except Exception with unconditional re-raise is not a violation."""
+    f = tmp_path / "ok.py"
+    f.write_text("try:\n    pass\nexcept Exception:\n    raise\n")
+    violations = _scan(f)
+    except_violations = [v for v in violations if "except" in v.message.lower()]
+    assert not except_violations, f"Unexpected except violation: {except_violations}"
 
 
 def test_server_does_not_import_list_recipes_or_load_recipe_from_recipe_loader() -> None:

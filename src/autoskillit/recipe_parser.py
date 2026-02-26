@@ -9,7 +9,10 @@ from typing import Any
 
 import yaml
 
+from autoskillit._logging import get_logger
 from autoskillit.types import RETRY_RESPONSE_FIELDS, LoadReport, LoadResult, RecipeSource
+
+logger = get_logger(__name__)
 
 _SKILL_TOOLS: frozenset[str] = frozenset({"run_skill", "run_skill_retry"})
 
@@ -459,4 +462,5 @@ def _collect_recipes(
                         )
                     )
             except Exception as exc:
+                logger.warning("Failed to load recipe file", path=str(f), error=str(exc))
                 errors.append(LoadReport(path=f, error=str(exc)))

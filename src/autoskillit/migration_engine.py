@@ -208,6 +208,7 @@ class RecipeMigrationAdapter:
                 return False, "; ".join(str(e) for e in errors)
             return True, ""
         except Exception as exc:
+            logger.warning("Recipe file validation failed", path=str(path), error=str(exc))
             return False, str(exc)
 
 
@@ -260,6 +261,7 @@ class ContractMigrationAdapter:
             generate_recipe_card(recipe_path, recipes_dir)
             return MigrationResult(success=True, name=file.name)
         except Exception as exc:
+            logger.warning("Contract card generation failed", name=file.name, error=str(exc))
             return MigrationResult(success=False, name=file.name, error=str(exc))
 
     def validate(self, path: Path) -> tuple[bool, str]:
@@ -271,6 +273,7 @@ class ContractMigrationAdapter:
                 return False, "missing skill_hashes field"
             return True, ""
         except Exception as exc:
+            logger.warning("Contract file validation failed", path=str(path), error=str(exc))
             return False, str(exc)
 
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import structlog.testing
 
 from autoskillit._audit import FailureRecord
 from autoskillit.config import (
@@ -867,6 +868,34 @@ class TestRecipeTools:
         assert "error" not in result, f"Unexpected error: {result.get('error')}"
         assert "content" in result
         assert len(result["content"]) > 0
+
+    @pytest.mark.asyncio
+    async def test_load_recipe_parse_failure_is_logged(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """load_recipe emits a warning log when validation pipeline raises."""
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        # Recipe must have 'steps' so the run_semantic_rules code path is reached
+        (recipes_dir / "test.yaml").write_text(
+            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
+        )
+
+        with (
+            patch("autoskillit.migration_loader.applicable_migrations", return_value=[]),
+            patch(
+                "autoskillit.semantic_rules.run_semantic_rules",
+                side_effect=RuntimeError("injected parse failure"),
+            ),
+            structlog.testing.capture_logs() as logs,
+        ):
+            result = json.loads(await load_recipe(name="test"))
+
+        assert "content" in result, "load_recipe must be non-blocking even on parse failure"
+        assert any(log.get("log_level") == "warning" for log in logs), (
+            f"Expected a warning log entry for parse failure, got: {logs}"
+        )
 
 
 class TestValidateRecipe:
@@ -3098,6 +3127,32 @@ class TestRunPython:
             )
         )
         assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_sync_timeout_logs_warning(self):
+        """run_python emits a warning log when TimeoutError is raised."""
+        import asyncio as _aio
+        from unittest.mock import MagicMock
+
+        async def _hang(**_kw: object) -> None:
+            await _aio.sleep(300)
+
+        mock_module = MagicMock()
+        mock_module.hang_fn = _hang
+
+        with (
+            patch("autoskillit.server.importlib.import_module", return_value=mock_module),
+            structlog.testing.capture_logs() as logs,
+        ):
+            result = json.loads(await run_python(callable="fake_mod.hang_fn", timeout=1))
+        assert result["success"] is False
+        assert "timeout" in result["error"].lower()
+        assert any(log.get("log_level") == "warning" for log in logs), (
+            f"Expected a warning log entry for timeout, got: {logs}"
+        )
+        assert any("timed out" in log.get("event", "").lower() for log in logs), (
+            f"Expected 'timed out' in warning event, got: {logs}"
+        )
 
 
 class TestValidateSelectOnly:

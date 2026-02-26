@@ -726,8 +726,18 @@ async def _import_and_call(
         else:
             result = await asyncio.wait_for(asyncio.to_thread(func, **args), timeout=timeout)
     except TimeoutError:
+        logger.warning(
+            "run_python timed out; sync thread may continue running",
+            dotted_path=dotted_path,
+            timeout=timeout,
+        )
         return {"success": False, "error": f"Timeout after {timeout}s calling {dotted_path}"}
     except Exception as exc:
+        logger.warning(
+            "run_python execution failed",
+            dotted_path=dotted_path,
+            error=type(exc).__name__,
+        )
         return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
 
     try:
@@ -919,6 +929,7 @@ async def read_db(db_path: str, query: str, params: str = "[]", timeout: int = 0
     except TimeoutError:
         return json.dumps({"error": f"Query exceeded {effective_timeout}s timeout"})
     except Exception as exc:
+        logger.warning("read_db query failed", error=type(exc).__name__)
         return json.dumps({"error": f"Query failed: {exc}"})
 
 
@@ -1859,7 +1870,11 @@ async def load_recipe(name: str) -> str:
                         generate_recipe_card(recipe_path, recipes_dir)
                         contract = load_recipe_card(name, recipes_dir)
                     except Exception:
-                        pass  # Non-blocking
+                        logger.warning(
+                            "Recipe contract card generation failed",
+                            name=name,
+                            exc_info=True,
+                        )
 
             if contract:
                 contract_findings = validate_recipe_cards(recipe, contract)
@@ -1882,7 +1897,11 @@ async def load_recipe(name: str) -> str:
                         }
                     )
     except Exception:
-        pass  # Non-blocking: parse failures don't affect load
+        logger.warning(
+            "Recipe validation pipeline failed",
+            name=name,
+            exc_info=True,
+        )
 
     return json.dumps({"content": content, "suggestions": suggestions})
 

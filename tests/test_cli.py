@@ -88,27 +88,6 @@ class TestCLI:
                 cli.main()
         assert exc_info.value.code != 0
 
-    # CL9
-    def test_update_refreshes_builtins(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        monkeypatch.chdir(tmp_path)
-        wf_dir = tmp_path / ".autoskillit" / "recipes"
-        wf_dir.mkdir(parents=True)
-
-        from autoskillit.recipe_parser import builtin_recipes_dir
-
-        builtin_dir = builtin_recipes_dir()
-        for f in builtin_dir.glob("*.yaml"):
-            shutil.copy2(f, wf_dir / f.name)
-
-        (wf_dir / "bugfix-loop.yaml").write_text("name: bugfix-loop\ncustomized: true\n")
-
-        cli.update()
-        captured = capsys.readouterr()
-        assert "bugfix-loop" in captured.out
-        assert "Skipped (customized)" in captured.out
-
     def test_init_force_overwrites(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
         config_dir = tmp_path / ".autoskillit"

@@ -96,6 +96,74 @@ class TestCIWorkflow:
             "the preflight job must complete before test runners start"
         )
 
+    def test_install_step_includes_dev_extras(self):
+        """CI install step must include --extra dev or --all-extras.
+
+        Dev dependencies (pytest, pytest-asyncio, pytest-xdist) are declared under
+        [project.optional-dependencies].dev. Without --extra dev, uv sync --locked
+        installs only runtime deps, causing 'No module named pytest' when task test-all runs.
+
+        If this test fails, change the Install dependencies step in tests.yml to:
+            run: uv sync --locked --extra dev
+        """
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        run_commands = [
+            step.get("run", "")
+            for job in workflow.get("jobs", {}).values()
+            for step in job.get("steps", [])
+        ]
+        assert any(
+            "uv sync" in cmd and ("--extra dev" in cmd or "--all-extras" in cmd)
+            for cmd in run_commands
+        ), (
+            "CI install step does not include '--extra dev' or '--all-extras' — "
+            "dev dependencies (pytest, pytest-asyncio, pytest-xdist) will not be installed, "
+            "causing task test-all to fail with 'No module named pytest'"
+        )
+
+    def test_setup_uv_action_has_version_pin(self):
+        """All setup-uv action usages must specify a uv-version pin.
+
+        Without uv-version, astral-sh/setup-uv calls the GitHub API to resolve the
+        latest release on every cache miss. On macOS runners, cache misses are frequent
+        (the cache key includes the Python version), causing network timeout failures
+        before any uv command runs.
+
+        If this test fails, add 'uv-version: "X.Y.Z"' to all setup-uv steps in tests.yml.
+        """
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        for job_name, job in workflow.get("jobs", {}).items():
+            for step in job.get("steps", []):
+                uses = step.get("uses", "")
+                if "setup-uv" in uses:
+                    with_block = step.get("with", {}) or {}
+                    assert "uv-version" in with_block, (
+                        f"CI job '{job_name}' uses {uses!r} without a uv-version pin — "
+                        "add 'uv-version: \"X.Y.Z\"' to prevent GitHub API network failures"
+                        " on macOS runner cache misses"
+                    )
+
+    def test_setup_task_action_has_version_pin(self):
+        """All setup-task action usages must specify a version pin.
+
+        Without a version pin, arduino/setup-task@v2 may pick up breaking changes
+        in minor releases, silently altering CI behavior. This is the same class of
+        issue as unpinned setup-uv, applied to the task runner action.
+
+        If this test fails, add 'version: "X.Y.Z"' to all setup-task steps in tests.yml.
+        """
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        for job_name, job in workflow.get("jobs", {}).items():
+            for step in job.get("steps", []):
+                uses = step.get("uses", "")
+                if "setup-task" in uses:
+                    with_block = step.get("with", {}) or {}
+                    assert "version" in with_block, (
+                        f"CI job '{job_name}' uses {uses!r} without a version pin — "
+                        "add 'version: \"X.Y.Z\"' to prevent silent behavior changes"
+                        " from minor releases"
+                    )
+
 
 class TestPtyTestGuard:
     def test_pty_wrapper_test_has_script_guard(self):

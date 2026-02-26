@@ -1,6 +1,6 @@
 name: implementation-pipeline
 description: Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
-summary: (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part)
+summary: (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > (audit-impl?) > merge (per group, per plan part)
 autoskillit_version: "0.2.0"
 
 ingredients:
@@ -24,6 +24,9 @@ ingredients:
     default: "false"
   review_approach:
     description: Run /review-approach before implementation? (true/false)
+    default: "false"
+  audit:
+    description: Run /autoskillit:audit-impl before each merge to gate on implementation quality (true/false)
     default: "false"
 
 kitchen_rules:
@@ -163,12 +166,31 @@ steps:
       routes:
         more_parts: verify
         more_groups: plan
-        all_done: done
+        all_done: audit_impl
     note: >
       Routing step — no tool call. The agent evaluates what comes next:
       1. If more plan_parts remain for the current group → go to verify with next part.
       2. If all plan_parts done but more groups remain → go to plan with next group's task.
-      3. If all groups (or single task) complete → go to done.
+      3. If all groups (or single task) complete → go to audit_impl.
+
+  audit_impl:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ inputs.work_dir }} ${{ inputs.base_branch }}"
+      cwd: "${{ inputs.work_dir }}"
+      step_name: "audit_impl"
+    on_success: done
+    on_failure: plan
+    optional: true
+    note: >
+      Only execute if inputs.audit is 'true'. If false, skip directly to done.
+      All groups and parts have been merged at this point — no worktree exists.
+      For plans_input: if make_groups was true, pass context.groups_path (the manifest JSON);
+      otherwise pass context.plan_path (or the temp/make-plan/ directory for multi-part plans).
+      For implementation_ref: pass inputs.base_branch — the skill will run
+      git diff against the upstream of that branch to capture everything merged.
+      On NO GO: the skill generates a remediation file in temp/audit-impl/. Pass that
+      remediation file path as the task to the plan step for another full cycle.
 
   done:
     action: stop

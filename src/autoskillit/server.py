@@ -1767,7 +1767,11 @@ async def load_recipe(name: str) -> str:
                 )
 
                 if migration_result.success:
-                    content = migration_result.migrated_content or recipe_path.read_text()
+                    content = (
+                        migration_result.migrated_content
+                        if migration_result.migrated_content is not None
+                        else recipe_path.read_text()
+                    )
                     data = _load_yaml(content)
                     recipe = _parse_recipe(data)
                     failure_store.clear(name)

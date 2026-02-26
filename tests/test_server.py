@@ -5287,6 +5287,36 @@ class TestLoadRecipeAutoMigration:
             f"Expected no migration-* suggestions after success, got: {migration_warnings}"
         )
 
+    # LR10
+    @pytest.mark.asyncio
+    async def test_uses_migrated_content_not_disk_when_engine_provides_content(
+        self, tmp_path, monkeypatch
+    ):
+        """LR10: migrated_content is used directly; no disk fallback when content is not None."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.migration_engine import MigrationResult
+
+        ctx = self._setup_migration_env(tmp_path, monkeypatch)
+        original_disk_content = ctx["recipe_path"].read_text()
+        migrated_content = ctx["migrated_content"]
+        assert original_disk_content != migrated_content  # precondition
+
+        mock_engine = MagicMock()
+        mock_engine.migrate_file = AsyncMock(
+            return_value=MigrationResult(
+                success=True,
+                name="test-script",
+                migrated_content=migrated_content,
+            )
+        )
+
+        with patch("autoskillit.server.default_migration_engine", return_value=mock_engine):
+            result = json.loads(await load_recipe(name="test-script"))
+
+        assert result["content"] == migrated_content
+        assert ctx["recipe_path"].read_text() == original_disk_content
+
 
 class TestExtractTokenUsage:
     """Tests for extract_token_usage()."""

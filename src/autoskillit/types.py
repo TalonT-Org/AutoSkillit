@@ -136,7 +136,7 @@ PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
 )
 
 # Skill tools that route headless Claude sessions — canonical constant used by
-# recipe_parser, semantic_rules, and contract_validator.
+# recipe_validator.py.
 SKILL_TOOLS: frozenset[str] = frozenset({"run_skill", "run_skill_retry"})
 
 # Known field names in run_skill_retry response — used by workflow validation

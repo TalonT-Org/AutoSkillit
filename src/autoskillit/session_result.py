@@ -272,7 +272,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
 
     extra_keys = frozenset(result_obj.keys()) - _KNOWN_RESULT_KEYS
     if extra_keys:
-        logger.debug("unknown_result_keys", extra_keys=sorted(extra_keys))
+        logger.debug("unknown_result_keys", unknown_fields=sorted(extra_keys))
 
     return ClaudeSessionResult(
         subtype=result_obj.get("subtype", "unknown"),

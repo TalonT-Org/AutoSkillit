@@ -331,7 +331,7 @@ class TestParseSessionResult:
         debug_entries = [e for e in logs if e.get("log_level") == "debug"]
         assert any(e.get("event") == "unknown_result_keys" for e in debug_entries)
         matched = next(e for e in debug_entries if e.get("event") == "unknown_result_keys")
-        assert "future_field" in matched.get("extra_keys", [])
+        assert "future_field" in matched.get("unknown_fields", [])
 
     def test_no_debug_log_for_known_result_keys(self):
         # Build a result record with only known keys — no debug log expected

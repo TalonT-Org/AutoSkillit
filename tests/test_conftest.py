@@ -46,3 +46,61 @@ async def test_mock_subprocess_runner_default_when_empty():
     runner = MockSubprocessRunner()
     result = await runner(["cmd"], cwd=Path("/tmp"), timeout=30.0)
     assert result.returncode == 0
+
+
+def test_reset_structlog_autouse_removed():
+    """_reset_structlog must not exist as a module-level fixture in conftest.
+
+    It was vestigial — TestConfigureLogging in test_logging.py already owns
+    its class-scoped structlog reset. Other tests never call configure_logging().
+    """
+    import tests.conftest as conftest_module
+
+    assert not hasattr(conftest_module, "_reset_structlog"), (
+        "_reset_structlog autouse fixture must be removed from conftest.py; "
+        "test_logging.py.TestConfigureLogging provides its own class-scoped reset"
+    )
+
+
+def test_reset_audit_log_autouse_removed():
+    """_reset_audit_log must not exist as a module-level fixture in conftest.
+
+    The module-level _audit_log singleton is never written to during tests —
+    serve() constructs fresh AuditLog() instances, and tool_ctx provides
+    per-test isolated instances. The autouse reset was a no-op.
+    """
+    import tests.conftest as conftest_module
+
+    assert not hasattr(conftest_module, "_reset_audit_log"), (
+        "_reset_audit_log autouse fixture must be removed from conftest.py; "
+        "test isolation is provided by the tool_ctx fixture via ToolContext DI"
+    )
+
+
+def test_reset_token_log_autouse_removed():
+    """_reset_token_log must not exist as a module-level fixture in conftest.
+
+    The module-level _token_log singleton is never written to during tests —
+    serve() constructs fresh TokenLog() instances, and tool_ctx provides
+    per-test isolated instances. The autouse reset was a no-op.
+    """
+    import tests.conftest as conftest_module
+
+    assert not hasattr(conftest_module, "_reset_token_log"), (
+        "_reset_token_log autouse fixture must be removed from conftest.py; "
+        "test isolation is provided by the tool_ctx fixture via ToolContext DI"
+    )
+
+
+def test_flush_logger_proxy_caches_removed_from_conftest():
+    """_flush_logger_proxy_caches must not be defined in conftest.
+
+    The conftest.py copy was only used by the removed _reset_structlog fixture.
+    test_logging.py maintains its own copy for TestConfigureLogging.
+    """
+    import tests.conftest as conftest_module
+
+    assert not hasattr(conftest_module, "_flush_logger_proxy_caches"), (
+        "_flush_logger_proxy_caches must be removed from conftest.py; "
+        "it was only used by the removed _reset_structlog fixture"
+    )

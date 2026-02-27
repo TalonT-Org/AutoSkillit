@@ -345,6 +345,39 @@ def _scan_module_level_io(path: Path) -> list[Violation]:
     return violations
 
 
+# ── Extension Point Coverage (REQ-EXT-001 to REQ-EXT-005) ───────────────────
+#
+# REQ-EXT-001: Adding a new MCP tool must require changes only within server/.
+#   Covered by: test_import_layer_enforcement[server-3] — any logic pulled from
+#   L0–L2 into server/ would cause an upward import violation in those lower-
+#   layer modules. test_server_tool_handlers_have_no_business_logic ensures
+#   tool handlers stay thin delegates without embedded domain logic.
+#
+# REQ-EXT-002: Adding a recipe semantic validation rule must require only a
+#   decorated function in recipe/validator.py.
+#   Covered by: test_recipe_no_forbidden_imports — validator.py can only
+#   import from core/ and workspace/; any violation indicates a structural
+#   change outside recipe/. The decorator-based rule registry means no
+#   registration file or central list requires modification for new rules.
+#
+# REQ-EXT-003: Adding a migration adapter must require only subclassing
+#   MigrationAdapter and registering with the default factory.
+#   Covered by: test_migration_no_forbidden_imports — migration/ imports
+#   only from core/, execution/, and recipe/; new adapters that violate
+#   this boundary are caught at test time without manual test updates.
+#
+# REQ-EXT-004: Adding a new CLI command must require changes only within cli/.
+#   Covered by: test_import_layer_enforcement[cli-3] — cli/ is L3; L0–L2
+#   modules that grow a cli/ dependency would be caught as upward imports
+#   in those modules' own layer enforcement test cases.
+#
+# REQ-EXT-005: Adding a new bundled skill requires only creating a directory
+#   under skills/ containing a SKILL.md file; no code changes are needed.
+#   Covered by: SkillResolver uses directory scanning, not a static registry.
+#   test_server_file_count_under_limit (groupD) ensures server/ doesn't
+#   accumulate skill-wiring boilerplate past 10 files undetected.
+
+
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 

@@ -9,6 +9,7 @@ NO MOCKS — that's the whole point.
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 import sys
 import textwrap
@@ -222,7 +223,7 @@ class TestProcessTreeKill:
                 pids.append(int(line.split(":")[1]))
 
         # All PIDs should be dead
-        time.sleep(0.5)  # Brief wait for kernel cleanup
+        await asyncio.sleep(0.5)  # Brief wait for kernel cleanup
         for pid in pids:
             assert not psutil.pid_exists(pid), f"PID {pid} should be dead"
 
@@ -248,7 +249,7 @@ class TestTimeoutKillsHangingProcess:
         assert elapsed < 8, f"Should return within ~2s timeout, took {elapsed:.1f}s"
         assert "before hang" in result.stdout  # Partial output captured
         # Process should be dead
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
         assert not psutil.pid_exists(result.pid)
 
 

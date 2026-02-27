@@ -155,6 +155,7 @@ temp/                        # Temporary/working files (gitignored)
   * **workspace.py**: Infrastructure layer for directory teardown. `_delete_directory_contents(directory, preserve)` removes all items in a directory except preserved names, recording failures in `CleanupResult` without raising. Depends only on `_logging.py`. Imported by server.py.
   * **_doctor.py**: CLI support layer: project health checks. `run_doctor()` runs 7 checks: stale MCP servers, duplicate autoskillit registrations, plugin metadata presence, PATH availability, project config existence, version consistency (package vs plugin.json), and recipe migration health (via failure_store.py). Depends on `server.py` (for `version_info`), `failure_store.py`, `recipe_io.py`, `types.py`. Imported by `cli.py`.
   * **_llm_triage.py**: AI orchestration layer for contract staleness semantic triage. `triage_staleness(stale_items)` spawns a `claude -p` subprocess via `process_lifecycle.run_managed_async` (Haiku model) to determine whether SKILL.md changes are semantically meaningful. Falls back to `meaningful=True` on timeout, JSON parse error, or OS error. Depends on `_logging.py`, `recipe_validator.py`, `process_lifecycle.py`, `skill_resolver.py`.
+  * **smoke_utils.py**: Utility callables for smoke-test pipeline `run_python` steps. `check_bug_report_non_empty(workspace)` reads `bug_report.json` and returns `{"non_empty": "true"/"false"}`. Zero autoskillit imports.
 
 ### **Plugin Structure**
 

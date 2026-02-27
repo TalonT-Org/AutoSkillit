@@ -1679,9 +1679,7 @@ async def load_recipe(name: str) -> str:
     ``suggestions`` (list of semantic findings, possibly empty) keys.
     On error: JSON with ``error`` key.
     """
-    import yaml
-
-    from autoskillit._io import _load_yaml
+    from autoskillit._yaml import YAMLError, load_yaml
     from autoskillit.recipe_io import _parse_recipe, find_recipe_by_name
     from autoskillit.recipe_validator import (
         check_contract_staleness,
@@ -1702,7 +1700,7 @@ async def load_recipe(name: str) -> str:
 
     suggestions: list[dict[str, str]] = []
     try:
-        data = _load_yaml(content)
+        data = load_yaml(content)
         if isinstance(data, dict) and "steps" in data:
             recipe = _parse_recipe(data)
 
@@ -1734,7 +1732,7 @@ async def load_recipe(name: str) -> str:
                         if migration_result.migrated_content is not None
                         else recipe_path.read_text()
                     )
-                    data = _load_yaml(content)
+                    data = load_yaml(content)
                     recipe = _parse_recipe(data)
                     failure_store.clear(name)
                 else:
@@ -1816,7 +1814,7 @@ async def load_recipe(name: str) -> str:
                             ),
                         }
                     )
-    except yaml.YAMLError as exc:
+    except YAMLError as exc:
         logger.warning(
             "Recipe YAML parse error",
             name=name,
@@ -1888,9 +1886,7 @@ async def validate_recipe(script_path: str) -> str:
     Args:
         script_path: Absolute path to the .yaml recipe file to validate.
     """
-    import yaml
-
-    from autoskillit._io import _load_yaml
+    from autoskillit._yaml import YAMLError, load_yaml
     from autoskillit.recipe_io import _parse_recipe
     from autoskillit.recipe_validator import (
         analyze_dataflow,
@@ -1908,8 +1904,8 @@ async def validate_recipe(script_path: str) -> str:
         return json.dumps({"error": f"File not found: {script_path}"})
 
     try:
-        data = _load_yaml(path)
-    except yaml.YAMLError as exc:
+        data = load_yaml(path)
+    except YAMLError as exc:
         return json.dumps({"error": f"YAML parse error: {exc}"})
 
     if not isinstance(data, dict):

@@ -559,9 +559,7 @@ def cook(recipe: str):
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
-    import yaml
-
-    from autoskillit._io import _load_yaml
+    from autoskillit._yaml import YAMLError, load_yaml
     from autoskillit.recipe_io import _parse_recipe, find_recipe_by_name
     from autoskillit.recipe_io import list_recipes as _list_all_recipes_for_cook
     from autoskillit.recipe_validator import validate_recipe
@@ -582,8 +580,8 @@ def cook(recipe: str):
     # Validate recipe before launching session
 
     try:
-        data = _load_yaml(recipe_yaml)
-    except yaml.YAMLError as exc:
+        data = load_yaml(recipe_yaml)
+    except YAMLError as exc:
         print(f"Recipe YAML parse error: {exc}")
         sys.exit(1)
 

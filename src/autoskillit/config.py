@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from autoskillit._io import _load_yaml
+from autoskillit._yaml import load_yaml
 
 
 @dataclass
@@ -113,14 +113,14 @@ def load_config(project_dir: Path | None = None) -> AutomationConfig:
 
     user_path = Path.home() / ".autoskillit" / "config.yaml"
     if user_path.is_file():
-        data = _load_yaml(user_path)
+        data = load_yaml(user_path)
         if isinstance(data, dict):
             _merge_into(config, data)
 
     if project_dir is not None:
         project_path = project_dir / ".autoskillit" / "config.yaml"
         if project_path.is_file():
-            data = _load_yaml(project_path)
+            data = load_yaml(project_path)
             if isinstance(data, dict):
                 _merge_into(config, data)
 

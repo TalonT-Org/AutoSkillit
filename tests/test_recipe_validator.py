@@ -1441,3 +1441,365 @@ def test_validate_recipe_cards_missing_input(tmp_path: Path) -> None:
     findings = validate_recipe_cards(None, contract)
     assert len(findings) > 0
     assert any("worktree_path" in f["message"] for f in findings)
+
+
+# ---------------------------------------------------------------------------
+# isinstance guard tests (T_GD1, T_GV1)
+# ---------------------------------------------------------------------------
+
+
+class TestIsInstanceGuards:
+    def test_gd1_analyze_dataflow_no_raise_on_bool_with_arg(self) -> None:
+        """T_GD1: _detect_dead_outputs does not raise TypeError for boolean with_args."""
+        data = {
+            "name": "bool-guard",
+            "description": "test",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "plan": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:make-plan do the task"},
+                    "capture": {"plan_path": "${{ result.plan_path }}"},
+                    "on_success": "downstream",
+                },
+                "downstream": {
+                    "tool": "run_cmd",
+                    "with": {"worktree_path": True},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            },
+        }
+        recipe = _parse_recipe(data)
+        report = analyze_dataflow(recipe)
+        assert report is not None
+
+    def test_gv1_validate_recipe_no_raise_on_bool_with_arg(self) -> None:
+        """T_GV1: validate_recipe does not raise TypeError for boolean with_args."""
+        data = {
+            "name": "bool-guard-validate",
+            "description": "test",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "step1": {
+                    "tool": "run_cmd",
+                    "with": {"flag": True},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            },
+        }
+        recipe = _parse_recipe(data)
+        result = validate_recipe(recipe)
+        assert isinstance(result, list)
+
+
+# ---------------------------------------------------------------------------
+# on_result self-consumption tests (T_OR1, T_OR2)
+# ---------------------------------------------------------------------------
+
+
+class TestOnResultConsumption:
+    def test_or1_on_result_field_is_not_dead_output(self) -> None:
+        """T_OR1: verdict captured and used as on_result.field is NOT flagged DEAD_OUTPUT."""
+        steps = {
+            "audit_impl": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:audit-impl plan.md myref main",
+                },
+                "capture": {"verdict": "${{ result.verdict }}"},
+                "on_result": {
+                    "field": "verdict",
+                    "routes": {"GO": "done", "NO GO": "done"},
+                },
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        report = analyze_dataflow(recipe)
+        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT" and w.field == "verdict"]
+        assert dead == []
+
+    def test_or2_different_on_result_field_flags_dead_output(self) -> None:
+        """T_OR2: verdict is flagged DEAD_OUTPUT when on_result.field is a different key."""
+        steps = {
+            "audit_impl": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:audit-impl plan.md myref main",
+                },
+                "capture": {"verdict": "${{ result.verdict }}"},
+                "on_result": {
+                    "field": "restart_scope",
+                    "routes": {"full_restart": "done", "partial_restart": "done"},
+                },
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        report = analyze_dataflow(recipe)
+        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT" and w.field == "verdict"]
+        assert len(dead) == 1
+
+
+# ---------------------------------------------------------------------------
+# dead-output semantic rule tests (T_DO1–T_DO3)
+# ---------------------------------------------------------------------------
+
+
+class TestDeadOutputRule:
+    def test_do1_dead_output_rule_in_registry(self) -> None:
+        """T_DO1: dead-output is in _RULE_REGISTRY."""
+        from autoskillit.recipe_validator import _RULE_REGISTRY
+
+        rule_names = [r.name for r in _RULE_REGISTRY]
+        assert "dead-output" in rule_names
+
+    def test_do2_fires_error_for_unconsumed_capture(self) -> None:
+        """T_DO2: dead-output fires ERROR when a captured key is never consumed downstream."""
+        steps = {
+            "plan": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:make-plan do the task"},
+                "capture": {"plan_path": "${{ result.plan_path }}"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        dead = [f for f in findings if f.rule == "dead-output"]
+        assert len(dead) >= 1
+        assert any(f.severity == Severity.ERROR and f.step_name == "plan" for f in dead)
+
+    def test_do3_does_not_fire_for_on_result_self_consumption(self) -> None:
+        """T_DO3: dead-output does NOT fire when on_result.field equals the captured key."""
+        steps = {
+            "audit_impl": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:audit-impl plan.md myref main",
+                },
+                "capture": {"verdict": "${{ result.verdict }}"},
+                "on_result": {
+                    "field": "verdict",
+                    "routes": {"GO": "done", "NO GO": "done"},
+                },
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        dead = [f for f in findings if f.rule == "dead-output" and f.step_name == "audit_impl"]
+        assert dead == []
+
+
+# ---------------------------------------------------------------------------
+# implicit-handoff semantic rule tests (T_IH1–T_IH5)
+# ---------------------------------------------------------------------------
+
+
+class TestImplicitHandoffRule:
+    def test_ih1_implicit_handoff_rule_in_registry(self) -> None:
+        """T_IH1: implicit-handoff is in _RULE_REGISTRY."""
+        from autoskillit.recipe_validator import _RULE_REGISTRY
+
+        rule_names = [r.name for r in _RULE_REGISTRY]
+        assert "implicit-handoff" in rule_names
+
+    def test_ih2_fires_error_for_skill_with_outputs_and_no_capture(self) -> None:
+        """T_IH2: implicit-handoff fires ERROR when skill has outputs but step has no capture."""
+        steps = {
+            "plan": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:make-plan do the task"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        ih = [f for f in findings if f.rule == "implicit-handoff"]
+        assert len(ih) >= 1
+        assert any(f.severity == Severity.ERROR and f.step_name == "plan" for f in ih)
+
+    def test_ih3_does_not_fire_when_capture_block_present(self) -> None:
+        """T_IH3: implicit-handoff does NOT fire when the step has a capture: block."""
+        steps = {
+            "plan": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:make-plan do the task"},
+                "capture": {"plan_path": "${{ result.plan_path }}"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        ih = [f for f in findings if f.rule == "implicit-handoff" and f.step_name == "plan"]
+        assert ih == []
+
+    def test_ih4_does_not_fire_for_skill_with_empty_outputs(self) -> None:
+        """T_IH4: implicit-handoff does NOT fire for a skill with outputs: []."""
+        steps = {
+            "assess": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:assess-and-merge worktree plan main"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        ih = [f for f in findings if f.rule == "implicit-handoff" and f.step_name == "assess"]
+        assert ih == []
+
+    def test_ih5_does_not_fire_for_unknown_skill(self) -> None:
+        """T_IH5: implicit-handoff does NOT fire for a skill with no contract entry."""
+        steps = {
+            "step": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:not-a-real-skill something"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        ih = [f for f in findings if f.rule == "implicit-handoff" and f.step_name == "step"]
+        assert ih == []
+
+
+# ---------------------------------------------------------------------------
+# Contract tests (T_SC1–T_SC5; T_SC6 is covered by test_load_bundled_manifest)
+# ---------------------------------------------------------------------------
+
+
+def test_sc1_audit_impl_has_real_inputs_and_outputs() -> None:
+    """T_SC1: audit-impl has non-empty inputs and declares verdict/remediation_path outputs."""
+    manifest = load_bundled_manifest()
+    audit_impl = manifest["skills"]["audit-impl"]
+    assert audit_impl["inputs"], "audit-impl should have non-empty inputs"
+    output_names = {o["name"] for o in audit_impl["outputs"]}
+    assert "verdict" in output_names
+    assert "remediation_path" in output_names
+    verdict_out = next(o for o in audit_impl["outputs"] if o["name"] == "verdict")
+    assert verdict_out["type"] == "string"
+    remediation_out = next(o for o in audit_impl["outputs"] if o["name"] == "remediation_path")
+    assert remediation_out["type"] == "file_path"
+
+
+def test_sc2_assess_and_merge_has_empty_outputs() -> None:
+    """T_SC2: assess-and-merge has outputs: []."""
+    manifest = load_bundled_manifest()
+    assert manifest["skills"]["assess-and-merge"]["outputs"] == []
+
+
+def test_sc3_dry_walkthrough_has_empty_outputs() -> None:
+    """T_SC3: dry-walkthrough has outputs: []."""
+    manifest = load_bundled_manifest()
+    assert manifest["skills"]["dry-walkthrough"]["outputs"] == []
+
+
+def test_sc4_investigate_has_empty_outputs() -> None:
+    """T_SC4: investigate has outputs: []."""
+    manifest = load_bundled_manifest()
+    assert manifest["skills"]["investigate"]["outputs"] == []
+
+
+def test_sc5_make_groups_outputs_include_group_files() -> None:
+    """T_SC5: make-groups outputs list contains an entry with name='group_files'."""
+    manifest = load_bundled_manifest()
+    output_names = {o["name"] for o in manifest["skills"]["make-groups"]["outputs"]}
+    assert "group_files" in output_names
+
+
+# ---------------------------------------------------------------------------
+# Recipe structural tests — implementation-pipeline.yaml (T_IP1–T_IP5)
+# ---------------------------------------------------------------------------
+
+
+class TestImplementationPipelineStructure:
+    def setup_method(self) -> None:
+        self.recipe = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+
+    def test_ip1_group_step_captures_group_files(self) -> None:
+        """T_IP1: group step has capture containing key group_files (not groups_path)."""
+        assert "group_files" in self.recipe.steps["group"].capture
+        assert "groups_path" not in self.recipe.steps["group"].capture
+
+    def test_ip2_review_step_captures_review_path(self) -> None:
+        """T_IP2: review step has capture containing key review_path."""
+        assert "review_path" in self.recipe.steps["review"].capture
+
+    def test_ip3_audit_impl_has_verdict_and_remediation_capture_and_on_result(
+        self,
+    ) -> None:
+        """T_IP3: audit_impl captures verdict+remediation_path and routes via on_result."""
+        step = self.recipe.steps["audit_impl"]
+        assert "verdict" in step.capture
+        assert "remediation_path" in step.capture
+        assert step.on_result is not None
+        assert step.on_result.field == "verdict"
+
+    def test_ip4_verify_step_references_context_review_path(self) -> None:
+        """T_IP4: verify step with_args contains a reference to context.review_path."""
+        verify_with = self.recipe.steps["verify"].with_args
+        assert any("context.review_path" in str(v) for v in verify_with.values())
+
+    def test_ip5_audit_impl_has_no_on_success_or_on_failure(self) -> None:
+        """T_IP5: audit_impl step has no on_success or on_failure (replaced by on_result)."""
+        step = self.recipe.steps["audit_impl"]
+        assert step.on_success is None
+        assert step.on_failure is None
+
+
+# ---------------------------------------------------------------------------
+# Recipe structural tests — bugfix-loop.yaml (T_BL1–T_BL2)
+# ---------------------------------------------------------------------------
+
+
+class TestBugfixLoopStructure:
+    def setup_method(self) -> None:
+        self.recipe = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
+
+    def test_bl1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
+        self,
+    ) -> None:
+        """T_BL1: audit_impl captures verdict+remediation_path and routes via on_result."""
+        step = self.recipe.steps["audit_impl"]
+        assert "verdict" in step.capture
+        assert "remediation_path" in step.capture
+        assert step.on_result is not None
+        assert step.on_result.field == "verdict"
+
+    def test_bl2_remediate_step_exists_with_on_success_plan(self) -> None:
+        """T_BL2: a step named remediate exists with on_success == 'plan'."""
+        assert "remediate" in self.recipe.steps
+        assert self.recipe.steps["remediate"].on_success == "plan"
+
+
+# ---------------------------------------------------------------------------
+# Recipe structural tests — investigate-first.yaml (T_IF1–T_IF2)
+# ---------------------------------------------------------------------------
+
+
+class TestInvestigateFirstStructure:
+    def setup_method(self) -> None:
+        self.recipe = load_recipe(builtin_recipes_dir() / "investigate-first.yaml")
+
+    def test_if1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
+        self,
+    ) -> None:
+        """T_IF1: audit_impl captures verdict+remediation_path and routes via on_result."""
+        step = self.recipe.steps["audit_impl"]
+        assert "verdict" in step.capture
+        assert "remediation_path" in step.capture
+        assert step.on_result is not None
+        assert step.on_result.field == "verdict"
+
+    def test_if2_remediate_step_exists_with_on_success_rectify(self) -> None:
+        """T_IF2: a step named remediate exists with on_success == 'rectify'."""
+        assert "remediate" in self.recipe.steps
+        assert self.recipe.steps["remediate"].on_success == "rectify"

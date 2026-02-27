@@ -417,6 +417,9 @@ async def run_managed_async(
     stale_threshold: float = 1200,
     session_record_types: frozenset[str] = frozenset({"assistant"}),
     completion_drain_timeout: float = 5.0,
+    _phase1_poll: float = 1.0,
+    _phase2_poll: float = 2.0,
+    _heartbeat_poll: float = 0.5,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -447,6 +450,11 @@ async def run_managed_async(
             completion. Prevents false-negative failures from the Channel B /
             Channel A race where the session monitor fires before the CLI
             flushes its result record.
+        _phase1_poll: Interval in seconds for session monitor Phase 1 (JSONL file
+            discovery) polling.
+        _phase2_poll: Interval in seconds for session monitor Phase 2 (completion
+            marker scan) polling.
+        _heartbeat_poll: Interval in seconds for heartbeat (stdout record type) polling.
     """
     if pty_mode:
         cmd = pty_wrap_command(cmd)
@@ -481,7 +489,12 @@ async def run_managed_async(
             heartbeat_task = None
             if heartbeat_marker:
                 heartbeat_task = asyncio.create_task(
-                    _heartbeat(stdout_path, heartbeat_marker, heartbeat_record_types)
+                    _heartbeat(
+                        stdout_path,
+                        heartbeat_marker,
+                        heartbeat_record_types,
+                        _poll_interval=_heartbeat_poll,
+                    )
                 )
                 tasks.add(heartbeat_task)
 
@@ -497,6 +510,8 @@ async def run_managed_async(
                         time.time(),
                         session_record_types,
                         pid=proc.pid,
+                        _phase1_poll=_phase1_poll,
+                        _phase2_poll=_phase2_poll,
                     )
                 )
                 tasks.add(session_monitor_task)

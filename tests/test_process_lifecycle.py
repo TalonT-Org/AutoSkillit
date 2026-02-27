@@ -121,8 +121,9 @@ CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
                   "content": "%%ORDER_UP%%"}}
         f.write(json.dumps(record) + "\\n")
         f.flush()
-    # Wait until after Channel B fires (~3s: 1s Phase 1 + 2s Phase 2 poll), then write stdout
-    time.sleep(4.0)
+    # Wait until after Channel B fires (phase1_poll + phase2_poll), then write stdout.
+    # Callers pass this delay as sys.argv[2]; default 4.0 matches production poll defaults.
+    time.sleep(float(sys.argv[2]) if len(sys.argv) > 2 else 4.0)
     result = {"type": "result", "subtype": "success", "is_error": False,
               "result": "done", "session_id": "s1"}
     sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\\n")
@@ -1345,12 +1346,14 @@ class TestChannelBDrainWait:
     async def test_channel_b_wins_then_channel_a_confirms_within_drain(self, tmp_path):
         """Channel B fires first; drain wait allows Channel A to confirm stdout data.
 
-        Sequence:
-          t=0.1s  script writes %%ORDER_UP%% to session JSONL (Channel B will fire)
-          t~3s    session monitor detects marker, Channel B fires → drain wait starts
-          t=4.1s  script writes type=result to stdout
-          t~4.5s  heartbeat detects type=result, Channel A fires → drain completes
-          t~4.5s  process killed with confirmed stdout
+        Sequence (fast poll params):
+          t=0.00s  subprocess starts
+          t=0.10s  script writes %%ORDER_UP%% to session JSONL (Channel B target)
+          t=0.11s  Phase 1 poll fires → session file found
+          t=0.16s  Phase 2 poll fires → marker detected → Channel B fires → drain starts
+          t=0.25s  script writes type=result to stdout (0.15s after JSONL write)
+          t=0.30s  heartbeat fires → Channel A confirms → drain completes
+          t~0.30s  process killed with confirmed stdout
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -1358,13 +1361,16 @@ class TestChannelBDrainWait:
         script.write_text(CHANNEL_B_THEN_A_CONFIRM_SCRIPT)
 
         result = await run_managed_async(
-            [sys.executable, str(script), str(session_dir)],
+            [sys.executable, str(script), str(session_dir), "0.15"],
             cwd=tmp_path,
             timeout=30,
             heartbeat_marker='"type":"result"',
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=5.0,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
+            _heartbeat_poll=0.05,
         )
 
         assert result.termination == TerminationReason.COMPLETED
@@ -1375,11 +1381,11 @@ class TestChannelBDrainWait:
     async def test_channel_b_wins_drain_timeout_still_kills(self, tmp_path):
         """Channel B fires; Channel A never fires; drain times out and process is killed.
 
-        Sequence:
-          t=0.1s  script writes %%ORDER_UP%% to session JSONL
-          t~3s    Channel B fires → drain wait starts with 0.5s timeout
-          t~3.5s  drain times out (script never wrote to stdout)
-          t~3.5s  process killed with empty stdout
+        Sequence (fast poll params):
+          t=0.10s  script writes %%ORDER_UP%% to session JSONL
+          t=0.16s  Channel B fires → drain wait starts with 0.5s timeout
+          t=0.66s  drain times out (script never wrote to stdout)
+          t=0.66s  process killed with empty stdout
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -1394,6 +1400,8 @@ class TestChannelBDrainWait:
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
         )
 
         assert result.termination == TerminationReason.COMPLETED

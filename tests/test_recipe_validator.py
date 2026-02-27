@@ -1441,3 +1441,49 @@ def test_validate_recipe_cards_missing_input(tmp_path: Path) -> None:
     findings = validate_recipe_cards(None, contract)
     assert len(findings) > 0
     assert any("worktree_path" in f["message"] for f in findings)
+
+
+# ---------------------------------------------------------------------------
+# Smoke-test YAML structural tests (T_ST1–T_ST5)
+# ---------------------------------------------------------------------------
+
+
+class TestSmokeTestStructure:
+    """Structural assertions for the smoke-test.yaml recipe steps."""
+
+    @pytest.fixture()
+    def smoke_yaml(self) -> dict:
+        recipe_path = builtin_recipes_dir() / "smoke-test.yaml"
+        return yaml.safe_load(recipe_path.read_text())
+
+    # T_ST1
+    def test_create_branch_is_run_cmd(self, smoke_yaml: dict) -> None:
+        """create_branch step has tool == "run_cmd" (not action == "route")."""
+        assert smoke_yaml["steps"]["create_branch"]["tool"] == "run_cmd"
+
+    # T_ST2
+    def test_create_branch_captures_feature_branch(self, smoke_yaml: dict) -> None:
+        """create_branch step has capture containing key feature_branch."""
+        assert "feature_branch" in smoke_yaml["steps"]["create_branch"]["capture"]
+
+    # T_ST3
+    def test_check_summary_is_run_python(self, smoke_yaml: dict) -> None:
+        """check_summary step has python discriminator (not action == "route")."""
+        assert (
+            smoke_yaml["steps"]["check_summary"]["python"]
+            == "autoskillit.smoke_utils.check_bug_report_non_empty"
+        )
+
+    # T_ST4
+    def test_check_summary_on_result_routes(self, smoke_yaml: dict) -> None:
+        """check_summary step has on_result with field non_empty and routes true/false."""
+        on_result = smoke_yaml["steps"]["check_summary"]["on_result"]
+        assert on_result["field"] == "non_empty"
+        assert "true" in on_result["routes"]
+        assert "false" in on_result["routes"]
+
+    # T_ST5
+    def test_merge_references_context_feature_branch(self, smoke_yaml: dict) -> None:
+        """merge step with_args references context.feature_branch."""
+        base_branch = smoke_yaml["steps"]["merge"]["with"]["base_branch"]
+        assert "context.feature_branch" in base_branch

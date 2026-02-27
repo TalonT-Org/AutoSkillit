@@ -426,6 +426,13 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         # Flag captured vars not consumed on any path
         for cap_key in step.capture:
             if cap_key not in consumed:
+                # Exempt merge_worktree diagnostic captures: cleanup_succeeded is captured
+                # for observability (to surface orphaned worktrees), not for data-passing.
+                # The merge-cleanup-uncaptured rule requires this capture; exempting it
+                # from dead-output prevents the two rules from conflicting.
+                cap_val = step.capture.get(cap_key, "")
+                if step.tool == "merge_worktree" and "result.cleanup_succeeded" in str(cap_val):
+                    continue
                 warnings.append(
                     DataFlowWarning(
                         code="DEAD_OUTPUT",

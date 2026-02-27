@@ -1608,6 +1608,20 @@ class TestDeadOutputRule:
         dead = [f for f in findings if f.rule == "dead-output" and f.step_name == "audit_impl"]
         assert dead == []
 
+    def test_do4_cleanup_succeeded_from_merge_worktree_not_dead_output(self) -> None:
+        """T_DO4: dead-output does NOT fire for cleanup_succeeded captured from merge_worktree.
+
+        cleanup_succeeded is an observability capture required by merge-cleanup-uncaptured.
+        It has no downstream consumer by design — the exemption prevents the two rules
+        from conflicting.
+        """
+        recipe = _build_merge_worktree_recipe(
+            capture={"cleanup_succeeded": "${{ result.cleanup_succeeded }}"}
+        )
+        findings = run_semantic_rules(recipe)
+        dead = [f for f in findings if f.rule == "dead-output" and f.step_name == "merge"]
+        assert dead == []
+
 
 # ---------------------------------------------------------------------------
 # implicit-handoff semantic rule tests (T_IH1–T_IH5)

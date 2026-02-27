@@ -167,7 +167,7 @@ class TestSkillMdToolNameCurrency:
         )
 
 
-_AUTOSKILLIT_CALLABLE_RE = re.compile(r"\bautoskillit\.[a-z_]+\.[a-z_]+\b")
+_AUTOSKILLIT_CALLABLE_RE = re.compile(r"\bautoskillit(?:\.[a-z_]+)+\b")
 
 
 class TestRunPythonCallableContract:

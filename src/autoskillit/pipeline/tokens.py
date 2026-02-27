@@ -67,6 +67,21 @@ class TokenLog:
         """Return a defensive copy of all entries as dicts, in insertion order."""
         return [e.to_dict() for e in self._entries.values()]
 
+    def compute_total(self) -> dict[str, int]:
+        """Compute aggregate token counts across all steps."""
+        total: dict[str, int] = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
+        for entry in self._entries.values():
+            total["input_tokens"] += entry.input_tokens
+            total["output_tokens"] += entry.output_tokens
+            total["cache_creation_input_tokens"] += entry.cache_creation_input_tokens
+            total["cache_read_input_tokens"] += entry.cache_read_input_tokens
+        return total
+
     def clear(self) -> None:
         """Reset the store."""
         self._entries = {}

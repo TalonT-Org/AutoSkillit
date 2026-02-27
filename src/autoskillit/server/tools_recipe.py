@@ -41,18 +41,11 @@ async def list_recipes() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    from autoskillit.recipe.io import format_recipe_list_response
     from autoskillit.recipe.io import list_recipes as _list_recipes
 
     result = _list_recipes(Path.cwd())
-    response: dict[str, object] = {
-        "recipes": [
-            {"name": r.name, "description": r.description, "summary": r.summary}
-            for r in result.items
-        ],
-    }
-    if result.errors:
-        response["errors"] = [{"file": e.path.name, "error": e.error} for e in result.errors]
-    return json.dumps(response)
+    return json.dumps(format_recipe_list_response(result))
 
 
 @mcp.tool(tags={"automation"})
@@ -208,10 +201,15 @@ async def load_recipe(name: str) -> str:
     from autoskillit.recipe.contracts import (
         check_contract_staleness,
         load_recipe_card,
+        stale_to_suggestions,
         validate_recipe_cards,
     )
     from autoskillit.recipe.io import _parse_recipe, find_recipe_by_name
-    from autoskillit.recipe.validator import run_semantic_rules
+    from autoskillit.recipe.validator import (
+        filter_version_rule,
+        findings_to_dicts,
+        run_semantic_rules,
+    )
 
     _match = find_recipe_by_name(name, Path.cwd())
     if _match is None:
@@ -231,12 +229,10 @@ async def load_recipe(name: str) -> str:
             recipe = _parse_recipe(data)
 
             findings = run_semantic_rules(recipe)
-            semantic_suggestions = [f.to_dict() for f in findings]
+            semantic_suggestions = findings_to_dicts(findings)
 
             if name in _migration_suppressed:
-                semantic_suggestions = [
-                    s for s in semantic_suggestions if s.get("rule") != "outdated-recipe-version"
-                ]
+                semantic_suggestions = filter_version_rule(semantic_suggestions)
             suggestions.extend(semantic_suggestions)
 
             # Contract validation
@@ -249,20 +245,7 @@ async def load_recipe(name: str) -> str:
 
                 # Staleness check
                 stale = check_contract_staleness(contract)
-                for item in stale:
-                    suggestions.append(
-                        {
-                            "rule": "stale-contract",
-                            "severity": "warning",
-                            "step": item.skill,
-                            "message": (
-                                f"Contract is stale: {item.reason} for "
-                                f"'{item.skill}' (stored={item.stored_value}, "
-                                f"current={item.current_value}). Consider "
-                                f"regenerating the contract."
-                            ),
-                        }
-                    )
+                suggestions.extend(stale_to_suggestions(stale))
     except YAMLError as exc:
         logger.warning(
             "Recipe YAML parse error",
@@ -338,11 +321,13 @@ async def validate_recipe(script_path: str) -> str:
         script_path: Absolute path to the .yaml recipe file to validate.
     """
     from autoskillit.core.io import YAMLError, load_yaml
-    from autoskillit.core.types import Severity
     from autoskillit.recipe.contracts import load_recipe_card, validate_recipe_cards
     from autoskillit.recipe.io import _parse_recipe
     from autoskillit.recipe.validator import (
         analyze_dataflow,
+        build_quality_dict,
+        compute_recipe_validity,
+        findings_to_dicts,
         run_semantic_rules,
     )
     from autoskillit.recipe.validator import (
@@ -366,32 +351,18 @@ async def validate_recipe(script_path: str) -> str:
     report = analyze_dataflow(recipe)
     semantic_findings = run_semantic_rules(recipe)
 
-    quality = {
-        "warnings": [
-            {
-                "code": w.code,
-                "step": w.step_name,
-                "field": w.field,
-                "message": w.message,
-            }
-            for w in report.warnings
-        ],
-        "summary": report.summary,
-    }
-    semantic = [f.to_dict() for f in semantic_findings]
+    quality = build_quality_dict(report)
+    semantic = findings_to_dicts(semantic_findings)
 
     # Contract validation
-    contract_findings: list[dict] = []
+    contract_findings: list[dict] = []  # type: ignore[type-arg]
     recipes_dir = path.parent
     recipe_name = path.stem
     contract = load_recipe_card(recipe_name, recipes_dir)
     if contract:
         contract_findings = validate_recipe_cards(recipe, contract)
 
-    has_schema_errors = bool(errors)
-    has_semantic_errors = any(f.severity == Severity.ERROR for f in semantic_findings)
-    has_contract_errors = any(f.get("severity") == "error" for f in contract_findings)
-    valid = not has_schema_errors and not has_semantic_errors and not has_contract_errors
+    valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
 
     return json.dumps(
         {

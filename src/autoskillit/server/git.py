@@ -23,6 +23,16 @@ from autoskillit.execution.testing import check_test_passed
 logger = get_logger(__name__)
 
 
+def _filter_changed_files(stdout: str, prefixes: list[str]) -> tuple[list[str], list[str]]:
+    """Parse git diff stdout into (changed_files, critical_files).
+
+    critical_files are those matching any of the configured path prefixes.
+    """
+    changed_files = [f.strip() for f in stdout.splitlines() if f.strip()]
+    critical_files = [f for f in changed_files if any(f.startswith(p) for p in prefixes)]
+    return changed_files, critical_files
+
+
 async def _run_git(
     cmd: list[str],
     cwd: str | Path,

@@ -106,6 +106,7 @@ async def classify_fix(
         pass
 
     from autoskillit.server import _get_config
+    from autoskillit.server.git import _filter_changed_files
 
     returncode, stdout, stderr = await _run_subprocess(
         ["git", "diff", "--name-only", f"origin/{base_branch}...HEAD"],
@@ -124,10 +125,8 @@ async def classify_fix(
             pass
         return json.dumps({"error": f"git diff failed: {stderr}"})
 
-    changed_files = [f.strip() for f in stdout.splitlines() if f.strip()]
-
     prefixes = _get_config().classify_fix.path_prefixes
-    critical_files = [f for f in changed_files if any(f.startswith(prefix) for prefix in prefixes)]
+    changed_files, critical_files = _filter_changed_files(stdout, prefixes)
 
     if critical_files:
         return json.dumps(

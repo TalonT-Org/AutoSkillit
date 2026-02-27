@@ -183,46 +183,37 @@ def _scan(path: Path) -> list[Violation]:
 _SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
 
 # ── Rule 1: Import layer enforcement ─────────────────────────────────────────
-LAYER_ASSIGNMENTS: dict[str, int] = {
-    # ── Layer 0: Foundation ── no autoskillit imports ─────────────────────────
-    # Note: core/, config/, pipeline/gate.py are sub-packages/modules. Their
-    # flat .py equivalents (types, _logging, _io, _yaml, _gate, config) no
-    # longer exist — entries below that lack a matching .py file are skipped.
+SUBPACKAGE_LAYERS: dict[str, int] = {
+    # Layer 0: core/ — zero autoskillit internal imports
     "core": 0,
-    "gate": 0,  # pipeline/gate.py (formerly _gate.py)
-    "version": 0,
-    "smoke_utils": 0,
-    # ── Layer 1: Basic Services ── import only L0 ─────────────────────────────
-    # flat-module equivalents removed; sub-module stems are checked when present
-    "audit": 1,  # pipeline/audit.py
-    "tokens": 1,  # pipeline/tokens.py
-    "session": 1,  # execution/session.py
-    "process": 1,  # execution/process.py
-    "testing": 1,  # execution/testing.py
-    "db": 1,  # execution/db.py
-    "cleanup": 1,  # workspace/cleanup.py
-    "skills": 1,  # workspace/skills.py
-    # ── Layer 2: Domain Services ── import L0 + L1 ────────────────────────────
-    "context": 2,  # pipeline/context.py (formerly _context.py)
-    "recipe": 2,  # L2 recipe/ sub-package
-    "migration": 2,  # L2 migration/ sub-package
-    # ── Layer 3: Orchestration + Server ── import L0–L2 ───────────────────────
-    "headless": 3,  # execution/headless.py
-    "server": 3,  # server/ package (skipped if server.py absent — uses server/ dir)
+    # Layer 1: domain primitives — may import only from L0
+    "config": 1,
+    "pipeline": 1,
+    "execution": 1,
+    "workspace": 1,
+    # Layer 2: domain services — may import from L0 and L1
+    "recipe": 2,
+    "migration": 2,
+    # Layer 3: application layer — may import from L0–L2
+    "server": 3,
+    "cli": 3,
 }
-_LAYER_EXEMPT: frozenset[str] = frozenset({"cli", "__init__", "__main__"})
+# Root-level isolated modules are exempt from sub-package layer enforcement.
+# Their import constraints are tested by test_isolated_modules_do_not_import_server_or_cli.
+_LAYER_EXEMPT_STEMS: frozenset[str] = frozenset(
+    {"version", "smoke_utils", "_llm_triage", "__init__", "__main__"}
+)
 
 # ── Rule 2: Singleton definition locality ─────────────────────────────────────
 # "server" allows mcp = FastMCP(...); "cli" allows app = App(...) etc.
 SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
     {
-        # pipeline/ package: singletons _audit_log and _token_log
-        "audit",
-        "tokens",
-        # server/__init__.py: mcp = FastMCP(...)
-        "__init__",
-        # cli/app.py: app = App(...), config_app = App(...), etc.
-        "app",
+        "audit",  # pipeline/audit.py: _audit_log singleton
+        "tokens",  # pipeline/tokens.py: _token_log singleton
+        "__init__",  # server/__init__.py: mcp = FastMCP(...)
+        "app",  # cli/app.py: app = App(...), config_app = App(...), etc.
+        "store",  # migration/store.py: defensive exemption for future module-level construction
+        "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -589,28 +580,28 @@ def test_server_imports_gate_registry() -> None:
 
 
 @pytest.mark.parametrize(
-    "mod_name,layer",
-    [(k, v) for k, v in LAYER_ASSIGNMENTS.items()],
+    "pkg_name,layer",
+    [(k, v) for k, v in SUBPACKAGE_LAYERS.items()],
 )
-def test_import_layer_enforcement(mod_name: str, layer: int) -> None:
-    """Each module may only import from same or lower layer modules (no upward imports)."""
-    src_file = SRC_ROOT / f"{mod_name}.py"
-    if not src_file.exists():
-        pytest.skip(f"{mod_name}.py not found — prerequisite group not merged")
+def test_import_layer_enforcement(pkg_name: str, layer: int) -> None:
+    """Each sub-package may only import from same or lower layer sub-packages."""
+    pkg_dir = SRC_ROOT / pkg_name
+    if not pkg_dir.exists():
+        pytest.skip(f"{pkg_name}/ not found — prerequisite group not merged")
 
     violations: list[str] = []
-    for imported_stem, lineno in _extract_module_level_internal_imports(src_file):
-        if imported_stem not in LAYER_ASSIGNMENTS:
-            # Unknown module — not in the assignment table; skip (new module, update table)
-            continue
-        imported_layer = LAYER_ASSIGNMENTS[imported_stem]
-        if imported_layer > layer:
-            violations.append(
-                f"  line {lineno}: {mod_name} (L{layer}) imports "
-                f"{imported_stem} (L{imported_layer}) — upward import"
-            )
+    for py_file in pkg_dir.rglob("*.py"):
+        for imported_stem, lineno in _extract_module_level_internal_imports(py_file):
+            if imported_stem not in SUBPACKAGE_LAYERS:
+                continue  # root-level, exempt, or external module
+            imported_layer = SUBPACKAGE_LAYERS[imported_stem]
+            if imported_layer > layer:
+                violations.append(
+                    f"  {_rel(py_file)}:{lineno}: {pkg_name} (L{layer}) imports "
+                    f"{imported_stem} (L{imported_layer}) — upward import"
+                )
 
-    assert not violations, f"Layer violations in {mod_name}.py:\n" + "\n".join(violations)
+    assert not violations, f"Layer violations in {pkg_name}/:\n" + "\n".join(violations)
 
 
 # ── Rule 2: test_singleton_definition_locality ────────────────────────────────
@@ -681,7 +672,7 @@ def test_layer_enforcement_detects_upward_import(tmp_path: Path) -> None:
             if parts[0] == "autoskillit" and len(parts) > 1:
                 imported = parts[1]
                 # synthetic module is L1; upward = strictly greater
-                if LAYER_ASSIGNMENTS.get(imported, 0) > 1:
+                if SUBPACKAGE_LAYERS.get(imported, 0) > 1:
                     violations.append(imported)
     assert violations  # must detect the upward import
 
@@ -805,16 +796,26 @@ def test_skill_tools_defined_in_types():
 def test_claude_md_documents_all_source_modules() -> None:
     """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
 
-    Prevents undocumented modules from silently accumulating after
-    a new module is added without updating the Architecture section.
+    For __init__.py files, the containing package directory name must appear.
+    For all other files, the filename must appear somewhere in CLAUDE.md.
     """
     claude_path = Path(__file__).parent.parent / "CLAUDE.md"
     content = claude_path.read_text()
     src_root = Path(__file__).parent.parent / "src" / "autoskillit"
 
-    missing = [
-        py_file.name for py_file in sorted(src_root.glob("*.py")) if py_file.name not in content
-    ]
+    missing = []
+    for py_file in sorted(src_root.rglob("*.py")):
+        if "__pycache__" in py_file.parts:
+            continue
+        rel = py_file.relative_to(src_root)
+        if py_file.name == "__init__.py":
+            # For sub-package inits, verify the package directory is documented
+            parent = rel.parent
+            if parent != Path(".") and (parent.name + "/") not in content:
+                missing.append(str(rel))
+        else:
+            if py_file.name not in content:
+                missing.append(str(rel))
 
     assert not missing, (
         f"Modules not documented in CLAUDE.md: {', '.join(missing)}. "
@@ -1168,3 +1169,112 @@ def test_doctor_moved_to_cli_package() -> None:
     """_doctor.py must be removed; its logic lives in cli/_doctor.py."""
     assert not (SRC_ROOT / "_doctor.py").exists()
     assert (SRC_ROOT / "cli" / "_doctor.py").exists()
+
+
+# ── New REQ-CNST tests (groupE) ───────────────────────────────────────────────
+
+
+def test_no_file_exceeds_1000_lines() -> None:
+    """REQ-CNST-002: No Python file in src/autoskillit/ may exceed 1,000 lines."""
+    violations: list[str] = []
+    for py_file in SRC_ROOT.rglob("*.py"):
+        if "__pycache__" in py_file.parts:
+            continue
+        line_count = len(py_file.read_text().splitlines())
+        if line_count > 1000:
+            violations.append(f"{_rel(py_file)}: {line_count} lines")
+    assert not violations, "Files exceeding 1,000 lines:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )
+
+
+def test_no_subpackage_exceeds_10_files() -> None:
+    """REQ-CNST-003: No sub-package directory may contain more than 10 Python files."""
+    violations: list[str] = []
+    for sub_dir in sorted(SRC_ROOT.iterdir()):
+        if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":
+            continue
+        py_files = list(sub_dir.glob("*.py"))
+        if len(py_files) > 10:
+            violations.append(f"{sub_dir.name}/: {len(py_files)} Python files (max 10)")
+    assert not violations, "Sub-packages exceeding 10 Python files:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )
+
+
+def test_core_has_no_autoskillit_imports() -> None:
+    """REQ-CNST-004: core/ modules must not import from any autoskillit sub-package."""
+    core_dir = SRC_ROOT / "core"
+    assert core_dir.exists(), "core/ package must exist"
+    violations: list[str] = []
+    for py_file in core_dir.glob("*.py"):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                parts = node.module.split(".")
+                if parts[0] == "autoskillit" and len(parts) > 1:
+                    violations.append(f"core/{py_file.name}:{node.lineno}: imports {node.module}")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    parts = alias.name.split(".")
+                    if parts[0] == "autoskillit" and len(parts) > 1:
+                        violations.append(
+                            f"core/{py_file.name}:{node.lineno}: imports {alias.name}"
+                        )
+    assert not violations, "core/ has autoskillit internal imports:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )
+
+
+def test_isolated_modules_do_not_import_server_or_cli() -> None:
+    """REQ-CNST-007: Root-level isolated modules must not import from server/ or cli/."""
+    isolated = ["_llm_triage.py", "smoke_utils.py", "version.py"]
+    forbidden_prefixes = ("autoskillit.server", "autoskillit.cli")
+    violations: list[str] = []
+    for filename in isolated:
+        py_file = SRC_ROOT / filename
+        if not py_file.exists():
+            continue
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                mod = node.module
+                if any(mod == f or mod.startswith(f + ".") for f in forbidden_prefixes):
+                    violations.append(f"{filename}:{node.lineno}: imports {mod}")
+    assert not violations, "Root-level isolated modules import server/ or cli/:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )
+
+
+def test_server_tool_handlers_have_no_business_logic() -> None:
+    """REQ-CNST-008: @mcp.tool handler functions must contain no comprehensions or for-loops.
+
+    Tool handlers must only: call _require_enabled(), delegate to domain functions,
+    and return results. Comprehensions and for-loops indicate logic that belongs
+    in a domain layer module.
+    """
+    server_dir = SRC_ROOT / "server"
+    violations: list[str] = []
+    for py_file in sorted(server_dir.glob("tools_*.py")):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
+                continue
+            # Walk only the function body for business-logic patterns
+            body_module = ast.Module(body=node.body, type_ignores=[])
+            for child in ast.walk(body_module):
+                if isinstance(child, (ast.ListComp, ast.DictComp, ast.SetComp, ast.GeneratorExp)):
+                    violations.append(
+                        f"server/{py_file.name}: {node.name}() line {child.lineno}: "
+                        f"comprehension found — move to domain layer"
+                    )
+                elif isinstance(child, ast.For):
+                    violations.append(
+                        f"server/{py_file.name}: {node.name}() line {child.lineno}: "
+                        f"for-loop found — move to domain layer"
+                    )
+    assert not violations, "Tool handlers contain business logic:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )

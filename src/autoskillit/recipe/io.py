@@ -72,6 +72,19 @@ def find_recipe_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
     return next((r for r in result.items if r.name == name), None)
 
 
+def format_recipe_list_response(result: LoadResult[RecipeInfo]) -> dict[str, object]:
+    """Build the MCP response dict for the list_recipes tool."""
+    response: dict[str, object] = {
+        "recipes": [
+            {"name": r.name, "description": r.description, "summary": r.summary}
+            for r in result.items
+        ],
+    }
+    if result.errors:
+        response["errors"] = [{"file": e.path.name, "error": e.error} for e in result.errors]
+    return response
+
+
 # --- internal helpers ---
 
 

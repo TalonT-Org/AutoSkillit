@@ -9,6 +9,8 @@ store with a defensive copy getter, and a module-level singleton.
 
 from __future__ import annotations
 
+from typing import Any
+
 from autoskillit.core.logging import get_logger
 from autoskillit.core.types import FailureRecord
 
@@ -53,6 +55,10 @@ class AuditLog:
     def get_report(self) -> list[FailureRecord]:
         """Return a defensive copy of the current failure list."""
         return list(self._records)
+
+    def get_report_as_dicts(self) -> list[dict[str, Any]]:
+        """Return all failure records serialized as dicts."""
+        return [r.to_dict() for r in self._records]
 
     def clear(self) -> None:
         """Reset the store. Call at the start of each new pipeline run."""

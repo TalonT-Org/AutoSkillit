@@ -350,3 +350,23 @@ def check_contract_staleness(contract: dict[str, Any]) -> list[StaleItem]:
             )
 
     return stale
+
+
+def stale_to_suggestions(stale: list[StaleItem]) -> list[dict[str, str]]:
+    """Convert stale contract items to MCP suggestion dicts."""
+    suggestions: list[dict[str, str]] = []
+    for item in stale:
+        suggestions.append(
+            {
+                "rule": "stale-contract",
+                "severity": "warning",
+                "step": item.skill,
+                "message": (
+                    f"Contract is stale: {item.reason} for "
+                    f"'{item.skill}' (stored={item.stored_value}, "
+                    f"current={item.current_value}). Consider "
+                    f"regenerating the contract."
+                ),
+            }
+        )
+    return suggestions

@@ -69,13 +69,13 @@ async def get_pipeline_report(clear: bool = False) -> str:
     """
     from autoskillit.server import _get_ctx
 
-    report = _get_ctx().audit.get_report()
+    failures = _get_ctx().audit.get_report_as_dicts()
     if clear:
         _get_ctx().audit.clear()
     return json.dumps(
         {
-            "total_failures": len(report),
-            "failures": [r.to_dict() for r in report],
+            "total_failures": len(failures),
+            "failures": failures,
         }
     )
 
@@ -101,14 +101,9 @@ async def get_token_summary(clear: bool = False) -> str:
     from autoskillit.server import _get_ctx
 
     steps = _get_ctx().token_log.get_report()
+    total = _get_ctx().token_log.compute_total()
     if clear:
         _get_ctx().token_log.clear()
-    total: dict[str, int] = {
-        "input_tokens": sum(s["input_tokens"] for s in steps),
-        "output_tokens": sum(s["output_tokens"] for s in steps),
-        "cache_creation_input_tokens": sum(s["cache_creation_input_tokens"] for s in steps),
-        "cache_read_input_tokens": sum(s["cache_read_input_tokens"] for s in steps),
-    }
     return json.dumps({"steps": steps, "total": total})
 
 

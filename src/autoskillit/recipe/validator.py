@@ -92,6 +92,44 @@ def run_semantic_rules(wf: Recipe) -> list[RuleFinding]:
     return findings
 
 
+def findings_to_dicts(findings: list[RuleFinding]) -> list[dict[str, str]]:
+    """Convert a list of RuleFindings to serializable dicts."""
+    return [f.to_dict() for f in findings]
+
+
+def filter_version_rule(suggestions: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Remove 'outdated-recipe-version' rule findings from suggestions."""
+    return [s for s in suggestions if s.get("rule") != "outdated-recipe-version"]
+
+
+def build_quality_dict(report: DataFlowReport) -> dict[str, object]:
+    """Build the quality analysis dict from a DataFlowReport."""
+    return {
+        "warnings": [
+            {
+                "code": w.code,
+                "step": w.step_name,
+                "field": w.field,
+                "message": w.message,
+            }
+            for w in report.warnings
+        ],
+        "summary": report.summary,
+    }
+
+
+def compute_recipe_validity(
+    errors: list[str],
+    semantic_findings: list[RuleFinding],
+    contract_findings: list[dict],  # type: ignore[type-arg]
+) -> bool:
+    """Return True if no schema, semantic, or contract errors are present."""
+    has_schema_errors = bool(errors)
+    has_semantic_errors = any(f.severity == Severity.ERROR for f in semantic_findings)
+    has_contract_errors = any(f.get("severity") == "error" for f in contract_findings)
+    return not has_schema_errors and not has_semantic_errors and not has_contract_errors
+
+
 # ---------------------------------------------------------------------------
 # Structural validation
 # ---------------------------------------------------------------------------

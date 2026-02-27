@@ -1,5 +1,6 @@
 name: bugfix-loop
 description: End-to-end test with automatic bug fixing in isolated worktrees.
+autoskillit_version: "0.2.0"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,

@@ -6334,3 +6334,67 @@ class TestGatedToolObservability:
         )
         await run_skill_retry("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
         mock_ctx.error.assert_awaited_once()
+
+
+class TestLoadRecipeMigrationPath:
+    """load_recipe with applicable migrations must degrade gracefully on engine failure."""
+
+    @pytest.fixture(autouse=True)
+    def _close_kitchen(self, tool_ctx):
+        """Verify load_recipe works WITHOUT tool activation."""
+        tool_ctx.gate = GateState(enabled=False)
+
+    @pytest.mark.asyncio
+    async def test_migration_failure_surfaces_as_suggestion_not_exception(
+        self, tmp_path, monkeypatch, tool_ctx
+    ):
+        """When migration runs and fails, load_recipe returns a suggestion, not an exception."""
+        import autoskillit
+        import autoskillit.migration_loader as ml
+        from autoskillit.config import MigrationConfig
+
+        monkeypatch.chdir(tmp_path)
+
+        # Set up recipe without autoskillit_version to trigger migration
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test-script.yaml").write_text(_MINIMAL_SCRIPT_YAML)
+
+        # Set up fake migration dir so applicable_migrations returns a non-empty list
+        installed_ver = autoskillit.__version__
+        fake_mig_dir = tmp_path / "migrations"
+        fake_mig_dir.mkdir()
+        (fake_mig_dir / "0.0.0-migration.yaml").write_text(
+            f"from_version: '0.0.0'\nto_version: '{installed_ver}'\n"
+            "description: Test migration\nchanges:\n"
+            "  - id: test-change\n    description: Test\n    instruction: Add something\n"
+        )
+        monkeypatch.setattr(ml, "_migrations_dir", lambda: fake_mig_dir)
+        tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=[]))
+
+        # Create the failure store directory
+        (tmp_path / ".autoskillit" / "temp" / "migrations").mkdir(parents=True)
+
+        # Patch _run_headless_core to simulate a failed migration skill session
+        mock_headless = AsyncMock(
+            return_value=SkillResult(
+                success=False,
+                result="Migration skill failed",
+                session_id="",
+                subtype="error",
+                is_error=True,
+                exit_code=1,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+        )
+
+        with patch("autoskillit.server._run_headless_core", mock_headless):
+            result = json.loads(await load_recipe(name="test-script"))
+
+        # Recipe content must still be returned despite migration failure
+        assert result.get("content") is not None
+        # Migration failure must surface as a suggestion, not propagate as an exception
+        suggestion_rules = [s["rule"] for s in result.get("suggestions", [])]
+        assert "migration-failed" in suggestion_rules

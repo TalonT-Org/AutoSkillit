@@ -198,3 +198,24 @@ def test_parse_recipe_metadata_private_removed() -> None:
     import autoskillit.recipe_loader as rl
 
     assert not hasattr(rl, "_parse_recipe_metadata")
+
+
+# ---------------------------------------------------------------------------
+# RL-VER1: all bundled recipes must declare autoskillit_version
+# ---------------------------------------------------------------------------
+def test_all_bundled_recipes_have_autoskillit_version() -> None:
+    """All bundled recipes must declare autoskillit_version to prevent spurious auto-migration."""
+    import yaml
+
+    from autoskillit.recipe_io import builtin_recipes_dir
+
+    missing = []
+    for recipe_file in builtin_recipes_dir().glob("*.yaml"):
+        data = yaml.safe_load(recipe_file.read_text())
+        if not data or "autoskillit_version" not in data:
+            missing.append(recipe_file.name)
+    assert not missing, (
+        "Bundled recipes missing 'autoskillit_version' field "
+        "(will trigger spurious auto-migration on every load_recipe call):\n"
+        + "\n".join(sorted(missing))
+    )

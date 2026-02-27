@@ -41,19 +41,23 @@ steps:
     on_failure: escalate
 
   create_branch:
-    action: route
+    tool: run_cmd
+    with:
+      cmd: >-
+        BRANCH="autoskillit-smoke-$(date +%s)" &&
+        git checkout -b "$BRANCH" &&
+        echo '[]' > bug_report.json &&
+        printf '%s' "$BRANCH"
+      cwd: ${{ inputs.workspace }}
+    capture:
+      feature_branch: "${{ result.stdout }}"
     on_success: investigate
     on_failure: escalate
     optional: true
     note: >
-      Only execute if collect_on_branch input is 'true'. Otherwise skip directly to investigate.
-      When executing:
-      1. Save the original base_branch value — this is the PR target (original_base_branch input).
-      2. Create a feature branch: git checkout -b smoke-run-YYYYMMDD-HHMMSS in the workspace.
-      3. Initialize bug_report.json as an empty array [] in the workspace.
-      4. From this point forward, treat the feature branch name as the merge target.
-         The agent must pass the feature branch name as base_branch to all subsequent
-         merge_worktree calls (override the input value in context or interpolation).
+      Only execute if inputs.collect_on_branch is 'true'. Otherwise skip to investigate.
+      Creates the feature branch, initialises bug_report.json, and captures the branch
+      name into context.feature_branch for use by the merge step.
 
   investigate:
     tool: run_skill
@@ -122,19 +126,24 @@ steps:
     tool: merge_worktree
     with:
       worktree_path: "${{ context.worktree_path }}"
-      base_branch: "${{ inputs.base_branch }}"
+      base_branch: "${{ context.feature_branch }}"
     on_success: check_summary
     on_failure: escalate
 
   check_summary:
-    action: route
-    on_success: create_summary
+    python: autoskillit.smoke_utils.check_bug_report_non_empty
+    with:
+      workspace: ${{ inputs.workspace }}
+    on_result:
+      field: non_empty
+      routes:
+        "true": create_summary
+        "false": done
     on_failure: done
     note: >
-      Routing step — evaluate whether to create a summary:
-      1. If collect_on_branch input is 'false' → route to done (on_failure).
-      2. If ${{ inputs.workspace }}/bug_report.json does not exist or is empty [] → route to done (on_failure).
-      3. Otherwise → route to create_summary (on_success).
+      Only execute if inputs.collect_on_branch is 'true'. Otherwise skip to done.
+      Reads bug_report.json from the workspace. Routes to create_summary when bugs
+      were fixed during the run (non_empty=true), otherwise routes to done.
 
   create_summary:
     tool: run_skill

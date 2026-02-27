@@ -1946,3 +1946,93 @@ class TestSmokeTestStructure:
         """merge step with_args references context.feature_branch."""
         base_branch = smoke_yaml["steps"]["merge"]["with"]["base_branch"]
         assert "context.feature_branch" in base_branch
+
+
+# ---------------------------------------------------------------------------
+# Contract tests — plan_parts output (D4–D5)
+# ---------------------------------------------------------------------------
+
+
+def test_make_plan_contract_declares_plan_parts_output() -> None:
+    """D4: make-plan contract must declare plan_parts as an output."""
+    manifest = load_bundled_manifest()
+    make_plan = manifest.get("skills", {}).get("make-plan", {})
+    output_names = [o["name"] for o in make_plan.get("outputs", [])]
+    assert "plan_parts" in output_names, (
+        "make-plan contract must declare plan_parts as an output "
+        "so capture_list coverage validation can enforce it"
+    )
+
+
+def test_rectify_contract_declares_plan_parts_output() -> None:
+    """D5: rectify contract must declare plan_parts as an output."""
+    manifest = load_bundled_manifest()
+    rectify = manifest.get("skills", {}).get("rectify", {})
+    output_names = [o["name"] for o in rectify.get("outputs", [])]
+    assert "plan_parts" in output_names
+
+
+# ---------------------------------------------------------------------------
+# Semantic rule tests — multipart plan_parts capture (D6–D7)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def compliant_multipart_recipe_no_list() -> Recipe:
+    """Recipe with make-plan step but no capture_list for plan_parts."""
+    return Recipe(
+        name="test",
+        description="test",
+        ingredients={},
+        steps={
+            "plan": RecipeStep(
+                tool="run_skill_retry",
+                with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
+                capture={"plan_path": "${{ result.plan_path }}"},
+                note="Glob plan_dir for *_part_*.md or single plan file. Sort into plan_parts[].",
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="Done"),
+        },
+        kitchen_rules=["SEQUENTIAL EXECUTION: complete full cycle per part."],
+    )
+
+
+@pytest.fixture
+def compliant_multipart_recipe_with_list() -> Recipe:
+    """Recipe with make-plan step and correct capture_list for plan_parts."""
+    return Recipe(
+        name="test",
+        description="test",
+        ingredients={},
+        steps={
+            "plan": RecipeStep(
+                tool="run_skill_retry",
+                with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
+                capture={"plan_path": "${{ result.plan_path }}"},
+                capture_list={"plan_parts": "${{ result.plan_parts }}"},
+                note="Glob plan_dir for *_part_*.md or single plan file. Sort into plan_parts[].",
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="Done"),
+        },
+        kitchen_rules=["SEQUENTIAL EXECUTION: complete full cycle per part."],
+    )
+
+
+def test_validator_warns_when_plan_parts_not_captured(
+    compliant_multipart_recipe_no_list: Recipe,
+) -> None:
+    """D6: Validator warns when make-plan step lacks capture_list for plan_parts."""
+    warnings = run_semantic_rules(compliant_multipart_recipe_no_list)
+    rule_names = [w.rule for w in warnings]
+    assert "multipart-plan-parts-not-captured" in rule_names
+
+
+def test_validator_passes_when_plan_parts_captured(
+    compliant_multipart_recipe_with_list: Recipe,
+) -> None:
+    """D7: Validator passes when make-plan step has capture_list for plan_parts."""
+    warnings = run_semantic_rules(compliant_multipart_recipe_with_list)
+    rule_names = [w.rule for w in warnings]
+    assert "multipart-plan-parts-not-captured" not in rule_names

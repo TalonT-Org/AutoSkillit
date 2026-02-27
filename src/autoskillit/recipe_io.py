@@ -59,6 +59,8 @@ def iter_steps_with_context(
         yield step_name, step, frozenset(available)
         if step.capture:
             available.update(step.capture.keys())
+        if step.capture_list:
+            available.update(step.capture_list.keys())
 
 
 def find_recipe_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
@@ -137,6 +139,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         message=data.get("message"),
         note=data.get("note"),
         capture=data.get("capture", {}),
+        capture_list=data.get("capture_list", {}),
         optional=bool(data.get("optional", False)),
         model=data.get("model"),
     )

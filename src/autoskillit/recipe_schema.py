@@ -47,6 +47,7 @@ class RecipeStep:
     message: str | None = None
     note: str | None = None
     capture: dict[str, str] = field(default_factory=dict)
+    capture_list: dict[str, str] = field(default_factory=dict)
     optional: bool = False
     model: str | None = None
 

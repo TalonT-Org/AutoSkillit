@@ -66,11 +66,14 @@ steps:
       group_files: "${{ context.group_files }}"
     capture:
       plan_path: "${{ result.plan_path }}"
+    capture_list:
+      plan_parts: "${{ result.plan_parts }}"
     on_success: review
     on_failure: escalate
     note: >
       Produces plan in temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
-      Sort alphabetically into plan_parts[].
+      plan_parts context key contains the full ordered list of part files (sorted alphabetically).
+      For a single-part plan, plan_parts has one entry equal to plan_path.
       GROUPS MODE: When running with groups, replace ${{ inputs.task }} with the current
       group's file path from context.group_files extracted from the group step's capture
       — do NOT read the file; pass the path directly to the skill.
@@ -109,13 +112,14 @@ steps:
       step_name: "implement"
     capture:
       worktree_path: "${{ result.worktree_path }}"
+      implementation_ref: "${{ result.worktree_path }}"
     on_success: test
     on_failure: escalate
     retry:
       max_attempts: 1
       on: needs_retry
       on_exhausted: retry_worktree
-    note: "Extracts worktree_path from result for use in subsequent steps."
+    note: "Extracts worktree_path and implementation_ref from result for use in subsequent steps."
 
   retry_worktree:
     tool: run_skill_retry
@@ -125,6 +129,7 @@ steps:
       step_name: "retry_worktree"
     capture:
       worktree_path: "${{ result.worktree_path }}"
+      implementation_ref: "${{ result.worktree_path }}"
     on_success: test
     on_failure: escalate
     retry:
@@ -184,7 +189,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ inputs.work_dir }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.implementation_ref }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.work_dir }}"
       step_name: "audit_impl"
     capture:

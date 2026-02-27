@@ -981,7 +981,7 @@ def _check_capture_output_coverage(wf: Recipe) -> list[RuleFinding]:
     for step_name, step in wf.steps.items():
         if step.tool not in SKILL_TOOLS:
             continue
-        if not step.capture:
+        if not step.capture and not step.capture_list:
             continue
 
         skill_cmd = step.with_args.get("skill_command", "")
@@ -1018,6 +1018,22 @@ def _check_capture_output_coverage(wf: Recipe) -> list[RuleFinding]:
                             step_name=step_name,
                             message=(
                                 f"Step '{step_name}' captures result.{ref_key} "
+                                f"but skill '{skill_name}' does not declare '{ref_key}' "
+                                f"in its outputs contract."
+                            ),
+                        )
+                    )
+
+        for _capture_var, capture_expr in step.capture_list.items():
+            for ref_key in _RESULT_CAPTURE_RE.findall(capture_expr):
+                if ref_key not in declared_keys:
+                    findings.append(
+                        RuleFinding(
+                            rule="undeclared-capture-key",
+                            severity=Severity.WARNING,
+                            step_name=step_name,
+                            message=(
+                                f"Step '{step_name}' captures result.{ref_key} via capture_list "
                                 f"but skill '{skill_name}' does not declare '{ref_key}' "
                                 f"in its outputs contract."
                             ),
@@ -1113,21 +1129,26 @@ def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
     if not has_multipart_step:
         return []
 
-    plan_step = wf.steps.get("plan")
-    plan_note = (plan_step.note or "") if plan_step is not None else ""
-    if "*_part_*.md" not in plan_note:
-        findings.append(
-            RuleFinding(
-                rule="multipart-glob-note",
-                severity=Severity.ERROR,
-                step_name="plan",
-                message=(
-                    "Recipe uses make-plan or rectify but the 'plan' step note does not contain "
-                    "'*_part_*.md'. Agents will not know to glob for multi-part plan files. "
-                    "Add: 'Glob plan_dir for *_part_*.md or single plan file.' to the note."
-                ),
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        if not any(s in step.with_args.get("skill_command", "") for s in _MULTIPART_SKILLS):
+            continue
+        plan_note = step.note or ""
+        if "*_part_*.md" not in plan_note:
+            findings.append(
+                RuleFinding(
+                    rule="multipart-glob-note",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls a multi-part skill but the step note does "
+                        f"not contain '*_part_*.md'. Agents will not know to glob for "
+                        f"multi-part plan files. Add: 'Glob plan_dir for *_part_*.md or "
+                        f"single plan file.' to the step note."
+                    ),
+                )
             )
-        )
 
     sequential_keywords = ("SEQUENTIAL EXECUTION", "full cycle", "Never run verify for all parts")
     rules_text = " ".join(wf.kitchen_rules)
@@ -1159,6 +1180,42 @@ def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
                         "Recipe uses make-plan or rectify but next_or_done does not route "
                         "'more_parts' back to 'verify'. Sequential part processing requires "
                         "more_parts → verify in the on_result routes."
+                    ),
+                )
+            )
+
+    return findings
+
+
+@semantic_rule(
+    name="multipart-plan-parts-not-captured",
+    description=(
+        "Recipes with make-plan or rectify steps must capture plan_parts via capture_list "
+        "so the full ordered list of part files is available in pipeline context."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_plan_parts_captured(wf: Recipe) -> list[RuleFinding]:
+    _MULTIPART_SKILLS = {"/autoskillit:make-plan", "/autoskillit:rectify"}
+    findings: list[RuleFinding] = []
+
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not any(s in skill_cmd for s in _MULTIPART_SKILLS):
+            continue
+        if "plan_parts" not in step.capture_list:
+            findings.append(
+                RuleFinding(
+                    rule="multipart-plan-parts-not-captured",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls a multi-part skill but does not capture "
+                        f"'plan_parts' via capture_list. Add: "
+                        f'capture_list:\\n  plan_parts: "${{{{ result.plan_parts }}}}" '
+                        f"so the full ordered list of part files is in pipeline context."
                     ),
                 )
             )

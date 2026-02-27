@@ -45,8 +45,11 @@ steps:
       step_name: "plan"
     capture:
       plan_path: "${{ result.plan_path }}"
+    capture_list:
+      plan_parts: "${{ result.plan_parts }}"
     on_success: implement
     on_failure: escalate
+    note: "Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically into plan_parts[]."
 
   implement:
     tool: run_skill_retry

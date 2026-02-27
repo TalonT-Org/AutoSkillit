@@ -56,9 +56,12 @@ steps:
       step_name: "plan"
     capture:
       plan_path: "${{ result.plan_path }}"
+    capture_list:
+      plan_parts: "${{ result.plan_parts }}"
     on_success: implement
     on_failure: escalate
     note: >
+      Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically into plan_parts[].
       REMEDIATION MODE: when routed from remediate, context.remediation_path is available
       — include it in the skill_command or as context for the rectify skill.
 
@@ -70,6 +73,7 @@ steps:
       step_name: "implement"
     capture:
       worktree_path: "${{ result.worktree_path }}"
+      implementation_ref: "${{ result.worktree_path }}"
     retry:
       max_attempts: 1
       on: needs_retry
@@ -85,6 +89,7 @@ steps:
       step_name: "retry_worktree"
     capture:
       worktree_path: "${{ result.worktree_path }}"
+      implementation_ref: "${{ result.worktree_path }}"
     retry:
       max_attempts: 3
       on: needs_retry
@@ -124,7 +129,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.implementation_ref }} ${{ inputs.base_branch }}"
       cwd: ${{ inputs.helper_dir }}
       step_name: "audit_impl"
     capture:

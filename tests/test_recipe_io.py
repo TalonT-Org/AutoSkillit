@@ -495,3 +495,95 @@ def test_recipe_source_enum_values() -> None:
 
     assert hasattr(RecipeSource, "PROJECT")
     assert hasattr(RecipeSource, "BUILTIN")
+
+
+# ---------------------------------------------------------------------------
+# capture_list field tests (D1–D3, D8–D9)
+# ---------------------------------------------------------------------------
+
+
+# D1
+def test_recipe_step_accepts_capture_list_field() -> None:
+    """RecipeStep accepts capture_list field and stores it."""
+    step = RecipeStep(
+        tool="run_skill_retry",
+        with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
+        capture={"plan_path": "${{ result.plan_path }}"},
+        capture_list={"plan_parts": "${{ result.plan_parts }}"},
+        on_success="verify",
+    )
+    assert step.capture_list == {"plan_parts": "${{ result.plan_parts }}"}
+
+
+# D2
+def test_recipe_step_capture_list_defaults_empty() -> None:
+    """RecipeStep.capture_list defaults to an empty dict."""
+    step = RecipeStep(tool="run_skill", with_args={}, on_success="done")
+    assert step.capture_list == {}
+
+
+# D3
+def test_recipe_yaml_with_capture_list_parses(tmp_path: Path) -> None:
+    """YAML recipe with capture_list key is parsed into RecipeStep.capture_list."""
+    data = {
+        "name": "test-recipe",
+        "description": "test",
+        "ingredients": {},
+        "steps": {
+            "plan": {
+                "tool": "run_skill_retry",
+                "with": {"skill_command": "/autoskillit:make-plan inputs.task"},
+                "capture": {"plan_path": "${{ result.plan_path }}"},
+                "capture_list": {"plan_parts": "${{ result.plan_parts }}"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done"},
+        },
+    }
+    path = _write_yaml(tmp_path / "recipe.yaml", data)
+    recipe = load_recipe(path)
+    assert recipe.steps["plan"].capture_list == {"plan_parts": "${{ result.plan_parts }}"}
+
+
+# D8
+def test_iter_steps_with_context_includes_capture_list_keys() -> None:
+    """iter_steps_with_context must include capture_list keys in available_context."""
+    from autoskillit.recipe_io import iter_steps_with_context
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        ingredients={},
+        steps={
+            "plan": RecipeStep(
+                tool="run_skill_retry",
+                with_args={"skill_command": "/autoskillit:make-plan t"},
+                capture={"plan_path": "${{ result.plan_path }}"},
+                capture_list={"plan_parts": "${{ result.plan_parts }}"},
+                on_success="verify",
+            ),
+            "verify": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:dry-walkthrough c"},
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="Done"),
+        },
+        kitchen_rules=[],
+    )
+    steps = list(iter_steps_with_context(recipe))
+    verify_ctx = next(ctx for name, _, ctx in steps if name == "verify")
+    assert "plan_parts" in verify_ctx, (
+        "capture_list keys must appear in available_context for downstream steps"
+    )
+
+
+# D9
+def test_implementation_pipeline_captures_plan_parts_as_list() -> None:
+    """implementation-pipeline.yaml plan step must capture plan_parts via capture_list."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+    step = recipe.steps["plan"]
+    assert hasattr(step, "capture_list"), "RecipeStep must have capture_list field"
+    assert "plan_parts" in step.capture_list, (
+        "implementation-pipeline plan step must capture plan_parts via capture_list"
+    )

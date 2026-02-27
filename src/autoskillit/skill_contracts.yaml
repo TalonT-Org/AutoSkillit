@@ -66,6 +66,8 @@ skills:
     outputs:
       - name: plan_path
         type: file_path
+      - name: plan_parts
+        type: file_path_list
 
   write-recipe:
     inputs: []
@@ -101,6 +103,8 @@ skills:
     outputs:
       - name: plan_path
         type: file_path
+      - name: plan_parts
+        type: file_path_list
 
   retry-worktree:
     inputs:

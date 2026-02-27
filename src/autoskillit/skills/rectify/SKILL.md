@@ -162,6 +162,22 @@ If the plan exceeds 500 lines, split it into multiple files (`_part_a`, `_part_b
 
 Save the plan to: `temp/rectify/rectify_{topic}_{YYYY-MM-DD_HHMMSS}.md`
 
+**Structured output:** After saving the file(s), emit the following lines so pipeline orchestrators can capture both fields:
+
+For a single-part plan:
+```
+plan_path={absolute_path}
+plan_parts={absolute_path}
+```
+
+For a multi-part plan (list all part paths in alphabetical order):
+```
+plan_path={path_to_part_a}
+plan_parts={path_to_part_a}
+{path_to_part_b}
+{path_to_part_c}
+```
+
 **Plan structure:**
 ```markdown
 # Rectify: {Topic}

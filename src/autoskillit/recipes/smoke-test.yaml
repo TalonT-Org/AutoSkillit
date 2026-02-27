@@ -70,10 +70,8 @@ steps:
   rectify:
     tool: run_skill
     with:
-      skill_command: "Create plan.md in the current directory at ${{ inputs.workspace }}/plan.md. The file MUST have this exact first line: Dry-walkthrough verified = TRUE followed by a blank line, then # Plan and Create ok.txt with content OK. Then output exactly this line on its own: plan_path=${{ inputs.workspace }}/plan.md"
+      skill_command: "Create plan.md in the current directory at ${{ inputs.workspace }}/plan.md. The file MUST have this exact first line: Dry-walkthrough verified = TRUE followed by a blank line, then # Plan and Create ok.txt with content OK."
       cwd: "${{ inputs.workspace }}"
-    capture:
-      plan_path: "${{ result.plan_path }}"
     on_success: implement
     on_failure: escalate
 

@@ -192,6 +192,7 @@ LAYER_ASSIGNMENTS: dict[str, int] = {
     "_logging": 0,
     "_yaml": 0,
     "migration_loader": 0,
+    "smoke_utils": 0,
     # ── Layer 1: Basic Services ── import only L0 ─────────────────────────────
     "_audit": 1,
     "_token_log": 1,

@@ -16,10 +16,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-import yaml
-
-from autoskillit._io import _atomic_write, _load_yaml
+from autoskillit._io import _atomic_write
 from autoskillit._logging import get_logger
+from autoskillit._yaml import dump_yaml_str, load_yaml
 from autoskillit.recipe_io import iter_steps_with_context
 from autoskillit.recipe_schema import (
     DataFlowReport,
@@ -168,7 +167,7 @@ def run_semantic_rules(wf: Recipe) -> list[RuleFinding]:
 def load_bundled_manifest() -> dict[str, Any]:
     """Load the bundled skill_contracts.yaml from the package directory."""
     manifest_path = Path(__file__).parent / "skill_contracts.yaml"
-    return _load_yaml(manifest_path)
+    return load_yaml(manifest_path)
 
 
 def resolve_skill_name(skill_command: str) -> str | None:
@@ -511,7 +510,7 @@ def generate_recipe_card(pipeline_path: Path | str, recipes_dir: Path | str) -> 
 
     from autoskillit.recipe_io import _parse_recipe
 
-    data = _load_yaml(pipeline_path)
+    data = load_yaml(pipeline_path)
     recipe = _parse_recipe(data)
     manifest = load_bundled_manifest()
 
@@ -574,7 +573,9 @@ def generate_recipe_card(pipeline_path: Path | str, recipes_dir: Path | str) -> 
 
     card_path = recipes_dir / "contracts" / f"{pipeline_path.stem}.yaml"
     card_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(card_path, yaml.dump(contract_data, default_flow_style=False, sort_keys=False))
+    _atomic_write(
+        card_path, dump_yaml_str(contract_data, default_flow_style=False, sort_keys=False)
+    )
     return contract_data
 
 
@@ -586,7 +587,7 @@ def load_recipe_card(recipe_name: str, recipes_dir: Path) -> dict | None:
     contract_path = recipes_dir / "contracts" / f"{recipe_name}.yaml"
     if not contract_path.is_file():
         return None
-    return _load_yaml(contract_path)
+    return load_yaml(contract_path)
 
 
 def validate_recipe_cards(recipe: Any, contract: dict[str, Any]) -> list[dict[str, str]]:

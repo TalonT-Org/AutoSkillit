@@ -7,11 +7,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml as _yaml
-
 from autoskillit import __version__
-from autoskillit._io import _atomic_write, _load_yaml
+from autoskillit._io import _atomic_write
 from autoskillit._logging import get_logger
+from autoskillit._yaml import dump_yaml_str, load_yaml
 from autoskillit.migration_loader import applicable_migrations
 from autoskillit.recipe_io import load_recipe as _parse_recipe
 from autoskillit.recipe_loader import parse_recipe_metadata
@@ -164,7 +163,7 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
         if not migrations:
             return MigrationResult(success=True, name=file.name)
 
-        notes_yaml = _yaml.dump(
+        notes_yaml = dump_yaml_str(
             [
                 {
                     "from_version": m.from_version,
@@ -289,7 +288,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
 
     def validate(self, path: Path) -> tuple[bool, str]:
         try:
-            data = _load_yaml(path)
+            data = load_yaml(path)
             if not isinstance(data, dict) or "skill_hashes" not in data:
                 return False, "missing skill_hashes field"
             return True, ""

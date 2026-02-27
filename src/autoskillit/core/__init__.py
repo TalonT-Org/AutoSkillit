@@ -5,7 +5,7 @@ so callers can do either `from autoskillit.core import get_logger` or the
 explicit `from autoskillit.core.logging import get_logger`.
 """
 
-from autoskillit.core.io import (
+from .io import (
     YAMLError,
     _atomic_write,
     dump_yaml,
@@ -13,12 +13,12 @@ from autoskillit.core.io import (
     ensure_project_temp,
     load_yaml,
 )
-from autoskillit.core.logging import (
+from .logging import (
     PACKAGE_LOGGER_NAME,
     configure_logging,
     get_logger,
 )
-from autoskillit.core.types import (
+from .types import (
     CONTEXT_EXHAUSTION_MARKER,
     PIPELINE_FORBIDDEN_TOOLS,
     RETRY_RESPONSE_FIELDS,

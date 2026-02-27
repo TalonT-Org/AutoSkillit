@@ -303,8 +303,8 @@ def migrate(*, check: bool = False):
     """
     from autoskillit import __version__
     from autoskillit.core.types import RecipeSource
-    from autoskillit.migration_loader import applicable_migrations
-    from autoskillit.recipe_io import list_recipes as _list_all_recipes
+    from autoskillit.migration.loader import applicable_migrations
+    from autoskillit.recipe.io import list_recipes as _list_all_recipes
 
     project_dir = Path.cwd()
     scripts_dir = project_dir / ".autoskillit" / "scripts"
@@ -428,7 +428,7 @@ def workspace_init(path: str):
 @recipes_app.command(name="list")
 def recipes_list():
     """List available recipes with sources."""
-    from autoskillit.recipe_io import list_recipes
+    from autoskillit.recipe.io import list_recipes
 
     recipes = list_recipes(Path.cwd()).items
     if not recipes:
@@ -446,7 +446,7 @@ def recipes_list():
 @recipes_app.command(name="show")
 def recipes_show(name: str):
     """Print the YAML content of a named recipe."""
-    from autoskillit.recipe_io import find_recipe_by_name
+    from autoskillit.recipe.io import find_recipe_by_name
 
     match = find_recipe_by_name(name, Path.cwd())
     if match is None:
@@ -560,9 +560,9 @@ def cook(recipe: str):
         sys.exit(1)
 
     from autoskillit.core.io import YAMLError, load_yaml
-    from autoskillit.recipe_io import _parse_recipe, find_recipe_by_name
-    from autoskillit.recipe_io import list_recipes as _list_all_recipes_for_cook
-    from autoskillit.recipe_validator import validate_recipe
+    from autoskillit.recipe.io import _parse_recipe, find_recipe_by_name
+    from autoskillit.recipe.io import list_recipes as _list_all_recipes_for_cook
+    from autoskillit.recipe.validator import validate_recipe
 
     _match = find_recipe_by_name(recipe, Path.cwd())
     if _match is None:

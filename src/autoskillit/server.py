@@ -39,10 +39,10 @@ from autoskillit.execution.db import _execute_readonly_query, _validate_select_o
 from autoskillit.execution.headless import run_headless_core
 from autoskillit.execution.session import _truncate
 from autoskillit.execution.testing import check_test_passed
-from autoskillit.failure_store import FailureStore, default_store_path
 from autoskillit.git_operations import perform_merge
-from autoskillit.migration_engine import MigrationFile, default_migration_engine
-from autoskillit.migration_loader import applicable_migrations
+from autoskillit.migration.engine import MigrationFile, default_migration_engine
+from autoskillit.migration.loader import applicable_migrations
+from autoskillit.migration.store import FailureStore, default_store_path
 from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.gate import (  # noqa: F401
     GATED_TOOLS,
@@ -1042,7 +1042,7 @@ async def list_recipes() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
-    from autoskillit.recipe_io import list_recipes as _list_recipes
+    from autoskillit.recipe.io import list_recipes as _list_recipes
 
     result = _list_recipes(Path.cwd())
     response: dict[str, object] = {
@@ -1206,13 +1206,13 @@ async def load_recipe(name: str) -> str:
     On error: JSON with ``error`` key.
     """
     from autoskillit.core.io import YAMLError, load_yaml
-    from autoskillit.recipe_io import _parse_recipe, find_recipe_by_name
-    from autoskillit.recipe_validator import (
+    from autoskillit.recipe.contracts import (
         check_contract_staleness,
         load_recipe_card,
-        run_semantic_rules,
         validate_recipe_cards,
     )
+    from autoskillit.recipe.io import _parse_recipe, find_recipe_by_name
+    from autoskillit.recipe.validator import run_semantic_rules
 
     _match = find_recipe_by_name(name, Path.cwd())
     if _match is None:
@@ -1347,8 +1347,8 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
         pass
 
     from autoskillit.core.io import load_yaml
-    from autoskillit.recipe_io import _parse_recipe, find_recipe_by_name
-    from autoskillit.recipe_validator import generate_recipe_card
+    from autoskillit.recipe.contracts import generate_recipe_card
+    from autoskillit.recipe.io import _parse_recipe, find_recipe_by_name
 
     project_dir = Path.cwd()
     _match = find_recipe_by_name(name, project_dir)
@@ -1434,14 +1434,13 @@ async def validate_recipe(script_path: str) -> str:
     """
     from autoskillit.core.io import YAMLError, load_yaml
     from autoskillit.core.types import Severity
-    from autoskillit.recipe_io import _parse_recipe
-    from autoskillit.recipe_validator import (
+    from autoskillit.recipe.contracts import load_recipe_card, validate_recipe_cards
+    from autoskillit.recipe.io import _parse_recipe
+    from autoskillit.recipe.validator import (
         analyze_dataflow,
-        load_recipe_card,
         run_semantic_rules,
-        validate_recipe_cards,
     )
-    from autoskillit.recipe_validator import (
+    from autoskillit.recipe.validator import (
         validate_recipe as _validate_recipe,
     )
 
@@ -1515,7 +1514,7 @@ def _close_kitchen_handler() -> None:
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
-    from autoskillit.recipe_io import find_recipe_by_name
+    from autoskillit.recipe.io import find_recipe_by_name
 
     match = find_recipe_by_name(name, Path.cwd())
     if match is None:

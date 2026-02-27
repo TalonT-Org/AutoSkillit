@@ -1220,7 +1220,7 @@ class TestValidateRecipe:
             if f.get("rule") == "dead-output" and f.get("severity") == "error"
         ]
         assert len(semantic_errors) == 1
-        assert semantic_errors[0]["step_name"] == "impl"
+        assert semantic_errors[0]["step"] == "impl"
 
     # SEM1
     @pytest.mark.asyncio
@@ -6392,18 +6392,24 @@ class TestStalePathStdoutCheck:
 class TestServerLazyInit:
     """Tests for the _ctx / _initialize() / _get_ctx() / _get_config() pattern."""
 
-    def test_server_import_does_not_call_load_config(self):
+    def test_server_import_does_not_call_load_config(self, monkeypatch):
         """Importing server.py must not trigger load_config() as a side effect."""
         import importlib
         import sys
         from unittest.mock import patch
 
+        import autoskillit
+
+        # Restore both the package attribute and sys.modules entry after the test so
+        # later tests in the same xdist worker see the original module object.
+        monkeypatch.setattr(autoskillit, "server", autoskillit.server)
+        monkeypatch.delitem(sys.modules, "autoskillit.server", raising=False)
+
         with patch("autoskillit.config.load_config") as mock_load:
-            sys.modules.pop("autoskillit.server", None)
             import autoskillit.server  # noqa: F401
 
             importlib.import_module("autoskillit.server")
-        mock_load.assert_not_called()
+        assert not mock_load.called
 
     def test_get_ctx_raises_before_initialize(self, monkeypatch):
         """_get_ctx() raises RuntimeError when _ctx is None."""

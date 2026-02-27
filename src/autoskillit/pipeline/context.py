@@ -1,6 +1,6 @@
 """ToolContext: explicit dependency container for server tool implementations.
 
-Layer 2 module — imports from L0 (_gate, types) and L1 (_audit, _token_log, config).
+pipeline/ module — the only pipeline sub-module that imports from config/.
 Replaces four mutable module-level singletons in server.py:
   _config, _tools_enabled, _audit_log, _token_log
 """
@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from autoskillit._audit import AuditLog
-from autoskillit._gate import GateState
-from autoskillit._token_log import TokenLog
 from autoskillit.config import AutomationConfig
 from autoskillit.core.types import SubprocessRunner
+from autoskillit.pipeline.audit import AuditLog
+from autoskillit.pipeline.gate import GateState
+from autoskillit.pipeline.tokens import TokenLog
 
 
 @dataclass

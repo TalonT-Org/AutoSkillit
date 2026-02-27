@@ -14,9 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit._audit import FailureRecord
 from autoskillit.core.logging import get_logger
-from autoskillit.core.types import RetryReason, TerminationReason
+from autoskillit.core.types import FailureRecord, RetryReason, TerminationReason
 from autoskillit.session_result import (
     ClaudeSessionResult,
     SkillResult,
@@ -27,10 +26,10 @@ from autoskillit.session_result import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit._audit import AuditLog
-    from autoskillit._context import ToolContext
     from autoskillit.config import AutomationConfig
     from autoskillit.core.types import SubprocessResult
+    from autoskillit.pipeline.audit import AuditLog
+    from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
 

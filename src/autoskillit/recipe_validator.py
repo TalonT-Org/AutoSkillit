@@ -1025,3 +1025,68 @@ def _check_capture_output_coverage(wf: Recipe) -> list[RuleFinding]:
                     )
 
     return findings
+
+
+@semantic_rule(
+    "dead-output",
+    "Captured variable never consumed downstream",
+    Severity.ERROR,
+)
+def _check_dead_output(wf: Recipe) -> list[RuleFinding]:
+    """Error when any captured context variable is never consumed downstream."""
+    report = analyze_dataflow(wf)
+    return [
+        RuleFinding(
+            rule="dead-output",
+            severity=Severity.ERROR,
+            step_name=w.step_name,
+            message=w.message,
+        )
+        for w in report.warnings
+        if w.code == "DEAD_OUTPUT"
+    ]
+
+
+@semantic_rule(
+    "implicit-handoff",
+    "Skill with declared outputs missing capture block",
+    Severity.ERROR,
+)
+def _check_implicit_handoff(wf: Recipe) -> list[RuleFinding]:
+    """Error when a skill step has contract outputs but no capture: block."""
+    try:
+        manifest = load_bundled_manifest()
+    except Exception:
+        logger.warning("implicit-handoff: failed to load skill_contracts.yaml; skipping")
+        return []
+
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not isinstance(skill_cmd, str):
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if not skill_name:
+            continue
+        contract = manifest.get("skills", {}).get(skill_name)
+        if not contract:
+            continue
+        if not contract.get("outputs"):
+            continue
+        if not step.capture:
+            findings.append(
+                RuleFinding(
+                    rule="implicit-handoff",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls '/autoskillit:{skill_name}' "
+                        f"which declares {len(contract['outputs'])} output(s) "
+                        f"but has no capture: block. Add a capture: block to "
+                        f"thread the skill's structured output into pipeline context."
+                    ),
+                )
+            )
+    return findings

@@ -1139,7 +1139,7 @@ class TestCaptureOutputCoverageRule:
         assert "no outputs contract entry" in undeclared[0].message
 
     def test_capture_key_from_empty_outputs_skill_emits_warning(self) -> None:
-        """audit-impl has outputs: [] — any capture key from it is undeclared."""
+        """audit-friction has outputs: [] — any capture key from it is undeclared."""
         recipe_yaml = textwrap.dedent("""\
             name: capture-empty-outputs
             description: test
@@ -1147,7 +1147,7 @@ class TestCaptureOutputCoverageRule:
               audit:
                 tool: run_skill
                 with:
-                  skill_command: /autoskillit:audit-impl ${{ inputs.plan }}
+                  skill_command: /autoskillit:audit-friction ${{ inputs.plan }}
                 capture:
                   verdict: "${{ result.verdict }}"
                 on_success: done
@@ -1162,7 +1162,7 @@ class TestCaptureOutputCoverageRule:
         assert len(undeclared) == 1
         assert undeclared[0].severity == Severity.WARNING
         assert "verdict" in undeclared[0].message
-        assert "audit-impl" in undeclared[0].message
+        assert "audit-friction" in undeclared[0].message
 
 
 # ---------------------------------------------------------------------------
@@ -1487,3 +1487,415 @@ class TestSmokeTestStructure:
         """merge step with_args references context.feature_branch."""
         base_branch = smoke_yaml["steps"]["merge"]["with"]["base_branch"]
         assert "context.feature_branch" in base_branch
+
+
+class TestIsInstanceGuards:
+    """T_GD1, T_GV1 — isinstance guards prevent TypeError on non-string with_args."""
+
+    def test_detect_dead_outputs_no_raise_with_boolean_with_arg(self) -> None:
+        """T_GD1: _detect_dead_outputs does not raise TypeError for boolean with_args."""
+        recipe_yaml = textwrap.dedent("""\
+            name: guard-test
+            description: test
+            kitchen_rules: ["No native tools."]
+            steps:
+              plan:
+                tool: run_skill
+                with:
+                  skill_command: "/autoskillit:make-plan the task"
+                  flag: true
+                capture:
+                  plan_path: "${{ result.plan_path }}"
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        # Must not raise TypeError
+        report = analyze_dataflow(recipe)
+        assert isinstance(report.warnings, list)
+
+    def test_validate_recipe_no_raise_with_boolean_with_arg(self) -> None:
+        """T_GV1: validate_recipe does not raise TypeError for boolean with_args."""
+        recipe_yaml = textwrap.dedent("""\
+            name: guard-test
+            description: test
+            kitchen_rules: ["No native tools."]
+            steps:
+              plan:
+                tool: run_skill
+                with:
+                  skill_command: "/autoskillit:make-plan the task"
+                  flag: true
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        # Must return a list, not raise
+        result = validate_recipe(recipe)
+        assert isinstance(result, list)
+
+
+class TestOnResultConsumption:
+    """T_OR1, T_OR2 — on_result.field counts as consumption in _detect_dead_outputs."""
+
+    def test_on_result_field_match_not_flagged_as_dead_output(self) -> None:
+        """T_OR1: verdict captured and routed via on_result.field is NOT dead."""
+        recipe_yaml = textwrap.dedent("""\
+            name: or-test
+            description: test
+            kitchen_rules: ["No native tools."]
+            steps:
+              audit_impl:
+                tool: run_skill
+                with:
+                  skill_command: "/autoskillit:audit-impl the plan impl main"
+                capture:
+                  verdict: "${{ result.verdict }}"
+                  remediation_path: "${{ result.remediation_path }}"
+                on_result:
+                  field: verdict
+                  routes:
+                    GO: done
+                    NO GO: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        report = analyze_dataflow(recipe)
+        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT" and w.field == "verdict"]
+        assert dead == [], f"verdict should not be flagged as dead: {dead}"
+
+    def test_on_result_different_field_still_flags_dead_output(self) -> None:
+        """T_OR2: verdict is flagged DEAD_OUTPUT when on_result.field is a different key."""
+        recipe_yaml = textwrap.dedent("""\
+            name: or-test
+            description: test
+            kitchen_rules: ["No native tools."]
+            steps:
+              audit_impl:
+                tool: run_skill
+                with:
+                  skill_command: "/autoskillit:audit-impl the plan impl main"
+                capture:
+                  verdict: "${{ result.verdict }}"
+                  remediation_path: "${{ result.remediation_path }}"
+                on_result:
+                  field: restart_scope
+                  routes:
+                    full_restart: done
+                    partial_restart: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        report = analyze_dataflow(recipe)
+        dead_fields = {w.field for w in report.warnings if w.code == "DEAD_OUTPUT"}
+        assert "verdict" in dead_fields
+
+
+class TestDeadOutputRule:
+    """T_DO1–T_DO3 — dead-output semantic rule."""
+
+    def test_dead_output_rule_in_registry(self) -> None:
+        """T_DO1: dead-output rule exists in _RULE_REGISTRY."""
+        from autoskillit.recipe_validator import _RULE_REGISTRY
+
+        rule_names = [spec.name for spec in _RULE_REGISTRY]
+        assert "dead-output" in rule_names
+
+    def test_dead_output_fires_when_captured_key_unconsumed(self) -> None:
+        """T_DO2: ERROR when captured key is never consumed downstream."""
+        recipe_yaml = textwrap.dedent("""\
+            name: dead-test
+            description: test
+            kitchen_rules: ["No native tools."]
+            steps:
+              plan:
+                tool: run_skill
+                with:
+                  skill_command: "/autoskillit:make-plan the task"
+                capture:
+                  plan_path: "${{ result.plan_path }}"
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        dead = [f for f in findings if f.rule == "dead-output"]
+        assert len(dead) >= 1
+        match = next(f for f in dead if f.step_name == "plan")
+        assert match.severity == Severity.ERROR
+
+    def test_dead_output_does_not_fire_when_on_result_self_consumes(self) -> None:
+        """T_DO3: dead-output does NOT fire when on_result.field equals captured key."""
+        recipe_yaml = textwrap.dedent("""\
+            name: or-self-test
+            description: test
+            kitchen_rules: ["No native tools."]
+            steps:
+              audit_impl:
+                tool: run_skill
+                with:
+                  skill_command: "/autoskillit:audit-impl the plan impl main"
+                capture:
+                  verdict: "${{ result.verdict }}"
+                  remediation_path: "${{ result.remediation_path }}"
+                on_result:
+                  field: verdict
+                  routes:
+                    GO: done
+                    NO GO: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        dead_verdict = [f for f in findings if f.rule == "dead-output" and "verdict" in f.message]
+        assert dead_verdict == [], f"verdict must not be flagged: {dead_verdict}"
+
+
+class TestImplicitHandoffRule:
+    """T_IH1–T_IH5 — implicit-handoff semantic rule."""
+
+    def test_implicit_handoff_rule_in_registry(self) -> None:
+        """T_IH1: implicit-handoff rule exists in _RULE_REGISTRY."""
+        from autoskillit.recipe_validator import _RULE_REGISTRY
+
+        rule_names = [spec.name for spec in _RULE_REGISTRY]
+        assert "implicit-handoff" in rule_names
+
+    def test_implicit_handoff_fires_when_outputs_declared_and_no_capture(self) -> None:
+        """T_IH2: ERROR when make-plan step has declared outputs and no capture block."""
+        recipe_yaml = textwrap.dedent("""\
+            name: ih-test
+            description: test
+            kitchen_rules: ["No native tools."]
+            steps:
+              plan:
+                tool: run_skill
+                with:
+                  skill_command: "/autoskillit:make-plan the task"
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        ih = [f for f in findings if f.rule == "implicit-handoff"]
+        assert len(ih) >= 1
+        assert ih[0].severity == Severity.ERROR
+        assert ih[0].step_name == "plan"
+
+    def test_implicit_handoff_does_not_fire_when_capture_present(self) -> None:
+        """T_IH3: no implicit-handoff when capture: block is present."""
+        recipe_yaml = textwrap.dedent("""\
+            name: ih-capture-test
+            description: test
+            kitchen_rules: ["No native tools."]
+            steps:
+              plan:
+                tool: run_skill
+                with:
+                  skill_command: "/autoskillit:make-plan the task"
+                capture:
+                  plan_path: "${{ result.plan_path }}"
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        ih = [f for f in findings if f.rule == "implicit-handoff" and f.step_name == "plan"]
+        assert ih == []
+
+    def test_implicit_handoff_does_not_fire_for_empty_outputs_skill(self) -> None:
+        """T_IH4: no implicit-handoff when skill has outputs: []."""
+        recipe_yaml = textwrap.dedent("""\
+            name: ih-empty-test
+            description: test
+            kitchen_rules: ["No native tools."]
+            steps:
+              assess:
+                tool: run_skill
+                with:
+                  skill_command: "/autoskillit:assess-and-merge worktree plan main"
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        ih = [f for f in findings if f.rule == "implicit-handoff"]
+        assert ih == []
+
+    def test_implicit_handoff_does_not_fire_for_unknown_skill(self) -> None:
+        """T_IH5: no implicit-handoff for skill with no contract entry."""
+        recipe_yaml = textwrap.dedent("""\
+            name: ih-unknown-test
+            description: test
+            kitchen_rules: ["No native tools."]
+            steps:
+              custom:
+                tool: run_skill
+                with:
+                  skill_command: "/my-custom-skill do something"
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        ih = [f for f in findings if f.rule == "implicit-handoff"]
+        assert ih == []
+
+
+# ---------------------------------------------------------------------------
+# Contract tests (T_SC1–T_SC6)
+# ---------------------------------------------------------------------------
+
+
+def test_sc1_audit_impl_has_verdict_and_remediation_path_outputs() -> None:
+    """T_SC1: audit-impl declares verdict and remediation_path outputs."""
+    manifest = load_bundled_manifest()
+    contract = manifest["skills"]["audit-impl"]
+    assert contract["inputs"], "audit-impl must have non-empty inputs"
+    output_names = {o["name"] for o in contract["outputs"]}
+    assert "verdict" in output_names
+    assert "remediation_path" in output_names
+
+
+def test_sc2_assess_and_merge_has_empty_outputs() -> None:
+    """T_SC2: assess-and-merge has outputs: []."""
+    manifest = load_bundled_manifest()
+    assert manifest["skills"]["assess-and-merge"]["outputs"] == []
+
+
+def test_sc3_dry_walkthrough_has_empty_outputs() -> None:
+    """T_SC3: dry-walkthrough has outputs: []."""
+    manifest = load_bundled_manifest()
+    assert manifest["skills"]["dry-walkthrough"]["outputs"] == []
+
+
+def test_sc4_investigate_has_empty_outputs() -> None:
+    """T_SC4: investigate has outputs: []."""
+    manifest = load_bundled_manifest()
+    assert manifest["skills"]["investigate"]["outputs"] == []
+
+
+def test_sc5_make_groups_has_group_files_output() -> None:
+    """T_SC5: make-groups outputs list contains group_files."""
+    manifest = load_bundled_manifest()
+    output_names = {o["name"] for o in manifest["skills"]["make-groups"]["outputs"]}
+    assert "group_files" in output_names
+
+
+def test_sc6_bundled_manifest_skill_count_unchanged() -> None:
+    """T_SC6: skill count in manifest is still 17 (no net change)."""
+    manifest = load_bundled_manifest()
+    assert len(manifest["skills"]) == 17
+
+
+class TestImplementationPipelineStructure:
+    """T_IP1–T_IP5 — structural assertions for implementation-pipeline.yaml."""
+
+    @pytest.fixture()
+    def impl_yaml(self) -> dict:
+        recipe_path = builtin_recipes_dir() / "implementation-pipeline.yaml"
+        return yaml.safe_load(recipe_path.read_text())
+
+    def test_group_step_captures_group_files(self, impl_yaml: dict) -> None:
+        """T_IP1: group step capture contains key group_files (not groups_path)."""
+        assert "group_files" in impl_yaml["steps"]["group"]["capture"]
+        assert "groups_path" not in impl_yaml["steps"]["group"]["capture"]
+
+    def test_review_step_captures_review_path(self, impl_yaml: dict) -> None:
+        """T_IP2: review step capture contains key review_path."""
+        assert "review_path" in impl_yaml["steps"]["review"]["capture"]
+
+    def test_audit_impl_captures_verdict_and_remediation_path(self, impl_yaml: dict) -> None:
+        """T_IP3: audit_impl step captures verdict and remediation_path, routes via on_result."""
+        capture = impl_yaml["steps"]["audit_impl"]["capture"]
+        assert "verdict" in capture
+        assert "remediation_path" in capture
+        on_result = impl_yaml["steps"]["audit_impl"]["on_result"]
+        assert on_result["field"] == "verdict"
+
+    def test_verify_step_with_has_review_path(self, impl_yaml: dict) -> None:
+        """T_IP4: verify step with_args references context.review_path."""
+        with_args = impl_yaml["steps"]["verify"]["with"]
+        review_path_val = with_args.get("review_path", "")
+        assert "context.review_path" in review_path_val
+
+    def test_audit_impl_has_no_on_success_or_on_failure(self, impl_yaml: dict) -> None:
+        """T_IP5: audit_impl step has no on_success or on_failure (replaced by on_result)."""
+        step = impl_yaml["steps"]["audit_impl"]
+        assert "on_success" not in step
+        assert "on_failure" not in step
+
+
+class TestBugfixLoopStructure:
+    """T_BL1–T_BL2 — structural assertions for bugfix-loop.yaml."""
+
+    @pytest.fixture()
+    def bl_yaml(self) -> dict:
+        recipe_path = builtin_recipes_dir() / "bugfix-loop.yaml"
+        return yaml.safe_load(recipe_path.read_text())
+
+    def test_audit_impl_captures_verdict_and_remediation_and_on_result(
+        self, bl_yaml: dict
+    ) -> None:
+        """T_BL1: audit_impl step captures verdict + remediation_path, routes via on_result."""
+        capture = bl_yaml["steps"]["audit_impl"]["capture"]
+        assert "verdict" in capture
+        assert "remediation_path" in capture
+        on_result = bl_yaml["steps"]["audit_impl"]["on_result"]
+        assert on_result["field"] == "verdict"
+
+    def test_remediate_step_exists_with_on_success_plan(self, bl_yaml: dict) -> None:
+        """T_BL2: remediate step exists with on_success == 'plan'."""
+        assert "remediate" in bl_yaml["steps"]
+        assert bl_yaml["steps"]["remediate"]["on_success"] == "plan"
+
+
+class TestInvestigateFirstStructure:
+    """T_IF1–T_IF2 — structural assertions for investigate-first.yaml."""
+
+    @pytest.fixture()
+    def if_yaml(self) -> dict:
+        recipe_path = builtin_recipes_dir() / "investigate-first.yaml"
+        return yaml.safe_load(recipe_path.read_text())
+
+    def test_audit_impl_captures_verdict_and_remediation_and_on_result(
+        self, if_yaml: dict
+    ) -> None:
+        """T_IF1: audit_impl step captures verdict + remediation_path, routes via on_result."""
+        capture = if_yaml["steps"]["audit_impl"]["capture"]
+        assert "verdict" in capture
+        assert "remediation_path" in capture
+        on_result = if_yaml["steps"]["audit_impl"]["on_result"]
+        assert on_result["field"] == "verdict"
+
+    def test_remediate_step_exists_with_on_success_rectify(self, if_yaml: dict) -> None:
+        """T_IF2: remediate step exists with on_success == 'rectify'."""
+        assert "remediate" in if_yaml["steps"]
+        assert if_yaml["steps"]["remediate"]["on_success"] == "rectify"

@@ -43,13 +43,15 @@ steps:
       skill_command: "/autoskillit:rectify the investigation"
       cwd: ${{ inputs.work_dir }}
       step_name: "plan"
+    capture:
+      plan_path: "${{ result.plan_path }}"
     on_success: implement
     on_failure: escalate
 
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:implement-worktree the plan"
+      skill_command: "/autoskillit:implement-worktree ${{ context.plan_path }}"
       cwd: ${{ inputs.work_dir }}
       step_name: "implement"
     capture:
@@ -58,7 +60,7 @@ steps:
       max_attempts: 1
       on: needs_retry
       on_exhausted: retry_worktree
-    on_success: done
+    on_success: test
     on_failure: escalate
 
   retry_worktree:
@@ -67,10 +69,19 @@ steps:
       skill_command: "/autoskillit:retry-worktree the plan ${{ context.worktree_path }}"
       cwd: ${{ inputs.work_dir }}
       step_name: "retry_worktree"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
     retry:
       max_attempts: 3
       on: needs_retry
       on_exhausted: escalate
+    on_success: test
+    on_failure: escalate
+
+  test:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
     on_success: done
     on_failure: escalate
 

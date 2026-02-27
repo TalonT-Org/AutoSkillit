@@ -150,16 +150,15 @@ steps:
     with:
       skill_command: "/autoskillit:pipeline-summary ${{ inputs.workspace }}/bug_report.json smoke-run ${{ inputs.original_base_branch }} ${{ inputs.workspace }}"
       cwd: "${{ inputs.workspace }}"
-    capture:
-      summary_path: "${{ result.summary_path }}"
     on_success: done
     on_failure: escalate
     optional: true
     note: >
-      Skipped when collect_on_branch is 'false' or no bugs were encountered.
-      The feature branch name passed here should be the actual branch name created
-      in create_branch (the agent tracks this). The skill gracefully handles
-      missing gh CLI by writing a local summary only.
+      Terminal reporting step — outputs are written to disk for human use and do not flow
+      into subsequent pipeline steps. Skipped when collect_on_branch is 'false' or no
+      bugs were encountered. The feature branch name passed here should be the actual
+      branch name created in create_branch (the agent tracks this). The skill gracefully
+      handles missing gh CLI by writing a local summary only.
 
   done:
     action: stop

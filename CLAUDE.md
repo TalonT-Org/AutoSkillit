@@ -86,7 +86,7 @@ src/autoskillit/
 ├── migration_loader.py      # Migration note discovery and version chaining
 ├── process_lifecycle.py     # Subprocess management (kill trees, temp I/O, timeouts)
 ├── recipe_io.py             # Recipe I/O: load_recipe, list_recipes, iter_steps_with_context, find_recipe_by_name
-├── recipe_loader.py         # Pipeline recipe discovery from .autoskillit/recipes/
+├── recipe_loader.py         # Path-based recipe metadata utilities for migration_engine
 ├── recipe_schema.py         # Recipe, RecipeStep, DataFlowWarning, AUTOSKILLIT_VERSION_KEY
 ├── recipe_validator.py      # validate_recipe, run_semantic_rules, generate_recipe_card, analyze_dataflow
 ├── server.py                # FastMCP server with 16 MCP tools + 2 prompts
@@ -110,18 +110,39 @@ src/autoskillit/
     └── smoke-test.yaml
 
 tests/
-├── conftest.py              # Shared fixtures (tools enabled + default config)
-├── test_architecture.py     # AST enforcement (no print(), no sensitive logger kwargs)
-├── test_audit.py            # Audit log and FailureRecord tests
-├── test_cli.py              # CLI command tests
-├── test_config.py           # Config loading tests
-├── test_logging.py          # Logging infrastructure tests
-├── test_process_lifecycle.py # Subprocess integration tests
-├── test_recipe_loader.py    # Recipe loader tests
-├── test_server.py           # Server unit tests
-├── test_skill_resolver.py   # Skill resolution tests
-├── test_token_log.py        # Token usage tracking tests
-└── test_recipe_parser.py    # Recipe loading/validation tests
+├── CLAUDE.md                            # xdist compatibility guidelines
+├── __init__.py
+├── conftest.py                          # Shared fixtures (tools enabled + default config)
+├── test_architecture.py                 # AST enforcement (no print(), no sensitive logger kwargs)
+├── test_audit.py                        # Audit log and FailureRecord tests
+├── test_ci_dev_config.py
+├── test_cli.py                          # CLI command tests
+├── test_config.py                       # Config loading tests
+├── test_conftest.py
+├── test_context.py
+├── test_db_tools.py
+├── test_failure_store.py
+├── test_gate.py
+├── test_instruction_surface_contract.py
+├── test_io.py
+├── test_llm_triage.py
+├── test_logging.py                      # Logging infrastructure tests
+├── test_migration_engine.py
+├── test_migration_loader.py
+├── test_process_lifecycle.py            # Subprocess integration tests
+├── test_recipe_io.py
+├── test_recipe_loader.py                # Recipe loader tests
+├── test_recipe_schema.py
+├── test_recipe_validator.py
+├── test_server.py                       # Server unit tests
+├── test_session_result.py
+├── test_skill_resolver.py               # Skill resolution tests
+├── test_smoke_pipeline.py
+├── test_smoke_utils.py
+├── test_token_log.py                    # Token usage tracking tests
+├── test_types.py
+├── test_version_consistency.py
+└── test_workspace.py
 
 temp/                        # Temporary/working files (gitignored)
 ```
@@ -132,7 +153,7 @@ temp/                        # Temporary/working files (gitignored)
   * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `skills list`, `recipes list/show`, `workspace init`, and `doctor`.
   * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
   * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `skills list`, `recipes list/show`, `workspace init`, `install`, `upgrade`, `migrate`, `cook`, and `doctor`.
-  * **recipe_loader.py**: Provides `list_recipes(project_dir)` (discovers `.autoskillit/recipes/` only) and `load_recipe(project_dir, name)`. Bundled recipes are discovered by `recipe_io.list_recipes()` directly from the package path; no sync or copy occurs at server startup. `.autoskillit/recipes/` contains only user-created recipes. **For this repo specifically:** `.autoskillit/recipes/` is where you iterate and improve recipes; `src/autoskillit/recipes/` is the bundle source that ships to users. Keep them in sync manually by copying improved local recipes back to `src/autoskillit/recipes/` before releasing.
+  * **recipe_loader.py**: Path-based recipe metadata utilities for `migration_engine`. Exports `parse_recipe_metadata(path: Path) -> RecipeInfo`, which handles both plain YAML and frontmatter-format files (`---` delimited). Reads the `name`, `description`, `summary`, `source`, and `version` fields from the YAML document and returns a `RecipeInfo` instance. Recipe discovery (`list_recipes`, `load_recipe`) lives in `recipe_io.py`, not here.
   * **server.py**: FastMCP server. 10 gated tools require user activation via MCP prompts. 6 ungated tools (`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) are always available. Uses ToolContext DI (`_context.py`) — single module-level `_ctx: ToolContext | None`. `_initialize(ctx)` wires everything at startup. Gate policy in `_gate.py`. `version_info()` is public. Registers `recipe://` resource handler.
   * **skill_resolver.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
   * **recipe_io.py**: Recipe I/O layer. `load_recipe(name, project_dir)` and `list_recipes(project_dir)` discover recipes from project and bundled sources. `iter_steps_with_context(recipe)` yields `(name, step, available_context)` with accumulated captures. `find_recipe_by_name(name, project_dir)` returns first match or None. `RecipeStep` supports an optional `model` field for per-step model selection.

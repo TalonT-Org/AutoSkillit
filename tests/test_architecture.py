@@ -185,12 +185,9 @@ _SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
 # ── Rule 1: Import layer enforcement ─────────────────────────────────────────
 LAYER_ASSIGNMENTS: dict[str, int] = {
     # ── Layer 0: Foundation ── no autoskillit imports ─────────────────────────
-    "types": 0,
+    "core": 0,
     "config": 0,
     "_gate": 0,
-    "_io": 0,
-    "_logging": 0,
-    "_yaml": 0,
     "migration_loader": 0,
     "version": 0,
     "smoke_utils": 0,
@@ -778,18 +775,18 @@ def _top_level_assign_targets(tree: ast.Module) -> set[str]:
 
 
 def test_severity_defined_in_types():
-    """Severity must be a top-level class in types.py."""
-    tree = _get_module_ast("types.py")
+    """Severity must be a top-level class in core/types.py."""
+    tree = _get_module_ast("core/types.py")
     assert "Severity" in _top_level_class_names(tree), (
-        "Severity not found in types.py; it must be defined there"
+        "Severity not found in core/types.py; it must be defined there"
     )
 
 
 def test_skill_tools_defined_in_types():
-    """SKILL_TOOLS must be a top-level assignment in types.py."""
-    tree = _get_module_ast("types.py")
+    """SKILL_TOOLS must be a top-level assignment in core/types.py."""
+    tree = _get_module_ast("core/types.py")
     assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
-        "SKILL_TOOLS not found in types.py; it must be defined there"
+        "SKILL_TOOLS not found in core/types.py; it must be defined there"
     )
 
 
@@ -842,7 +839,7 @@ def test_no_yaml_safe_load_in_migration_engine() -> None:
             if isinstance(func, ast.Attribute) and func.attr == "safe_load":
                 pytest.fail(
                     f"migration_engine.py line {node.lineno}: "
-                    f"direct yaml.safe_load call found; use _load_yaml from _io instead"
+                    f"direct yaml.safe_load call found; use load_yaml from core.io instead"
                 )
 
 
@@ -861,7 +858,9 @@ def test_severity_not_defined_locally_in_recipe_validator() -> None:
     """Severity must be imported from types, not defined in recipe_validator."""
     ast_module = _get_module_ast("recipe_validator.py")
     class_names = _top_level_class_names(ast_module)
-    assert "Severity" not in class_names, "Severity must live in types.py, not recipe_validator.py"
+    assert "Severity" not in class_names, (
+        "Severity must live in core/types.py, not recipe_validator.py"
+    )
 
 
 def test_skill_tools_not_defined_in_recipe_io() -> None:
@@ -869,7 +868,7 @@ def test_skill_tools_not_defined_in_recipe_io() -> None:
     ast_module = _get_module_ast("recipe_io.py")
     assigns = _top_level_assign_targets(ast_module)
     assert "SKILL_TOOLS" not in assigns and "_SKILL_TOOLS" not in assigns, (
-        "SKILL_TOOLS must be imported from types, not defined in recipe_io.py"
+        "SKILL_TOOLS must be imported from core/types, not defined in recipe_io.py"
     )
 
 
@@ -878,7 +877,7 @@ def test_skill_tools_not_defined_in_recipe_validator() -> None:
     ast_module = _get_module_ast("recipe_validator.py")
     assigns = _top_level_assign_targets(ast_module)
     assert "SKILL_TOOLS" not in assigns and "_SKILL_TOOLS" not in assigns, (
-        "SKILL_TOOLS must be imported from types, not defined in recipe_validator.py"
+        "SKILL_TOOLS must be imported from core/types, not defined in recipe_validator.py"
     )
 
 

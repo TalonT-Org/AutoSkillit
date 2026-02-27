@@ -58,6 +58,9 @@ steps:
       plan_path: "${{ result.plan_path }}"
     on_success: implement
     on_failure: escalate
+    note: >
+      REMEDIATION MODE: when routed from remediate, context.remediation_path is available
+      — include it in the skill_command or as context for the rectify skill.
 
   implement:
     tool: run_skill_retry
@@ -80,6 +83,8 @@ steps:
       skill_command: "/autoskillit:retry-worktree the plan ${{ context.worktree_path }}"
       cwd: ${{ inputs.helper_dir }}
       step_name: "retry_worktree"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
     retry:
       max_attempts: 3
       on: needs_retry
@@ -122,9 +127,21 @@ steps:
       skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: ${{ inputs.helper_dir }}
       step_name: "audit_impl"
+    capture:
+      verdict: "${{ result.verdict }}"
+      remediation_path: "${{ result.remediation_path }}"
+    on_result:
+      field: verdict
+      routes:
+        GO: merge
+        NO GO: remediate
     note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
-    on_success: merge
-    on_failure: escalate
+
+  remediate:
+    action: route
+    with:
+      remediation_path: "${{ context.remediation_path }}"
+    on_success: plan
 
   merge:
     tool: merge_worktree

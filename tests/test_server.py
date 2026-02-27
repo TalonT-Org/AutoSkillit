@@ -60,6 +60,7 @@ from autoskillit.session_result import (
     SkillResult,
     _compute_retry,
     _compute_success,
+    _is_completion_kill_anomaly,
     extract_token_usage,
     parse_session_result,
 )
@@ -4388,6 +4389,141 @@ class TestComputeRetryUnparseable:
         assert reason == RetryReason.NONE
 
 
+class TestIsCompletionKillAnomaly:
+    """_is_completion_kill_anomaly covers exactly the subtypes that represent kill artifacts."""
+
+    @pytest.mark.parametrize(
+        "subtype,result,expected",
+        [
+            ("unparseable", "", True),  # killed mid-write → partial NDJSON
+            ("empty_output", "", True),  # killed before any stdout written
+            ("success", "", True),  # killed after result record, content empty
+            ("success", "x", False),  # success with content → NOT an anomaly
+            ("error_during_execution", "", False),  # explicit API error, not a kill artifact
+            ("timeout", "", False),  # timeout is a separate terminal state
+        ],
+    )
+    def test_anomaly_classification(self, subtype: str, result: str, expected: bool) -> None:
+        session = ClaudeSessionResult(
+            subtype=subtype,
+            is_error=(subtype != "success"),
+            result=result,
+            session_id="",
+            errors=[],
+            token_usage=None,
+        )
+        assert _is_completion_kill_anomaly(session) is expected
+
+
+class TestComputeRetrySuccessEmptyResult:
+    """_compute_retry for success subtype with empty result under COMPLETED termination."""
+
+    def test_success_empty_result_completed_rc0_is_retriable(self) -> None:
+        """success + "" + COMPLETED + rc=0 must be retriable (drain-race glitch)."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="",
+            session_id="s1",
+            errors=[],
+            token_usage=None,
+        )
+        retriable, reason = _compute_retry(
+            session, returncode=0, termination=TerminationReason.COMPLETED
+        )
+        assert retriable is True
+        assert reason == RetryReason.RESUME
+
+    def test_success_empty_result_completed_negative_rc_is_retriable(self) -> None:
+        """success + "" + COMPLETED + rc=-15 (SIGTERM kill) must also be retriable."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="",
+            session_id="s1",
+            errors=[],
+            token_usage=None,
+        )
+        retriable, reason = _compute_retry(
+            session, returncode=-15, termination=TerminationReason.COMPLETED
+        )
+        assert retriable is True
+        assert reason == RetryReason.RESUME
+
+    def test_success_nonempty_result_completed_is_not_retriable(self) -> None:
+        """success + non-empty result + COMPLETED must NOT be retriable (genuine success)."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Done. %%ORDER_UP%%",
+            session_id="s1",
+            errors=[],
+            token_usage=None,
+        )
+        retriable, _ = _compute_retry(
+            session, returncode=-15, termination=TerminationReason.COMPLETED
+        )
+        assert retriable is False
+
+    def test_success_empty_result_natural_exit_is_not_retriable(self) -> None:
+        """success + "" + NATURAL_EXIT must NOT be retriable (CLI chose to exit clean)."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="",
+            session_id="s1",
+            errors=[],
+            token_usage=None,
+        )
+        retriable, _ = _compute_retry(
+            session, returncode=0, termination=TerminationReason.NATURAL_EXIT
+        )
+        assert retriable is False
+
+    def test_empty_output_completed_negative_rc_is_retriable(self) -> None:
+        """empty_output + COMPLETED + rc=-15 must be retriable.
+
+        Process was killed by infrastructure before writing any stdout.
+        """
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="",
+            errors=[],
+            token_usage=None,
+        )
+        retriable, reason = _compute_retry(
+            session, returncode=-15, termination=TerminationReason.COMPLETED
+        )
+        assert retriable is True
+        assert reason == RetryReason.RESUME
+
+
+class TestComputeSuccessCompletedBypassEmptyResult:
+    """COMPLETED bypass requires non-empty result; empty result bypasses are rejected."""
+
+    def test_completed_success_empty_result_nonzero_rc_is_failure(self) -> None:
+        """COMPLETED bypass does NOT engage when result is empty, even for success subtype."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="",
+            session_id="s1",
+            errors=[],
+            token_usage=None,
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=-15,
+                termination=TerminationReason.COMPLETED,
+                completion_marker="",
+            )
+            is False
+        )
+
+
 class TestBuildSkillResultStderr:
     """_build_skill_result includes stderr in responses."""
 
@@ -4626,10 +4762,11 @@ class TestBuildSkillResultCompleted:
         assert parsed["success"] is True
 
     def test_build_skill_result_completed_empty_result_is_failure(self):
-        """COMPLETED + empty stdout → success=False, needs_retry=False.
+        """COMPLETED + empty stdout + rc=-15 → success=False, needs_retry=True.
 
-        This represents a CLI hang after generating the completion marker (drain
-        timeout expired). It is a genuine CLI issue, not a race condition.
+        Process was killed by infrastructure before writing any stdout.
+        The COMPLETED + empty_output path is a kill artifact covered by
+        _is_completion_kill_anomaly.
         """
         result = _make_result(
             returncode=-15,
@@ -4638,7 +4775,7 @@ class TestBuildSkillResultCompleted:
         )
         parsed = json.loads(_build_skill_result(result).to_json())
         assert parsed["success"] is False
-        assert parsed["needs_retry"] is False
+        assert parsed["needs_retry"] is True
 
     def test_compute_success_completed_empty_result_returns_false(self):
         """Empty result with COMPLETED termination: bypass does NOT engage → returns False.
@@ -4661,6 +4798,52 @@ class TestBuildSkillResultCompleted:
             )
             is False
         )
+
+    def test_success_empty_completed_returns_needs_retry_true(self, tool_ctx):
+        """Full path: stdout with success+empty under COMPLETED → needs_retry=True."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "",
+                "session_id": "s1",
+            }
+        )
+        result = _make_result(
+            returncode=0,
+            stdout=stdout,
+            termination_reason=TerminationReason.COMPLETED,
+        )
+        parsed = json.loads(
+            _build_skill_result(result, completion_marker="", skill_command="/test").to_json()
+        )
+        assert parsed["success"] is False
+        assert parsed["needs_retry"] is True
+        assert parsed["retry_reason"] == RetryReason.RESUME.value
+        assert parsed["subtype"] == "success"
+
+    def test_success_empty_completed_subtype_captured_in_audit_log(self, tool_ctx):
+        """_capture_failure must be called with subtype='success' for audit log integrity."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "",
+                "session_id": "s1",
+            }
+        )
+        result = _make_result(
+            returncode=0,
+            stdout=stdout,
+            termination_reason=TerminationReason.COMPLETED,
+        )
+        _build_skill_result(result, completion_marker="", skill_command="/test")
+        report = tool_ctx.audit.get_report()
+        assert len(report) == 1
+        assert report[0].subtype == "success"
+        assert report[0].needs_retry is True
 
 
 class TestRunSkillRetryConsolidation:

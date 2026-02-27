@@ -320,23 +320,53 @@ def _compute_success(
     return True
 
 
+_KILL_ANOMALY_SUBTYPES: frozenset[str] = frozenset(
+    {
+        "unparseable",  # killed mid-write → partial NDJSON
+        "empty_output",  # killed before any stdout was written
+    }
+)
+
+
+def _is_completion_kill_anomaly(session: ClaudeSessionResult) -> bool:
+    """True if the session result looks like a kill-induced incomplete flush.
+
+    When termination == COMPLETED, the process was killed by our infrastructure
+    (Channel B session monitor or Channel A heartbeat). Any result that is NOT
+    a genuine success is therefore our infrastructure's fault, not the task's.
+
+    Covers:
+    - unparseable: process killed mid-write, stdout is partial NDJSON
+    - empty_output: process killed before any stdout was written
+    - success with empty result: kill occurred after result record was written
+      but with empty content (Channel B / Channel A drain-race)
+    """
+    if session.subtype in _KILL_ANOMALY_SUBTYPES:
+        return True
+    if session.subtype == "success" and not session.result.strip():
+        return True
+    return False
+
+
 def _compute_retry(
     session: ClaudeSessionResult,
     returncode: int,
     termination: TerminationReason,
 ) -> tuple[bool, RetryReason]:
     """Cross-validate all signals to determine retry eligibility."""
-    # API-level retries (session knew it should be retried)
+    # API-level retry: Claude API told us to retry (context exhaustion, max turns)
     if session.needs_retry:
         return True, RetryReason.RESUME
 
-    # Infrastructure failure: session never ran (empty stdout, clean exit)
+    # Infrastructure anomaly: CLI launched, wrote nothing, exited cleanly.
+    # Covers: claude binary not found, immediate crash before any output.
+    # Uses returncode == 0 to distinguish from kill-induced empty output (COMPLETED path below).
     if session.subtype == "empty_output" and returncode == 0:
         return True, RetryReason.RESUME
 
-    # unparseable output under COMPLETED means the process was killed mid-write
-    # (drain timeout expired). The session likely completed; retry with resume.
-    if session.subtype == "unparseable" and termination == TerminationReason.COMPLETED:
+    # Infrastructure anomaly: process was killed by our infrastructure (Channel B/A race).
+    # COMPLETED means we killed the process; any non-genuine-success result is our fault.
+    if termination == TerminationReason.COMPLETED and _is_completion_kill_anomaly(session):
         return True, RetryReason.RESUME
 
     return False, RetryReason.NONE

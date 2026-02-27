@@ -11,7 +11,7 @@ from pathlib import Path
 
 from packaging.version import Version
 
-from autoskillit._yaml import load_yaml
+from autoskillit.core.io import load_yaml
 
 
 @dataclass

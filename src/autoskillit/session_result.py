@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from autoskillit._logging import get_logger
-from autoskillit.types import CONTEXT_EXHAUSTION_MARKER, RetryReason, TerminationReason
+from autoskillit.core.logging import get_logger
+from autoskillit.core.types import CONTEXT_EXHAUSTION_MARKER, RetryReason, TerminationReason
 
 logger = get_logger(__name__)
 

@@ -25,8 +25,8 @@ from typing import IO
 
 import psutil
 
-from autoskillit._logging import get_logger
-from autoskillit.types import SubprocessResult, TerminationReason
+from autoskillit.core.logging import get_logger
+from autoskillit.core.types import SubprocessResult, TerminationReason
 
 logger = get_logger(__name__)
 

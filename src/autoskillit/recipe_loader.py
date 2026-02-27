@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from autoskillit._yaml import load_yaml
+from autoskillit.core.io import load_yaml
+from autoskillit.core.types import RecipeSource
 from autoskillit.recipe_schema import AUTOSKILLIT_VERSION_KEY, RecipeInfo
-from autoskillit.types import RecipeSource
 
 
 def _extract_frontmatter(text: str) -> str:

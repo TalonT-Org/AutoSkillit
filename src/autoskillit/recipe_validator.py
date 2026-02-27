@@ -16,9 +16,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from autoskillit._io import _atomic_write
-from autoskillit._logging import get_logger
-from autoskillit._yaml import dump_yaml_str, load_yaml
+from autoskillit.core.io import _atomic_write, dump_yaml_str, load_yaml
+from autoskillit.core.logging import get_logger
+from autoskillit.core.types import (
+    PIPELINE_FORBIDDEN_TOOLS,
+    RETRY_RESPONSE_FIELDS,
+    SKILL_TOOLS,
+    Severity,
+)
 from autoskillit.recipe_io import iter_steps_with_context
 from autoskillit.recipe_schema import (
     DataFlowReport,
@@ -26,12 +31,6 @@ from autoskillit.recipe_schema import (
     Recipe,
 )
 from autoskillit.skill_resolver import bundled_skills_dir
-from autoskillit.types import (
-    PIPELINE_FORBIDDEN_TOOLS,
-    RETRY_RESPONSE_FIELDS,
-    SKILL_TOOLS,
-    Severity,
-)
 
 logger = get_logger(__name__)
 

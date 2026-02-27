@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from autoskillit.types import SkillSource
+from autoskillit.core.types import SkillSource
 
 
 @dataclass

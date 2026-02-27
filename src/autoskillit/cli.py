@@ -35,8 +35,8 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     """Start the MCP server (default command)."""
     import logging as _stdlib_logging
 
-    from autoskillit._logging import configure_logging, get_logger
     from autoskillit.config import load_config
+    from autoskillit.core.logging import configure_logging, get_logger
 
     configure_logging(
         level=_stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO,
@@ -98,7 +98,7 @@ def init(
     test_command
         Test command string for non-interactive init (e.g. "pytest -v").
     """
-    from autoskillit._io import ensure_project_temp
+    from autoskillit.core.io import ensure_project_temp
 
     project_dir = Path.cwd()
     config_dir = project_dir / ".autoskillit"
@@ -248,7 +248,7 @@ def upgrade():
     """
     import re
 
-    from autoskillit._io import _atomic_write
+    from autoskillit.core.io import _atomic_write
 
     project_dir = Path.cwd()
     scripts_dir = project_dir / ".autoskillit" / "scripts"
@@ -302,9 +302,9 @@ def migrate(*, check: bool = False):
         Exit with code 1 if any recipes need migration (useful for CI).
     """
     from autoskillit import __version__
+    from autoskillit.core.types import RecipeSource
     from autoskillit.migration_loader import applicable_migrations
     from autoskillit.recipe_io import list_recipes as _list_all_recipes
-    from autoskillit.types import RecipeSource
 
     project_dir = Path.cwd()
     scripts_dir = project_dir / ".autoskillit" / "scripts"
@@ -559,7 +559,7 @@ def cook(recipe: str):
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
-    from autoskillit._yaml import YAMLError, load_yaml
+    from autoskillit.core.io import YAMLError, load_yaml
     from autoskillit.recipe_io import _parse_recipe, find_recipe_by_name
     from autoskillit.recipe_io import list_recipes as _list_all_recipes_for_cook
     from autoskillit.recipe_validator import validate_recipe

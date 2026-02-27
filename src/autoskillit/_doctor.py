@@ -218,9 +218,9 @@ def run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> N
 
     # Check 7: Script version health
     from autoskillit import __version__
+    from autoskillit.core.types import RecipeSource
     from autoskillit.failure_store import FailureStore, default_store_path
     from autoskillit.recipe_io import list_recipes as _list_all_recipes
-    from autoskillit.types import RecipeSource
 
     _all_result = _list_all_recipes(Path.cwd())
     scripts_result_items = [r for r in _all_result.items if r.source == RecipeSource.PROJECT]

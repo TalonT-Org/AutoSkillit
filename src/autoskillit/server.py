@@ -34,8 +34,14 @@ from autoskillit._gate import (  # noqa: F401
     GateState,
     gate_error_result,
 )
-from autoskillit._logging import get_logger
 from autoskillit.config import AutomationConfig
+from autoskillit.core.logging import get_logger
+from autoskillit.core.types import (
+    PIPELINE_FORBIDDEN_TOOLS,
+    RestartScope,
+    RetryReason,
+    TerminationReason,
+)
 from autoskillit.db_tools import _execute_readonly_query, _validate_select_only
 from autoskillit.failure_store import FailureStore, default_store_path
 from autoskillit.git_operations import perform_merge
@@ -44,12 +50,6 @@ from autoskillit.migration_engine import MigrationFile, default_migration_engine
 from autoskillit.migration_loader import applicable_migrations
 from autoskillit.session_result import _truncate
 from autoskillit.test_runner import check_test_passed
-from autoskillit.types import (
-    PIPELINE_FORBIDDEN_TOOLS,
-    RestartScope,
-    RetryReason,
-    TerminationReason,
-)
 from autoskillit.workspace import _delete_directory_contents
 
 mcp = FastMCP("autoskillit")
@@ -1205,7 +1205,7 @@ async def load_recipe(name: str) -> str:
     ``suggestions`` (list of semantic findings, possibly empty) keys.
     On error: JSON with ``error`` key.
     """
-    from autoskillit._yaml import YAMLError, load_yaml
+    from autoskillit.core.io import YAMLError, load_yaml
     from autoskillit.recipe_io import _parse_recipe, find_recipe_by_name
     from autoskillit.recipe_validator import (
         check_contract_staleness,
@@ -1346,7 +1346,7 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     except (RuntimeError, AttributeError):
         pass
 
-    from autoskillit._yaml import load_yaml
+    from autoskillit.core.io import load_yaml
     from autoskillit.recipe_io import _parse_recipe, find_recipe_by_name
     from autoskillit.recipe_validator import generate_recipe_card
 
@@ -1432,7 +1432,8 @@ async def validate_recipe(script_path: str) -> str:
     Args:
         script_path: Absolute path to the .yaml recipe file to validate.
     """
-    from autoskillit._yaml import YAMLError, load_yaml
+    from autoskillit.core.io import YAMLError, load_yaml
+    from autoskillit.core.types import Severity
     from autoskillit.recipe_io import _parse_recipe
     from autoskillit.recipe_validator import (
         analyze_dataflow,
@@ -1443,7 +1444,6 @@ async def validate_recipe(script_path: str) -> str:
     from autoskillit.recipe_validator import (
         validate_recipe as _validate_recipe,
     )
-    from autoskillit.types import Severity
 
     path = Path(script_path)
     if not path.is_file():

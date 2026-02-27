@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from autoskillit._logging import get_logger
+from autoskillit.core.logging import get_logger
 
 logger = get_logger(__name__)
 

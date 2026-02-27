@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from autoskillit._logging import get_logger
+from autoskillit.core.logging import get_logger
 from autoskillit.process_lifecycle import (
     SubprocessResult,
     TerminationReason,

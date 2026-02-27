@@ -13,7 +13,7 @@ from autoskillit._audit import AuditLog
 from autoskillit._gate import GateState
 from autoskillit._token_log import TokenLog
 from autoskillit.config import AutomationConfig
-from autoskillit.types import SubprocessRunner
+from autoskillit.core.types import SubprocessRunner
 
 
 @dataclass

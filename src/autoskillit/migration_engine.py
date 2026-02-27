@@ -8,9 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit import __version__
-from autoskillit._io import _atomic_write
-from autoskillit._logging import get_logger
-from autoskillit._yaml import dump_yaml_str, load_yaml
+from autoskillit.core.io import _atomic_write, dump_yaml_str, load_yaml
+from autoskillit.core.logging import get_logger
 from autoskillit.migration_loader import applicable_migrations
 from autoskillit.recipe_io import load_recipe as _parse_recipe
 from autoskillit.recipe_loader import parse_recipe_metadata

@@ -14,11 +14,11 @@ import os
 from pathlib import Path
 from typing import Any
 
-from autoskillit._logging import get_logger
 from autoskillit.config import AutomationConfig
+from autoskillit.core.logging import get_logger
+from autoskillit.core.types import MergeFailedStep, MergeState, SubprocessRunner, TerminationReason
 from autoskillit.session_result import _truncate
 from autoskillit.test_runner import check_test_passed
-from autoskillit.types import MergeFailedStep, MergeState, SubprocessRunner, TerminationReason
 
 logger = get_logger(__name__)
 

@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit._audit import FailureRecord
-from autoskillit._logging import get_logger
+from autoskillit.core.logging import get_logger
+from autoskillit.core.types import RetryReason, TerminationReason
 from autoskillit.session_result import (
     ClaudeSessionResult,
     SkillResult,
@@ -24,13 +25,12 @@ from autoskillit.session_result import (
     _truncate,
     parse_session_result,
 )
-from autoskillit.types import RetryReason, TerminationReason
 
 if TYPE_CHECKING:
     from autoskillit._audit import AuditLog
     from autoskillit._context import ToolContext
     from autoskillit.config import AutomationConfig
-    from autoskillit.types import SubprocessResult
+    from autoskillit.core.types import SubprocessResult
 
 logger = get_logger(__name__)
 

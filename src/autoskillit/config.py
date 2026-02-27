@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from autoskillit._yaml import load_yaml
+from autoskillit.core.io import load_yaml
 
 
 @dataclass

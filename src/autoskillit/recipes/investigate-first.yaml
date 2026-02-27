@@ -54,6 +54,7 @@ steps:
       Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically into plan_parts[].
       REMEDIATION MODE: when routed from remediate, context.remediation_path is available
       — pass it to the rectify skill for targeted re-planning.
+      Glob plan_dir for *_part_*.md or single plan file.
 
   dry_walkthrough:
     tool: run_skill
@@ -72,7 +73,6 @@ steps:
       cwd: ${{ inputs.work_dir }}
       step_name: "implement"
     capture:
-      worktree_path: "${{ result.worktree_path }}"
       implementation_ref: "${{ result.worktree_path }}"
     retry:
       max_attempts: 1
@@ -84,11 +84,10 @@ steps:
   retry_worktree:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:retry-worktree the verified plan ${{ context.worktree_path }}"
+      skill_command: "/autoskillit:retry-worktree the verified plan ${{ context.implementation_ref }}"
       cwd: ${{ inputs.work_dir }}
       step_name: "retry_worktree"
     capture:
-      worktree_path: "${{ result.worktree_path }}"
       implementation_ref: "${{ result.worktree_path }}"
     retry:
       max_attempts: 3

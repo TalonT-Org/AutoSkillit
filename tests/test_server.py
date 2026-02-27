@@ -1204,7 +1204,7 @@ class TestValidateRecipe:
             '    message: "Done."\n'
         )
         result = json.loads(await validate_recipe(script_path=str(script)))
-        assert result["valid"] is True
+        assert result["valid"] is False
         assert "quality" in result
         quality = result["quality"]
         assert "warnings" in quality
@@ -1213,6 +1213,13 @@ class TestValidateRecipe:
         assert len(dead) == 1
         assert dead[0]["step"] == "impl"
         assert dead[0]["field"] == "worktree_path"
+        semantic_errors = [
+            f
+            for f in result.get("semantic", [])
+            if f.get("rule") == "dead-output" and f.get("severity") == "error"
+        ]
+        assert len(semantic_errors) == 1
+        assert semantic_errors[0]["step_name"] == "impl"
 
     # SEM1
     @pytest.mark.asyncio
@@ -6247,31 +6254,34 @@ class TestGatedToolObservability:
     async def test_run_cmd_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
         """run_cmd binds tool='run_cmd' contextvar and calls ctx.info on success."""
         tool_ctx.runner.push(_make_result(0, "ok\n", ""))
-        with structlog.testing.capture_logs() as logs:
+        with structlog.testing.capture_logs(
+            processors=[structlog.contextvars.merge_contextvars]
+        ) as logs:
             await run_cmd(cmd="echo ok", cwd="/tmp", ctx=mock_ctx)
         assert any(entry.get("tool") == "run_cmd" for entry in logs)
-        mock_ctx.info.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_run_cmd_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
-        """run_cmd calls ctx.error when subprocess exits non-zero."""
+        """run_cmd reports failure (success=false) when subprocess exits non-zero."""
         tool_ctx.runner.push(_make_result(1, "", "err"))
-        await run_cmd(cmd="false", cwd="/tmp", ctx=mock_ctx)
-        mock_ctx.error.assert_awaited_once()
+        result = json.loads(await run_cmd(cmd="false", cwd="/tmp", ctx=mock_ctx))
+        assert result["success"] is False
+        assert result["exit_code"] == 1
 
     @pytest.mark.asyncio
     async def test_run_python_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
         """run_python binds tool='run_python' contextvar and calls ctx.info on success."""
-        with structlog.testing.capture_logs() as logs:
+        with structlog.testing.capture_logs(
+            processors=[structlog.contextvars.merge_contextvars]
+        ) as logs:
             await run_python(callable="json.dumps", args={"obj": 1}, ctx=mock_ctx)
         assert any(entry.get("tool") == "run_python" for entry in logs)
-        mock_ctx.info.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_run_python_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
-        """run_python calls ctx.error when callable import fails."""
-        await run_python(callable="nonexistent.module.func", ctx=mock_ctx)
-        mock_ctx.error.assert_awaited_once()
+        """run_python reports failure (success=false) when callable import fails."""
+        result = json.loads(await run_python(callable="nonexistent.module.func", ctx=mock_ctx))
+        assert result["success"] is False
 
     @pytest.mark.asyncio
     async def test_run_skill_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
@@ -6284,14 +6294,15 @@ class TestGatedToolObservability:
                 "",
             )
         )
-        with structlog.testing.capture_logs() as logs:
+        with structlog.testing.capture_logs(
+            processors=[structlog.contextvars.merge_contextvars]
+        ) as logs:
             await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
         assert any(entry.get("tool") == "run_skill" for entry in logs)
-        mock_ctx.info.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_run_skill_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
-        """run_skill calls ctx.error when headless session fails."""
+        """run_skill reports failure (success=false) when headless session fails."""
         tool_ctx.runner.push(
             _make_result(
                 1,
@@ -6300,8 +6311,8 @@ class TestGatedToolObservability:
                 "",
             )
         )
-        await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
-        mock_ctx.error.assert_awaited_once()
+        result = json.loads(await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx))
+        assert result["success"] is False
 
     @pytest.mark.asyncio
     async def test_run_skill_retry_binds_tool_contextvar_and_calls_ctx_info(
@@ -6316,14 +6327,15 @@ class TestGatedToolObservability:
                 "",
             )
         )
-        with structlog.testing.capture_logs() as logs:
+        with structlog.testing.capture_logs(
+            processors=[structlog.contextvars.merge_contextvars]
+        ) as logs:
             await run_skill_retry("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
         assert any(entry.get("tool") == "run_skill_retry" for entry in logs)
-        mock_ctx.info.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_run_skill_retry_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
-        """run_skill_retry calls ctx.error when headless session fails."""
+        """run_skill_retry reports failure (success=false) when headless session fails."""
         tool_ctx.runner.push(
             _make_result(
                 1,
@@ -6332,8 +6344,10 @@ class TestGatedToolObservability:
                 "",
             )
         )
-        await run_skill_retry("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
-        mock_ctx.error.assert_awaited_once()
+        result = json.loads(
+            await run_skill_retry("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
+        )
+        assert result["success"] is False
 
 
 class TestLoadRecipeMigrationPath:

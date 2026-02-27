@@ -1131,26 +1131,33 @@ def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
     if not has_multipart_step:
         return []
 
-    for step_name, step in wf.steps.items():
-        if step.tool not in SKILL_TOOLS:
-            continue
-        if not any(s in step.with_args.get("skill_command", "") for s in _MULTIPART_SKILLS):
-            continue
-        plan_note = step.note or ""
-        if "*_part_*.md" not in plan_note:
-            findings.append(
-                RuleFinding(
-                    rule="multipart-glob-note",
-                    severity=Severity.ERROR,
-                    step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' calls a multi-part skill but the step note does "
-                        f"not contain '*_part_*.md'. Agents will not know to glob for "
-                        f"multi-part plan files. Add: 'Glob plan_dir for *_part_*.md or "
-                        f"single plan file.' to the step note."
-                    ),
-                )
+    plan_step = wf.steps.get("plan")
+    plan_note = (plan_step.note or "") if plan_step is not None else ""
+    # Also accept the glob pattern from the note of whichever step invokes the multipart skill
+    multipart_step_notes = [
+        (step.note or "")
+        for step in wf.steps.values()
+        if step.tool in SKILL_TOOLS
+        and any(s in step.with_args.get("skill_command", "") for s in _MULTIPART_SKILLS)
+    ]
+    if "*_part_*.md" not in plan_note and not any(
+        "*_part_*.md" in note for note in multipart_step_notes
+    ):
+        findings.append(
+            RuleFinding(
+                rule="multipart-glob-note",
+                severity=Severity.ERROR,
+                step_name="plan",
+                message=(
+                    "Recipe uses make-plan or rectify but neither the 'plan' step note nor "
+                    "the planning step's own note contains '*_part_*.md'. Agents will not "
+                    "know to glob for multi-part plan files. Add: "
+                    "'Glob plan_dir for *_part_*.md or single plan file.' to the plan "
+                    "step's note (or to the make-plan/rectify step's note if no separate "
+                    "'plan' step exists)."
+                ),
             )
+        )
 
     sequential_keywords = ("SEQUENTIAL EXECUTION", "full cycle", "Never run verify for all parts")
     rules_text = " ".join(wf.kitchen_rules)

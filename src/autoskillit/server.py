@@ -208,6 +208,7 @@ def _session_log_dir(cwd: str) -> Path:
     """Derive Claude Code session log directory from project cwd."""
     project_hash = cwd.replace("/", "-").replace("_", "-")
     log_dir = Path.home() / ".claude" / "projects" / project_hash
+    logger.info("session_log_dir_computed", path=str(log_dir), cwd=cwd)
     if not log_dir.exists():
         logger.warning("session_log_dir_missing", path=str(log_dir), cwd=cwd)
     return log_dir

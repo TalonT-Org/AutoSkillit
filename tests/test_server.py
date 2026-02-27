@@ -2571,6 +2571,38 @@ class TestGateTransitionLogs:
         finally:
             shutil.rmtree(log_dir, ignore_errors=True)
 
+    def test_session_log_dir_logs_path_when_dir_exists(self, tmp_path):
+        import shutil
+
+        cwd = str(tmp_path)
+        project_hash = cwd.replace("/", "-").replace("_", "-")
+        log_dir = Path.home() / ".claude" / "projects" / project_hash
+        log_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            with structlog.testing.capture_logs() as logs:
+                result = _session_log_dir(cwd)
+            info_entries = [e for e in logs if e.get("log_level") == "info"]
+            assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
+            computed_entry = next(
+                e for e in info_entries if e.get("event") == "session_log_dir_computed"
+            )
+            assert computed_entry.get("path") == str(result)
+            assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
+        finally:
+            shutil.rmtree(log_dir, ignore_errors=True)
+
+    def test_session_log_dir_logs_path_when_dir_missing(self):
+        cwd = "/nonexistent/project/unique-test-99999"
+        with structlog.testing.capture_logs() as logs:
+            result = _session_log_dir(cwd)
+        info_entries = [e for e in logs if e.get("log_level") == "info"]
+        assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
+        computed_entry = next(
+            e for e in info_entries if e.get("event") == "session_log_dir_computed"
+        )
+        assert computed_entry.get("path") == str(result)
+        assert any(e.get("event") == "session_log_dir_missing" for e in logs)
+
 
 class TestPromptSchemas:
     """Prompt descriptions must be accurate, current, and cooking-themed."""

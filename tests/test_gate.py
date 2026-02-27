@@ -103,7 +103,9 @@ def test_gate_has_no_internal_imports():
     import ast
     from pathlib import Path
 
-    src = (Path(__file__).parent.parent / "src" / "autoskillit" / "_gate.py").read_text()
+    src = (
+        Path(__file__).parent.parent / "src" / "autoskillit" / "pipeline" / "gate.py"
+    ).read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):

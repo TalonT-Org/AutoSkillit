@@ -34,6 +34,7 @@ from autoskillit.server import (
     load_recipe,
     merge_worktree,
     run_cmd,
+    run_python,
     run_skill,
     run_skill_retry,
     test_check,
@@ -84,6 +85,11 @@ class SmokeExecutor:
                 current = step_def.get("on_success")
                 continue
 
+            if "python" in step_def:
+                result = await self._execute_python(step_def)
+                current = self._route(step_def, result)
+                continue
+
             result = await self._execute(step_def)
             self._capture(step_def, result)
             current = self._route(step_def, result)
@@ -100,6 +106,14 @@ class SmokeExecutor:
 
         tool_fn = _TOOL_MAP[tool_name]
         raw_result = await tool_fn(**args)
+        return json.loads(raw_result)
+
+    async def _execute_python(self, step_def: dict) -> dict:
+        """Dispatch a python: step to the run_python MCP tool."""
+        raw_args = step_def.get("with", {})
+        args = self._interpolate(raw_args)
+        callable_path = step_def["python"]
+        raw_result = await run_python(callable=callable_path, args=args)
         return json.loads(raw_result)
 
     async def _run_with_retry(self, step_def: dict, args: dict) -> dict:
@@ -269,8 +283,11 @@ class TestSmokeScriptValidation:
         assert pipeline["steps"]["test"]["tool"] == "test_check"
         assert pipeline["steps"]["merge"]["tool"] == "merge_worktree"
         assert pipeline["steps"]["classify"]["tool"] == "classify_fix"
-        assert pipeline["steps"]["create_branch"]["action"] == "route"
-        assert pipeline["steps"]["check_summary"]["action"] == "route"
+        assert pipeline["steps"]["create_branch"]["tool"] == "run_cmd"
+        assert (
+            pipeline["steps"]["check_summary"]["python"]
+            == "autoskillit.smoke_utils.check_bug_report_non_empty"
+        )
         assert pipeline["steps"]["create_summary"]["tool"] == "run_skill"
 
     def test_executor_interpolation(self) -> None:

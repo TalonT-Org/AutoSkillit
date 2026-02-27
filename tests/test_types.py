@@ -1,6 +1,6 @@
 """Tests for shared type contracts — enum exhaustiveness."""
 
-from autoskillit.types import MergeFailedStep, MergeState, RestartScope, RetryReason
+from autoskillit.core.types import MergeFailedStep, MergeState, RestartScope, RetryReason
 
 
 def test_retry_reason_values():

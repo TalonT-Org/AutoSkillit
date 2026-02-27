@@ -4,7 +4,7 @@ from pathlib import Path as _Path
 
 import pytest
 
-from autoskillit.types import SubprocessResult, SubprocessRunner, TerminationReason
+from autoskillit.core.types import SubprocessResult, SubprocessRunner, TerminationReason
 
 
 class MockSubprocessRunner(SubprocessRunner):

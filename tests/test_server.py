@@ -623,6 +623,11 @@ class TestMergeWorktree:
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.REBASE
         assert result["state"] == MergeState.WORKTREE_INTACT_REBASE_ABORTED
+        assert result.get("stderr"), (
+            f"merge_worktree rebase failure must include non-empty stderr diagnostic. "
+            f"Got result={result!r}"
+        )
+        assert "CONFLICT" in result["stderr"]
 
     @pytest.mark.asyncio
     async def test_merge_worktree_rejects_nonexistent_path(self, tool_ctx):

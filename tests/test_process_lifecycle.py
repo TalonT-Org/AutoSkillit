@@ -805,6 +805,33 @@ class TestPtyWrapper:
         assert result.termination != TerminationReason.TIMED_OUT
         assert "False" in result.stdout
 
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(
+        shutil.which("script") is None,
+        reason="script binary not available (util-linux required)",
+    )
+    async def test_pty_mode_true_merges_child_stderr_into_stdout(self, tmp_path):
+        """Characterize: under PTY mode, child stderr lands in result.stdout, not result.stderr.
+
+        This test DOCUMENTS the PTY fd-routing behavior for maintainers. It guards against
+        silent changes to PTY behavior that would break run_headless_core's assumptions
+        (execution/headless.py).
+        """
+        script = tmp_path / "write_stderr.py"
+        script.write_text("import sys; sys.stderr.write('PTY_STDERR_CONTENT'); sys.exit(1)")
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=10,
+            pty_mode=True,
+        )
+        assert result.returncode != 0
+        assert "PTY_STDERR_CONTENT" in result.stdout, (
+            f"Under PTY mode, child stderr must land in result.stdout (PTY merges fd 2→fd 1). "
+            f"stdout={result.stdout!r}, stderr={result.stderr!r}"
+        )
+        assert "PTY_STDERR_CONTENT" not in result.stderr
+
 
 class TestCancellationKillsProcess:
     """Cancellation of run_managed_async kills the subprocess."""
@@ -1573,3 +1600,25 @@ class TestSubprocessResultAndRunnerTypes:
 
         runner = RealSubprocessRunner()
         assert isinstance(runner, SubprocessRunner)
+
+    def test_real_subprocess_runner_default_pty_mode_is_false(self):
+        """RealSubprocessRunner must default pty_mode=False.
+
+        pty_mode=True merges child stderr into PTY stdout, breaking all _run_subprocess
+        callers that expect stderr to contain git/shell error messages. Claude CLI callers
+        (run_headless_core in execution/headless.py, _llm_triage) already pass pty_mode=True
+        explicitly. Note: run_managed_async itself already defaults pty_mode=False; only the
+        RealSubprocessRunner wrapper overrides this with True — making it the sole target for
+        this fix.
+        """
+        import inspect
+
+        from autoskillit.execution.process import RealSubprocessRunner
+
+        sig = inspect.signature(RealSubprocessRunner.__call__)
+        default = sig.parameters["pty_mode"].default
+        assert default is False, (
+            f"pty_mode default must be False to prevent silent stderr loss in git commands. "
+            f"Current default: {default!r}. Only callers that need PTY (Claude CLI) "
+            f"should pass pty_mode=True explicitly."
+        )

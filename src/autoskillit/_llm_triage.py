@@ -15,6 +15,7 @@ from typing import Any
 from autoskillit.core.logging import get_logger
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from autoskillit.execution.process import run_managed_async
+from autoskillit.execution.session import parse_session_result
 from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest
 from autoskillit.workspace.skills import bundled_skills_dir
 
@@ -84,15 +85,41 @@ async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]
             )
             if result.termination == TerminationReason.TIMED_OUT:
                 raise TimeoutError(f"triage_staleness timed out for skill {item.skill!r}")
-            response = json.loads(result.stdout)
-            results.append(
-                {
-                    "skill": item.skill,
-                    "meaningful": response.get("meaningful_change", True),
-                    "summary": response.get("summary", "No summary provided."),
-                }
-            )
-        except (TimeoutError, json.JSONDecodeError, OSError):
+            session = parse_session_result(result.stdout)
+            if session.is_error or not session.result:
+                logger.warning(
+                    "triage_staleness parse failed; treating as meaningful", skill=item.skill
+                )
+                results.append(
+                    {
+                        "skill": item.skill,
+                        "meaningful": True,
+                        "summary": f"Triage parse failed for {item.skill!r}.",
+                    }
+                )
+            else:
+                try:
+                    data = json.loads(session.result)
+                    results.append(
+                        {
+                            "skill": item.skill,
+                            "meaningful": bool(data["meaningful_change"]),
+                            "summary": data.get("summary", ""),
+                        }
+                    )
+                except (json.JSONDecodeError, KeyError):
+                    logger.warning(
+                        "triage_staleness result parse failed; treating as meaningful",
+                        skill=item.skill,
+                    )
+                    results.append(
+                        {
+                            "skill": item.skill,
+                            "meaningful": True,
+                            "summary": f"Result parse failed for {item.skill!r}.",
+                        }
+                    )
+        except (TimeoutError, OSError):
             logger.warning(
                 "triage_staleness failed; treating skill as meaningful",
                 skill=item.skill,

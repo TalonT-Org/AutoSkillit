@@ -251,14 +251,31 @@ class TestTriageStaleness:
     @pytest.mark.asyncio
     async def test_triage_staleness_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """On success, meaningful and summary are populated from LLM response."""
+        import json as _json
         from unittest.mock import AsyncMock
 
         from autoskillit._llm_triage import triage_staleness
-        from autoskillit.execution.process import SubprocessResult, TerminationReason
+        from autoskillit.core.types import TerminationReason
+        from autoskillit.execution.process import SubprocessResult
 
         skill_dir = tmp_path / "test-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Test Skill\nDummy content.")
+
+        _ndjson = "\n".join(
+            [
+                _json.dumps({"type": "assistant", "message": {"content": []}}),
+                _json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "result": _json.dumps({"meaningful_change": False, "summary": "ok"}),
+                        "session_id": "test-session",
+                        "is_error": False,
+                    }
+                ),
+            ]
+        )
 
         monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
         monkeypatch.setattr(
@@ -266,7 +283,7 @@ class TestTriageStaleness:
             AsyncMock(
                 return_value=SubprocessResult(
                     returncode=0,
-                    stdout='{"meaningful_change": false, "summary": "ok"}',
+                    stdout=_ndjson,
                     stderr="",
                     termination=TerminationReason.NATURAL_EXIT,
                     pid=0,
@@ -311,3 +328,70 @@ class TestTriageStaleness:
         assert result[0]["meaningful"] is True
         assert "not found" in result[0]["summary"].lower()
         assert not mock_run.called, "run_managed_async must NOT be called when SKILL.md is missing"
+
+    @pytest.mark.asyncio
+    async def test_triage_staleness_parses_ndjson_result_record(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """triage_staleness must extract result content from NDJSON, not call json.loads on raw stdout."""  # noqa: E501
+        import json as _json
+        from unittest.mock import AsyncMock
+
+        from autoskillit._llm_triage import triage_staleness
+        from autoskillit.core.types import TerminationReason
+        from autoskillit.execution.process import SubprocessResult
+
+        skill_dir = tmp_path / "test-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Test Skill\nDummy content.")
+
+        agent_response = _json.dumps(
+            {"meaningful_change": False, "summary": "only whitespace changes"}
+        )
+        ndjson = "\n".join(
+            [
+                _json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {"content": [{"type": "text", "text": "thinking..."}]},
+                    }
+                ),
+                _json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "result": agent_response,
+                        "session_id": "test-session-123",
+                        "is_error": False,
+                    }
+                ),
+            ]
+        )
+
+        monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+        monkeypatch.setattr(
+            "autoskillit._llm_triage.run_managed_async",
+            AsyncMock(
+                return_value=SubprocessResult(
+                    returncode=0,
+                    stdout=ndjson,
+                    stderr="",
+                    termination=TerminationReason.NATURAL_EXIT,
+                    pid=99999,
+                )
+            ),
+        )
+
+        item = StaleItem(
+            skill="test-skill",
+            reason="hash_mismatch",
+            stored_value="abc123",
+            current_value="def456",
+        )
+        result = await triage_staleness([item])
+
+        assert result[0]["meaningful"] is False, (
+            f"triage_staleness must parse NDJSON via parse_session_result, not json.loads. "
+            f"Got: {result!r}"
+        )
+        assert "whitespace" in result[0]["summary"]

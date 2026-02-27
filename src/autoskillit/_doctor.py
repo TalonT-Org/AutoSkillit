@@ -35,7 +35,7 @@ def _is_plugin_installed() -> bool:
         return False
 
 
-def run_doctor(*, output_json: bool = False) -> None:
+def run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> None:
     """Check project setup for common issues."""
     results: list[DoctorResult] = []
 
@@ -140,7 +140,7 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 5: Version consistency — plugin.json vs package version
     from autoskillit.version import version_info
 
-    info = version_info()
+    info = version_info(plugin_dir=plugin_dir)
     if info["plugin_json_version"] is None:
         results.append(
             DoctorResult(

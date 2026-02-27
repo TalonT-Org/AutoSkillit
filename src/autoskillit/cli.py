@@ -285,9 +285,11 @@ def doctor(*, output_json: bool = False):
     output_json
         Output results as JSON instead of human-readable text.
     """
+    from autoskillit import server as _server
     from autoskillit._doctor import run_doctor
 
-    run_doctor(output_json=output_json)
+    plugin_dir = _server._ctx.plugin_dir if _server._ctx is not None else None
+    run_doctor(output_json=output_json, plugin_dir=plugin_dir)
 
 
 @app.command

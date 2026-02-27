@@ -930,3 +930,89 @@ def test_server_uses_recipe_io_not_recipe_loader_for_discovery() -> None:
     )
     assert "from autoskillit.recipe_loader import list_recipes" not in src
     assert "from autoskillit.recipe_loader import load_recipe" not in src
+
+
+# ── L1 Package Runtime Isolation Tests ────────────────────────────────────────
+
+
+def _type_checking_lines(tree: ast.AST) -> set[int]:
+    """Return line numbers of all imports inside ``if TYPE_CHECKING:`` blocks."""
+    lines: set[int] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.If)
+            and isinstance(node.test, ast.Name)
+            and node.test.id == "TYPE_CHECKING"
+        ):
+            for child in ast.walk(node):
+                if isinstance(child, ast.Import | ast.ImportFrom):
+                    lines.add(child.lineno)
+    return lines
+
+
+def test_execution_imports_only_core() -> None:
+    """execution/ must not import from pipeline/, config/, or workspace/ at runtime."""
+    forbidden = {"autoskillit.pipeline", "autoskillit.config", "autoskillit.workspace"}
+    pkg = SRC_ROOT / "execution"
+    assert pkg.exists(), "execution/ package must exist"
+    violations = []
+    for py in pkg.rglob("*.py"):
+        tree = ast.parse(py.read_text())
+        tc_lines = _type_checking_lines(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.lineno not in tc_lines:
+                mod = node.module or ""
+                if any(mod == f or mod.startswith(f + ".") for f in forbidden):
+                    violations.append(f"{py.name}: {mod}")
+    assert not violations, f"execution/ has forbidden runtime imports: {violations}"
+
+
+def test_workspace_imports_only_core() -> None:
+    """workspace/ must not import from pipeline/, config/, or execution/ at runtime."""
+    forbidden = {"autoskillit.pipeline", "autoskillit.config", "autoskillit.execution"}
+    pkg = SRC_ROOT / "workspace"
+    assert pkg.exists(), "workspace/ package must exist"
+    violations = []
+    for py in pkg.rglob("*.py"):
+        tree = ast.parse(py.read_text())
+        tc_lines = _type_checking_lines(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.lineno not in tc_lines:
+                mod = node.module or ""
+                if any(mod == f or mod.startswith(f + ".") for f in forbidden):
+                    violations.append(f"{py.name}: {mod}")
+    assert not violations, f"workspace/ has forbidden imports: {violations}"
+
+
+def test_pipeline_non_context_modules_import_only_core() -> None:
+    """pipeline/audit.py, pipeline/gate.py, pipeline/tokens.py must not import config/."""
+    restricted = ["audit.py", "gate.py", "tokens.py"]
+    pkg = SRC_ROOT / "pipeline"
+    assert pkg.exists(), "pipeline/ package must exist"
+    violations = []
+    for py in (pkg / name for name in restricted if (pkg / name).exists()):
+        tree = ast.parse(py.read_text())
+        tc_lines = _type_checking_lines(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.lineno not in tc_lines:
+                mod = node.module or ""
+                if "autoskillit.config" in mod:
+                    violations.append(f"{py.name}: {mod}")
+    assert not violations, f"Non-context pipeline modules import config/: {violations}"
+
+
+def test_only_pipeline_context_imports_config() -> None:
+    """Only pipeline/context.py may import from autoskillit.config."""
+    pkg = SRC_ROOT / "pipeline"
+    assert pkg.exists(), "pipeline/ package must exist"
+    for py in pkg.rglob("*.py"):
+        if py.name == "context.py":
+            continue
+        tree = ast.parse(py.read_text())
+        tc_lines = _type_checking_lines(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.lineno not in tc_lines:
+                mod = node.module or ""
+                assert "autoskillit.config" not in mod, (
+                    f"{py.name} must not import autoskillit.config (only context.py may)"
+                )

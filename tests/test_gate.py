@@ -2,32 +2,32 @@
 
 
 def test_gated_tools_is_frozenset():
-    from autoskillit._gate import GATED_TOOLS
+    from autoskillit.pipeline.gate import GATED_TOOLS
 
     assert isinstance(GATED_TOOLS, frozenset)
 
 
 def test_ungated_tools_is_frozenset():
-    from autoskillit._gate import UNGATED_TOOLS
+    from autoskillit.pipeline.gate import UNGATED_TOOLS
 
     assert isinstance(UNGATED_TOOLS, frozenset)
 
 
 def test_tool_sets_are_disjoint():
-    from autoskillit._gate import GATED_TOOLS, UNGATED_TOOLS
+    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
     assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
 
 
 def test_tool_sets_total_count():
-    from autoskillit._gate import GATED_TOOLS, UNGATED_TOOLS
+    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
     assert len(GATED_TOOLS) == 11
     assert len(UNGATED_TOOLS) == 6
 
 
 def test_gated_tools_contains_expected_names():
-    from autoskillit._gate import GATED_TOOLS
+    from autoskillit.pipeline.gate import GATED_TOOLS
 
     expected = {
         "run_cmd",
@@ -46,7 +46,7 @@ def test_gated_tools_contains_expected_names():
 
 
 def test_ungated_tools_contains_expected_names():
-    from autoskillit._gate import UNGATED_TOOLS
+    from autoskillit.pipeline.gate import UNGATED_TOOLS
 
     expected = {
         "kitchen_status",
@@ -60,14 +60,14 @@ def test_ungated_tools_contains_expected_names():
 
 
 def test_gate_state_default_disabled():
-    from autoskillit._gate import GateState
+    from autoskillit.pipeline.gate import GateState
 
     gs = GateState()
     assert gs.enabled is False
 
 
 def test_gate_state_can_be_enabled():
-    from autoskillit._gate import GateState
+    from autoskillit.pipeline.gate import GateState
 
     gs = GateState(enabled=True)
     assert gs.enabled is True
@@ -76,7 +76,7 @@ def test_gate_state_can_be_enabled():
 def test_gate_error_result_is_valid_json():
     import json
 
-    from autoskillit._gate import gate_error_result
+    from autoskillit.pipeline.gate import gate_error_result
 
     raw = gate_error_result()
     parsed = json.loads(raw)
@@ -86,7 +86,7 @@ def test_gate_error_result_is_valid_json():
 def test_gate_error_result_fields():
     import json
 
-    from autoskillit._gate import gate_error_result
+    from autoskillit.pipeline.gate import gate_error_result
 
     parsed = json.loads(gate_error_result())
     assert parsed["success"] is False

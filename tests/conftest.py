@@ -56,11 +56,11 @@ def tool_ctx(monkeypatch, tmp_path):
     gate should do: tool_ctx.gate = GateState(enabled=False) locally.
     """
     from autoskillit import server as _server
-    from autoskillit._audit import AuditLog
-    from autoskillit._context import ToolContext
-    from autoskillit._gate import GateState
-    from autoskillit._token_log import TokenLog
     from autoskillit.config import AutomationConfig
+    from autoskillit.pipeline.audit import AuditLog
+    from autoskillit.pipeline.context import ToolContext
+    from autoskillit.pipeline.gate import GateState
+    from autoskillit.pipeline.tokens import TokenLog
 
     mock_runner = MockSubprocessRunner()
     ctx = ToolContext(

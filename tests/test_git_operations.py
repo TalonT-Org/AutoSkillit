@@ -1,9 +1,9 @@
 """Tests for git_operations.py perform_merge()."""
 
 import pytest
-from autoskillit.types import SubprocessResult, TerminationReason
 
 from autoskillit.config import AutomationConfig
+from autoskillit.core.types import SubprocessResult, TerminationReason
 
 
 def _make_result(
@@ -54,8 +54,7 @@ async def test_perform_merge_returns_error_for_nonexistent_path(
 async def test_perform_merge_blocks_on_failing_tests(
     default_config, conftest_mock_runner, tmp_path
 ):
-    from autoskillit.types import MergeFailedStep, MergeState
-
+    from autoskillit.core.types import MergeFailedStep, MergeState
     from autoskillit.git_operations import perform_merge
 
     # Create a temp dir to use as a fake worktree path so os.path.isdir passes

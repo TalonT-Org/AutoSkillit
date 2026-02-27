@@ -2,12 +2,12 @@
 
 from pathlib import Path
 
-from autoskillit.types import SubprocessResult, TerminationReason
+from autoskillit.core.types import SubprocessResult, TerminationReason
 
 
 def test_tool_ctx_provides_isolated_gate(tool_ctx):
     """tool_ctx fixture provides a ToolContext with gate enabled."""
-    from autoskillit._gate import GateState
+    from autoskillit.pipeline.gate import GateState
 
     assert isinstance(tool_ctx.gate, GateState)
     assert tool_ctx.gate.enabled is True

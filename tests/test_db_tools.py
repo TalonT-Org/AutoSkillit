@@ -1,4 +1,4 @@
-"""Tests for autoskillit.db_tools module."""
+"""Tests for autoskillit.execution.db module."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.db_tools import (
+from autoskillit.execution.db import (
     _execute_readonly_query,
     _row_to_dict,
     _validate_select_only,

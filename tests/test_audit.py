@@ -1,11 +1,11 @@
-"""Tests for autoskillit._audit — pipeline failure tracking."""
+"""Tests for autoskillit.pipeline.audit — pipeline failure tracking."""
 
 from __future__ import annotations
 
 import json
 from dataclasses import fields
 
-from autoskillit._audit import AuditLog, FailureRecord
+from autoskillit.pipeline.audit import AuditLog, FailureRecord
 
 
 def _make_record(**overrides: object) -> FailureRecord:
@@ -92,11 +92,13 @@ class TestAuditLog:
 
 class TestAuditLogModuleSingleton:
     def test_module_singleton_exists(self):
-        from autoskillit._audit import _audit_log
+        from autoskillit.pipeline.audit import _audit_log
 
         assert isinstance(_audit_log, AuditLog)
 
     def test_singleton_is_importable_from_audit(self):
-        from autoskillit._audit import _audit_log  # always in _audit, injected into ToolContext
+        from autoskillit.pipeline.audit import (
+            _audit_log,
+        )  # always in _audit, injected into ToolContext
 
         assert isinstance(_audit_log, AuditLog)

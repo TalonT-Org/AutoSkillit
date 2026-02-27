@@ -12,18 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import structlog.contextvars
 import structlog.testing
-from autoskillit.types import (
-    CONTEXT_EXHAUSTION_MARKER,
-    RETRY_RESPONSE_FIELDS,
-    MergeFailedStep,
-    MergeState,
-    RestartScope,
-    RetryReason,
-    TerminationReason,
-)
 
-from autoskillit._audit import FailureRecord
-from autoskillit._gate import GATED_TOOLS, UNGATED_TOOLS, GateState
 from autoskillit.config import (
     AutomationConfig,
     ClassifyFixConfig,
@@ -34,14 +23,35 @@ from autoskillit.config import (
     SafetyConfig,
     TokenUsageConfig,
 )
-from autoskillit.db_tools import _select_only_authorizer, _validate_select_only
-from autoskillit.headless_runner import (
+from autoskillit.core.types import (
+    CONTEXT_EXHAUSTION_MARKER,
+    RETRY_RESPONSE_FIELDS,
+    MergeFailedStep,
+    MergeState,
+    RestartScope,
+    RetryReason,
+    TerminationReason,
+)
+from autoskillit.execution.db import _select_only_authorizer, _validate_select_only
+from autoskillit.execution.headless import (
     _build_skill_result,
     _ensure_skill_prefix,
     _resolve_model,
     _session_log_dir,
 )
-from autoskillit.process_lifecycle import SubprocessResult
+from autoskillit.execution.process import SubprocessResult
+from autoskillit.execution.session import (
+    ClaudeSessionResult,
+    SkillResult,
+    _compute_retry,
+    _compute_success,
+    _is_completion_kill_anomaly,
+    extract_token_usage,
+    parse_session_result,
+)
+from autoskillit.execution.testing import parse_pytest_summary as _parse_pytest_summary
+from autoskillit.pipeline.audit import FailureRecord
+from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, GateState
 from autoskillit.server import (
     _check_dry_walkthrough,
     _close_kitchen_handler,
@@ -66,16 +76,6 @@ from autoskillit.server import (
     test_check,
     validate_recipe,
 )
-from autoskillit.session_result import (
-    ClaudeSessionResult,
-    SkillResult,
-    _compute_retry,
-    _compute_success,
-    _is_completion_kill_anomaly,
-    extract_token_usage,
-    parse_session_result,
-)
-from autoskillit.test_runner import parse_pytest_summary as _parse_pytest_summary
 from autoskillit.workspace import CleanupResult, _delete_directory_contents
 
 test_check.__test__ = False  # type: ignore[attr-defined]
@@ -773,8 +773,7 @@ class TestRecipeTools:
     @patch("autoskillit.recipe_io.list_recipes")
     async def test_list_returns_json_object(self, mock_list):
         """list_recipes returns JSON object with scripts array (not gated)."""
-        from autoskillit.types import LoadResult, RecipeSource
-
+        from autoskillit.core.types import LoadResult, RecipeSource
         from autoskillit.recipe_schema import RecipeInfo
 
         mock_list.return_value = LoadResult(
@@ -825,7 +824,7 @@ class TestRecipeTools:
     @patch("autoskillit.recipe_io.list_recipes")
     async def test_list_reports_errors_in_response(self, mock_list):
         """list_recipes includes errors in JSON when recipes fail to parse."""
-        from autoskillit.types import LoadReport, LoadResult
+        from autoskillit.core.types import LoadReport, LoadResult
 
         mock_list.return_value = LoadResult(
             items=[],
@@ -1036,8 +1035,7 @@ class TestLoadRecipeExceptionHandling:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """ValueError (malformed recipe structure) is caught and returned as error suggestion."""
-        from autoskillit.types import RecipeSource
-
+        from autoskillit.core.types import RecipeSource
         from autoskillit.recipe_schema import RecipeInfo
 
         monkeypatch.chdir(tmp_path)
@@ -2671,7 +2669,7 @@ class TestOpenKitchenVersionReporting:
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -3701,7 +3699,7 @@ class TestReadDb:
 
     @pytest.mark.asyncio
     async def test_gated_when_disabled(self, sample_db, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
         result = json.loads(
@@ -3774,7 +3772,7 @@ class TestReadDbGating:
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -4132,7 +4130,7 @@ class TestBuildSkillResultCrossValidation:
     def test_gate_disabled_schema(self, tool_ctx):
         """Gate-disabled response has standard keys."""
         import autoskillit.server as srv
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
         response = json.loads(srv._require_enabled())
@@ -4190,7 +4188,7 @@ class TestGateErrorSchemaNormalization:
     def test_require_enabled_gate_returns_standard_schema(self, tool_ctx):
         """Gate errors must use the same schema as normal responses."""
         import autoskillit.server as srv
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
         gate_result = srv._require_enabled()
@@ -5280,7 +5278,7 @@ class TestMigrationSuggestions:
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
         """Verify these tools work WITHOUT tool activation."""
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -5303,7 +5301,7 @@ class TestMigrationSuppression:
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
         """Verify these tools work WITHOUT tool activation."""
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -5376,7 +5374,7 @@ class TestLoadRecipeReadOnly:
         monkeypatch.chdir(tmp_path)
         with (
             patch("autoskillit.migration_loader.applicable_migrations", return_value=["v0.1.0"]),
-            patch("autoskillit.headless_runner.run_headless_core") as mock_headless,
+            patch("autoskillit.execution.headless.run_headless_core") as mock_headless,
             patch("autoskillit.recipe_validator.generate_recipe_card") as mock_gen,
         ):
             result = json.loads(await load_recipe(name="implementation-pipeline"))
@@ -6019,7 +6017,7 @@ class TestGetPipelineReport:
     # Override conftest to test WITHOUT open_kitchen
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -6037,7 +6035,7 @@ class TestGetPipelineReport:
 
     @pytest.mark.asyncio
     async def test_accumulates_failures_from_run_skill(self, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=True)
         tool_ctx.runner.push(_make_result(returncode=1, stdout=_failed_session_json()))
@@ -6180,7 +6178,7 @@ class TestGetTokenSummary:
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -6307,7 +6305,7 @@ class TestGetTokenSummary:
 
 def test_open_kitchen_has_no_update_advisory(tool_ctx):
     """REQ-APP-004: open_kitchen prompt contains no recipe update advisory."""
-    from autoskillit._gate import GateState
+    from autoskillit.pipeline.gate import GateState
     from autoskillit.server import open_kitchen
 
     # Ensure kitchen is closed before calling open_kitchen

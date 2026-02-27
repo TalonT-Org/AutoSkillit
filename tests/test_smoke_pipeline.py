@@ -367,7 +367,7 @@ class TestSmokeScriptValidation:
         assert "bug_report.json" in assess_cmd
 
     def test_pipeline_summary_skill_exists(self) -> None:
-        from autoskillit.skill_resolver import SkillResolver
+        from autoskillit.workspace.skills import SkillResolver
 
         resolver = SkillResolver()
         names = [s.name for s in resolver.list_all()]

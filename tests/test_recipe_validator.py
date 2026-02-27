@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 import yaml
-from autoskillit.types import RETRY_RESPONSE_FIELDS
 
+from autoskillit.core.types import RETRY_RESPONSE_FIELDS
 from autoskillit.recipe_io import (
     _parse_recipe,
     _parse_step,
@@ -1044,7 +1044,7 @@ class TestWeakConstraintRule:
         assert weak
 
     def test_detailed_constraints_pass(self) -> None:
-        from autoskillit.types import PIPELINE_FORBIDDEN_TOOLS
+        from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
 
         tool_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
         constraint = f"NEVER use native tools ({tool_list}) from the orchestrator."

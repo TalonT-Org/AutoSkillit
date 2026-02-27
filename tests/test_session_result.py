@@ -8,13 +8,13 @@ from __future__ import annotations
 import json
 
 import structlog
-from autoskillit.types import (
+
+from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     RetryReason,
     TerminationReason,
 )
-
-from autoskillit.session_result import (
+from autoskillit.execution.session import (
     ClaudeSessionResult,
     SkillResult,
     _compute_retry,

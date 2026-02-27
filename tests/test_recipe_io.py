@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 import yaml
-from autoskillit.types import RecipeSource
 
+from autoskillit.core.types import RecipeSource
 from autoskillit.recipe_io import (
     _parse_recipe,
     _parse_step,
@@ -491,7 +491,7 @@ def test_builtin_recipes_dir_points_to_recipes() -> None:
 
 
 def test_recipe_source_enum_values() -> None:
-    from autoskillit.types import RecipeSource
+    from autoskillit.core.types import RecipeSource
 
     assert hasattr(RecipeSource, "PROJECT")
     assert hasattr(RecipeSource, "BUILTIN")

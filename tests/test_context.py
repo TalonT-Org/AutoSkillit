@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from autoskillit._audit import AuditLog, FailureRecord
-from autoskillit._context import ToolContext
-from autoskillit._gate import GateState
-from autoskillit._token_log import TokenLog
 from autoskillit.config import AutomationConfig
+from autoskillit.pipeline.audit import AuditLog, FailureRecord
+from autoskillit.pipeline.context import ToolContext
+from autoskillit.pipeline.gate import GateState
+from autoskillit.pipeline.tokens import TokenLog
 
 
 def test_tool_context_fields_accessible(tmp_path):

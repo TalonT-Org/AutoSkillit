@@ -185,38 +185,53 @@ _SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
 # ── Rule 1: Import layer enforcement ─────────────────────────────────────────
 LAYER_ASSIGNMENTS: dict[str, int] = {
     # ── Layer 0: Foundation ── no autoskillit imports ─────────────────────────
+    # Note: core/, config/, pipeline/gate.py are sub-packages/modules. Their
+    # flat .py equivalents (types, _logging, _io, _yaml, _gate, config) no
+    # longer exist — entries below that lack a matching .py file are skipped.
     "core": 0,
-    "config": 0,
-    "_gate": 0,
+    "gate": 0,  # pipeline/gate.py (formerly _gate.py)
     "migration_loader": 0,
     "version": 0,
     "smoke_utils": 0,
     # ── Layer 1: Basic Services ── import only L0 ─────────────────────────────
-    "_audit": 1,
-    "_token_log": 1,
-    "session_result": 1,
+    # flat-module equivalents removed; sub-module stems are checked when present
+    "audit": 1,  # pipeline/audit.py
+    "tokens": 1,  # pipeline/tokens.py
+    "session": 1,  # execution/session.py
+    "process": 1,  # execution/process.py
+    "testing": 1,  # execution/testing.py
+    "db": 1,  # execution/db.py
+    "cleanup": 1,  # workspace/cleanup.py
+    "skills": 1,  # workspace/skills.py
     "recipe_schema": 1,
-    "skill_resolver": 1,
     "failure_store": 1,
-    "process_lifecycle": 1,
     # ── Layer 2: Complex Services ── import L0 + L1 ───────────────────────────
-    "_context": 2,
+    "context": 2,  # pipeline/context.py (formerly _context.py)
     "recipe_io": 2,
     "recipe_loader": 2,
-    "db_tools": 2,
-    "workspace": 2,
     # ── Layer 3: Orchestration + Server ── import L0–L2 ───────────────────────
+    "headless": 3,  # execution/headless.py
     "recipe_validator": 3,
     "migration_engine": 3,
     "server": 3,
     "_doctor": 3,
+    "git_operations": 3,
 }
 _LAYER_EXEMPT: frozenset[str] = frozenset({"cli", "__init__", "__main__"})
 
 # ── Rule 2: Singleton definition locality ─────────────────────────────────────
 # "server" allows mcp = FastMCP(...); "cli" allows app = App(...) etc.
 SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
-    {"_audit", "_token_log", "failure_store", "server", "cli", "recipe_validator"}
+    {
+        # pipeline/ package: singletons _audit_log and _token_log
+        "audit",
+        "tokens",
+        # root-level singletons
+        "failure_store",
+        "server",
+        "cli",
+        "recipe_validator",
+    }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
     {
@@ -247,7 +262,7 @@ _MODULE_LEVEL_IO_ATTR_CALLS: frozenset[tuple[str, str]] = frozenset(
 _MODULE_LEVEL_IO_EXEMPT: frozenset[str] = frozenset({"__main__.py"})
 
 # ── Rule 5 (visitor): asyncio.PIPE ban ────────────────────────────────────────
-_ASYNCIO_PIPE_EXEMPT: frozenset[str] = frozenset({"process_lifecycle.py"})
+_ASYNCIO_PIPE_EXEMPT: frozenset[str] = frozenset({"process.py"})
 
 
 # ── Helpers for new rules ─────────────────────────────────────────────────────
@@ -495,7 +510,7 @@ def _has_await_or_return(stmt: ast.stmt) -> bool:
 def test_all_mcp_tools_are_registered() -> None:
     """Bidirectional check: every @mcp.tool function is in the _gate registry and
     every registry entry has a corresponding @mcp.tool function in server.py."""
-    from autoskillit._gate import GATED_TOOLS, UNGATED_TOOLS
+    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
     expected = GATED_TOOLS | UNGATED_TOOLS
     server_src = SRC_ROOT / "server.py"
@@ -516,7 +531,7 @@ def test_all_mcp_tools_are_registered() -> None:
 def test_gated_tools_call_require_enabled_first() -> None:
     """Every tool in GATED_TOOLS must call _require_enabled() before any
     await expression or return statement in its function body."""
-    from autoskillit._gate import GATED_TOOLS
+    from autoskillit.pipeline.gate import GATED_TOOLS
 
     src = (SRC_ROOT / "server.py").read_text()
     tree = ast.parse(src)
@@ -555,7 +570,7 @@ def test_gated_tools_call_require_enabled_first() -> None:
 
 
 def test_server_imports_gate_registry() -> None:
-    """server.py must import GATED_TOOLS and UNGATED_TOOLS from autoskillit._gate.
+    """server.py must import GATED_TOOLS and UNGATED_TOOLS from autoskillit.pipeline.gate.
 
     N6 requirement: server.py is the authoritative runtime consumer of the
     gate registry, not only the test suite.
@@ -565,12 +580,12 @@ def test_server_imports_gate_registry() -> None:
 
     imported: set[str] = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "autoskillit._gate":
+        if isinstance(node, ast.ImportFrom) and node.module == "autoskillit.pipeline.gate":
             for alias in node.names:
                 imported.add(alias.name)
 
     missing = {"GATED_TOOLS", "UNGATED_TOOLS"} - imported
-    assert not missing, f"server.py must import from autoskillit._gate: {sorted(missing)}"
+    assert not missing, f"server.py must import from autoskillit.pipeline.gate: {sorted(missing)}"
 
 
 # ── Rule 1: test_import_layer_enforcement ─────────────────────────────────────
@@ -716,8 +731,8 @@ def test_asyncio_pipe_ban_detects_violation(tmp_path: Path) -> None:
     assert any("asyncio.PIPE" in v.message for v in violations)
 
 
-def test_asyncio_pipe_ban_exempt_in_process_lifecycle(tmp_path: Path) -> None:
-    f = tmp_path / "process_lifecycle.py"
+def test_asyncio_pipe_ban_exempt_in_process(tmp_path: Path) -> None:
+    f = tmp_path / "process.py"
     f.write_text("import asyncio\nval = asyncio.PIPE\n")
     violations = _scan(f)
     assert not any("asyncio.PIPE" in v.message for v in violations)

@@ -18,19 +18,19 @@ def make_config():
 
 
 def test_ensure_skill_prefix_prepends_use_for_slash_commands():
-    from autoskillit.headless_runner import _ensure_skill_prefix
+    from autoskillit.execution.headless import _ensure_skill_prefix
 
     assert _ensure_skill_prefix("/investigate foo") == "Use /investigate foo"
 
 
 def test_ensure_skill_prefix_leaves_plain_text_unchanged():
-    from autoskillit.headless_runner import _ensure_skill_prefix
+    from autoskillit.execution.headless import _ensure_skill_prefix
 
     assert _ensure_skill_prefix("just a plain prompt") == "just a plain prompt"
 
 
 def test_inject_completion_directive_appends_marker():
-    from autoskillit.headless_runner import _inject_completion_directive
+    from autoskillit.execution.headless import _inject_completion_directive
 
     result = _inject_completion_directive("/investigate foo", "%%DONE%%")
     assert result.endswith("%%DONE%%")
@@ -38,28 +38,28 @@ def test_inject_completion_directive_appends_marker():
 
 
 def test_resolve_model_prefers_override(make_config):
-    from autoskillit.headless_runner import _resolve_model
+    from autoskillit.execution.headless import _resolve_model
 
     cfg = make_config(model_override="opus")
     assert _resolve_model("sonnet", cfg) == "opus"
 
 
 def test_resolve_model_uses_step_model_when_no_override(make_config):
-    from autoskillit.headless_runner import _resolve_model
+    from autoskillit.execution.headless import _resolve_model
 
     cfg = make_config(model_override=None, model_default=None)
     assert _resolve_model("haiku", cfg) == "haiku"
 
 
 def test_resolve_model_uses_config_default_when_step_empty(make_config):
-    from autoskillit.headless_runner import _resolve_model
+    from autoskillit.execution.headless import _resolve_model
 
     cfg = make_config(model_override=None, model_default="sonnet")
     assert _resolve_model("", cfg) == "sonnet"
 
 
 def test_resolve_model_returns_none_when_all_empty(make_config):
-    from autoskillit.headless_runner import _resolve_model
+    from autoskillit.execution.headless import _resolve_model
 
     cfg = make_config(model_override=None, model_default=None)
     assert _resolve_model("", cfg) is None

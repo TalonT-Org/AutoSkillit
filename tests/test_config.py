@@ -4,7 +4,7 @@ from dataclasses import fields as dc_fields
 
 import yaml
 
-from autoskillit.config import AutomationConfig, RunSkillRetryConfig, load_config
+from autoskillit.config import AutomationConfig, RunSkillConfig, RunSkillRetryConfig, load_config
 
 
 class TestDefaultConfig:
@@ -321,3 +321,35 @@ class TestRunSkillRetryConfigFields:
         assert field_names == {"timeout", "stale_threshold"}, (
             f"Unexpected fields: {field_names - {'timeout', 'stale_threshold'}}"
         )
+
+
+class TestRunSkillConfigExitAfterStopDelay:
+    def test_default_exit_after_stop_delay_is_30000(self):
+        cfg = AutomationConfig()
+        assert cfg.run_skill.exit_after_stop_delay_ms == 30000
+
+    def test_yaml_loads_exit_after_stop_delay(self, tmp_path):
+        (tmp_path / ".autoskillit").mkdir()
+        (tmp_path / ".autoskillit" / "config.yaml").write_text(
+            "run_skill:\n  exit_after_stop_delay_ms: 60000\n"
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.run_skill.exit_after_stop_delay_ms == 60000
+
+    def test_zero_disables_injection(self, tmp_path):
+        (tmp_path / ".autoskillit").mkdir()
+        (tmp_path / ".autoskillit" / "config.yaml").write_text(
+            "run_skill:\n  exit_after_stop_delay_ms: 0\n"
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.run_skill.exit_after_stop_delay_ms == 0
+
+    def test_partial_run_skill_config_preserves_default(self, tmp_path):
+        (tmp_path / ".autoskillit").mkdir()
+        (tmp_path / ".autoskillit" / "config.yaml").write_text("run_skill:\n  timeout: 1800\n")
+        cfg = load_config(tmp_path)
+        assert cfg.run_skill.exit_after_stop_delay_ms == 30000
+
+    def test_run_skill_config_fields_include_exit_delay(self):
+        names = {f.name for f in dc_fields(RunSkillConfig)}
+        assert "exit_after_stop_delay_ms" in names

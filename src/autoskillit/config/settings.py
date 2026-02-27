@@ -62,6 +62,7 @@ class RunSkillConfig:
     stale_threshold: int = 1200  # 20 minutes
     completion_marker: str = "%%ORDER_UP%%"
     completion_drain_timeout: float = 5.0
+    exit_after_stop_delay_ms: int = 30000
 
 
 @dataclass

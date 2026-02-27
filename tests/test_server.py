@@ -3823,7 +3823,7 @@ class TestRunSkillPrefix:
         )
         await run_skill("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[2].startswith("Use /investigate error")
+        assert cmd[4].startswith("Use /investigate error")
 
     @pytest.mark.asyncio
     async def test_run_skill_no_prefix_for_plain_prompt(self, tool_ctx):
@@ -3837,7 +3837,7 @@ class TestRunSkillPrefix:
         )
         await run_skill("Fix the bug in main.py", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[2].startswith("Fix the bug in main.py")
+        assert cmd[4].startswith("Fix the bug in main.py")
 
     @pytest.mark.asyncio
     async def test_run_skill_includes_completion_directive(self, tool_ctx):
@@ -3851,7 +3851,7 @@ class TestRunSkillPrefix:
         )
         await run_skill("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
-        assert "%%ORDER_UP%%" in cmd[2]
+        assert "%%ORDER_UP%%" in cmd[4]
 
 
 class TestRunSkillRetryPrefix:
@@ -3869,7 +3869,7 @@ class TestRunSkillRetryPrefix:
         )
         await run_skill_retry("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[2].startswith("Use /investigate error")
+        assert cmd[4].startswith("Use /investigate error")
 
     @pytest.mark.asyncio
     async def test_run_skill_retry_no_prefix_for_plain_prompt(self, tool_ctx):
@@ -3883,7 +3883,7 @@ class TestRunSkillRetryPrefix:
         )
         await run_skill_retry("Fix the bug in main.py", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[2].startswith("Fix the bug in main.py")
+        assert cmd[4].startswith("Fix the bug in main.py")
 
 
 class TestDryWalkthroughGateWithPrefix:
@@ -3946,10 +3946,61 @@ class TestRunSkillInjectsCompletionDirective:
         await run_skill("/investigate foo", "/tmp")
 
         cmd = tool_ctx.runner.call_args_list[-1][0]
-        # The -p argument is at index 2
-        skill_arg = cmd[2]
+        # The prompt argument is at index 4 (shifted by 2 env tokens)
+        skill_arg = cmd[4]
         assert "%%ORDER_UP%%" in skill_arg
         assert "ORCHESTRATION DIRECTIVE" in skill_arg
+
+
+_SUCCESS_JSON = (
+    '{"type": "result", "subtype": "success", "is_error": false,'
+    ' "result": "done", "session_id": "s1"}'
+)
+
+
+class TestRunSkillEnvPrefix:
+    """run_skill and run_skill_retry inject CLAUDE_CODE_EXIT_AFTER_STOP_DELAY env prefix."""
+
+    @pytest.mark.asyncio
+    async def test_default_delay_prepends_env_to_cmd(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
+        await run_skill("/investigate something", "/tmp")
+        cmd = tool_ctx.runner.call_args_list[0][0]
+        assert cmd[0] == "env"
+        assert cmd[1] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=30000"
+        assert "claude" in cmd
+
+    @pytest.mark.asyncio
+    async def test_zero_delay_omits_env_prefix(self, tool_ctx):
+        cfg = AutomationConfig()
+        cfg.run_skill = RunSkillConfig(exit_after_stop_delay_ms=0)
+        cfg.safety.require_dry_walkthrough = False
+        tool_ctx.config = cfg
+        tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
+        await run_skill("/investigate something", "/tmp")
+        cmd = tool_ctx.runner.call_args_list[0][0]
+        assert cmd[0] != "env"
+        assert cmd[0] == "claude"
+
+    @pytest.mark.asyncio
+    async def test_custom_delay_value_in_cmd(self, tool_ctx):
+        cfg = AutomationConfig()
+        cfg.run_skill = RunSkillConfig(exit_after_stop_delay_ms=60000)
+        cfg.safety.require_dry_walkthrough = False
+        tool_ctx.config = cfg
+        tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
+        await run_skill("/investigate something", "/tmp")
+        cmd = tool_ctx.runner.call_args_list[0][0]
+        assert cmd[0] == "env"
+        assert cmd[1] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=60000"
+
+    @pytest.mark.asyncio
+    async def test_run_skill_retry_also_gets_env_prefix(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
+        await run_skill_retry("/investigate something", "/tmp")
+        cmd = tool_ctx.runner.call_args_list[0][0]
+        assert cmd[0] == "env"
+        assert cmd[1] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=30000"
 
 
 class TestSessionLogDir:

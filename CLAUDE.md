@@ -295,3 +295,4 @@ All tool behavior is configurable via `.autoskillit/config.yaml`. No config file
 | `token_usage` | `verbosity` | `"summary"` | Token table behavior: `"summary"` = render once at pipeline end; `"none"` = suppress entirely |
 | `worktree_setup` | `command` | `null` | Worktree env setup command (`null` = auto-detect) |
 | `run_skill` | `completion_drain_timeout` | `5.0` | Seconds to wait for Channel A (stdout heartbeat) to confirm data after Channel B (session log) signals completion. Prevents false-negative failures from the Channel B / Channel A race. |
+| `run_skill` | `exit_after_stop_delay_ms` | `30000` | Milliseconds after session goes idle before Claude Code self-exits. Set to `0` to disable. |

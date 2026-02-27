@@ -244,6 +244,10 @@ async def run_headless_core(
     if resolved_model:
         cmd.extend(["--model", resolved_model])
 
+    delay_ms = cfg.exit_after_stop_delay_ms
+    if delay_ms > 0:
+        cmd = ["env", f"CLAUDE_CODE_EXIT_AFTER_STOP_DELAY={delay_ms}"] + cmd
+
     runner = ctx.runner
     assert runner is not None, "No subprocess runner configured"
     result = await runner(

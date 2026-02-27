@@ -93,5 +93,5 @@ async def test_perform_merge_returns_success_on_green_tests(
     result = await perform_merge(
         fake_wt, "main", config=default_config, runner=conftest_mock_runner
     )
-    assert result.get("success") is True
+    assert result.get("merge_succeeded") is True
     assert result["merged_branch"] == "feature-branch"

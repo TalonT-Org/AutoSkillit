@@ -22,6 +22,7 @@ dev = [
     "pytest-asyncio>=0.23.0",  # asyncio_default_fixture_loop_scope requires >=0.23.0
     "pytest-xdist>=3.5.0",
     "ruff>=0.9.0",
+    "import-linter>=2.1",
 ]
 
 [project.scripts]
@@ -50,3 +51,104 @@ select = ["E", "F", "I", "UP", "TID251"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "logging.getLogger" = {msg = "Use get_logger() from autoskillit._logging instead."}
+
+[tool.importlinter]
+root_packages = ["autoskillit"]
+# Exclude imports made inside `if TYPE_CHECKING:` guards from all contracts.
+# This is critical for execution/headless.py, which imports pipeline types only
+# inside TYPE_CHECKING blocks to avoid circular imports at runtime.
+exclude_type_checking_imports = true
+
+[[tool.importlinter.contracts]]
+name = "L0 core has no autoskillit upward imports"
+type = "forbidden"
+source_modules = ["autoskillit.core"]
+forbidden_modules = [
+    "autoskillit.config",
+    "autoskillit.pipeline",
+    "autoskillit.execution",
+    "autoskillit.workspace",
+    "autoskillit.recipe",
+    "autoskillit.migration",
+    "autoskillit.server",
+    "autoskillit.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "L1 config imports only L0"
+type = "forbidden"
+source_modules = ["autoskillit.config"]
+forbidden_modules = [
+    "autoskillit.pipeline",
+    "autoskillit.execution",
+    "autoskillit.workspace",
+    "autoskillit.recipe",
+    "autoskillit.migration",
+    "autoskillit.server",
+    "autoskillit.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "L1 pipeline does not import L2 or L3"
+type = "forbidden"
+source_modules = ["autoskillit.pipeline"]
+forbidden_modules = [
+    "autoskillit.execution",
+    "autoskillit.workspace",
+    "autoskillit.recipe",
+    "autoskillit.migration",
+    "autoskillit.server",
+    "autoskillit.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "L1 execution imports only L0"
+type = "forbidden"
+source_modules = ["autoskillit.execution"]
+forbidden_modules = [
+    "autoskillit.config",
+    "autoskillit.pipeline",
+    "autoskillit.workspace",
+    "autoskillit.recipe",
+    "autoskillit.migration",
+    "autoskillit.server",
+    "autoskillit.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "L1 workspace imports only L0"
+type = "forbidden"
+source_modules = ["autoskillit.workspace"]
+forbidden_modules = [
+    "autoskillit.config",
+    "autoskillit.pipeline",
+    "autoskillit.execution",
+    "autoskillit.recipe",
+    "autoskillit.migration",
+    "autoskillit.server",
+    "autoskillit.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "L2 recipe imports only L0 and workspace"
+type = "forbidden"
+source_modules = ["autoskillit.recipe"]
+forbidden_modules = [
+    "autoskillit.config",
+    "autoskillit.pipeline",
+    "autoskillit.execution",
+    "autoskillit.migration",
+    "autoskillit.server",
+    "autoskillit.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "L2 migration does not import L3 or config"
+type = "forbidden"
+source_modules = ["autoskillit.migration"]
+forbidden_modules = [
+    "autoskillit.config",
+    "autoskillit.pipeline",
+    "autoskillit.server",
+    "autoskillit.cli",
+]

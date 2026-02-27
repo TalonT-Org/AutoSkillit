@@ -770,11 +770,11 @@ class TestRecipeTools:
 
     # SS1
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe_io.list_recipes")
+    @patch("autoskillit.recipe.io.list_recipes")
     async def test_list_returns_json_object(self, mock_list):
         """list_recipes returns JSON object with scripts array (not gated)."""
         from autoskillit.core.types import LoadResult, RecipeSource
-        from autoskillit.recipe_schema import RecipeInfo
+        from autoskillit.recipe.schema import RecipeInfo
 
         mock_list.return_value = LoadResult(
             items=[
@@ -821,7 +821,7 @@ class TestRecipeTools:
 
     # SS4
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe_io.list_recipes")
+    @patch("autoskillit.recipe.io.list_recipes")
     async def test_list_reports_errors_in_response(self, mock_list):
         """list_recipes includes errors in JSON when recipes fail to parse."""
         from autoskillit.core.types import LoadReport, LoadResult
@@ -924,7 +924,7 @@ class TestRecipeTools:
 
         with (
             patch(
-                "autoskillit.recipe_validator.run_semantic_rules",
+                "autoskillit.recipe.validator.run_semantic_rules",
                 side_effect=ValueError("injected parse failure"),
             ),
             structlog.testing.capture_logs() as logs,
@@ -951,7 +951,7 @@ class TestRecipeTools:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with patch(
-            "autoskillit.recipe_validator.run_semantic_rules",
+            "autoskillit.recipe.validator.run_semantic_rules",
             side_effect=ValueError("injected crash"),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -966,7 +966,7 @@ class TestContractMigrationAdapterValidate:
     """P7-2: ContractMigrationAdapter.validate uses _load_yaml, not yaml.safe_load."""
 
     def test_valid_contract_returns_true(self, tmp_path: Path) -> None:
-        from autoskillit.migration_engine import ContractMigrationAdapter
+        from autoskillit.migration.engine import ContractMigrationAdapter
 
         f = tmp_path / "contract.yaml"
         f.write_text("skill_hashes:\n  my-skill: abc123\n")
@@ -976,7 +976,7 @@ class TestContractMigrationAdapterValidate:
         assert msg == ""
 
     def test_missing_skill_hashes_returns_false(self, tmp_path: Path) -> None:
-        from autoskillit.migration_engine import ContractMigrationAdapter
+        from autoskillit.migration.engine import ContractMigrationAdapter
 
         f = tmp_path / "contract.yaml"
         f.write_text("other_field: value\n")
@@ -986,7 +986,7 @@ class TestContractMigrationAdapterValidate:
         assert "skill_hashes" in msg
 
     def test_invalid_yaml_returns_false(self, tmp_path: Path) -> None:
-        from autoskillit.migration_engine import ContractMigrationAdapter
+        from autoskillit.migration.engine import ContractMigrationAdapter
 
         f = tmp_path / "contract.yaml"
         f.write_bytes(b":\tbad: yaml: [unclosed\n")
@@ -996,7 +996,7 @@ class TestContractMigrationAdapterValidate:
         assert msg != ""
 
     def test_missing_file_returns_false(self, tmp_path: Path) -> None:
-        from autoskillit.migration_engine import ContractMigrationAdapter
+        from autoskillit.migration.engine import ContractMigrationAdapter
 
         adapter = ContractMigrationAdapter()
         ok, msg = adapter.validate(tmp_path / "nonexistent.yaml")
@@ -1036,7 +1036,7 @@ class TestLoadRecipeExceptionHandling:
     ) -> None:
         """ValueError (malformed recipe structure) is caught and returned as error suggestion."""
         from autoskillit.core.types import RecipeSource
-        from autoskillit.recipe_schema import RecipeInfo
+        from autoskillit.recipe.schema import RecipeInfo
 
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
@@ -1052,8 +1052,8 @@ class TestLoadRecipeExceptionHandling:
             path=recipe_path,
         )
         with (
-            patch("autoskillit.recipe_io.find_recipe_by_name", return_value=fake_match),
-            patch("autoskillit.recipe_io._parse_recipe", side_effect=ValueError("bad structure")),
+            patch("autoskillit.recipe.io.find_recipe_by_name", return_value=fake_match),
+            patch("autoskillit.recipe.io._parse_recipe", side_effect=ValueError("bad structure")),
         ):
             result = json.loads(await load_recipe(name="test"))
         assert "error" not in result
@@ -1074,7 +1074,7 @@ class TestLoadRecipeExceptionHandling:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with patch(
-            "autoskillit.recipe_validator.load_recipe_card",
+            "autoskillit.recipe.contracts.load_recipe_card",
             side_effect=FileNotFoundError("missing"),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -1096,7 +1096,7 @@ class TestLoadRecipeExceptionHandling:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with patch(
-            "autoskillit.recipe_validator.run_semantic_rules",
+            "autoskillit.recipe.validator.run_semantic_rules",
             side_effect=AttributeError("programming error"),
         ):
             with pytest.raises(AttributeError, match="programming error"):
@@ -1430,7 +1430,7 @@ class TestToolSchemas:
 
     def test_bundled_recipe_kitchen_rules_name_all_forbidden_tools(self):
         """All bundled recipe kitchen_rules blocks must name every forbidden tool."""
-        from autoskillit.recipe_io import builtin_recipes_dir, load_recipe
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
         from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
 
         wf_dir = builtin_recipes_dir()
@@ -5373,9 +5373,9 @@ class TestLoadRecipeReadOnly:
         """load_recipe must not trigger headless migration even when migrations are applicable."""
         monkeypatch.chdir(tmp_path)
         with (
-            patch("autoskillit.migration_loader.applicable_migrations", return_value=["v0.1.0"]),
+            patch("autoskillit.migration.loader.applicable_migrations", return_value=["v0.1.0"]),
             patch("autoskillit.execution.headless.run_headless_core") as mock_headless,
-            patch("autoskillit.recipe_validator.generate_recipe_card") as mock_gen,
+            patch("autoskillit.recipe.contracts.generate_recipe_card") as mock_gen,
         ):
             result = json.loads(await load_recipe(name="implementation-pipeline"))
         assert "error" not in result
@@ -5391,7 +5391,7 @@ class TestLoadRecipeReadOnly:
         (recipes_dir / "test.yaml").write_text(
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
-        with patch("autoskillit.recipe_validator.generate_recipe_card") as mock_gen:
+        with patch("autoskillit.recipe.contracts.generate_recipe_card") as mock_gen:
             await load_recipe(name="test")
         mock_gen.assert_not_called()
 
@@ -5414,7 +5414,7 @@ class TestMigrateRecipe:
     ):
         """Create directory structure, fake migration YAML, and config."""
         import autoskillit
-        import autoskillit.migration_loader as ml
+        import autoskillit.migration.loader as ml
         from autoskillit.config import MigrationConfig
 
         monkeypatch.chdir(tmp_path)
@@ -5479,7 +5479,7 @@ class TestMigrateRecipe:
     async def test_migrate_recipe_up_to_date(self, tmp_path, monkeypatch):
         """migrate_recipe returns up_to_date when no migrations applicable."""
         monkeypatch.chdir(tmp_path)
-        with patch("autoskillit.migration_loader.applicable_migrations", return_value=[]):
+        with patch("autoskillit.migration.loader.applicable_migrations", return_value=[]):
             result = json.loads(await migrate_recipe(name="implementation-pipeline"))
         assert result.get("status") == "up_to_date"
 
@@ -5505,7 +5505,7 @@ class TestMigrateRecipe:
         )
         with (
             patch("autoskillit.server.run_headless_core", mock_headless),
-            patch("autoskillit.recipe_validator.generate_recipe_card", return_value=None),
+            patch("autoskillit.recipe.contracts.generate_recipe_card", return_value=None),
         ):
             result = json.loads(await migrate_recipe(name="test-script"))
 
@@ -5518,7 +5518,7 @@ class TestMigrateRecipe:
         self, tmp_path, monkeypatch, tool_ctx
     ):
         """LR4: FailureStore.clear(name) is called when migration succeeds."""
-        from autoskillit.failure_store import FailureStore, default_store_path
+        from autoskillit.migration.store import FailureStore, default_store_path
 
         ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
@@ -5548,7 +5548,7 @@ class TestMigrateRecipe:
         )
         with (
             patch("autoskillit.server.run_headless_core", mock_headless),
-            patch("autoskillit.recipe_validator.generate_recipe_card", return_value=None),
+            patch("autoskillit.recipe.contracts.generate_recipe_card", return_value=None),
         ):
             await migrate_recipe(name="test-script")
 
@@ -5559,7 +5559,7 @@ class TestMigrateRecipe:
     @pytest.mark.asyncio
     async def test_records_failure_when_migration_fails(self, tmp_path, monkeypatch, tool_ctx):
         """LR5: When headless returns success=False, failure is recorded to failures.json."""
-        from autoskillit.failure_store import FailureStore, default_store_path
+        from autoskillit.migration.store import FailureStore, default_store_path
 
         self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
 
@@ -5613,7 +5613,7 @@ class TestMigrateRecipe:
     async def test_up_to_date_recipe_not_migrated(self, tmp_path, monkeypatch, tool_ctx):
         """LR8: When applicable_migrations returns [], headless is never called."""
         import autoskillit
-        import autoskillit.migration_loader as ml
+        import autoskillit.migration.loader as ml
         from autoskillit.config import MigrationConfig
 
         monkeypatch.chdir(tmp_path)

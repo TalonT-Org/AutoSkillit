@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.failure_store import (
+from autoskillit.migration.store import (
     FailureStore,
     MigrationFailure,
     default_store_path,
@@ -129,7 +129,7 @@ def test_has_failure_false(tmp_path: Path) -> None:
 # FS10: record_from_skill() records to cwd/.autoskillit/temp/migrations/failures.json
 # ---------------------------------------------------------------------------
 def test_record_from_skill_helper(tmp_path: Path) -> None:
-    with patch("autoskillit.failure_store.Path.cwd", return_value=tmp_path):
+    with patch("autoskillit.migration.store.Path.cwd", return_value=tmp_path):
         record_from_skill(
             name="my-pipeline",
             file_path="/abs/path/my-pipeline.yaml",
@@ -200,7 +200,7 @@ def test_record_persists_to_disk(tmp_path: Path) -> None:
 def test_record_does_not_mutate_state_on_disk_failure(tmp_path: Path) -> None:
     """If _atomic_write raises, _state remains unchanged."""
     store = FailureStore(tmp_path / "failures.json")
-    with patch("autoskillit.failure_store._atomic_write", side_effect=OSError("disk full")):
+    with patch("autoskillit.migration.store._atomic_write", side_effect=OSError("disk full")):
         with pytest.raises(OSError):
             store.record("alpha", Path("/a.yaml"), "recipe", "err", 1)
     assert not store.has_failure("alpha")

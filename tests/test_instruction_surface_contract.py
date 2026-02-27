@@ -135,10 +135,10 @@ class TestBundledWorkflowContract:
 
     def test_bundled_workflows_constraints_name_all_forbidden_tools(self):
         """All bundled workflow YAML files must name every forbidden tool in constraints."""
-        from autoskillit.recipe_io import (
+        from autoskillit.recipe.io import (
             list_recipes as list_workflows,
         )
-        from autoskillit.recipe_io import (
+        from autoskillit.recipe.io import (
             load_recipe as load_workflow,
         )
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.recipe_validator import StaleItem
+from autoskillit.recipe.contracts import StaleItem
 
 # ---------------------------------------------------------------------------
 # T-P3-4-B: Module importable

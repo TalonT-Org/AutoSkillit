@@ -190,7 +190,6 @@ LAYER_ASSIGNMENTS: dict[str, int] = {
     # longer exist — entries below that lack a matching .py file are skipped.
     "core": 0,
     "gate": 0,  # pipeline/gate.py (formerly _gate.py)
-    "migration_loader": 0,
     "version": 0,
     "smoke_utils": 0,
     # ── Layer 1: Basic Services ── import only L0 ─────────────────────────────
@@ -203,16 +202,12 @@ LAYER_ASSIGNMENTS: dict[str, int] = {
     "db": 1,  # execution/db.py
     "cleanup": 1,  # workspace/cleanup.py
     "skills": 1,  # workspace/skills.py
-    "recipe_schema": 1,
-    "failure_store": 1,
-    # ── Layer 2: Complex Services ── import L0 + L1 ───────────────────────────
+    # ── Layer 2: Domain Services ── import L0 + L1 ────────────────────────────
     "context": 2,  # pipeline/context.py (formerly _context.py)
-    "recipe_io": 2,
-    "recipe_loader": 2,
+    "recipe": 2,  # L2 recipe/ sub-package
+    "migration": 2,  # L2 migration/ sub-package
     # ── Layer 3: Orchestration + Server ── import L0–L2 ───────────────────────
     "headless": 3,  # execution/headless.py
-    "recipe_validator": 3,
-    "migration_engine": 3,
     "server": 3,
     "_doctor": 3,
     "git_operations": 3,
@@ -227,10 +222,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "audit",
         "tokens",
         # root-level singletons
-        "failure_store",
         "server",
         "cli",
-        "recipe_validator",
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -846,14 +839,14 @@ def test_pyproject_cyclopts_minimum_version() -> None:
 
 def test_no_yaml_safe_load_in_migration_engine() -> None:
     """P7-2: ContractMigrationAdapter.validate must use _load_yaml, not yaml.safe_load."""
-    src = (Path(__file__).parent.parent / "src/autoskillit/migration_engine.py").read_text()
+    src = (Path(__file__).parent.parent / "src/autoskillit/migration/engine.py").read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Attribute) and func.attr == "safe_load":
                 pytest.fail(
-                    f"migration_engine.py line {node.lineno}: "
+                    f"migration/engine.py line {node.lineno}: "
                     f"direct yaml.safe_load call found; use load_yaml from core.io instead"
                 )
 
@@ -870,30 +863,32 @@ def test_pytest_asyncio_version_bound() -> None:
 
 
 def test_severity_not_defined_locally_in_recipe_validator() -> None:
-    """Severity must be imported from types, not defined in recipe_validator."""
-    ast_module = _get_module_ast("recipe_validator.py")
-    class_names = _top_level_class_names(ast_module)
-    assert "Severity" not in class_names, (
-        "Severity must live in core/types.py, not recipe_validator.py"
-    )
+    """Severity must be imported from types, not locally defined in recipe sub-modules."""
+    for filename in ("recipe/validator.py", "recipe/contracts.py"):
+        ast_module = _get_module_ast(filename)
+        class_names = _top_level_class_names(ast_module)
+        assert "Severity" not in class_names, (
+            f"Severity must live in core/types.py, not {filename}"
+        )
 
 
 def test_skill_tools_not_defined_in_recipe_io() -> None:
-    """SKILL_TOOLS must not be defined locally in recipe_io.py."""
-    ast_module = _get_module_ast("recipe_io.py")
+    """SKILL_TOOLS must not be defined locally in recipe/io.py."""
+    ast_module = _get_module_ast("recipe/io.py")
     assigns = _top_level_assign_targets(ast_module)
     assert "SKILL_TOOLS" not in assigns and "_SKILL_TOOLS" not in assigns, (
-        "SKILL_TOOLS must be imported from core/types, not defined in recipe_io.py"
+        "SKILL_TOOLS must be imported from core/types, not defined in recipe/io.py"
     )
 
 
 def test_skill_tools_not_defined_in_recipe_validator() -> None:
-    """SKILL_TOOLS must not be defined locally in recipe_validator.py."""
-    ast_module = _get_module_ast("recipe_validator.py")
-    assigns = _top_level_assign_targets(ast_module)
-    assert "SKILL_TOOLS" not in assigns and "_SKILL_TOOLS" not in assigns, (
-        "SKILL_TOOLS must be imported from core/types, not defined in recipe_validator.py"
-    )
+    """SKILL_TOOLS must not be defined locally in recipe/validator.py or recipe/contracts.py."""
+    for filename in ("recipe/validator.py", "recipe/contracts.py"):
+        ast_module = _get_module_ast(filename)
+        assigns = _top_level_assign_targets(ast_module)
+        assert "SKILL_TOOLS" not in assigns and "_SKILL_TOOLS" not in assigns, (
+            f"SKILL_TOOLS must be imported from core/types, not defined in {filename}"
+        )
 
 
 def test_contract_validator_module_deleted() -> None:
@@ -905,31 +900,32 @@ def test_contract_validator_module_deleted() -> None:
 
 
 def test_recipe_validator_has_regex_patterns() -> None:
-    """recipe_validator.py must define context/input regex patterns (not scattered)."""
-    ast_module = _get_module_ast("recipe_validator.py")
+    """recipe/contracts.py must define context/input regex patterns."""
+    ast_module = _get_module_ast("recipe/contracts.py")
     assigns = _top_level_assign_targets(ast_module)
-    assert "_CONTEXT_REF_RE" in assigns, "recipe_validator.py must define _CONTEXT_REF_RE"
-    assert "_INPUT_REF_RE" in assigns, "recipe_validator.py must define _INPUT_REF_RE"
+    assert "_CONTEXT_REF_RE" in assigns, "recipe/contracts.py must define _CONTEXT_REF_RE"
+    assert "_INPUT_REF_RE" in assigns, "recipe/contracts.py must define _INPUT_REF_RE"
 
 
 def test_recipe_validator_no_process_lifecycle_import() -> None:
-    """recipe_validator.py must not import from process_lifecycle (triage_staleness removed)."""
-    import_pairs = _extract_module_level_internal_imports(SRC_ROOT / "recipe_validator.py")
-    import_stems = [stem for stem, _ in import_pairs]
-    assert "process_lifecycle" not in import_stems, (
-        "recipe_validator.py must not import from process_lifecycle"
-    )
+    """recipe/validator.py and recipe/contracts.py must not import from process_lifecycle."""
+    for filename in ("recipe/validator.py", "recipe/contracts.py"):
+        import_pairs = _extract_module_level_internal_imports(SRC_ROOT / filename)
+        import_stems = [stem for stem, _ in import_pairs]
+        assert "process_lifecycle" not in import_stems, (
+            f"{filename} must not import from process_lifecycle"
+        )
 
 
 def test_server_uses_recipe_io_not_recipe_loader_for_discovery() -> None:
-    """server.py must import find_recipe_by_name from recipe_io, not from recipe_loader."""
+    """server.py must import find_recipe_by_name from recipe.io, not from recipe.loader."""
     server_path = SRC_ROOT / "server.py"
     src = server_path.read_text()
-    assert "from autoskillit.recipe_io import" in src or "from .recipe_io import" in src, (
-        "server.py must import recipe discovery functions from recipe_io"
+    assert "from autoskillit.recipe.io import" in src or "from .recipe.io import" in src, (
+        "server.py must import recipe discovery functions from recipe.io"
     )
-    assert "from autoskillit.recipe_loader import list_recipes" not in src
-    assert "from autoskillit.recipe_loader import load_recipe" not in src
+    assert "from autoskillit.recipe.loader import list_recipes" not in src
+    assert "from autoskillit.recipe.loader import load_recipe" not in src
 
 
 # ── L1 Package Runtime Isolation Tests ────────────────────────────────────────
@@ -1016,3 +1012,119 @@ def test_only_pipeline_context_imports_config() -> None:
                 assert "autoskillit.config" not in mod, (
                     f"{py.name} must not import autoskillit.config (only context.py may)"
                 )
+
+
+# ── New L2 sub-package tests (T1–T9 from groupC plan) ─────────────────────────
+
+
+def test_recipe_subpackage_importable() -> None:
+    """T1: recipe/ package exposes all expected symbols."""
+    from autoskillit.recipe import (  # noqa: F401
+        Recipe,
+        RecipeStep,
+        analyze_dataflow,
+        check_contract_staleness,
+        find_recipe_by_name,
+        generate_recipe_card,
+        iter_steps_with_context,
+        list_recipes,
+        load_bundled_manifest,
+        load_recipe,
+        load_recipe_card,
+        run_semantic_rules,
+        validate_recipe,
+        validate_recipe_cards,
+    )
+
+
+def test_contracts_module_has_staleitem() -> None:
+    """T2: recipe/contracts.py exposes StaleItem and load_bundled_manifest."""
+    from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest  # noqa: F401
+
+    assert StaleItem is not None
+    assert load_bundled_manifest is not None
+
+
+def test_validator_module_has_validate() -> None:
+    """T3: recipe/validator.py exposes validate_recipe, run_semantic_rules, analyze_dataflow."""
+    from autoskillit.recipe.validator import (  # noqa: F401
+        analyze_dataflow,
+        run_semantic_rules,
+        validate_recipe,
+    )
+
+    assert validate_recipe is not None
+    assert run_semantic_rules is not None
+    assert analyze_dataflow is not None
+
+
+def test_migration_subpackage_importable() -> None:
+    """T4: migration/ package exposes MigrationEngine, applicable_migrations, FailureStore."""
+    from autoskillit.migration import (  # noqa: F401
+        FailureStore,
+        MigrationEngine,
+        applicable_migrations,
+    )
+
+    assert MigrationEngine is not None
+    assert applicable_migrations is not None
+    assert FailureStore is not None
+
+
+def test_recipe_no_forbidden_imports() -> None:
+    """T5: REQ-COMP-009 — recipe/ modules import only from core/ and workspace/."""
+    recipe_pkg = SRC_ROOT / "recipe"
+    assert recipe_pkg.exists(), "recipe/ package must exist"
+    violations: list[str] = []
+    for py in recipe_pkg.glob("*.py"):
+        if py.name == "__init__.py":
+            continue
+        for stem, lineno in _extract_module_level_internal_imports(py):
+            if stem not in {"core", "workspace", "recipe"}:
+                violations.append(
+                    f"recipe/{py.name}:{lineno} imports {stem} — forbidden by REQ-COMP-009"
+                )
+    assert not violations, "\n".join(violations)
+
+
+def test_migration_no_forbidden_imports() -> None:
+    """T6: REQ-COMP-010 — migration/ imports only from core/, execution/, and recipe/."""
+    migration_pkg = SRC_ROOT / "migration"
+    assert migration_pkg.exists(), "migration/ package must exist"
+    violations: list[str] = []
+    for py in migration_pkg.glob("*.py"):
+        if py.name == "__init__.py":
+            continue
+        for stem, lineno in _extract_module_level_internal_imports(py):
+            if stem not in {"core", "execution", "recipe", "migration"}:
+                violations.append(
+                    f"migration/{py.name}:{lineno} imports {stem} — forbidden by REQ-COMP-010"
+                )
+    assert not violations, "\n".join(violations)
+
+
+def test_llm_triage_imports_from_contracts_not_validator() -> None:
+    """T7: REQ-DSGN-007 — _llm_triage.py imports from recipe/contracts, not recipe/validator."""
+    src = (SRC_ROOT / "_llm_triage.py").read_text()
+    assert "recipe.contracts" in src or "recipe/contracts" in src, (
+        "_llm_triage.py must import from recipe.contracts"
+    )
+    assert "recipe.validator" not in src and "recipe_validator" not in src, (
+        "_llm_triage.py must not import from recipe.validator or old recipe_validator"
+    )
+
+
+def test_old_flat_recipe_modules_removed() -> None:
+    """T9a: old flat recipe modules must be deleted after sub-package migration."""
+    for name in ("recipe_schema.py", "recipe_io.py", "recipe_loader.py", "recipe_validator.py"):
+        assert not (SRC_ROOT / name).exists(), (
+            f"{name} should be removed — code now lives in recipe/ sub-package"
+        )
+
+
+def test_old_flat_migration_modules_removed() -> None:
+    """T9b: old flat migration modules must be deleted after sub-package migration."""
+    for name in ("migration_engine.py", "migration_loader.py", "failure_store.py"):
+        assert not (SRC_ROOT / name).exists(), (
+            f"{name} should be removed — code now lives in migration/ sub-package"
+        )

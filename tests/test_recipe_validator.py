@@ -9,27 +9,28 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autoskillit.core.types import RETRY_RESPONSE_FIELDS
-from autoskillit.recipe_io import (
+from autoskillit.core.types import RETRY_RESPONSE_FIELDS, Severity
+from autoskillit.recipe.contracts import (
+    check_contract_staleness,
+    compute_skill_hash,
+    generate_recipe_card,
+    load_bundled_manifest,
+    load_recipe_card,
+    validate_recipe_cards,
+)
+from autoskillit.recipe.io import (
     _parse_recipe,
     _parse_step,
     builtin_recipes_dir,
     list_recipes,
     load_recipe,
 )
-from autoskillit.recipe_schema import Recipe, RecipeIngredient, RecipeStep, StepResultRoute
-from autoskillit.recipe_validator import (
+from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep, StepResultRoute
+from autoskillit.recipe.validator import (
     RuleFinding,
-    Severity,
     analyze_dataflow,
-    check_contract_staleness,
-    compute_skill_hash,
-    generate_recipe_card,
-    load_bundled_manifest,
-    load_recipe_card,
     run_semantic_rules,
     validate_recipe,
-    validate_recipe_cards,
 )
 
 # ---------------------------------------------------------------------------
@@ -38,19 +39,14 @@ from autoskillit.recipe_validator import (
 
 
 def test_all_symbols_importable() -> None:
-    """All expected symbols are importable from recipe_validator."""
-    from autoskillit.recipe_validator import (  # noqa: F401
-        _RULE_REGISTRY,
-        _WORKTREE_CREATING_SKILLS,
+    """All expected symbols are importable from recipe.validator and recipe.contracts."""
+    from autoskillit.core.types import Severity  # noqa: F401
+    from autoskillit.recipe.contracts import (  # noqa: F401
         DataflowEntry,
         RecipeCard,
-        RuleFinding,
-        RuleSpec,
-        Severity,
         SkillContract,
         SkillInput,
         SkillOutput,
-        analyze_dataflow,
         check_contract_staleness,
         compute_skill_hash,
         count_positional_args,
@@ -60,10 +56,17 @@ def test_all_symbols_importable() -> None:
         load_bundled_manifest,
         load_recipe_card,
         resolve_skill_name,
+        validate_recipe_cards,
+    )
+    from autoskillit.recipe.validator import (  # noqa: F401
+        _RULE_REGISTRY,
+        _WORKTREE_CREATING_SKILLS,
+        RuleFinding,
+        RuleSpec,
+        analyze_dataflow,
         run_semantic_rules,
         semantic_rule,
         validate_recipe,
-        validate_recipe_cards,
     )
 
 
@@ -121,7 +124,7 @@ class TestValidateRecipe:
         assert errors == []
 
     def test_missing_name_produces_error(self) -> None:
-        from autoskillit.recipe_io import _parse_recipe
+        from autoskillit.recipe.io import _parse_recipe
 
         data = {**VALID_RECIPE, "name": ""}
         wf = _parse_recipe(data)
@@ -448,7 +451,7 @@ class TestValidateRecipe:
 
     # VER3
     def test_version_does_not_cause_validation_errors(self) -> None:
-        from autoskillit.recipe_io import _parse_recipe
+        from autoskillit.recipe.io import _parse_recipe
 
         data = {
             "name": "version-test-recipe",
@@ -502,7 +505,7 @@ class TestDataFlowQuality:
 
     # DFQ1
     def test_analyze_dataflow_returns_report(self) -> None:
-        from autoskillit.recipe_schema import DataFlowReport
+        from autoskillit.recipe.schema import DataFlowReport
 
         wf = self._make_recipe(
             {
@@ -603,7 +606,7 @@ class TestDataFlowQuality:
         for yaml_file in yaml_files:
             wf = load_recipe(yaml_file)
             report = analyze_dataflow(wf)
-            from autoskillit.recipe_schema import DataFlowReport
+            from autoskillit.recipe.schema import DataFlowReport
 
             assert isinstance(report, DataFlowReport)
             assert isinstance(report.warnings, list)
@@ -875,7 +878,7 @@ def test_rule_finding_to_dict() -> None:
 
 
 def test_old_rule_removed() -> None:
-    from autoskillit.recipe_validator import _RULE_REGISTRY
+    from autoskillit.recipe.validator import _RULE_REGISTRY
 
     assert not any(r.name == "retry-without-worktree-path" for r in _RULE_REGISTRY)
 
@@ -1188,7 +1191,7 @@ def test_load_bundled_manifest_skill_inputs_typed() -> None:
 
 
 def test_resolve_skill_name_standard() -> None:
-    from autoskillit.recipe_validator import resolve_skill_name
+    from autoskillit.recipe.contracts import resolve_skill_name
 
     assert (
         resolve_skill_name("/autoskillit:retry-worktree ${{ context.plan_path }}")
@@ -1197,7 +1200,7 @@ def test_resolve_skill_name_standard() -> None:
 
 
 def test_resolve_skill_name_with_use_prefix() -> None:
-    from autoskillit.recipe_validator import resolve_skill_name
+    from autoskillit.recipe.contracts import resolve_skill_name
 
     assert (
         resolve_skill_name("Use /autoskillit:implement-worktree plan.md") == "implement-worktree"
@@ -1205,13 +1208,13 @@ def test_resolve_skill_name_with_use_prefix() -> None:
 
 
 def test_resolve_skill_name_no_prefix() -> None:
-    from autoskillit.recipe_validator import resolve_skill_name
+    from autoskillit.recipe.contracts import resolve_skill_name
 
     assert resolve_skill_name("/do-stuff") is None
 
 
 def test_resolve_skill_name_dynamic() -> None:
-    from autoskillit.recipe_validator import resolve_skill_name
+    from autoskillit.recipe.contracts import resolve_skill_name
 
     assert resolve_skill_name("/audit-${{ inputs.audit_type }}") is None
 
@@ -1293,7 +1296,7 @@ def test_generate_recipe_card_accepts_string_paths(tmp_path: Path) -> None:
 
 def test_validate_recipe_uses_iter_steps_with_context_for_capture_refs(tmp_path: Path) -> None:
     """validate_recipe catches context refs not captured by preceding steps."""
-    from autoskillit.recipe_io import iter_steps_with_context
+    from autoskillit.recipe.io import iter_steps_with_context
 
     data = {
         "name": "ctx-test",
@@ -1565,7 +1568,7 @@ class TestOnResultConsumption:
 class TestDeadOutputRule:
     def test_do1_dead_output_rule_in_registry(self) -> None:
         """T_DO1: dead-output is in _RULE_REGISTRY."""
-        from autoskillit.recipe_validator import _RULE_REGISTRY
+        from autoskillit.recipe.validator import _RULE_REGISTRY
 
         rule_names = [r.name for r in _RULE_REGISTRY]
         assert "dead-output" in rule_names
@@ -1631,7 +1634,7 @@ class TestDeadOutputRule:
 class TestImplicitHandoffRule:
     def test_ih1_implicit_handoff_rule_in_registry(self) -> None:
         """T_IH1: implicit-handoff is in _RULE_REGISTRY."""
-        from autoskillit.recipe_validator import _RULE_REGISTRY
+        from autoskillit.recipe.validator import _RULE_REGISTRY
 
         rule_names = [r.name for r in _RULE_REGISTRY]
         assert "implicit-handoff" in rule_names

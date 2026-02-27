@@ -14,12 +14,11 @@ Transport: stdio (default for FastMCP).
 from __future__ import annotations
 
 import asyncio
+import functools
 import importlib
 import inspect
 import json
 import os
-import re
-from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
@@ -28,7 +27,6 @@ from fastmcp.dependencies import CurrentContext
 from fastmcp.prompts import Message, PromptResult
 
 from autoskillit import __version__
-from autoskillit._audit import FailureRecord
 from autoskillit._context import ToolContext
 from autoskillit._gate import (  # noqa: F401
     GATED_TOOLS,
@@ -40,20 +38,14 @@ from autoskillit._logging import get_logger
 from autoskillit.config import AutomationConfig
 from autoskillit.db_tools import _execute_readonly_query, _validate_select_only
 from autoskillit.failure_store import FailureStore, default_store_path
+from autoskillit.git_operations import perform_merge
+from autoskillit.headless_runner import run_headless_core
 from autoskillit.migration_engine import MigrationFile, default_migration_engine
 from autoskillit.migration_loader import applicable_migrations
-from autoskillit.process_lifecycle import SubprocessResult
-from autoskillit.session_result import (
-    ClaudeSessionResult,
-    SkillResult,
-    _compute_retry,
-    _compute_success,
-    parse_session_result,
-)
+from autoskillit.session_result import _truncate
+from autoskillit.test_runner import check_test_passed
 from autoskillit.types import (
     PIPELINE_FORBIDDEN_TOOLS,
-    MergeFailedStep,
-    MergeState,
     RestartScope,
     RetryReason,
     TerminationReason,
@@ -181,173 +173,6 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
         )
 
     return None
-
-
-def _ensure_skill_prefix(skill_command: str) -> str:
-    """Ensure skill commands start with 'Use' for headless session loading."""
-    stripped = skill_command.strip()
-    if stripped.startswith("/"):
-        return f"Use {stripped}"
-    return skill_command
-
-
-def _truncate(text: str, max_len: int = 5000) -> str:
-    if len(text) <= max_len:
-        return text
-    return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]
-
-
-def _session_log_dir(cwd: str) -> Path:
-    """Derive Claude Code session log directory from project cwd."""
-    project_hash = cwd.replace("/", "-").replace("_", "-")
-    log_dir = Path.home() / ".claude" / "projects" / project_hash
-    logger.info("session_log_dir_computed", path=str(log_dir), cwd=cwd)
-    if not log_dir.exists():
-        logger.warning("session_log_dir_missing", path=str(log_dir), cwd=cwd)
-    return log_dir
-
-
-def _inject_completion_directive(skill_command: str, marker: str) -> str:
-    """Append an orchestration directive to make the session write a completion marker."""
-    directive = (
-        f"\n\nORCHESTRATION DIRECTIVE: When your task is complete, "
-        f"your final text output MUST end with: {marker}"
-    )
-    return skill_command + directive
-
-
-def _capture_failure(
-    skill_command: str,
-    exit_code: int,
-    subtype: str,
-    needs_retry: bool,
-    retry_reason: str,
-    stderr: str,
-) -> None:
-    """Record a failure in the audit log. No-op if skill_command is empty."""
-    if not skill_command:
-        return
-    _get_ctx().audit.record_failure(
-        FailureRecord(
-            timestamp=datetime.now(UTC).isoformat(),
-            skill_command=skill_command,
-            exit_code=exit_code,
-            subtype=subtype,
-            needs_retry=needs_retry,
-            retry_reason=retry_reason,
-            stderr=stderr,
-        )
-    )
-
-
-def _build_skill_result(
-    result: SubprocessResult,
-    completion_marker: str = "",
-    skill_command: str = "",
-) -> SkillResult:
-    """Route SubprocessResult fields into the standard run_skill response."""
-    if result.termination == TerminationReason.STALE:
-        # Attempt to recover from stdout before declaring stale failure.
-        # A session that completed its result record before going quiet deserves
-        # to have its output honored.
-        stale_session = parse_session_result(result.stdout)
-        if (
-            stale_session.subtype == "success"
-            and stale_session.result.strip()
-            and not stale_session.is_error
-        ):
-            # The session wrote a valid result before going stale.
-            # Treat as COMPLETED rather than STALE.
-            stale_returncode = result.returncode if result.returncode is not None else -1
-            success = _compute_success(
-                stale_session,
-                stale_returncode,
-                TerminationReason.COMPLETED,
-                completion_marker=completion_marker,
-            )
-            if success:
-                logger.warning(
-                    "Session went stale but stdout contained a valid result; recovering"
-                )
-                return SkillResult(
-                    success=True,
-                    result=_truncate(stale_session.agent_result),
-                    session_id=stale_session.session_id,
-                    subtype="recovered_from_stale",
-                    is_error=False,
-                    exit_code=stale_returncode,
-                    needs_retry=False,
-                    retry_reason=RetryReason.NONE,
-                    stderr=result.stderr if result.stderr else "",
-                    token_usage=stale_session.token_usage,
-                )
-        # No valid result in stdout — fall through to original stale response
-        _capture_failure(
-            skill_command,
-            exit_code=result.returncode if result.returncode is not None else -1,
-            subtype="stale",
-            needs_retry=True,
-            retry_reason=RetryReason.RESUME,
-            stderr=result.stderr if result.stderr else "",
-        )
-        return SkillResult(
-            success=False,
-            result=(
-                "Session went stale (no activity for configured threshold). "
-                "Partial progress may have been made. Retry to continue."
-            ),
-            session_id="",
-            subtype="stale",
-            is_error=False,
-            exit_code=-1,
-            needs_retry=True,
-            retry_reason=RetryReason.RESUME,
-            stderr="",
-            token_usage=None,
-        )
-
-    if result.termination == TerminationReason.TIMED_OUT:
-        returncode = -1
-        session = ClaudeSessionResult(
-            subtype="timeout",
-            is_error=True,
-            result=_truncate(result.stdout) if result.stdout.strip() else "",
-            session_id="",
-            errors=[],
-        )
-    else:
-        returncode = result.returncode if result.returncode is not None else -1
-        session = parse_session_result(result.stdout)
-
-    success = _compute_success(session, returncode, result.termination, completion_marker)
-    needs_retry, retry_reason = _compute_retry(session, returncode, result.termination)
-
-    if not success or needs_retry:
-        _capture_failure(
-            skill_command,
-            exit_code=returncode,
-            subtype=session.subtype,
-            needs_retry=needs_retry,
-            retry_reason=retry_reason.value,
-            stderr=result.stderr if result.stderr else "",
-        )
-
-    result_text = _truncate(session.agent_result)
-    if completion_marker:
-        result_text = result_text.replace(completion_marker, "").strip()
-
-    return SkillResult(
-        success=success,
-        result=result_text,
-        session_id=session.session_id,
-        subtype=session.subtype,
-        is_error=session.is_error,
-        exit_code=returncode,
-        needs_retry=needs_retry,
-        retry_reason=retry_reason,
-        stderr=_truncate(result.stderr),
-        token_usage=session.token_usage,
-    )
 
 
 @mcp.tool(tags={"automation"})
@@ -639,81 +464,6 @@ async def read_db(
         return json.dumps({"error": f"Query failed: {exc}"})
 
 
-def _resolve_model(step_model: str) -> str | None:
-    """Resolve model selection: config override > step > config default."""
-    if _get_config().model.override:
-        return _get_config().model.override
-    if step_model:
-        return step_model
-    if _get_config().model.default:
-        return _get_config().model.default
-    return None
-
-
-async def _run_headless_core(
-    skill_command: str,
-    cwd: str,
-    plugin_dir: str | None = None,
-    model: str | None = None,
-    step_name: str = "",
-    add_dir: str = "",
-    timeout: int | None = None,
-    stale_threshold: int | None = None,
-) -> SkillResult:
-    """Shared headless runner used by run_skill, run_skill_retry, and load_recipe.
-
-    Does NOT check open_kitchen gate — callers are responsible for authorization context.
-    Returns a SkillResult with at minimum a 'success' field.
-
-    Args:
-        timeout: Override the default run_skill timeout. Used by run_skill_retry
-            to pass its longer timeout without a separate subprocess-building path.
-        stale_threshold: Override the default stale threshold. Used by run_skill_retry.
-    """
-    cfg = _get_config().run_skill
-    original_skill_command = skill_command
-    skill_command = _inject_completion_directive(
-        _ensure_skill_prefix(skill_command), cfg.completion_marker
-    )
-    effective_plugin_dir = plugin_dir if plugin_dir is not None else _get_ctx().plugin_dir
-    cmd = [
-        "claude",
-        "-p",
-        skill_command,
-        "--plugin-dir",
-        effective_plugin_dir,
-        "--output-format",
-        "json",
-        "--dangerously-skip-permissions",
-    ]
-    if add_dir:
-        cmd.extend(["--add-dir", add_dir])
-    resolved_model = _resolve_model(model or "")
-    if resolved_model:
-        cmd.extend(["--model", resolved_model])
-
-    runner = _get_ctx().runner
-    assert runner is not None, "No subprocess runner configured"
-    result = await runner(
-        cmd,
-        cwd=Path(cwd),
-        timeout=timeout if timeout is not None else cfg.timeout,
-        pty_mode=True,
-        heartbeat_marker=cfg.heartbeat_marker,
-        session_log_dir=_session_log_dir(cwd),
-        completion_marker=cfg.completion_marker,
-        stale_threshold=stale_threshold if stale_threshold is not None else cfg.stale_threshold,
-        completion_drain_timeout=cfg.completion_drain_timeout,
-    )
-
-    skill_result = _build_skill_result(
-        result, completion_marker=cfg.completion_marker, skill_command=original_skill_command
-    )
-    if step_name:
-        _get_ctx().token_log.record(step_name, skill_result.token_usage)
-    return skill_result
-
-
 @mcp.tool(tags={"automation"})
 async def run_skill(
     skill_command: str,
@@ -761,8 +511,8 @@ async def run_skill(
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
-    skill_result = await _run_headless_core(
-        skill_command, cwd, model=model, add_dir=add_dir, step_name=step_name
+    skill_result = await run_headless_core(
+        skill_command, cwd, _get_ctx(), model=model, add_dir=add_dir, step_name=step_name
     )
     if not skill_result.success:
         try:
@@ -831,9 +581,10 @@ async def run_skill_retry(
             return gate_error
 
     cfg = _get_config().run_skill_retry
-    skill_result = await _run_headless_core(
+    skill_result = await run_headless_core(
         skill_command,
         cwd,
+        _get_ctx(),
         model=model,
         add_dir=add_dir,
         step_name=step_name,
@@ -850,50 +601,6 @@ async def run_skill_retry(
         except AttributeError:
             pass
     return skill_result.to_json()
-
-
-_OUTCOME_PATTERN = re.compile(
-    r"(\d+)\s+(passed|failed|error|xfailed|xpassed|skipped|warnings?|deselected)"
-)
-
-
-def _parse_pytest_summary(stdout: str) -> dict[str, int]:
-    """Extract pytest outcome counts from the last ``=``-delimited summary line.
-
-    Pytest's summary line is always delimited by ``=`` characters, e.g.
-    ``= 5 passed, 1 warning in 2.31s =``.  Only lines that start and end
-    with ``=`` are considered, preventing false matches on log output
-    containing phrases like ``"3 failed connections"``.
-
-    Returns empty dict if no summary line found.
-    """
-    for line in reversed(stdout.splitlines()):
-        stripped = line.strip()
-        if not (stripped.startswith("=") and stripped.endswith("=")):
-            continue
-        matches = _OUTCOME_PATTERN.findall(stripped)
-        if matches:
-            counts: dict[str, int] = {}
-            for count_str, outcome in matches:
-                key = outcome.rstrip("s") if outcome == "warnings" else outcome
-                counts[key] = int(count_str)
-            return counts
-    return {}
-
-
-def _check_test_passed(returncode: int, stdout: str) -> bool:
-    """Determine test pass/fail with cross-validation.
-
-    Uses exit code as primary signal, but overrides to False if the
-    output contains failure indicators — defense against exit code bugs
-    in external tools (e.g. Taskfile PIPESTATUS in non-bash shell).
-    """
-    if returncode != 0:
-        return False
-    counts = _parse_pytest_summary(stdout)
-    if counts.get("failed", 0) > 0 or counts.get("error", 0) > 0:
-        return False
-    return True
 
 
 @mcp.tool(tags={"automation"})
@@ -930,7 +637,7 @@ async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str
         timeout=_get_config().test_check.timeout,
     )
 
-    passed = _check_test_passed(returncode, stdout)
+    passed = check_test_passed(returncode, stdout)
 
     if not passed:
         try:
@@ -974,221 +681,26 @@ async def merge_worktree(
     except (RuntimeError, AttributeError):
         pass
 
-    # Validate worktree path exists
-    if not os.path.isdir(worktree_path):
+    runner = _get_ctx().runner
+    assert runner is not None, "No subprocess runner configured"
+    result = await perform_merge(
+        worktree_path,
+        base_branch,
+        config=_get_config(),
+        runner=runner,
+    )
+
+    if "error" in result:
         try:
             await ctx.error(
                 "merge_worktree failed",
                 logger_name="autoskillit.merge_worktree",
-                extra={"reason": "path does not exist"},
+                extra={"reason": result["error"]},
             )
         except (RuntimeError, AttributeError):
             pass
-        return json.dumps({"error": f"Path does not exist: {worktree_path}"})
 
-    # Verify it's a git worktree
-    rc, git_dir, stderr = await _run_subprocess(
-        ["git", "rev-parse", "--git-dir"],
-        cwd=worktree_path,
-        timeout=10,
-    )
-    if rc != 0 or "/worktrees/" not in git_dir:
-        try:
-            await ctx.error(
-                "merge_worktree failed",
-                logger_name="autoskillit.merge_worktree",
-                extra={"reason": "not a git worktree"},
-            )
-        except (RuntimeError, AttributeError):
-            pass
-        return json.dumps({"error": f"Not a git worktree: {worktree_path}", "stderr": stderr})
-
-    # Get branch name
-    rc, branch_out, stderr = await _run_subprocess(
-        ["git", "branch", "--show-current"],
-        cwd=worktree_path,
-        timeout=10,
-    )
-    if rc != 0:
-        try:
-            await ctx.error(
-                "merge_worktree failed",
-                logger_name="autoskillit.merge_worktree",
-                extra={"reason": "could not determine branch"},
-            )
-        except (RuntimeError, AttributeError):
-            pass
-        return json.dumps({"error": f"Could not determine branch: {stderr}"})
-    worktree_branch = branch_out.strip()
-
-    # Test gate
-    if _get_config().safety.test_gate_on_merge:
-        rc, test_stdout, test_stderr = await _run_subprocess(
-            _get_config().test_check.command,
-            cwd=worktree_path,
-            timeout=_get_config().test_check.timeout,
-        )
-        if not _check_test_passed(rc, test_stdout):
-            try:
-                await ctx.error(
-                    "merge_worktree failed",
-                    logger_name="autoskillit.merge_worktree",
-                    extra={"reason": "tests failed"},
-                )
-            except (RuntimeError, AttributeError):
-                pass
-            return json.dumps(
-                {
-                    "error": "Tests failed in worktree — merge blocked",
-                    "failed_step": MergeFailedStep.TEST_GATE,
-                    "state": MergeState.WORKTREE_INTACT,
-                    "worktree_path": worktree_path,
-                }
-            )
-
-    # Rebase
-    fetch_rc, _, fetch_stderr = await _run_subprocess(
-        ["git", "fetch", "origin"],
-        cwd=worktree_path,
-        timeout=60,
-    )
-    if fetch_rc != 0:
-        try:
-            await ctx.error(
-                "merge_worktree failed",
-                logger_name="autoskillit.merge_worktree",
-                extra={"reason": "git fetch failed"},
-            )
-        except (RuntimeError, AttributeError):
-            pass
-        return json.dumps(
-            {
-                "error": "git fetch origin failed",
-                "failed_step": MergeFailedStep.FETCH,
-                "state": MergeState.WORKTREE_INTACT,
-                "stderr": _truncate(fetch_stderr),
-                "worktree_path": worktree_path,
-            }
-        )
-
-    rc, _, rebase_stderr = await _run_subprocess(
-        ["git", "rebase", f"origin/{base_branch}"],
-        cwd=worktree_path,
-        timeout=120,
-    )
-    if rc != 0:
-        await _run_subprocess(
-            ["git", "rebase", "--abort"],
-            cwd=worktree_path,
-            timeout=30,
-        )
-        try:
-            await ctx.error(
-                "merge_worktree failed",
-                logger_name="autoskillit.merge_worktree",
-                extra={"reason": "rebase failed"},
-            )
-        except (RuntimeError, AttributeError):
-            pass
-        return json.dumps(
-            {
-                "error": "Rebase failed — aborted to clean state",
-                "failed_step": MergeFailedStep.REBASE,
-                "state": MergeState.WORKTREE_INTACT_REBASE_ABORTED,
-                "stderr": rebase_stderr,
-                "worktree_path": worktree_path,
-            }
-        )
-
-    # Determine main repo path from worktree list
-    rc, wt_list, _ = await _run_subprocess(
-        ["git", "worktree", "list", "--porcelain"],
-        cwd=worktree_path,
-        timeout=10,
-    )
-    main_repo = ""
-    for line in wt_list.splitlines():
-        if line.startswith("worktree "):
-            main_repo = line.split(" ", 1)[1].strip()
-            break  # First entry is always the main working tree
-
-    if not main_repo:
-        try:
-            await ctx.error(
-                "merge_worktree failed",
-                logger_name="autoskillit.merge_worktree",
-                extra={"reason": "could not determine main repo path"},
-            )
-        except (RuntimeError, AttributeError):
-            pass
-        return json.dumps({"error": "Could not determine main repo path from worktree list"})
-
-    # Merge from main repo
-    rc, _, merge_stderr = await _run_subprocess(
-        ["git", "merge", worktree_branch],
-        cwd=main_repo,
-        timeout=60,
-    )
-    if rc != 0:
-        await _run_subprocess(
-            ["git", "merge", "--abort"],
-            cwd=main_repo,
-            timeout=30,
-        )
-        try:
-            await ctx.error(
-                "merge_worktree failed",
-                logger_name="autoskillit.merge_worktree",
-                extra={"reason": "merge failed"},
-            )
-        except (RuntimeError, AttributeError):
-            pass
-        return json.dumps(
-            {
-                "error": "Merge failed — aborted to clean state",
-                "failed_step": MergeFailedStep.MERGE,
-                "state": MergeState.MAIN_REPO_MERGE_ABORTED,
-                "stderr": merge_stderr,
-                "worktree_path": worktree_path,
-            }
-        )
-
-    # Cleanup
-    wt_rc, _, wt_stderr = await _run_subprocess(
-        ["git", "worktree", "remove", worktree_path],
-        cwd=main_repo,
-        timeout=30,
-    )
-    if wt_rc != 0:
-        logger.warning(
-            "merge_worktree_cleanup_failed",
-            operation="worktree_remove",
-            path=worktree_path,
-            stderr=wt_stderr.strip(),
-        )
-
-    br_rc, _, br_stderr = await _run_subprocess(
-        ["git", "branch", "-D", worktree_branch],
-        cwd=main_repo,
-        timeout=10,
-    )
-    if br_rc != 0:
-        logger.warning(
-            "merge_worktree_cleanup_failed",
-            operation="branch_delete",
-            branch=worktree_branch,
-            stderr=br_stderr.strip(),
-        )
-
-    return json.dumps(
-        {
-            "success": True,
-            "merged_branch": worktree_branch,
-            "into_branch": base_branch,
-            "worktree_removed": wt_rc == 0,
-            "branch_deleted": br_rc == 0,
-        }
-    )
+    return json.dumps(result)
 
 
 @mcp.tool(tags={"automation"})
@@ -1720,9 +1232,10 @@ async def load_recipe(name: str) -> str:
                     file_type="recipe",
                     current_version=recipe.version,
                 )
+                _bound_headless = functools.partial(run_headless_core, ctx=_get_ctx())
                 migration_result = await engine.migrate_file(
                     mfile,
-                    run_headless=_run_headless_core,
+                    run_headless=_bound_headless,
                     temp_dir=temp_dir,
                 )
 

@@ -17,6 +17,13 @@ from autoskillit.types import CONTEXT_EXHAUSTION_MARKER, RetryReason, Terminatio
 
 logger = get_logger(__name__)
 
+
+def _truncate(text: str, max_len: int = 5000) -> str:
+    if len(text) <= max_len:
+        return text
+    return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]
+
+
 _TOKEN_FIELDS = (
     "input_tokens",
     "output_tokens",

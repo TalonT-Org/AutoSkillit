@@ -9,30 +9,15 @@ store with a defensive copy getter, and a module-level singleton.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-
 from autoskillit.core.logging import get_logger
+from autoskillit.core.types import FailureRecord
 
 logger = get_logger(__name__)
 
 STDERR_MAX_LEN = 500
 COMMAND_MAX_LEN = 200
 
-
-@dataclass
-class FailureRecord:
-    """Structured record of a single run_skill / run_skill_retry failure."""
-
-    timestamp: str  # ISO 8601 UTC, e.g. "2026-02-24T16:12:26Z"
-    skill_command: str  # truncated to COMMAND_MAX_LEN
-    exit_code: int
-    subtype: str  # e.g. "error", "stale", "timeout", "gate_error"
-    needs_retry: bool
-    retry_reason: str  # RetryReason.value string
-    stderr: str  # truncated to STDERR_MAX_LEN
-
-    def to_dict(self) -> dict:  # type: ignore[type-arg]
-        return asdict(self)
+__all__ = ["FailureRecord", "AuditLog", "_audit_log", "STDERR_MAX_LEN", "COMMAND_MAX_LEN"]
 
 
 class AuditLog:

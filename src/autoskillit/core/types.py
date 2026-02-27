@@ -6,7 +6,7 @@ Zero autoskillit imports. Provides the shared type vocabulary for all higher lay
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Generic, Protocol, TypeVar, runtime_checkable
@@ -151,3 +151,24 @@ RETRY_RESPONSE_FIELDS: frozenset[str] = frozenset(
         "token_usage",
     }
 )
+
+
+@dataclass
+class FailureRecord:
+    """Structured record of a single run_skill / run_skill_retry failure.
+
+    Pure-stdlib dataclass — no autoskillit imports required.
+    Shared between pipeline/audit.py (AuditLog store) and
+    execution/headless.py (_capture_failure).
+    """
+
+    timestamp: str  # ISO 8601 UTC, e.g. "2026-02-24T16:12:26Z"
+    skill_command: str  # truncated to COMMAND_MAX_LEN
+    exit_code: int
+    subtype: str  # e.g. "error", "stale", "timeout", "gate_error"
+    needs_retry: bool
+    retry_reason: str  # RetryReason.value string
+    stderr: str  # truncated to STDERR_MAX_LEN
+
+    def to_dict(self) -> dict:  # type: ignore[type-arg]
+        return asdict(self)

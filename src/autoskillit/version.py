@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import functools
 import json
 from pathlib import Path
 
 from autoskillit import __version__
 
 
+@functools.lru_cache(maxsize=1)
 def version_info(plugin_dir: Path | str | None = None) -> dict:
     """Return version health for the autoskillit installation.
 

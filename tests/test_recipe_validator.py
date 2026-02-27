@@ -1277,6 +1277,20 @@ def test_generate_recipe_card_returns_dict(tmp_path: Path) -> None:
     assert "skill_hashes" in result
 
 
+def test_generate_recipe_card_accepts_string_paths(tmp_path: Path) -> None:
+    """generate_recipe_card must accept str paths (the JSON round-trip from run_python)."""
+    recipes_dir = tmp_path / ".autoskillit" / "scripts"
+    recipes_dir.mkdir(parents=True)
+    pipeline = recipes_dir / "test-str-pipeline.yaml"
+    pipeline.write_text(SAMPLE_PIPELINE_YAML)
+
+    # Pass str arguments as run_python would after JSON round-trip
+    result = generate_recipe_card(str(pipeline), str(recipes_dir))
+
+    assert isinstance(result, dict)
+    assert "skill_hashes" in result
+
+
 def test_validate_recipe_uses_iter_steps_with_context_for_capture_refs(tmp_path: Path) -> None:
     """validate_recipe catches context refs not captured by preceding steps."""
     from autoskillit.recipe_io import iter_steps_with_context

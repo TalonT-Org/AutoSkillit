@@ -1,5 +1,6 @@
 name: investigate-first
 description: Investigate a problem deeply, plan architectural fix, implement and merge.
+autoskillit_version: "0.2.0"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,

@@ -7,6 +7,7 @@ If any test fails, a drift has occurred and the corresponding surface needs upda
 
 from __future__ import annotations
 
+import importlib
 import re
 from pathlib import Path
 
@@ -163,4 +164,81 @@ class TestSkillMdToolNameCurrency:
         assert "autoskillit_status" not in content, (
             "write-recipe/SKILL.md still references 'autoskillit_status'. "
             "Update all occurrences to 'kitchen_status'."
+        )
+
+
+_AUTOSKILLIT_CALLABLE_RE = re.compile(r"\bautoskillit\.[a-z_]+\.[a-z_]+\b")
+
+
+class TestRunPythonCallableContract:
+    """Every autoskillit.module.function reference in any SKILL.md must be importable and callable.
+
+    This mirrors the exact validation that _import_and_call() performs at runtime.
+    If the test passes, agents can call the path; if it fails, the path is stale.
+    """
+
+    def _collect_callable_refs(self) -> list[tuple[str, str]]:
+        """Returns list of (skill_name/SKILL.md relative path, dotted callable path)."""
+        skills_dir = _project_root() / "src" / "autoskillit" / "skills"
+        refs = []
+        for skill_md in skills_dir.rglob("SKILL.md"):
+            content = skill_md.read_text()
+            skill_name = skill_md.parent.name
+            for match in _AUTOSKILLIT_CALLABLE_RE.finditer(content):
+                refs.append((f"{skill_name}/SKILL.md", match.group(0)))
+        return refs
+
+    def test_all_callable_refs_are_importable(self):
+        """All autoskillit.* callable paths found in SKILL.md files must be importable."""
+        failures = []
+        for source, dotted in self._collect_callable_refs():
+            module_path, _attr = dotted.rsplit(".", 1)
+            try:
+                importlib.import_module(module_path)
+            except ImportError as exc:
+                failures.append(f"{source}: {dotted!r} — ImportError: {exc}")
+        assert not failures, "Stale module paths in SKILL.md files:\n" + "\n".join(failures)
+
+    def test_all_callable_refs_have_valid_attribute(self):
+        """All autoskillit.* callable paths in SKILL.md must resolve to an existing attribute."""
+        failures = []
+        for source, dotted in self._collect_callable_refs():
+            module_path, attr_name = dotted.rsplit(".", 1)
+            try:
+                module = importlib.import_module(module_path)
+            except ImportError:
+                continue  # caught by test_all_callable_refs_are_importable
+            if not hasattr(module, attr_name):
+                failures.append(
+                    f"{source}: {dotted!r} — no attribute {attr_name!r} on {module_path!r}"
+                )
+        assert not failures, "Stale attribute references in SKILL.md files:\n" + "\n".join(
+            failures
+        )
+
+    def test_all_callable_refs_are_callable(self):
+        """All autoskillit.* attribute references in SKILL.md must be callable."""
+        failures = []
+        for source, dotted in self._collect_callable_refs():
+            module_path, attr_name = dotted.rsplit(".", 1)
+            try:
+                module = importlib.import_module(module_path)
+            except ImportError:
+                continue
+            attr = getattr(module, attr_name, None)
+            if attr is not None and not callable(attr):
+                failures.append(f"{source}: {dotted!r} — attribute exists but is not callable")
+        assert not failures, "Non-callable references in SKILL.md files:\n" + "\n".join(failures)
+
+    def test_contract_validator_not_referenced_in_skill_mds(self):
+        """autoskillit.contract_validator was deleted; no SKILL.md may reference it."""
+        skills_dir = _project_root() / "src" / "autoskillit" / "skills"
+        stale_refs = []
+        for skill_md in skills_dir.rglob("SKILL.md"):
+            content = skill_md.read_text()
+            if "autoskillit.contract_validator" in content:
+                stale_refs.append(str(skill_md.relative_to(_project_root())))
+        assert not stale_refs, (
+            "Deleted module 'autoskillit.contract_validator' still referenced:\n"
+            + "\n".join(stale_refs)
         )

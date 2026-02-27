@@ -491,7 +491,7 @@ When called directly as `/autoskillit:write-recipe`:
    - `DEAD_OUTPUT`: A `capture:` key is never referenced by any reachable downstream step via `${{ context.X }}`. Either add a `${{ context.X }}` reference in the downstream step's `with:` block, or remove the unused capture.
    - `IMPLICIT_HANDOFF`: A `run_skill` or `run_skill_retry` step has no `capture:` block. Add a `capture:` block to explicitly wire outputs to downstream steps via `${{ context.X }}`, or confirm the skill's output is intentionally unused.
    - Present the quality summary to the user and fix any warnings that indicate broken wiring.
-9. After validation passes, generate the pipeline contract file by calling `generate_pipeline_contract` on the saved script. This creates `.autoskillit/recipes/contracts/{name}.yaml` alongside the recipe. Use `run_python` with `autoskillit.recipe_validator.generate_recipe_card` passing the script path and scripts directory, or rely on `load_recipe` which auto-generates contracts on first load.
+9. After validation passes, generate the pipeline contract file by calling `generate_recipe_card` on the saved script. This creates `.autoskillit/recipes/contracts/{name}.yaml` alongside the recipe. Use `run_python` with `autoskillit.recipe_validator.generate_recipe_card` passing the script path and scripts directory, or rely on `load_recipe` which auto-generates contracts on first load.
 10. Tell the user: "Saved to `.autoskillit/recipes/{name}.yaml`. Load it with `load_recipe("{name}")` via the MCP tool."
 
 ## CRITICAL: Scripts Are NOT Skills

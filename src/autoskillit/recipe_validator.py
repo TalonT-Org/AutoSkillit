@@ -496,7 +496,7 @@ def analyze_dataflow(recipe: Recipe) -> DataFlowReport:
 # ---------------------------------------------------------------------------
 
 
-def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> dict:
+def generate_recipe_card(pipeline_path: Path | str, recipes_dir: Path | str) -> dict:
     """Generate a recipe card file for a recipe.
 
     Walks each step, resolves skill names, looks up contracts in the manifest,
@@ -505,6 +505,8 @@ def generate_recipe_card(pipeline_path: Path, recipes_dir: Path) -> dict:
 
     Returns the contract data dict directly (no disk re-read required by callers).
     """
+    pipeline_path = Path(pipeline_path)
+    recipes_dir = Path(recipes_dir)
     import datetime
 
     from autoskillit.recipe_io import _parse_recipe

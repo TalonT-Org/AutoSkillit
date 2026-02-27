@@ -184,6 +184,7 @@ async def _heartbeat(
     stdout_path: Path,
     marker: str,
     record_types: frozenset[str] = frozenset({"result"}),
+    _poll_interval: float = 0.5,
 ) -> str:
     """Poll session NDJSON output for a result-type record.
 
@@ -194,7 +195,7 @@ async def _heartbeat(
     scan_pos = 0  # byte offset into the file
     os_error_count = 0
     while True:
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(_poll_interval)
         try:
             raw = stdout_path.read_bytes()
             os_error_count = 0
@@ -240,6 +241,8 @@ async def _session_log_monitor(
     spawn_time: float,
     record_types: frozenset[str] = frozenset({"assistant"}),
     pid: int | None = None,
+    _phase1_poll: float = 1.0,
+    _phase2_poll: float = 2.0,
 ) -> str:
     """Watch Claude Code session log for completion or staleness.
 
@@ -257,7 +260,7 @@ async def _session_log_monitor(
     session_file = None
     os_error_count = 0
     while session_file is None:
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(_phase1_poll)
         try:
             candidates = [
                 f
@@ -282,7 +285,7 @@ async def _session_log_monitor(
     os_error_count = 0
 
     while True:
-        await asyncio.sleep(2.0)
+        await asyncio.sleep(_phase2_poll)
         try:
             current_size = session_file.stat().st_size
             os_error_count = 0

@@ -474,12 +474,17 @@ class TestSessionLogMonitor:
 
         start = time.monotonic()
         result = await _session_log_monitor(
-            log_dir, "%%AUTOSKILLIT_COMPLETE%%", stale_threshold=2, spawn_time=spawn_time
+            log_dir,
+            "%%AUTOSKILLIT_COMPLETE%%",
+            stale_threshold=0.2,
+            spawn_time=spawn_time,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
         )
         elapsed = time.monotonic() - start
 
         assert result == "stale"
-        assert elapsed < 10, f"Staleness should fire after ~2s, took {elapsed:.1f}s"
+        assert elapsed < 1.0, f"Staleness should fire after ~0.2s, took {elapsed:.1f}s"
 
     @pytest.mark.asyncio
     async def test_staleness_resets_on_activity(self, tmp_path):
@@ -499,7 +504,7 @@ class TestSessionLogMonitor:
 
         async def keep_writing():
             for i in range(5):
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.05)
                 with session_file.open("a") as f:
                     f.write(
                         json.dumps(
@@ -511,12 +516,17 @@ class TestSessionLogMonitor:
                         + "\n"
                     )
             # After writing stops, staleness should eventually fire
-            await asyncio.sleep(5.0)
+            await asyncio.sleep(0.5)
 
         writer = asyncio.create_task(keep_writing())
 
         result = await _session_log_monitor(
-            log_dir, "NONEXISTENT_MARKER", stale_threshold=3, spawn_time=spawn_time
+            log_dir,
+            "NONEXISTENT_MARKER",
+            stale_threshold=0.3,
+            spawn_time=spawn_time,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
         )
         writer.cancel()
 
@@ -553,11 +563,18 @@ class TestSessionLogMonitor:
         session_file.write_text(enqueue_record + "\n")
 
         monitor_task = asyncio.create_task(
-            _session_log_monitor(log_dir, marker, stale_threshold=30, spawn_time=spawn_time)
+            _session_log_monitor(
+                log_dir,
+                marker,
+                stale_threshold=30,
+                spawn_time=spawn_time,
+                _phase1_poll=0.01,
+                _phase2_poll=0.1,
+            )
         )
 
-        # Monitor should NOT fire on the enqueue record — wait 4s to confirm
-        await asyncio.sleep(4.0)
+        # Monitor should NOT fire on the enqueue record — wait for several poll cycles to confirm
+        await asyncio.sleep(0.5)
         assert not monitor_task.done(), "Monitor fired on non-assistant record — false-fire bug"
 
         # Now append an assistant record with the marker — should fire
@@ -570,7 +587,7 @@ class TestSessionLogMonitor:
         with session_file.open("a") as f:
             f.write(assistant_record + "\n")
 
-        result = await asyncio.wait_for(monitor_task, timeout=10)
+        result = await asyncio.wait_for(monitor_task, timeout=2)
         assert result == "completion"
 
     @pytest.mark.asyncio
@@ -615,11 +632,18 @@ class TestSessionLogMonitor:
         session_file.write_text(records_12)
 
         monitor_task = asyncio.create_task(
-            _session_log_monitor(log_dir, marker, stale_threshold=30, spawn_time=spawn_time)
+            _session_log_monitor(
+                log_dir,
+                marker,
+                stale_threshold=30,
+                spawn_time=spawn_time,
+                _phase1_poll=0.01,
+                _phase2_poll=0.1,
+            )
         )
 
-        # Wait and confirm no early fire
-        await asyncio.sleep(4.0)
+        # Wait for several poll cycles and confirm no early fire
+        await asyncio.sleep(0.5)
         assert not monitor_task.done(), "Monitor fired on user/enqueue records"
 
         # Write record 3 (assistant with marker as standalone line)
@@ -632,7 +656,7 @@ class TestSessionLogMonitor:
         with session_file.open("a") as f:
             f.write(assistant_record + "\n")
 
-        result = await asyncio.wait_for(monitor_task, timeout=10)
+        result = await asyncio.wait_for(monitor_task, timeout=2)
         assert result == "completion"
 
 
@@ -713,10 +737,12 @@ class TestHeartbeatStructuredParsing:
         )
         stdout_path.write_text(assistant_msg + "\n")
 
-        heartbeat_task = asyncio.create_task(_heartbeat(stdout_path, '"type":"result"'))
+        heartbeat_task = asyncio.create_task(
+            _heartbeat(stdout_path, '"type":"result"', _poll_interval=0.05)
+        )
 
-        # Wait to confirm it doesn't fire on the assistant record
-        await asyncio.sleep(2.0)
+        # Wait for several poll cycles to confirm it doesn't fire on the assistant record
+        await asyncio.sleep(0.5)
         assert not heartbeat_task.done(), (
             "Heartbeat fired on non-result record containing marker text"
         )
@@ -735,7 +761,7 @@ class TestHeartbeatStructuredParsing:
         with stdout_path.open("a") as f:
             f.write(result_record + "\n")
 
-        result = await asyncio.wait_for(heartbeat_task, timeout=10)
+        result = await asyncio.wait_for(heartbeat_task, timeout=2)
         assert result == "completion"
 
 

@@ -1003,13 +1003,13 @@ class TestLoadRecipeExceptionHandling:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """yaml.YAMLError is caught and returned as an error suggestion."""
-        import yaml
+        from autoskillit._yaml import YAMLError
 
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         (recipes_dir / "test.yaml").write_text("name: test\n")
-        with patch("autoskillit._io._load_yaml", side_effect=yaml.YAMLError("bad yaml")):
+        with patch("autoskillit._yaml.load_yaml", side_effect=YAMLError("bad yaml")):
             result = json.loads(await load_recipe(name="test"))
         assert "error" not in result
         assert any(

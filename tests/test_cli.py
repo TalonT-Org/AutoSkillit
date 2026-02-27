@@ -1309,7 +1309,7 @@ class TestGroupFRefactoring:
 
         called_with: dict = {}
 
-        def mock_run_doctor(*, output_json: bool = False) -> None:
+        def mock_run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> None:
             called_with["output_json"] = output_json
 
         monkeypatch.setattr(_doctor, "run_doctor", mock_run_doctor)

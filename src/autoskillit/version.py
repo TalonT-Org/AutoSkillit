@@ -1,0 +1,29 @@
+"""Version health utilities (Layer 0)."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from autoskillit import __version__
+
+
+def version_info(plugin_dir: Path | str | None = None) -> dict:
+    """Return version health for the autoskillit installation.
+
+    Args:
+        plugin_dir: Root of the plugin directory (must contain .claude-plugin/).
+            When None, defaults to Path(__file__).parent (the autoskillit package dir).
+    """
+    if plugin_dir is None:
+        plugin_dir = Path(__file__).parent
+    plugin_json_path = Path(plugin_dir) / ".claude-plugin" / "plugin.json"
+    plugin_version = None
+    if plugin_json_path.is_file():
+        data = json.loads(plugin_json_path.read_text())
+        plugin_version = data.get("version")
+    return {
+        "package_version": __version__,
+        "plugin_json_version": plugin_version,
+        "match": __version__ == plugin_version,
+    }

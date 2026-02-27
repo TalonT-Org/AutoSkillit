@@ -16,7 +16,7 @@ from autoskillit.recipe_io import (
     list_recipes,
     load_recipe,
 )
-from autoskillit.recipe_schema import Recipe, RecipeIngredient
+from autoskillit.recipe_schema import Recipe, RecipeIngredient, RecipeStep, StepResultRoute
 from autoskillit.recipe_validator import (
     RuleFinding,
     Severity,
@@ -1754,6 +1754,36 @@ class TestImplementationPipelineStructure:
         assert step.on_success is None
         assert step.on_failure is None
 
+    def test_ip6_plan_step_note_contains_glob_pattern(self) -> None:
+        """T_IP6: plan step note must contain *_part_*.md glob pattern for multi-part discovery."""
+        note = self.recipe.steps["plan"].note or ""
+        assert "*_part_*.md" in note, (
+            "plan step note must contain glob pattern for multi-part discovery; "
+            "if removed, agents will not discover part files"
+        )
+
+    def test_ip7_verify_step_note_sequential_constraint(self) -> None:
+        """T_IP7: verify step note must contain sequential execution constraint."""
+        note = self.recipe.steps["verify"].note or ""
+        assert "SEQUENTIAL EXECUTION" in note or "full cycle" in note.lower(), (
+            "verify step note must contain sequential constraint; "
+            "without it agents may batch-verify all parts before implementing any"
+        )
+
+    def test_ip8_next_or_done_routes_more_parts_to_verify(self) -> None:
+        """T_IP8: next_or_done routes more_parts back to verify for sequential processing."""
+        step = self.recipe.steps["next_or_done"]
+        assert step.on_result is not None
+        assert step.on_result.routes.get("more_parts") == "verify", (
+            "next_or_done must route more_parts back to verify for sequential part processing"
+        )
+
+    def test_ip9_next_or_done_routes_all_done_to_audit_impl(self) -> None:
+        """T_IP9: next_or_done must route all_done to audit_impl."""
+        step = self.recipe.steps["next_or_done"]
+        assert step.on_result is not None
+        assert step.on_result.routes.get("all_done") == "audit_impl"
+
 
 # ---------------------------------------------------------------------------
 # Recipe structural tests — bugfix-loop.yaml (T_BL1–T_BL2)
@@ -1803,3 +1833,70 @@ class TestInvestigateFirstStructure:
         """T_IF2: a step named remediate exists with on_success == 'rectify'."""
         assert "remediate" in self.recipe.steps
         assert self.recipe.steps["remediate"].on_success == "rectify"
+
+
+# ---------------------------------------------------------------------------
+# Semantic rule tests — multipart iteration conventions (T_MI1–T_MI2)
+# ---------------------------------------------------------------------------
+
+
+class TestMultipartIterationRule:
+    def test_mi1_multipart_rule_warns_on_missing_glob_note(self) -> None:
+        """T_MI1: multipart-glob-note fires when make-plan step has no *_part_*.md in note."""
+        recipe = Recipe(
+            name="test-recipe",
+            description="test",
+            ingredients={},
+            steps={
+                "plan": RecipeStep(
+                    tool="run_skill_retry",
+                    with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
+                    on_success="verify",
+                    note="Produces a plan file.",
+                ),
+                "verify": RecipeStep(
+                    tool="run_skill",
+                    with_args={"skill_command": "/autoskillit:dry-walkthrough context.plan_path"},
+                    on_success="done",
+                ),
+                "done": RecipeStep(action="stop", message="Done"),
+            },
+            kitchen_rules=[],
+        )
+        warnings = run_semantic_rules(recipe)
+        rule_names = [w.rule for w in warnings]
+        assert "multipart-glob-note" in rule_names
+
+    def test_mi2_multipart_rule_passes_compliant_recipe(self) -> None:
+        """T_MI2: Validator emits no multipart warnings when all conventions are present."""
+        recipe = Recipe(
+            name="test-recipe",
+            description="test",
+            ingredients={},
+            steps={
+                "plan": RecipeStep(
+                    tool="run_skill_retry",
+                    with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
+                    on_success="verify",
+                    note="Glob plan_dir for *_part_*.md or single plan file.",
+                ),
+                "verify": RecipeStep(
+                    tool="run_skill",
+                    with_args={"skill_command": "/autoskillit:dry-walkthrough context.plan_path"},
+                    on_success="next_or_done",
+                ),
+                "next_or_done": RecipeStep(
+                    action="route",
+                    on_result=StepResultRoute(
+                        field="next", routes={"more_parts": "verify", "all_done": "done"}
+                    ),
+                ),
+                "done": RecipeStep(action="stop", message="Done"),
+            },
+            kitchen_rules=["SEQUENTIAL EXECUTION: complete full cycle per part before advancing."],
+        )
+        warnings = run_semantic_rules(recipe)
+        rule_names = [w.rule for w in warnings]
+        assert "multipart-glob-note" not in rule_names
+        assert "multipart-sequential-kitchen-rule" not in rule_names
+        assert "multipart-route-back" not in rule_names

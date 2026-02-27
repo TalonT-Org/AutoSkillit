@@ -1090,3 +1090,77 @@ def _check_implicit_handoff(wf: Recipe) -> list[RuleFinding]:
                 )
             )
     return findings
+
+
+@semantic_rule(
+    name="multipart-iteration-notes",
+    description=(
+        "Recipes with make-plan or rectify steps must declare multi-part iteration conventions: "
+        "the plan step note must contain the *_part_*.md glob pattern, kitchen_rules must include "
+        "a sequential execution constraint, and next_or_done must route more_parts back to verify."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
+    _MULTIPART_SKILLS = {"/autoskillit:make-plan", "/autoskillit:rectify"}
+    findings: list[RuleFinding] = []
+
+    has_multipart_step = any(
+        step.tool in SKILL_TOOLS
+        and any(s in step.with_args.get("skill_command", "") for s in _MULTIPART_SKILLS)
+        for step in wf.steps.values()
+    )
+    if not has_multipart_step:
+        return []
+
+    plan_step = wf.steps.get("plan")
+    plan_note = (plan_step.note or "") if plan_step is not None else ""
+    if "*_part_*.md" not in plan_note:
+        findings.append(
+            RuleFinding(
+                rule="multipart-glob-note",
+                severity=Severity.ERROR,
+                step_name="plan",
+                message=(
+                    "Recipe uses make-plan or rectify but the 'plan' step note does not contain "
+                    "'*_part_*.md'. Agents will not know to glob for multi-part plan files. "
+                    "Add: 'Glob plan_dir for *_part_*.md or single plan file.' to the note."
+                ),
+            )
+        )
+
+    sequential_keywords = ("SEQUENTIAL EXECUTION", "full cycle", "Never run verify for all parts")
+    rules_text = " ".join(wf.kitchen_rules)
+    if not any(kw in rules_text for kw in sequential_keywords):
+        findings.append(
+            RuleFinding(
+                rule="multipart-sequential-kitchen-rule",
+                severity=Severity.WARNING,
+                step_name="kitchen_rules",
+                message=(
+                    "Recipe uses make-plan or rectify but kitchen_rules do not contain "
+                    "a sequential execution constraint. Without it, agents may "
+                    "batch-verify all parts before "
+                    "implementing any. Add a rule such as: 'SEQUENTIAL EXECUTION: complete full "
+                    "cycle per part before advancing.'"
+                ),
+            )
+        )
+
+    next_or_done = wf.steps.get("next_or_done")
+    if next_or_done is not None and next_or_done.on_result is not None:
+        if next_or_done.on_result.routes.get("more_parts") != "verify":
+            findings.append(
+                RuleFinding(
+                    rule="multipart-route-back",
+                    severity=Severity.ERROR,
+                    step_name="next_or_done",
+                    message=(
+                        "Recipe uses make-plan or rectify but next_or_done does not route "
+                        "'more_parts' back to 'verify'. Sequential part processing requires "
+                        "more_parts → verify in the on_result routes."
+                    ),
+                )
+            )
+
+    return findings

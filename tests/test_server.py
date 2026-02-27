@@ -514,6 +514,43 @@ class TestCheckDryWalkthrough:
         result = _check_dry_walkthrough("/autoskillit:investigate some-error", "/tmp")
         assert result is None
 
+    def test_dry_walkthrough_gate_with_part_a_named_file_marked(self, tmp_path, tool_ctx):
+        """Gate accepts _part_a.md file when marker is present."""
+        plan = tmp_path / "task_plan_2026-01-01_part_a.md"
+        plan.write_text("Dry-walkthrough verified = TRUE\n\nContent here")
+        result = _check_dry_walkthrough(
+            f"/autoskillit:implement-worktree-no-merge {plan}", str(tmp_path)
+        )
+        assert result is None
+
+    def test_dry_walkthrough_gate_with_part_b_named_file_unmarked(self, tmp_path, tool_ctx):
+        """Gate blocks _part_b.md file when marker is absent."""
+        plan = tmp_path / "task_plan_2026-01-01_part_b.md"
+        plan.write_text("> **PART B ONLY.**\n\nNo walkthrough marker here")
+        result = _check_dry_walkthrough(
+            f"/autoskillit:implement-worktree-no-merge {plan}", str(tmp_path)
+        )
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed["subtype"] == "gate_error"
+
+    def test_dry_walkthrough_gate_distinguishes_parts_independently(self, tmp_path, tool_ctx):
+        """Gate correctly distinguishes marked part_a from unmarked part_b."""
+        part_a = tmp_path / "task_plan_part_a.md"
+        part_b = tmp_path / "task_plan_part_b.md"
+        part_a.write_text("Dry-walkthrough verified = TRUE\n\nPart A content")
+        part_b.write_text("> **PART B ONLY.**\n\nPart B content — no marker")
+
+        result_a = _check_dry_walkthrough(
+            f"/autoskillit:implement-worktree-no-merge {part_a}", str(tmp_path)
+        )
+        result_b = _check_dry_walkthrough(
+            f"/autoskillit:implement-worktree-no-merge {part_b}", str(tmp_path)
+        )
+        assert result_a is None
+        assert result_b is not None
+        assert json.loads(result_b)["subtype"] == "gate_error"
+
 
 class TestMergeWorktree:
     """merge_worktree enforces test gate, rebases, and merges."""

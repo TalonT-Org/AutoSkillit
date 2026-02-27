@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 16 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 10 gated behind MCP prompts for user-only activation, and 13 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 17 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 11 gated behind MCP prompts for user-only activation, and 13 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -91,7 +91,7 @@ src/autoskillit/
 ├── recipe_loader.py         # Path-based recipe metadata utilities for migration_engine
 ├── recipe_schema.py         # Recipe, RecipeStep, DataFlowWarning, AUTOSKILLIT_VERSION_KEY
 ├── recipe_validator.py      # validate_recipe, run_semantic_rules, generate_recipe_card, analyze_dataflow
-├── server.py                # FastMCP server with 16 MCP tools + 2 prompts
+├── server.py                # FastMCP server with 17 MCP tools + 2 prompts
 ├── session_result.py        # ClaudeSessionResult, SkillResult, _compute_success, _compute_retry, _truncate, extract_token_usage
 ├── skill_resolver.py        # Bundled skill listing
 ├── test_runner.py           # Pytest output parsing and pass/fail adjudication (L3 service)
@@ -158,7 +158,7 @@ temp/                        # Temporary/working files (gitignored)
   * **config.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
   * **cli.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `skills list`, `recipes list/show`, `workspace init`, `install`, `upgrade`, `migrate`, `cook`, and `doctor`.
   * **recipe_loader.py**: Path-based recipe metadata utilities for `migration_engine`. Exports `parse_recipe_metadata(path: Path) -> RecipeInfo`, which handles both plain YAML and frontmatter-format files (`---` delimited). Reads the `name`, `description`, `summary`, `source`, and `version` fields from the YAML document and returns a `RecipeInfo` instance. Recipe discovery (`list_recipes`, `load_recipe`) lives in `recipe_io.py`, not here.
-  * **server.py**: FastMCP server. 10 gated tools require user activation via MCP prompts. 6 ungated tools (`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) are always available. Uses ToolContext DI (`_context.py`) — single module-level `_ctx: ToolContext | None`. `_initialize(ctx)` wires everything at startup. Gate policy in `_gate.py`. `version_info()` is public. Registers `recipe://` resource handler.
+  * **server.py**: FastMCP server. 11 gated tools require user activation via MCP prompts. 6 ungated tools (`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) are always available. Uses ToolContext DI (`_context.py`) — single module-level `_ctx: ToolContext | None`. `_initialize(ctx)` wires everything at startup. Gate policy in `_gate.py`. `version_info()` is public. Registers `recipe://` resource handler. **Ungated vs gated notifications:** Ungated tools (`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) accept no `ctx: Context` parameter and emit no MCP progress notifications. This is intentional — they are fast, lightweight reads. MCP notifications are reserved for long-running gated operations. This asymmetry is documented in each ungated tool's docstring.
   * **skill_resolver.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
   * **recipe_io.py**: Recipe I/O layer. `load_recipe(name, project_dir)` and `list_recipes(project_dir)` discover recipes from project and bundled sources. `iter_steps_with_context(recipe)` yields `(name, step, available_context)` with accumulated captures. `find_recipe_by_name(name, project_dir)` returns first match or None. `RecipeStep` supports an optional `model` field for per-step model selection.
   * **recipe_schema.py**: Recipe data models. `Recipe`, `RecipeStep`, `DataFlowWarning`, `AUTOSKILLIT_VERSION_KEY`. Zero autoskillit I/O dependencies.
@@ -214,9 +214,10 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 | `classify_fix` | Analyze worktree diff to determine restart scope (full vs partial) |
 | `reset_workspace` | Reset workspace, preserving configured directories |
 | `read_db` | Run read-only SQL query against SQLite database |
+| `migrate_recipe` | Apply pending migration notes to a recipe file (gated) |
 | `kitchen_status` | Return version health and config status (ungated) |
 | `list_recipes` | List pipeline recipes from .autoskillit/recipes/ (ungated) |
-| `load_recipe` | Load a recipe by name as raw YAML (ungated) |
+| `load_recipe` | Load a recipe by name as raw YAML — read-only, no migration (ungated) |
 | `validate_recipe` | Validate a pipeline recipe against the recipe schema (ungated) |
 | `get_pipeline_report` | Return accumulated run_skill/run_skill_retry failure report (ungated) |
 | `get_token_summary` | Return accumulated token usage grouped by step name (ungated) |
@@ -225,7 +226,7 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 
 ### **Tool Activation**
 
-10 tools are gated by default. At the start of a session, the user must type
+11 tools are gated by default. At the start of a session, the user must type
 the `open_kitchen` prompt to activate. The exact prompt name is prefixed by
 Claude Code based on how the server was loaded (e.g. `plugin_autoskillit_autoskillit`
 for plugin installs). This uses MCP prompts (user-only, model cannot invoke)

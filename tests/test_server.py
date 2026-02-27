@@ -687,6 +687,21 @@ class TestToolRegistration:
         }
         assert expected == tool_names
 
+    def test_ungated_tools_docstrings_state_notification_free(self):
+        """P5-1: Each ungated tool docstring states it sends no MCP notifications."""
+        for tool_fn in [
+            kitchen_status,
+            list_recipes,
+            load_recipe,
+            validate_recipe,
+            get_pipeline_report,
+            get_token_summary,
+        ]:
+            doc = tool_fn.__doc__ or ""
+            assert "no MCP" in doc or "no progress notification" in doc.lower(), (
+                f"{tool_fn.__name__} must document notification-free behavior"
+            )
+
 
 class TestKitchenStatus:
     """kitchen_status tool returns version health info (ungated)."""

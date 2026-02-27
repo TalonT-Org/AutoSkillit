@@ -944,6 +944,8 @@ async def kitchen_status() -> str:
     enabling tools or anytime you need to verify the server is healthy.
 
     This tool is always available (not gated by open_kitchen).
+    This tool sends no MCP progress notifications by design (ungated tools are
+    notification-free — see CLAUDE.md).
     """
     info = version_info()
     status = {
@@ -977,6 +979,8 @@ async def get_pipeline_report(clear: bool = False) -> str:
                             needs_retry, retry_reason, stderr}
 
     This tool is always available (not gated by open_kitchen).
+    This tool sends no MCP progress notifications by design (ungated tools are
+    notification-free — see CLAUDE.md).
     """
     report = _get_ctx().audit.get_report()
     if clear:
@@ -994,6 +998,8 @@ async def get_token_summary(clear: bool = False) -> str:
     """Return accumulated run_skill/run_skill_retry token usage grouped by step name.
 
     This tool is always available (not gated by open_kitchen).
+    This tool sends no MCP progress notifications by design (ungated tools are
+    notification-free — see CLAUDE.md).
 
     Returns JSON with:
     - steps: list of {step_name, input_tokens, output_tokens,
@@ -1033,6 +1039,8 @@ async def list_recipes() -> str:
     .autoskillit/skills/ or any other directory).
 
     This tool is always available (not gated by open_kitchen).
+    This tool sends no MCP progress notifications by design (ungated tools are
+    notification-free — see CLAUDE.md).
     """
     from autoskillit.recipe_io import list_recipes as _list_recipes
 
@@ -1173,6 +1181,7 @@ async def load_recipe(name: str) -> str:
     FAILURE PREDICATES — when to follow on_failure:
     - test_check: {"passed": false}
     - merge_worktree: "error" key present in response
+      (cleanup_succeeded=false means orphaned worktree/branch — the merge itself succeeded)
     - run_cmd: {"success": false}
     - run_skill / run_skill_retry: {"success": false}
     - classify_fix: "error" key present in response
@@ -1189,6 +1198,8 @@ async def load_recipe(name: str) -> str:
     YAML. To run migrations, use migrate_recipe.
 
     This tool is always available (not gated by open_kitchen).
+    This tool sends no MCP progress notifications by design (ungated tools are
+    notification-free — see CLAUDE.md).
 
     Response format: always JSON with ``content`` (raw YAML string) and
     ``suggestions`` (list of semantic findings, possibly empty) keys.
@@ -1415,6 +1426,8 @@ async def validate_recipe(script_path: str) -> str:
     as .yaml files.
 
     This tool is always available (not gated by open_kitchen).
+    This tool sends no MCP progress notifications by design (ungated tools are
+    notification-free — see CLAUDE.md).
 
     Args:
         script_path: Absolute path to the .yaml recipe file to validate.

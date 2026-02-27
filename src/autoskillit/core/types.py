@@ -1,0 +1,153 @@
+"""Core type contracts: StrEnum discriminators, protocols, and constants.
+
+Zero autoskillit imports. Provides the shared type vocabulary for all higher layers.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable
+from dataclasses import dataclass, field
+from enum import StrEnum
+from pathlib import Path
+from typing import Generic, Protocol, TypeVar, runtime_checkable
+
+T = TypeVar("T")
+
+
+class RetryReason(StrEnum):
+    RESUME = "resume"
+    NONE = "none"
+
+
+class MergeFailedStep(StrEnum):
+    TEST_GATE = "test_gate"
+    FETCH = "fetch"
+    REBASE = "rebase"
+    MERGE = "merge"
+
+
+class MergeState(StrEnum):
+    WORKTREE_INTACT = "worktree_intact"
+    WORKTREE_INTACT_REBASE_ABORTED = "worktree_intact_rebase_aborted"
+    MAIN_REPO_MERGE_ABORTED = "main_repo_merge_aborted"
+
+
+class RestartScope(StrEnum):
+    FULL_RESTART = "full_restart"
+    PARTIAL_RESTART = "partial_restart"
+
+
+class SkillSource(StrEnum):
+    BUNDLED = "bundled"
+
+
+class RecipeSource(StrEnum):
+    PROJECT = "project"
+    BUILTIN = "builtin"
+
+
+class Severity(StrEnum):
+    ERROR = "error"
+    WARNING = "warning"
+
+
+class TerminationReason(StrEnum):
+    """How a managed subprocess ended.
+
+    Propagates termination provenance from run_managed_async to consumers,
+    replacing implicit inference from exit codes.
+    """
+
+    NATURAL_EXIT = "natural_exit"
+    COMPLETED = "completed"
+    STALE = "stale"
+    TIMED_OUT = "timed_out"
+
+
+@dataclass
+class SubprocessResult:
+    """Result from a managed subprocess execution."""
+
+    returncode: int
+    stdout: str
+    stderr: str
+    termination: TerminationReason
+    pid: int
+
+
+@runtime_checkable
+class SubprocessRunner(Protocol):
+    """Protocol for async subprocess execution. Matches run_managed_async signature."""
+
+    def __call__(
+        self,
+        cmd: list[str],
+        *,
+        cwd: Path,
+        timeout: float,
+        heartbeat_marker: str = "",
+        stale_threshold: float = 1200,
+        completion_marker: str = "",
+        session_log_dir: Path | None = None,
+        pty_mode: bool = True,
+        input_data: str | None = None,
+        completion_drain_timeout: float = 5.0,
+    ) -> Awaitable[SubprocessResult]: ...
+
+
+@dataclass
+class LoadReport:
+    """A single file that failed to load, with the reason."""
+
+    path: Path
+    error: str
+
+
+@dataclass
+class LoadResult(Generic[T]):
+    """Discovery result: successfully loaded items + error reports."""
+
+    items: list[T]
+    errors: list[LoadReport] = field(default_factory=list)
+
+
+# The substring Claude CLI emits when the context window is full.
+# Used by ClaudeSessionResult._is_context_exhausted() for detection.
+# Centralized here so tests can reference the canonical value.
+CONTEXT_EXHAUSTION_MARKER = "prompt is too long"
+
+# Native Claude Code tools that pipeline orchestrators must NEVER use directly.
+# Canonical source of truth — imported by server.py and tests.
+PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
+    "Read",
+    "Grep",
+    "Glob",
+    "Edit",
+    "Write",
+    "Bash",
+    "Task",
+    "Explore",
+    "WebFetch",
+    "WebSearch",
+    "NotebookEdit",
+)
+
+# Skill tools that route headless Claude sessions — canonical constant used by
+# recipe_validator.py.
+SKILL_TOOLS: frozenset[str] = frozenset({"run_skill", "run_skill_retry"})
+
+# Known field names in run_skill_retry response — used by workflow validation
+RETRY_RESPONSE_FIELDS: frozenset[str] = frozenset(
+    {
+        "success",
+        "result",
+        "session_id",
+        "subtype",
+        "is_error",
+        "exit_code",
+        "needs_retry",
+        "retry_reason",
+        "stderr",
+        "token_usage",
+    }
+)

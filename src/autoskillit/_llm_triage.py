@@ -13,13 +13,10 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core.logging import get_logger
-from autoskillit.process_lifecycle import (
-    SubprocessResult,
-    TerminationReason,
-    run_managed_async,
-)
+from autoskillit.core.types import SubprocessResult, TerminationReason
+from autoskillit.execution.process import run_managed_async
 from autoskillit.recipe_validator import StaleItem, load_bundled_manifest
-from autoskillit.skill_resolver import bundled_skills_dir
+from autoskillit.workspace.skills import bundled_skills_dir
 
 logger = get_logger(__name__)
 

@@ -45,11 +45,11 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     )
 
     import autoskillit.server as _server
-    from autoskillit._audit import AuditLog
-    from autoskillit._context import ToolContext
-    from autoskillit._gate import GateState
-    from autoskillit._token_log import TokenLog
-    from autoskillit.process_lifecycle import RealSubprocessRunner
+    from autoskillit.execution.process import RealSubprocessRunner
+    from autoskillit.pipeline.audit import AuditLog
+    from autoskillit.pipeline.context import ToolContext
+    from autoskillit.pipeline.gate import GateState
+    from autoskillit.pipeline.tokens import TokenLog
 
     project_dir = Path.cwd()
     cfg = load_config(project_dir)
@@ -361,7 +361,7 @@ def config_show():
 @skills_app.command(name="list")
 def skills_list():
     """List bundled skills provided by the plugin."""
-    from autoskillit.skill_resolver import SkillResolver
+    from autoskillit.workspace.skills import SkillResolver
 
     resolver = SkillResolver()
     skills = resolver.list_all()

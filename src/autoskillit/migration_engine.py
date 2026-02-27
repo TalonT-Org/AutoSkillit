@@ -10,11 +10,11 @@ from pathlib import Path
 from autoskillit import __version__
 from autoskillit.core.io import _atomic_write, dump_yaml_str, load_yaml
 from autoskillit.core.logging import get_logger
+from autoskillit.execution.session import SkillResult
 from autoskillit.migration_loader import applicable_migrations
 from autoskillit.recipe_io import load_recipe as _parse_recipe
 from autoskillit.recipe_loader import parse_recipe_metadata
 from autoskillit.recipe_validator import validate_recipe
-from autoskillit.session_result import SkillResult
 
 logger = get_logger(__name__)
 

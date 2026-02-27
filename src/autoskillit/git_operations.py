@@ -17,8 +17,8 @@ from typing import Any
 from autoskillit.config import AutomationConfig
 from autoskillit.core.logging import get_logger
 from autoskillit.core.types import MergeFailedStep, MergeState, SubprocessRunner, TerminationReason
-from autoskillit.session_result import _truncate
-from autoskillit.test_runner import check_test_passed
+from autoskillit.execution.session import _truncate
+from autoskillit.execution.testing import check_test_passed
 
 logger = get_logger(__name__)
 

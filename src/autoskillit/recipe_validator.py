@@ -30,7 +30,7 @@ from autoskillit.recipe_schema import (
     DataFlowWarning,
     Recipe,
 )
-from autoskillit.skill_resolver import bundled_skills_dir
+from autoskillit.workspace.skills import bundled_skills_dir
 
 logger = get_logger(__name__)
 

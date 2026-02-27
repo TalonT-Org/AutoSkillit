@@ -27,13 +27,6 @@ from fastmcp.dependencies import CurrentContext
 from fastmcp.prompts import Message, PromptResult
 
 from autoskillit import __version__
-from autoskillit._context import ToolContext
-from autoskillit._gate import (  # noqa: F401
-    GATED_TOOLS,
-    UNGATED_TOOLS,
-    GateState,
-    gate_error_result,
-)
 from autoskillit.config import AutomationConfig
 from autoskillit.core.logging import get_logger
 from autoskillit.core.types import (
@@ -42,15 +35,22 @@ from autoskillit.core.types import (
     RetryReason,
     TerminationReason,
 )
-from autoskillit.db_tools import _execute_readonly_query, _validate_select_only
+from autoskillit.execution.db import _execute_readonly_query, _validate_select_only
+from autoskillit.execution.headless import run_headless_core
+from autoskillit.execution.session import _truncate
+from autoskillit.execution.testing import check_test_passed
 from autoskillit.failure_store import FailureStore, default_store_path
 from autoskillit.git_operations import perform_merge
-from autoskillit.headless_runner import run_headless_core
 from autoskillit.migration_engine import MigrationFile, default_migration_engine
 from autoskillit.migration_loader import applicable_migrations
-from autoskillit.session_result import _truncate
-from autoskillit.test_runner import check_test_passed
-from autoskillit.workspace import _delete_directory_contents
+from autoskillit.pipeline.context import ToolContext
+from autoskillit.pipeline.gate import (  # noqa: F401
+    GATED_TOOLS,
+    UNGATED_TOOLS,
+    GateState,
+    gate_error_result,
+)
+from autoskillit.workspace.cleanup import _delete_directory_contents
 
 mcp = FastMCP("autoskillit")
 

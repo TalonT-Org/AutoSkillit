@@ -1185,6 +1185,9 @@ async def load_recipe(name: str) -> str:
     tool, then follow the YAML steps. Recipes live in .autoskillit/recipes/
     as .yaml files (NOT in .autoskillit/skills/ or any other directory).
 
+    This tool is strictly read-only. It discovers, parses, and validates recipe
+    YAML. To run migrations, use migrate_recipe.
+
     This tool is always available (not gated by open_kitchen).
 
     Response format: always JSON with ``content`` (raw YAML string) and
@@ -1195,7 +1198,6 @@ async def load_recipe(name: str) -> str:
     from autoskillit.recipe_io import _parse_recipe, find_recipe_by_name
     from autoskillit.recipe_validator import (
         check_contract_staleness,
-        generate_recipe_card,
         load_recipe_card,
         run_semantic_rules,
         validate_recipe_cards,
@@ -1216,60 +1218,6 @@ async def load_recipe(name: str) -> str:
         if isinstance(data, dict) and "steps" in data:
             recipe = _parse_recipe(data)
 
-            # --- Auto-migration block ---
-            migrations = applicable_migrations(recipe.version, __version__)
-            if migrations and name not in _migration_suppressed:
-                project_dir = Path.cwd()
-                temp_dir = project_dir / ".autoskillit" / "temp"
-                recipes_dir = project_dir / ".autoskillit" / "recipes"
-                recipe_path = recipes_dir / f"{name}.yaml"
-                failure_store = FailureStore(default_store_path(project_dir))
-
-                engine = default_migration_engine()
-                mfile = MigrationFile(
-                    name=name,
-                    path=recipe_path,
-                    file_type="recipe",
-                    current_version=recipe.version,
-                )
-                _bound_headless = functools.partial(run_headless_core, ctx=_get_ctx())
-                migration_result = await engine.migrate_file(
-                    mfile,
-                    run_headless=_bound_headless,
-                    temp_dir=temp_dir,
-                )
-
-                if migration_result.success:
-                    content = (
-                        migration_result.migrated_content
-                        if migration_result.migrated_content is not None
-                        else recipe_path.read_text()
-                    )
-                    data = load_yaml(content)
-                    recipe = _parse_recipe(data)
-                    failure_store.clear(name)
-                else:
-                    failure_store.record(
-                        name=name,
-                        file_path=recipe_path,
-                        file_type="recipe",
-                        error=migration_result.error or "unknown",
-                        retries_attempted=migration_result.retries_attempted,
-                    )
-                    suggestions.append(
-                        {
-                            "rule": "migration-failed",
-                            "severity": "error",
-                            "step": "(auto-migration)",
-                            "message": (
-                                f"Auto-migration failed: {migration_result.error}. "
-                                "Check .autoskillit/temp/migrations/failures.json. "
-                                "Manual intervention required."
-                            ),
-                        }
-                    )
-            # --- End auto-migration block ---
-
             findings = run_semantic_rules(recipe)
             semantic_suggestions = [f.to_dict() for f in findings]
 
@@ -1282,30 +1230,6 @@ async def load_recipe(name: str) -> str:
             # Contract validation
             recipes_dir = Path.cwd() / ".autoskillit" / "recipes"
             contract = load_recipe_card(name, recipes_dir)
-            if contract is None:
-                # Auto-generate for first load
-                recipe_path = recipes_dir / f"{name}.yaml"
-                if not recipe_path.exists():
-                    recipe_path = recipes_dir / f"{name}.yml"
-                if recipe_path.exists():
-                    try:
-                        contract = generate_recipe_card(recipe_path, recipes_dir)
-                    except Exception as exc:
-                        logger.warning(
-                            "Recipe contract card generation failed",
-                            name=name,
-                            exc_info=True,
-                        )
-                        suggestions.append(
-                            {
-                                "rule": "validation-error",
-                                "severity": "warning",
-                                "step": "(contract-generation)",
-                                "message": (
-                                    f"Contract generation failed: {type(exc).__name__}: {exc}"
-                                ),
-                            }
-                        )
 
             if contract:
                 contract_findings = validate_recipe_cards(recipe, contract)
@@ -1372,6 +1296,102 @@ async def load_recipe(name: str) -> str:
     # Unexpected exceptions (AttributeError, RuntimeError, etc.) propagate uncaught
 
     return json.dumps({"content": content, "suggestions": suggestions})
+
+
+@mcp.tool(tags={"automation"})
+async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
+    """Apply pending migration notes to a recipe file.
+
+    This tool is gated — the kitchen must be open before calling it.
+
+    Checks whether the named recipe has pending migration notes relative to the
+    installed autoskillit version. If migrations are applicable, runs the
+    migration engine (which launches a headless Claude session), writes the
+    updated recipe back to disk, and regenerates the contract card.
+
+    This tool sends MCP progress notifications via ctx during long-running
+    migration engine invocations.
+
+    Returns JSON with one of:
+    - ``{"status": "up_to_date", "name": name}`` — no migrations needed
+    - ``{"status": "migrated", "name": name}`` — migration completed successfully
+    - ``{"error": "...", "name": name}`` — migration failed (details in error)
+    - ``{"error": "No recipe named '...' found"}`` — recipe not found
+
+    Args:
+        name: The recipe name (without .yaml extension) to migrate.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="migrate_recipe", name=name)
+    logger.info("migrate_recipe", name=name)
+    try:
+        await ctx.info(
+            f"migrate_recipe: {name}",
+            logger_name="autoskillit.migrate_recipe",
+            extra={"name": name},
+        )
+    except (RuntimeError, AttributeError):
+        pass
+
+    from autoskillit._yaml import load_yaml
+    from autoskillit.recipe_io import _parse_recipe, find_recipe_by_name
+    from autoskillit.recipe_validator import generate_recipe_card
+
+    project_dir = Path.cwd()
+    _match = find_recipe_by_name(name, project_dir)
+    if _match is None:
+        return json.dumps({"error": f"No recipe named '{name}' found"})
+
+    recipes_dir = project_dir / ".autoskillit" / "recipes"
+    recipe_path = recipes_dir / f"{name}.yaml"
+    content = _match.path.read_text()
+    data = load_yaml(content)
+    recipe = _parse_recipe(data)
+
+    _migration_suppressed: list[str] = _ctx.config.migration.suppressed if _ctx is not None else []
+    migrations = applicable_migrations(recipe.version, __version__)
+    if not migrations or name in _migration_suppressed:
+        return json.dumps({"status": "up_to_date", "name": name})
+
+    temp_dir = project_dir / ".autoskillit" / "temp"
+    failure_store = FailureStore(default_store_path(project_dir))
+    engine = default_migration_engine()
+    mfile = MigrationFile(
+        name=name,
+        path=recipe_path,
+        file_type="recipe",
+        current_version=recipe.version,
+    )
+    _bound_headless = functools.partial(run_headless_core, ctx=_get_ctx())
+    migration_result = await engine.migrate_file(
+        mfile,
+        run_headless=_bound_headless,
+        temp_dir=temp_dir,
+    )
+
+    if migration_result.success:
+        failure_store.clear(name)
+        try:
+            if recipe_path.exists():
+                generate_recipe_card(recipe_path, recipes_dir)
+        except Exception:
+            logger.warning(
+                "migrate_recipe contract card generation failed",
+                name=name,
+                exc_info=True,
+            )
+        return json.dumps({"status": "migrated", "name": name})
+
+    failure_store.record(
+        name=name,
+        file_path=recipe_path,
+        file_type="recipe",
+        error=migration_result.error or "unknown",
+        retries_attempted=migration_result.retries_attempted,
+    )
+    return json.dumps({"error": f"Migration failed: {migration_result.error}", "name": name})
 
 
 @mcp.tool(tags={"automation"})

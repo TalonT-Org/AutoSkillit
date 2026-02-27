@@ -22,7 +22,7 @@ def test_tool_sets_are_disjoint():
 def test_tool_sets_total_count():
     from autoskillit._gate import GATED_TOOLS, UNGATED_TOOLS
 
-    assert len(GATED_TOOLS) == 10
+    assert len(GATED_TOOLS) == 11
     assert len(UNGATED_TOOLS) == 6
 
 
@@ -40,6 +40,7 @@ def test_gated_tools_contains_expected_names():
         "reset_test_dir",
         "classify_fix",
         "reset_workspace",
+        "migrate_recipe",
     }
     assert GATED_TOOLS == expected
 

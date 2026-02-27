@@ -30,6 +30,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "reset_test_dir",
         "classify_fix",
         "reset_workspace",
+        "migrate_recipe",
     }
 )
 

@@ -73,7 +73,9 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         audit=AuditLog(),
         token_log=TokenLog(),
         gate=GateState(enabled=False),
-        plugin_dir=str(Path(_server.__file__).parent),
+        # server/__init__.py is the package __init__; its parent is server/, so
+        # parent.parent is the autoskillit package root where .claude-plugin/ lives.
+        plugin_dir=str(Path(_server.__file__).parent.parent),
         runner=RealSubprocessRunner(),
     )
     _server._initialize(ctx)
@@ -121,7 +123,7 @@ def init(
 
     print("\nReady! Start Claude Code and open the kitchen:")
     print("  claude")
-    from autoskillit._doctor import _is_plugin_installed
+    from autoskillit.cli._doctor import _is_plugin_installed
 
     if _is_plugin_installed():
         print("  /mcp__plugin_autoskillit_autoskillit__open_kitchen")
@@ -205,7 +207,8 @@ def _ensure_marketplace() -> Path:
     """Create or update the local marketplace directory."""
     from autoskillit import __version__
 
-    pkg_dir = Path(__file__).parent
+    # cli/app.py is in cli/ subdirectory; package root is one level up
+    pkg_dir = Path(__file__).parent.parent
     marketplace_dir = Path.home() / ".autoskillit" / "marketplace"
     plugin_dir = marketplace_dir / ".claude-plugin"
     plugin_dir.mkdir(parents=True, exist_ok=True)
@@ -286,7 +289,7 @@ def doctor(*, output_json: bool = False):
         Output results as JSON instead of human-readable text.
     """
     from autoskillit import server as _server
-    from autoskillit._doctor import run_doctor
+    from autoskillit.cli._doctor import run_doctor
 
     plugin_dir = _server._ctx.plugin_dir if _server._ctx is not None else None
     run_doctor(output_json=output_json, plugin_dir=plugin_dir)
@@ -602,7 +605,8 @@ def cook(recipe: str):
         print("Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code")
         sys.exit(1)
 
-    plugin_dir = Path(__file__).parent
+    # cli/app.py is in cli/ subdirectory; package root is one level up
+    plugin_dir = Path(__file__).parent.parent
     system_prompt = _build_orchestrator_prompt(recipe_yaml)
 
     cmd = [

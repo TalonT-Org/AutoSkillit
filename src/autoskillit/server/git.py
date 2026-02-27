@@ -1,6 +1,6 @@
 """Git merge workflow for the merge_worktree MCP tool.
 
-L3 service module. Extracted from server.py. Executes the full merge pipeline:
+L3 service module. Executes the full merge pipeline:
 path validation → worktree verification → branch detection → test gate →
 fetch → rebase → main-repo merge → worktree cleanup.
 
@@ -48,7 +48,7 @@ async def perform_merge(
 ) -> dict[str, Any]:
     """Execute the full merge pipeline for a git worktree.
 
-    Returns a dict that server.py serializes to JSON. On failure, the dict
+    Returns a dict that server/__init__.py serializes to JSON. On failure, the dict
     contains an 'error' key along with 'failed_step', 'state', and
     'worktree_path' for downstream diagnosis.
     """

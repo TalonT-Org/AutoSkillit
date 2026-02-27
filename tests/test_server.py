@@ -2999,8 +2999,6 @@ class TestDeleteDirectoryContents:
     @pytest.mark.asyncio
     async def test_reset_test_dir_returns_partial_failure_json(self, tmp_path):
         """1e: reset_test_dir returns structured JSON on partial failure."""
-        from autoskillit import server
-
         workspace = tmp_path / "workspace"
         workspace.mkdir()
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
@@ -3011,7 +3009,10 @@ class TestDeleteDirectoryContents:
             failed=[("bad_dir", "PermissionError: denied")],
             skipped=[],
         )
-        with patch.object(server, "_delete_directory_contents", return_value=mock_result):
+        with patch(
+            "autoskillit.server.tools_workspace._delete_directory_contents",
+            return_value=mock_result,
+        ):
             result = json.loads(await reset_test_dir(test_dir=str(workspace), force=False))
 
         assert result["success"] is False
@@ -3021,8 +3022,6 @@ class TestDeleteDirectoryContents:
     @pytest.mark.asyncio
     async def test_reset_workspace_returns_partial_failure_json(self, tool_ctx, tmp_path):
         """1f: reset_workspace returns structured JSON on partial failure."""
-        import autoskillit.server as server
-
         tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
 
         workspace = tmp_path / "workspace"
@@ -3036,7 +3035,10 @@ class TestDeleteDirectoryContents:
             failed=[("bad_dir", "PermissionError: denied")],
             skipped=[".cache"],
         )
-        with patch.object(server, "_delete_directory_contents", return_value=mock_result):
+        with patch(
+            "autoskillit.server.tools_workspace._delete_directory_contents",
+            return_value=mock_result,
+        ):
             result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
         assert result["success"] is False
@@ -3392,7 +3394,7 @@ class TestRunPython:
         mock_module = MagicMock()
         mock_module.hang_fn = _hang
 
-        with patch("autoskillit.server.importlib.import_module", return_value=mock_module):
+        with patch("importlib.import_module", return_value=mock_module):
             result = json.loads(
                 await run_python(
                     callable="fake_mod.hang_fn",
@@ -3426,7 +3428,7 @@ class TestRunPython:
         mock_module.hang_fn = _hang
 
         with (
-            patch("autoskillit.server.importlib.import_module", return_value=mock_module),
+            patch("importlib.import_module", return_value=mock_module),
             structlog.testing.capture_logs() as logs,
         ):
             result = json.loads(await run_python(callable="fake_mod.hang_fn", timeout=1))
@@ -4914,7 +4916,7 @@ class TestRunSkillRetryConsolidation:
             stderr="",
         )
         mock_core = AsyncMock(return_value=mock_result)
-        with patch("autoskillit.server.run_headless_core", mock_core):
+        with patch("autoskillit.server.tools_execution.run_headless_core", mock_core):
             await run_skill_retry("/investigate something", "/tmp", add_dir="/extra/dir")
 
         assert mock_core.call_args.kwargs.get("add_dir") == "/extra/dir"
@@ -4934,7 +4936,7 @@ class TestRunSkillRetryConsolidation:
             stderr="",
         )
         mock_core = AsyncMock(return_value=mock_result)
-        with patch("autoskillit.server.run_headless_core", mock_core):
+        with patch("autoskillit.server.tools_execution.run_headless_core", mock_core):
             await run_skill_retry("/investigate something", "/tmp")
 
         assert mock_core.call_args.kwargs.get("timeout") == 7200
@@ -5332,7 +5334,7 @@ class TestMigrationSuppression:
                 stderr="",
             )
         )
-        with patch("autoskillit.server.run_headless_core", mock_headless):
+        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
             result = json.loads(await load_recipe(name="test-script"))
 
         assert "suggestions" in result
@@ -5504,7 +5506,7 @@ class TestMigrateRecipe:
             )
         )
         with (
-            patch("autoskillit.server.run_headless_core", mock_headless),
+            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
             patch("autoskillit.recipe.contracts.generate_recipe_card", return_value=None),
         ):
             result = json.loads(await migrate_recipe(name="test-script"))
@@ -5547,7 +5549,7 @@ class TestMigrateRecipe:
             )
         )
         with (
-            patch("autoskillit.server.run_headless_core", mock_headless),
+            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
             patch("autoskillit.recipe.contracts.generate_recipe_card", return_value=None),
         ):
             await migrate_recipe(name="test-script")
@@ -5576,7 +5578,7 @@ class TestMigrateRecipe:
                 stderr="",
             )
         )
-        with patch("autoskillit.server.run_headless_core", mock_headless):
+        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
             result = json.loads(await migrate_recipe(name="test-script"))
 
         assert "error" in result
@@ -5602,7 +5604,7 @@ class TestMigrateRecipe:
                 stderr="",
             )
         )
-        with patch("autoskillit.server.run_headless_core", mock_headless):
+        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
             result = json.loads(await migrate_recipe(name="test-script"))
 
         mock_headless.assert_not_called()
@@ -5642,7 +5644,7 @@ class TestMigrateRecipe:
                 stderr="",
             )
         )
-        with patch("autoskillit.server.run_headless_core", mock_headless):
+        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
             result = json.loads(await migrate_recipe(name="test-script"))
 
         mock_headless.assert_not_called()

@@ -72,7 +72,9 @@ class TestVersionArchitecture:
                     pytest.fail(f"version.py must not import autoskillit.{parts[1]}")
 
     def test_doctor_imports_version_not_server(self):
-        """_doctor.py must import version_info from autoskillit.version, not server."""
-        src = (Path(__file__).parent.parent / "src" / "autoskillit" / "_doctor.py").read_text()
+        """cli/_doctor.py must import version_info from autoskillit.version, not server."""
+        src = (
+            Path(__file__).parent.parent / "src" / "autoskillit" / "cli" / "_doctor.py"
+        ).read_text()
         assert "from autoskillit.server import version_info" not in src
         assert "from autoskillit.version import version_info" in src

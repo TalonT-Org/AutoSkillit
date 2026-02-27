@@ -17,7 +17,7 @@ at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
 Those rules belong in the toolchain, not duplicated here.
 
 Exemptions:
-  - cli.py, _doctor.py: may use print() for user-facing terminal output
+  - cli/app.py, cli/doctor.py: may use print() for user-facing terminal output
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ SRC_ROOT = Path(__file__).parent.parent / "src" / "autoskillit"
 
 _SENSITIVE_KEYWORDS = frozenset({"token", "secret", "password", "key", "api_key", "auth"})
 _LOGGER_METHODS = frozenset({"debug", "info", "warning", "error", "critical", "exception"})
-_PRINT_EXEMPT = frozenset({"cli.py", "_doctor.py"})
+_PRINT_EXEMPT = frozenset({"app.py", "_doctor.py"})
 _BROAD_EXCEPTION_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"})
 
 
@@ -208,9 +208,7 @@ LAYER_ASSIGNMENTS: dict[str, int] = {
     "migration": 2,  # L2 migration/ sub-package
     # ── Layer 3: Orchestration + Server ── import L0–L2 ───────────────────────
     "headless": 3,  # execution/headless.py
-    "server": 3,
-    "_doctor": 3,
-    "git_operations": 3,
+    "server": 3,  # server/ package (skipped if server.py absent — uses server/ dir)
 }
 _LAYER_EXEMPT: frozenset[str] = frozenset({"cli", "__init__", "__main__"})
 
@@ -221,9 +219,10 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # pipeline/ package: singletons _audit_log and _token_log
         "audit",
         "tokens",
-        # root-level singletons
-        "server",
-        "cli",
+        # server/__init__.py: mcp = FastMCP(...)
+        "__init__",
+        # cli/app.py: app = App(...), config_app = App(...), etc.
+        "app",
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -502,18 +501,19 @@ def _has_await_or_return(stmt: ast.stmt) -> bool:
 
 def test_all_mcp_tools_are_registered() -> None:
     """Bidirectional check: every @mcp.tool function is in the _gate registry and
-    every registry entry has a corresponding @mcp.tool function in server.py."""
+    every registry entry has a corresponding @mcp.tool function in server/."""
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
     expected = GATED_TOOLS | UNGATED_TOOLS
-    server_src = SRC_ROOT / "server.py"
-    tree = ast.parse(server_src.read_text())
+    server_dir = SRC_ROOT / "server"
     decorated: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            for dec in node.decorator_list:
-                if _is_mcp_tool_decorator(dec):
-                    decorated.add(node.name)
+    for py_file in server_dir.glob("*.py"):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                for dec in node.decorator_list:
+                    if _is_mcp_tool_decorator(dec):
+                        decorated.add(node.name)
 
     unregistered = decorated - expected
     missing = expected - decorated
@@ -526,35 +526,37 @@ def test_gated_tools_call_require_enabled_first() -> None:
     await expression or return statement in its function body."""
     from autoskillit.pipeline.gate import GATED_TOOLS
 
-    src = (SRC_ROOT / "server.py").read_text()
-    tree = ast.parse(src)
+    server_dir = SRC_ROOT / "server"
     violations: list[str] = []
 
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name not in GATED_TOOLS:
-                continue
-            if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
-                continue
+    for py_file in server_dir.glob("*.py"):
+        src = py_file.read_text()
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name not in GATED_TOOLS:
+                    continue
+                if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
+                    continue
 
-            # Find the statement index of first _require_enabled() call
-            # and first await/return in the function body.
-            require_idx: int | None = None
-            action_idx: int | None = None
+                # Find the statement index of first _require_enabled() call
+                # and first await/return in the function body.
+                require_idx: int | None = None
+                action_idx: int | None = None
 
-            for i, stmt in enumerate(node.body):
-                if require_idx is None and _has_call_to(stmt, "_require_enabled"):
-                    require_idx = i
-                if action_idx is None and _has_await_or_return(stmt):
-                    action_idx = i
+                for i, stmt in enumerate(node.body):
+                    if require_idx is None and _has_call_to(stmt, "_require_enabled"):
+                        require_idx = i
+                    if action_idx is None and _has_await_or_return(stmt):
+                        action_idx = i
 
-            if require_idx is None:
-                violations.append(f"{node.name}: _require_enabled() never called")
-            elif action_idx is not None and require_idx > action_idx:
-                violations.append(
-                    f"{node.name}: _require_enabled() called at stmt {require_idx} "
-                    f"but await/return found at stmt {action_idx} first"
-                )
+                if require_idx is None:
+                    violations.append(f"{node.name}: _require_enabled() never called")
+                elif action_idx is not None and require_idx > action_idx:
+                    violations.append(
+                        f"{node.name}: _require_enabled() called at stmt {require_idx} "
+                        f"but await/return found at stmt {action_idx} first"
+                    )
 
     assert not violations, (
         "Gated tools must call _require_enabled() before any await/return:\n"
@@ -563,22 +565,24 @@ def test_gated_tools_call_require_enabled_first() -> None:
 
 
 def test_server_imports_gate_registry() -> None:
-    """server.py must import GATED_TOOLS and UNGATED_TOOLS from autoskillit.pipeline.gate.
+    """server/ package must import GATED_TOOLS and UNGATED_TOOLS from autoskillit.pipeline.gate.
 
-    N6 requirement: server.py is the authoritative runtime consumer of the
+    N6 requirement: the server package is the authoritative runtime consumer of the
     gate registry, not only the test suite.
     """
-    server_src = SRC_ROOT / "server.py"
-    tree = ast.parse(server_src.read_text())
-
+    server_dir = SRC_ROOT / "server"
     imported: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "autoskillit.pipeline.gate":
-            for alias in node.names:
-                imported.add(alias.name)
+    for py_file in server_dir.glob("*.py"):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "autoskillit.pipeline.gate":
+                for alias in node.names:
+                    imported.add(alias.name)
 
     missing = {"GATED_TOOLS", "UNGATED_TOOLS"} - imported
-    assert not missing, f"server.py must import from autoskillit.pipeline.gate: {sorted(missing)}"
+    assert not missing, (
+        f"server/ package must import from autoskillit.pipeline.gate: {sorted(missing)}"
+    )
 
 
 # ── Rule 1: test_import_layer_enforcement ─────────────────────────────────────
@@ -918,14 +922,15 @@ def test_recipe_validator_no_process_lifecycle_import() -> None:
 
 
 def test_server_uses_recipe_io_not_recipe_loader_for_discovery() -> None:
-    """server.py must import find_recipe_by_name from recipe.io, not from recipe.loader."""
-    server_path = SRC_ROOT / "server.py"
-    src = server_path.read_text()
-    assert "from autoskillit.recipe.io import" in src or "from .recipe.io import" in src, (
-        "server.py must import recipe discovery functions from recipe.io"
-    )
-    assert "from autoskillit.recipe.loader import list_recipes" not in src
-    assert "from autoskillit.recipe.loader import load_recipe" not in src
+    """server/ package must import recipe discovery from recipe.io, not from recipe.loader."""
+    server_dir = SRC_ROOT / "server"
+    combined_src = "\n".join(p.read_text() for p in server_dir.glob("*.py"))
+    assert (
+        "from autoskillit.recipe.io import" in combined_src
+        or "from .recipe.io import" in combined_src
+    ), "server/ package must import recipe discovery functions from recipe.io"
+    assert "from autoskillit.recipe.loader import list_recipes" not in combined_src
+    assert "from autoskillit.recipe.loader import load_recipe" not in combined_src
 
 
 # ── L1 Package Runtime Isolation Tests ────────────────────────────────────────
@@ -1128,3 +1133,38 @@ def test_old_flat_migration_modules_removed() -> None:
         assert not (SRC_ROOT / name).exists(), (
             f"{name} should be removed — code now lives in migration/ sub-package"
         )
+
+
+# ── New L3 package tests (groupD plan) ────────────────────────────────────────
+
+
+def test_server_is_package() -> None:
+    """server/ must be a package directory, not a flat module."""
+    assert (SRC_ROOT / "server").is_dir(), "server/ directory must exist"
+    assert (SRC_ROOT / "server" / "__init__.py").exists()
+    assert not (SRC_ROOT / "server.py").exists(), "server.py flat module must be deleted"
+
+
+def test_cli_is_package() -> None:
+    """cli/ must be a package directory, not a flat module."""
+    assert (SRC_ROOT / "cli").is_dir(), "cli/ directory must exist"
+    assert (SRC_ROOT / "cli" / "__init__.py").exists()
+    assert not (SRC_ROOT / "cli.py").exists(), "cli.py flat module must be deleted"
+
+
+def test_server_file_count_under_limit() -> None:
+    """server/ must not exceed 10 Python files (REQ-DSGN-002)."""
+    py_files = list((SRC_ROOT / "server").glob("*.py"))
+    assert len(py_files) <= 10, f"server/ has {len(py_files)} files, max is 10"
+
+
+def test_git_operations_moved_to_server_package() -> None:
+    """git_operations.py must be removed; its logic lives in server/git.py."""
+    assert not (SRC_ROOT / "git_operations.py").exists()
+    assert (SRC_ROOT / "server" / "git.py").exists()
+
+
+def test_doctor_moved_to_cli_package() -> None:
+    """_doctor.py must be removed; its logic lives in cli/_doctor.py."""
+    assert not (SRC_ROOT / "_doctor.py").exists()
+    assert (SRC_ROOT / "cli" / "_doctor.py").exists()

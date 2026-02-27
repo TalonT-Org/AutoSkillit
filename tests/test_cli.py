@@ -48,7 +48,7 @@ class TestCLI:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        with patch.object(cli, "_prompt_test_command", return_value=["npm", "test"]):
+        with patch("autoskillit.cli.app._prompt_test_command", return_value=["npm", "test"]):
             cli.init()
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         data = yaml.safe_load(config_path.read_text())
@@ -517,7 +517,8 @@ class TestCLI:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         marketplace_dir = cli._ensure_marketplace()
         link = marketplace_dir / "plugins" / "autoskillit"
-        assert link.resolve() == Path(cli.__file__).parent.resolve()
+        # cli.__file__ is now cli/__init__.py; .parent = cli/, .parent.parent = autoskillit/
+        assert link.resolve() == Path(cli.__file__).parent.parent.resolve()
 
     def test_install_marketplace_json_content(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1304,8 +1305,8 @@ class TestGroupFRefactoring:
     """P8-2, P3-2, P5-4: CLI refactoring — doctor delegation, public version_info, atomic write."""
 
     def test_doctor_delegates_to_doctor_module(self, monkeypatch, capsys):
-        """cli.doctor() must delegate to _doctor.run_doctor(), not contain the logic itself."""
-        from autoskillit import _doctor
+        """cli.doctor() must delegate to cli._doctor.run_doctor(), not contain the logic itself."""
+        from autoskillit.cli import _doctor
 
         called_with: dict = {}
 
@@ -1317,8 +1318,8 @@ class TestGroupFRefactoring:
         assert called_with == {"output_json": True}
 
     def test_severity_and_doctorresult_in_doctor_module(self):
-        """Severity and DoctorResult must be importable from autoskillit._doctor."""
-        from autoskillit._doctor import DoctorResult, Severity
+        """Severity and DoctorResult must be importable from autoskillit.cli._doctor."""
+        from autoskillit.cli._doctor import DoctorResult, Severity
 
         r = DoctorResult(severity=Severity.OK, check="test", message="ok")
         assert r.severity == Severity.OK

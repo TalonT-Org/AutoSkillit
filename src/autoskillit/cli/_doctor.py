@@ -99,7 +99,8 @@ def run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> N
         )
 
     # Check 2: Plugin metadata exists in package
-    pkg_dir = Path(__file__).parent
+    # cli/doctor.py is in cli/ subdirectory; package root is one level up
+    pkg_dir = Path(__file__).parent.parent
     if not (pkg_dir / ".claude-plugin" / "plugin.json").is_file():
         results.append(
             DoctorResult(

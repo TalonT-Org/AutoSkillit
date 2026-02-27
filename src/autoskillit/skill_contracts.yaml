@@ -11,18 +11,14 @@ skills:
       - name: base_branch
         type: string
         required: true
-    outputs:
-      - name: merged_branch
-        type: string
+    outputs: []
 
   dry-walkthrough:
     inputs:
       - name: plan_path
         type: file_path
         required: true
-    outputs:
-      - name: verified_plan_path
-        type: file_path
+    outputs: []
 
   implement-worktree:
     inputs:
@@ -47,9 +43,7 @@ skills:
       - name: topic
         type: string
         required: true
-    outputs:
-      - name: investigation_path
-        type: file_path
+    outputs: []
 
   make-groups:
     inputs:
@@ -61,6 +55,8 @@ skills:
         type: file_path
       - name: manifest_path
         type: file_path
+      - name: group_files
+        type: file_path_list
 
   make-plan:
     inputs:
@@ -95,13 +91,7 @@ skills:
       - name: workspace
         type: directory_path
         required: true
-    outputs:
-      - name: summary_path
-        type: file_path
-      - name: issue_url
-        type: string
-      - name: pr_url
-        type: string
+    outputs: []
 
   rectify:
     inputs:
@@ -149,8 +139,21 @@ skills:
     outputs: []
 
   audit-impl:
-    inputs: []
-    outputs: []
+    inputs:
+      - name: plan_path
+        type: file_path
+        required: true
+      - name: implementation_ref
+        type: string
+        required: true
+      - name: base_branch
+        type: string
+        required: false
+    outputs:
+      - name: verdict
+        type: string
+      - name: remediation_path
+        type: file_path
 
   migrate-recipes:
     inputs: []

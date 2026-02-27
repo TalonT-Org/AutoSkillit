@@ -138,7 +138,7 @@ def run_doctor(*, output_json: bool = False) -> None:
         results.append(DoctorResult(Severity.OK, "project_config", "Project config exists"))
 
     # Check 5: Version consistency — plugin.json vs package version
-    from autoskillit.server import version_info
+    from autoskillit.version import version_info
 
     info = version_info()
     if info["plugin_json_version"] is None:

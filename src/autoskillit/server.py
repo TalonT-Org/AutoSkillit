@@ -90,17 +90,10 @@ def _get_config() -> AutomationConfig:
 
 def version_info() -> dict:
     """Return version health information for the running server."""
-    plugin_dir = _ctx.plugin_dir if _ctx is not None else str(Path(__file__).parent)
-    plugin_json_path = Path(plugin_dir) / ".claude-plugin" / "plugin.json"
-    plugin_version = None
-    if plugin_json_path.is_file():
-        data = json.loads(plugin_json_path.read_text())
-        plugin_version = data.get("version")
-    return {
-        "package_version": __version__,
-        "plugin_json_version": plugin_version,
-        "match": __version__ == plugin_version,
-    }
+    from autoskillit.version import version_info as _compute_version
+
+    plugin_dir = _ctx.plugin_dir if _ctx is not None else None
+    return _compute_version(plugin_dir)
 
 
 def _gate_error_result(error_message: str) -> str:

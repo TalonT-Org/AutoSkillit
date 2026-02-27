@@ -140,6 +140,8 @@ steps:
     with:
       worktree_path: ${{ inputs.work_dir }}
       base_branch: ${{ inputs.base_branch }}
+    capture:
+      cleanup_succeeded: "${{ result.cleanup_succeeded }}"
     on_success: done
     on_failure: escalate
 

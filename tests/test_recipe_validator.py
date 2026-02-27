@@ -2118,3 +2118,18 @@ def test_merge_cleanup_uncaptured_rule_not_triggered_on_non_merge_step() -> None
     )
     findings = run_semantic_rules(recipe)
     assert not any(f.rule == "merge-cleanup-uncaptured" for f in findings)
+
+
+def test_bundled_recipes_capture_cleanup_succeeded() -> None:
+    """N12: All bundled recipes with merge_worktree steps must capture cleanup_succeeded."""
+    wf_dir = builtin_recipes_dir()
+    yaml_files = list(wf_dir.glob("*.yaml"))
+    assert yaml_files
+
+    for path in yaml_files:
+        wf = load_recipe(path)
+        findings = run_semantic_rules(wf)
+        uncaptured = [f for f in findings if f.rule == "merge-cleanup-uncaptured"]
+        assert not uncaptured, (
+            f"Bundled recipe {path.name} emits merge-cleanup-uncaptured: {uncaptured}"
+        )

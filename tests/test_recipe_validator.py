@@ -1139,7 +1139,7 @@ class TestCaptureOutputCoverageRule:
         assert "no outputs contract entry" in undeclared[0].message
 
     def test_capture_key_from_empty_outputs_skill_emits_warning(self) -> None:
-        """audit-impl has outputs: [] — any capture key from it is undeclared."""
+        """audit-friction has outputs: [] — any capture key from it is undeclared."""
         recipe_yaml = textwrap.dedent("""\
             name: capture-empty-outputs
             description: test
@@ -1147,9 +1147,9 @@ class TestCaptureOutputCoverageRule:
               audit:
                 tool: run_skill
                 with:
-                  skill_command: /autoskillit:audit-impl ${{ inputs.plan }}
+                  skill_command: /autoskillit:audit-friction
                 capture:
-                  verdict: "${{ result.verdict }}"
+                  report_path: "${{ result.report_path }}"
                 on_success: done
                 on_failure: done
               done:
@@ -1161,8 +1161,8 @@ class TestCaptureOutputCoverageRule:
         undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
         assert len(undeclared) == 1
         assert undeclared[0].severity == Severity.WARNING
-        assert "verdict" in undeclared[0].message
-        assert "audit-impl" in undeclared[0].message
+        assert "report_path" in undeclared[0].message
+        assert "audit-friction" in undeclared[0].message
 
 
 # ---------------------------------------------------------------------------

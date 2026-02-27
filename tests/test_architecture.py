@@ -1126,6 +1126,27 @@ def test_recipe_no_forbidden_imports() -> None:
     assert not violations, "\n".join(violations)
 
 
+def test_recipe_does_not_import_migration() -> None:
+    """REQ-CNST-005: No module in recipe/ may import from migration/."""
+    src = SRC_ROOT / "recipe"
+    assert src.exists(), "recipe/ package must exist"
+    violations: list[str] = []
+    for py_file in sorted(src.rglob("*.py")):
+        if "__pycache__" in py_file.parts:
+            continue
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if "autoskillit.migration" in module:
+                    violations.append(f"{py_file.name}: imports {module}")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if "autoskillit.migration" in alias.name:
+                        violations.append(f"{py_file.name}: imports {alias.name}")
+    assert not violations, f"recipe/ imports migration/: {violations}"
+
+
 def test_migration_no_forbidden_imports() -> None:
     """T6: REQ-COMP-010 — migration/ imports only from core/, execution/, and recipe/."""
     migration_pkg = SRC_ROOT / "migration"

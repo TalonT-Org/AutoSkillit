@@ -1295,7 +1295,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
         mock_tcp.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_suppression_emits_warning(self, tmp_path):
+    async def test_suppression_emits_warning(self, tmp_path, capsys):
         """A suppression event must log a warning with elapsed time."""
         import asyncio
 
@@ -1326,9 +1326,17 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     ),
                     timeout=12.0,
                 )
-        assert any(
+        # capture_logs() intercepts when structlog is in default state.
+        # In a parallel worker where configure_logging() ran in a prior test,
+        # bound loggers may use a stale processor reference and write to stdout.
+        captured = capsys.readouterr().out
+        warning_in_logs = any(
             "port-443" in str(log.get("event", "")) or "ESTABLISHED" in str(log.get("event", ""))
             for log in logs
+        )
+        warning_in_stdout = "port-443" in captured or "ESTABLISHED" in captured
+        assert warning_in_logs or warning_in_stdout, (
+            "Suppression warning must appear in structlog capture or stdout"
         )
 
 

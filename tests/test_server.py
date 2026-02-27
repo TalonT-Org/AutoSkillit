@@ -600,7 +600,8 @@ class TestMergeWorktree:
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
         result = json.loads(await merge_worktree(str(wt), "main"))
-        assert result["success"] is True
+        assert result["merge_succeeded"] is True
+        assert result["cleanup_succeeded"] is True
         assert result["worktree_removed"] is True
         assert result["branch_deleted"] is True
 
@@ -3104,7 +3105,7 @@ class TestSafetyConfigWiring:
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
         result = json.loads(await merge_worktree(str(wt), "main"))
-        assert result["success"] is True
+        assert result["merge_succeeded"] is True
 
         # Verify no test command was called — the 3rd call should be git fetch, not test
         third_call_cmd = tool_ctx.runner.call_args_list[2][0]
@@ -3186,7 +3187,8 @@ class TestMergeWorktreeCleanupReporting:
         )  # worktree remove FAILS
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
         result = json.loads(await merge_worktree(str(wt), "main"))
-        assert result["success"] is True
+        assert result["merge_succeeded"] is True
+        assert result["cleanup_succeeded"] is False
         assert result["worktree_removed"] is False
 
     @pytest.mark.asyncio
@@ -3212,7 +3214,8 @@ class TestMergeWorktreeCleanupReporting:
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS
         result = json.loads(await merge_worktree(str(wt), "main"))
-        assert result["success"] is True
+        assert result["merge_succeeded"] is True
+        assert result["cleanup_succeeded"] is False
         assert result["worktree_removed"] is True
         assert result["branch_deleted"] is False
 
@@ -3260,7 +3263,8 @@ class TestMergeWorktreeCleanupWarnings:
         with structlog.testing.capture_logs() as logs:
             result = json.loads(await merge_worktree(str(wt), "main"))
 
-        assert result["success"] is True
+        assert result["merge_succeeded"] is True
+        assert result["cleanup_succeeded"] is False
         assert result["worktree_removed"] is False
         warning_entries = [entry for entry in logs if entry.get("log_level") == "warning"]
         assert any(entry.get("operation") == "worktree_remove" for entry in warning_entries)
@@ -3286,7 +3290,8 @@ class TestMergeWorktreeCleanupWarnings:
         with structlog.testing.capture_logs() as logs:
             result = json.loads(await merge_worktree(str(wt), "main"))
 
-        assert result["success"] is True
+        assert result["merge_succeeded"] is True
+        assert result["cleanup_succeeded"] is False
         assert result["branch_deleted"] is False
         warning_entries = [entry for entry in logs if entry.get("log_level") == "warning"]
         assert any(entry.get("operation") == "branch_delete" for entry in warning_entries)
@@ -3312,7 +3317,8 @@ class TestMergeWorktreeCleanupWarnings:
         with structlog.testing.capture_logs() as logs:
             result = json.loads(await merge_worktree(str(wt), "main"))
 
-        assert result["success"] is True
+        assert result["merge_succeeded"] is True
+        assert result["cleanup_succeeded"] is True
         cleanup_warnings = [
             entry
             for entry in logs

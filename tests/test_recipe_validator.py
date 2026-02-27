@@ -2050,3 +2050,71 @@ def test_validator_passes_when_plan_parts_captured(
     warnings = run_semantic_rules(compliant_multipart_recipe_with_list)
     rule_names = [w.rule for w in warnings]
     assert "multipart-plan-parts-not-captured" not in rule_names
+
+
+# ---------------------------------------------------------------------------
+# N12: merge-cleanup-uncaptured semantic rule
+# ---------------------------------------------------------------------------
+
+
+def _build_merge_worktree_recipe(capture: dict) -> Recipe:
+    """Helper: build a minimal Recipe with a merge_worktree step and the given capture dict."""
+    return Recipe(
+        name="test-merge",
+        description="Test merge recipe",
+        summary="merge > done",
+        steps={
+            "merge": RecipeStep(
+                tool="merge_worktree",
+                with_args={"worktree_path": "${{ context.worktree_path }}", "base_branch": "main"},
+                capture=capture,
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="Done"),
+        },
+    )
+
+
+def test_semantic_rule_warns_merge_worktree_without_cleanup_capture() -> None:
+    """N12: merge_worktree step without cleanup_succeeded captured emits warning."""
+    recipe = _build_merge_worktree_recipe(capture={})
+    findings = run_semantic_rules(recipe)
+    assert any(f.rule == "merge-cleanup-uncaptured" for f in findings)
+
+
+def test_semantic_rule_warns_merge_worktree_with_unrelated_capture() -> None:
+    """N12: merge_worktree step capturing only merge_succeeded still warns about cleanup."""
+    recipe = _build_merge_worktree_recipe(capture={"merged": "${{ result.merge_succeeded }}"})
+    findings = run_semantic_rules(recipe)
+    assert any(f.rule == "merge-cleanup-uncaptured" for f in findings)
+
+
+def test_semantic_rule_passes_when_cleanup_captured() -> None:
+    """N12: No merge-cleanup-uncaptured warning when cleanup_succeeded is captured."""
+    recipe = _build_merge_worktree_recipe(
+        capture={"cleanup_ok": "${{ result.cleanup_succeeded }}"}
+    )
+    findings = run_semantic_rules(recipe)
+    assert not any(f.rule == "merge-cleanup-uncaptured" for f in findings)
+
+
+def test_merge_cleanup_uncaptured_rule_not_triggered_on_non_merge_step() -> None:
+    """N12: The rule does not fire on non-merge_worktree steps."""
+    recipe = Recipe(
+        name="test-non-merge",
+        description="Test recipe without merge_worktree",
+        summary="run > done",
+        steps={
+            "run": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo hi", "cwd": "/tmp"},
+                capture={},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="Done"),
+        },
+    )
+    findings = run_semantic_rules(recipe)
+    assert not any(f.rule == "merge-cleanup-uncaptured" for f in findings)

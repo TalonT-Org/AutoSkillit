@@ -159,9 +159,10 @@ async def perform_merge(
         )
 
     return {
-        "success": True,
+        "merge_succeeded": True,
         "merged_branch": worktree_branch,
         "into_branch": base_branch,
         "worktree_removed": wt_rc == 0,
         "branch_deleted": br_rc == 0,
+        "cleanup_succeeded": wt_rc == 0 and br_rc == 0,
     }

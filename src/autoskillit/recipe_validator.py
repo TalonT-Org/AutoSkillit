@@ -1198,6 +1198,40 @@ def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="merge-cleanup-uncaptured",
+    description=(
+        "merge_worktree steps should capture cleanup_succeeded to surface orphaned "
+        "worktrees or branches left behind when cleanup commands fail after a successful merge."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_merge_cleanup_captured(wf: Recipe) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+
+    for step_name, step in wf.steps.items():
+        if step.tool != "merge_worktree":
+            continue
+        # Check whether any capture value references cleanup_succeeded
+        captures_cleanup = any("result.cleanup_succeeded" in str(v) for v in step.capture.values())
+        if not captures_cleanup:
+            findings.append(
+                RuleFinding(
+                    rule="merge-cleanup-uncaptured",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls merge_worktree but does not capture "
+                        f"'cleanup_succeeded'. Add a capture entry such as "
+                        f'cleanup_ok: "${{{{ result.cleanup_succeeded }}}}" '
+                        f"so cleanup failures (orphaned worktree/branch) are not silently ignored."
+                    ),
+                )
+            )
+
+    return findings
+
+
+@semantic_rule(
     name="multipart-plan-parts-not-captured",
     description=(
         "Recipes with make-plan or rectify steps must capture plan_parts via capture_list "

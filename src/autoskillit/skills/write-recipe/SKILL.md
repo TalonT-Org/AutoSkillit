@@ -491,7 +491,7 @@ When called directly as `/autoskillit:write-recipe`:
    - `DEAD_OUTPUT`: A `capture:` key is never referenced by any reachable downstream step via `${{ context.X }}`. Either add a `${{ context.X }}` reference in the downstream step's `with:` block, or remove the unused capture.
    - `IMPLICIT_HANDOFF`: A `run_skill` or `run_skill_retry` step has no `capture:` block. Add a `capture:` block to explicitly wire outputs to downstream steps via `${{ context.X }}`, or confirm the skill's output is intentionally unused.
    - Present the quality summary to the user and fix any warnings that indicate broken wiring.
-9. After validation passes, generate the pipeline contract file by calling `generate_recipe_card` on the saved script. This creates `.autoskillit/recipes/contracts/{name}.yaml` alongside the recipe. Use `run_python` with `autoskillit.recipe_validator.generate_recipe_card` passing the script path and scripts directory, or rely on `load_recipe` which auto-generates contracts on first load.
+9. After validation passes, generate the pipeline contract file by calling `generate_recipe_card` on the saved script. This creates `.autoskillit/recipes/contracts/{name}.yaml` alongside the recipe. Use `run_python` with `autoskillit.recipe.contracts.generate_recipe_card` passing the script path and scripts directory, or rely on `load_recipe` which auto-generates contracts on first load.
 10. Tell the user: "Saved to `.autoskillit/recipes/{name}.yaml`. Load it with `load_recipe("{name}")` via the MCP tool."
 
 ## CRITICAL: Scripts Are NOT Skills
@@ -532,7 +532,7 @@ When the agent is given an existing script's YAML content and a requested change
 5. Call `validate_recipe` on the saved path
 6. If errors, fix and re-validate until clean
 7. Review quality warnings and fix data-flow issues before reporting changes
-8. After validation passes, regenerate the pipeline contract file to reflect the changes. Use `run_python` with `autoskillit.recipe_validator.generate_recipe_card` or rely on `load_recipe` auto-generation on next load.
+8. After validation passes, regenerate the pipeline contract file to reflect the changes. Use `run_python` with `autoskillit.recipe.contracts.generate_recipe_card` or rely on `load_recipe` auto-generation on next load.
 9. Report the changes made
 
 This edit mode is invoked when `load_recipe` routes the user's modification request through this skill. The skill receives the existing YAML as context.

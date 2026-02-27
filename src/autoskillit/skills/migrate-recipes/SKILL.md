@@ -64,7 +64,7 @@ If all 3 retry attempts are exhausted without a valid result, BEFORE declaring f
 you MUST persist the failure record:
 
   run_python:
-    callable: autoskillit.failure_store.record_from_skill
+    callable: autoskillit.migration.store.record_from_skill
     args:
       name: {recipe stem, e.g. "my-pipeline"}
       file_path: {absolute path received as script_path argument}

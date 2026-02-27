@@ -374,7 +374,7 @@ class TestSmokeScriptValidation:
         assert "pipeline-summary" in names
 
     def test_pipeline_summary_contract_declared(self) -> None:
-        contracts_path = PROJECT_ROOT / "src" / "autoskillit" / "skill_contracts.yaml"
+        contracts_path = PROJECT_ROOT / "src" / "autoskillit" / "recipe" / "skill_contracts.yaml"
         contracts = yaml.safe_load(contracts_path.read_text())
         assert "pipeline-summary" in contracts["skills"]
         skill = contracts["skills"]["pipeline-summary"]

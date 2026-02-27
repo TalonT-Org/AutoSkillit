@@ -9,18 +9,18 @@ import json
 
 import structlog
 
-from autoskillit.session_result import (
+from autoskillit.core.types import (
+    CONTEXT_EXHAUSTION_MARKER,
+    RetryReason,
+    TerminationReason,
+)
+from autoskillit.execution.session import (
     ClaudeSessionResult,
     SkillResult,
     _compute_retry,
     _compute_success,
     extract_token_usage,
     parse_session_result,
-)
-from autoskillit.types import (
-    CONTEXT_EXHAUSTION_MARKER,
-    RetryReason,
-    TerminationReason,
 )
 
 # ---------------------------------------------------------------------------

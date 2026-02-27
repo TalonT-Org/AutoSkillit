@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.types import PIPELINE_FORBIDDEN_TOOLS
+from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
 
 
 def _project_root() -> Path:
@@ -84,7 +84,7 @@ class TestServerToolSurfaceContract:
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -135,10 +135,10 @@ class TestBundledWorkflowContract:
 
     def test_bundled_workflows_constraints_name_all_forbidden_tools(self):
         """All bundled workflow YAML files must name every forbidden tool in constraints."""
-        from autoskillit.recipe_io import (
+        from autoskillit.recipe.io import (
             list_recipes as list_workflows,
         )
-        from autoskillit.recipe_io import (
+        from autoskillit.recipe.io import (
             load_recipe as load_workflow,
         )
 
@@ -167,7 +167,7 @@ class TestSkillMdToolNameCurrency:
         )
 
 
-_AUTOSKILLIT_CALLABLE_RE = re.compile(r"\bautoskillit\.[a-z_]+\.[a-z_]+\b")
+_AUTOSKILLIT_CALLABLE_RE = re.compile(r"\bautoskillit(?:\.[a-z_]+)+\b")
 
 
 class TestRunPythonCallableContract:

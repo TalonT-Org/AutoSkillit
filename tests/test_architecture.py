@@ -17,7 +17,7 @@ at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
 Those rules belong in the toolchain, not duplicated here.
 
 Exemptions:
-  - cli.py, _doctor.py: may use print() for user-facing terminal output
+  - cli/app.py, cli/doctor.py: may use print() for user-facing terminal output
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ SRC_ROOT = Path(__file__).parent.parent / "src" / "autoskillit"
 
 _SENSITIVE_KEYWORDS = frozenset({"token", "secret", "password", "key", "api_key", "auth"})
 _LOGGER_METHODS = frozenset({"debug", "info", "warning", "error", "critical", "exception"})
-_PRINT_EXEMPT = frozenset({"cli.py", "_doctor.py"})
+_PRINT_EXEMPT = frozenset({"app.py", "_doctor.py"})
 _BROAD_EXCEPTION_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"})
 
 
@@ -183,43 +183,38 @@ def _scan(path: Path) -> list[Violation]:
 _SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
 
 # ── Rule 1: Import layer enforcement ─────────────────────────────────────────
-LAYER_ASSIGNMENTS: dict[str, int] = {
-    # ── Layer 0: Foundation ── no autoskillit imports ─────────────────────────
-    "types": 0,
-    "config": 0,
-    "_gate": 0,
-    "_io": 0,
-    "_logging": 0,
-    "_yaml": 0,
-    "migration_loader": 0,
-    "version": 0,
-    "smoke_utils": 0,
-    # ── Layer 1: Basic Services ── import only L0 ─────────────────────────────
-    "_audit": 1,
-    "_token_log": 1,
-    "session_result": 1,
-    "recipe_schema": 1,
-    "skill_resolver": 1,
-    "failure_store": 1,
-    "process_lifecycle": 1,
-    # ── Layer 2: Complex Services ── import L0 + L1 ───────────────────────────
-    "_context": 2,
-    "recipe_io": 2,
-    "recipe_loader": 2,
-    "db_tools": 2,
-    "workspace": 2,
-    # ── Layer 3: Orchestration + Server ── import L0–L2 ───────────────────────
-    "recipe_validator": 3,
-    "migration_engine": 3,
+SUBPACKAGE_LAYERS: dict[str, int] = {
+    # Layer 0: core/ — zero autoskillit internal imports
+    "core": 0,
+    # Layer 1: domain primitives — may import only from L0
+    "config": 1,
+    "pipeline": 1,
+    "execution": 1,
+    "workspace": 1,
+    # Layer 2: domain services — may import from L0 and L1
+    "recipe": 2,
+    "migration": 2,
+    # Layer 3: application layer — may import from L0–L2
     "server": 3,
-    "_doctor": 3,
+    "cli": 3,
 }
-_LAYER_EXEMPT: frozenset[str] = frozenset({"cli", "__init__", "__main__"})
+# Root-level isolated modules are exempt from sub-package layer enforcement.
+# Their import constraints are tested by test_isolated_modules_do_not_import_server_or_cli.
+_LAYER_EXEMPT_STEMS: frozenset[str] = frozenset(
+    {"version", "smoke_utils", "_llm_triage", "__init__", "__main__"}
+)
 
 # ── Rule 2: Singleton definition locality ─────────────────────────────────────
 # "server" allows mcp = FastMCP(...); "cli" allows app = App(...) etc.
 SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
-    {"_audit", "_token_log", "failure_store", "server", "cli", "recipe_validator"}
+    {
+        "audit",  # pipeline/audit.py: _audit_log singleton
+        "tokens",  # pipeline/tokens.py: _token_log singleton
+        "__init__",  # server/__init__.py: mcp = FastMCP(...)
+        "app",  # cli/app.py: app = App(...), config_app = App(...), etc.
+        "store",  # migration/store.py: defensive exemption for future module-level construction
+        "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
+    }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
     {
@@ -250,7 +245,7 @@ _MODULE_LEVEL_IO_ATTR_CALLS: frozenset[tuple[str, str]] = frozenset(
 _MODULE_LEVEL_IO_EXEMPT: frozenset[str] = frozenset({"__main__.py"})
 
 # ── Rule 5 (visitor): asyncio.PIPE ban ────────────────────────────────────────
-_ASYNCIO_PIPE_EXEMPT: frozenset[str] = frozenset({"process_lifecycle.py"})
+_ASYNCIO_PIPE_EXEMPT: frozenset[str] = frozenset({"process.py"})
 
 
 # ── Helpers for new rules ─────────────────────────────────────────────────────
@@ -348,6 +343,39 @@ def _scan_module_level_io(path: Path) -> list[Violation]:
                         )
                     )
     return violations
+
+
+# ── Extension Point Coverage (REQ-EXT-001 to REQ-EXT-005) ───────────────────
+#
+# REQ-EXT-001: Adding a new MCP tool must require changes only within server/.
+#   Covered by: test_import_layer_enforcement[server-3] — any logic pulled from
+#   L0–L2 into server/ would cause an upward import violation in those lower-
+#   layer modules. test_server_tool_handlers_have_no_business_logic ensures
+#   tool handlers stay thin delegates without embedded domain logic.
+#
+# REQ-EXT-002: Adding a recipe semantic validation rule must require only a
+#   decorated function in recipe/validator.py.
+#   Covered by: test_recipe_no_forbidden_imports — validator.py can only
+#   import from core/ and workspace/; any violation indicates a structural
+#   change outside recipe/. The decorator-based rule registry means no
+#   registration file or central list requires modification for new rules.
+#
+# REQ-EXT-003: Adding a migration adapter must require only subclassing
+#   MigrationAdapter and registering with the default factory.
+#   Covered by: test_migration_no_forbidden_imports — migration/ imports
+#   only from core/, execution/, and recipe/; new adapters that violate
+#   this boundary are caught at test time without manual test updates.
+#
+# REQ-EXT-004: Adding a new CLI command must require changes only within cli/.
+#   Covered by: test_import_layer_enforcement[cli-3] — cli/ is L3; L0–L2
+#   modules that grow a cli/ dependency would be caught as upward imports
+#   in those modules' own layer enforcement test cases.
+#
+# REQ-EXT-005: Adding a new bundled skill requires only creating a directory
+#   under skills/ containing a SKILL.md file; no code changes are needed.
+#   Covered by: SkillResolver uses directory scanning, not a static registry.
+#   test_server_file_count_under_limit (groupD) ensures server/ doesn't
+#   accumulate skill-wiring boilerplate past 10 files undetected.
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -497,18 +525,19 @@ def _has_await_or_return(stmt: ast.stmt) -> bool:
 
 def test_all_mcp_tools_are_registered() -> None:
     """Bidirectional check: every @mcp.tool function is in the _gate registry and
-    every registry entry has a corresponding @mcp.tool function in server.py."""
-    from autoskillit._gate import GATED_TOOLS, UNGATED_TOOLS
+    every registry entry has a corresponding @mcp.tool function in server/."""
+    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
     expected = GATED_TOOLS | UNGATED_TOOLS
-    server_src = SRC_ROOT / "server.py"
-    tree = ast.parse(server_src.read_text())
+    server_dir = SRC_ROOT / "server"
     decorated: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            for dec in node.decorator_list:
-                if _is_mcp_tool_decorator(dec):
-                    decorated.add(node.name)
+    for py_file in server_dir.glob("*.py"):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                for dec in node.decorator_list:
+                    if _is_mcp_tool_decorator(dec):
+                        decorated.add(node.name)
 
     unregistered = decorated - expected
     missing = expected - decorated
@@ -519,37 +548,39 @@ def test_all_mcp_tools_are_registered() -> None:
 def test_gated_tools_call_require_enabled_first() -> None:
     """Every tool in GATED_TOOLS must call _require_enabled() before any
     await expression or return statement in its function body."""
-    from autoskillit._gate import GATED_TOOLS
+    from autoskillit.pipeline.gate import GATED_TOOLS
 
-    src = (SRC_ROOT / "server.py").read_text()
-    tree = ast.parse(src)
+    server_dir = SRC_ROOT / "server"
     violations: list[str] = []
 
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name not in GATED_TOOLS:
-                continue
-            if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
-                continue
+    for py_file in server_dir.glob("*.py"):
+        src = py_file.read_text()
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name not in GATED_TOOLS:
+                    continue
+                if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
+                    continue
 
-            # Find the statement index of first _require_enabled() call
-            # and first await/return in the function body.
-            require_idx: int | None = None
-            action_idx: int | None = None
+                # Find the statement index of first _require_enabled() call
+                # and first await/return in the function body.
+                require_idx: int | None = None
+                action_idx: int | None = None
 
-            for i, stmt in enumerate(node.body):
-                if require_idx is None and _has_call_to(stmt, "_require_enabled"):
-                    require_idx = i
-                if action_idx is None and _has_await_or_return(stmt):
-                    action_idx = i
+                for i, stmt in enumerate(node.body):
+                    if require_idx is None and _has_call_to(stmt, "_require_enabled"):
+                        require_idx = i
+                    if action_idx is None and _has_await_or_return(stmt):
+                        action_idx = i
 
-            if require_idx is None:
-                violations.append(f"{node.name}: _require_enabled() never called")
-            elif action_idx is not None and require_idx > action_idx:
-                violations.append(
-                    f"{node.name}: _require_enabled() called at stmt {require_idx} "
-                    f"but await/return found at stmt {action_idx} first"
-                )
+                if require_idx is None:
+                    violations.append(f"{node.name}: _require_enabled() never called")
+                elif action_idx is not None and require_idx > action_idx:
+                    violations.append(
+                        f"{node.name}: _require_enabled() called at stmt {require_idx} "
+                        f"but await/return found at stmt {action_idx} first"
+                    )
 
     assert not violations, (
         "Gated tools must call _require_enabled() before any await/return:\n"
@@ -558,50 +589,52 @@ def test_gated_tools_call_require_enabled_first() -> None:
 
 
 def test_server_imports_gate_registry() -> None:
-    """server.py must import GATED_TOOLS and UNGATED_TOOLS from autoskillit._gate.
+    """server/ package must import GATED_TOOLS and UNGATED_TOOLS from autoskillit.pipeline.gate.
 
-    N6 requirement: server.py is the authoritative runtime consumer of the
+    N6 requirement: the server package is the authoritative runtime consumer of the
     gate registry, not only the test suite.
     """
-    server_src = SRC_ROOT / "server.py"
-    tree = ast.parse(server_src.read_text())
-
+    server_dir = SRC_ROOT / "server"
     imported: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "autoskillit._gate":
-            for alias in node.names:
-                imported.add(alias.name)
+    for py_file in server_dir.glob("*.py"):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "autoskillit.pipeline.gate":
+                for alias in node.names:
+                    imported.add(alias.name)
 
     missing = {"GATED_TOOLS", "UNGATED_TOOLS"} - imported
-    assert not missing, f"server.py must import from autoskillit._gate: {sorted(missing)}"
+    assert not missing, (
+        f"server/ package must import from autoskillit.pipeline.gate: {sorted(missing)}"
+    )
 
 
 # ── Rule 1: test_import_layer_enforcement ─────────────────────────────────────
 
 
 @pytest.mark.parametrize(
-    "mod_name,layer",
-    [(k, v) for k, v in LAYER_ASSIGNMENTS.items()],
+    "pkg_name,layer",
+    [(k, v) for k, v in SUBPACKAGE_LAYERS.items()],
 )
-def test_import_layer_enforcement(mod_name: str, layer: int) -> None:
-    """Each module may only import from same or lower layer modules (no upward imports)."""
-    src_file = SRC_ROOT / f"{mod_name}.py"
-    if not src_file.exists():
-        pytest.skip(f"{mod_name}.py not found — prerequisite group not merged")
+def test_import_layer_enforcement(pkg_name: str, layer: int) -> None:
+    """Each sub-package may only import from same or lower layer sub-packages."""
+    pkg_dir = SRC_ROOT / pkg_name
+    if not pkg_dir.exists():
+        pytest.skip(f"{pkg_name}/ not found — prerequisite group not merged")
 
     violations: list[str] = []
-    for imported_stem, lineno in _extract_module_level_internal_imports(src_file):
-        if imported_stem not in LAYER_ASSIGNMENTS:
-            # Unknown module — not in the assignment table; skip (new module, update table)
-            continue
-        imported_layer = LAYER_ASSIGNMENTS[imported_stem]
-        if imported_layer > layer:
-            violations.append(
-                f"  line {lineno}: {mod_name} (L{layer}) imports "
-                f"{imported_stem} (L{imported_layer}) — upward import"
-            )
+    for py_file in pkg_dir.rglob("*.py"):
+        for imported_stem, lineno in _extract_module_level_internal_imports(py_file):
+            if imported_stem not in SUBPACKAGE_LAYERS:
+                continue  # root-level, exempt, or external module
+            imported_layer = SUBPACKAGE_LAYERS[imported_stem]
+            if imported_layer > layer:
+                violations.append(
+                    f"  {_rel(py_file)}:{lineno}: {pkg_name} (L{layer}) imports "
+                    f"{imported_stem} (L{imported_layer}) — upward import"
+                )
 
-    assert not violations, f"Layer violations in {mod_name}.py:\n" + "\n".join(violations)
+    assert not violations, f"Layer violations in {pkg_name}/:\n" + "\n".join(violations)
 
 
 # ── Rule 2: test_singleton_definition_locality ────────────────────────────────
@@ -672,7 +705,7 @@ def test_layer_enforcement_detects_upward_import(tmp_path: Path) -> None:
             if parts[0] == "autoskillit" and len(parts) > 1:
                 imported = parts[1]
                 # synthetic module is L1; upward = strictly greater
-                if LAYER_ASSIGNMENTS.get(imported, 0) > 1:
+                if SUBPACKAGE_LAYERS.get(imported, 0) > 1:
                     violations.append(imported)
     assert violations  # must detect the upward import
 
@@ -719,8 +752,8 @@ def test_asyncio_pipe_ban_detects_violation(tmp_path: Path) -> None:
     assert any("asyncio.PIPE" in v.message for v in violations)
 
 
-def test_asyncio_pipe_ban_exempt_in_process_lifecycle(tmp_path: Path) -> None:
-    f = tmp_path / "process_lifecycle.py"
+def test_asyncio_pipe_ban_exempt_in_process(tmp_path: Path) -> None:
+    f = tmp_path / "process.py"
     f.write_text("import asyncio\nval = asyncio.PIPE\n")
     violations = _scan(f)
     assert not any("asyncio.PIPE" in v.message for v in violations)
@@ -778,34 +811,44 @@ def _top_level_assign_targets(tree: ast.Module) -> set[str]:
 
 
 def test_severity_defined_in_types():
-    """Severity must be a top-level class in types.py."""
-    tree = _get_module_ast("types.py")
+    """Severity must be a top-level class in core/types.py."""
+    tree = _get_module_ast("core/types.py")
     assert "Severity" in _top_level_class_names(tree), (
-        "Severity not found in types.py; it must be defined there"
+        "Severity not found in core/types.py; it must be defined there"
     )
 
 
 def test_skill_tools_defined_in_types():
-    """SKILL_TOOLS must be a top-level assignment in types.py."""
-    tree = _get_module_ast("types.py")
+    """SKILL_TOOLS must be a top-level assignment in core/types.py."""
+    tree = _get_module_ast("core/types.py")
     assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
-        "SKILL_TOOLS not found in types.py; it must be defined there"
+        "SKILL_TOOLS not found in core/types.py; it must be defined there"
     )
 
 
 def test_claude_md_documents_all_source_modules() -> None:
     """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
 
-    Prevents undocumented modules from silently accumulating after
-    a new module is added without updating the Architecture section.
+    For __init__.py files, the containing package directory name must appear.
+    For all other files, the filename must appear somewhere in CLAUDE.md.
     """
     claude_path = Path(__file__).parent.parent / "CLAUDE.md"
     content = claude_path.read_text()
     src_root = Path(__file__).parent.parent / "src" / "autoskillit"
 
-    missing = [
-        py_file.name for py_file in sorted(src_root.glob("*.py")) if py_file.name not in content
-    ]
+    missing = []
+    for py_file in sorted(src_root.rglob("*.py")):
+        if "__pycache__" in py_file.parts:
+            continue
+        rel = py_file.relative_to(src_root)
+        if py_file.name == "__init__.py":
+            # For sub-package inits, verify the package directory is documented
+            parent = rel.parent
+            if parent != Path(".") and (parent.name + "/") not in content:
+                missing.append(str(rel))
+        else:
+            if py_file.name not in content:
+                missing.append(str(rel))
 
     assert not missing, (
         f"Modules not documented in CLAUDE.md: {', '.join(missing)}. "
@@ -834,15 +877,15 @@ def test_pyproject_cyclopts_minimum_version() -> None:
 
 def test_no_yaml_safe_load_in_migration_engine() -> None:
     """P7-2: ContractMigrationAdapter.validate must use _load_yaml, not yaml.safe_load."""
-    src = (Path(__file__).parent.parent / "src/autoskillit/migration_engine.py").read_text()
+    src = (Path(__file__).parent.parent / "src/autoskillit/migration/engine.py").read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Attribute) and func.attr == "safe_load":
                 pytest.fail(
-                    f"migration_engine.py line {node.lineno}: "
-                    f"direct yaml.safe_load call found; use _load_yaml from _io instead"
+                    f"migration/engine.py line {node.lineno}: "
+                    f"direct yaml.safe_load call found; use load_yaml from core.io instead"
                 )
 
 
@@ -858,28 +901,32 @@ def test_pytest_asyncio_version_bound() -> None:
 
 
 def test_severity_not_defined_locally_in_recipe_validator() -> None:
-    """Severity must be imported from types, not defined in recipe_validator."""
-    ast_module = _get_module_ast("recipe_validator.py")
-    class_names = _top_level_class_names(ast_module)
-    assert "Severity" not in class_names, "Severity must live in types.py, not recipe_validator.py"
+    """Severity must be imported from types, not locally defined in recipe sub-modules."""
+    for filename in ("recipe/validator.py", "recipe/contracts.py"):
+        ast_module = _get_module_ast(filename)
+        class_names = _top_level_class_names(ast_module)
+        assert "Severity" not in class_names, (
+            f"Severity must live in core/types.py, not {filename}"
+        )
 
 
 def test_skill_tools_not_defined_in_recipe_io() -> None:
-    """SKILL_TOOLS must not be defined locally in recipe_io.py."""
-    ast_module = _get_module_ast("recipe_io.py")
+    """SKILL_TOOLS must not be defined locally in recipe/io.py."""
+    ast_module = _get_module_ast("recipe/io.py")
     assigns = _top_level_assign_targets(ast_module)
     assert "SKILL_TOOLS" not in assigns and "_SKILL_TOOLS" not in assigns, (
-        "SKILL_TOOLS must be imported from types, not defined in recipe_io.py"
+        "SKILL_TOOLS must be imported from core/types, not defined in recipe/io.py"
     )
 
 
 def test_skill_tools_not_defined_in_recipe_validator() -> None:
-    """SKILL_TOOLS must not be defined locally in recipe_validator.py."""
-    ast_module = _get_module_ast("recipe_validator.py")
-    assigns = _top_level_assign_targets(ast_module)
-    assert "SKILL_TOOLS" not in assigns and "_SKILL_TOOLS" not in assigns, (
-        "SKILL_TOOLS must be imported from types, not defined in recipe_validator.py"
-    )
+    """SKILL_TOOLS must not be defined locally in recipe/validator.py or recipe/contracts.py."""
+    for filename in ("recipe/validator.py", "recipe/contracts.py"):
+        ast_module = _get_module_ast(filename)
+        assigns = _top_level_assign_targets(ast_module)
+        assert "SKILL_TOOLS" not in assigns and "_SKILL_TOOLS" not in assigns, (
+            f"SKILL_TOOLS must be imported from core/types, not defined in {filename}"
+        )
 
 
 def test_contract_validator_module_deleted() -> None:
@@ -891,28 +938,397 @@ def test_contract_validator_module_deleted() -> None:
 
 
 def test_recipe_validator_has_regex_patterns() -> None:
-    """recipe_validator.py must define context/input regex patterns (not scattered)."""
-    ast_module = _get_module_ast("recipe_validator.py")
+    """recipe/contracts.py must define context/input regex patterns."""
+    ast_module = _get_module_ast("recipe/contracts.py")
     assigns = _top_level_assign_targets(ast_module)
-    assert "_CONTEXT_REF_RE" in assigns, "recipe_validator.py must define _CONTEXT_REF_RE"
-    assert "_INPUT_REF_RE" in assigns, "recipe_validator.py must define _INPUT_REF_RE"
+    assert "_CONTEXT_REF_RE" in assigns, "recipe/contracts.py must define _CONTEXT_REF_RE"
+    assert "_INPUT_REF_RE" in assigns, "recipe/contracts.py must define _INPUT_REF_RE"
 
 
 def test_recipe_validator_no_process_lifecycle_import() -> None:
-    """recipe_validator.py must not import from process_lifecycle (triage_staleness removed)."""
-    import_pairs = _extract_module_level_internal_imports(SRC_ROOT / "recipe_validator.py")
-    import_stems = [stem for stem, _ in import_pairs]
-    assert "process_lifecycle" not in import_stems, (
-        "recipe_validator.py must not import from process_lifecycle"
-    )
+    """recipe/validator.py and recipe/contracts.py must not import from process_lifecycle."""
+    for filename in ("recipe/validator.py", "recipe/contracts.py"):
+        import_pairs = _extract_module_level_internal_imports(SRC_ROOT / filename)
+        import_stems = [stem for stem, _ in import_pairs]
+        assert "process_lifecycle" not in import_stems, (
+            f"{filename} must not import from process_lifecycle"
+        )
 
 
 def test_server_uses_recipe_io_not_recipe_loader_for_discovery() -> None:
-    """server.py must import find_recipe_by_name from recipe_io, not from recipe_loader."""
-    server_path = SRC_ROOT / "server.py"
-    src = server_path.read_text()
-    assert "from autoskillit.recipe_io import" in src or "from .recipe_io import" in src, (
-        "server.py must import recipe discovery functions from recipe_io"
+    """server/ package must import recipe discovery from recipe.io, not from recipe.loader."""
+    server_dir = SRC_ROOT / "server"
+    combined_src = "\n".join(p.read_text() for p in server_dir.glob("*.py"))
+    assert (
+        "from autoskillit.recipe.io import" in combined_src
+        or "from .recipe.io import" in combined_src
+    ), "server/ package must import recipe discovery functions from recipe.io"
+    assert "from autoskillit.recipe.loader import list_recipes" not in combined_src
+    assert "from autoskillit.recipe.loader import load_recipe" not in combined_src
+
+
+# ── L1 Package Runtime Isolation Tests ────────────────────────────────────────
+
+
+def _type_checking_lines(tree: ast.AST) -> set[int]:
+    """Return line numbers of all imports inside ``if TYPE_CHECKING:`` blocks."""
+    lines: set[int] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.If)
+            and isinstance(node.test, ast.Name)
+            and node.test.id == "TYPE_CHECKING"
+        ):
+            for child in ast.walk(node):
+                if isinstance(child, ast.Import | ast.ImportFrom):
+                    lines.add(child.lineno)
+    return lines
+
+
+def test_execution_imports_only_core() -> None:
+    """execution/ must not import from pipeline/, config/, or workspace/ at runtime."""
+    forbidden = {"autoskillit.pipeline", "autoskillit.config", "autoskillit.workspace"}
+    pkg = SRC_ROOT / "execution"
+    assert pkg.exists(), "execution/ package must exist"
+    violations = []
+    for py in pkg.rglob("*.py"):
+        tree = ast.parse(py.read_text())
+        tc_lines = _type_checking_lines(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.lineno not in tc_lines:
+                mod = node.module or ""
+                if any(mod == f or mod.startswith(f + ".") for f in forbidden):
+                    violations.append(f"{py.name}: {mod}")
+    assert not violations, f"execution/ has forbidden runtime imports: {violations}"
+
+
+def test_workspace_imports_only_core() -> None:
+    """workspace/ must not import from pipeline/, config/, or execution/ at runtime."""
+    forbidden = {"autoskillit.pipeline", "autoskillit.config", "autoskillit.execution"}
+    pkg = SRC_ROOT / "workspace"
+    assert pkg.exists(), "workspace/ package must exist"
+    violations = []
+    for py in pkg.rglob("*.py"):
+        tree = ast.parse(py.read_text())
+        tc_lines = _type_checking_lines(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.lineno not in tc_lines:
+                mod = node.module or ""
+                if any(mod == f or mod.startswith(f + ".") for f in forbidden):
+                    violations.append(f"{py.name}: {mod}")
+    assert not violations, f"workspace/ has forbidden imports: {violations}"
+
+
+def test_pipeline_non_context_modules_import_only_core() -> None:
+    """pipeline/audit.py, pipeline/gate.py, pipeline/tokens.py must not import config/."""
+    restricted = ["audit.py", "gate.py", "tokens.py"]
+    pkg = SRC_ROOT / "pipeline"
+    assert pkg.exists(), "pipeline/ package must exist"
+    violations = []
+    for py in (pkg / name for name in restricted if (pkg / name).exists()):
+        tree = ast.parse(py.read_text())
+        tc_lines = _type_checking_lines(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.lineno not in tc_lines:
+                mod = node.module or ""
+                if "autoskillit.config" in mod:
+                    violations.append(f"{py.name}: {mod}")
+    assert not violations, f"Non-context pipeline modules import config/: {violations}"
+
+
+def test_only_pipeline_context_imports_config() -> None:
+    """Only pipeline/context.py may import from autoskillit.config."""
+    pkg = SRC_ROOT / "pipeline"
+    assert pkg.exists(), "pipeline/ package must exist"
+    for py in pkg.rglob("*.py"):
+        if py.name == "context.py":
+            continue
+        tree = ast.parse(py.read_text())
+        tc_lines = _type_checking_lines(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.lineno not in tc_lines:
+                mod = node.module or ""
+                assert "autoskillit.config" not in mod, (
+                    f"{py.name} must not import autoskillit.config (only context.py may)"
+                )
+
+
+# ── New L2 sub-package tests (T1–T9 from groupC plan) ─────────────────────────
+
+
+def test_recipe_subpackage_importable() -> None:
+    """T1: recipe/ package exposes all expected symbols."""
+    from autoskillit.recipe import (  # noqa: F401
+        Recipe,
+        RecipeStep,
+        analyze_dataflow,
+        check_contract_staleness,
+        find_recipe_by_name,
+        generate_recipe_card,
+        iter_steps_with_context,
+        list_recipes,
+        load_bundled_manifest,
+        load_recipe,
+        load_recipe_card,
+        run_semantic_rules,
+        validate_recipe,
+        validate_recipe_cards,
     )
-    assert "from autoskillit.recipe_loader import list_recipes" not in src
-    assert "from autoskillit.recipe_loader import load_recipe" not in src
+
+
+def test_contracts_module_has_staleitem() -> None:
+    """T2: recipe/contracts.py exposes StaleItem and load_bundled_manifest."""
+    from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest  # noqa: F401
+
+    assert StaleItem is not None
+    assert load_bundled_manifest is not None
+
+
+def test_validator_module_has_validate() -> None:
+    """T3: recipe/validator.py exposes validate_recipe, run_semantic_rules, analyze_dataflow."""
+    from autoskillit.recipe.validator import (  # noqa: F401
+        analyze_dataflow,
+        run_semantic_rules,
+        validate_recipe,
+    )
+
+    assert validate_recipe is not None
+    assert run_semantic_rules is not None
+    assert analyze_dataflow is not None
+
+
+def test_migration_subpackage_importable() -> None:
+    """T4: migration/ package exposes MigrationEngine, applicable_migrations, FailureStore."""
+    from autoskillit.migration import (  # noqa: F401
+        FailureStore,
+        MigrationEngine,
+        applicable_migrations,
+    )
+
+    assert MigrationEngine is not None
+    assert applicable_migrations is not None
+    assert FailureStore is not None
+
+
+def test_recipe_no_forbidden_imports() -> None:
+    """T5: REQ-COMP-009 — recipe/ modules import only from core/ and workspace/."""
+    recipe_pkg = SRC_ROOT / "recipe"
+    assert recipe_pkg.exists(), "recipe/ package must exist"
+    violations: list[str] = []
+    for py in recipe_pkg.glob("*.py"):
+        if py.name == "__init__.py":
+            continue
+        for stem, lineno in _extract_module_level_internal_imports(py):
+            if stem not in {"core", "workspace", "recipe"}:
+                violations.append(
+                    f"recipe/{py.name}:{lineno} imports {stem} — forbidden by REQ-COMP-009"
+                )
+    assert not violations, "\n".join(violations)
+
+
+def test_recipe_does_not_import_migration() -> None:
+    """REQ-CNST-005: No module in recipe/ may import from migration/."""
+    src = SRC_ROOT / "recipe"
+    assert src.exists(), "recipe/ package must exist"
+    violations: list[str] = []
+    for py_file in sorted(src.rglob("*.py")):
+        if "__pycache__" in py_file.parts:
+            continue
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if "autoskillit.migration" in module:
+                    violations.append(f"{py_file.name}: imports {module}")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if "autoskillit.migration" in alias.name:
+                        violations.append(f"{py_file.name}: imports {alias.name}")
+    assert not violations, f"recipe/ imports migration/: {violations}"
+
+
+def test_migration_no_forbidden_imports() -> None:
+    """T6: REQ-COMP-010 — migration/ imports only from core/, execution/, and recipe/."""
+    migration_pkg = SRC_ROOT / "migration"
+    assert migration_pkg.exists(), "migration/ package must exist"
+    violations: list[str] = []
+    for py in migration_pkg.glob("*.py"):
+        if py.name == "__init__.py":
+            continue
+        for stem, lineno in _extract_module_level_internal_imports(py):
+            if stem not in {"core", "execution", "recipe", "migration"}:
+                violations.append(
+                    f"migration/{py.name}:{lineno} imports {stem} — forbidden by REQ-COMP-010"
+                )
+    assert not violations, "\n".join(violations)
+
+
+def test_llm_triage_imports_from_contracts_not_validator() -> None:
+    """T7: REQ-DSGN-007 — _llm_triage.py imports from recipe/contracts, not recipe/validator."""
+    src = (SRC_ROOT / "_llm_triage.py").read_text()
+    assert "recipe.contracts" in src or "recipe/contracts" in src, (
+        "_llm_triage.py must import from recipe.contracts"
+    )
+    assert "recipe.validator" not in src and "recipe_validator" not in src, (
+        "_llm_triage.py must not import from recipe.validator or old recipe_validator"
+    )
+
+
+def test_old_flat_recipe_modules_removed() -> None:
+    """T9a: old flat recipe modules must be deleted after sub-package migration."""
+    for name in ("recipe_schema.py", "recipe_io.py", "recipe_loader.py", "recipe_validator.py"):
+        assert not (SRC_ROOT / name).exists(), (
+            f"{name} should be removed — code now lives in recipe/ sub-package"
+        )
+
+
+def test_old_flat_migration_modules_removed() -> None:
+    """T9b: old flat migration modules must be deleted after sub-package migration."""
+    for name in ("migration_engine.py", "migration_loader.py", "failure_store.py"):
+        assert not (SRC_ROOT / name).exists(), (
+            f"{name} should be removed — code now lives in migration/ sub-package"
+        )
+
+
+# ── New L3 package tests (groupD plan) ────────────────────────────────────────
+
+
+def test_server_is_package() -> None:
+    """server/ must be a package directory, not a flat module."""
+    assert (SRC_ROOT / "server").is_dir(), "server/ directory must exist"
+    assert (SRC_ROOT / "server" / "__init__.py").exists()
+    assert not (SRC_ROOT / "server.py").exists(), "server.py flat module must be deleted"
+
+
+def test_cli_is_package() -> None:
+    """cli/ must be a package directory, not a flat module."""
+    assert (SRC_ROOT / "cli").is_dir(), "cli/ directory must exist"
+    assert (SRC_ROOT / "cli" / "__init__.py").exists()
+    assert not (SRC_ROOT / "cli.py").exists(), "cli.py flat module must be deleted"
+
+
+def test_server_file_count_under_limit() -> None:
+    """server/ must not exceed 10 Python files (REQ-DSGN-002)."""
+    py_files = list((SRC_ROOT / "server").glob("*.py"))
+    assert len(py_files) <= 10, f"server/ has {len(py_files)} files, max is 10"
+
+
+def test_git_operations_moved_to_server_package() -> None:
+    """git_operations.py must be removed; its logic lives in server/git.py."""
+    assert not (SRC_ROOT / "git_operations.py").exists()
+    assert (SRC_ROOT / "server" / "git.py").exists()
+
+
+def test_doctor_moved_to_cli_package() -> None:
+    """_doctor.py must be removed; its logic lives in cli/_doctor.py."""
+    assert not (SRC_ROOT / "_doctor.py").exists()
+    assert (SRC_ROOT / "cli" / "_doctor.py").exists()
+
+
+# ── New REQ-CNST tests (groupE) ───────────────────────────────────────────────
+
+
+def test_no_file_exceeds_1000_lines() -> None:
+    """REQ-CNST-002: No Python file in src/autoskillit/ may exceed 1,000 lines."""
+    violations: list[str] = []
+    for py_file in SRC_ROOT.rglob("*.py"):
+        if "__pycache__" in py_file.parts:
+            continue
+        line_count = len(py_file.read_text().splitlines())
+        if line_count > 1000:
+            violations.append(f"{_rel(py_file)}: {line_count} lines")
+    assert not violations, "Files exceeding 1,000 lines:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )
+
+
+def test_no_subpackage_exceeds_10_files() -> None:
+    """REQ-CNST-003: No sub-package directory may contain more than 10 Python files."""
+    violations: list[str] = []
+    for sub_dir in sorted(SRC_ROOT.iterdir()):
+        if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":
+            continue
+        py_files = list(sub_dir.glob("*.py"))
+        if len(py_files) > 10:
+            violations.append(f"{sub_dir.name}/: {len(py_files)} Python files (max 10)")
+    assert not violations, "Sub-packages exceeding 10 Python files:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )
+
+
+def test_core_has_no_autoskillit_imports() -> None:
+    """REQ-CNST-004: core/ modules must not import from any autoskillit sub-package."""
+    core_dir = SRC_ROOT / "core"
+    assert core_dir.exists(), "core/ package must exist"
+    violations: list[str] = []
+    for py_file in core_dir.glob("*.py"):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                parts = node.module.split(".")
+                if parts[0] == "autoskillit" and len(parts) > 1:
+                    violations.append(f"core/{py_file.name}:{node.lineno}: imports {node.module}")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    parts = alias.name.split(".")
+                    if parts[0] == "autoskillit" and len(parts) > 1:
+                        violations.append(
+                            f"core/{py_file.name}:{node.lineno}: imports {alias.name}"
+                        )
+    assert not violations, "core/ has autoskillit internal imports:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )
+
+
+def test_isolated_modules_do_not_import_server_or_cli() -> None:
+    """REQ-CNST-007: Root-level isolated modules must not import from server/ or cli/."""
+    isolated = ["_llm_triage.py", "smoke_utils.py", "version.py"]
+    forbidden_prefixes = ("autoskillit.server", "autoskillit.cli")
+    violations: list[str] = []
+    for filename in isolated:
+        py_file = SRC_ROOT / filename
+        if not py_file.exists():
+            continue
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                mod = node.module
+                if any(mod == f or mod.startswith(f + ".") for f in forbidden_prefixes):
+                    violations.append(f"{filename}:{node.lineno}: imports {mod}")
+    assert not violations, "Root-level isolated modules import server/ or cli/:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )
+
+
+def test_server_tool_handlers_have_no_business_logic() -> None:
+    """REQ-CNST-008: @mcp.tool handler functions must contain no comprehensions or for-loops.
+
+    Tool handlers must only: call _require_enabled(), delegate to domain functions,
+    and return results. Comprehensions and for-loops indicate logic that belongs
+    in a domain layer module.
+    """
+    server_dir = SRC_ROOT / "server"
+    violations: list[str] = []
+    for py_file in sorted(server_dir.glob("tools_*.py")):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
+                continue
+            # Walk only the function body for business-logic patterns
+            body_module = ast.Module(body=node.body, type_ignores=[])
+            for child in ast.walk(body_module):
+                if isinstance(child, (ast.ListComp, ast.DictComp, ast.SetComp, ast.GeneratorExp)):
+                    violations.append(
+                        f"server/{py_file.name}: {node.name}() line {child.lineno}: "
+                        f"comprehension found — move to domain layer"
+                    )
+                elif isinstance(child, ast.For):
+                    violations.append(
+                        f"server/{py_file.name}: {node.name}() line {child.lineno}: "
+                        f"for-loop found — move to domain layer"
+                    )
+    assert not violations, "Tool handlers contain business logic:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )

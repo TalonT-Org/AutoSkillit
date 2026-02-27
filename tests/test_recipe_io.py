@@ -9,20 +9,20 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autoskillit.recipe_io import (
+from autoskillit.core.types import RecipeSource
+from autoskillit.recipe.io import (
     _parse_recipe,
     _parse_step,
     builtin_recipes_dir,
     list_recipes,
     load_recipe,
 )
-from autoskillit.recipe_schema import (
+from autoskillit.recipe.schema import (
     Recipe,
     RecipeIngredient,
     RecipeStep,
     StepResultRoute,
 )
-from autoskillit.types import RecipeSource
 
 VALID_RECIPE = {
     "name": "test-recipe",
@@ -78,7 +78,7 @@ def test_parse_recipe_accepts_raw_dict() -> None:
 
 def test_iter_steps_with_context_empty_for_first_step() -> None:
     """iter_steps_with_context yields frozenset() for the first step."""
-    from autoskillit.recipe_io import iter_steps_with_context
+    from autoskillit.recipe.io import iter_steps_with_context
 
     recipe = _parse_recipe(
         {
@@ -95,7 +95,7 @@ def test_iter_steps_with_context_empty_for_first_step() -> None:
 
 def test_iter_steps_with_context_accumulates_captures() -> None:
     """iter_steps_with_context accumulates captures from preceding steps."""
-    from autoskillit.recipe_io import iter_steps_with_context
+    from autoskillit.recipe.io import iter_steps_with_context
 
     recipe = _parse_recipe(
         {
@@ -124,7 +124,7 @@ def test_iter_steps_with_context_accumulates_captures() -> None:
 
 def test_find_recipe_by_name_returns_none_for_unknown() -> None:
     """find_recipe_by_name returns None when the recipe name does not exist."""
-    from autoskillit.recipe_io import find_recipe_by_name
+    from autoskillit.recipe.io import find_recipe_by_name
 
     result = find_recipe_by_name("nonexistent_xyz_recipe_abc", Path("/tmp"))
     assert result is None
@@ -491,7 +491,7 @@ def test_builtin_recipes_dir_points_to_recipes() -> None:
 
 
 def test_recipe_source_enum_values() -> None:
-    from autoskillit.types import RecipeSource
+    from autoskillit.core.types import RecipeSource
 
     assert hasattr(RecipeSource, "PROJECT")
     assert hasattr(RecipeSource, "BUILTIN")
@@ -548,7 +548,7 @@ def test_recipe_yaml_with_capture_list_parses(tmp_path: Path) -> None:
 # D8
 def test_iter_steps_with_context_includes_capture_list_keys() -> None:
     """iter_steps_with_context must include capture_list keys in available_context."""
-    from autoskillit.recipe_io import iter_steps_with_context
+    from autoskillit.recipe.io import iter_steps_with_context
 
     recipe = Recipe(
         name="test",

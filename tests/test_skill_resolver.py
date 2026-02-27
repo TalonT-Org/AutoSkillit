@@ -7,8 +7,8 @@ from pathlib import Path
 
 import yaml
 
-from autoskillit.skill_resolver import SkillResolver, bundled_skills_dir
-from autoskillit.types import SkillSource
+from autoskillit.core.types import SkillSource
+from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
 
 BUNDLED_SKILLS = [
     "assess-and-merge",
@@ -94,10 +94,10 @@ class TestSkillResolver:
         import yaml as _yaml
 
         import autoskillit
-        from autoskillit.recipe_io import (
+        from autoskillit.recipe.io import (
             _parse_recipe as _parse_workflow,
         )
-        from autoskillit.recipe_validator import (
+        from autoskillit.recipe.validator import (
             validate_recipe as validate_workflow,
         )
 

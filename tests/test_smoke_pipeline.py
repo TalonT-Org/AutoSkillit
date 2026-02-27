@@ -27,7 +27,7 @@ import yaml
 
 from autoskillit import server
 from autoskillit.config import AutomationConfig, TestCheckConfig
-from autoskillit.recipe_io import builtin_recipes_dir
+from autoskillit.recipe.io import builtin_recipes_dir
 from autoskillit.server import (
     classify_fix,
     list_recipes,
@@ -367,14 +367,14 @@ class TestSmokeScriptValidation:
         assert "bug_report.json" in assess_cmd
 
     def test_pipeline_summary_skill_exists(self) -> None:
-        from autoskillit.skill_resolver import SkillResolver
+        from autoskillit.workspace.skills import SkillResolver
 
         resolver = SkillResolver()
         names = [s.name for s in resolver.list_all()]
         assert "pipeline-summary" in names
 
     def test_pipeline_summary_contract_declared(self) -> None:
-        contracts_path = PROJECT_ROOT / "src" / "autoskillit" / "skill_contracts.yaml"
+        contracts_path = PROJECT_ROOT / "src" / "autoskillit" / "recipe" / "skill_contracts.yaml"
         contracts = yaml.safe_load(contracts_path.read_text())
         assert "pipeline-summary" in contracts["skills"]
         skill = contracts["skills"]["pipeline-summary"]

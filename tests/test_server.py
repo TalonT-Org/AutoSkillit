@@ -13,8 +13,6 @@ import pytest
 import structlog.contextvars
 import structlog.testing
 
-from autoskillit._audit import FailureRecord
-from autoskillit._gate import GATED_TOOLS, UNGATED_TOOLS, GateState
 from autoskillit.config import (
     AutomationConfig,
     ClassifyFixConfig,
@@ -25,14 +23,35 @@ from autoskillit.config import (
     SafetyConfig,
     TokenUsageConfig,
 )
-from autoskillit.db_tools import _select_only_authorizer, _validate_select_only
-from autoskillit.headless_runner import (
+from autoskillit.core.types import (
+    CONTEXT_EXHAUSTION_MARKER,
+    RETRY_RESPONSE_FIELDS,
+    MergeFailedStep,
+    MergeState,
+    RestartScope,
+    RetryReason,
+    TerminationReason,
+)
+from autoskillit.execution.db import _select_only_authorizer, _validate_select_only
+from autoskillit.execution.headless import (
     _build_skill_result,
     _ensure_skill_prefix,
     _resolve_model,
     _session_log_dir,
 )
-from autoskillit.process_lifecycle import SubprocessResult
+from autoskillit.execution.process import SubprocessResult
+from autoskillit.execution.session import (
+    ClaudeSessionResult,
+    SkillResult,
+    _compute_retry,
+    _compute_success,
+    _is_completion_kill_anomaly,
+    extract_token_usage,
+    parse_session_result,
+)
+from autoskillit.execution.testing import parse_pytest_summary as _parse_pytest_summary
+from autoskillit.pipeline.audit import FailureRecord
+from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, GateState
 from autoskillit.server import (
     _check_dry_walkthrough,
     _close_kitchen_handler,
@@ -56,25 +75,6 @@ from autoskillit.server import (
     run_skill_retry,
     test_check,
     validate_recipe,
-)
-from autoskillit.session_result import (
-    ClaudeSessionResult,
-    SkillResult,
-    _compute_retry,
-    _compute_success,
-    _is_completion_kill_anomaly,
-    extract_token_usage,
-    parse_session_result,
-)
-from autoskillit.test_runner import parse_pytest_summary as _parse_pytest_summary
-from autoskillit.types import (
-    CONTEXT_EXHAUSTION_MARKER,
-    RETRY_RESPONSE_FIELDS,
-    MergeFailedStep,
-    MergeState,
-    RestartScope,
-    RetryReason,
-    TerminationReason,
 )
 from autoskillit.workspace import CleanupResult, _delete_directory_contents
 
@@ -770,11 +770,11 @@ class TestRecipeTools:
 
     # SS1
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe_io.list_recipes")
+    @patch("autoskillit.recipe.io.list_recipes")
     async def test_list_returns_json_object(self, mock_list):
         """list_recipes returns JSON object with scripts array (not gated)."""
-        from autoskillit.recipe_schema import RecipeInfo
-        from autoskillit.types import LoadResult, RecipeSource
+        from autoskillit.core.types import LoadResult, RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
 
         mock_list.return_value = LoadResult(
             items=[
@@ -821,10 +821,10 @@ class TestRecipeTools:
 
     # SS4
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe_io.list_recipes")
+    @patch("autoskillit.recipe.io.list_recipes")
     async def test_list_reports_errors_in_response(self, mock_list):
         """list_recipes includes errors in JSON when recipes fail to parse."""
-        from autoskillit.types import LoadReport, LoadResult
+        from autoskillit.core.types import LoadReport, LoadResult
 
         mock_list.return_value = LoadResult(
             items=[],
@@ -924,7 +924,7 @@ class TestRecipeTools:
 
         with (
             patch(
-                "autoskillit.recipe_validator.run_semantic_rules",
+                "autoskillit.recipe.validator.run_semantic_rules",
                 side_effect=ValueError("injected parse failure"),
             ),
             structlog.testing.capture_logs() as logs,
@@ -951,7 +951,7 @@ class TestRecipeTools:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with patch(
-            "autoskillit.recipe_validator.run_semantic_rules",
+            "autoskillit.recipe.validator.run_semantic_rules",
             side_effect=ValueError("injected crash"),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -966,7 +966,7 @@ class TestContractMigrationAdapterValidate:
     """P7-2: ContractMigrationAdapter.validate uses _load_yaml, not yaml.safe_load."""
 
     def test_valid_contract_returns_true(self, tmp_path: Path) -> None:
-        from autoskillit.migration_engine import ContractMigrationAdapter
+        from autoskillit.migration.engine import ContractMigrationAdapter
 
         f = tmp_path / "contract.yaml"
         f.write_text("skill_hashes:\n  my-skill: abc123\n")
@@ -976,7 +976,7 @@ class TestContractMigrationAdapterValidate:
         assert msg == ""
 
     def test_missing_skill_hashes_returns_false(self, tmp_path: Path) -> None:
-        from autoskillit.migration_engine import ContractMigrationAdapter
+        from autoskillit.migration.engine import ContractMigrationAdapter
 
         f = tmp_path / "contract.yaml"
         f.write_text("other_field: value\n")
@@ -986,7 +986,7 @@ class TestContractMigrationAdapterValidate:
         assert "skill_hashes" in msg
 
     def test_invalid_yaml_returns_false(self, tmp_path: Path) -> None:
-        from autoskillit.migration_engine import ContractMigrationAdapter
+        from autoskillit.migration.engine import ContractMigrationAdapter
 
         f = tmp_path / "contract.yaml"
         f.write_bytes(b":\tbad: yaml: [unclosed\n")
@@ -996,7 +996,7 @@ class TestContractMigrationAdapterValidate:
         assert msg != ""
 
     def test_missing_file_returns_false(self, tmp_path: Path) -> None:
-        from autoskillit.migration_engine import ContractMigrationAdapter
+        from autoskillit.migration.engine import ContractMigrationAdapter
 
         adapter = ContractMigrationAdapter()
         ok, msg = adapter.validate(tmp_path / "nonexistent.yaml")
@@ -1016,13 +1016,13 @@ class TestLoadRecipeExceptionHandling:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """yaml.YAMLError is caught and returned as an error suggestion."""
-        from autoskillit._yaml import YAMLError
+        from autoskillit.core.io import YAMLError
 
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         (recipes_dir / "test.yaml").write_text("name: test\n")
-        with patch("autoskillit._yaml.load_yaml", side_effect=YAMLError("bad yaml")):
+        with patch("autoskillit.core.io.load_yaml", side_effect=YAMLError("bad yaml")):
             result = json.loads(await load_recipe(name="test"))
         assert "error" not in result
         assert any(
@@ -1035,8 +1035,8 @@ class TestLoadRecipeExceptionHandling:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """ValueError (malformed recipe structure) is caught and returned as error suggestion."""
-        from autoskillit.recipe_schema import RecipeInfo
-        from autoskillit.types import RecipeSource
+        from autoskillit.core.types import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
 
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
@@ -1052,8 +1052,8 @@ class TestLoadRecipeExceptionHandling:
             path=recipe_path,
         )
         with (
-            patch("autoskillit.recipe_io.find_recipe_by_name", return_value=fake_match),
-            patch("autoskillit.recipe_io._parse_recipe", side_effect=ValueError("bad structure")),
+            patch("autoskillit.recipe.io.find_recipe_by_name", return_value=fake_match),
+            patch("autoskillit.recipe.io._parse_recipe", side_effect=ValueError("bad structure")),
         ):
             result = json.loads(await load_recipe(name="test"))
         assert "error" not in result
@@ -1074,7 +1074,7 @@ class TestLoadRecipeExceptionHandling:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with patch(
-            "autoskillit.recipe_validator.load_recipe_card",
+            "autoskillit.recipe.contracts.load_recipe_card",
             side_effect=FileNotFoundError("missing"),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -1096,7 +1096,7 @@ class TestLoadRecipeExceptionHandling:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with patch(
-            "autoskillit.recipe_validator.run_semantic_rules",
+            "autoskillit.recipe.validator.run_semantic_rules",
             side_effect=AttributeError("programming error"),
         ):
             with pytest.raises(AttributeError, match="programming error"):
@@ -1430,7 +1430,7 @@ class TestToolSchemas:
 
     def test_bundled_recipe_kitchen_rules_name_all_forbidden_tools(self):
         """All bundled recipe kitchen_rules blocks must name every forbidden tool."""
-        from autoskillit.recipe_io import builtin_recipes_dir, load_recipe
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
         from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
 
         wf_dir = builtin_recipes_dir()
@@ -2669,7 +2669,7 @@ class TestOpenKitchenVersionReporting:
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -2939,7 +2939,7 @@ class TestDeleteDirectoryContents:
                 raise PermissionError("Permission denied")
             real_rmtree(path, *args, **kwargs)
 
-        with patch("autoskillit.workspace.shutil.rmtree", side_effect=selective_rmtree):
+        with patch("autoskillit.workspace.cleanup.shutil.rmtree", side_effect=selective_rmtree):
             result = _delete_directory_contents(target)
 
         assert "dir_a" in result.deleted
@@ -2999,8 +2999,6 @@ class TestDeleteDirectoryContents:
     @pytest.mark.asyncio
     async def test_reset_test_dir_returns_partial_failure_json(self, tmp_path):
         """1e: reset_test_dir returns structured JSON on partial failure."""
-        from autoskillit import server
-
         workspace = tmp_path / "workspace"
         workspace.mkdir()
         (workspace / ".autoskillit-workspace").write_text("# marker\n")
@@ -3011,7 +3009,10 @@ class TestDeleteDirectoryContents:
             failed=[("bad_dir", "PermissionError: denied")],
             skipped=[],
         )
-        with patch.object(server, "_delete_directory_contents", return_value=mock_result):
+        with patch(
+            "autoskillit.server.tools_workspace._delete_directory_contents",
+            return_value=mock_result,
+        ):
             result = json.loads(await reset_test_dir(test_dir=str(workspace), force=False))
 
         assert result["success"] is False
@@ -3021,8 +3022,6 @@ class TestDeleteDirectoryContents:
     @pytest.mark.asyncio
     async def test_reset_workspace_returns_partial_failure_json(self, tool_ctx, tmp_path):
         """1f: reset_workspace returns structured JSON on partial failure."""
-        import autoskillit.server as server
-
         tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
 
         workspace = tmp_path / "workspace"
@@ -3036,7 +3035,10 @@ class TestDeleteDirectoryContents:
             failed=[("bad_dir", "PermissionError: denied")],
             skipped=[".cache"],
         )
-        with patch.object(server, "_delete_directory_contents", return_value=mock_result):
+        with patch(
+            "autoskillit.server.tools_workspace._delete_directory_contents",
+            return_value=mock_result,
+        ):
             result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
         assert result["success"] is False
@@ -3392,7 +3394,7 @@ class TestRunPython:
         mock_module = MagicMock()
         mock_module.hang_fn = _hang
 
-        with patch("autoskillit.server.importlib.import_module", return_value=mock_module):
+        with patch("importlib.import_module", return_value=mock_module):
             result = json.loads(
                 await run_python(
                     callable="fake_mod.hang_fn",
@@ -3426,7 +3428,7 @@ class TestRunPython:
         mock_module.hang_fn = _hang
 
         with (
-            patch("autoskillit.server.importlib.import_module", return_value=mock_module),
+            patch("importlib.import_module", return_value=mock_module),
             structlog.testing.capture_logs() as logs,
         ):
             result = json.loads(await run_python(callable="fake_mod.hang_fn", timeout=1))
@@ -3699,7 +3701,7 @@ class TestReadDb:
 
     @pytest.mark.asyncio
     async def test_gated_when_disabled(self, sample_db, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
         result = json.loads(
@@ -3772,7 +3774,7 @@ class TestReadDbGating:
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -4130,7 +4132,7 @@ class TestBuildSkillResultCrossValidation:
     def test_gate_disabled_schema(self, tool_ctx):
         """Gate-disabled response has standard keys."""
         import autoskillit.server as srv
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
         response = json.loads(srv._require_enabled())
@@ -4188,7 +4190,7 @@ class TestGateErrorSchemaNormalization:
     def test_require_enabled_gate_returns_standard_schema(self, tool_ctx):
         """Gate errors must use the same schema as normal responses."""
         import autoskillit.server as srv
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
         gate_result = srv._require_enabled()
@@ -4914,7 +4916,7 @@ class TestRunSkillRetryConsolidation:
             stderr="",
         )
         mock_core = AsyncMock(return_value=mock_result)
-        with patch("autoskillit.server.run_headless_core", mock_core):
+        with patch("autoskillit.server.tools_execution.run_headless_core", mock_core):
             await run_skill_retry("/investigate something", "/tmp", add_dir="/extra/dir")
 
         assert mock_core.call_args.kwargs.get("add_dir") == "/extra/dir"
@@ -4934,7 +4936,7 @@ class TestRunSkillRetryConsolidation:
             stderr="",
         )
         mock_core = AsyncMock(return_value=mock_result)
-        with patch("autoskillit.server.run_headless_core", mock_core):
+        with patch("autoskillit.server.tools_execution.run_headless_core", mock_core):
             await run_skill_retry("/investigate something", "/tmp")
 
         assert mock_core.call_args.kwargs.get("timeout") == 7200
@@ -5278,7 +5280,7 @@ class TestMigrationSuggestions:
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
         """Verify these tools work WITHOUT tool activation."""
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -5301,7 +5303,7 @@ class TestMigrationSuppression:
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
         """Verify these tools work WITHOUT tool activation."""
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -5332,7 +5334,7 @@ class TestMigrationSuppression:
                 stderr="",
             )
         )
-        with patch("autoskillit.server.run_headless_core", mock_headless):
+        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
             result = json.loads(await load_recipe(name="test-script"))
 
         assert "suggestions" in result
@@ -5373,9 +5375,9 @@ class TestLoadRecipeReadOnly:
         """load_recipe must not trigger headless migration even when migrations are applicable."""
         monkeypatch.chdir(tmp_path)
         with (
-            patch("autoskillit.migration_loader.applicable_migrations", return_value=["v0.1.0"]),
-            patch("autoskillit.headless_runner.run_headless_core") as mock_headless,
-            patch("autoskillit.recipe_validator.generate_recipe_card") as mock_gen,
+            patch("autoskillit.migration.loader.applicable_migrations", return_value=["v0.1.0"]),
+            patch("autoskillit.execution.headless.run_headless_core") as mock_headless,
+            patch("autoskillit.recipe.contracts.generate_recipe_card") as mock_gen,
         ):
             result = json.loads(await load_recipe(name="implementation-pipeline"))
         assert "error" not in result
@@ -5391,7 +5393,7 @@ class TestLoadRecipeReadOnly:
         (recipes_dir / "test.yaml").write_text(
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
-        with patch("autoskillit.recipe_validator.generate_recipe_card") as mock_gen:
+        with patch("autoskillit.recipe.contracts.generate_recipe_card") as mock_gen:
             await load_recipe(name="test")
         mock_gen.assert_not_called()
 
@@ -5414,7 +5416,7 @@ class TestMigrateRecipe:
     ):
         """Create directory structure, fake migration YAML, and config."""
         import autoskillit
-        import autoskillit.migration_loader as ml
+        import autoskillit.migration.loader as ml
         from autoskillit.config import MigrationConfig
 
         monkeypatch.chdir(tmp_path)
@@ -5479,7 +5481,7 @@ class TestMigrateRecipe:
     async def test_migrate_recipe_up_to_date(self, tmp_path, monkeypatch):
         """migrate_recipe returns up_to_date when no migrations applicable."""
         monkeypatch.chdir(tmp_path)
-        with patch("autoskillit.migration_loader.applicable_migrations", return_value=[]):
+        with patch("autoskillit.migration.loader.applicable_migrations", return_value=[]):
             result = json.loads(await migrate_recipe(name="implementation-pipeline"))
         assert result.get("status") == "up_to_date"
 
@@ -5504,8 +5506,8 @@ class TestMigrateRecipe:
             )
         )
         with (
-            patch("autoskillit.server.run_headless_core", mock_headless),
-            patch("autoskillit.recipe_validator.generate_recipe_card", return_value=None),
+            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
+            patch("autoskillit.recipe.contracts.generate_recipe_card", return_value=None),
         ):
             result = json.loads(await migrate_recipe(name="test-script"))
 
@@ -5518,7 +5520,7 @@ class TestMigrateRecipe:
         self, tmp_path, monkeypatch, tool_ctx
     ):
         """LR4: FailureStore.clear(name) is called when migration succeeds."""
-        from autoskillit.failure_store import FailureStore, default_store_path
+        from autoskillit.migration.store import FailureStore, default_store_path
 
         ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
@@ -5547,8 +5549,8 @@ class TestMigrateRecipe:
             )
         )
         with (
-            patch("autoskillit.server.run_headless_core", mock_headless),
-            patch("autoskillit.recipe_validator.generate_recipe_card", return_value=None),
+            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
+            patch("autoskillit.recipe.contracts.generate_recipe_card", return_value=None),
         ):
             await migrate_recipe(name="test-script")
 
@@ -5559,7 +5561,7 @@ class TestMigrateRecipe:
     @pytest.mark.asyncio
     async def test_records_failure_when_migration_fails(self, tmp_path, monkeypatch, tool_ctx):
         """LR5: When headless returns success=False, failure is recorded to failures.json."""
-        from autoskillit.failure_store import FailureStore, default_store_path
+        from autoskillit.migration.store import FailureStore, default_store_path
 
         self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
 
@@ -5576,7 +5578,7 @@ class TestMigrateRecipe:
                 stderr="",
             )
         )
-        with patch("autoskillit.server.run_headless_core", mock_headless):
+        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
             result = json.loads(await migrate_recipe(name="test-script"))
 
         assert "error" in result
@@ -5602,7 +5604,7 @@ class TestMigrateRecipe:
                 stderr="",
             )
         )
-        with patch("autoskillit.server.run_headless_core", mock_headless):
+        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
             result = json.loads(await migrate_recipe(name="test-script"))
 
         mock_headless.assert_not_called()
@@ -5613,7 +5615,7 @@ class TestMigrateRecipe:
     async def test_up_to_date_recipe_not_migrated(self, tmp_path, monkeypatch, tool_ctx):
         """LR8: When applicable_migrations returns [], headless is never called."""
         import autoskillit
-        import autoskillit.migration_loader as ml
+        import autoskillit.migration.loader as ml
         from autoskillit.config import MigrationConfig
 
         monkeypatch.chdir(tmp_path)
@@ -5642,7 +5644,7 @@ class TestMigrateRecipe:
                 stderr="",
             )
         )
-        with patch("autoskillit.server.run_headless_core", mock_headless):
+        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
             result = json.loads(await migrate_recipe(name="test-script"))
 
         mock_headless.assert_not_called()
@@ -6017,7 +6019,7 @@ class TestGetPipelineReport:
     # Override conftest to test WITHOUT open_kitchen
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -6035,7 +6037,7 @@ class TestGetPipelineReport:
 
     @pytest.mark.asyncio
     async def test_accumulates_failures_from_run_skill(self, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=True)
         tool_ctx.runner.push(_make_result(returncode=1, stdout=_failed_session_json()))
@@ -6178,7 +6180,7 @@ class TestGetTokenSummary:
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit._gate import GateState
+        from autoskillit.pipeline.gate import GateState
 
         tool_ctx.gate = GateState(enabled=False)
 
@@ -6305,7 +6307,7 @@ class TestGetTokenSummary:
 
 def test_open_kitchen_has_no_update_advisory(tool_ctx):
     """REQ-APP-004: open_kitchen prompt contains no recipe update advisory."""
-    from autoskillit._gate import GateState
+    from autoskillit.pipeline.gate import GateState
     from autoskillit.server import open_kitchen
 
     # Ensure kitchen is closed before calling open_kitchen

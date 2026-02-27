@@ -48,7 +48,7 @@ class TestCLI:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        with patch.object(cli, "_prompt_test_command", return_value=["npm", "test"]):
+        with patch("autoskillit.cli.app._prompt_test_command", return_value=["npm", "test"]):
             cli.init()
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         data = yaml.safe_load(config_path.read_text())
@@ -517,7 +517,8 @@ class TestCLI:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         marketplace_dir = cli._ensure_marketplace()
         link = marketplace_dir / "plugins" / "autoskillit"
-        assert link.resolve() == Path(cli.__file__).parent.resolve()
+        # cli.__file__ is now cli/__init__.py; .parent = cli/, .parent.parent = autoskillit/
+        assert link.resolve() == Path(cli.__file__).parent.parent.resolve()
 
     def test_install_marketplace_json_content(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1207,26 +1208,26 @@ class TestEnsureProjectTemp:
     """N5: ensure_project_temp moved from config.py to _io.py."""
 
     def test_ensure_project_temp_importable_from_io(self):
-        from autoskillit._io import ensure_project_temp
+        from autoskillit.core.io import ensure_project_temp
 
         assert callable(ensure_project_temp)
 
     def test_ensure_project_temp_creates_temp_dir(self, tmp_path):
-        from autoskillit._io import ensure_project_temp
+        from autoskillit.core.io import ensure_project_temp
 
         result = ensure_project_temp(tmp_path)
         assert result == tmp_path / ".autoskillit" / "temp"
         assert result.is_dir()
 
     def test_ensure_project_temp_writes_gitignore(self, tmp_path):
-        from autoskillit._io import ensure_project_temp
+        from autoskillit.core.io import ensure_project_temp
 
         ensure_project_temp(tmp_path)
         gitignore = tmp_path / ".autoskillit" / ".gitignore"
         assert gitignore.read_text() == "temp/\n"
 
     def test_ensure_project_temp_is_idempotent(self, tmp_path):
-        from autoskillit._io import ensure_project_temp
+        from autoskillit.core.io import ensure_project_temp
 
         ensure_project_temp(tmp_path)
         ensure_project_temp(tmp_path)  # second call must not raise
@@ -1252,7 +1253,7 @@ class TestServeStartupLog:
 
         with (
             patch.object(server_mod.mcp, "run"),
-            patch("autoskillit._logging.configure_logging"),
+            patch("autoskillit.core.logging.configure_logging"),
             structlog.testing.capture_logs() as logs,
         ):
             cli_mod.serve()
@@ -1274,7 +1275,7 @@ class TestServeStartupLog:
 
         with (
             patch.object(server_mod.mcp, "run"),
-            patch("autoskillit._logging.configure_logging"),
+            patch("autoskillit.core.logging.configure_logging"),
             patch("autoskillit.cli.Path.home", return_value=tmp_path),
             structlog.testing.capture_logs() as logs,
         ):
@@ -1304,8 +1305,8 @@ class TestGroupFRefactoring:
     """P8-2, P3-2, P5-4: CLI refactoring — doctor delegation, public version_info, atomic write."""
 
     def test_doctor_delegates_to_doctor_module(self, monkeypatch, capsys):
-        """cli.doctor() must delegate to _doctor.run_doctor(), not contain the logic itself."""
-        from autoskillit import _doctor
+        """cli.doctor() must delegate to cli._doctor.run_doctor(), not contain the logic itself."""
+        from autoskillit.cli import _doctor
 
         called_with: dict = {}
 
@@ -1317,8 +1318,8 @@ class TestGroupFRefactoring:
         assert called_with == {"output_json": True}
 
     def test_severity_and_doctorresult_in_doctor_module(self):
-        """Severity and DoctorResult must be importable from autoskillit._doctor."""
-        from autoskillit._doctor import DoctorResult, Severity
+        """Severity and DoctorResult must be importable from autoskillit.cli._doctor."""
+        from autoskillit.cli._doctor import DoctorResult, Severity
 
         r = DoctorResult(severity=Severity.OK, check="test", message="ok")
         assert r.severity == Severity.OK
@@ -1326,7 +1327,7 @@ class TestGroupFRefactoring:
 
     def test_upgrade_uses_atomic_write(self, tmp_path, monkeypatch):
         """upgrade() must call _io._atomic_write, not yaml_file.write_text."""
-        from autoskillit import _io
+        from autoskillit.core import io as _io
 
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"

@@ -7,7 +7,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from autoskillit.migration_engine import (
+from autoskillit.core.types import RetryReason
+from autoskillit.execution.session import SkillResult
+from autoskillit.migration.engine import (
     MIGRATE_RECIPES_MAX_RETRIES,
     ContractMigrationAdapter,
     DeterministicMigrationAdapter,
@@ -17,9 +19,7 @@ from autoskillit.migration_engine import (
     RecipeMigrationAdapter,
     default_migration_engine,
 )
-from autoskillit.migration_loader import MigrationChange, MigrationNote
-from autoskillit.session_result import SkillResult
-from autoskillit.types import RetryReason
+from autoskillit.migration.loader import MigrationChange, MigrationNote
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -113,7 +113,7 @@ class TestRecipeMigrationAdapter:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "autoskillit.migration_engine.applicable_migrations",
+            "autoskillit.migration.engine.applicable_migrations",
             lambda *a, **kw: [_make_migration_note()],
         )
         file = MigrationFile(
@@ -127,7 +127,7 @@ class TestRecipeMigrationAdapter:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "autoskillit.migration_engine.applicable_migrations",
+            "autoskillit.migration.engine.applicable_migrations",
             lambda *a, **kw: [],
         )
         file = MigrationFile(
@@ -143,7 +143,7 @@ class TestRecipeMigrationAdapter:
         # current_version=None is treated as 0.0.0 by applicable_migrations;
         # we return a non-empty list to verify that None still causes needs_migration=True
         monkeypatch.setattr(
-            "autoskillit.migration_engine.applicable_migrations",
+            "autoskillit.migration.engine.applicable_migrations",
             lambda *a, **kw: [_make_migration_note()],
         )
         file = MigrationFile(
@@ -168,7 +168,7 @@ class TestRecipeMigrationAdapter:
         temp_out.write_text("name: myrecipe\n# migrated\n")
 
         monkeypatch.setattr(
-            "autoskillit.migration_engine.applicable_migrations",
+            "autoskillit.migration.engine.applicable_migrations",
             lambda *a, **kw: [_make_migration_note()],
         )
         mock_headless = AsyncMock(return_value=_make_skill_result(True))
@@ -209,8 +209,8 @@ class TestRecipeMigrationAdapter:
         recipe_path.write_text("name: valid\n")
 
         mock_recipe = Mock()
-        monkeypatch.setattr("autoskillit.migration_engine._parse_recipe", lambda p: mock_recipe)
-        monkeypatch.setattr("autoskillit.migration_engine.validate_recipe", lambda r: [])
+        monkeypatch.setattr("autoskillit.migration.engine._parse_recipe", lambda p: mock_recipe)
+        monkeypatch.setattr("autoskillit.migration.engine.validate_recipe", lambda r: [])
 
         adapter = RecipeMigrationAdapter()
         is_valid, error = adapter.validate(recipe_path)
@@ -226,7 +226,7 @@ class TestRecipeMigrationAdapter:
         recipe_path.write_text("name: invalid\n")
 
         monkeypatch.setattr(
-            "autoskillit.migration_engine._parse_recipe",
+            "autoskillit.migration.engine._parse_recipe",
             Mock(side_effect=ValueError("invalid recipe structure")),
         )
 
@@ -277,11 +277,11 @@ class TestContractMigrationAdapter:
         mock_contract = {"skill_hashes": {}}
         stale_item = Mock()
         monkeypatch.setattr(
-            "autoskillit.recipe_validator.load_recipe_card",
+            "autoskillit.recipe.contracts.load_recipe_card",
             lambda *a, **kw: mock_contract,
         )
         monkeypatch.setattr(
-            "autoskillit.recipe_validator.check_contract_staleness",
+            "autoskillit.recipe.contracts.check_contract_staleness",
             lambda *a, **kw: [stale_item],
         )
 
@@ -306,7 +306,7 @@ class TestContractMigrationAdapter:
         contract_path.write_text("skill_hashes: {}")
 
         monkeypatch.setattr(
-            "autoskillit.recipe_validator.generate_recipe_card",
+            "autoskillit.recipe.contracts.generate_recipe_card",
             lambda *a, **kw: {
                 "generated_at": "2026-01-01T00:00:00+00:00",
                 "bundled_manifest_version": "0.1.0",
@@ -369,7 +369,7 @@ class TestMigrationEngine:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "autoskillit.migration_engine.applicable_migrations",
+            "autoskillit.migration.engine.applicable_migrations",
             lambda *a, **kw: [],
         )
         mock_headless = AsyncMock()
@@ -402,7 +402,7 @@ class TestMigrationEngine:
         temp_out.write_text(new_content)
 
         monkeypatch.setattr(
-            "autoskillit.migration_engine.applicable_migrations",
+            "autoskillit.migration.engine.applicable_migrations",
             lambda *a, **kw: [_make_migration_note()],
         )
         mock_headless = AsyncMock(return_value=_make_skill_result(True))
@@ -427,7 +427,7 @@ class TestMigrationEngine:
         recipe_path.write_text("name: test\n")
 
         monkeypatch.setattr(
-            "autoskillit.migration_engine.applicable_migrations",
+            "autoskillit.migration.engine.applicable_migrations",
             lambda *a, **kw: [_make_migration_note()],
         )
         mock_headless = AsyncMock(
@@ -457,7 +457,7 @@ class TestMigrationEngine:
         # temp output file intentionally NOT created
 
         monkeypatch.setattr(
-            "autoskillit.migration_engine.applicable_migrations",
+            "autoskillit.migration.engine.applicable_migrations",
             lambda *a, **kw: [_make_migration_note()],
         )
         mock_headless = AsyncMock(return_value=_make_skill_result(True))
@@ -527,7 +527,7 @@ class TestMigrateRecipesConstant:
         recipe_path.parent.mkdir(parents=True)
         recipe_path.write_text("name: myrecipe\n")
         monkeypatch.setattr(
-            "autoskillit.migration_engine.applicable_migrations",
+            "autoskillit.migration.engine.applicable_migrations",
             lambda *a, **kw: [_make_migration_note()],
         )
         mock_rh = AsyncMock(return_value=_make_skill_result(False, "boom"))

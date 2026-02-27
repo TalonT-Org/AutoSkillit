@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.recipe_validator import StaleItem
+from autoskillit.recipe.contracts import StaleItem
 
 # ---------------------------------------------------------------------------
 # T-P3-4-B: Module importable
@@ -58,7 +58,7 @@ async def test_triage_staleness_reads_skill_md_once_per_unique_skill(
     from unittest.mock import AsyncMock
 
     from autoskillit._llm_triage import triage_staleness
-    from autoskillit.process_lifecycle import SubprocessResult, TerminationReason
+    from autoskillit.execution.process import SubprocessResult, TerminationReason
 
     skill_dir = tmp_path / "implement-worktree"
     skill_dir.mkdir()
@@ -123,7 +123,7 @@ class TestTriageStaleness:
         from unittest.mock import AsyncMock
 
         from autoskillit._llm_triage import triage_staleness
-        from autoskillit.process_lifecycle import SubprocessResult, TerminationReason
+        from autoskillit.execution.process import SubprocessResult, TerminationReason
 
         skill_dir = tmp_path / "test-skill"
         skill_dir.mkdir()
@@ -165,7 +165,7 @@ class TestTriageStaleness:
         import structlog
 
         from autoskillit._llm_triage import triage_staleness
-        from autoskillit.process_lifecycle import SubprocessResult, TerminationReason
+        from autoskillit.execution.process import SubprocessResult, TerminationReason
 
         skill_dir = tmp_path / "test-skill"
         skill_dir.mkdir()
@@ -213,7 +213,7 @@ class TestTriageStaleness:
         import structlog
 
         from autoskillit._llm_triage import triage_staleness
-        from autoskillit.process_lifecycle import SubprocessResult, TerminationReason
+        from autoskillit.execution.process import SubprocessResult, TerminationReason
 
         skill_dir = tmp_path / "test-skill"
         skill_dir.mkdir()
@@ -254,7 +254,7 @@ class TestTriageStaleness:
         from unittest.mock import AsyncMock
 
         from autoskillit._llm_triage import triage_staleness
-        from autoskillit.process_lifecycle import SubprocessResult, TerminationReason
+        from autoskillit.execution.process import SubprocessResult, TerminationReason
 
         skill_dir = tmp_path / "test-skill"
         skill_dir.mkdir()

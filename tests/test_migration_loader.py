@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autoskillit.migration_loader import (
+from autoskillit.migration.loader import (
     _parse_migration,
     applicable_migrations,
     list_migrations,
@@ -163,7 +163,7 @@ class TestListMigrations:
     ) -> None:
         """Returns empty list when migrations/ dir has no files."""
         mig_dir = _make_migrations_dir(tmp_path)
-        monkeypatch.setattr("autoskillit.migration_loader._migrations_dir", lambda: mig_dir)
+        monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
         assert list_migrations() == []
 
     # ML5
@@ -180,7 +180,7 @@ class TestListMigrations:
             mig_dir / "0.1.0.yaml",
             {"from_version": "0.0.0", "to_version": "0.1.0", "description": "First"},
         )
-        monkeypatch.setattr("autoskillit.migration_loader._migrations_dir", lambda: mig_dir)
+        monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
 
         notes = list_migrations()
         assert len(notes) == 2
@@ -197,7 +197,7 @@ class TestListMigrations:
         )
         (mig_dir / "README.md").write_text("# Migrations")
         (mig_dir / "notes.txt").write_text("some notes")
-        monkeypatch.setattr("autoskillit.migration_loader._migrations_dir", lambda: mig_dir)
+        monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
 
         notes = list_migrations()
         assert len(notes) == 1
@@ -208,7 +208,7 @@ class TestListMigrations:
     ) -> None:
         """Returns empty list when the migrations/ directory does not exist."""
         missing_dir = tmp_path / "nonexistent"
-        monkeypatch.setattr("autoskillit.migration_loader._migrations_dir", lambda: missing_dir)
+        monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: missing_dir)
         assert list_migrations() == []
 
 
@@ -228,7 +228,7 @@ class TestApplicableMigrations:
         for mig in migrations:
             filename = f"{mig['from_version']}-to-{mig['to_version']}.yaml"
             _write_migration(mig_dir / filename, mig)
-        monkeypatch.setattr("autoskillit.migration_loader._migrations_dir", lambda: mig_dir)
+        monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
 
     # ML7
     def test_script_at_from_version_matches(
@@ -365,7 +365,7 @@ class TestApplicableMigrations:
     ) -> None:
         """Returns empty list when no migration files exist."""
         mig_dir = _make_migrations_dir(tmp_path)
-        monkeypatch.setattr("autoskillit.migration_loader._migrations_dir", lambda: mig_dir)
+        monkeypatch.setattr("autoskillit.migration.loader._migrations_dir", lambda: mig_dir)
         result = applicable_migrations("0.1.0", "0.2.0")
         assert result == []
 

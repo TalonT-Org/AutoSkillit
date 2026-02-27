@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.recipe_loader import (
+from autoskillit.recipe.loader import (
     _extract_frontmatter,
     parse_recipe_metadata,
 )
@@ -139,13 +139,13 @@ class TestRecipeVersion:
 class TestSyncRemoval:
     def test_no_sync_bundled_recipes_function(self):
         """REQ-SYNC-004: sync_bundled_recipes does not exist in recipe_loader."""
-        import autoskillit.recipe_loader as rl
+        import autoskillit.recipe.loader as rl
 
         assert not hasattr(rl, "sync_bundled_recipes")
 
     def test_no_get_pending_recipe_updates_function(self):
         """REQ-SYNC-004: _get_pending_recipe_updates does not exist in recipe_loader."""
-        import autoskillit.recipe_loader as rl
+        import autoskillit.recipe.loader as rl
 
         assert not hasattr(rl, "_get_pending_recipe_updates")
 
@@ -154,7 +154,7 @@ class TestSyncRemoval:
         import ast
         from pathlib import Path
 
-        src = Path(__file__).parent.parent / "src" / "autoskillit" / "recipe_loader.py"
+        src = Path(__file__).parent.parent / "src" / "autoskillit" / "recipe" / "loader.py"
         tree = ast.parse(src.read_text())
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -167,7 +167,7 @@ def test_version_key_not_hardcoded_in_recipe_loader():
     import ast
     import inspect
 
-    import autoskillit.recipe_loader as rl
+    import autoskillit.recipe.loader as rl
 
     source = inspect.getsource(rl)
     tree = ast.parse(source)
@@ -185,7 +185,7 @@ def test_version_key_not_hardcoded_in_recipe_loader():
 # RL-PUB1: parse_recipe_metadata exists as a public attribute
 # ---------------------------------------------------------------------------
 def test_parse_recipe_metadata_is_public() -> None:
-    import autoskillit.recipe_loader as rl
+    import autoskillit.recipe.loader as rl
 
     assert hasattr(rl, "parse_recipe_metadata")
     assert callable(rl.parse_recipe_metadata)
@@ -195,7 +195,7 @@ def test_parse_recipe_metadata_is_public() -> None:
 # RL-PUB2: _parse_recipe_metadata no longer exists
 # ---------------------------------------------------------------------------
 def test_parse_recipe_metadata_private_removed() -> None:
-    import autoskillit.recipe_loader as rl
+    import autoskillit.recipe.loader as rl
 
     assert not hasattr(rl, "_parse_recipe_metadata")
 
@@ -207,7 +207,7 @@ def test_all_bundled_recipes_have_autoskillit_version() -> None:
     """All bundled recipes must declare autoskillit_version to prevent spurious auto-migration."""
     import yaml
 
-    from autoskillit.recipe_io import builtin_recipes_dir
+    from autoskillit.recipe.io import builtin_recipes_dir
 
     missing = []
     for recipe_file in builtin_recipes_dir().glob("*.yaml"):

@@ -20,7 +20,8 @@ from unittest.mock import Mock, patch
 import psutil
 import pytest
 
-from autoskillit.process_lifecycle import (
+from autoskillit.core.types import TerminationReason
+from autoskillit.execution.process import (
     _has_active_api_connection,
     _heartbeat,
     _jsonl_contains_marker,
@@ -33,7 +34,6 @@ from autoskillit.process_lifecycle import (
     run_managed_async,
     run_managed_sync,
 )
-from autoskillit.types import TerminationReason
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
@@ -1145,7 +1145,7 @@ class TestHasActiveApiConnection:
             mock_child.net_connections.return_value = child_conns
             children.append(mock_child)
         mock_parent.children.return_value = children
-        return patch("autoskillit.process_lifecycle.psutil.Process", return_value=mock_parent)
+        return patch("autoskillit.execution.process.psutil.Process", return_value=mock_parent)
 
     def test_returns_true_when_parent_has_established_port_443(self):
         with self._patch_psutil([self._make_conn(443)]):
@@ -1184,7 +1184,7 @@ class TestHasActiveApiConnection:
 
     def test_returns_false_on_nosuchprocess(self):
         with patch(
-            "autoskillit.process_lifecycle.psutil.Process",
+            "autoskillit.execution.process.psutil.Process",
             side_effect=psutil.NoSuchProcess(12345),
         ):
             assert _has_active_api_connection(12345) is False
@@ -1197,7 +1197,7 @@ class TestHasActiveApiConnection:
         mock_live_child = Mock()
         mock_live_child.net_connections.return_value = [self._make_conn(443)]
         mock_parent.children.return_value = [mock_dead_child, mock_live_child]
-        with patch("autoskillit.process_lifecycle.psutil.Process", return_value=mock_parent):
+        with patch("autoskillit.execution.process.psutil.Process", return_value=mock_parent):
             assert _has_active_api_connection(12345) is True
 
     def test_skips_zombie_child_gracefully(self):
@@ -1208,7 +1208,7 @@ class TestHasActiveApiConnection:
         mock_live_child = Mock()
         mock_live_child.net_connections.return_value = [self._make_conn(443)]
         mock_parent.children.return_value = [mock_zombie, mock_live_child]
-        with patch("autoskillit.process_lifecycle.psutil.Process", return_value=mock_parent):
+        with patch("autoskillit.execution.process.psutil.Process", return_value=mock_parent):
             assert _has_active_api_connection(12345) is True
 
 
@@ -1235,7 +1235,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
             return call_count["n"] == 1  # True on first call, False on second
 
         with patch(
-            "autoskillit.process_lifecycle._has_active_api_connection",
+            "autoskillit.execution.process._has_active_api_connection",
             side_effect=side_effect,
         ):
             result = await asyncio.wait_for(
@@ -1280,7 +1280,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
         session_file.write_text("")
         spawn_time = time.time() - 10
 
-        with patch("autoskillit.process_lifecycle._has_active_api_connection") as mock_tcp:
+        with patch("autoskillit.execution.process._has_active_api_connection") as mock_tcp:
             result = await asyncio.wait_for(
                 _session_log_monitor(
                     tmp_path,
@@ -1295,7 +1295,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
         mock_tcp.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_suppression_emits_warning(self, tmp_path):
+    async def test_suppression_emits_warning(self, tmp_path, capsys):
         """A suppression event must log a warning with elapsed time."""
         import asyncio
 
@@ -1312,7 +1312,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
             return calls["n"] == 1
 
         with patch(
-            "autoskillit.process_lifecycle._has_active_api_connection",
+            "autoskillit.execution.process._has_active_api_connection",
             side_effect=side_effect,
         ):
             with structlog.testing.capture_logs() as logs:
@@ -1326,9 +1326,17 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     ),
                     timeout=12.0,
                 )
-        assert any(
+        # capture_logs() intercepts when structlog is in default state.
+        # In a parallel worker where configure_logging() ran in a prior test,
+        # bound loggers may use a stale processor reference and write to stdout.
+        captured = capsys.readouterr().out
+        warning_in_logs = any(
             "port-443" in str(log.get("event", "")) or "ESTABLISHED" in str(log.get("event", ""))
             for log in logs
+        )
+        warning_in_stdout = "port-443" in captured or "ESTABLISHED" in captured
+        assert warning_in_logs or warning_in_stdout, (
+            "Suppression warning must appear in structlog capture or stdout"
         )
 
 
@@ -1351,7 +1359,7 @@ class TestRunManagedAsyncPassesPidToMonitor:
         session_file = tmp_path / "fake_session.jsonl"
         session_file.write_text("")
 
-        with patch("autoskillit.process_lifecycle._session_log_monitor", capturing_monitor):
+        with patch("autoskillit.execution.process._session_log_monitor", capturing_monitor):
             result = await run_managed_async(
                 ["sleep", "5"],
                 cwd=tmp_path,
@@ -1513,7 +1521,7 @@ class TestPtyWrapCommand:
         cmd = ["claude", "--no-color", "do something"]
         fake_script = "/usr/bin/script"
         with (
-            patch("autoskillit.process_lifecycle.sys.platform", "linux"),
+            patch("autoskillit.execution.process.sys.platform", "linux"),
             patch("shutil.which", return_value=fake_script),
         ):
             result = pty_wrap_command(cmd)
@@ -1529,7 +1537,7 @@ class TestPtyWrapCommand:
         cmd = ["claude", "--no-color", "do something"]
         fake_script = "/usr/bin/script"
         with (
-            patch("autoskillit.process_lifecycle.sys.platform", "darwin"),
+            patch("autoskillit.execution.process.sys.platform", "darwin"),
             patch("shutil.which", return_value=fake_script),
         ):
             result = pty_wrap_command(cmd)
@@ -1551,17 +1559,17 @@ class TestSubprocessResultAndRunnerTypes:
     """Tests for SubprocessResult in types.py and SubprocessRunner protocol."""
 
     def test_subprocess_result_importable_from_types(self):
-        """SubprocessResult must be importable from autoskillit.types."""
-        from autoskillit.types import SubprocessResult  # noqa: F401
+        """SubprocessResult must be importable from autoskillit.core.types."""
+        from autoskillit.core.types import SubprocessResult  # noqa: F401
 
     def test_subprocess_result_still_importable_from_process_lifecycle(self):
         """SubprocessResult remains importable from process_lifecycle for backward compat."""
-        from autoskillit.process_lifecycle import SubprocessResult  # noqa: F401
+        from autoskillit.execution.process import SubprocessResult  # noqa: F401
 
     def test_subprocess_runner_protocol_satisfied_by_real(self):
         """RealSubprocessRunner satisfies the SubprocessRunner protocol."""
-        from autoskillit.process_lifecycle import RealSubprocessRunner
-        from autoskillit.types import SubprocessRunner
+        from autoskillit.core.types import SubprocessRunner
+        from autoskillit.execution.process import RealSubprocessRunner
 
         runner = RealSubprocessRunner()
         assert isinstance(runner, SubprocessRunner)

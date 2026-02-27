@@ -1,11 +1,11 @@
-"""Tests for autoskillit._token_log — pipeline token usage tracking."""
+"""Tests for autoskillit.pipeline.tokens — pipeline token usage tracking."""
 
 from __future__ import annotations
 
 import json
 from dataclasses import fields
 
-from autoskillit._token_log import TokenEntry, TokenLog
+from autoskillit.pipeline.tokens import TokenEntry, TokenLog
 
 
 def _make_usage(**overrides: int) -> dict[str, int]:
@@ -136,12 +136,12 @@ class TestTokenLog:
 
 class TestTokenLogModuleSingleton:
     def test_singleton_exists_in_module(self):
-        from autoskillit._token_log import _token_log
+        from autoskillit.pipeline.tokens import _token_log
 
         assert isinstance(_token_log, TokenLog)
 
     def test_singleton_importable_from_token_log(self):
-        from autoskillit._token_log import (
+        from autoskillit.pipeline.tokens import (
             _token_log,
         )  # always in _token_log, injected into ToolContext
 

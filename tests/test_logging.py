@@ -1,4 +1,4 @@
-"""Tests for autoskillit._logging — centralized structlog configuration."""
+"""Tests for autoskillit.core.logging — centralized structlog configuration."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import structlog
 class TestGetLogger:
     def test_returns_bound_logger(self):
         """get_logger() returns a structlog BoundLogger callable."""
-        from autoskillit._logging import get_logger
+        from autoskillit.core.logging import get_logger
 
         logger = get_logger(__name__)
         assert callable(logger.info)
@@ -23,7 +23,7 @@ class TestGetLogger:
 
     def test_module_name_used_as_logger_name(self):
         """get_logger(__name__) creates a logger named after the module."""
-        from autoskillit._logging import get_logger
+        from autoskillit.core.logging import get_logger
 
         with structlog.testing.capture_logs() as logs:
             get_logger("autoskillit.server").info("probe")
@@ -92,7 +92,7 @@ class TestConfigureLogging:
 
     def test_text_output_reaches_stream(self):
         """configure_logging() routes log records to the given stream."""
-        from autoskillit._logging import configure_logging, get_logger
+        from autoskillit.core.logging import configure_logging, get_logger
 
         stream = io.StringIO()
         configure_logging(level=logging.DEBUG, json_output=False, stream=stream)
@@ -101,7 +101,7 @@ class TestConfigureLogging:
 
     def test_json_output_is_valid_json(self):
         """json_output=True produces one valid JSON object per log line."""
-        from autoskillit._logging import configure_logging, get_logger
+        from autoskillit.core.logging import configure_logging, get_logger
 
         stream = io.StringIO()
         configure_logging(level=logging.DEBUG, json_output=True, stream=stream)
@@ -113,7 +113,7 @@ class TestConfigureLogging:
 
     def test_log_level_filters_below_threshold(self):
         """Messages below the configured level are suppressed."""
-        from autoskillit._logging import configure_logging, get_logger
+        from autoskillit.core.logging import configure_logging, get_logger
 
         stream = io.StringIO()
         configure_logging(level=logging.WARNING, json_output=False, stream=stream)
@@ -122,7 +122,7 @@ class TestConfigureLogging:
 
     def test_never_writes_to_stdout(self, capsys: pytest.CaptureFixture[str]):
         """configure_logging() must never write to stdout (MCP protocol wire)."""
-        from autoskillit._logging import configure_logging, get_logger
+        from autoskillit.core.logging import configure_logging, get_logger
 
         configure_logging(level=logging.DEBUG, json_output=False)
         get_logger("autoskillit.test").info("stdout_check")

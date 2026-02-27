@@ -213,6 +213,11 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
     }
 
 
+_KNOWN_RESULT_KEYS: frozenset[str] = frozenset(
+    {"type", "subtype", "is_error", "result", "session_id", "errors", "usage"}
+)
+
+
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
     """Parse Claude Code's --output-format json stdout into a typed result.
 
@@ -264,6 +269,10 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
             )
 
     token_usage = extract_token_usage(stdout)
+
+    extra_keys = frozenset(result_obj.keys()) - _KNOWN_RESULT_KEYS
+    if extra_keys:
+        logger.debug("unknown_result_keys", extra_keys=sorted(extra_keys))
 
     return ClaudeSessionResult(
         subtype=result_obj.get("subtype", "unknown"),

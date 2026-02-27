@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 
+import structlog
+
 from autoskillit.session_result import (
     ClaudeSessionResult,
     SkillResult,
@@ -310,6 +312,42 @@ class TestParseSessionResult:
         result = parse_session_result(stdout)
         assert result.token_usage is not None
         assert result.token_usage["input_tokens"] == 200
+
+    def test_logs_unknown_result_keys_at_debug(self):
+        # Build a result record with an extra key not in _KNOWN_RESULT_KEYS
+        record = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "abc",
+                "errors": [],
+                "future_field": "x",
+            }
+        )
+        with structlog.testing.capture_logs() as logs:
+            parse_session_result(record)
+        debug_entries = [e for e in logs if e.get("log_level") == "debug"]
+        assert any(e.get("event") == "unknown_result_keys" for e in debug_entries)
+        matched = next(e for e in debug_entries if e.get("event") == "unknown_result_keys")
+        assert "future_field" in matched.get("extra_keys", [])
+
+    def test_no_debug_log_for_known_result_keys(self):
+        # Build a result record with only known keys — no debug log expected
+        record = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "abc",
+                "errors": [],
+            }
+        )
+        with structlog.testing.capture_logs() as logs:
+            parse_session_result(record)
+        assert not any(e.get("event") == "unknown_result_keys" for e in logs)
 
 
 # ---------------------------------------------------------------------------

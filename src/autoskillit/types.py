@@ -8,10 +8,11 @@ misclassification from string typos or unhandled values.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import Generic, Protocol, TypeVar, runtime_checkable
 
 T = TypeVar("T")
 
@@ -53,6 +54,50 @@ class Severity(StrEnum):
     WARNING = "warning"
 
 
+class TerminationReason(StrEnum):
+    """How a managed subprocess ended.
+
+    Propagates termination provenance from run_managed_async to consumers,
+    replacing implicit inference from exit codes.
+    """
+
+    NATURAL_EXIT = "natural_exit"
+    COMPLETED = "completed"
+    STALE = "stale"
+    TIMED_OUT = "timed_out"
+
+
+@dataclass
+class SubprocessResult:
+    """Result from a managed subprocess execution."""
+
+    returncode: int
+    stdout: str
+    stderr: str
+    termination: TerminationReason
+    pid: int
+
+
+@runtime_checkable
+class SubprocessRunner(Protocol):
+    """Protocol for async subprocess execution. Matches run_managed_async signature."""
+
+    def __call__(
+        self,
+        cmd: list[str],
+        *,
+        cwd: Path,
+        timeout: float,
+        heartbeat_marker: str = "",
+        stale_threshold: float = 1200,
+        completion_marker: str = "",
+        session_log_dir: Path | None = None,
+        pty_mode: bool = True,
+        input_data: str | None = None,
+        completion_drain_timeout: float = 5.0,
+    ) -> Awaitable[SubprocessResult]: ...
+
+
 @dataclass
 class LoadReport:
     """A single file that failed to load, with the reason."""
@@ -75,7 +120,7 @@ class LoadResult(Generic[T]):
 CONTEXT_EXHAUSTION_MARKER = "prompt is too long"
 
 # Native Claude Code tools that pipeline orchestrators must NEVER use directly.
-# Canonical source of truth — imported by server.py, semantic_rules.py, and tests.
+# Canonical source of truth — imported by server.py and tests.
 PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
     "Read",
     "Grep",

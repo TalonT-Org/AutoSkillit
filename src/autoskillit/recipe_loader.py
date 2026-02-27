@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from autoskillit._io import _load_yaml
-from autoskillit.recipe_parser import AUTOSKILLIT_VERSION_KEY, RecipeInfo
+from autoskillit.recipe_schema import AUTOSKILLIT_VERSION_KEY, RecipeInfo
 from autoskillit.types import RecipeSource
 
 

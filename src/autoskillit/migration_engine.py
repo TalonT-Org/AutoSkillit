@@ -13,9 +13,10 @@ from autoskillit import __version__
 from autoskillit._io import _atomic_write, _load_yaml
 from autoskillit._logging import get_logger
 from autoskillit.migration_loader import applicable_migrations
+from autoskillit.recipe_io import load_recipe as _parse_recipe
 from autoskillit.recipe_loader import parse_recipe_metadata
-from autoskillit.recipe_parser import load_recipe as _parse_recipe
-from autoskillit.recipe_parser import validate_recipe
+from autoskillit.recipe_validator import validate_recipe
+from autoskillit.session_result import SkillResult
 
 logger = get_logger(__name__)
 
@@ -66,7 +67,7 @@ class HeadlessMigrationAdapter(MigrationAdapter):
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[dict]],
+        run_headless: Callable[..., Awaitable[SkillResult]],
         temp_dir: Path,
     ) -> MigrationResult:
         """Apply migration via run_headless; write-back handled by MigrationEngine."""
@@ -99,7 +100,7 @@ class MigrationEngine:
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[dict]],
+        run_headless: Callable[..., Awaitable[SkillResult]],
         temp_dir: Path,
     ) -> MigrationResult:
         adapter = self._adapters.get(file.file_type)
@@ -156,7 +157,7 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[dict]],
+        run_headless: Callable[..., Awaitable[SkillResult]],
         temp_dir: Path,
     ) -> MigrationResult:
         migrations = applicable_migrations(file.current_version, __version__)
@@ -198,11 +199,11 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
             skill_command=skill_command,
             cwd=str(file.path.parent.parent.parent),
         )
-        if not raw.get("success"):
+        if not raw.success:
             return MigrationResult(
                 success=False,
                 name=file.name,
-                error=raw.get("result", "headless session failed"),
+                error=raw.result or "headless session failed",
                 retries_attempted=MIGRATE_RECIPES_MAX_RETRIES,
             )
 
@@ -255,7 +256,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         return files
 
     def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.contract_validator import check_contract_staleness, load_recipe_card
+        from autoskillit.recipe_validator import check_contract_staleness, load_recipe_card
 
         recipes_dir = file.path.parent.parent
         contract = load_recipe_card(file.name, recipes_dir)
@@ -269,7 +270,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         *,
         temp_dir: Path,
     ) -> MigrationResult:
-        from autoskillit.contract_validator import generate_recipe_card
+        from autoskillit.recipe_validator import generate_recipe_card
 
         recipes_dir = file.path.parent.parent
         recipe_path = recipes_dir / f"{file.name}.yaml"

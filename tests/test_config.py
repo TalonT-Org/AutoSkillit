@@ -275,6 +275,15 @@ class TestMigrationConfig:
         assert cfg.migration.suppressed == []
 
 
+class TestEnsureProjectTempAbsent:
+    def test_ensure_project_temp_absent_from_config(self):
+        import autoskillit.config as config_mod
+
+        assert not hasattr(config_mod, "ensure_project_temp"), (
+            "ensure_project_temp was moved to _io; config must not export it"
+        )
+
+
 class TestSyncConfigRemoval:
     def test_automation_config_has_no_sync_field(self):
         """REQ-SYNC-003: AutomationConfig has no sync attribute."""

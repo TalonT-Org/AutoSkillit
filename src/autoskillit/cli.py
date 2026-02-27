@@ -35,15 +35,49 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     """Start the MCP server (default command)."""
     import logging as _stdlib_logging
 
-    from autoskillit._logging import configure_logging
-    from autoskillit.server import mcp
+    from autoskillit._logging import configure_logging, get_logger
+    from autoskillit.config import load_config
 
     configure_logging(
         level=_stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO,
         json_output=not sys.stderr.isatty(),
         stream=sys.stderr,
     )
-    mcp.run()
+
+    import autoskillit.server as _server
+    from autoskillit._audit import AuditLog
+    from autoskillit._context import ToolContext
+    from autoskillit._gate import GateState
+    from autoskillit._token_log import TokenLog
+    from autoskillit.process_lifecycle import RealSubprocessRunner
+
+    project_dir = Path.cwd()
+    cfg = load_config(project_dir)
+    project_path = project_dir / ".autoskillit" / "config.yaml"
+    user_path = Path.home() / ".autoskillit" / "config.yaml"
+    resolved_path: str | None = (
+        str(project_path)
+        if project_path.is_file()
+        else str(user_path)
+        if user_path.is_file()
+        else None
+    )
+    get_logger(__name__).info(
+        "serve_startup",
+        config_path=resolved_path,
+        test_check_command=cfg.test_check.command,
+    )
+
+    ctx = ToolContext(
+        config=cfg,
+        audit=AuditLog(),
+        token_log=TokenLog(),
+        gate=GateState(enabled=False),
+        plugin_dir=str(Path(_server.__file__).parent),
+        runner=RealSubprocessRunner(),
+    )
+    _server._initialize(ctx)
+    _server.mcp.run()
 
 
 @app.command
@@ -64,7 +98,7 @@ def init(
     test_command
         Test command string for non-interactive init (e.g. "pytest -v").
     """
-    from autoskillit.config import ensure_project_temp
+    from autoskillit._io import ensure_project_temp
 
     project_dir = Path.cwd()
     config_dir = project_dir / ".autoskillit"
@@ -267,7 +301,7 @@ def migrate(*, check: bool = False):
     """
     from autoskillit import __version__
     from autoskillit.migration_loader import applicable_migrations
-    from autoskillit.recipe_parser import list_recipes as _list_all_recipes
+    from autoskillit.recipe_io import list_recipes as _list_all_recipes
     from autoskillit.types import RecipeSource
 
     project_dir = Path.cwd()
@@ -392,7 +426,7 @@ def workspace_init(path: str):
 @recipes_app.command(name="list")
 def recipes_list():
     """List available recipes with sources."""
-    from autoskillit.recipe_parser import list_recipes
+    from autoskillit.recipe_io import list_recipes
 
     recipes = list_recipes(Path.cwd()).items
     if not recipes:
@@ -410,7 +444,7 @@ def recipes_list():
 @recipes_app.command(name="show")
 def recipes_show(name: str):
     """Print the YAML content of a named recipe."""
-    from autoskillit.recipe_parser import find_recipe_by_name
+    from autoskillit.recipe_io import find_recipe_by_name
 
     match = find_recipe_by_name(name, Path.cwd())
     if match is None:
@@ -526,12 +560,12 @@ def cook(recipe: str):
     import yaml
 
     from autoskillit._io import _load_yaml
-    from autoskillit.recipe_parser import _parse_recipe, find_recipe_by_name, validate_recipe
+    from autoskillit.recipe_io import _parse_recipe, find_recipe_by_name
+    from autoskillit.recipe_io import list_recipes as _list_all_recipes_for_cook
+    from autoskillit.recipe_validator import validate_recipe
 
     _match = find_recipe_by_name(recipe, Path.cwd())
     if _match is None:
-        from autoskillit.recipe_parser import list_recipes as _list_all_recipes_for_cook
-
         available = _list_all_recipes_for_cook(Path.cwd()).items
         print(f"Recipe not found: '{recipe}'")
         if available:
@@ -544,6 +578,7 @@ def cook(recipe: str):
     recipe_yaml = _match.path.read_text()
 
     # Validate recipe before launching session
+
     try:
         data = _load_yaml(recipe_yaml)
     except yaml.YAMLError as exc:

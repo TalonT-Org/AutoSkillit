@@ -96,7 +96,7 @@ class TestAuditLogModuleSingleton:
 
         assert isinstance(_audit_log, AuditLog)
 
-    def test_singleton_is_importable_from_server(self):
-        from autoskillit.server import _audit_log  # re-exported or directly importable
+    def test_singleton_is_importable_from_audit(self):
+        from autoskillit._audit import _audit_log  # always in _audit, injected into ToolContext
 
         assert isinstance(_audit_log, AuditLog)

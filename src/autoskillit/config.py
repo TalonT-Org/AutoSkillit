@@ -127,20 +127,6 @@ def load_config(project_dir: Path | None = None) -> AutomationConfig:
     return config
 
 
-def ensure_project_temp(project_dir: Path) -> Path:
-    """Ensure .autoskillit/temp/ exists with .gitignore.
-
-    Called defensively by any code that needs temp space. Idempotent.
-    """
-    autoskillit_dir = project_dir / ".autoskillit"
-    temp_dir = autoskillit_dir / "temp"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    gitignore_path = autoskillit_dir / ".gitignore"
-    if not gitignore_path.exists():
-        gitignore_path.write_text("temp/\n")
-    return temp_dir
-
-
 def _merge_into(config: AutomationConfig, data: dict[str, Any]) -> None:
     """Apply YAML dict values onto dataclass fields."""
     for section_field in dataclasses.fields(config):

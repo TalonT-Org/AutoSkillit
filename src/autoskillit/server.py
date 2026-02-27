@@ -28,21 +28,26 @@ from fastmcp.dependencies import CurrentContext
 from fastmcp.prompts import Message, PromptResult
 
 from autoskillit import __version__
-from autoskillit._audit import FailureRecord, _audit_log
+from autoskillit._audit import FailureRecord
+from autoskillit._context import ToolContext
+from autoskillit._gate import (  # noqa: F401
+    GATED_TOOLS,
+    UNGATED_TOOLS,
+    GateState,
+    gate_error_result,
+)
 from autoskillit._logging import get_logger
-from autoskillit._token_log import _token_log
-from autoskillit.config import AutomationConfig, load_config
+from autoskillit.config import AutomationConfig
 from autoskillit.db_tools import _execute_readonly_query, _validate_select_only
 from autoskillit.failure_store import FailureStore, default_store_path
 from autoskillit.migration_engine import MigrationFile, default_migration_engine
 from autoskillit.migration_loader import applicable_migrations
-from autoskillit.process_lifecycle import (
-    SubprocessResult,
-    TerminationReason,
-    run_managed_async,
-)
-from autoskillit.session_parser import (
+from autoskillit.process_lifecycle import SubprocessResult
+from autoskillit.session_result import (
     ClaudeSessionResult,
+    SkillResult,
+    _compute_retry,
+    _compute_success,
     parse_session_result,
 )
 from autoskillit.types import (
@@ -51,35 +56,50 @@ from autoskillit.types import (
     MergeState,
     RestartScope,
     RetryReason,
+    TerminationReason,
 )
 from autoskillit.workspace import _delete_directory_contents
 
-# Migration subsystem (Layer B — domain logic).
-# These modules have no dependency on FastMCP or server state.
-# Originally deferred to avoid circular imports; safe to promote after groupA/groupC cleanup.
-
 mcp = FastMCP("autoskillit")
 
-_config: AutomationConfig = load_config(Path.cwd())
-
-_plugin_dir = str(Path(__file__).parent)
-
-_plugin_version: str | None = None
-_plugin_json_path = Path(_plugin_dir) / ".claude-plugin" / "plugin.json"
-if _plugin_json_path.is_file():
-    _plugin_version = json.loads(_plugin_json_path.read_text()).get("version")
-
-_tools_enabled = False
+_ctx: ToolContext | None = None
 
 logger = get_logger(__name__)
 
 
+def _initialize(ctx: ToolContext) -> None:
+    """Set the server's ToolContext. Called by cli.py serve() before mcp.run()."""
+    global _ctx
+    _ctx = ctx
+
+
+def _get_ctx() -> ToolContext:
+    """Return the active ToolContext. Raises if _initialize() has not been called."""
+    if _ctx is None:
+        raise RuntimeError(
+            "serve() must be called before accessing context. "
+            "Call server._initialize(ctx) before mcp.run()."
+        )
+    return _ctx
+
+
+def _get_config() -> AutomationConfig:
+    """Return the active AutomationConfig from the ToolContext."""
+    return _get_ctx().config
+
+
 def version_info() -> dict:
     """Return version health information for the running server."""
+    plugin_dir = _ctx.plugin_dir if _ctx is not None else str(Path(__file__).parent)
+    plugin_json_path = Path(plugin_dir) / ".claude-plugin" / "plugin.json"
+    plugin_version = None
+    if plugin_json_path.is_file():
+        data = json.loads(plugin_json_path.read_text())
+        plugin_version = data.get("version")
     return {
         "package_version": __version__,
-        "plugin_json_version": _plugin_version,
-        "match": __version__ == _plugin_version,
+        "plugin_json_version": plugin_version,
+        "match": __version__ == plugin_version,
     }
 
 
@@ -110,12 +130,8 @@ def _require_enabled() -> str | None:
     This survives --dangerously-skip-permissions because MCP prompts are
     outside the permission system.
     """
-    if not _tools_enabled:
-        return _gate_error_result(
-            "AutoSkillit tools are not enabled. "
-            "User must type the open_kitchen prompt to activate. "
-            "Check the MCP prompt list for the exact name."
-        )
+    if not _get_ctx().gate.enabled:
+        return gate_error_result()
     return None
 
 
@@ -130,7 +146,9 @@ async def _run_subprocess(
     Delegates to run_managed_async which uses temp file I/O (immune to
     pipe-blocking from child FD inheritance) and psutil process tree cleanup.
     """
-    result = await run_managed_async(cmd, cwd=Path(cwd), timeout=timeout)
+    runner = _get_ctx().runner
+    assert runner is not None, "No subprocess runner configured"
+    result = await runner(cmd, cwd=Path(cwd), timeout=timeout)
     if result.termination == TerminationReason.TIMED_OUT:
         return -1, result.stdout, f"Process timed out after {timeout}s"
     return result.returncode, result.stdout, result.stderr
@@ -142,7 +160,7 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
     Returns an error JSON string if validation fails, None if OK.
     """
     parts = skill_command.strip().split(None, 1)
-    if not parts or parts[0] not in _config.implement_gate.skill_names:
+    if not parts or parts[0] not in _get_config().implement_gate.skill_names:
         return None
 
     skill_name = parts[0]
@@ -162,10 +180,10 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
     # (b) — passing file content via stdin or re-verifying via content hash —
     # involve significant scope and are deferred.
     first_line = plan_path.read_text().split("\n", 1)[0].strip()
-    if first_line != _config.implement_gate.marker:
+    if first_line != _get_config().implement_gate.marker:
         return _gate_error_result(
             f"Plan has NOT been dry-walked. Run /dry-walkthrough on the plan first. "
-            f"Expected first line: {_config.implement_gate.marker!r}, "
+            f"Expected first line: {_get_config().implement_gate.marker!r}, "
             f"actual: {first_line[:100]!r}"
         )
 
@@ -189,7 +207,10 @@ def _truncate(text: str, max_len: int = 5000) -> str:
 def _session_log_dir(cwd: str) -> Path:
     """Derive Claude Code session log directory from project cwd."""
     project_hash = cwd.replace("/", "-").replace("_", "-")
-    return Path.home() / ".claude" / "projects" / project_hash
+    log_dir = Path.home() / ".claude" / "projects" / project_hash
+    if not log_dir.exists():
+        logger.warning("session_log_dir_missing", path=str(log_dir), cwd=cwd)
+    return log_dir
 
 
 def _inject_completion_directive(skill_command: str, marker: str) -> str:
@@ -199,76 +220,6 @@ def _inject_completion_directive(skill_command: str, marker: str) -> str:
         f"your final text output MUST end with: {marker}"
     )
     return skill_command + directive
-
-
-_FAILURE_SUBTYPES = frozenset({"unknown", "empty_output", "unparseable", "timeout"})
-
-
-def _compute_success(
-    session: ClaudeSessionResult,
-    returncode: int,
-    termination: TerminationReason,
-    completion_marker: str = "",
-) -> bool:
-    """Cross-validate all signals to determine unambiguous success/failure."""
-    if termination in (TerminationReason.TIMED_OUT, TerminationReason.STALE):
-        return False
-    if returncode != 0:
-        # COMPLETED path: the process was killed by our own async_kill_process_tree
-        # (signal -15 or -9), so a non-zero returncode is expected and trustworthy
-        # when the session envelope says "success". Trust the envelope.
-        #
-        # NATURAL_EXIT path: the process exited on its own with an error code.
-        # We cannot distinguish PTY-masking quirks from genuine CLI errors here,
-        # so we fail conservatively. The session result record (if any) may still
-        # be present in stdout — but a non-zero natural exit is treated as authoritative
-        # evidence of failure. No asymmetric bypass is applied.
-        if (
-            termination == TerminationReason.COMPLETED
-            and session.subtype == "success"
-            and session.result.strip()
-        ):
-            pass  # fall through to remaining checks
-        else:
-            return False
-    if session.is_error:
-        return False
-    if not session.result.strip():
-        return False
-    if session.subtype in _FAILURE_SUBTYPES:
-        return False
-
-    if completion_marker:
-        result_text = session.result.strip()
-        marker_stripped = result_text.replace(completion_marker, "").strip()
-        if not marker_stripped:
-            return False
-        if completion_marker not in result_text:
-            return False
-
-    return True
-
-
-def _compute_retry(
-    session: ClaudeSessionResult,
-    returncode: int,
-    termination: TerminationReason,
-) -> tuple[bool, RetryReason]:
-    """Cross-validate all signals to determine retry eligibility."""
-    # API-level retries (session knew it should be retried)
-    if session.needs_retry:
-        return True, RetryReason.RESUME
-
-    # Infrastructure failure: session never ran (empty stdout, clean exit)
-    if session.subtype == "empty_output" and returncode == 0:
-        return True, RetryReason.RESUME
-
-    # unparseable output under COMPLETED means the process was killed mid-write
-    # (drain timeout expired). The session likely completed; retry with resume.
-    if session.subtype == "unparseable" and termination == TerminationReason.COMPLETED:
-        return True, RetryReason.RESUME
-
-    return False, RetryReason.NONE
 
 
 def _capture_failure(
@@ -282,7 +233,7 @@ def _capture_failure(
     """Record a failure in the audit log. No-op if skill_command is empty."""
     if not skill_command:
         return
-    _audit_log.record_failure(
+    _get_ctx().audit.record_failure(
         FailureRecord(
             timestamp=datetime.now(UTC).isoformat(),
             skill_command=skill_command,
@@ -299,8 +250,8 @@ def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
     skill_command: str = "",
-) -> str:
-    """Route SubprocessResult fields into the standard run_skill JSON response."""
+) -> SkillResult:
+    """Route SubprocessResult fields into the standard run_skill response."""
     if result.termination == TerminationReason.STALE:
         # Attempt to recover from stdout before declaring stale failure.
         # A session that completed its result record before going quiet deserves
@@ -324,19 +275,17 @@ def _build_skill_result(
                 logger.warning(
                     "Session went stale but stdout contained a valid result; recovering"
                 )
-                return json.dumps(
-                    {
-                        "success": True,
-                        "result": _truncate(stale_session.agent_result),
-                        "session_id": stale_session.session_id,
-                        "subtype": "recovered_from_stale",
-                        "is_error": False,
-                        "exit_code": stale_returncode,
-                        "needs_retry": False,
-                        "retry_reason": RetryReason.NONE,
-                        "stderr": result.stderr if result.stderr else "",
-                        "token_usage": stale_session.token_usage,
-                    }
+                return SkillResult(
+                    success=True,
+                    result=_truncate(stale_session.agent_result),
+                    session_id=stale_session.session_id,
+                    subtype="recovered_from_stale",
+                    is_error=False,
+                    exit_code=stale_returncode,
+                    needs_retry=False,
+                    retry_reason=RetryReason.NONE,
+                    stderr=result.stderr if result.stderr else "",
+                    token_usage=stale_session.token_usage,
                 )
         # No valid result in stdout — fall through to original stale response
         _capture_failure(
@@ -347,20 +296,20 @@ def _build_skill_result(
             retry_reason=RetryReason.RESUME,
             stderr=result.stderr if result.stderr else "",
         )
-        return json.dumps(
-            {
-                "success": False,
-                "result": "Session went stale (no activity for configured threshold). "
-                "Partial progress may have been made. Retry to continue.",
-                "session_id": "",
-                "subtype": "stale",
-                "is_error": False,
-                "exit_code": -1,
-                "needs_retry": True,
-                "retry_reason": RetryReason.RESUME,
-                "stderr": "",
-                "token_usage": None,
-            }
+        return SkillResult(
+            success=False,
+            result=(
+                "Session went stale (no activity for configured threshold). "
+                "Partial progress may have been made. Retry to continue."
+            ),
+            session_id="",
+            subtype="stale",
+            is_error=False,
+            exit_code=-1,
+            needs_retry=True,
+            retry_reason=RetryReason.RESUME,
+            stderr="",
+            token_usage=None,
         )
 
     if result.termination == TerminationReason.TIMED_OUT:
@@ -393,19 +342,17 @@ def _build_skill_result(
     if completion_marker:
         result_text = result_text.replace(completion_marker, "").strip()
 
-    return json.dumps(
-        {
-            "success": success,
-            "result": result_text,
-            "session_id": session.session_id,
-            "subtype": session.subtype,
-            "is_error": session.is_error,
-            "exit_code": returncode,
-            "needs_retry": needs_retry,
-            "retry_reason": retry_reason,
-            "stderr": _truncate(result.stderr),
-            "token_usage": session.token_usage,
-        }
+    return SkillResult(
+        success=success,
+        result=result_text,
+        session_id=session.session_id,
+        subtype=session.subtype,
+        is_error=session.is_error,
+        exit_code=returncode,
+        needs_retry=needs_retry,
+        retry_reason=retry_reason,
+        stderr=_truncate(result.stderr),
+        token_usage=session.token_usage,
     )
 
 
@@ -429,7 +376,7 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600, ctx: Context = Current
             logger_name="autoskillit.run_cmd",
             extra={"cwd": cwd},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
     returncode, stdout, stderr = await _run_subprocess(
         ["bash", "-c", cmd],
@@ -449,7 +396,7 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600, ctx: Context = Current
                 logger_name="autoskillit.run_cmd",
                 extra={"exit_code": returncode},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
     return json.dumps(result)
 
@@ -548,7 +495,7 @@ async def run_python(
             logger_name="autoskillit.run_python",
             extra={"callable": callable},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
     result = await _import_and_call(callable, args=args, timeout=float(timeout))
     if not result.get("success"):
@@ -558,7 +505,7 @@ async def run_python(
                 logger_name="autoskillit.run_python",
                 extra={"callable": callable},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
     return json.dumps(result)
 
@@ -594,7 +541,7 @@ async def read_db(
             logger_name="autoskillit.read_db",
             extra={"db_path": db_path},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
 
     # Parse params
@@ -607,7 +554,7 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={"error": str(exc)},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Invalid params JSON: {exc}"})
     if not isinstance(parsed_params, (list, dict)):
@@ -617,7 +564,7 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": "params must be a JSON array or object"})
 
@@ -630,7 +577,7 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={"db_path": db_path},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Database does not exist: {db}"})
     if not db.is_file():
@@ -640,7 +587,7 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={"db_path": db_path},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Path is not a file: {db}"})
 
@@ -654,13 +601,13 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={"error": str(exc)},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": str(exc), "hint": "Only SELECT queries are allowed"})
 
     # Resolve timeout
-    effective_timeout = timeout if timeout > 0 else _config.read_db.timeout
-    max_rows = _config.read_db.max_rows
+    effective_timeout = timeout if timeout > 0 else _get_config().read_db.timeout
+    max_rows = _get_config().read_db.max_rows
 
     # Execute in thread (sqlite3 is blocking)
     loop = asyncio.get_running_loop()
@@ -682,7 +629,7 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={"timeout": effective_timeout},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Query exceeded {effective_timeout}s timeout"})
     except Exception as exc:
@@ -693,19 +640,19 @@ async def read_db(
                 logger_name="autoskillit.read_db",
                 extra={"error": type(exc).__name__},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Query failed: {exc}"})
 
 
 def _resolve_model(step_model: str) -> str | None:
     """Resolve model selection: config override > step > config default."""
-    if _config.model.override:
-        return _config.model.override
+    if _get_config().model.override:
+        return _get_config().model.override
     if step_model:
         return step_model
-    if _config.model.default:
-        return _config.model.default
+    if _get_config().model.default:
+        return _get_config().model.default
     return None
 
 
@@ -718,23 +665,23 @@ async def _run_headless_core(
     add_dir: str = "",
     timeout: int | None = None,
     stale_threshold: int | None = None,
-) -> dict:
+) -> SkillResult:
     """Shared headless runner used by run_skill, run_skill_retry, and load_recipe.
 
     Does NOT check open_kitchen gate — callers are responsible for authorization context.
-    Returns the raw result dict with at minimum a 'success' key.
+    Returns a SkillResult with at minimum a 'success' field.
 
     Args:
         timeout: Override the default run_skill timeout. Used by run_skill_retry
             to pass its longer timeout without a separate subprocess-building path.
         stale_threshold: Override the default stale threshold. Used by run_skill_retry.
     """
-    cfg = _config.run_skill
+    cfg = _get_config().run_skill
     original_skill_command = skill_command
     skill_command = _inject_completion_directive(
         _ensure_skill_prefix(skill_command), cfg.completion_marker
     )
-    effective_plugin_dir = plugin_dir if plugin_dir is not None else _plugin_dir
+    effective_plugin_dir = plugin_dir if plugin_dir is not None else _get_ctx().plugin_dir
     cmd = [
         "claude",
         "-p",
@@ -751,7 +698,9 @@ async def _run_headless_core(
     if resolved_model:
         cmd.extend(["--model", resolved_model])
 
-    result = await run_managed_async(
+    runner = _get_ctx().runner
+    assert runner is not None, "No subprocess runner configured"
+    result = await runner(
         cmd,
         cwd=Path(cwd),
         timeout=timeout if timeout is not None else cfg.timeout,
@@ -763,13 +712,12 @@ async def _run_headless_core(
         completion_drain_timeout=cfg.completion_drain_timeout,
     )
 
-    result_str = _build_skill_result(
+    skill_result = _build_skill_result(
         result, completion_marker=cfg.completion_marker, skill_command=original_skill_command
     )
-    parsed = json.loads(result_str)
     if step_name:
-        _token_log.record(step_name, parsed.get("token_usage"))
-    return parsed
+        _get_ctx().token_log.record(step_name, skill_result.token_usage)
+    return skill_result
 
 
 @mcp.tool(tags={"automation"})
@@ -815,23 +763,23 @@ async def run_skill(
     except AttributeError:
         pass
 
-    if _config.safety.require_dry_walkthrough:
+    if _get_config().safety.require_dry_walkthrough:
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
-    parsed = await _run_headless_core(
+    skill_result = await _run_headless_core(
         skill_command, cwd, model=model, add_dir=add_dir, step_name=step_name
     )
-    if not parsed.get("success"):
+    if not skill_result.success:
         try:
             await ctx.error(
                 "run_skill failed",
                 logger_name="autoskillit.run_skill",
-                extra={"exit_code": parsed.get("exit_code"), "subtype": parsed.get("subtype")},
+                extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
             )
         except AttributeError:
             pass
-    return json.dumps(parsed)
+    return skill_result.to_json()
 
 
 @mcp.tool(tags={"automation"})
@@ -884,12 +832,12 @@ async def run_skill_retry(
     except AttributeError:
         pass
 
-    if _config.safety.require_dry_walkthrough:
+    if _get_config().safety.require_dry_walkthrough:
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
-    cfg = _config.run_skill_retry
-    parsed = await _run_headless_core(
+    cfg = _get_config().run_skill_retry
+    skill_result = await _run_headless_core(
         skill_command,
         cwd,
         model=model,
@@ -898,16 +846,16 @@ async def run_skill_retry(
         timeout=cfg.timeout,
         stale_threshold=cfg.stale_threshold,
     )
-    if not parsed.get("success"):
+    if not skill_result.success:
         try:
             await ctx.error(
                 "run_skill_retry failed",
                 logger_name="autoskillit.run_skill_retry",
-                extra={"exit_code": parsed.get("exit_code"), "subtype": parsed.get("subtype")},
+                extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
             )
         except AttributeError:
             pass
-    return json.dumps(parsed)
+    return skill_result.to_json()
 
 
 _OUTCOME_PATTERN = re.compile(
@@ -980,12 +928,12 @@ async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str
             logger_name="autoskillit.test_check",
             extra={"worktree": worktree_path},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
     returncode, stdout, stderr = await _run_subprocess(
-        _config.test_check.command,
+        _get_config().test_check.command,
         cwd=worktree_path,
-        timeout=_config.test_check.timeout,
+        timeout=_get_config().test_check.timeout,
     )
 
     passed = _check_test_passed(returncode, stdout)
@@ -997,7 +945,7 @@ async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str
                 logger_name="autoskillit.test_check",
                 extra={"worktree": worktree_path},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
 
     return json.dumps({"passed": passed})
@@ -1029,7 +977,7 @@ async def merge_worktree(
             logger_name="autoskillit.merge_worktree",
             extra={"worktree": worktree_path, "base": base_branch},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
 
     # Validate worktree path exists
@@ -1040,7 +988,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "path does not exist"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Path does not exist: {worktree_path}"})
 
@@ -1057,7 +1005,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "not a git worktree"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Not a git worktree: {worktree_path}", "stderr": stderr})
 
@@ -1074,17 +1022,17 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "could not determine branch"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Could not determine branch: {stderr}"})
     worktree_branch = branch_out.strip()
 
     # Test gate
-    if _config.safety.test_gate_on_merge:
+    if _get_config().safety.test_gate_on_merge:
         rc, test_stdout, test_stderr = await _run_subprocess(
-            _config.test_check.command,
+            _get_config().test_check.command,
             cwd=worktree_path,
-            timeout=_config.test_check.timeout,
+            timeout=_get_config().test_check.timeout,
         )
         if not _check_test_passed(rc, test_stdout):
             try:
@@ -1093,7 +1041,7 @@ async def merge_worktree(
                     logger_name="autoskillit.merge_worktree",
                     extra={"reason": "tests failed"},
                 )
-            except RuntimeError:
+            except (RuntimeError, AttributeError):
                 pass
             return json.dumps(
                 {
@@ -1117,7 +1065,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "git fetch failed"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps(
             {
@@ -1146,7 +1094,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "rebase failed"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps(
             {
@@ -1177,7 +1125,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "could not determine main repo path"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": "Could not determine main repo path from worktree list"})
 
@@ -1199,7 +1147,7 @@ async def merge_worktree(
                 logger_name="autoskillit.merge_worktree",
                 extra={"reason": "merge failed"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps(
             {
@@ -1217,11 +1165,26 @@ async def merge_worktree(
         cwd=main_repo,
         timeout=30,
     )
+    if wt_rc != 0:
+        logger.warning(
+            "merge_worktree_cleanup_failed",
+            operation="worktree_remove",
+            path=worktree_path,
+            stderr=wt_stderr.strip(),
+        )
+
     br_rc, _, br_stderr = await _run_subprocess(
         ["git", "branch", "-D", worktree_branch],
         cwd=main_repo,
         timeout=10,
     )
+    if br_rc != 0:
+        logger.warning(
+            "merge_worktree_cleanup_failed",
+            operation="branch_delete",
+            branch=worktree_branch,
+            stderr=br_stderr.strip(),
+        )
 
     return json.dumps(
         {
@@ -1260,7 +1223,7 @@ async def reset_test_dir(
             logger_name="autoskillit.reset_test_dir",
             extra={"resolved": resolved, "force": force},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
 
     if not os.path.isdir(resolved):
@@ -1270,11 +1233,11 @@ async def reset_test_dir(
                 logger_name="autoskillit.reset_test_dir",
                 extra={"reason": "directory does not exist"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
-    marker_name = _config.safety.reset_guard_marker
+    marker_name = _get_config().safety.reset_guard_marker
     marker_path = Path(resolved) / marker_name
     if not force and not marker_path.is_file():
         try:
@@ -1283,7 +1246,7 @@ async def reset_test_dir(
                 logger_name="autoskillit.reset_test_dir",
                 extra={"reason": "marker missing"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps(
             {
@@ -1329,7 +1292,7 @@ async def classify_fix(
             logger_name="autoskillit.classify_fix",
             extra={"worktree": worktree_path, "base": base_branch},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
 
     returncode, stdout, stderr = await _run_subprocess(
@@ -1345,13 +1308,13 @@ async def classify_fix(
                 logger_name="autoskillit.classify_fix",
                 extra={"worktree": worktree_path},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"git diff failed: {stderr}"})
 
     changed_files = [f.strip() for f in stdout.splitlines() if f.strip()]
 
-    prefixes = _config.classify_fix.path_prefixes
+    prefixes = _get_config().classify_fix.path_prefixes
     critical_files = [f for f in changed_files if any(f.startswith(prefix) for prefix in prefixes)]
 
     if critical_files:
@@ -1394,7 +1357,7 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
             logger_name="autoskillit.reset_workspace",
             extra={"resolved": resolved},
         )
-    except RuntimeError:
+    except (RuntimeError, AttributeError):
         pass
 
     if not os.path.isdir(resolved):
@@ -1404,11 +1367,11 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
                 logger_name="autoskillit.reset_workspace",
                 extra={"reason": "directory does not exist"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
-    marker_name = _config.safety.reset_guard_marker
+    marker_name = _get_config().safety.reset_guard_marker
     marker_path = Path(resolved) / marker_name
     if not marker_path.is_file():
         try:
@@ -1417,7 +1380,7 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
                 logger_name="autoskillit.reset_workspace",
                 extra={"reason": "marker missing"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps(
             {
@@ -1426,19 +1389,20 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
             }
         )
 
-    if _config.reset_workspace.command is None:
+    reset_cmd = _get_config().reset_workspace.command
+    if reset_cmd is None:
         try:
             await ctx.error(
                 "reset_workspace failed",
                 logger_name="autoskillit.reset_workspace",
                 extra={"reason": "not configured"},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": "reset_workspace not configured for this project"})
 
     returncode, stdout, stderr = await _run_subprocess(
-        _config.reset_workspace.command,
+        reset_cmd,
         cwd=resolved,
         timeout=60,
     )
@@ -1450,7 +1414,7 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
                 logger_name="autoskillit.reset_workspace",
                 extra={"reason": "reset command failed", "exit_code": returncode},
             )
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
             pass
         return json.dumps(
             {
@@ -1460,7 +1424,7 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
             }
         )
 
-    preserve = set(_config.reset_workspace.preserve_dirs) | {marker_name}
+    preserve = set(_get_config().reset_workspace.preserve_dirs) | {marker_name}
     cleanup = _delete_directory_contents(Path(resolved), preserve=preserve)
     return json.dumps(cleanup.to_dict())
 
@@ -1480,7 +1444,7 @@ async def kitchen_status() -> str:
         "package_version": info["package_version"],
         "plugin_json_version": info["plugin_json_version"],
         "versions_match": info["match"],
-        "tools_enabled": _tools_enabled,
+        "tools_enabled": _get_ctx().gate.enabled,
     }
     if not info["match"]:
         status["warning"] = (
@@ -1489,7 +1453,7 @@ async def kitchen_status() -> str:
             f"Run `autoskillit doctor` for details or "
             f"`autoskillit install` to refresh the plugin cache."
         )
-    status["token_usage_verbosity"] = _config.token_usage.verbosity
+    status["token_usage_verbosity"] = _get_config().token_usage.verbosity
     return json.dumps(status)
 
 
@@ -1508,9 +1472,9 @@ async def get_pipeline_report(clear: bool = False) -> str:
 
     This tool is always available (not gated by open_kitchen).
     """
-    report = _audit_log.get_report()
+    report = _get_ctx().audit.get_report()
     if clear:
-        _audit_log.clear()
+        _get_ctx().audit.clear()
     return json.dumps(
         {
             "total_failures": len(report),
@@ -1535,9 +1499,9 @@ async def get_token_summary(clear: bool = False) -> str:
     Args:
         clear: If True, reset the token log after returning current data.
     """
-    steps = _token_log.get_report()
+    steps = _get_ctx().token_log.get_report()
     if clear:
-        _token_log.clear()
+        _get_ctx().token_log.clear()
     total: dict[str, int] = {
         "input_tokens": sum(s["input_tokens"] for s in steps),
         "output_tokens": sum(s["output_tokens"] for s in steps),
@@ -1564,7 +1528,7 @@ async def list_recipes() -> str:
 
     This tool is always available (not gated by open_kitchen).
     """
-    from autoskillit.recipe_parser import list_recipes as _list_recipes
+    from autoskillit.recipe_io import list_recipes as _list_recipes
 
     result = _list_recipes(Path.cwd())
     response: dict[str, object] = {
@@ -1724,19 +1688,23 @@ async def load_recipe(name: str) -> str:
     import yaml
 
     from autoskillit._io import _load_yaml
-    from autoskillit.contract_validator import (
+    from autoskillit.recipe_io import _parse_recipe, find_recipe_by_name
+    from autoskillit.recipe_validator import (
         check_contract_staleness,
         generate_recipe_card,
         load_recipe_card,
+        run_semantic_rules,
         validate_recipe_cards,
     )
-    from autoskillit.recipe_parser import _parse_recipe, find_recipe_by_name
-    from autoskillit.semantic_rules import run_semantic_rules
 
     _match = find_recipe_by_name(name, Path.cwd())
     if _match is None:
         return json.dumps({"error": f"No recipe named '{name}' found"})
     content = _match.path.read_text()
+
+    # Resolve migration suppression list once before the try block.
+    # Ungated tool: gracefully handle missing context (e.g. tests without tool_ctx).
+    _migration_suppressed: list[str] = _ctx.config.migration.suppressed if _ctx is not None else []
 
     suggestions: list[dict[str, str]] = []
     try:
@@ -1746,7 +1714,7 @@ async def load_recipe(name: str) -> str:
 
             # --- Auto-migration block ---
             migrations = applicable_migrations(recipe.version, __version__)
-            if migrations and name not in _config.migration.suppressed:
+            if migrations and name not in _migration_suppressed:
                 project_dir = Path.cwd()
                 temp_dir = project_dir / ".autoskillit" / "temp"
                 recipes_dir = project_dir / ".autoskillit" / "recipes"
@@ -1800,7 +1768,7 @@ async def load_recipe(name: str) -> str:
             findings = run_semantic_rules(recipe)
             semantic_suggestions = [f.to_dict() for f in findings]
 
-            if name in _config.migration.suppressed:
+            if name in _migration_suppressed:
                 semantic_suggestions = [
                     s for s in semantic_suggestions if s.get("rule") != "outdated-recipe-version"
                 ]
@@ -1896,6 +1864,7 @@ async def load_recipe(name: str) -> str:
                 "message": f"File error: {exc}",
             }
         )
+    # Unexpected exceptions (AttributeError, RuntimeError, etc.) propagate uncaught
 
     return json.dumps({"content": content, "suggestions": suggestions})
 
@@ -1928,18 +1897,16 @@ async def validate_recipe(script_path: str) -> str:
     import yaml
 
     from autoskillit._io import _load_yaml
-    from autoskillit.contract_validator import (
+    from autoskillit.recipe_io import _parse_recipe
+    from autoskillit.recipe_validator import (
+        analyze_dataflow,
         load_recipe_card,
+        run_semantic_rules,
         validate_recipe_cards,
     )
-    from autoskillit.recipe_parser import (
-        _parse_recipe,
-        analyze_dataflow,
-    )
-    from autoskillit.recipe_parser import (
+    from autoskillit.recipe_validator import (
         validate_recipe as _validate_recipe,
     )
-    from autoskillit.semantic_rules import run_semantic_rules
     from autoskillit.types import Severity
 
     path = Path(script_path)
@@ -1999,20 +1966,20 @@ async def validate_recipe(script_path: str) -> str:
 
 def _open_kitchen_handler() -> None:
     """Set the tools-enabled flag. Extracted for testability."""
-    global _tools_enabled
-    _tools_enabled = True
+    _get_ctx().gate = GateState(enabled=True)
+    logger.info("open_kitchen", gate_state="open")
 
 
 def _close_kitchen_handler() -> None:
     """Clear the tools-enabled flag. Extracted for testability."""
-    global _tools_enabled
-    _tools_enabled = False
+    _get_ctx().gate = GateState(enabled=False)
+    logger.info("close_kitchen", gate_state="closed")
 
 
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
-    from autoskillit.recipe_parser import find_recipe_by_name
+    from autoskillit.recipe_io import find_recipe_by_name
 
     match = find_recipe_by_name(name, Path.cwd())
     if match is None:

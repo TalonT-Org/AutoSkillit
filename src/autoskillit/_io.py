@@ -49,3 +49,17 @@ def _load_yaml(source: os.PathLike[str] | str) -> Any:
         with open(source, "rb") as fh:  # binary: PyYAML handles UTF-8/BOM portably
             return yaml.safe_load(fh)
     return yaml.safe_load(source)
+
+
+def ensure_project_temp(project_dir: Path) -> Path:
+    """Ensure .autoskillit/temp/ exists with .gitignore.
+
+    Called defensively by any code that needs temp space. Idempotent.
+    """
+    autoskillit_dir = project_dir / ".autoskillit"
+    temp_dir = autoskillit_dir / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    gitignore_path = autoskillit_dir / ".gitignore"
+    if not gitignore_path.exists():
+        gitignore_path.write_text("temp/\n")
+    return temp_dir

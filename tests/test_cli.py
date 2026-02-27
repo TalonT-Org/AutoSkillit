@@ -329,17 +329,19 @@ class TestCLI:
         assert severities <= {"ok", "warning", "error"}
 
     def test_doctor_warns_version_mismatch(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+        tool_ctx,
     ) -> None:
         """doctor reports error when plugin.json version differs from package."""
-        from autoskillit import server
-
         plugin_dir = tmp_path / "fake_plugin" / ".claude-plugin"
         plugin_dir.mkdir(parents=True)
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path / "fake_plugin"))
+        tool_ctx.plugin_dir = str(tmp_path / "fake_plugin")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         cli.doctor(output_json=True)
@@ -411,17 +413,19 @@ class TestCLI:
         assert expected <= check_names
 
     def test_doctor_human_output_shows_severity(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+        tool_ctx,
     ) -> None:
         """doctor human output includes severity prefixes for problems."""
-        from autoskillit import server
-
         plugin_dir = tmp_path / "fake_plugin" / ".claude-plugin"
         plugin_dir.mkdir(parents=True)
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        monkeypatch.setattr(server, "_plugin_dir", str(tmp_path / "fake_plugin"))
+        tool_ctx.plugin_dir = str(tmp_path / "fake_plugin")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         cli.doctor()
@@ -1197,6 +1201,88 @@ class TestMigrateCommand:
         captured = capsys.readouterr()
         assert "old" in captured.out
         assert "Claude Code session" not in captured.out
+
+
+class TestEnsureProjectTemp:
+    """N5: ensure_project_temp moved from config.py to _io.py."""
+
+    def test_ensure_project_temp_importable_from_io(self):
+        from autoskillit._io import ensure_project_temp
+
+        assert callable(ensure_project_temp)
+
+    def test_ensure_project_temp_creates_temp_dir(self, tmp_path):
+        from autoskillit._io import ensure_project_temp
+
+        result = ensure_project_temp(tmp_path)
+        assert result == tmp_path / ".autoskillit" / "temp"
+        assert result.is_dir()
+
+    def test_ensure_project_temp_writes_gitignore(self, tmp_path):
+        from autoskillit._io import ensure_project_temp
+
+        ensure_project_temp(tmp_path)
+        gitignore = tmp_path / ".autoskillit" / ".gitignore"
+        assert gitignore.read_text() == "temp/\n"
+
+    def test_ensure_project_temp_is_idempotent(self, tmp_path):
+        from autoskillit._io import ensure_project_temp
+
+        ensure_project_temp(tmp_path)
+        ensure_project_temp(tmp_path)  # second call must not raise
+        assert (tmp_path / ".autoskillit" / "temp").is_dir()
+
+
+class TestServeStartupLog:
+    """N11: serve() logs startup info including resolved config path and test command."""
+
+    def test_serve_logs_startup_with_config_path(self, tmp_path, monkeypatch):
+        from unittest.mock import patch
+
+        import structlog.testing
+
+        import autoskillit.cli as cli_mod
+        import autoskillit.server as server_mod
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".autoskillit").mkdir()
+        (tmp_path / ".autoskillit" / "config.yaml").write_text(
+            "test_check:\n  command: [make, test]\n"
+        )
+
+        with (
+            patch.object(server_mod.mcp, "run"),
+            patch("autoskillit._logging.configure_logging"),
+            structlog.testing.capture_logs() as logs,
+        ):
+            cli_mod.serve()
+
+        startup = next((entry for entry in logs if entry.get("event") == "serve_startup"), None)
+        assert startup is not None
+        assert startup["test_check_command"] == ["make", "test"]
+        assert str(tmp_path / ".autoskillit" / "config.yaml") in startup["config_path"]
+
+    def test_serve_logs_startup_config_path_none_when_no_config(self, tmp_path, monkeypatch):
+        from unittest.mock import patch
+
+        import structlog.testing
+
+        import autoskillit.cli as cli_mod
+        import autoskillit.server as server_mod
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            patch.object(server_mod.mcp, "run"),
+            patch("autoskillit._logging.configure_logging"),
+            patch("autoskillit.cli.Path.home", return_value=tmp_path),
+            structlog.testing.capture_logs() as logs,
+        ):
+            cli_mod.serve()
+
+        startup = next((entry for entry in logs if entry.get("event") == "serve_startup"), None)
+        assert startup is not None
+        assert startup["config_path"] is None
 
 
 class TestSyncRemovalCLI:

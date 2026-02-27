@@ -219,7 +219,7 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 7: Script version health
     from autoskillit import __version__
     from autoskillit.failure_store import FailureStore, default_store_path
-    from autoskillit.recipe_parser import list_recipes as _list_all_recipes
+    from autoskillit.recipe_io import list_recipes as _list_all_recipes
     from autoskillit.types import RecipeSource
 
     _all_result = _list_all_recipes(Path.cwd())

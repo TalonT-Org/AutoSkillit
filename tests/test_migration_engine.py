@@ -18,10 +18,27 @@ from autoskillit.migration_engine import (
     default_migration_engine,
 )
 from autoskillit.migration_loader import MigrationChange, MigrationNote
+from autoskillit.session_result import SkillResult
+from autoskillit.types import RetryReason
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _make_skill_result(success: bool, result: str = "") -> SkillResult:
+    """Create a minimal SkillResult for testing headless return values."""
+    return SkillResult(
+        success=success,
+        result=result,
+        session_id="",
+        subtype="success" if success else "error",
+        is_error=not success,
+        exit_code=0 if success else 1,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+    )
 
 
 def _make_migration_note(
@@ -154,7 +171,7 @@ class TestRecipeMigrationAdapter:
             "autoskillit.migration_engine.applicable_migrations",
             lambda *a, **kw: [_make_migration_note()],
         )
-        mock_headless = AsyncMock(return_value={"success": True})
+        mock_headless = AsyncMock(return_value=_make_skill_result(True))
 
         adapter = RecipeMigrationAdapter()
         file = MigrationFile(
@@ -260,11 +277,11 @@ class TestContractMigrationAdapter:
         mock_contract = {"skill_hashes": {}}
         stale_item = Mock()
         monkeypatch.setattr(
-            "autoskillit.contract_validator.load_recipe_card",
+            "autoskillit.recipe_validator.load_recipe_card",
             lambda *a, **kw: mock_contract,
         )
         monkeypatch.setattr(
-            "autoskillit.contract_validator.check_contract_staleness",
+            "autoskillit.recipe_validator.check_contract_staleness",
             lambda *a, **kw: [stale_item],
         )
 
@@ -289,7 +306,7 @@ class TestContractMigrationAdapter:
         contract_path.write_text("skill_hashes: {}")
 
         monkeypatch.setattr(
-            "autoskillit.contract_validator.generate_recipe_card",
+            "autoskillit.recipe_validator.generate_recipe_card",
             lambda *a, **kw: {
                 "generated_at": "2026-01-01T00:00:00+00:00",
                 "bundled_manifest_version": "0.1.0",
@@ -388,7 +405,7 @@ class TestMigrationEngine:
             "autoskillit.migration_engine.applicable_migrations",
             lambda *a, **kw: [_make_migration_note()],
         )
-        mock_headless = AsyncMock(return_value={"success": True})
+        mock_headless = AsyncMock(return_value=_make_skill_result(True))
 
         file = MigrationFile(
             name="mypipe", path=recipe_path, file_type="recipe", current_version="0.0.1"
@@ -414,7 +431,7 @@ class TestMigrationEngine:
             lambda *a, **kw: [_make_migration_note()],
         )
         mock_headless = AsyncMock(
-            return_value={"success": False, "result": "headless session failed"}
+            return_value=_make_skill_result(False, "headless session failed")
         )
 
         file = MigrationFile(
@@ -443,7 +460,7 @@ class TestMigrationEngine:
             "autoskillit.migration_engine.applicable_migrations",
             lambda *a, **kw: [_make_migration_note()],
         )
-        mock_headless = AsyncMock(return_value={"success": True})
+        mock_headless = AsyncMock(return_value=_make_skill_result(True))
 
         file = MigrationFile(
             name="test", path=recipe_path, file_type="recipe", current_version="0.0.1"
@@ -513,7 +530,7 @@ class TestMigrateRecipesConstant:
             "autoskillit.migration_engine.applicable_migrations",
             lambda *a, **kw: [_make_migration_note()],
         )
-        mock_rh = AsyncMock(return_value={"success": False, "result": "boom"})
+        mock_rh = AsyncMock(return_value=_make_skill_result(False, "boom"))
         adapter = RecipeMigrationAdapter()
         file = MigrationFile(
             name="myrecipe",

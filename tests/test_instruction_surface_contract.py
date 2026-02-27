@@ -82,10 +82,10 @@ class TestServerToolSurfaceContract:
     """Server tool docstrings and prompts must name all forbidden tools."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, monkeypatch):
-        import autoskillit.server as srv
+    def _close_kitchen(self, tool_ctx):
+        from autoskillit._gate import GateState
 
-        monkeypatch.setattr(srv, "_tools_enabled", False)
+        tool_ctx.gate = GateState(enabled=False)
 
     def test_open_kitchen_prompt_names_all_forbidden_tools(self):
         """open_kitchen prompt text must name every forbidden tool with prohibition framing."""
@@ -134,10 +134,10 @@ class TestBundledWorkflowContract:
 
     def test_bundled_workflows_constraints_name_all_forbidden_tools(self):
         """All bundled workflow YAML files must name every forbidden tool in constraints."""
-        from autoskillit.recipe_parser import (
+        from autoskillit.recipe_io import (
             list_recipes as list_workflows,
         )
-        from autoskillit.recipe_parser import (
+        from autoskillit.recipe_io import (
             load_recipe as load_workflow,
         )
 

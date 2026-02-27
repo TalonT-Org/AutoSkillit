@@ -20,40 +20,15 @@ import sys
 import tempfile
 from collections.abc import Generator
 from contextlib import contextmanager
-from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 from typing import IO
 
 import psutil
 
 from autoskillit._logging import get_logger
+from autoskillit.types import SubprocessResult, TerminationReason
 
 logger = get_logger(__name__)
-
-
-class TerminationReason(StrEnum):
-    """How a managed subprocess ended.
-
-    Propagates termination provenance from run_managed_async to consumers,
-    replacing implicit inference from exit codes.
-    """
-
-    NATURAL_EXIT = "natural_exit"
-    COMPLETED = "completed"
-    STALE = "stale"
-    TIMED_OUT = "timed_out"
-
-
-@dataclass
-class SubprocessResult:
-    """Result from a managed subprocess execution."""
-
-    returncode: int
-    stdout: str
-    stderr: str
-    termination: TerminationReason
-    pid: int
 
 
 def kill_process_tree(pid: int, timeout: float = 2.0) -> None:
@@ -134,25 +109,6 @@ def _marker_is_standalone(text: str, marker: str) -> bool:
     return False
 
 
-def _extract_text_content(raw: object) -> str:
-    """Normalize Claude API content to plain text.
-
-    Handles the three shapes that appear in Claude CLI output:
-    - ``str``: plain text (returned as-is)
-    - ``list[dict]``: content blocks — joins ``text`` fields
-    - ``None`` / other: coerced to string (``None`` → ``""``)
-    """
-    if isinstance(raw, str):
-        return raw
-    if isinstance(raw, list):
-        return "\n".join(
-            block.get("text", "") if isinstance(block, dict) else str(block) for block in raw
-        )
-    if raw is None:
-        return ""
-    return str(raw)
-
-
 def _jsonl_contains_marker(
     content: str,
     marker: str,
@@ -191,7 +147,12 @@ def _jsonl_contains_marker(
         else:
             raw = " ".join(v for v in obj.values() if isinstance(v, str))
 
-        text = _extract_text_content(raw)
+        if isinstance(raw, list):
+            text = "\n".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in raw)
+        elif not isinstance(raw, str):
+            text = "" if raw is None else str(raw)
+        else:
+            text = raw
         if _marker_is_standalone(text, marker):
             return True
     return False
@@ -688,3 +649,34 @@ def run_managed_sync(
                     stdin_handle.close()
                 except OSError:
                     pass
+
+
+class RealSubprocessRunner:
+    """Implements SubprocessRunner protocol by delegating to run_managed_async."""
+
+    async def __call__(
+        self,
+        cmd: list[str],
+        *,
+        cwd: Path,
+        timeout: float,
+        heartbeat_marker: str = "",
+        stale_threshold: float = 1200,
+        completion_marker: str = "",
+        session_log_dir: Path | None = None,
+        pty_mode: bool = True,
+        input_data: str | None = None,
+        completion_drain_timeout: float = 5.0,
+    ) -> SubprocessResult:
+        return await run_managed_async(
+            cmd,
+            cwd=cwd,
+            timeout=timeout,
+            heartbeat_marker=heartbeat_marker if heartbeat_marker else None,
+            stale_threshold=stale_threshold,
+            completion_marker=completion_marker,
+            session_log_dir=session_log_dir,
+            pty_mode=pty_mode,
+            input_data=input_data,
+            completion_drain_timeout=completion_drain_timeout,
+        )

@@ -1,17 +1,19 @@
-"""NDJSON result-parsing for Claude Code headless sessions.
+"""Domain model for Claude Code headless session results.
 
-No MCP dependencies. Pure data extraction and typed result construction.
+L2 module: imports only from L0 (types, _logging). No server side-effects.
+Centralizes all session-parsing concerns so callers can work with typed
+objects instead of raw JSON strings.
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Self
+from enum import Enum
+from typing import Any
 
 from autoskillit._logging import get_logger
-from autoskillit.process_lifecycle import _extract_text_content
-from autoskillit.types import CONTEXT_EXHAUSTION_MARKER, RetryReason
+from autoskillit.types import CONTEXT_EXHAUSTION_MARKER, RetryReason, TerminationReason
 
 logger = get_logger(__name__)
 
@@ -21,6 +23,8 @@ _TOKEN_FIELDS = (
     "cache_creation_input_tokens",
     "cache_read_input_tokens",
 )
+
+_FAILURE_SUBTYPES = frozenset({"unknown", "empty_output", "unparseable", "timeout"})
 
 
 @dataclass
@@ -36,33 +40,18 @@ class ClaudeSessionResult:
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
-            self.result = _extract_text_content(self.result)
+            if isinstance(self.result, list):
+                self.result = "\n".join(
+                    b.get("text", "") if isinstance(b, dict) else str(b) for b in self.result
+                )
+            elif not isinstance(self.result, str):
+                self.result = "" if self.result is None else str(self.result)
         if not isinstance(self.errors, list):
             self.errors = [] if self.errors is None else [str(self.errors)]
         if not isinstance(self.subtype, str):
             self.subtype = "unknown" if self.subtype is None else str(self.subtype)
         if not isinstance(self.session_id, str):
             self.session_id = "" if self.session_id is None else str(self.session_id)
-
-    @classmethod
-    def from_result_dict(
-        cls,
-        result_obj: dict[str, Any],
-        token_usage: dict[str, Any] | None = None,
-    ) -> Self:
-        """Construct a ClaudeSessionResult from a parsed result JSON object.
-
-        Makes the field-mapping contract explicit. token_usage is extracted
-        separately by extract_token_usage() and passed by the caller.
-        """
-        return cls(
-            subtype=result_obj.get("subtype", "unknown"),
-            is_error=result_obj.get("is_error", False),
-            result=result_obj.get("result", ""),
-            session_id=result_obj.get("session_id", ""),
-            errors=list(result_obj.get("errors", [])),
-            token_usage=token_usage,
-        )
 
     def _is_context_exhausted(self) -> bool:
         """Detect context window exhaustion from Claude's error output.
@@ -125,12 +114,50 @@ class ClaudeSessionResult:
         return RetryReason.NONE
 
 
+@dataclass
+class SkillResult:
+    """Typed result returned by _build_skill_result and _run_headless_core."""
+
+    success: bool
+    result: str
+    session_id: str
+    subtype: str
+    is_error: bool
+    exit_code: int
+    needs_retry: bool
+    retry_reason: RetryReason
+    stderr: str
+    token_usage: dict[str, Any] | None = None
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "success": self.success,
+                "result": self.result,
+                "session_id": self.session_id,
+                "subtype": self.subtype,
+                "is_error": self.is_error,
+                "exit_code": self.exit_code,
+                "needs_retry": self.needs_retry,
+                "retry_reason": self.retry_reason,
+                "stderr": self.stderr,
+                "token_usage": self.token_usage,
+            },
+            default=lambda o: o.value if isinstance(o, Enum) else str(o),
+        )
+
+
 def extract_token_usage(stdout: str) -> dict[str, Any] | None:
     """Extract token usage from Claude CLI NDJSON output.
 
-    Scans assistant records for per-model usage and the result record
-    for authoritative aggregated totals.  Returns None if no usage
-    data is found.
+    Takes raw NDJSON *stdout* (not a parsed ClaudeSessionResult) because this
+    function is called inside parse_session_result() *during construction* of
+    ClaudeSessionResult — before that object exists. A (result: ClaudeSessionResult)
+    parameter would create a circular bootstrapping dependency and is therefore
+    architecturally incorrect for this call site.
+
+    Scans assistant records for per-model usage and the result record for
+    authoritative aggregated totals. Returns None if no usage data is found.
     """
     if not stdout.strip():
         return None
@@ -237,4 +264,79 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
             )
 
     token_usage = extract_token_usage(stdout)
-    return ClaudeSessionResult.from_result_dict(result_obj, token_usage=token_usage)
+
+    return ClaudeSessionResult(
+        subtype=result_obj.get("subtype", "unknown"),
+        is_error=result_obj.get("is_error", False),
+        result=result_obj.get("result", ""),
+        session_id=result_obj.get("session_id", ""),
+        errors=result_obj.get("errors", []),
+        token_usage=token_usage,
+    )
+
+
+def _compute_success(
+    session: ClaudeSessionResult,
+    returncode: int,
+    termination: TerminationReason,
+    completion_marker: str = "",
+) -> bool:
+    """Cross-validate all signals to determine unambiguous success/failure."""
+    if termination in (TerminationReason.TIMED_OUT, TerminationReason.STALE):
+        return False
+    if returncode != 0:
+        # COMPLETED path: the process was killed by our own async_kill_process_tree
+        # (signal -15 or -9), so a non-zero returncode is expected and trustworthy
+        # when the session envelope says "success". Trust the envelope.
+        #
+        # NATURAL_EXIT path: the process exited on its own with an error code.
+        # We cannot distinguish PTY-masking quirks from genuine CLI errors here,
+        # so we fail conservatively. The session result record (if any) may still
+        # be present in stdout — but a non-zero natural exit is treated as authoritative
+        # evidence of failure. No asymmetric bypass is applied.
+        if (
+            termination == TerminationReason.COMPLETED
+            and session.subtype == "success"
+            and session.result.strip()
+        ):
+            pass  # fall through to remaining checks
+        else:
+            return False
+    if session.is_error:
+        return False
+    if not session.result.strip():
+        return False
+    if session.subtype in _FAILURE_SUBTYPES:
+        return False
+
+    if completion_marker:
+        result_text = session.result.strip()
+        marker_stripped = result_text.replace(completion_marker, "").strip()
+        if not marker_stripped:
+            return False
+        if completion_marker not in result_text:
+            return False
+
+    return True
+
+
+def _compute_retry(
+    session: ClaudeSessionResult,
+    returncode: int,
+    termination: TerminationReason,
+) -> tuple[bool, RetryReason]:
+    """Cross-validate all signals to determine retry eligibility."""
+    # API-level retries (session knew it should be retried)
+    if session.needs_retry:
+        return True, RetryReason.RESUME
+
+    # Infrastructure failure: session never ran (empty stdout, clean exit)
+    if session.subtype == "empty_output" and returncode == 0:
+        return True, RetryReason.RESUME
+
+    # unparseable output under COMPLETED means the process was killed mid-write
+    # (drain timeout expired). The session likely completed; retry with resume.
+    if session.subtype == "unparseable" and termination == TerminationReason.COMPLETED:
+        return True, RetryReason.RESUME
+
+    return False, RetryReason.NONE

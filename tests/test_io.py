@@ -45,7 +45,7 @@ def test_load_yaml_path_reads_utf8(tmp_path):
     from autoskillit._io import _load_yaml
 
     p = tmp_path / "u.yaml"
-    p.write_bytes("emoji: \xc3\xa9\n")  # UTF-8 é
+    p.write_bytes(b"emoji: \xc3\xa9\n")  # UTF-8 é
     result = _load_yaml(p)
     assert result["emoji"] == "é"
 

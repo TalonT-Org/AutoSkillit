@@ -1207,26 +1207,26 @@ class TestEnsureProjectTemp:
     """N5: ensure_project_temp moved from config.py to _io.py."""
 
     def test_ensure_project_temp_importable_from_io(self):
-        from autoskillit._io import ensure_project_temp
+        from autoskillit.core.io import ensure_project_temp
 
         assert callable(ensure_project_temp)
 
     def test_ensure_project_temp_creates_temp_dir(self, tmp_path):
-        from autoskillit._io import ensure_project_temp
+        from autoskillit.core.io import ensure_project_temp
 
         result = ensure_project_temp(tmp_path)
         assert result == tmp_path / ".autoskillit" / "temp"
         assert result.is_dir()
 
     def test_ensure_project_temp_writes_gitignore(self, tmp_path):
-        from autoskillit._io import ensure_project_temp
+        from autoskillit.core.io import ensure_project_temp
 
         ensure_project_temp(tmp_path)
         gitignore = tmp_path / ".autoskillit" / ".gitignore"
         assert gitignore.read_text() == "temp/\n"
 
     def test_ensure_project_temp_is_idempotent(self, tmp_path):
-        from autoskillit._io import ensure_project_temp
+        from autoskillit.core.io import ensure_project_temp
 
         ensure_project_temp(tmp_path)
         ensure_project_temp(tmp_path)  # second call must not raise
@@ -1326,7 +1326,7 @@ class TestGroupFRefactoring:
 
     def test_upgrade_uses_atomic_write(self, tmp_path, monkeypatch):
         """upgrade() must call _io._atomic_write, not yaml_file.write_text."""
-        from autoskillit import _io
+        from autoskillit.core import io as _io
 
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"

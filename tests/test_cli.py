@@ -1252,7 +1252,7 @@ class TestServeStartupLog:
 
         with (
             patch.object(server_mod.mcp, "run"),
-            patch("autoskillit._logging.configure_logging"),
+            patch("autoskillit.core.logging.configure_logging"),
             structlog.testing.capture_logs() as logs,
         ):
             cli_mod.serve()
@@ -1274,7 +1274,7 @@ class TestServeStartupLog:
 
         with (
             patch.object(server_mod.mcp, "run"),
-            patch("autoskillit._logging.configure_logging"),
+            patch("autoskillit.core.logging.configure_logging"),
             patch("autoskillit.cli.Path.home", return_value=tmp_path),
             structlog.testing.capture_logs() as logs,
         ):

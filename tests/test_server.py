@@ -1016,13 +1016,13 @@ class TestLoadRecipeExceptionHandling:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """yaml.YAMLError is caught and returned as an error suggestion."""
-        from autoskillit._yaml import YAMLError
+        from autoskillit.core.io import YAMLError
 
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         (recipes_dir / "test.yaml").write_text("name: test\n")
-        with patch("autoskillit._yaml.load_yaml", side_effect=YAMLError("bad yaml")):
+        with patch("autoskillit.core.io.load_yaml", side_effect=YAMLError("bad yaml")):
             result = json.loads(await load_recipe(name="test"))
         assert "error" not in result
         assert any(
@@ -2939,7 +2939,7 @@ class TestDeleteDirectoryContents:
                 raise PermissionError("Permission denied")
             real_rmtree(path, *args, **kwargs)
 
-        with patch("autoskillit.workspace.shutil.rmtree", side_effect=selective_rmtree):
+        with patch("autoskillit.workspace.cleanup.shutil.rmtree", side_effect=selective_rmtree):
             result = _delete_directory_contents(target)
 
         assert "dir_a" in result.deleted

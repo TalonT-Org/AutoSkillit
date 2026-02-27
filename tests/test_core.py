@@ -99,6 +99,8 @@ def test_core_modules_have_no_intra_package_imports():
     """Verify core/ sub-modules import nothing from autoskillit.*."""
     core_dir = Path(__file__).parent.parent / "src" / "autoskillit" / "core"
     for py_file in core_dir.glob("*.py"):
+        if py_file.name == "__init__.py":
+            continue
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):

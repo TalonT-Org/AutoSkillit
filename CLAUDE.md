@@ -82,6 +82,8 @@ src/autoskillit/
 ├── config.py                # Dataclass config + YAML loading (layered resolution)
 ├── db_tools.py              # Read-only SQLite execution with defence-in-depth
 ├── failure_store.py         # Migration failure persistence (JSON, atomic writes)
+├── git_operations.py        # Git merge workflow for merge_worktree (L3 service)
+├── headless_runner.py       # Headless Claude session orchestration (L3 service)
 ├── migration_engine.py      # Migration orchestration — engine + adapters (Layer B)
 ├── migration_loader.py      # Migration note discovery and version chaining
 ├── process_lifecycle.py     # Subprocess management (kill trees, temp I/O, timeouts)
@@ -90,8 +92,9 @@ src/autoskillit/
 ├── recipe_schema.py         # Recipe, RecipeStep, DataFlowWarning, AUTOSKILLIT_VERSION_KEY
 ├── recipe_validator.py      # validate_recipe, run_semantic_rules, generate_recipe_card, analyze_dataflow
 ├── server.py                # FastMCP server with 16 MCP tools + 2 prompts
-├── session_result.py        # ClaudeSessionResult, SkillResult, _compute_success, _compute_retry, extract_token_usage
+├── session_result.py        # ClaudeSessionResult, SkillResult, _compute_success, _compute_retry, _truncate, extract_token_usage
 ├── skill_resolver.py        # Bundled skill listing
+├── test_runner.py           # Pytest output parsing and pass/fail adjudication (L3 service)
 ├── types.py                 # Shared type contracts: StrEnums, constants, generics
 ├── version.py               # Version health utilities (Layer 0)
 ├── workspace.py             # Directory teardown utilities (CleanupResult, preserve list)
@@ -171,6 +174,9 @@ temp/                        # Temporary/working files (gitignored)
   * **types.py**: Cross-cutting type contracts layer. StrEnum discriminators (`RetryReason`, `MergeFailedStep`, `MergeState`, `RestartScope`, `SkillSource`, `RecipeSource`, `Severity`) and canonical constants (`CONTEXT_EXHAUSTION_MARKER`, `PIPELINE_FORBIDDEN_TOOLS`, `SKILL_TOOLS`, `RETRY_RESPONSE_FIELDS`). Generic result wrappers (`LoadReport`, `LoadResult`). Zero autoskillit dependencies.
   * **_io.py**: Infrastructure layer filesystem primitives. Two functions: `_atomic_write(path, content)` (crash-safe write via temp file + `os.replace`) and `_load_yaml(source)` (path-or-string YAML loader in binary mode for portable UTF-8 handling). Zero autoskillit dependencies. Imported by failure_store.py, migration_loader.py, recipe_io.py, recipe_loader.py, and migration_engine.py.
   * **failure_store.py**: Persistence layer for migration failure tracking. `FailureStore` persists `MigrationFailure` records to `.autoskillit/temp/migrations/failures.json` via atomic writes (`_io.py`). `record_from_skill()` is the `run_python` entry point invoked by the migrate-recipes skill when retries are exhausted. Depends on `_io.py`. Imported by migration_engine.py and `_doctor.py`.
+  * **git_operations.py**: L3 service module for the git merge workflow. `perform_merge(worktree_path, base_branch, *, config, runner)` executes the full merge pipeline: path validation → worktree verification → branch detection → test gate → fetch → rebase → main-repo merge → worktree cleanup. Uses injected `SubprocessRunner` so existing test mocks apply unchanged. Depends on `test_runner`, `session_result._truncate`, `_logging`, `config`, `types`. Imported by server.py.
+  * **headless_runner.py**: L3 service module for headless Claude Code session orchestration. `run_headless_core(skill_command, cwd, ctx, *, model, step_name, add_dir, timeout, stale_threshold)` is the single public entry point shared by `run_skill` and `run_skill_retry`. Contains `_build_skill_result`, `_resolve_model`, `_ensure_skill_prefix`, `_inject_completion_directive`, `_session_log_dir`, and `_capture_failure`. Depends on `session_result`, `_context`, `_audit`, `_logging`, `types`. Imported by server.py.
+  * **test_runner.py**: L3 service module for pytest output parsing and pass/fail adjudication. `parse_pytest_summary(stdout)` extracts structured outcome counts from `=`-delimited summary lines. `check_test_passed(returncode, stdout)` cross-validates exit code against output for defense against PIPESTATUS bugs. Depends only on `_logging`. Used by server.py `test_check` tool and `git_operations.py` merge test gate.
   * **migration_engine.py**: Orchestration layer for recipe and contract migration. Layer B domain logic — no FastMCP dependency, imported by server.py at module level. `MigrationEngine` dispatches to registered adapters: `RecipeMigrationAdapter` (LLM-driven via headless Claude session) and `ContractMigrationAdapter` (deterministic contract regeneration). ABC hierarchy: `MigrationAdapter` → `HeadlessMigrationAdapter` / `DeterministicMigrationAdapter`. `default_migration_engine()` factory builds the standard adapter set.
   * **migration_loader.py**: Data access layer for the migration version graph. Discovers and parses versioned migration YAML files from the bundled `migrations/` package directory. `list_migrations()` enumerates all notes; `applicable_migrations(script_version, installed_version)` chains applicable notes from the script's current version to the installed version using semver ordering. Depends on `_io.py` and `packaging`. Imported by `migration_engine.py`.
   * **db_tools.py**: Data access layer: read-only SQLite execution with defence-in-depth. Regex pre-validation rejects non-SELECT queries; OS-level `file:...?mode=ro` connection; `set_authorizer` callback blocks any non-SELECT/READ/FUNCTION engine operation. `_execute_readonly_query` is the main entry point. Depends only on `_logging.py`. Imported by server.py.

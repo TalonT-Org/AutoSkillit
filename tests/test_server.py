@@ -26,18 +26,19 @@ from autoskillit.config import (
     TokenUsageConfig,
 )
 from autoskillit.db_tools import _select_only_authorizer, _validate_select_only
+from autoskillit.headless_runner import (
+    _build_skill_result,
+    _ensure_skill_prefix,
+    _resolve_model,
+    _session_log_dir,
+)
 from autoskillit.process_lifecycle import SubprocessResult
 from autoskillit.server import (
-    _build_skill_result,
     _check_dry_walkthrough,
     _close_kitchen_handler,
-    _ensure_skill_prefix,
     _open_kitchen_handler,
-    _parse_pytest_summary,
     _require_enabled,
-    _resolve_model,
     _run_subprocess,
-    _session_log_dir,
     classify_fix,
     get_pipeline_report,
     get_token_summary,
@@ -64,6 +65,7 @@ from autoskillit.session_result import (
     extract_token_usage,
     parse_session_result,
 )
+from autoskillit.test_runner import parse_pytest_summary as _parse_pytest_summary
 from autoskillit.types import (
     CONTEXT_EXHAUSTION_MARKER,
     RETRY_RESPONSE_FIELDS,
@@ -4871,7 +4873,9 @@ class TestBuildSkillResultCompleted:
             stdout=stdout,
             termination_reason=TerminationReason.COMPLETED,
         )
-        _build_skill_result(result, completion_marker="", skill_command="/test")
+        _build_skill_result(
+            result, completion_marker="", skill_command="/test", audit=tool_ctx.audit
+        )
         report = tool_ctx.audit.get_report()
         assert len(report) == 1
         assert report[0].subtype == "success"
@@ -4900,7 +4904,7 @@ class TestRunSkillRetryConsolidation:
             stderr="",
         )
         mock_core = AsyncMock(return_value=mock_result)
-        with patch("autoskillit.server._run_headless_core", mock_core):
+        with patch("autoskillit.server.run_headless_core", mock_core):
             await run_skill_retry("/investigate something", "/tmp", add_dir="/extra/dir")
 
         assert mock_core.call_args.kwargs.get("add_dir") == "/extra/dir"
@@ -4920,7 +4924,7 @@ class TestRunSkillRetryConsolidation:
             stderr="",
         )
         mock_core = AsyncMock(return_value=mock_result)
-        with patch("autoskillit.server._run_headless_core", mock_core):
+        with patch("autoskillit.server.run_headless_core", mock_core):
             await run_skill_retry("/investigate something", "/tmp")
 
         assert mock_core.call_args.kwargs.get("timeout") == 7200
@@ -5201,22 +5205,22 @@ class TestResolveModel:
     # MOD_R1
     def test_resolve_model_override_wins(self):
         self._set_model_config(override="haiku")
-        assert _resolve_model("sonnet") == "haiku"
+        assert _resolve_model("sonnet", self._tool_ctx.config) == "haiku"
 
     # MOD_R2
     def test_resolve_model_step_model(self):
         self._set_model_config()
-        assert _resolve_model("sonnet") == "sonnet"
+        assert _resolve_model("sonnet", self._tool_ctx.config) == "sonnet"
 
     # MOD_R3
     def test_resolve_model_config_default(self):
         self._set_model_config(default="haiku")
-        assert _resolve_model("") == "haiku"
+        assert _resolve_model("", self._tool_ctx.config) == "haiku"
 
     # MOD_R4
     def test_resolve_model_nothing_set(self):
         self._set_model_config()
-        assert _resolve_model("") is None
+        assert _resolve_model("", self._tool_ctx.config) is None
 
 
 # ---------------------------------------------------------------------------
@@ -5318,7 +5322,7 @@ class TestMigrationSuppression:
                 stderr="",
             )
         )
-        with patch("autoskillit.server._run_headless_core", mock_headless):
+        with patch("autoskillit.server.run_headless_core", mock_headless):
             result = json.loads(await load_recipe(name="test-script"))
 
         assert "suggestions" in result
@@ -5423,7 +5427,7 @@ class TestLoadRecipeAutoMigration:
                 stderr="",
             )
         )
-        with patch("autoskillit.server._run_headless_core", mock_headless):
+        with patch("autoskillit.server.run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
         mock_headless.assert_awaited_once()
@@ -5448,7 +5452,7 @@ class TestLoadRecipeAutoMigration:
                 stderr="",
             )
         )
-        with patch("autoskillit.server._run_headless_core", mock_headless):
+        with patch("autoskillit.server.run_headless_core", mock_headless):
             result = json.loads(await load_recipe(name="test-script"))
 
         assert "content" in result
@@ -5474,7 +5478,7 @@ class TestLoadRecipeAutoMigration:
                 stderr="",
             )
         )
-        with patch("autoskillit.server._run_headless_core", mock_headless):
+        with patch("autoskillit.server.run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
         assert ctx["recipe_path"].read_text() == ctx["migrated_content"]
@@ -5513,7 +5517,7 @@ class TestLoadRecipeAutoMigration:
                 stderr="",
             )
         )
-        with patch("autoskillit.server._run_headless_core", mock_headless):
+        with patch("autoskillit.server.run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
         # Reload the store from disk to get the post-migration state
@@ -5541,7 +5545,7 @@ class TestLoadRecipeAutoMigration:
                 stderr="",
             )
         )
-        with patch("autoskillit.server._run_headless_core", mock_headless):
+        with patch("autoskillit.server.run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
         store = FailureStore(default_store_path(tmp_path))
@@ -5566,7 +5570,7 @@ class TestLoadRecipeAutoMigration:
                 stderr="",
             )
         )
-        with patch("autoskillit.server._run_headless_core", mock_headless):
+        with patch("autoskillit.server.run_headless_core", mock_headless):
             result = json.loads(await load_recipe(name="test-script"))
 
         migration_failed = [
@@ -5594,7 +5598,7 @@ class TestLoadRecipeAutoMigration:
                 stderr="",
             )
         )
-        with patch("autoskillit.server._run_headless_core", mock_headless):
+        with patch("autoskillit.server.run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
         mock_headless.assert_not_called()
@@ -5633,7 +5637,7 @@ class TestLoadRecipeAutoMigration:
                 stderr="",
             )
         )
-        with patch("autoskillit.server._run_headless_core", mock_headless):
+        with patch("autoskillit.server.run_headless_core", mock_headless):
             await load_recipe(name="test-script")
 
         mock_headless.assert_not_called()
@@ -5660,7 +5664,7 @@ class TestLoadRecipeAutoMigration:
                 stderr="",
             )
         )
-        with patch("autoskillit.server._run_headless_core", mock_headless):
+        with patch("autoskillit.server.run_headless_core", mock_headless):
             result = json.loads(await load_recipe(name="test-script"))
 
         migration_warnings = [
@@ -6110,38 +6114,40 @@ class TestFailureCaptureInBuildSkillResult:
 
     def test_captures_non_zero_exit_code(self, tool_ctx):
         result = _make_result(returncode=1, stdout=_failed_session_json())
-        _build_skill_result(result, skill_command="/test:cmd")
+        _build_skill_result(result, skill_command="/test:cmd", audit=tool_ctx.audit)
         assert len(tool_ctx.audit.get_report()) == 1
 
     def test_does_not_capture_clean_success(self, tool_ctx):
         result = _make_result(returncode=0, stdout=_success_session_json("done"))
-        _build_skill_result(result, skill_command="/test:cmd")
+        _build_skill_result(result, skill_command="/test:cmd", audit=tool_ctx.audit)
         assert tool_ctx.audit.get_report() == []
 
     def test_captured_record_has_correct_skill_command(self, tool_ctx):
         result = _make_result(returncode=1, stdout=_failed_session_json())
-        _build_skill_result(result, skill_command="/autoskillit:implement-worktree")
+        _build_skill_result(
+            result, skill_command="/autoskillit:implement-worktree", audit=tool_ctx.audit
+        )
         assert tool_ctx.audit.get_report()[0].skill_command == "/autoskillit:implement-worktree"
 
     def test_captured_record_has_timestamp(self, tool_ctx):
         from datetime import datetime
 
         result = _make_result(returncode=1, stdout=_failed_session_json())
-        _build_skill_result(result, skill_command="/test")
+        _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
         record = tool_ctx.audit.get_report()[0]
         assert record.timestamp  # non-empty ISO timestamp
         datetime.fromisoformat(record.timestamp)  # must parse as ISO
 
     def test_stale_termination_is_captured(self, tool_ctx):
         result = _make_result(returncode=0, termination_reason=TerminationReason.STALE)
-        _build_skill_result(result, skill_command="/test")
+        _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
         report = tool_ctx.audit.get_report()
         assert len(report) == 1
         assert report[0].subtype == "stale"
 
     def test_needs_retry_is_captured(self, tool_ctx):
         result = _make_result(returncode=1, stdout=_context_exhausted_session_json())
-        _build_skill_result(result, skill_command="/test")
+        _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
         report = tool_ctx.audit.get_report()
         assert len(report) == 1
         assert report[0].needs_retry is True
@@ -6149,7 +6155,7 @@ class TestFailureCaptureInBuildSkillResult:
     def test_stderr_truncated_to_500_chars(self, tool_ctx):
         long_stderr = "e" * 2000
         result = _make_result(returncode=1, stderr=long_stderr, stdout=_failed_session_json())
-        _build_skill_result(result, skill_command="/test")
+        _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
         assert len(tool_ctx.audit.get_report()[0].stderr) <= 500
 
 
@@ -6625,7 +6631,7 @@ class TestLoadRecipeMigrationPath:
             )
         )
 
-        with patch("autoskillit.server._run_headless_core", mock_headless):
+        with patch("autoskillit.server.run_headless_core", mock_headless):
             result = json.loads(await load_recipe(name="test-script"))
 
         # Recipe content must still be returned despite migration failure

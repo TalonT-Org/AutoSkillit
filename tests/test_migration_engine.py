@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from autoskillit.types import RetryReason
 
 from autoskillit.migration_engine import (
     MIGRATE_RECIPES_MAX_RETRIES,
@@ -19,7 +20,6 @@ from autoskillit.migration_engine import (
 )
 from autoskillit.migration_loader import MigrationChange, MigrationNote
 from autoskillit.session_result import SkillResult
-from autoskillit.types import RetryReason
 
 # ---------------------------------------------------------------------------
 # Helpers

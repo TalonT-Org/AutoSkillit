@@ -12,7 +12,6 @@ import re
 from pathlib import Path
 
 import pytest
-
 from autoskillit.types import PIPELINE_FORBIDDEN_TOOLS
 
 

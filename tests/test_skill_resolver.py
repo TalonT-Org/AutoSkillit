@@ -6,9 +6,9 @@ import re
 from pathlib import Path
 
 import yaml
+from autoskillit.types import SkillSource
 
 from autoskillit.skill_resolver import SkillResolver, bundled_skills_dir
-from autoskillit.types import SkillSource
 
 BUNDLED_SKILLS = [
     "assess-and-merge",

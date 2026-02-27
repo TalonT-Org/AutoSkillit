@@ -19,6 +19,7 @@ from unittest.mock import Mock, patch
 
 import psutil
 import pytest
+from autoskillit.types import TerminationReason
 
 from autoskillit.process_lifecycle import (
     _has_active_api_connection,
@@ -33,7 +34,6 @@ from autoskillit.process_lifecycle import (
     run_managed_async,
     run_managed_sync,
 )
-from autoskillit.types import TerminationReason
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
@@ -1560,8 +1560,9 @@ class TestSubprocessResultAndRunnerTypes:
 
     def test_subprocess_runner_protocol_satisfied_by_real(self):
         """RealSubprocessRunner satisfies the SubprocessRunner protocol."""
-        from autoskillit.process_lifecycle import RealSubprocessRunner
         from autoskillit.types import SubprocessRunner
+
+        from autoskillit.process_lifecycle import RealSubprocessRunner
 
         runner = RealSubprocessRunner()
         assert isinstance(runner, SubprocessRunner)

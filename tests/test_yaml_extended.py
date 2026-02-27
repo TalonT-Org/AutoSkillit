@@ -32,7 +32,6 @@ class TestLoadYamlExtended:
 
     def test_yaml_error_reexport_is_pyyaml_error(self):
         import yaml
-
         from autoskillit._yaml import YAMLError
 
         assert YAMLError is yaml.YAMLError

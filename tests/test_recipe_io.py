@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from autoskillit.types import RecipeSource
 
 from autoskillit.recipe_io import (
     _parse_recipe,
@@ -22,7 +23,6 @@ from autoskillit.recipe_schema import (
     RecipeStep,
     StepResultRoute,
 )
-from autoskillit.types import RecipeSource
 
 VALID_RECIPE = {
     "name": "test-recipe",

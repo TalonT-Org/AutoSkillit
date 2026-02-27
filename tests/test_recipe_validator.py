@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from autoskillit.types import RETRY_RESPONSE_FIELDS
 
 from autoskillit.recipe_io import (
     _parse_recipe,
@@ -30,7 +31,6 @@ from autoskillit.recipe_validator import (
     validate_recipe,
     validate_recipe_cards,
 )
-from autoskillit.types import RETRY_RESPONSE_FIELDS
 
 # ---------------------------------------------------------------------------
 # Importability assertions

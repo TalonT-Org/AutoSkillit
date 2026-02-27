@@ -12,6 +12,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import structlog.contextvars
 import structlog.testing
+from autoskillit.types import (
+    CONTEXT_EXHAUSTION_MARKER,
+    RETRY_RESPONSE_FIELDS,
+    MergeFailedStep,
+    MergeState,
+    RestartScope,
+    RetryReason,
+    TerminationReason,
+)
 
 from autoskillit._audit import FailureRecord
 from autoskillit._gate import GATED_TOOLS, UNGATED_TOOLS, GateState
@@ -67,15 +76,6 @@ from autoskillit.session_result import (
     parse_session_result,
 )
 from autoskillit.test_runner import parse_pytest_summary as _parse_pytest_summary
-from autoskillit.types import (
-    CONTEXT_EXHAUSTION_MARKER,
-    RETRY_RESPONSE_FIELDS,
-    MergeFailedStep,
-    MergeState,
-    RestartScope,
-    RetryReason,
-    TerminationReason,
-)
 from autoskillit.workspace import CleanupResult, _delete_directory_contents
 
 test_check.__test__ = False  # type: ignore[attr-defined]
@@ -773,8 +773,9 @@ class TestRecipeTools:
     @patch("autoskillit.recipe_io.list_recipes")
     async def test_list_returns_json_object(self, mock_list):
         """list_recipes returns JSON object with scripts array (not gated)."""
-        from autoskillit.recipe_schema import RecipeInfo
         from autoskillit.types import LoadResult, RecipeSource
+
+        from autoskillit.recipe_schema import RecipeInfo
 
         mock_list.return_value = LoadResult(
             items=[
@@ -1035,8 +1036,9 @@ class TestLoadRecipeExceptionHandling:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """ValueError (malformed recipe structure) is caught and returned as error suggestion."""
-        from autoskillit.recipe_schema import RecipeInfo
         from autoskillit.types import RecipeSource
+
+        from autoskillit.recipe_schema import RecipeInfo
 
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"

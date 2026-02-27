@@ -8,6 +8,11 @@ from __future__ import annotations
 import json
 
 import structlog
+from autoskillit.types import (
+    CONTEXT_EXHAUSTION_MARKER,
+    RetryReason,
+    TerminationReason,
+)
 
 from autoskillit.session_result import (
     ClaudeSessionResult,
@@ -16,11 +21,6 @@ from autoskillit.session_result import (
     _compute_success,
     extract_token_usage,
     parse_session_result,
-)
-from autoskillit.types import (
-    CONTEXT_EXHAUSTION_MARKER,
-    RetryReason,
-    TerminationReason,
 )
 
 # ---------------------------------------------------------------------------

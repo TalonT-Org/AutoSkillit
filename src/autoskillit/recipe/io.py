@@ -124,9 +124,12 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
     retry = None
     retry_data = data.get("retry")
     if isinstance(retry_data, dict):
+        # YAML 1.1 parsers (yaml.safe_load) interpret bare 'on' as boolean True.
+        # Normalise: prefer string key "on", fall back to boolean True key.
+        on_value = retry_data.get("on") if "on" in retry_data else retry_data.get(True)
         retry = StepRetry(
             max_attempts=retry_data.get("max_attempts", 3),
-            on=retry_data.get("on"),
+            on=on_value,
             on_exhausted=retry_data.get("on_exhausted", "escalate"),
         )
 

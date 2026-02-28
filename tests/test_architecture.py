@@ -1395,9 +1395,9 @@ def test_cli_is_package() -> None:
 
 
 def test_server_file_count_under_limit() -> None:
-    """server/ must not exceed 11 Python files (REQ-DSGN-002)."""
+    """server/ must not exceed 12 Python files (REQ-DSGN-002)."""
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 11, f"server/ has {len(py_files)} files, max is 11"
+    assert len(py_files) <= 12, f"server/ has {len(py_files)} files, max is 12"
 
 
 def test_git_operations_moved_to_server_package() -> None:

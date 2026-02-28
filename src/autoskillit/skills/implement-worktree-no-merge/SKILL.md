@@ -57,9 +57,18 @@ The worktree is left intact for the orchestrator to test and merge separately.
 ### Step 1: Create Git Worktree
 
 ```bash
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 WORKTREE_NAME="impl-{plan_name}-$(date +%Y%m%d-%H%M%S)"
 WORKTREE_PATH="../worktrees/${WORKTREE_NAME}"
 git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
+
+# Record the base branch in two ways for reliable discovery by retry-worktree:
+# 1) Write an explicit file store (works with any Git version, works offline)
+mkdir -p ".autoskillit/temp/worktrees/${WORKTREE_NAME}"
+echo "${CURRENT_BRANCH}" > ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch"
+# 2) Set git upstream tracking (requires remote tracking ref in local fetch cache)
+git fetch origin "${CURRENT_BRANCH}" 2>/dev/null || true
+git -C "${WORKTREE_PATH}" branch --set-upstream-to="origin/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null || true
 ```
 
 ### Step 1.5: Initialize Code Index for Original Project

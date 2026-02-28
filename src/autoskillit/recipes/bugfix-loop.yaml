@@ -86,7 +86,7 @@ steps:
     tool: run_skill_retry
     with:
       skill_command: "/autoskillit:retry-worktree the plan ${{ context.worktree_path }}"
-      cwd: ${{ inputs.helper_dir }}
+      cwd: "${{ context.worktree_path }}"
       step_name: "retry_worktree"
     capture:
       worktree_path: "${{ result.worktree_path }}"
@@ -110,7 +110,7 @@ steps:
     model: sonnet
     with:
       skill_command: "/autoskillit:assess-and-merge fix test failures"
-      cwd: ${{ inputs.helper_dir }}
+      cwd: "${{ context.worktree_path }}"
       step_name: "assess"
     on_success: verify
     on_failure: classify

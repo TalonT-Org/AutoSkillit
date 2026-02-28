@@ -41,6 +41,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Blame test failures on "pre-existing issues" — ALL tests must pass
 - Re-run tests just to see failures — grep the saved output file instead
 - Pipe test output through `tail`, `head`, or other truncation commands — `tail -N` buffers the entire stream and produces no output if the process is killed before EOF
+- Default to `main` as the base branch — always discover it from git's upstream structure or the explicit base-branch store file
 
 **ALWAYS:**
 - Use the provided worktree path (do NOT create a new one)
@@ -66,12 +67,39 @@ If the environment is missing or broken:
 
 ### Step 1: Assess Current State
 
+Discover the base branch from git's upstream tracking (primary) or the explicit
+base-branch store file written by `implement-worktree-no-merge` (fallback).
+
+```bash
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# Primary: read upstream tracking set by implement-worktree-no-merge
+BASE_BRANCH=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null | sed 's|origin/||')
+
+if [ -z "$BASE_BRANCH" ]; then
+    # Fallback: read explicit file store written by implement-worktree-no-merge
+    MAIN_GIT_DIR=$(git rev-parse --git-common-dir)
+    MAIN_REPO_ROOT=$(dirname "${MAIN_GIT_DIR}")
+    STORE_FILE="${MAIN_REPO_ROOT}/.autoskillit/temp/worktrees/${CURRENT_BRANCH}/base-branch"
+    BASE_BRANCH=$(cat "${STORE_FILE}" 2>/dev/null)
+fi
+
+if [ -z "$BASE_BRANCH" ]; then
+    echo "ERROR: Cannot determine base branch from git structure."
+    echo "Both the upstream tracking ref and the explicit base-branch file at"
+    echo ".autoskillit/temp/worktrees/${CURRENT_BRANCH}/base-branch are missing."
+    echo "Ensure the worktree was created by implement-worktree-no-merge,"
+    echo "which writes both stores at worktree creation time."
+    exit 1
+fi
+```
+
+Then assess what has been implemented:
 1. Read the plan file to understand the full scope
 2. Check what has been implemented so far:
    ```bash
-   cd {WORKTREE_PATH}
-   git log --oneline $(git merge-base HEAD origin/{base_branch})..HEAD
-   git diff --stat $(git merge-base HEAD origin/{base_branch})..HEAD
+   git log --oneline $(git merge-base HEAD origin/${BASE_BRANCH})..HEAD
+   git diff --stat $(git merge-base HEAD origin/${BASE_BRANCH})..HEAD
    ```
 3. Compare implemented changes against plan phases to determine:
    - Which phases are complete
@@ -123,14 +151,14 @@ If tests fail, fix the issue and re-run.
 
 ```bash
 git fetch origin
-git rebase origin/{base_branch}
+git rebase origin/${BASE_BRANCH}
 ```
 
 If conflicts occur, resolve them, `git rebase --continue`, then re-run tests. Report rebase status.
 
 ### Step 6: Completion Report
 
-Output to terminal: worktree path, branch name, base branch, status, summary of changes, and next steps (fast-forward merge then clean up).
+Output to terminal: worktree path, branch name, base branch (`$BASE_BRANCH`), status, summary of changes, and next steps (fast-forward merge then clean up).
 Change directory before removing worktree to prevent deleting the cwd.
 Always confirm the merge went through before removing worktree.
 Do not merge until user confirms first!

@@ -66,7 +66,7 @@ def test_core_init_reexports_logging():
 
 
 def test_core_init_reexports_io():
-    from autoskillit.core import YAMLError, _atomic_write, dump_yaml, load_yaml  # noqa: F401
+    from autoskillit.core import YAMLError, _atomic_write, load_yaml  # noqa: F401
 
 
 def test_old_types_module_removed():
@@ -108,3 +108,29 @@ def test_core_modules_have_no_intra_package_imports():
                     assert not node.module.startswith("autoskillit."), (
                         f"{py_file.name} imports from autoskillit.*: {node.module}"
                     )
+
+
+def test_dump_yaml_not_in_core_all():
+    import autoskillit.core as core
+
+    assert "dump_yaml" not in core.__all__
+
+
+def test_package_logger_name_not_in_core_all():
+    import autoskillit.core as core
+
+    assert "PACKAGE_LOGGER_NAME" not in core.__all__
+
+
+def test_t_typevar_not_in_core_all():
+    import autoskillit.core as core
+
+    assert "T" not in core.__all__
+
+
+def test_severity_has_ok_member():
+    from autoskillit.core.types import Severity
+
+    assert Severity.OK == "ok"
+    assert Severity.ERROR == "error"
+    assert Severity.WARNING == "warning"

@@ -910,6 +910,15 @@ def test_severity_not_defined_locally_in_recipe_validator() -> None:
         )
 
 
+def test_severity_not_locally_defined_in_doctor() -> None:
+    """cli/_doctor.py must not define its own Severity — it must import from core."""
+    ast_module = _get_module_ast("cli/_doctor.py")
+    class_names = _top_level_class_names(ast_module)
+    assert "Severity" not in class_names, (
+        "cli/_doctor.py must import Severity from autoskillit.core, not define it locally"
+    )
+
+
 def test_skill_tools_not_defined_in_recipe_io() -> None:
     """SKILL_TOOLS must not be defined locally in recipe/io.py."""
     ast_module = _get_module_ast("recipe/io.py")

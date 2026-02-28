@@ -67,13 +67,15 @@ async def fetch_github_issue(
     resolved_ref = issue_url
     if issue_url.strip().isdigit():
         if not config.github.default_repo:
-            return json.dumps({
-                "success": False,
-                "error": (
-                    f"Cannot resolve bare issue number {issue_url!r}: "
-                    "github.default_repo is not set in .autoskillit/config.yaml"
-                ),
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": (
+                        f"Cannot resolve bare issue number {issue_url!r}: "
+                        "github.default_repo is not set in .autoskillit/config.yaml"
+                    ),
+                }
+            )
         resolved_ref = f"{config.github.default_repo}#{issue_url.strip()}"
         logger.info("resolved bare number", resolved_ref=resolved_ref)
 

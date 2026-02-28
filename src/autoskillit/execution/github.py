@@ -15,9 +15,7 @@ from autoskillit.core import get_logger
 
 _log = get_logger(__name__)
 
-_FULL_URL_RE = re.compile(
-    r"https?://github\.com/([^/]+)/([^/]+)/issues/(\d+)"
-)
+_FULL_URL_RE = re.compile(r"https?://github\.com/([^/]+)/([^/]+)/issues/(\d+)")
 _SHORTHAND_RE = re.compile(r"^([^/]+)/([^#]+)#(\d+)$")
 
 

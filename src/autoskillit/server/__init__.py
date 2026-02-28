@@ -106,6 +106,9 @@ from autoskillit.server.tools_git import (  # noqa: E402, F401
     classify_fix,
     merge_worktree,
 )
+from autoskillit.server.tools_integrations import (  # noqa: E402, F401
+    fetch_github_issue,
+)
 from autoskillit.server.tools_recipe import (  # noqa: E402, F401
     list_recipes,
     load_recipe,
@@ -118,9 +121,6 @@ from autoskillit.server.tools_status import (  # noqa: E402, F401
     get_token_summary,
     kitchen_status,
     read_db,
-)
-from autoskillit.server.tools_integrations import (  # noqa: E402, F401
-    fetch_github_issue,
 )
 from autoskillit.server.tools_workspace import (  # noqa: E402, F401
     reset_test_dir,

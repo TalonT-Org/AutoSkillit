@@ -666,7 +666,7 @@ class TestRunSkillRetryGate:
 
 
 class TestToolRegistration:
-    """All 18 tools are registered on the MCP server."""
+    """All 22 tools are registered on the MCP server."""
 
     def test_all_tools_exist(self):
         from fastmcp.tools import Tool
@@ -698,6 +698,7 @@ class TestToolRegistration:
             "clone_repo",
             "remove_clone",
             "push_to_remote",
+            "fetch_github_issue",
         }
         assert expected == tool_names
 
@@ -2531,7 +2532,7 @@ class TestGatedToolAccess:
         assert prompt_names == {"open_kitchen", "close_kitchen"}
 
     def test_all_tools_still_registered(self):
-        """All 21 tools remain registered (gated + ungated)."""
+        """All 22 tools remain registered (gated + ungated)."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -2560,6 +2561,7 @@ class TestGatedToolAccess:
             "clone_repo",
             "remove_clone",
             "push_to_remote",
+            "fetch_github_issue",
         }
         assert expected == tool_names
 

@@ -186,3 +186,13 @@ def _collect_recipes(
             except Exception as exc:
                 logger.warning("Failed to load recipe file", path=str(f), error=str(exc))
                 errors.append(LoadReport(path=f, error=str(exc)))
+
+
+class DefaultRecipeRepository:
+    """Concrete RecipeRepository backed by find_recipe_by_name and list_recipes."""
+
+    def find(self, name: str, project_dir: Path) -> Any:
+        return find_recipe_by_name(name, project_dir)
+
+    def list(self, project_dir: Path) -> Any:
+        return list_recipes(project_dir)

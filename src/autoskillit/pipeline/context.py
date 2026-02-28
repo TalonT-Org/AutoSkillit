@@ -29,7 +29,7 @@ class ToolContext:
     config:     AutomationConfig loaded from .autoskillit/config.yaml
     audit:      AuditLog instance for recording pipeline failures
     token_log:  TokenLog instance for per-step token tracking
-    gate:       GateState (frozen) — replace with GateState(enabled=True/False) to toggle
+    gate:       GateState — call gate.enable()/gate.disable() to toggle in place
     plugin_dir: Absolute path string to the autoskillit package directory
     runner:     SubprocessRunner implementation (RealSubprocessRunner in production,
                 MockSubprocessRunner in tests)

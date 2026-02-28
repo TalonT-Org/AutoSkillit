@@ -1889,6 +1889,27 @@ class TestTestCheck:
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is True
 
+    @pytest.mark.asyncio
+    async def test_bare_q_failures_detected(self, tool_ctx):
+        """Bare -q failure line (rc=0 due to PIPESTATUS bug) -> passed=False."""
+        tool_ctx.runner.push(_make_result(0, "3 failed, 97 passed in 2.31s\n", ""))
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is False
+
+    @pytest.mark.asyncio
+    async def test_cwa_empty_output_fails(self, tool_ctx):
+        """CWA: rc=0 but empty stdout -> passed=False (cannot confirm pass)."""
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is False
+
+    @pytest.mark.asyncio
+    async def test_bare_q_clean_passes(self, tool_ctx):
+        """Bare -q all-passing output: rc=0 and summary found -> passed=True."""
+        tool_ctx.runner.push(_make_result(0, "100 passed in 1.50s\n", ""))
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is True
+
 
 class TestClaudeSessionResult:
     """ClaudeSessionResult correctly parses Claude Code JSON output."""
@@ -2403,6 +2424,17 @@ class TestParsePytestSummary:
 
     def test_no_summary_line(self):
         assert _parse_pytest_summary("no test results here\n") == {}
+
+    def test_bare_q_format_failed_and_passed(self):
+        """Bare -q format parses correctly — no = delimiters needed."""
+        counts = _parse_pytest_summary("3 failed, 97 passed in 2.31s")
+        assert counts["failed"] == 3
+        assert counts["passed"] == 97
+
+    def test_bare_q_format_passed_only(self):
+        """Bare -q single-outcome line."""
+        counts = _parse_pytest_summary("100 passed in 1.50s")
+        assert counts == {"passed": 100}
 
 
 class TestMergeWorktreeNoBypass:

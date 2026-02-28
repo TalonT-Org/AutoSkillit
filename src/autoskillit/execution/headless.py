@@ -26,8 +26,7 @@ from autoskillit.execution.session import (
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.core.types import SubprocessResult
-    from autoskillit.pipeline.audit import AuditLog
+    from autoskillit.core.types import AuditStore, SubprocessResult
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
@@ -67,7 +66,7 @@ def _capture_failure(
     needs_retry: bool,
     retry_reason: str,
     stderr: str,
-    audit: AuditLog | None,
+    audit: AuditStore | None,
 ) -> None:
     """Record a failure in the audit log. No-op if skill_command is empty or audit is None."""
     if not skill_command or audit is None:
@@ -100,7 +99,7 @@ def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
     skill_command: str = "",
-    audit: AuditLog | None = None,
+    audit: AuditStore | None = None,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     if result.termination == TerminationReason.STALE:

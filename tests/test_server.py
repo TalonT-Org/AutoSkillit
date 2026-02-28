@@ -6863,8 +6863,8 @@ class TestCheckQuota:
     @pytest.mark.asyncio
     async def test_no_notification_when_quota_below_threshold(self, tool_ctx, monkeypatch):
         """_notify must NOT be called when should_sleep is False."""
-        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
         import autoskillit.server.tools_status as ts
+        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
 
         notify_calls = []
 
@@ -6878,7 +6878,12 @@ class TestCheckQuota:
         )
 
         async def mock_check(config):
-            return {"should_sleep": False, "sleep_seconds": 0, "utilization": 50.0, "resets_at": None}
+            return {
+                "should_sleep": False,
+                "sleep_seconds": 0,
+                "utilization": 50.0,
+                "resets_at": None,
+            }
 
         monkeypatch.setattr("autoskillit.server.helpers.check_and_sleep_if_needed", mock_check)
 
@@ -6891,8 +6896,8 @@ class TestCheckQuota:
     @pytest.mark.asyncio
     async def test_notification_emitted_when_quota_above_threshold(self, tool_ctx, monkeypatch):
         """_notify must be called exactly once when should_sleep is True."""
-        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
         import autoskillit.server.tools_status as ts
+        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
 
         notify_calls = []
 

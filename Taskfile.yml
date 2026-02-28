@@ -25,10 +25,10 @@ tasks:
         echo "Running all tests with -n 4"
         echo "Output: $TEST_OUTPUT"
         if [[ -d ".venv" ]]; then
-          .venv/bin/python -m importlinter
+          .venv/bin/lint-imports
           .venv/bin/python -m pytest tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         else
-          python -m importlinter
+          lint-imports
           pytest tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         fi
         echo ""

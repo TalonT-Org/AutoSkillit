@@ -95,9 +95,9 @@ src/autoskillit/
 │   ├── session.py           #   ClaudeSessionResult, SkillResult, extract_token_usage
 │   └── testing.py           #   Pytest output parsing and pass/fail adjudication
 ├── workspace/               # L1 workspace sub-package
-│   ├── __init__.py          #   Re-exports CleanupResult, SkillResolver, clone_repo, remove_clone, push_clone_to_origin
+│   ├── __init__.py          #   Re-exports CleanupResult, SkillResolver, clone_repo, remove_clone, push_to_remote
 │   ├── cleanup.py           #   Directory teardown utilities (CleanupResult, preserve list)
-│   ├── clone.py             #   Clone-based run isolation: clone_repo, remove_clone, push_clone_to_origin
+│   ├── clone.py             #   Clone-based run isolation: clone_repo, remove_clone, push_to_remote
 │   └── skills.py            #   Bundled skill listing (SkillResolver)
 ├── recipe/                  # L2 recipe sub-package
 │   ├── __init__.py          #   Re-exports Recipe, RecipeStep, validate_recipe, load_recipe, etc.
@@ -211,7 +211,7 @@ temp/                        # Temporary/working files (gitignored)
   * **execution/db.py**: Data access layer: read-only SQLite execution with defence-in-depth. Regex pre-validation rejects non-SELECT queries; OS-level `file:...?mode=ro` connection; `set_authorizer` callback blocks any non-SELECT/READ/FUNCTION engine operation. `_execute_readonly_query` is the main entry point. Depends only on `core/logging.py`.
   * **execution/quota.py**: Quota-aware check for long-running pipeline recipes. `QuotaStatus` dataclass. `_read_credentials(path)` reads Bearer token from `~/.claude/.credentials.json`. `_read_cache(path, max_age)` returns fresh status or None. `_write_cache(path, status)` persists to cache (silent on failure). `_fetch_quota(credentials_path)` fetches 5-hour utilization from Anthropic quota API via `httpx`. `check_and_sleep_if_needed(config)` is the main async entry point — returns metadata dict; does NOT sleep. L1 module: depends only on stdlib, httpx, and `core/logging`.
   * **workspace/cleanup.py**: Infrastructure layer for directory teardown. `_delete_directory_contents(directory, preserve)` removes all items in a directory except preserved names, recording failures in `CleanupResult` without raising. Depends only on `core/logging.py`.
-  * **workspace/clone.py**: Clone-based run isolation for pipeline recipes. `clone_repo(source_dir, run_name)` clones source into `../autoskillit-runs/<run_name>-<timestamp>/` and returns `{"clone_path", "source_dir"}`. `remove_clone(clone_path, keep)` tears down the clone (never raises). `push_clone_to_origin(clone_path, source_dir, branch)` propagates the merged branch back to the source repo via pull inversion (`git fetch` from the source side). L1 module: depends only on stdlib and `core/logging`.
+  * **workspace/clone.py**: Clone-based run isolation for pipeline recipes. `clone_repo(source_dir, run_name)` clones source into `../autoskillit-runs/<run_name>-<timestamp>/` and returns `{"clone_path", "source_dir"}`. `remove_clone(clone_path, keep)` tears down the clone (never raises). `push_to_remote(clone_path, source_dir, branch)` reads the upstream remote URL from source_dir via `git remote get-url origin` (read-only) and pushes from clone_path directly to the remote, never touching source_dir. L1 module: depends only on stdlib and `core/logging`.
   * **workspace/skills.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
   * **recipe/schema.py**: Recipe data models. `Recipe`, `RecipeStep`, `DataFlowWarning`, `AUTOSKILLIT_VERSION_KEY`. Zero autoskillit I/O dependencies.
   * **recipe/io.py**: Recipe I/O layer. `load_recipe(name, project_dir)` and `list_recipes(project_dir)` discover recipes from project and bundled sources. `iter_steps_with_context(recipe)` yields `(name, step, available_context)` with accumulated captures. `find_recipe_by_name(name, project_dir)` returns first match or None. `RecipeStep` supports an optional `model` field for per-step model selection.

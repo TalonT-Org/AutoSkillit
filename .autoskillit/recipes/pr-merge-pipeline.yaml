@@ -248,9 +248,9 @@ steps:
     on_failure: cleanup_failure
     note: >
       Pushes the integration branch to the GitHub remote so that gh pr create
-      can reference it. push_clone_to_origin is not used here because that
-      callable does a fast-forward pull of an existing branch; this branch is
-      new and must be pushed directly.
+      can reference it. push_to_remote is not used here because this branch is
+      new and must be pushed directly to the remote — push_to_remote expects
+      the branch to already exist in the remote.
 
   collect_artifacts:
     tool: run_cmd

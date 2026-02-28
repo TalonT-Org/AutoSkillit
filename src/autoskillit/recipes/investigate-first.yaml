@@ -189,7 +189,7 @@ steps:
     on_failure: cleanup_failure
 
   push:
-    python: autoskillit.workspace.clone.push_clone_to_origin
+    python: autoskillit.workspace.clone.push_to_remote
     with:
       clone_path: "${{ context.work_dir }}"
       source_dir: "${{ context.source_dir }}"
@@ -197,9 +197,9 @@ steps:
     on_success: cleanup_success
     on_failure: cleanup_failure
     note: >
-      Propagates the merged base_branch from the clone back to the source repository
-      using pull inversion (git fetch from the source_dir side). This avoids Git's
-      receive.denyCurrentBranch restriction on non-bare local repos.
+      Pushes the merged base_branch directly from the clone to the upstream remote.
+      Reads the remote URL from source_dir (read-only) and pushes from clone_path,
+      preserving clone isolation — source_dir is never modified.
       On failure, cleanup_failure still removes the clone.
 
   cleanup_success:

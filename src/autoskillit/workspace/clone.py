@@ -105,65 +105,60 @@ def remove_clone(clone_path: str, keep: str = "false") -> dict[str, str]:
         return {"removed": "false", "reason": str(exc)}
 
 
-def push_clone_to_origin(
+def push_to_remote(
     clone_path: str,
     source_dir: str,
     branch: str,
-    push_to_remote: str = "false",
 ) -> dict[str, str]:
-    """Propagate merged branch from the clone back to the source repository.
+    """Push the merged branch from the clone directly to the upstream remote.
 
-    Uses git pull --ff-only from the source_dir side. Running pull from the
-    source repo avoids Git's receive.denyCurrentBranch restriction, which
-    blocks both push and fetch-with-refspec into a checked-out branch of a
-    non-bare repository.
+    Reads the upstream remote URL from source_dir using
+    'git remote get-url origin' (read-only — no writes to source_dir),
+    then runs 'git push <remote_url> <branch>' from clone_path.
 
-    After merge_worktree merges into the clone's main branch, this callable
-    propagates the changes to the original source repository.
-
-    When push_to_remote='true', also runs 'git push origin <branch>' from
-    source_dir to propagate changes to the remote.
+    This preserves clone-based pipeline isolation: source_dir is never
+    modified. Changes flow: clone_path → upstream remote (e.g. GitHub).
 
     Returns:
         {"success": "true", "stderr": ""} on success,
         {"success": "false", "stderr": str} on failure (does not raise).
     """
-    result = subprocess.run(
-        ["git", "pull", "--ff-only", clone_path, branch],
+    url_result = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
         cwd=source_dir,
         capture_output=True,
         text=True,
     )
-    if result.returncode != 0:
+    if url_result.returncode != 0:
         logger.error(
-            "push_clone_failed",
-            clone_path=clone_path,
+            "push_to_remote_get_url_failed",
             source_dir=source_dir,
             branch=branch,
-            stderr=result.stderr.strip(),
+            stderr=url_result.stderr.strip(),
         )
-        return {"success": "false", "stderr": result.stderr.strip()}
+        return {"success": "false", "stderr": url_result.stderr.strip()}
 
-    if push_to_remote.strip().lower() == "true":
-        push_result = subprocess.run(
-            ["git", "push", "origin", branch],
-            cwd=source_dir,
-            capture_output=True,
-            text=True,
+    remote_url = url_result.stdout.strip()
+    push_result = subprocess.run(
+        ["git", "push", remote_url, branch],
+        cwd=clone_path,
+        capture_output=True,
+        text=True,
+    )
+    if push_result.returncode != 0:
+        logger.error(
+            "push_to_remote_failed",
+            clone_path=clone_path,
+            remote_url=remote_url,
+            branch=branch,
+            stderr=push_result.stderr.strip(),
         )
-        if push_result.returncode != 0:
-            logger.error(
-                "push_to_remote_failed",
-                source_dir=source_dir,
-                branch=branch,
-                stderr=push_result.stderr.strip(),
-            )
-            return {"success": "false", "stderr": push_result.stderr.strip()}
+        return {"success": "false", "stderr": push_result.stderr.strip()}
 
     logger.info(
-        "push_clone_succeeded",
+        "push_to_remote_succeeded",
         clone_path=clone_path,
-        source_dir=source_dir,
+        remote_url=remote_url,
         branch=branch,
     )
     return {"success": "true", "stderr": ""}

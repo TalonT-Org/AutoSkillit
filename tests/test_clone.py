@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.workspace.clone import clone_repo, push_clone_to_origin, remove_clone
+from autoskillit.workspace.clone import clone_repo, push_to_remote, remove_clone
 
 
 @pytest.fixture
@@ -115,19 +115,22 @@ class TestRemoveClone:
         remove_clone("/no/such/path/anywhere", keep="false")
 
 
-class TestPushCloneToOrigin:
-    def test_success_propagates_commit(self, tmp_path: Path) -> None:
-        # Create source repo
+class TestPushToRemote:
+    def test_push_to_remote_propagates_to_upstream(self, tmp_path: Path) -> None:
+        # 1. Create bare remote (simulates GitHub)
+        remote = tmp_path / "remote.git"
+        subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+
+        # 2. Clone remote into source (simulates user's local checkout)
         source = tmp_path / "source"
-        source.mkdir()
-        subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
+        subprocess.run(["git", "clone", str(remote), str(source)], check=True, capture_output=True)
         subprocess.run(
-            ["git", "-C", str(source), "config", "user.email", "test@test.com"],
+            ["git", "-C", str(source), "config", "user.email", "t@t.com"],
             check=True,
             capture_output=True,
         )
         subprocess.run(
-            ["git", "-C", str(source), "config", "user.name", "Test"],
+            ["git", "-C", str(source), "config", "user.name", "T"],
             check=True,
             capture_output=True,
         )
@@ -136,69 +139,89 @@ class TestPushCloneToOrigin:
             check=True,
             capture_output=True,
         )
+        src_branch = subprocess.run(
+            ["git", "-C", str(source), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(source), "push", "origin", src_branch],
+            check=True,
+            capture_output=True,
+        )
 
-        # Clone it
+        # 3. Pipeline clones source
         clone_result = clone_repo(str(source), "pushtest")
         clone_path = clone_result["clone_path"]
 
-        # Get the current branch name
-        branch_result = subprocess.run(
+        # 4. Make a commit in pipeline-clone
+        subprocess.run(
+            ["git", "-C", clone_path, "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", clone_path, "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", clone_path, "commit", "--allow-empty", "-m", "pipeline-commit"],
+            check=True,
+            capture_output=True,
+        )
+        branch = subprocess.run(
             ["git", "-C", clone_path, "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True,
             text=True,
             check=True,
-        )
-        branch = branch_result.stdout.strip()
+        ).stdout.strip()
 
-        # Make a commit in the clone
-        subprocess.run(
-            ["git", "-C", clone_path, "config", "user.email", "test@test.com"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", clone_path, "config", "user.name", "Test"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", clone_path, "commit", "--allow-empty", "-m", "new-commit"],
-            check=True,
-            capture_output=True,
-        )
-
-        # Push back to origin
-        result = push_clone_to_origin(clone_path, str(source), branch)
-        assert result["success"] == "true"
-        assert result["stderr"] == ""
-
-        # Verify source has the new commit
-        log = subprocess.run(
-            ["git", "-C", str(source), "log", "--oneline", "-2"],
+        # Record source HEAD before push (must not change)
+        source_head_before = subprocess.run(
+            ["git", "-C", str(source), "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
             check=True,
-        )
-        assert "new-commit" in log.stdout
+        ).stdout.strip()
 
-        # Cleanup
+        result = push_to_remote(clone_path, str(source), branch)
+        assert result["success"] == "true"
+
+        # Commit landed in remote
+        remote_log = subprocess.run(
+            ["git", "-C", str(remote), "log", "--oneline", "-3"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        assert "pipeline-commit" in remote_log
+
+        # source_dir HEAD unchanged
+        source_head_after = subprocess.run(
+            ["git", "-C", str(source), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert source_head_before == source_head_after
+
         import shutil
 
         shutil.rmtree(Path(clone_path).parent, ignore_errors=True)
 
-    def test_failure_invalid_clone_path_returns_error(self, tmp_path: Path) -> None:
-        # Need a valid git repo as source_dir for the git fetch to attempt
+    def test_push_to_remote_fails_when_source_has_no_origin(self, tmp_path: Path) -> None:
         source = tmp_path / "source"
         source.mkdir()
         subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
 
-        result = push_clone_to_origin("/nonexistent/clone", str(source), "main")
+        result = push_to_remote("/nonexistent/clone", str(source), "main")
         assert result["success"] == "false"
         assert len(result["stderr"]) > 0
 
-    def test_failure_does_not_raise(self, tmp_path: Path) -> None:
+    def test_push_to_remote_does_not_raise(self, tmp_path: Path) -> None:
         source = tmp_path / "source"
         source.mkdir()
         subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
-        # Must not raise
-        push_clone_to_origin("/no/such/clone", str(source), "main")
+        push_to_remote("/no/such/clone", str(source), "main")  # must not raise

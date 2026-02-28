@@ -11,7 +11,7 @@ from autoskillit.workspace import CleanupResult, _delete_directory_contents
 from autoskillit.workspace.clone import (
     clone_repo,
     detect_source_dir,
-    push_clone_to_origin,
+    push_to_remote,
 )
 
 
@@ -109,7 +109,7 @@ class TestDeleteDirectoryContents:
 
 
 # ---------------------------------------------------------------------------
-# T_DS1–T_DS7: detect_source_dir and clone_repo/push_clone_to_origin additions
+# T_DS1–T_DS7: detect_source_dir and clone_repo/push_to_remote additions
 # ---------------------------------------------------------------------------
 
 
@@ -161,29 +161,41 @@ class TestCloneRepoDetectAndExpand:
             clone_repo(nonexistent, "test-run")
 
 
-class TestPushCloneToOrigin:
-    def test_ds6_calls_git_push_when_push_to_remote_true(self) -> None:
-        """T_DS6: push_clone_to_origin calls git push when push_to_remote='true'."""
-        mock_success = MagicMock()
-        mock_success.returncode = 0
-        mock_success.stderr = ""
+class TestPushToRemote:
+    def test_ds6_push_to_remote_calls_get_url_then_push(self) -> None:
+        """T_DS6: push_to_remote calls git remote get-url origin then git push <url> <branch>."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
 
-        with patch("subprocess.run", return_value=mock_success) as mock_run:
-            result = push_clone_to_origin("/clone", "/source", "main", push_to_remote="true")
+        mock_push = MagicMock()
+        mock_push.returncode = 0
+        mock_push.stderr = ""
 
-        assert result["success"] == "true"
-        assert mock_run.call_count == 2
-        second_call_args = mock_run.call_args_list[1][0][0]
-        assert second_call_args == ["git", "push", "origin", "main"]
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]) as mock_run:
+            result = push_to_remote("/clone", "/source", "main")
 
-    def test_ds7_skips_git_push_when_push_to_remote_false(self) -> None:
-        """T_DS7: push_clone_to_origin does not call git push when push_to_remote='false'."""
-        mock_success = MagicMock()
-        mock_success.returncode = 0
-        mock_success.stderr = ""
+        assert result == {"success": "true", "stderr": ""}
+        # First call: git remote get-url origin from source_dir
+        first_call = mock_run.call_args_list[0]
+        assert first_call[0][0] == ["git", "remote", "get-url", "origin"]
+        assert first_call[1]["cwd"] == "/source"
+        # Second call: git push <url> <branch> from clone_path
+        second_call = mock_run.call_args_list[1]
+        assert second_call[0][0] == ["git", "push", "git@github.com:org/repo.git", "main"]
+        assert second_call[1]["cwd"] == "/clone"
 
-        with patch("subprocess.run", return_value=mock_success) as mock_run:
-            result = push_clone_to_origin("/clone", "/source", "main", push_to_remote="false")
+    def test_ds7_push_to_remote_fails_when_no_origin(self) -> None:
+        """T_DS7: push_to_remote returns error when git remote get-url fails — no push attempted."""
+        mock_fail = MagicMock()
+        mock_fail.returncode = 128
+        mock_fail.stdout = ""
+        mock_fail.stderr = "error: No such remote 'origin'"
 
-        assert result["success"] == "true"
-        assert mock_run.call_count == 1
+        with patch("subprocess.run", return_value=mock_fail) as mock_run:
+            result = push_to_remote("/clone", "/source", "main")
+
+        assert result["success"] == "false"
+        assert "origin" in result["stderr"]
+        assert mock_run.call_count == 1  # no push attempted

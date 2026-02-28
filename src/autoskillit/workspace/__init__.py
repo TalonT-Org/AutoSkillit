@@ -12,7 +12,7 @@ from autoskillit.workspace.cleanup import (
 from autoskillit.workspace.clone import (
     clone_repo,
     detect_source_dir,
-    push_clone_to_origin,
+    push_to_remote,
     remove_clone,
 )
 from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
@@ -28,6 +28,6 @@ __all__ = [
     "bundled_skills_dir",
     "clone_repo",
     "detect_source_dir",
-    "push_clone_to_origin",
+    "push_to_remote",
     "remove_clone",
 ]

@@ -6,7 +6,7 @@ REQ-IMP-002: from autoskillit.core.logging/io/types → from autoskillit.core.
 REQ-IMP-003: server/tools_*.py imports from at most autoskillit.core and autoskillit.pipeline.
 REQ-IMP-004: cli/app.py imports from at most autoskillit.core, .config, and .pipeline.
 REQ-IMP-005: server/git.py only imports autoskillit.core at runtime (TYPE_CHECKING excluded).
-REQ-IMP-006: server/prompts.py has no direct import of DefaultGateState or pipeline.gate sub-module.
+REQ-IMP-006: server/prompts.py has no direct import of DefaultGateState or pipeline.gate.
 """
 
 import ast

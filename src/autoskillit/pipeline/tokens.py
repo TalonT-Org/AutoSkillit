@@ -88,4 +88,3 @@ class DefaultTokenLog:
     def clear(self) -> None:
         """Reset the store."""
         self._entries = {}
-

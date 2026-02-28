@@ -2034,6 +2034,18 @@ class TestInvestigateFirstStructure:
         assert "remediate" in self.recipe.steps
         assert self.recipe.steps["remediate"].on_success == "rectify"
 
+    def test_if3_verify_step_uses_implementation_ref(self) -> None:
+        """T_IF3: verify step worktree_path must reference context.implementation_ref."""
+        worktree_arg = self.recipe.steps["verify"].with_args.get("worktree_path", "")
+        assert "context.implementation_ref" in worktree_arg
+        assert "context.work_dir" not in worktree_arg
+
+    def test_if4_merge_step_uses_implementation_ref(self) -> None:
+        """T_IF4: merge step worktree_path must reference context.implementation_ref."""
+        worktree_arg = self.recipe.steps["merge"].with_args.get("worktree_path", "")
+        assert "context.implementation_ref" in worktree_arg
+        assert "context.work_dir" not in worktree_arg
+
 
 # ---------------------------------------------------------------------------
 # Semantic rule tests — multipart iteration conventions (T_MI1–T_MI2)

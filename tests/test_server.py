@@ -6859,3 +6859,66 @@ class TestCheckQuota:
 
         tools = [c for c in server._local_provider._components.values() if isinstance(c, Tool)]
         assert "check_quota" in {t.name for t in tools}
+
+    @pytest.mark.asyncio
+    async def test_no_notification_when_quota_below_threshold(self, tool_ctx, monkeypatch):
+        """_notify must NOT be called when should_sleep is False."""
+        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
+        import autoskillit.server.tools_status as ts
+
+        notify_calls = []
+
+        async def fake_notify(ctx, level, message, logger_name, extra=None):
+            notify_calls.append((level, message))
+
+        monkeypatch.setattr(ts, "_notify", fake_notify)
+
+        tool_ctx.config = AutomationConfig(
+            quota_guard=QuotaGuardConfig(enabled=True, threshold=80.0)
+        )
+
+        async def mock_check(config):
+            return {"should_sleep": False, "sleep_seconds": 0, "utilization": 50.0, "resets_at": None}
+
+        monkeypatch.setattr("autoskillit.server.helpers.check_and_sleep_if_needed", mock_check)
+
+        await check_quota()
+
+        assert notify_calls == [], (
+            f"Expected no notifications when should_sleep=False, got {notify_calls}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_notification_emitted_when_quota_above_threshold(self, tool_ctx, monkeypatch):
+        """_notify must be called exactly once when should_sleep is True."""
+        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
+        import autoskillit.server.tools_status as ts
+
+        notify_calls = []
+
+        async def fake_notify(ctx, level, message, logger_name, extra=None):
+            notify_calls.append((level, message))
+
+        monkeypatch.setattr(ts, "_notify", fake_notify)
+
+        tool_ctx.config = AutomationConfig(
+            quota_guard=QuotaGuardConfig(enabled=True, threshold=80.0)
+        )
+
+        async def mock_check(config):
+            return {
+                "should_sleep": True,
+                "sleep_seconds": 3600,
+                "utilization": 95.0,
+                "resets_at": "2026-02-28T13:00:00+00:00",
+            }
+
+        monkeypatch.setattr("autoskillit.server.helpers.check_and_sleep_if_needed", mock_check)
+
+        await check_quota()
+
+        assert len(notify_calls) == 1, (
+            f"Expected exactly 1 notification when should_sleep=True, got {notify_calls}"
+        )
+        assert notify_calls[0][0] == "info"
+        assert "threshold" in notify_calls[0][1] or "sleep" in notify_calls[0][1]

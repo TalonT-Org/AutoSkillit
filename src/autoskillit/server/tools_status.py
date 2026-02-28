@@ -263,16 +263,6 @@ async def check_quota(ctx: Context = CurrentContext()) -> str:
     from autoskillit.server import _get_config
 
     config = _get_config()
-    await _notify(
-        ctx,
-        "info",
-        "check_quota",
-        "autoskillit.check_quota",
-        extra={
-            "quota_guard_enabled": config.quota_guard.enabled,
-            "threshold": config.quota_guard.threshold,
-        },
-    )
 
     from autoskillit.server.helpers import check_and_sleep_if_needed
 

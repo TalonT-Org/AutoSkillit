@@ -1193,6 +1193,7 @@ class TestValidateRecipe:
             "      routes:\n"
             "        full_restart: done\n"
             "        partial_restart: done\n"
+            "    on_failure: done\n"
             "  done:\n"
             "    action: stop\n"
             '    message: "Done."\n'

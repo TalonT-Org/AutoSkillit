@@ -141,6 +141,7 @@ steps:
       routes:
         GO: merge
         NO GO: remediate
+    on_failure: escalate
     note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
 
   remediate:

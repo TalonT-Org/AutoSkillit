@@ -237,6 +237,7 @@ steps:
       routes:
         GO: cleanup_success
         NO GO: remediate
+    on_failure: escalate_stop
     optional: true
     note: >
       Only execute if inputs.audit is 'true'. If false, skip directly to cleanup_success.

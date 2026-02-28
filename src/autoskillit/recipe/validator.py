@@ -968,3 +968,33 @@ def _check_plan_parts_captured(wf: Recipe) -> list[RuleFinding]:
             )
 
     return findings
+
+
+@semantic_rule(
+    name="on-result-missing-failure-route",
+    description=(
+        "Tool and python steps using on_result must also declare on_failure. "
+        "on_result only fires when the tool succeeds and returns a recognized verdict. "
+        "When the tool call itself fails (success: false), on_result never evaluates "
+        "and the orchestrator has no route without on_failure."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_on_result_missing_failure_route(wf: Recipe) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        is_tool_invocation = step.tool is not None or step.python is not None
+        if is_tool_invocation and step.on_result is not None and step.on_failure is None:
+            findings.append(
+                RuleFinding(
+                    rule="on-result-missing-failure-route",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' uses on_result but has no on_failure. "
+                        f"If the tool call fails before a verdict is returned, the "
+                        f"orchestrator has no route. Add on_failure: <target>."
+                    ),
+                )
+            )
+    return findings

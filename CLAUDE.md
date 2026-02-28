@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 17 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 11 gated behind MCP prompts for user-only activation, and 17 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 18 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, check_quota + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 12 gated behind MCP prompts for user-only activation, and 19 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -46,7 +46,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
 
 The project uses pytest with pytest-asyncio for async test support. Tests run in parallel via pytest-xdist (`-n 4`). All tests must be safe for parallel execution.
 
-  * **Run tests**: `task test-all` from the project root. This is the **only** test command. Never use `pytest`, `python -m pytest`, or any other test runner directly.
+  * **Run tests**: `task test-all` from the project root (human-facing, runs lint + tests). For automation and MCP tools, `task test-check` is used (unambiguous PASS/FAIL, correct PIPESTATUS capture). Never use `pytest`, `python -m pytest`, or any other test runner directly.
   * **Always run tests at end of task**
   * **Fix failing tests immediately**
   * **Add tests for new features**
@@ -135,13 +135,14 @@ src/autoskillit/
 │   ├── implementation-pipeline.yaml
 │   ├── investigate-first.yaml
 │   └── smoke-test.yaml
-└── skills/                  # 17 bundled skills (SKILL.md per skill)
-    ├── assess-and-merge/     ├── audit-friction/
-    ├── audit-impl/           ├── dry-walkthrough/
-    ├── implement-worktree/   ├── implement-worktree-no-merge/
-    ├── investigate/          ├── make-groups/
-    ├── make-plan/            ├── migrate-recipes/
-    ├── mermaid/              ├── pipeline-summary/
+└── skills/                  # 19 bundled skills (SKILL.md per skill)
+    ├── analyze-prs/          ├── assess-and-merge/
+    ├── audit-friction/       ├── audit-impl/
+    ├── dry-walkthrough/      ├── implement-worktree/
+    ├── implement-worktree-no-merge/ ├── investigate/
+    ├── make-groups/          ├── make-plan/
+    ├── merge-pr/             ├── mermaid/
+    ├── migrate-recipes/      ├── pipeline-summary/
     ├── rectify/              ├── retry-worktree/
     ├── review-approach/      └── setup-project/
     └── write-recipe/
@@ -190,7 +191,7 @@ temp/                        # Temporary/working files (gitignored)
   * **config/settings.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
   * **cli/app.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `skills list`, `recipes list/show`, `workspace init`, `install`, `upgrade`, `migrate`, `cook`, and `doctor`.
   * **cli/_doctor.py**: CLI support layer: project health checks. `run_doctor()` runs 7 checks: stale MCP servers, duplicate autoskillit registrations, plugin metadata presence, PATH availability, project config existence, version consistency (package vs plugin.json), and recipe migration health (via migration/store.py). Depends on `version.py`, `migration/store.py`, `recipe/io.py`, `core/types.py`. Imported by `cli/app.py`.
-  * **server/__init__.py**: FastMCP server. 11 gated tools require user activation via MCP prompts. 6 ungated tools (`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) are always available. Uses ToolContext DI (`pipeline/context.py`) — single module-level `_ctx: ToolContext | None`. `_initialize(ctx)` wires everything at startup. Gate policy in `pipeline/gate.py`. `version_info()` is public. Registers `recipe://` resource handler. **Ungated vs gated notifications:** Ungated tools accept no `ctx: Context` parameter and emit no MCP progress notifications. This is intentional — they are fast, lightweight reads. MCP notifications are reserved for long-running gated operations. This asymmetry is documented in each ungated tool's docstring.
+  * **server/__init__.py**: FastMCP server. 12 gated tools require user activation via MCP prompts. 6 ungated tools (`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) are always available. Uses ToolContext DI (`pipeline/context.py`) — single module-level `_ctx: ToolContext | None`. `_initialize(ctx)` wires everything at startup. Gate policy in `pipeline/gate.py`. `version_info()` is public. Registers `recipe://` resource handler. **Ungated vs gated notifications:** Ungated tools accept no `ctx: Context` parameter and emit no MCP progress notifications. This is intentional — they are fast, lightweight reads. MCP notifications are reserved for long-running gated operations. This asymmetry is documented in each ungated tool's docstring.
   * **server/git.py**: L3 service module for the git merge workflow. `perform_merge(worktree_path, base_branch, *, config, runner)` executes the full merge pipeline: path validation → worktree verification → branch detection → test gate → fetch → rebase → main-repo merge → worktree cleanup. Uses injected `SubprocessRunner` so existing test mocks apply unchanged.
   * **server/helpers.py**: Shared server-layer utilities — worktree environment setup, path normalization, and other helpers shared across `tools_*.py` modules.
   * **server/prompts.py**: MCP prompt handlers for `open_kitchen` and `close_kitchen` activation prompts (user-only, model cannot invoke).
@@ -234,12 +235,12 @@ temp/                        # Temporary/working files (gitignored)
 The Python package directory (`src/autoskillit/`) is the plugin root:
   * `.claude-plugin/plugin.json` — plugin manifest (name, version, description)
   * `.mcp.json` — MCP server config (command: `autoskillit`)
-  * `skills/` — 17 bundled skills discovered by Claude Code as `/autoskillit:*` slash commands
+  * `skills/` — 19 bundled skills discovered by Claude Code as `/autoskillit:*` slash commands
   * `pyproject.toml` declares `artifacts` to include dotfiles in the wheel
 
 ### **Skills**
 
-17 bundled skills, invoked as `/autoskillit:<name>`. These are the building blocks that project-specific pipeline recipes (generated by `setup-project`) compose together.
+19 bundled skills, invoked as `/autoskillit:<name>`. These are the building blocks that project-specific pipeline recipes (generated by `setup-project`) compose together.
 
 Skills are discovered by Claude Code via the plugin structure. Headless sessions receive `--plugin-dir` automatically via `run_skill` and `run_skill_retry`. Project-specific pipeline recipes go in `.autoskillit/recipes/` as YAML files, discovered via `list_recipes` and loaded via `load_recipe`.
 
@@ -258,6 +259,7 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 | `reset_workspace` | Reset workspace, preserving configured directories |
 | `read_db` | Run read-only SQL query against SQLite database |
 | `migrate_recipe` | Apply pending migration notes to a recipe file (gated) |
+| `check_quota` | Check 5-hour API quota utilization; returns whether a sleep is needed before the next `run_skill` call |
 | `kitchen_status` | Return version health and config status (ungated) |
 | `list_recipes` | List pipeline recipes from .autoskillit/recipes/ (ungated) |
 | `load_recipe` | Load a recipe by name as raw YAML — read-only, no migration (ungated) |
@@ -269,7 +271,7 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 
 ### **Tool Activation**
 
-11 tools are gated by default. At the start of a session, the user must type
+12 tools are gated by default. At the start of a session, the user must type
 the `open_kitchen` prompt to activate. The exact prompt name is prefixed by
 Claude Code based on how the server was loaded (e.g. `plugin_autoskillit_autoskillit`
 for plugin installs). This uses MCP prompts (user-only, model cannot invoke)

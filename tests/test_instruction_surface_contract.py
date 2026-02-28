@@ -8,12 +8,16 @@ If any test fails, a drift has occurred and the corresponding surface needs upda
 from __future__ import annotations
 
 import importlib
+import json
 import re
 from pathlib import Path
 
 import pytest
 
+from autoskillit.config.settings import AutomationConfig
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
+from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
+from autoskillit.workspace.skills import SkillResolver
 
 
 def _project_root() -> Path:
@@ -284,4 +288,95 @@ class TestMultiPartScopeContract:
         )
         assert "SCOPE FENCE" in text or "scope fence" in text.lower(), (
             "implement-worktree-no-merge SKILL.md must contain a SCOPE FENCE instruction"
+        )
+
+
+class TestClaudeMdConfigSurfaceContract:
+    """CLAUDE.md developer guidance surfaces must match their code-level sources of truth.
+
+    These tests ensure that when settings.py defaults, gate.py tool sets, or the
+    bundled skill list changes, CLAUDE.md's documented values are kept in sync.
+    A failing test here means CLAUDE.md has drifted from the code it describes.
+    """
+
+    def _claude_md(self) -> str:
+        return (_project_root() / "CLAUDE.md").read_text()
+
+    def test_header_total_tool_count_matches_gate(self):
+        """CLAUDE.md Section 1 header must state the correct total MCP tool count."""
+        total = len(GATED_TOOLS) + len(UNGATED_TOOLS)
+        content = self._claude_md()
+        assert f"{total} MCP tools" in content, (
+            f"CLAUDE.md header says the wrong total MCP tool count. "
+            f"gate.py defines {total} tools ({len(GATED_TOOLS)} gated + "
+            f"{len(UNGATED_TOOLS)} ungated). Update the header in Section 1."
+        )
+
+    def test_header_gated_tool_count_matches_gate(self):
+        """CLAUDE.md Section 1 header must state the correct gated tool count."""
+        gated = len(GATED_TOOLS)
+        content = self._claude_md()
+        assert f"{gated} gated" in content, (
+            f"CLAUDE.md header says the wrong gated tool count. "
+            f"gate.py defines {gated} gated tools. "
+            f"Update all occurrences of the gated count in CLAUDE.md."
+        )
+
+    def test_header_skill_count_matches_filesystem(self):
+        """CLAUDE.md Section 1 header must state the correct bundled skill count."""
+        count = len(SkillResolver().list_all())
+        content = self._claude_md()
+        assert f"{count} bundled skills" in content, (
+            f"CLAUDE.md header says the wrong bundled skill count. "
+            f"SkillResolver finds {count} skills on disk. "
+            f"Update all occurrences of the skill count in CLAUDE.md."
+        )
+
+    def test_all_gated_tools_in_mcp_table(self):
+        """Every tool in GATED_TOOLS must appear in CLAUDE.md's MCP Tools table."""
+        content = self._claude_md()
+        # Locate the MCP Tools table section
+        table_start = content.find("### **MCP Tools**")
+        assert table_start != -1, "CLAUDE.md must have a '### **MCP Tools**' section"
+        # Find section end (next ###)
+        table_end = content.find("\n### ", table_start + 1)
+        table_section = content[table_start:table_end] if table_end != -1 else content[table_start:]
+        missing = [t for t in GATED_TOOLS if f"`{t}`" not in table_section]
+        assert not missing, (
+            f"CLAUDE.md MCP Tools table is missing these gated tools: {missing}. "
+            f"Add a row for each in the table."
+        )
+
+    def test_testing_guidelines_mentions_task_test_check(self):
+        """CLAUDE.md Section 4 (Testing Guidelines) must document task test-check.
+
+        task test-check is the automation/MCP command used by test_check and
+        merge_worktree. Section 4 must document both commands and their roles
+        rather than declaring task test-all as the sole command.
+        """
+        content = self._claude_md()
+        section_start = content.find("## **4. Testing Guidelines**")
+        assert section_start != -1, "CLAUDE.md must have a Section 4: Testing Guidelines"
+        section_end = content.find("\n## **", section_start + 1)
+        section = content[section_start:section_end] if section_end != -1 else content[section_start:]
+        assert "task test-check" in section, (
+            "CLAUDE.md Section 4 (Testing Guidelines) does not mention 'task test-check'. "
+            "Update the 'Run tests' bullet to document both: "
+            "task test-all (human-facing, includes lint) and "
+            "task test-check (automation/MCP, unambiguous PASS/FAIL)."
+        )
+
+    def test_config_table_test_check_command_matches_settings(self):
+        """CLAUDE.md config table test_check.command default must match AutomationConfig().
+
+        This is a sync guard: when settings.py's default changes, this test
+        will fail unless CLAUDE.md's config table is also updated.
+        """
+        default_cmd = AutomationConfig().test_check.command
+        cmd_json = json.dumps(default_cmd)  # e.g. '["task", "test-all"]'
+        content = self._claude_md()
+        assert cmd_json in content, (
+            f"CLAUDE.md config table test_check.command default ({cmd_json!r}) "
+            f"does not match settings.py default ({default_cmd!r}). "
+            f"Update the config table row for test_check/command in CLAUDE.md."
         )

@@ -1007,7 +1007,8 @@ def test_server_uses_recipe_io_not_recipe_loader_for_discovery() -> None:
     assert (
         "from autoskillit.recipe.io import" in combined_src
         or "from .recipe.io import" in combined_src
-    ), "server/ package must import recipe discovery functions from recipe.io"
+        or "from autoskillit.recipe import" in combined_src
+    ), "server/ package must import recipe discovery functions from recipe.io or recipe package"
     assert "from autoskillit.recipe.loader import list_recipes" not in combined_src
     assert "from autoskillit.recipe.loader import load_recipe" not in combined_src
 

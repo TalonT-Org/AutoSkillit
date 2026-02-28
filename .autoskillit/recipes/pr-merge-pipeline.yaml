@@ -1,0 +1,339 @@
+name: pr-merge-pipeline
+description: Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
+summary: "clone > setup_remote > analyze_prs > create_integration_branch > [loop per PR: merge_pr or (plan > verify > implement > test > merge_to_integration)] > push_integration_branch > collect_artifacts > audit_impl > create_review_pr > cleanup"
+autoskillit_version: "0.2.0"
+
+ingredients:
+  source_dir:
+    description: Path to the source repository to clone and work in
+    required: true
+  run_name:
+    description: Name prefix for this pipeline run (used in clone directory name)
+    default: "pr-merge"
+  keep_clone_on_failure:
+    description: Keep the clone directory when the pipeline fails (true/false)
+    default: "false"
+  base_branch:
+    description: Target branch that all PRs are merging into; integration branch is created from this
+    default: main
+  audit:
+    description: Run /autoskillit:audit-impl after all PRs are merged to check coherency (true/false)
+    default: "true"
+
+kitchen_rules:
+  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
+    orchestrator. All work is delegated through run_skill/run_skill_retry
+    and run_cmd."
+  - "Route to on_failure when a step fails — do not investigate or fix directly."
+  - "SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before
+    advancing to the next PR. Never batch-assess all PRs before starting merges."
+  - "SEQUENTIAL EXECUTION: complete full cycle (verify → implement → test →
+    merge_to_integration) per plan part before advancing to the next part or PR."
+  - "INTEGRATION BRANCH: All PR merges and worktree merges target
+    context.integration_branch, not inputs.base_branch. The base_branch is only
+    used for the final review PR."
+  - "PR QUEUE: The agent reads context.pr_order_file once at analyze_prs and
+    maintains an ordered queue. context.current_pr_index (agent-maintained, starts
+    at 0) tracks progress. Advance the index after each successful merge or
+    complex-pr cycle completes."
+  - "COMPLEX PR PATH: When merge_pr returns needs_plan=true, context.task is set to
+    the conflict_report_path. Pass context.task to make-plan. The plan+implement
+    cycle creates a worktree from the integration branch and merges it back via
+    merge_to_integration."
+
+steps:
+  clone:
+    python: autoskillit.workspace.clone.clone_repo
+    with:
+      source_dir: "${{ inputs.source_dir }}"
+      run_name: "${{ inputs.run_name }}"
+    capture:
+      work_dir: "${{ result.clone_path }}"
+    on_success: setup_remote
+    on_failure: escalate_stop
+    note: >
+      Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
+      Captures work_dir used as cwd by all subsequent steps.
+      On failure, escalate_stop is reached immediately — no clone to remove.
+
+  setup_remote:
+    tool: run_cmd
+    with:
+      cmd: "git remote set-url origin \"$(git -C ${{ inputs.source_dir }} remote get-url origin)\""
+      cwd: "${{ context.work_dir }}"
+    on_success: analyze_prs
+    on_failure: cleanup_failure
+    note: >
+      The clone's origin initially points to the local source_dir path.
+      This step replaces it with the actual GitHub remote URL from source_dir,
+      so that gh CLI commands and git fetch origin work correctly in the clone.
+
+  analyze_prs:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:analyze-prs ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "analyze_prs"
+    capture:
+      pr_order_file: "${{ result.pr_order_file }}"
+      integration_branch: "${{ result.integration_branch }}"
+    on_success: create_integration_branch
+    on_failure: cleanup_failure
+    note: >
+      Captures pr_order_file (path to JSON with ordered PRs + complexity tags) and
+      integration_branch (e.g. integration/pr-merge-20250228-143052). If the skill
+      reports pr_count=0 (no open PRs), skip directly to cleanup_success — no
+      integration branch is needed.
+
+  create_integration_branch:
+    tool: run_cmd
+    with:
+      cmd: "git checkout ${{ inputs.base_branch }} && git pull && git checkout -b ${{ context.integration_branch }}"
+      cwd: "${{ context.work_dir }}"
+    on_success: merge_pr
+    on_failure: cleanup_failure
+    note: >
+      Creates the integration branch from the latest base_branch HEAD.
+      context.integration_branch was computed by analyze_prs.
+      The agent initializes context.current_pr_index = 0 here.
+
+  merge_pr:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:merge-pr"
+      cwd: "${{ context.work_dir }}"
+      step_name: "merge_pr"
+      pr_order_file: "${{ context.pr_order_file }}"
+    capture:
+      needs_plan: "${{ result.needs_plan }}"
+      task: "${{ result.conflict_report_path }}"
+    on_result:
+      field: needs_plan
+      routes:
+        "true": plan
+        "false": next_part_or_next_pr
+    on_failure: cleanup_failure
+    note: >
+      The agent reads context.pr_order_file at context.current_pr_index to get the
+      current PR's number and complexity. Appends them to skill_command:
+        /autoskillit:merge-pr {pr_number} {complexity}
+      needs_plan=false → PR merged directly → next_part_or_next_pr.
+      needs_plan=true → conflict_report_path set as context.task → plan.
+
+  plan:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:make-plan ${{ context.task }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "plan"
+    capture:
+      plan_path: "${{ result.plan_path }}"
+    capture_list:
+      plan_parts: "${{ result.plan_parts }}"
+    on_success: verify
+    on_failure: cleanup_failure
+    note: >
+      Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically
+      into plan_parts[]. For a single-part plan, plan_parts has one entry equal
+      to plan_path.
+      PRIMARY PATH: context.task = conflict_report_path from merge_pr.
+      REMEDIATION MODE: context.remediation_path is set when re-entering from
+      the remediate step; pass it inline in the skill_command instead of
+      context.task.
+
+  verify:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:dry-walkthrough ${{ context.plan_path }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "verify"
+    on_success: implement
+    on_failure: cleanup_failure
+    note: >
+      SEQUENTIAL: For each plan_part, run the full cycle
+      (verify → implement → test → merge_to_integration) before advancing.
+
+  implement:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "implement"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    on_success: test
+    on_failure: cleanup_failure
+    retry:
+      max_attempts: 0
+      on: needs_retry
+      on_exhausted: retry_worktree
+
+  retry_worktree:
+    tool: run_skill_retry
+    with:
+      skill_command: "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: "retry_worktree"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    on_success: test
+    on_failure: cleanup_failure
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: cleanup_failure
+
+  test:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: merge_to_integration
+    on_failure: fix
+
+  merge_to_integration:
+    tool: merge_worktree
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+      base_branch: "${{ context.integration_branch }}"
+    capture:
+      cleanup_succeeded: "${{ result.cleanup_succeeded }}"
+    on_success: next_part_or_next_pr
+    on_failure: cleanup_failure
+    note: >
+      Merges the conflict-resolution worktree into the integration branch
+      (not inputs.base_branch). After merge, check if more plan_parts remain
+      for this PR. If so, return to verify with the next part. If all parts
+      are done, go to next_part_or_next_pr.
+
+  fix:
+    tool: run_skill
+    model: sonnet
+    with:
+      skill_command: "/autoskillit:assess-and-merge ${{ context.worktree_path }} ${{ context.plan_path }} ${{ context.integration_branch }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: "fix"
+      base_branch: "${{ inputs.base_branch }}"
+    on_success: next_part_or_next_pr
+    on_failure: cleanup_failure
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: cleanup_failure
+    note: >
+      Fixes test failures and merges the worktree into context.integration_branch
+      (not inputs.base_branch — the base_branch with: key is present for contract
+      compatibility only; the merge target is always the integration branch).
+
+  next_part_or_next_pr:
+    action: route
+    on_result:
+      field: next
+      routes:
+        more_parts: verify
+        more_prs: merge_pr
+        all_done: push_integration_branch
+    note: >
+      Routing step — no tool call. The agent evaluates what comes next:
+      1. If more plan_parts remain for the current PR → verify (next part).
+      2. If all parts done, advance current_pr_index. If more PRs remain → merge_pr.
+      3. If all PRs processed → push_integration_branch.
+
+  push_integration_branch:
+    tool: run_cmd
+    with:
+      cmd: "git push --set-upstream origin ${{ context.integration_branch }}"
+      cwd: "${{ context.work_dir }}"
+    on_success: collect_artifacts
+    on_failure: cleanup_failure
+    note: >
+      Pushes the integration branch to the GitHub remote so that gh pr create
+      can reference it. push_clone_to_origin is not used here because that
+      callable does a fast-forward pull of an existing branch; this branch is
+      new and must be pushed directly.
+
+  collect_artifacts:
+    tool: run_cmd
+    with:
+      cmd: "find temp/make-plan/ -name '*_plan_*.md' -exec cp {} temp/pr-merge-pipeline/ \\; 2>/dev/null || true"
+      cwd: "${{ context.work_dir }}"
+    on_success: audit_impl
+    on_failure: audit_impl
+    note: >
+      Copies any plan files generated during the pipeline into
+      temp/pr-merge-pipeline/ alongside the PR analysis and conflict reports.
+      Always proceeds to audit_impl even if no plan files exist — the PR
+      analysis plan file (pr_analysis_plan_*.md) is always present.
+
+  audit_impl:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:audit-impl temp/pr-merge-pipeline ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "audit_impl"
+    capture:
+      verdict: "${{ result.verdict }}"
+      remediation_path: "${{ result.remediation_path }}"
+    on_result:
+      field: verdict
+      routes:
+        GO: create_review_pr
+        NO GO: remediate
+    optional: true
+    note: >
+      Only execute if inputs.audit is 'true'. If false, skip directly to
+      create_review_pr. Passes temp/pr-merge-pipeline/ as plans_input — audit-impl
+      discovers all *_plan_*.md files there (PR analysis + conflict reports + any
+      make-plan output files copied by collect_artifacts).
+      implementation_ref is context.integration_branch (no worktree remains).
+      GO → create_review_pr. NO GO → remediate (re-enters plan with remediation file).
+
+  remediate:
+    action: route
+    with:
+      remediation_path: "${{ context.remediation_path }}"
+    on_success: plan
+
+  create_review_pr:
+    tool: run_cmd
+    with:
+      cmd: >-
+        gh pr create
+        --base ${{ inputs.base_branch }}
+        --head ${{ context.integration_branch }}
+        --title "Integration: collapsed PRs into ${{ inputs.base_branch }}"
+        --body "Auto-generated integration branch collapsing open PRs into a single review. See temp/pr-merge-pipeline/ for analysis and conflict resolution details."
+      cwd: "${{ context.work_dir }}"
+    on_success: cleanup_success
+    on_failure: cleanup_failure
+
+  cleanup_success:
+    python: autoskillit.workspace.clone.remove_clone
+    with:
+      clone_path: "${{ context.work_dir }}"
+      keep: "false"
+    on_success: done
+    on_failure: done
+    note: >
+      Removes the clone directory after a successful pipeline run.
+      Routes to done regardless of whether removal succeeds — a cleanup
+      failure should not mask a successful pipeline.
+
+  cleanup_failure:
+    python: autoskillit.workspace.clone.remove_clone
+    with:
+      clone_path: "${{ context.work_dir }}"
+      keep: "${{ inputs.keep_clone_on_failure }}"
+    on_success: escalate_stop
+    on_failure: escalate_stop
+    note: >
+      Called on any pipeline failure where the clone was created.
+      Respects keep_clone_on_failure for debugging. Always routes to escalate_stop.
+
+  done:
+    action: stop
+    message: "PR consolidation complete. Integration branch pushed, review PR opened. Human review required before merging to base_branch."
+
+  escalate_stop:
+    action: stop
+    message: "Pipeline failed — human intervention needed. Check the integration branch and temp/pr-merge-pipeline/ for details."

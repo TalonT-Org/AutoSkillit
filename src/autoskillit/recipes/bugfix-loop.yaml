@@ -23,7 +23,7 @@ ingredients:
     required: true
   audit:
     description: Run /autoskillit:audit-impl before merge to gate on implementation quality
-    default: "false"
+    default: "true"
 
 steps:
   reset:

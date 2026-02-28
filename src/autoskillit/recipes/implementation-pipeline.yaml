@@ -30,7 +30,7 @@ ingredients:
     default: "false"
   audit:
     description: Run /autoskillit:audit-impl once after all groups/parts have been merged, to check overall implementation quality and optionally trigger a remediation round (true/false)
-    default: "false"
+    default: "true"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,

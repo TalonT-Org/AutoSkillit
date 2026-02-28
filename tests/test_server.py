@@ -7041,9 +7041,7 @@ class TestPushToRemoteTool:
     @pytest.mark.asyncio
     async def test_returns_gate_error_when_disabled(self, tool_ctx):
         tool_ctx.gate.enabled = False
-        result = json.loads(
-            await push_to_remote(clone_path="/c", source_dir="/s", branch="main")
-        )
+        result = json.loads(await push_to_remote(clone_path="/c", source_dir="/s", branch="main"))
         assert result["subtype"] == "gate_error"
 
     @pytest.mark.asyncio

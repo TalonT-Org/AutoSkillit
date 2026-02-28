@@ -22,7 +22,7 @@ def test_tool_sets_are_disjoint():
 def test_tool_sets_total_count():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    assert len(GATED_TOOLS) == 15   # +3 for clone_repo, remove_clone, push_to_remote
+    assert len(GATED_TOOLS) == 15  # +3 for clone_repo, remove_clone, push_to_remote
     assert len(UNGATED_TOOLS) == 6
 
 

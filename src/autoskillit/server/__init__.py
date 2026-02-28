@@ -90,6 +90,11 @@ from autoskillit.server.prompts import (  # noqa: E402, F401
     close_kitchen,
     open_kitchen,
 )
+from autoskillit.server.tools_clone import (  # noqa: E402, F401
+    clone_repo,
+    push_to_remote,
+    remove_clone,
+)
 from autoskillit.server.tools_execution import (  # noqa: E402, F401
     run_cmd,
     run_python,
@@ -112,11 +117,6 @@ from autoskillit.server.tools_status import (  # noqa: E402, F401
     get_token_summary,
     kitchen_status,
     read_db,
-)
-from autoskillit.server.tools_clone import (  # noqa: E402, F401
-    clone_repo,
-    push_to_remote,
-    remove_clone,
 )
 from autoskillit.server.tools_workspace import (  # noqa: E402, F401
     reset_test_dir,

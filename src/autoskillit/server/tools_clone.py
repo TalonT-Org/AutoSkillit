@@ -17,9 +17,7 @@ logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"automation"})
-async def clone_repo(
-    source_dir: str, run_name: str, ctx: Context = CurrentContext()
-) -> str:
+async def clone_repo(source_dir: str, run_name: str, ctx: Context = CurrentContext()) -> str:
     """Clone a source repository for isolated pipeline execution.
 
     Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.

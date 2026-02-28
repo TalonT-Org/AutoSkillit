@@ -331,34 +331,26 @@ class DefaultMigrationService:
 
         Checks for applicable migrations, runs the migration engine (LLM-driven
         if a headless runner is wired in), handles FailureStore recording, and
-        regenerates the contract card on success.
+        regenerates the contract card when stale.
 
         Returns a dict with:
           {"status": "up_to_date", "name": name}  — no migration needed
-          {"status": "migrated", "name": name}     — migration applied
+          {"status": "migrated", "name": name, "contracts_regenerated": [...]}
+              — version migration applied and/or stale contracts regenerated
           {"error": str, "name": name}             — migration failed
         """
         from autoskillit.migration.loader import applicable_migrations as _applicable
         from autoskillit.migration.store import FailureStore, default_store_path
-        from autoskillit.recipe import generate_recipe_card, parse_recipe_metadata
+        from autoskillit.recipe import parse_recipe_metadata
 
         meta = parse_recipe_metadata(recipe_path)
         name = meta.name
         migrations = _applicable(meta.version, __version__)
-        if not migrations:
-            return {"status": "up_to_date", "name": name}
 
         # Derive project_dir: recipe_path → recipes_dir → .autoskillit/ → project_dir
         recipes_dir = recipe_path.parent
         project_dir = recipes_dir.parent.parent
         temp_dir = project_dir / ".autoskillit" / "temp"
-
-        file = MigrationFile(
-            name=name,
-            path=recipe_path,
-            file_type="recipe",
-            current_version=meta.version,
-        )
 
         if self._run_headless is not None:
             run_headless: Callable[..., Awaitable[SkillResult]] = self._run_headless
@@ -381,26 +373,62 @@ class DefaultMigrationService:
                     token_usage=None,
                 )
 
-        migration_result = await self._engine.migrate_file(
-            file, run_headless=run_headless, temp_dir=temp_dir
-        )
+        did_version_migrate = False
+        if migrations:
+            file = MigrationFile(
+                name=name,
+                path=recipe_path,
+                file_type="recipe",
+                current_version=meta.version,
+            )
 
-        failure_store = FailureStore(default_store_path(project_dir))
+            migration_result = await self._engine.migrate_file(
+                file, run_headless=run_headless, temp_dir=temp_dir
+            )
 
-        if migration_result.success:
-            failure_store.clear(name)
-            try:
-                if recipe_path.exists():
-                    generate_recipe_card(recipe_path, recipes_dir)
-            except Exception:
-                logger.warning("contract_card_generation_failed", name=name, exc_info=True)
-            return {"status": "migrated", "name": name}
+            failure_store = FailureStore(default_store_path(project_dir))
 
-        failure_store.record(
-            name=name,
-            file_path=recipe_path,
-            file_type="recipe",
-            error=migration_result.error or "unknown",
-            retries_attempted=migration_result.retries_attempted,
-        )
-        return {"error": f"Migration failed: {migration_result.error}", "name": name}
+            if migration_result.success:
+                failure_store.clear(name)
+                did_version_migrate = True
+            else:
+                failure_store.record(
+                    name=name,
+                    file_path=recipe_path,
+                    file_type="recipe",
+                    error=migration_result.error or "unknown",
+                    retries_attempted=migration_result.retries_attempted,
+                )
+                return {"error": f"Migration failed: {migration_result.error}", "name": name}
+
+        contracts_regenerated: list[str] = []
+        contract_adapter = self._engine.get_adapter("contract")
+        if contract_adapter is not None:
+            contract_file = MigrationFile(
+                name=name,
+                path=recipes_dir / "contracts" / f"{name}.yaml",
+                file_type="contract",
+                current_version=None,
+            )
+            if contract_adapter.needs_migration(contract_file):
+                contract_result = await self._engine.migrate_file(
+                    contract_file,
+                    run_headless=run_headless,
+                    temp_dir=temp_dir,
+                )
+                if contract_result.success:
+                    contracts_regenerated.append(name)
+                else:
+                    logger.warning(
+                        "contract.migration_failed",
+                        name=name,
+                        error=contract_result.error,
+                    )
+
+        if did_version_migrate or contracts_regenerated:
+            return {
+                "status": "migrated",
+                "name": name,
+                "contracts_regenerated": contracts_regenerated,
+            }
+        return {"status": "up_to_date", "name": name}

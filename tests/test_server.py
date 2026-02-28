@@ -5590,10 +5590,14 @@ class TestMigrateRecipe:
         assert "nonexistent" in result["error"]
 
     @pytest.mark.asyncio
-    async def test_migrate_recipe_up_to_date(self, tmp_path, monkeypatch):
-        """migrate_recipe returns up_to_date when no migrations applicable."""
+    async def test_migrate_recipe_up_to_date(self, tmp_path, monkeypatch):  # SRV-UPD-1
+        """migrate_recipe returns up_to_date when no migrations applicable and contract fresh."""
         monkeypatch.chdir(tmp_path)
-        with patch("autoskillit.migration.loader.applicable_migrations", return_value=[]):
+        with (
+            patch("autoskillit.migration.loader.applicable_migrations", return_value=[]),
+            patch("autoskillit.recipe.load_recipe_card", return_value={"skill_hashes": {}}),
+            patch("autoskillit.recipe.check_contract_staleness", return_value=[]),
+        ):
             result = json.loads(await migrate_recipe(name="implementation-pipeline"))
         assert result.get("status") == "up_to_date"
 
@@ -5619,12 +5623,13 @@ class TestMigrateRecipe:
         )
         with (
             patch("autoskillit.execution.headless.run_headless_core", mock_headless),
-            patch("autoskillit.recipe.contracts.generate_recipe_card", return_value=None),
+            patch("autoskillit.recipe.generate_recipe_card", return_value=None),
         ):
             result = json.loads(await migrate_recipe(name="test-script"))
 
         mock_headless.assert_awaited_once()
         assert result.get("status") == "migrated"
+        assert "contracts_regenerated" in result
 
     # LR4
     @pytest.mark.asyncio
@@ -5756,11 +5761,47 @@ class TestMigrateRecipe:
                 stderr="",
             )
         )
-        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
+        with (
+            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
+            patch("autoskillit.recipe.load_recipe_card", return_value={"skill_hashes": {}}),
+            patch("autoskillit.recipe.check_contract_staleness", return_value=[]),
+        ):
             result = json.loads(await migrate_recipe(name="test-script"))
 
         mock_headless.assert_not_called()
         assert result.get("status") == "up_to_date"
+
+    # SRV-NEW-1
+    @pytest.mark.asyncio
+    async def test_migrate_recipe_regenerates_stale_contract(
+        self, tmp_path, monkeypatch, tool_ctx
+    ):
+        """migrate_recipe with version migration also regenerates stale contracts."""
+        ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
+        (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
+
+        mock_headless = AsyncMock(
+            return_value=SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason=RetryReason.NONE,
+                stderr="",
+            )
+        )
+        with (
+            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
+            patch("autoskillit.recipe.load_recipe_card", return_value=None),
+            patch("autoskillit.recipe.generate_recipe_card", return_value={}),
+        ):
+            result = json.loads(await migrate_recipe(name="test-script"))
+
+        assert result.get("status") == "migrated"
+        assert result.get("contracts_regenerated") == ["test-script"]
 
 
 class TestExtractTokenUsage:

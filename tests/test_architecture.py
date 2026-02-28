@@ -182,6 +182,39 @@ def _scan(path: Path) -> list[Violation]:
 
 _SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
 
+
+def _runtime_import_froms(path: Path) -> list[ast.ImportFrom]:
+    """Return ImportFrom nodes not inside a TYPE_CHECKING guard."""
+    tree = ast.parse(path.read_text())
+    result: list[ast.ImportFrom] = []
+
+    def _walk(stmts: list) -> None:
+        for stmt in stmts:
+            if isinstance(stmt, ast.ImportFrom):
+                result.append(stmt)
+            elif isinstance(stmt, ast.If):
+                test = stmt.test
+                is_tc = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+                    isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+                )
+                if not is_tc:
+                    _walk(stmt.body)
+                    _walk(stmt.orelse)
+            elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                _walk(stmt.body)
+            elif isinstance(stmt, ast.ClassDef):
+                _walk(stmt.body)
+            elif isinstance(stmt, ast.Try):
+                _walk(stmt.body)
+                for handler in stmt.handlers:
+                    _walk(handler.body)
+                _walk(stmt.orelse)
+                _walk(getattr(stmt, "finalbody", []))
+
+    _walk(tree.body)
+    return result
+
+
 # ── Rule 1: Import layer enforcement ─────────────────────────────────────────
 SUBPACKAGE_LAYERS: dict[str, int] = {
     # Layer 0: core/ — zero autoskillit internal imports
@@ -1350,3 +1383,206 @@ def test_server_tool_handlers_have_no_business_logic() -> None:
     assert not violations, "Tool handlers contain business logic:\n" + "\n".join(
         f"  {v}" for v in violations
     )
+
+
+# ── REQ-ARCH-001: No cross-package submodule imports ─────────────────────────
+
+
+def test_no_cross_package_submodule_imports() -> None:
+    """REQ-ARCH-001: No module outside package X may import from autoskillit.X.<submodule>.
+
+    Intra-package imports (e.g., server/__init__.py importing autoskillit.server.helpers)
+    are explicitly allowed. TYPE_CHECKING-guarded imports are excluded.
+    """
+    AUTOSKILLIT_ROOT = SRC_ROOT
+    violations: list[str] = []
+
+    for path in _SOURCE_FILES:
+        rel = path.relative_to(AUTOSKILLIT_ROOT)
+        # Determine this file's immediate package (None for root-level modules)
+        file_package: str | None = rel.parts[0] if len(rel.parts) > 1 else None
+
+        for node in _runtime_import_froms(path):
+            if node.module is None:
+                continue
+            parts = node.module.split(".")
+            # Flag: autoskillit.<pkg>.<submod> where <pkg> != file_package
+            if len(parts) >= 3 and parts[0] == "autoskillit":
+                target_package = parts[1]
+                if file_package != target_package:
+                    violations.append(
+                        f"{path.relative_to(AUTOSKILLIT_ROOT)}:{node.lineno} "
+                        f"imports from autoskillit.{target_package}.{parts[2]}"
+                    )
+
+    assert not violations, (
+        "Cross-package submodule imports detected (use package __init__ instead):\n"
+        + "\n".join(violations)
+    )
+
+
+# ── REQ-ARCH-002: ToolContext service fields use Protocol types ───────────────
+
+
+def test_tool_context_service_fields_use_protocol_types() -> None:
+    """REQ-ARCH-002: Every non-exempt ToolContext field must use a Protocol from core/types.py.
+
+    Exempt fields:
+    - plugin_dir: str primitive (explicitly stated in the requirement)
+    - config: AutomationConfig dataclass (configuration container, not a service interface)
+    """
+    AUTOSKILLIT_ROOT = SRC_ROOT
+
+    # Collect Protocol class names from core/types.py via AST
+    types_path = AUTOSKILLIT_ROOT / "core" / "types.py"
+    types_tree = ast.parse(types_path.read_text())
+    core_protocols: set[str] = set()
+    for node in ast.walk(types_tree):
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                base_str = ast.unparse(base)
+                if "Protocol" in base_str:
+                    core_protocols.add(node.name)
+                    break
+
+    # Collect ToolContext field annotations via AST
+    context_path = AUTOSKILLIT_ROOT / "pipeline" / "context.py"
+    context_tree = ast.parse(context_path.read_text())
+
+    EXEMPT = {"plugin_dir", "config"}
+    violations: list[str] = []
+
+    for node in ast.walk(context_tree):
+        if isinstance(node, ast.ClassDef) and node.name == "ToolContext":
+            for item in node.body:
+                if not isinstance(item, ast.AnnAssign):
+                    continue
+                field_name = ast.unparse(item.target)
+                if field_name in EXEMPT:
+                    continue
+
+                # Collect all type names from annotation (unwraps Union/Optional)
+                ann_str = ast.unparse(item.annotation)
+                # Strip Optional[...] / X | None wrappers; collect bare names
+                type_names = {
+                    n.strip().strip("[]")
+                    for n in ann_str.replace("|", ",").split(",")
+                    if n.strip() not in ("None", "")
+                }
+                # Remove generic parameters, e.g. "list[str]" → "list"
+                type_names = {n.split("[")[0] for n in type_names}
+
+                for type_name in type_names:
+                    if type_name not in core_protocols and type_name not in (
+                        "str",
+                        "int",
+                        "float",
+                        "bool",
+                        "bytes",
+                        "None",
+                    ):
+                        violations.append(
+                            f"ToolContext.{field_name}: '{type_name}' is not a "
+                            f"Protocol in core/types.py"
+                        )
+
+    assert not violations, (
+        "ToolContext fields use concrete types instead of core/types.py Protocols:\n"
+        + "\n".join(violations)
+    )
+
+
+# ── REQ-ARCH-003: server/tools_*.py import only allowed packages ──────────────
+
+
+def test_server_tools_import_only_allowed_packages() -> None:
+    """REQ-ARCH-003: server/tools_*.py may only import from autoskillit.core,
+    autoskillit.pipeline, and intra-package autoskillit.server.*. TYPE_CHECKING exempt.
+    """
+    ALLOWED = {"core", "pipeline", "server"}
+    tools_files = [
+        p for p in _SOURCE_FILES if p.parent.name == "server" and p.stem.startswith("tools_")
+    ]
+    violations: list[str] = []
+
+    for path in tools_files:
+        for node in _runtime_import_froms(path):
+            if node.module is None:
+                continue
+            parts = node.module.split(".")
+            if parts[0] == "autoskillit" and len(parts) >= 2:
+                if parts[1] not in ALLOWED:
+                    violations.append(
+                        f"{path.name}:{node.lineno} imports from "
+                        f"autoskillit.{parts[1]} (not in allowed set {ALLOWED})"
+                    )
+
+    assert not violations, (
+        "server/tools_*.py files import from disallowed autoskillit sub-packages:\n"
+        + "\n".join(violations)
+    )
+
+
+# ── REQ-ARCH-004: __all__ completeness ───────────────────────────────────────
+
+
+def test_package_all_matches_exports() -> None:
+    """REQ-ARCH-004: Each package __init__.__all__ must match its exported symbol set.
+
+    Two checks:
+    1. Every name in __all__ is importable from the package (no dead entries).
+    2. Every public name re-exported via relative or autoskillit.* imports in __init__.py
+       appears in __all__ (no undeclared exports).
+
+    Packages without __all__ (server, root autoskillit) are skipped.
+    """
+    import importlib
+
+    AUTOSKILLIT_ROOT = SRC_ROOT
+    PACKAGES_WITH_ALL = [
+        "core",
+        "config",
+        "pipeline",
+        "execution",
+        "workspace",
+        "recipe",
+        "migration",
+        "cli",
+    ]
+    violations: list[str] = []
+
+    for pkg_name in PACKAGES_WITH_ALL:
+        module = importlib.import_module(f"autoskillit.{pkg_name}")
+        all_list: list[str] = getattr(module, "__all__", None)  # type: ignore[assignment]
+        if all_list is None:
+            continue  # package opted out of __all__ — skip
+
+        # Check 1: every __all__ entry is importable
+        for name in all_list:
+            if not hasattr(module, name):
+                violations.append(
+                    f"autoskillit.{pkg_name}: '{name}' in __all__ but not importable"
+                )
+
+        # Check 2: every public name from relative / intra-package imports is in __all__
+        # Only intra-package absolute imports (autoskillit.{pkg_name}.*) are checked —
+        # cross-package imports (e.g. `from autoskillit.core import get_logger` in
+        # recipe/__init__.py) are internal helpers, not re-exports, and must be excluded.
+        init_path = AUTOSKILLIT_ROOT / pkg_name / "__init__.py"
+        for node in _runtime_import_froms(init_path):
+            is_relative = node.level and node.level > 0
+            is_intra_package = node.module and node.module.startswith(f"autoskillit.{pkg_name}.")
+            if not (is_relative or is_intra_package):
+                continue  # skip stdlib / third-party / cross-package imports
+
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name
+                if name.startswith("_") or name == "*":
+                    continue
+                if name not in all_list:
+                    violations.append(
+                        f"autoskillit.{pkg_name}: '{name}' re-exported via import "
+                        f"but not in __all__"
+                    )
+
+    assert not violations, "__all__ completeness violations:\n" + "\n".join(violations)

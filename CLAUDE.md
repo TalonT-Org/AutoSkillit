@@ -169,6 +169,7 @@ tests/
 ├── test_recipe_schema.py
 ├── test_recipe_validator.py
 ├── test_server.py                       # Server unit tests
+├── test_service_wrappers.py             # REQ-ARCH-006/007: DefaultRecipeRepository and DefaultMigrationService behavior
 ├── test_session_result.py
 ├── test_skill_resolver.py               # Skill resolution tests
 ├── test_smoke_pipeline.py

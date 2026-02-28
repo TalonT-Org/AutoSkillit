@@ -599,14 +599,7 @@ def _check_retry_without_capture(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="worktree-retry-creates-new",
-    description=(
-        "Worktree-creating skills (implement-worktree, "
-        "implement-worktree-no-merge) must not have retry "
-        "max_attempts > 1. Each retry re-invokes the skill, "
-        "creating a new worktree and orphaning the previous one. "
-        "Use max_attempts: 1 and route on_exhausted to a "
-        "retry-worktree step instead."
-    ),
+    description="Worktree-creating skills must not have retry max_attempts > 1.",
     severity=Severity.ERROR,
 )
 def _check_worktree_retry_creates_new(
@@ -643,15 +636,7 @@ def _check_worktree_retry_creates_new(
 
 @semantic_rule(
     name="needs-retry-no-restart",
-    description=(
-        "Worktree-creating skills (implement-worktree, implement-worktree-no-merge) "
-        "must not retry on needs_retry with max_attempts >= 1. "
-        "needs_retry signals partial progress exists in an existing worktree — "
-        "retrying the skill unconditionally creates a new timestamped worktree, "
-        "discarding that partial work. "
-        "Set max_attempts: 0 so on_exhausted fires immediately and routes to "
-        "a retry-worktree step that resumes in the existing worktree."
-    ),
+    description="Worktree-creating skills must not retry on needs_retry with max_attempts >= 1.",
     severity=Severity.ERROR,
 )
 def _check_needs_retry_no_restart(wf: Recipe) -> list[RuleFinding]:
@@ -862,11 +847,7 @@ def _check_implicit_handoff(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="multipart-iteration-notes",
-    description=(
-        "Recipes with make-plan or rectify steps must declare multi-part iteration conventions: "
-        "the plan step note must contain the *_part_*.md glob pattern, kitchen_rules must include "
-        "a sequential execution constraint, and next_or_done must route more_parts back to verify."
-    ),
+    description="Multi-part plan recipes must declare iteration conventions.",
     severity=Severity.ERROR,
 )
 def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
@@ -948,10 +929,7 @@ def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="merge-cleanup-uncaptured",
-    description=(
-        "merge_worktree steps should capture cleanup_succeeded to surface orphaned "
-        "worktrees or branches left behind when cleanup commands fail after a successful merge."
-    ),
+    description="merge_worktree steps should capture cleanup_succeeded to track orphaned results.",
     severity=Severity.WARNING,
 )
 def _check_merge_cleanup_captured(wf: Recipe) -> list[RuleFinding]:
@@ -982,10 +960,7 @@ def _check_merge_cleanup_captured(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="multipart-plan-parts-not-captured",
-    description=(
-        "Recipes with make-plan or rectify steps must capture plan_parts via capture_list "
-        "so the full ordered list of part files is available in pipeline context."
-    ),
+    description="Multi-part plan recipes must capture plan_parts via capture_list.",
     severity=Severity.ERROR,
 )
 def _check_plan_parts_captured(wf: Recipe) -> list[RuleFinding]:

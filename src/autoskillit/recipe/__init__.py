@@ -66,11 +66,11 @@ def list_all(project_dir: Path | None = None) -> dict[str, Any]:
         {"recipes": list[{"name", "description", "summary"}]}
         Includes "errors" key when recipes fail to parse.
     """
-    from autoskillit.recipe.io import format_recipe_list_response
+    from autoskillit.recipe.io import format_recipe_list_response as _format_recipe_list_response
 
     _pdir = project_dir if project_dir is not None else Path.cwd()
     result = list_recipes(_pdir)
-    return format_recipe_list_response(result)
+    return _format_recipe_list_response(result)
 
 
 def validate_from_path(path: Path) -> dict[str, Any]:
@@ -86,9 +86,15 @@ def validate_from_path(path: Path) -> dict[str, Any]:
     from autoskillit.recipe.io import _parse_recipe
     from autoskillit.recipe.validator import (
         analyze_dataflow,
-        build_quality_dict,
-        compute_recipe_validity,
-        findings_to_dicts,
+    )
+    from autoskillit.recipe.validator import (
+        build_quality_dict as _build_quality_dict,
+    )
+    from autoskillit.recipe.validator import (
+        compute_recipe_validity as _compute_recipe_validity,
+    )
+    from autoskillit.recipe.validator import (
+        findings_to_dicts as _findings_to_dicts,
     )
     from autoskillit.recipe.validator import run_semantic_rules as _run_semantic
     from autoskillit.recipe.validator import validate_recipe as _validate_struct
@@ -118,8 +124,8 @@ def validate_from_path(path: Path) -> dict[str, Any]:
     report = analyze_dataflow(recipe)
     semantic_findings = _run_semantic(recipe)
 
-    quality = build_quality_dict(report)
-    semantic = findings_to_dicts(semantic_findings)
+    quality = _build_quality_dict(report)
+    semantic = _findings_to_dicts(semantic_findings)
 
     contract_findings: list[dict[str, Any]] = []
     recipes_dir = path.parent
@@ -128,7 +134,7 @@ def validate_from_path(path: Path) -> dict[str, Any]:
     if contract:
         contract_findings = _validate_cards(recipe, contract)
 
-    valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
+    valid = _compute_recipe_validity(errors, semantic_findings, contract_findings)
 
     return {
         "valid": valid,
@@ -159,13 +165,17 @@ def load_and_validate(
     from autoskillit.core import YAMLError
     from autoskillit.recipe.contracts import check_contract_staleness as _check_staleness
     from autoskillit.recipe.contracts import load_recipe_card as _load_card
-    from autoskillit.recipe.contracts import stale_to_suggestions
+    from autoskillit.recipe.contracts import stale_to_suggestions as _stale_to_suggestions
     from autoskillit.recipe.contracts import validate_recipe_cards as _validate_cards
     from autoskillit.recipe.io import _parse_recipe
     from autoskillit.recipe.validator import (
-        compute_recipe_validity,
-        filter_version_rule,
-        findings_to_dicts,
+        compute_recipe_validity as _compute_recipe_validity,
+    )
+    from autoskillit.recipe.validator import (
+        filter_version_rule as _filter_version_rule,
+    )
+    from autoskillit.recipe.validator import (
+        findings_to_dicts as _findings_to_dicts,
     )
     from autoskillit.recipe.validator import run_semantic_rules as _run_semantic
     from autoskillit.recipe.validator import validate_recipe as _validate_struct
@@ -185,11 +195,11 @@ def load_and_validate(
             recipe = _parse_recipe(data)
             errors = _validate_struct(recipe)
             semantic_findings = _run_semantic(recipe)
-            semantic_suggestions = findings_to_dicts(semantic_findings)
+            semantic_suggestions = _findings_to_dicts(semantic_findings)
 
             _suppressed = suppressed or []
             if name in _suppressed:
-                semantic_suggestions = filter_version_rule(semantic_suggestions)
+                semantic_suggestions = _filter_version_rule(semantic_suggestions)
             suggestions.extend(semantic_suggestions)
 
             recipes_dir = _pdir / ".autoskillit" / "recipes"
@@ -199,9 +209,9 @@ def load_and_validate(
                 contract_findings = _validate_cards(recipe, contract)
                 suggestions.extend(contract_findings)
                 stale = _check_staleness(contract)
-                suggestions.extend(stale_to_suggestions(stale))
+                suggestions.extend(_stale_to_suggestions(stale))
 
-            valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
+            valid = _compute_recipe_validity(errors, semantic_findings, contract_findings)
     except YAMLError as exc:
         _logger.warning("Recipe YAML parse error", name=name, exc_info=True)
         suggestions.append(

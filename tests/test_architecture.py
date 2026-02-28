@@ -34,8 +34,10 @@ SRC_ROOT = Path(__file__).parent.parent / "src" / "autoskillit"
 
 _SENSITIVE_KEYWORDS = frozenset({"token", "secret", "password", "key", "api_key", "auth"})
 _LOGGER_METHODS = frozenset({"debug", "info", "warning", "error", "critical", "exception"})
-_PRINT_EXEMPT = frozenset({"app.py", "_doctor.py"})
+_PRINT_EXEMPT = frozenset({"app.py", "_doctor.py", "quota_check.py"})
 _BROAD_EXCEPTION_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"})
+# quota_check.py is a standalone hook script: fail-open design requires silent broad excepts
+_BROAD_EXCEPT_EXEMPT = frozenset({"quota_check.py"})
 
 
 def _has_log_call(body: list[ast.stmt]) -> bool:
@@ -213,6 +215,7 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
         self.violations: list[Violation] = []
         self._print_exempt = filepath.name in _PRINT_EXEMPT
         self._asyncio_pipe_exempt = filepath.name in _ASYNCIO_PIPE_EXEMPT
+        self._broad_except_exempt = filepath.name in _BROAD_EXCEPT_EXEMPT
 
     def _add(self, node: ast.AST, rule: RuleDescriptor, message: str) -> None:
         self.violations.append(
@@ -295,7 +298,12 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
         is_broad = node.type is None or (
             isinstance(node.type, ast.Name) and node.type.id in _BROAD_EXCEPTION_TYPES
         )
-        if is_broad and not _has_log_call(node.body) and not _has_reraise(node.body):
+        if (
+            is_broad
+            and not self._broad_except_exempt
+            and not _has_log_call(node.body)
+            and not _has_reraise(node.body)
+        ):
             type_label = ast.unparse(node.type) if node.type else "bare except"
             self._add(
                 node,

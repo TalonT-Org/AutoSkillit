@@ -204,13 +204,13 @@ def _claude_settings_path(scope: str) -> Path:
 
 def _register_quota_hook(settings_path: Path) -> None:
     """Idempotently add the quota PreToolUse hook to .claude/settings.json."""
-    from autoskillit.core.io import _atomic_write
+    from autoskillit.core import _atomic_write
 
     data: dict = {}
     if settings_path.exists():
         try:
             data = json.loads(settings_path.read_text())
-        except Exception:
+        except (OSError, json.JSONDecodeError):
             pass
 
     hooks = data.setdefault("hooks", {})
@@ -389,7 +389,7 @@ def quota_status() -> None:
     import asyncio
 
     from autoskillit.config import load_config
-    from autoskillit.execution.quota import check_and_sleep_if_needed
+    from autoskillit.execution import check_and_sleep_if_needed
 
     config = load_config(Path.cwd())
     result = asyncio.run(check_and_sleep_if_needed(config.quota_guard))

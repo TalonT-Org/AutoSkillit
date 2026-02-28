@@ -1421,14 +1421,19 @@ class TestGroupFRefactoring:
 
     def test_install_writes_pretooluse_hooks(self, tmp_path, monkeypatch):
         """install must register the quota PreToolUse hook in .claude/settings.json."""
+        import importlib
+
         settings_path = tmp_path / ".claude" / "settings.json"
         settings_path.parent.mkdir(parents=True)
 
-        monkeypatch.setattr(
-            "autoskillit.cli.app._claude_settings_path", lambda scope: settings_path
-        )
+        # monkeypatch via the actual module object — string path resolves to the App object
+        # due to autoskillit.cli.__init__.py re-exporting `app = App(...)` as attribute `app`
+        app_module = importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
         monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
         monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
+        # Clear CLAUDECODE env var so install doesn't short-circuit with the early-return path
+        monkeypatch.delenv("CLAUDECODE", raising=False)
 
         cli.install(scope="local")
 

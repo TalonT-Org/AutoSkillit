@@ -4,7 +4,7 @@ Structural import-path compliance tests.
 REQ-IMP-001: No cross-package sub-module imports in production code.
 REQ-IMP-002: from autoskillit.core.logging/io/types → from autoskillit.core.
 REQ-IMP-003: server/tools_*.py imports from at most autoskillit.core and autoskillit.pipeline.
-REQ-IMP-004: cli/app.py imports from at most autoskillit.core, .config, and .pipeline.
+REQ-IMP-004: cli/app.py imports from at most autoskillit.core, .config, .pipeline, and .execution.
 REQ-IMP-005: server/git.py only imports autoskillit.core at runtime (TYPE_CHECKING excluded).
 REQ-IMP-006: server/prompts.py has no direct import of DefaultGateState or pipeline.gate.
 """
@@ -151,7 +151,6 @@ def test_req_imp_004_cli_app_namespace_limit() -> None:
 
     Gateway-level imports (autoskillit.X) are allowed.
     Intra-package imports (autoskillit.cli.*) are allowed.
-    execution sub-module imports are forbidden.
     """
     path = SRC / "cli" / "app.py"
     # Packages accessible at gateway level (autoskillit.X imports are OK)
@@ -164,6 +163,7 @@ def test_req_imp_004_cli_app_namespace_limit() -> None:
             "autoskillit.recipe",
             "autoskillit.migration",
             "autoskillit.workspace",
+            "autoskillit.execution",  # quota_status CLI command needs check_and_sleep_if_needed
             "autoskillit.cli",  # intra-package
         }
     )

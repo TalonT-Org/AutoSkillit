@@ -162,3 +162,18 @@ def push_to_remote(
         branch=branch,
     )
     return {"success": "true", "stderr": ""}
+
+
+class DefaultCloneManager:
+    """Concrete CloneManager that delegates to module-level clone functions."""
+
+    def clone_repo(self, source_dir: str, run_name: str) -> dict[str, str]:
+        return clone_repo(source_dir, run_name)
+
+    def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]:
+        return remove_clone(clone_path, keep)
+
+    def push_to_remote(
+        self, clone_path: str, source_dir: str, branch: str
+    ) -> dict[str, str]:
+        return push_to_remote(clone_path, source_dir, branch)

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     AuditStore,
+    CloneManager,
     DatabaseReader,
     GatePolicy,
     HeadlessExecutor,
@@ -47,6 +48,7 @@ class ToolContext:
     migrations:    MigrationService — applies versioned migration notes to recipes
     db_reader:     DatabaseReader — executes read-only SQLite queries
     workspace_mgr: WorkspaceManager — manages workspace directory teardown
+    clone_mgr:     CloneManager — clone-based pipeline run isolation
     """
 
     config: AutomationConfig
@@ -61,3 +63,4 @@ class ToolContext:
     migrations: MigrationService | None = field(default=None)
     db_reader: DatabaseReader | None = field(default=None)
     workspace_mgr: WorkspaceManager | None = field(default=None)
+    clone_mgr: CloneManager | None = field(default=None)

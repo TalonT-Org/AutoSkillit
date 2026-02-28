@@ -43,10 +43,14 @@ async def clone_repo(source_dir: str, run_name: str, ctx: Context = CurrentConte
         extra={"source_dir": source_dir, "run_name": run_name},
     )
 
-    from autoskillit.workspace import clone as _clone
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+    if tool_ctx.clone_mgr is None:
+        return json.dumps({"error": "Clone manager not configured"})
 
     try:
-        result = await asyncio.to_thread(_clone.clone_repo, source_dir, run_name)
+        result = await asyncio.to_thread(tool_ctx.clone_mgr.clone_repo, source_dir, run_name)
     except (ValueError, RuntimeError) as exc:
         await _notify(
             ctx,
@@ -90,9 +94,13 @@ async def remove_clone(
         extra={"clone_path": clone_path, "keep": keep},
     )
 
-    from autoskillit.workspace import clone as _clone
+    from autoskillit.server import _get_ctx
 
-    result = await asyncio.to_thread(_clone.remove_clone, clone_path, keep)
+    tool_ctx = _get_ctx()
+    if tool_ctx.clone_mgr is None:
+        return json.dumps({"removed": "false", "reason": "Clone manager not configured"})
+
+    result = await asyncio.to_thread(tool_ctx.clone_mgr.remove_clone, clone_path, keep)
     return json.dumps(result)
 
 
@@ -127,9 +135,15 @@ async def push_to_remote(
         extra={"clone_path": clone_path, "source_dir": source_dir, "branch": branch},
     )
 
-    from autoskillit.workspace import clone as _clone
+    from autoskillit.server import _get_ctx
 
-    result = await asyncio.to_thread(_clone.push_to_remote, clone_path, source_dir, branch)
+    tool_ctx = _get_ctx()
+    if tool_ctx.clone_mgr is None:
+        return json.dumps({"error": "Clone manager not configured", "stderr": ""})
+
+    result = await asyncio.to_thread(
+        tool_ctx.clone_mgr.push_to_remote, clone_path, source_dir, branch
+    )
 
     if result.get("success") == "false":
         await _notify(

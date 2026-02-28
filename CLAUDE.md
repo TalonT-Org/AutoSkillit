@@ -117,6 +117,7 @@ src/autoskillit/
 │   ├── git.py               #   Git merge workflow for merge_worktree (perform_merge)
 │   ├── helpers.py           #   Shared server-layer helpers (worktree setup, path utilities)
 │   ├── prompts.py           #   MCP prompt handlers (open_kitchen, close_kitchen)
+│   ├── tools_clone.py       #   clone_repo, remove_clone, push_to_remote tool handlers
 │   ├── tools_execution.py   #   run_cmd, run_python, run_skill, run_skill_retry tool handlers
 │   ├── tools_git.py         #   merge_worktree, classify_fix tool handlers
 │   ├── tools_recipe.py      #   migrate_recipe, load_recipe, list_recipes, validate_recipe tool handlers
@@ -195,6 +196,7 @@ temp/                        # Temporary/working files (gitignored)
   * **server/git.py**: L3 service module for the git merge workflow. `perform_merge(worktree_path, base_branch, *, config, runner)` executes the full merge pipeline: path validation → worktree verification → branch detection → test gate → fetch → rebase → main-repo merge → worktree cleanup. Uses injected `SubprocessRunner` so existing test mocks apply unchanged.
   * **server/helpers.py**: Shared server-layer utilities — worktree environment setup, path normalization, and other helpers shared across `tools_*.py` modules.
   * **server/prompts.py**: MCP prompt handlers for `open_kitchen` and `close_kitchen` activation prompts (user-only, model cannot invoke).
+  * **server/tools_clone.py**: MCP tool handlers for `clone_repo`, `remove_clone`, and `push_to_remote`. Accesses clone functionality via `tool_ctx.clone_mgr` (DI pattern — no direct workspace imports).
   * **server/tools_execution.py**: MCP tool handlers for `run_cmd`, `run_python`, `run_skill`, and `run_skill_retry`.
   * **server/tools_git.py**: MCP tool handlers for `merge_worktree` and `classify_fix`.
   * **server/tools_recipe.py**: MCP tool handlers for `migrate_recipe`, `load_recipe`, `list_recipes`, and `validate_recipe`.

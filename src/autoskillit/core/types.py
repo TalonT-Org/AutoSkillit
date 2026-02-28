@@ -379,3 +379,16 @@ class WorkspaceManager(Protocol):
         directory: Path,
         preserve: set[str] | None = None,
     ) -> CleanupResult: ...
+
+
+@runtime_checkable
+class CloneManager(Protocol):
+    """Protocol for clone-based pipeline run isolation."""
+
+    def clone_repo(self, source_dir: str, run_name: str) -> dict[str, str]: ...
+
+    def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]: ...
+
+    def push_to_remote(
+        self, clone_path: str, source_dir: str, branch: str
+    ) -> dict[str, str]: ...

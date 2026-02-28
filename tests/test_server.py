@@ -695,6 +695,9 @@ class TestToolRegistration:
             "get_pipeline_report",
             "get_token_summary",
             "check_quota",
+            "clone_repo",
+            "remove_clone",
+            "push_to_remote",
         }
         assert expected == tool_names
 
@@ -2528,7 +2531,7 @@ class TestGatedToolAccess:
         assert prompt_names == {"open_kitchen", "close_kitchen"}
 
     def test_all_tools_still_registered(self):
-        """All 18 tools remain registered (gated + ungated)."""
+        """All 21 tools remain registered (gated + ungated)."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -2554,6 +2557,9 @@ class TestGatedToolAccess:
             "get_pipeline_report",
             "get_token_summary",
             "check_quota",
+            "clone_repo",
+            "remove_clone",
+            "push_to_remote",
         }
         assert expected == tool_names
 

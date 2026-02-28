@@ -10,6 +10,7 @@ from autoskillit.workspace.cleanup import (
     _delete_directory_contents,
 )
 from autoskillit.workspace.clone import (
+    DefaultCloneManager,
     clone_repo,
     detect_source_dir,
     push_to_remote,
@@ -23,6 +24,7 @@ __all__ = [
     "CleanupResult",
     "_delete_directory_contents",
     "delete_directory_contents",
+    "DefaultCloneManager",
     "DefaultWorkspaceManager",
     "SkillResolver",
     "bundled_skills_dir",

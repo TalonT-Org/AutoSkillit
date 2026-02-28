@@ -18,7 +18,7 @@ from autoskillit.execution import DefaultDatabaseReader, DefaultHeadlessExecutor
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import DefaultAuditLog, DefaultGateState, DefaultTokenLog, ToolContext
 from autoskillit.recipe import DefaultRecipeRepository
-from autoskillit.workspace import DefaultWorkspaceManager
+from autoskillit.workspace import DefaultCloneManager, DefaultWorkspaceManager
 
 # Sentinel: distinguish "caller passed runner=None explicitly" from "not provided"
 _UNSET: Any = object()
@@ -35,7 +35,7 @@ def make_context(
     runner: SubprocessRunner | None = _UNSET,
     plugin_dir: str | None = None,
 ) -> ToolContext:
-    """Create a fully-wired ToolContext with all 10 service fields populated.
+    """Create a fully-wired ToolContext with all 11 service fields populated.
 
     This is the Composition Root — the only location that should instantiate
     all concrete service implementations simultaneously. Uses a two-step
@@ -75,6 +75,7 @@ def make_context(
         migrations=DefaultMigrationService(default_migration_engine()),
         db_reader=DefaultDatabaseReader(),
         workspace_mgr=DefaultWorkspaceManager(),
+        clone_mgr=DefaultCloneManager(),
     )
     ctx.executor = DefaultHeadlessExecutor(ctx)
     # Wire the headless runner into migrations for LLM-driven migration support

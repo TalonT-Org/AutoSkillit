@@ -13,17 +13,19 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - After implementation completes and tests pass, as the last step before merging
 - In single-plan pipelines: audit the worktree against the plan
 - In multi-group pipelines: audit the feature branch against all group plans via manifest
-- Standalone: `/autoskillit:audit-impl {plans_input} {implementation_ref} {base_branch}`
+- Standalone: `/autoskillit:audit-impl {plans_input} {branch_name} {base_branch}`
 
 ## Arguments
 
 ```
-{plans_input} {implementation_ref} {base_branch}
+{plans_input} {branch_name} {base_branch}
 ```
 
 - `plans_input` — path to a single plan `.md` file, a directory containing `*_plan_*.md`
   files, or a `manifest_*.json` from `/autoskillit:make-groups`
-- `implementation_ref` — worktree path (if intact) or branch name containing the implementation
+- `branch_name` — branch name containing the implementation (preferred, stable after merge);
+  a live worktree path is also accepted for legacy manual invocations (Step 0 extracts
+  the branch name from the directory automatically)
 - `base_branch` — branch to diff against (default: `main`)
 
 ## Critical Constraints

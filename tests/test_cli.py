@@ -207,6 +207,39 @@ class TestCLI:
         assert "autoskillit" in content
         assert "do not delete" in content
 
+    # --- T_WC: workspace clean ---
+
+    def test_workspace_clean_removes_subdirs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """T_WC1: workspace_clean removes all subdirs of autoskillit-runs/."""
+        runs_dir = tmp_path / "autoskillit-runs"
+        (runs_dir / "run-a").mkdir(parents=True)
+        (runs_dir / "run-b").mkdir(parents=True)
+        cli.workspace_clean(dir=str(tmp_path))
+        assert not (runs_dir / "run-a").exists()
+        assert not (runs_dir / "run-b").exists()
+
+    def test_workspace_clean_reports_nothing_when_no_runs_dir(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """T_WC2: workspace_clean prints message when autoskillit-runs/ doesn't exist."""
+        cli.workspace_clean(dir=str(tmp_path))
+        captured = capsys.readouterr()
+        assert "No autoskillit-runs/" in captured.out
+
+    def test_workspace_clean_defaults_to_parent_of_cwd(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T_WC3: workspace_clean without --dir uses parent of CWD."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        monkeypatch.chdir(project_dir)
+        runs_dir = tmp_path / "autoskillit-runs"
+        (runs_dir / "run-x").mkdir(parents=True)
+        cli.workspace_clean()
+        assert not (runs_dir / "run-x").exists()
+
     # --- T6: skills list CLI output ---
 
     def test_skills_list_shows_all_sources(

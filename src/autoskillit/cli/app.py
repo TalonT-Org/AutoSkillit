@@ -22,7 +22,7 @@ app = App(
 config_app = App(name="config", help="Configuration commands.")
 skills_app = App(name="skills", help="Skill management.")
 recipes_app = App(name="recipes", help="Recipe management.")
-workspace_app = App(name="prep-station", help="Prep station management.")
+workspace_app = App(name="workspace", help="Workspace management.")
 
 app.command(config_app)
 app.command(skills_app)
@@ -416,6 +416,48 @@ def workspace_init(path: str):
     )
     print(f"Prep station initialized: {target}")
     print(f"Reset guard marker created: {marker}")
+
+
+@workspace_app.command(name="clean")
+def workspace_clean(
+    *,
+    dir: Annotated[str | None, Parameter(name=["--dir"])] = None,
+) -> None:
+    """Prune autoskillit-runs/ directories.
+
+    Removes all subdirectories of autoskillit-runs/ under the given path.
+    Defaults to the parent of the current working directory.
+
+    Parameters
+    ----------
+    dir
+        Base directory to search for autoskillit-runs/ (default: parent of CWD).
+    """
+    base = Path(dir).resolve() if dir else Path.cwd().parent
+    runs_dir = base / "autoskillit-runs"
+
+    if not runs_dir.is_dir():
+        print(f"No autoskillit-runs/ directory found under: {base}")
+        return
+
+    count = 0
+    errors = 0
+    for entry in sorted(runs_dir.iterdir()):
+        if entry.is_dir():
+            try:
+                shutil.rmtree(entry)
+                print(f"Removed: {entry}")
+                count += 1
+            except OSError as exc:
+                print(f"Failed to remove {entry}: {exc}", file=sys.stderr)
+                errors += 1
+
+    if count == 0 and errors == 0:
+        print(f"Nothing to clean in {runs_dir}")
+    else:
+        suffix = "ies" if count != 1 else "y"
+        err_note = f" ({errors} error(s))" if errors else ""
+        print(f"\nCleaned {count} director{suffix}{err_note}")
 
 
 @recipes_app.command(name="list")

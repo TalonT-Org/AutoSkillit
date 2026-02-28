@@ -32,6 +32,7 @@ from autoskillit.cli.app import (
     skills_list,
     upgrade,
     workspace_app,
+    workspace_clean,
     workspace_init,
 )
 
@@ -58,5 +59,6 @@ __all__ = [
     "skills_list",
     "upgrade",
     "workspace_app",
+    "workspace_clean",
     "workspace_init",
 ]

@@ -195,7 +195,7 @@ class FailureRecord:
     """Structured record of a single run_skill / run_skill_retry failure.
 
     Pure-stdlib dataclass — no autoskillit imports required.
-    Shared between pipeline/audit.py (AuditLog store) and
+    Shared between pipeline/audit.py (DefaultAuditLog store) and
     execution/headless.py (_capture_failure).
     """
 

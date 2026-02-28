@@ -1268,7 +1268,7 @@ class TestCaptureOutputCoverageRule:
                 with:
                   skill_command: /autoskillit:implement-worktree-no-merge ${{ inputs.plan }}
                 capture:
-                  branch_name: "${{ result.branch_name }}"
+                  nonexistent_output: "${{ result.nonexistent_output }}"
                 on_success: done
                 on_failure: done
               done:
@@ -1280,7 +1280,7 @@ class TestCaptureOutputCoverageRule:
         undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
         assert len(undeclared) == 1
         assert undeclared[0].severity == Severity.WARNING
-        assert "branch_name" in undeclared[0].message
+        assert "nonexistent_output" in undeclared[0].message
         assert "implement-worktree-no-merge" in undeclared[0].message
 
     def test_capture_from_skill_with_no_contract_emits_warning(self) -> None:

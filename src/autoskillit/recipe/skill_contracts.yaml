@@ -28,6 +28,8 @@ skills:
     outputs:
       - name: worktree_path
         type: directory_path
+      - name: branch_name
+        type: string
 
   implement-worktree-no-merge:
     inputs:
@@ -37,6 +39,8 @@ skills:
     outputs:
       - name: worktree_path
         type: directory_path
+      - name: branch_name
+        type: string
 
   investigate:
     inputs:
@@ -117,6 +121,8 @@ skills:
     outputs:
       - name: worktree_path
         type: directory_path
+      - name: branch_name
+        type: string
 
   review-approach:
     inputs:

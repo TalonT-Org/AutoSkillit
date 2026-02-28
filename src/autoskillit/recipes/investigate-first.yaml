@@ -117,6 +117,7 @@ steps:
       step_name: "implement"
     capture:
       implementation_ref: "${{ result.worktree_path }}"
+      branch_name: "${{ result.branch_name }}"
     retry:
       max_attempts: 0
       on: needs_retry
@@ -132,6 +133,7 @@ steps:
       step_name: "retry_worktree"
     capture:
       implementation_ref: "${{ result.worktree_path }}"
+      branch_name: "${{ result.branch_name }}"
     retry:
       max_attempts: 3
       on: needs_retry
@@ -159,7 +161,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.implementation_ref }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.branch_name }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:

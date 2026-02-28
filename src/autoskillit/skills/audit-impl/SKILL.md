@@ -55,9 +55,20 @@ Verify every plan file exists. If any are missing, abort with a clear error list
 
 Determine the diff source from `implementation_ref`:
 
-- **Existing directory path**: run `git diff {base_branch}...HEAD` inside it
-- **Branch name or non-existent path**: run `git diff {base_branch}...{implementation_ref}`
-  from the current working directory
+1. **If `implementation_ref` is an existing directory path:**
+   - Extract the branch name: `git -C {implementation_ref} branch --show-current`
+   - Run: `git diff {base_branch}...{branch_name}` from the current working directory
+   - (This handles legacy manual invocations where a live worktree path is passed.)
+
+2. **Otherwise, treat `implementation_ref` as a branch name:**
+   - Run: `git diff {base_branch}...{implementation_ref}` from the current working directory
+   - If git reports "unknown revision or path not in the working tree", abort with:
+     > "implementation_ref '{implementation_ref}' is neither an existing worktree
+     > directory nor a known git branch. If you are passing a worktree path, ensure
+     > the worktree has not been deleted before calling audit-impl."
+
+The old silent fallthrough (non-existent path treated as branch name without error)
+is removed. A clear error is emitted instead.
 
 ### Step 1 — Load Plans via Parallel Subagents
 

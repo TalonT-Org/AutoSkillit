@@ -133,14 +133,14 @@ steps:
       step_name: "implement"
     capture:
       worktree_path: "${{ result.worktree_path }}"
-      implementation_ref: "${{ result.worktree_path }}"
+      branch_name: "${{ result.branch_name }}"
     on_success: test
     on_failure: cleanup_failure
     retry:
       max_attempts: 0
       on: needs_retry
       on_exhausted: retry_worktree
-    note: "Extracts worktree_path and implementation_ref from result for use in subsequent steps."
+    note: "Extracts worktree_path and branch_name from result for use in subsequent steps."
 
   retry_worktree:
     tool: run_skill_retry
@@ -150,7 +150,7 @@ steps:
       step_name: "retry_worktree"
     capture:
       worktree_path: "${{ result.worktree_path }}"
-      implementation_ref: "${{ result.worktree_path }}"
+      branch_name: "${{ result.branch_name }}"
     on_success: test
     on_failure: cleanup_failure
     retry:
@@ -226,7 +226,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.implementation_ref }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.branch_name }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:
@@ -244,6 +244,8 @@ steps:
       Captures verdict and remediation_path. Routes GO → cleanup_success, NO GO → remediate
       which re-enters the plan step with the remediation file.
       All groups and parts have been merged at this point — no worktree exists.
+      Uses context.branch_name (stable git ref) as implementation_ref so audit-impl
+      can diff even after merge_worktree has deleted the worktree directory.
 
   remediate:
     action: route

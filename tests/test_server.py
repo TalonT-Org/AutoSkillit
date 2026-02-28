@@ -6,6 +6,7 @@ import json
 import re
 import shutil
 import sqlite3
+from datetime import UTC
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -6705,12 +6706,12 @@ class TestCheckQuota:
 
     @pytest.mark.asyncio
     async def test_above_threshold_returns_should_sleep(self, tool_ctx, monkeypatch, tmp_path):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
         from autoskillit.execution.quota import QuotaStatus
 
-        resets_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        resets_at = datetime.now(UTC) + timedelta(hours=1)
         tool_ctx.config = AutomationConfig(
             quota_guard=QuotaGuardConfig(
                 enabled=True,

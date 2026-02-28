@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +44,7 @@ def _read_cache(cache_path: str, max_age: int) -> QuotaStatus | None:
     try:
         raw = json.loads(Path(cache_path).expanduser().read_text())
         fetched_at = datetime.fromisoformat(raw["fetched_at"])
-        age = (datetime.now(timezone.utc) - fetched_at).total_seconds()
+        age = (datetime.now(UTC) - fetched_at).total_seconds()
         if age > max_age:
             return None
         fh = raw["five_hour"]
@@ -62,7 +62,7 @@ def _write_cache(cache_path: str, status: QuotaStatus) -> None:
     """Write quota status to cache file. Silently logs on failure."""
     try:
         payload = {
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "fetched_at": datetime.now(UTC).isoformat(),
             "five_hour": {
                 "utilization": status.utilization,
                 "resets_at": status.resets_at.isoformat() if status.resets_at else None,
@@ -91,9 +91,7 @@ async def _fetch_quota(credentials_path: str) -> QuotaStatus:
     fh = data["five_hour"]
     resets_at_str = fh.get("resets_at")
     resets_at = (
-        datetime.fromisoformat(resets_at_str.replace("Z", "+00:00"))
-        if resets_at_str
-        else None
+        datetime.fromisoformat(resets_at_str.replace("Z", "+00:00")) if resets_at_str else None
     )
     return QuotaStatus(
         utilization=float(fh["utilization"]),
@@ -155,7 +153,7 @@ async def check_and_sleep_if_needed(config: Any) -> dict:
                 "resets_at": None,
             }
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         wake_at = status.resets_at + timedelta(seconds=config.buffer_seconds)
         sleep_secs = max(0, int((wake_at - now).total_seconds()))
         _log.info(

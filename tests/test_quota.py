@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -48,7 +48,7 @@ class TestReadCache:
     def test_fresh_cache_returns_status(self, tmp_path):
         from autoskillit.execution.quota import _read_cache
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cache_data = {
             "fetched_at": (now - timedelta(seconds=30)).isoformat(),
             "five_hour": {
@@ -65,7 +65,7 @@ class TestReadCache:
     def test_stale_cache_returns_none(self, tmp_path):
         from autoskillit.execution.quota import _read_cache
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cache_data = {
             "fetched_at": (now - timedelta(seconds=300)).isoformat(),
             "five_hour": {
@@ -94,7 +94,7 @@ class TestWriteCache:
     def test_writes_readable_cache(self, tmp_path):
         from autoskillit.execution.quota import QuotaStatus, _read_cache, _write_cache
 
-        resets_at = datetime(2026, 2, 27, 20, 15, tzinfo=timezone.utc)
+        resets_at = datetime(2026, 2, 27, 20, 15, tzinfo=UTC)
         status = QuotaStatus(utilization=75.0, resets_at=resets_at)
         cache_path = tmp_path / "usage_cache.json"
         _write_cache(str(cache_path), status)
@@ -105,7 +105,7 @@ class TestWriteCache:
     def test_write_failure_does_not_raise(self, tmp_path):
         from autoskillit.execution.quota import QuotaStatus, _write_cache
 
-        resets_at = datetime(2026, 2, 27, 20, 15, tzinfo=timezone.utc)
+        resets_at = datetime(2026, 2, 27, 20, 15, tzinfo=UTC)
         status = QuotaStatus(utilization=50.0, resets_at=resets_at)
         # Nonexistent parent directory — should log warning, not raise
         _write_cache("/nonexistent/dir/cache.json", status)
@@ -134,7 +134,7 @@ class TestCheckAndSleepIfNeeded:
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
 
-        resets_at = datetime.now(timezone.utc) + timedelta(hours=2)
+        resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = QuotaGuardConfig(
             enabled=True,
             threshold=80.0,
@@ -155,7 +155,7 @@ class TestCheckAndSleepIfNeeded:
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
 
-        resets_at = datetime.now(timezone.utc) + timedelta(hours=2)
+        resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = QuotaGuardConfig(
             enabled=True,
             threshold=80.0,
@@ -175,9 +175,13 @@ class TestCheckAndSleepIfNeeded:
     @pytest.mark.asyncio
     async def test_uses_fresh_cache_skips_fetch(self, monkeypatch, tmp_path):
         from autoskillit.config.settings import QuotaGuardConfig
-        from autoskillit.execution.quota import QuotaStatus, _write_cache, check_and_sleep_if_needed
+        from autoskillit.execution.quota import (
+            QuotaStatus,
+            _write_cache,
+            check_and_sleep_if_needed,
+        )
 
-        resets_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        resets_at = datetime.now(UTC) + timedelta(hours=1)
         cache_path = tmp_path / "cache.json"
         _write_cache(str(cache_path), QuotaStatus(utilization=40.0, resets_at=resets_at))
         config = QuotaGuardConfig(

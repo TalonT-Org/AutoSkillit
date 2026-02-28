@@ -15,9 +15,15 @@ ingredients:
   topic:
     description: Description of the bug, error, or question to investigate
     required: true
-  work_dir:
-    description: Working directory for agent sessions
+  source_dir:
+    description: Path to the source repository to clone and work in
     required: true
+  run_name:
+    description: Name prefix for this pipeline run (used in clone directory name)
+    default: "investigate"
+  keep_clone_on_failure:
+    description: Keep the clone directory when the pipeline fails (true/false)
+    default: "false"
   target_dir:
     description: Optional additional project directory for context
     default: ""
@@ -29,27 +35,41 @@ ingredients:
     default: "false"
 
 steps:
+  clone:
+    python: autoskillit.workspace.clone.clone_repo
+    with:
+      source_dir: "${{ inputs.source_dir }}"
+      run_name: "${{ inputs.run_name }}"
+    capture:
+      work_dir: "${{ result.clone_path }}"
+    on_success: investigate
+    on_failure: escalate_stop
+    note: >
+      Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
+      Captures work_dir context used by all subsequent steps as cwd.
+      On failure, escalate_stop is reached immediately (no clone to remove).
+
   investigate:
     tool: run_skill
     with:
       skill_command: "/autoskillit:investigate ${{ inputs.topic }}"
-      cwd: ${{ inputs.work_dir }}
+      cwd: "${{ context.work_dir }}"
       step_name: "investigate"
     on_success: rectify
-    on_failure: escalate
+    on_failure: cleanup_failure
 
   rectify:
     tool: run_skill
     with:
       skill_command: "/autoskillit:rectify"
-      cwd: ${{ inputs.work_dir }}
+      cwd: "${{ context.work_dir }}"
       step_name: "rectify"
     capture:
       plan_path: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
     on_success: dry_walkthrough
-    on_failure: escalate
+    on_failure: cleanup_failure
     note: >
       Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically into plan_parts[].
       REMEDIATION MODE: when routed from remediate, context.remediation_path is available
@@ -60,7 +80,7 @@ steps:
     tool: run_skill
     with:
       skill_command: "/autoskillit:dry-walkthrough the plan"
-      cwd: ${{ inputs.work_dir }}
+      cwd: "${{ context.work_dir }}"
       step_name: "dry_walkthrough"
     on_success: implement
     on_failure: rectify
@@ -70,7 +90,7 @@ steps:
     tool: run_skill_retry
     with:
       skill_command: "/autoskillit:implement-worktree the verified plan"
-      cwd: ${{ inputs.work_dir }}
+      cwd: "${{ context.work_dir }}"
       step_name: "implement"
     capture:
       implementation_ref: "${{ result.worktree_path }}"
@@ -79,7 +99,7 @@ steps:
       on: needs_retry
       on_exhausted: retry_worktree
     on_success: verify
-    on_failure: escalate
+    on_failure: cleanup_failure
 
   retry_worktree:
     tool: run_skill_retry
@@ -92,14 +112,14 @@ steps:
     retry:
       max_attempts: 3
       on: needs_retry
-      on_exhausted: escalate
+      on_exhausted: cleanup_failure
     on_success: verify
-    on_failure: escalate
+    on_failure: cleanup_failure
 
   verify:
     tool: test_check
     with:
-      worktree_path: ${{ inputs.work_dir }}
+      worktree_path: "${{ context.work_dir }}"
     on_success: audit_impl
     on_failure: assess
 
@@ -111,13 +131,13 @@ steps:
       cwd: "${{ context.implementation_ref }}"
       step_name: "assess"
     on_success: verify
-    on_failure: escalate
+    on_failure: cleanup_failure
 
   audit_impl:
     tool: run_skill
     with:
       skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.implementation_ref }} ${{ inputs.base_branch }}"
-      cwd: ${{ inputs.work_dir }}
+      cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:
       verdict: "${{ result.verdict }}"
@@ -138,17 +158,55 @@ steps:
   merge:
     tool: merge_worktree
     with:
-      worktree_path: ${{ inputs.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      worktree_path: "${{ context.work_dir }}"
+      base_branch: "${{ inputs.base_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
+    on_success: push
+    on_failure: cleanup_failure
+
+  push:
+    python: autoskillit.workspace.clone.push_clone_to_origin
+    with:
+      clone_path: "${{ context.work_dir }}"
+      source_dir: "${{ inputs.source_dir }}"
+      branch: "${{ inputs.base_branch }}"
+    on_success: cleanup_success
+    on_failure: cleanup_failure
+    note: >
+      Propagates the merged base_branch from the clone back to the source repository
+      using pull inversion (git fetch from the source_dir side). This avoids Git's
+      receive.denyCurrentBranch restriction on non-bare local repos.
+      On failure, cleanup_failure still removes the clone.
+
+  cleanup_success:
+    python: autoskillit.workspace.clone.remove_clone
+    with:
+      clone_path: "${{ context.work_dir }}"
+      keep: "false"
     on_success: done
-    on_failure: escalate
+    on_failure: done
+    note: >
+      Removes the clone directory after a successful pipeline run.
+      Routes to done regardless of whether removal succeeds — a cleanup
+      failure should not mask a successful pipeline.
+
+  cleanup_failure:
+    python: autoskillit.workspace.clone.remove_clone
+    with:
+      clone_path: "${{ context.work_dir }}"
+      keep: "${{ inputs.keep_clone_on_failure }}"
+    on_success: escalate_stop
+    on_failure: escalate_stop
+    note: >
+      Called on any pipeline failure where the clone was created.
+      Respects keep_clone_on_failure ingredient for debugging.
+      Always routes to escalate_stop.
 
   done:
     action: stop
     message: "Investigation complete. Fix implemented and merged."
 
-  escalate:
+  escalate_stop:
     action: stop
     message: "Human intervention needed. Review the latest output for details."

@@ -1,6 +1,6 @@
 name: implementation-pipeline
 description: Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
-summary: (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > (audit-impl?) > merge (per group, per plan part)
+summary: clone > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > (audit-impl?) > merge > push > cleanup (per group, per plan part)
 autoskillit_version: "0.2.0"
 
 ingredients:
@@ -10,12 +10,15 @@ ingredients:
   source_doc:
     description: Path to source document for group decomposition (required when make_groups is true)
     required: false
-  project_dir:
-    description: Path to the project
+  source_dir:
+    description: Path to the source repository to clone and work in
     required: true
-  work_dir:
-    description: Working directory (can be same as project_dir)
-    required: true
+  run_name:
+    description: Name prefix for this pipeline run (used in clone directory name)
+    default: "impl"
+  keep_clone_on_failure:
+    description: Keep the clone directory when the pipeline fails (true/false)
+    default: "false"
   base_branch:
     description: Branch to merge into (defaults to current branch)
     default: main
@@ -39,16 +42,30 @@ kitchen_rules:
   - "Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront."
 
 steps:
+  clone:
+    python: autoskillit.workspace.clone.clone_repo
+    with:
+      source_dir: "${{ inputs.source_dir }}"
+      run_name: "${{ inputs.run_name }}"
+    capture:
+      work_dir: "${{ result.clone_path }}"
+    on_success: group
+    on_failure: escalate_stop
+    note: >
+      Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
+      Captures work_dir context used by all subsequent steps as cwd.
+      On failure, escalate_stop is reached immediately (no clone to remove).
+
   group:
     tool: run_skill
     with:
       skill_command: "/autoskillit:make-groups ${{ inputs.source_doc }}"
-      cwd: "${{ inputs.work_dir }}"
+      cwd: "${{ context.work_dir }}"
       step_name: "group"
     capture:
       group_files: "${{ result.group_files }}"
     on_success: plan
-    on_failure: escalate
+    on_failure: cleanup_failure
     note: >
       Only execute if make_groups input is 'true'. Otherwise skip directly to plan.
       Produces group files in temp/make-groups/ containing sequenced groups (groupA, groupB, ...).
@@ -61,7 +78,7 @@ steps:
     tool: run_skill
     with:
       skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
-      cwd: "${{ inputs.work_dir }}"
+      cwd: "${{ context.work_dir }}"
       step_name: "plan"
       group_files: "${{ context.group_files }}"
     capture:
@@ -69,7 +86,7 @@ steps:
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
     on_success: review
-    on_failure: escalate
+    on_failure: cleanup_failure
     note: >
       Produces plan in temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
       plan_parts context key contains the full ordered list of part files (sorted alphabetically).
@@ -85,36 +102,36 @@ steps:
     tool: run_skill
     with:
       skill_command: "/autoskillit:review-approach ${{ context.plan_path }}"
-      cwd: "${{ inputs.work_dir }}"
+      cwd: "${{ context.work_dir }}"
       step_name: "review"
     capture:
       review_path: "${{ result.review_path }}"
     on_success: verify
-    on_failure: escalate
+    on_failure: cleanup_failure
     note: "Only execute this step if review_approach input is 'true'. Otherwise skip directly to verify."
 
   verify:
     tool: run_skill
     with:
       skill_command: "/autoskillit:dry-walkthrough ${{ context.plan_path }}"
-      cwd: "${{ inputs.work_dir }}"
+      cwd: "${{ context.work_dir }}"
       step_name: "verify"
       review_path: "${{ context.review_path }}"
     on_success: implement
-    on_failure: escalate
+    on_failure: cleanup_failure
     note: "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify → implement → test → merge — for that part before advancing to the next part. Never run verify for all parts first. If review produced a report, context.review_path is available — pass it as an additional arg to dry-walkthrough."
 
   implement:
     tool: run_skill_retry
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
-      cwd: "${{ inputs.work_dir }}"
+      cwd: "${{ context.work_dir }}"
       step_name: "implement"
     capture:
       worktree_path: "${{ result.worktree_path }}"
       implementation_ref: "${{ result.worktree_path }}"
     on_success: test
-    on_failure: escalate
+    on_failure: cleanup_failure
     retry:
       max_attempts: 0
       on: needs_retry
@@ -131,11 +148,11 @@ steps:
       worktree_path: "${{ result.worktree_path }}"
       implementation_ref: "${{ result.worktree_path }}"
     on_success: test
-    on_failure: escalate
+    on_failure: cleanup_failure
     retry:
       max_attempts: 3
       on: needs_retry
-      on_exhausted: escalate
+      on_exhausted: cleanup_failure
 
   test:
     tool: test_check
@@ -151,13 +168,27 @@ steps:
       base_branch: "${{ inputs.base_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-    on_success: next_or_done
-    on_failure: escalate
+    on_success: push
+    on_failure: cleanup_failure
     note: >
-      After merge, continue to next plan_part (back to verify step) if more parts remain.
+      After merge, push changes back to source_dir via the push step.
       GROUPS MODE: When all plan_parts for the current group are merged, advance to the
       next group (back to plan step with the next group's description). When all groups
       are complete, go to done.
+
+  push:
+    python: autoskillit.workspace.clone.push_clone_to_origin
+    with:
+      clone_path: "${{ context.work_dir }}"
+      source_dir: "${{ inputs.source_dir }}"
+      branch: "${{ inputs.base_branch }}"
+    on_success: next_or_done
+    on_failure: cleanup_failure
+    note: >
+      Propagates the merged base_branch from the clone back to the source repository
+      using pull inversion (git fetch from the source_dir side). This avoids Git's
+      receive.denyCurrentBranch restriction on non-bare local repos.
+      On failure, cleanup_failure still removes the clone.
 
   fix:
     tool: run_skill
@@ -167,12 +198,12 @@ steps:
       cwd: "${{ context.worktree_path }}"
       step_name: "fix"
     on_success: next_or_done
-    on_failure: escalate
+    on_failure: cleanup_failure
     retry:
       max_attempts: 3
       on: needs_retry
-      on_exhausted: escalate
-    note: "Attempts to fix test failures and merge. After 3 failed attempts, escalates."
+      on_exhausted: cleanup_failure
+    note: "Attempts to fix test failures and merge. After 3 failed attempts, routes to cleanup_failure."
 
   next_or_done:
     action: route
@@ -192,7 +223,7 @@ steps:
     tool: run_skill
     with:
       skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.implementation_ref }} ${{ inputs.base_branch }}"
-      cwd: "${{ inputs.work_dir }}"
+      cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:
       verdict: "${{ result.verdict }}"
@@ -200,12 +231,12 @@ steps:
     on_result:
       field: verdict
       routes:
-        GO: done
+        GO: cleanup_success
         NO GO: remediate
     optional: true
     note: >
-      Only execute if inputs.audit is 'true'. If false, skip directly to done.
-      Captures verdict and remediation_path. Routes GO → done, NO GO → remediate
+      Only execute if inputs.audit is 'true'. If false, skip directly to cleanup_success.
+      Captures verdict and remediation_path. Routes GO → cleanup_success, NO GO → remediate
       which re-enters the plan step with the remediation file.
       All groups and parts have been merged at this point — no worktree exists.
 
@@ -215,10 +246,34 @@ steps:
       remediation_path: "${{ context.remediation_path }}"
     on_success: plan
 
+  cleanup_success:
+    python: autoskillit.workspace.clone.remove_clone
+    with:
+      clone_path: "${{ context.work_dir }}"
+      keep: "false"
+    on_success: done
+    on_failure: done
+    note: >
+      Removes the clone directory after a successful pipeline run.
+      Routes to done regardless of whether removal succeeds — a cleanup
+      failure should not mask a successful pipeline.
+
+  cleanup_failure:
+    python: autoskillit.workspace.clone.remove_clone
+    with:
+      clone_path: "${{ context.work_dir }}"
+      keep: "${{ inputs.keep_clone_on_failure }}"
+    on_success: escalate_stop
+    on_failure: escalate_stop
+    note: >
+      Called on any pipeline failure where the clone was created.
+      Respects keep_clone_on_failure ingredient for debugging.
+      Always routes to escalate_stop.
+
   done:
     action: stop
     message: "Implementation pipeline complete. All groups/tasks have been planned, implemented, tested, and merged."
 
-  escalate:
+  escalate_stop:
     action: stop
     message: "Pipeline failed — human intervention needed. Check the worktree and plan for details."

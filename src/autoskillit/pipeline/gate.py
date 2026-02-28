@@ -39,6 +39,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "classify_fix",
         "reset_workspace",
         "migrate_recipe",
+        "check_quota",
     }
 )
 

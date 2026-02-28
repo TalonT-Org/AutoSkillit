@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from autoskillit.core import RetryReason, TerminationReason, get_logger
+from autoskillit.execution import check_and_sleep_if_needed  # noqa: F401
 from autoskillit.pipeline import gate_error_result
 
 logger = get_logger(__name__)

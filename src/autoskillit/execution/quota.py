@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from autoskillit.core.logging import get_logger
+from autoskillit.core import get_logger
 
 _log = get_logger(__name__)
 

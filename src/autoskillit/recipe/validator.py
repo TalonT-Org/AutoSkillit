@@ -351,13 +351,7 @@ def _detect_implicit_handoffs(recipe: Recipe) -> list[DataFlowWarning]:
 
 
 def analyze_dataflow(recipe: Recipe) -> DataFlowReport:
-    """Analyze pipeline data flow quality (non-blocking warnings).
-
-    Unlike validate_recipe() which returns blocking errors for
-    structural problems, this function returns advisory warnings
-    about data-flow quality: dead outputs, implicit hand-offs,
-    and a summary.
-    """
+    """Analyze pipeline data flow quality (non-blocking warnings)."""
     graph = _build_step_graph(recipe)
 
     warnings: list[DataFlowWarning] = []
@@ -430,11 +424,7 @@ def _check_outdated_version(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="missing-ingredient",
-    description=(
-        "Skill steps must provide all required ingredients via context or recipe "
-        "ingredient references. Detects when a skill requires an ingredient that the "
-        "step does not reference."
-    ),
+    description="Skill steps must provide all required ingredients via context or recipe inputs.",
     severity=Severity.ERROR,
 )
 def _check_unsatisfied_skill_input(wf: Recipe) -> list[RuleFinding]:
@@ -558,10 +548,7 @@ def _check_model_on_non_skill(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="retry-without-capture",
-    description=(
-        "run_skill_retry steps with retry routing that feed downstream "
-        "context references must have capture blocks to supply those values."
-    ),
+    description="run_skill_retry with retry must have capture if downstream uses context.",
     severity=Severity.WARNING,
 )
 def _check_retry_without_capture(wf: Recipe) -> list[RuleFinding]:
@@ -673,10 +660,7 @@ def _check_needs_retry_no_restart(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="retry-worktree-cwd",
-    description=(
-        "retry-worktree steps must use cwd pointing to a context variable "
-        "(e.g. context.worktree_path) so git operations run inside the isolated worktree."
-    ),
+    description="retry-worktree cwd must use a context variable so git runs inside the worktree.",
     severity=Severity.ERROR,
 )
 def _check_retry_worktree_cwd(wf: Recipe) -> list[RuleFinding]:
@@ -702,11 +686,7 @@ def _check_retry_worktree_cwd(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="weak-constraint-text",
-    description=(
-        "Pipeline constraints should enumerate forbidden native tools by name. "
-        "Generic one-liner constraints like 'Only use MCP tools' are too vague "
-        "to enforce orchestrator discipline."
-    ),
+    description="Pipeline constraints must enumerate forbidden native tools by name.",
     severity=Severity.WARNING,
 )
 def _check_weak_constraint_text(wf: Recipe) -> list[RuleFinding]:

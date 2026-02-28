@@ -15,7 +15,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from autoskillit.core.logging import get_logger
+from autoskillit.core import get_logger
 
 logger = get_logger(__name__)
 
@@ -80,9 +80,10 @@ def remove_clone(clone_path: str, keep: str = "false") -> dict[str, str]:
 def push_clone_to_origin(clone_path: str, source_dir: str, branch: str) -> dict[str, str]:
     """Propagate merged branch from the clone back to the source repository.
 
-    Uses git fetch (pull inversion) from the source_dir side. Running fetch
-    from the source repo avoids Git's receive.denyCurrentBranch restriction,
-    which blocks pushing to the checked-out branch of a non-bare repository.
+    Uses git pull --ff-only from the source_dir side. Running pull from the
+    source repo avoids Git's receive.denyCurrentBranch restriction, which
+    blocks both push and fetch-with-refspec into a checked-out branch of a
+    non-bare repository.
 
     After merge_worktree merges into the clone's main branch, this callable
     propagates the changes to the original source repository.
@@ -92,7 +93,7 @@ def push_clone_to_origin(clone_path: str, source_dir: str, branch: str) -> dict[
         {"success": "false", "stderr": str} on failure (does not raise).
     """
     result = subprocess.run(
-        ["git", "fetch", clone_path, f"{branch}:{branch}"],
+        ["git", "pull", "--ff-only", clone_path, branch],
         cwd=source_dir,
         capture_output=True,
         text=True,

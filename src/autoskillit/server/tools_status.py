@@ -287,7 +287,7 @@ async def check_quota(ctx: Context = CurrentContext()) -> str:
     except (RuntimeError, AttributeError):
         pass
 
-    from autoskillit.execution.quota import check_and_sleep_if_needed
+    from autoskillit.server.helpers import check_and_sleep_if_needed
 
     quota_result = await check_and_sleep_if_needed(config.quota_guard)
 

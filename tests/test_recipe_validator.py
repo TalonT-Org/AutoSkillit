@@ -1029,7 +1029,13 @@ def test_worktree_retry_creates_new_clean_max_one() -> None:
         }
     )
     findings = run_semantic_rules(wf)
+    # Original assertion: no worktree-retry-creates-new violations (still valid)
     assert not any(f.rule == "worktree-retry-creates-new" for f in findings)
+    # New assertion: the needs-retry-no-restart rule DOES fire for this pattern
+    errors = [f for f in findings if f.severity == Severity.ERROR]
+    assert any(
+        f.rule == "needs-retry-no-restart" and "implement" in f.step_name for f in errors
+    ), "Expected needs-retry-no-restart ERROR — max_attempts:1 with needs_retry is forbidden"
 
 
 def test_needs_retry_on_worktree_creating_skill_with_attempts_is_error() -> None:

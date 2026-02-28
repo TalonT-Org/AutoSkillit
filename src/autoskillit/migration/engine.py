@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit import __version__
-from autoskillit.core import SkillResult, _atomic_write, dump_yaml_str, get_logger, load_yaml
+from autoskillit.core import (
+    RetryReason,
+    SkillResult,
+    _atomic_write,
+    dump_yaml_str,
+    get_logger,
+    load_yaml,
+)
 from autoskillit.migration.loader import applicable_migrations
 from autoskillit.recipe import load_recipe as _parse_recipe
 from autoskillit.recipe import parse_recipe_metadata, validate_recipe
@@ -300,36 +307,100 @@ def default_migration_engine() -> MigrationEngine:
 
 
 class DefaultMigrationService:
-    """Concrete MigrationService wrapping MigrationEngine.migrate_file."""
+    """Concrete MigrationService wrapping MigrationEngine.migrate_file.
+
+    Call bind_headless() after construction (in the composition root) to enable
+    LLM-driven recipe migration. Without a headless runner, migrate() returns an
+    error for recipes that require LLM-assisted migration.
+    """
 
     def __init__(self, engine: MigrationEngine) -> None:
         self._engine = engine
+        self._run_headless: Callable[..., Awaitable[SkillResult]] | None = None
+
+    def bind_headless(self, run_headless: Callable[..., Awaitable[SkillResult]]) -> None:
+        """Wire in a headless runner for LLM-driven migrations.
+
+        Called by the composition root (_factory.py) after ctx.executor is created.
+        The callable must accept keyword arguments skill_command= and cwd=.
+        """
+        self._run_headless = run_headless
 
     async def migrate(self, recipe_path: Path) -> dict[str, Any]:
         """Apply pending migration notes to the recipe file at recipe_path.
 
-        Discovers the recipe as a MigrationFile, delegates to migrate_file with
-        a no-op run_headless callable (callers needing LLM migration must wire
-        in a real run_headless via the MigrationEngine adapters directly).
-        Returns a dict with 'success', 'name', and optional 'error' keys.
+        Checks for applicable migrations, runs the migration engine (LLM-driven
+        if a headless runner is wired in), handles FailureStore recording, and
+        regenerates the contract card on success.
+
+        Returns a dict with:
+          {"status": "up_to_date", "name": name}  — no migration needed
+          {"status": "migrated", "name": name}     — migration applied
+          {"error": str, "name": name}             — migration failed
         """
-        from autoskillit.recipe import parse_recipe_metadata
+        from autoskillit.migration.loader import applicable_migrations as _applicable
+        from autoskillit.migration.store import FailureStore, default_store_path
+        from autoskillit.recipe import generate_recipe_card, parse_recipe_metadata
 
         meta = parse_recipe_metadata(recipe_path)
+        name = meta.name
+        migrations = _applicable(meta.version, __version__)
+        if not migrations:
+            return {"status": "up_to_date", "name": name}
+
+        # Derive project_dir: recipe_path → recipes_dir → .autoskillit/ → project_dir
+        recipes_dir = recipe_path.parent
+        project_dir = recipes_dir.parent.parent
+        temp_dir = project_dir / ".autoskillit" / "temp"
+
         file = MigrationFile(
-            name=meta.name,
+            name=name,
             path=recipe_path,
             file_type="recipe",
             current_version=meta.version,
         )
 
-        async def _no_op_headless(*args: Any, **kwargs: Any) -> Any:
-            raise NotImplementedError(
-                "DefaultMigrationService.migrate does not support LLM-driven migration. "
-                "Use the migrate_recipe MCP tool directly."
-            )
+        if self._run_headless is not None:
+            run_headless: Callable[..., Awaitable[SkillResult]] = self._run_headless
+        else:
 
-        result = await self._engine.migrate_file(
-            file, run_headless=_no_op_headless, temp_dir=recipe_path.parent
+            async def run_headless(*args: Any, **kwargs: Any) -> SkillResult:  # type: ignore[misc]
+                return SkillResult(
+                    success=False,
+                    result=(
+                        "LLM-driven migration requires a headless runner. "
+                        "Use the migrate_recipe MCP tool directly."
+                    ),
+                    session_id="",
+                    subtype="no_runner",
+                    is_error=True,
+                    exit_code=1,
+                    needs_retry=False,
+                    retry_reason=RetryReason.NONE,
+                    stderr="",
+                    token_usage=None,
+                )
+
+        migration_result = await self._engine.migrate_file(
+            file, run_headless=run_headless, temp_dir=temp_dir
         )
-        return {"success": result.success, "name": result.name, "error": result.error}
+
+        failure_store = FailureStore(default_store_path(project_dir))
+
+        if migration_result.success:
+            failure_store.clear(name)
+            try:
+                if recipe_path.exists():
+                    generate_recipe_card(recipe_path, recipes_dir)
+            except Exception:
+                logger.warning("contract_card_generation_failed", name=name, exc_info=True)
+            return {"status": "migrated", "name": name}
+
+        failure_store.record(
+            name=name,
+            file_path=recipe_path,
+            file_type="recipe",
+            error=migration_result.error or "unknown",
+            retries_attempted=migration_result.retries_attempted,
+        )
+        return {"error": f"Migration failed: {migration_result.error}", "name": name}

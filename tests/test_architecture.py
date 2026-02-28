@@ -234,6 +234,7 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
         "get_logger",
         "version",
         "compile",
+        "object",
     }
 )
 
@@ -589,24 +590,26 @@ def test_gated_tools_call_require_enabled_first() -> None:
 
 
 def test_server_imports_gate_registry() -> None:
-    """server/ package must import GATED_TOOLS and UNGATED_TOOLS from autoskillit.pipeline.gate.
+    """server/ package must import GATED_TOOLS and UNGATED_TOOLS from autoskillit.pipeline(.gate).
 
     N6 requirement: the server package is the authoritative runtime consumer of the
-    gate registry, not only the test suite.
+    gate registry, not only the test suite.  Accepts both the sub-module import
+    (autoskillit.pipeline.gate) and the gateway import (autoskillit.pipeline).
     """
     server_dir = SRC_ROOT / "server"
     imported: set[str] = set()
     for py_file in server_dir.glob("*.py"):
         tree = ast.parse(py_file.read_text())
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "autoskillit.pipeline.gate":
+            if isinstance(node, ast.ImportFrom) and node.module in (
+                "autoskillit.pipeline.gate",
+                "autoskillit.pipeline",
+            ):
                 for alias in node.names:
                     imported.add(alias.name)
 
     missing = {"GATED_TOOLS", "UNGATED_TOOLS"} - imported
-    assert not missing, (
-        f"server/ package must import from autoskillit.pipeline.gate: {sorted(missing)}"
-    )
+    assert not missing, f"server/ package must import from autoskillit.pipeline: {sorted(missing)}"
 
 
 # ── Rule 1: test_import_layer_enforcement ─────────────────────────────────────
@@ -1173,11 +1176,17 @@ def test_migration_no_forbidden_imports() -> None:
 
 
 def test_llm_triage_imports_from_contracts_not_validator() -> None:
-    """T7: REQ-DSGN-007 — _llm_triage.py imports from recipe/contracts, not recipe/validator."""
+    """T7: REQ-DSGN-007 — _llm_triage.py imports contract types, not recipe/validator.
+
+    Accepts both direct sub-module import (recipe.contracts) and gateway import
+    (autoskillit.recipe) since REQ-IMP-001 requires gateway imports for non-server/cli files.
+    """
     src = (SRC_ROOT / "_llm_triage.py").read_text()
-    assert "recipe.contracts" in src or "recipe/contracts" in src, (
-        "_llm_triage.py must import from recipe.contracts"
-    )
+    assert (
+        "recipe.contracts" in src
+        or "recipe/contracts" in src
+        or "from autoskillit.recipe import" in src
+    ), "_llm_triage.py must import contract types from recipe package"
     assert "recipe.validator" not in src and "recipe_validator" not in src, (
         "_llm_triage.py must not import from recipe.validator or old recipe_validator"
     )

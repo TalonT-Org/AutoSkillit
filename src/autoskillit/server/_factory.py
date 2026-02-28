@@ -10,19 +10,18 @@ construction scattered across callers.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core.types import SubprocessRunner
-from autoskillit.execution.db import DefaultDatabaseReader
-from autoskillit.execution.headless import DefaultHeadlessExecutor
-from autoskillit.execution.testing import DefaultTestRunner
-from autoskillit.migration.engine import DefaultMigrationService, default_migration_engine
-from autoskillit.pipeline.audit import AuditLog
-from autoskillit.pipeline.context import ToolContext
-from autoskillit.pipeline.gate import GateState
-from autoskillit.pipeline.tokens import TokenLog
-from autoskillit.recipe.io import DefaultRecipeRepository
-from autoskillit.workspace.cleanup import DefaultWorkspaceManager
+from autoskillit.core import SubprocessRunner
+from autoskillit.execution import DefaultDatabaseReader, DefaultHeadlessExecutor, DefaultTestRunner
+from autoskillit.migration import DefaultMigrationService, default_migration_engine
+from autoskillit.pipeline import AuditLog, GateState, TokenLog, ToolContext
+from autoskillit.recipe import DefaultRecipeRepository
+from autoskillit.workspace import DefaultWorkspaceManager
+
+# Sentinel: distinguish "caller passed runner=None explicitly" from "not provided"
+_UNSET: Any = object()
 
 
 def _default_plugin_dir() -> str:
@@ -33,7 +32,7 @@ def _default_plugin_dir() -> str:
 def make_context(
     config: AutomationConfig,
     *,
-    runner: SubprocessRunner | None = None,
+    runner: SubprocessRunner | None = _UNSET,
     plugin_dir: str | None = None,
 ) -> ToolContext:
     """Create a fully-wired ToolContext with all 10 service fields populated.
@@ -46,18 +45,23 @@ def make_context(
 
     Args:
         config: The loaded AutomationConfig (use load_config() to obtain it).
-        runner: Subprocess runner implementation. Defaults to None (tests use
-                MockSubprocessRunner; production sets RealSubprocessRunner).
-                When None, tester is left as None because DefaultTestRunner
-                requires a non-None runner.
+        runner: Subprocess runner implementation. Defaults to RealSubprocessRunner()
+                for production use. Pass runner=None explicitly to disable the
+                tester (useful in tests that don't need real subprocess execution).
         plugin_dir: Absolute path to the autoskillit plugin directory. Defaults
                     to the autoskillit package directory (parent of server/).
 
     Returns:
         ToolContext with gate starting closed (enabled=False). Call
         gate.enable() (via the open_kitchen prompt) to activate gated tools.
-        All service fields are populated except tester when runner is None.
+        All service fields are populated. When runner=None is passed explicitly,
+        tester is left as None.
     """
+    if runner is _UNSET:
+        from autoskillit.execution import RealSubprocessRunner
+
+        runner = RealSubprocessRunner()
+
     resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
     ctx = ToolContext(
         config=config,
@@ -73,4 +77,7 @@ def make_context(
         workspace_mgr=DefaultWorkspaceManager(),
     )
     ctx.executor = DefaultHeadlessExecutor(ctx)
+    # Wire the headless runner into migrations for LLM-driven migration support
+    if isinstance(ctx.migrations, DefaultMigrationService):
+        ctx.migrations.bind_headless(ctx.executor.run)
     return ctx

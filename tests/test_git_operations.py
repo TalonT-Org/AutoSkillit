@@ -72,6 +72,17 @@ async def test_perform_merge_blocks_on_failing_tests(
     assert result["state"] == MergeState.WORKTREE_INTACT
 
 
+class _MockTester:
+    """Mock TestRunner for perform_merge tests."""
+
+    def __init__(self, passed: bool = True, output: str = "50 passed"):
+        self._passed = passed
+        self._output = output
+
+    async def run(self, cwd):
+        return (self._passed, self._output)
+
+
 @pytest.mark.asyncio
 async def test_perform_merge_returns_success_on_green_tests(
     default_config, conftest_mock_runner, tmp_path
@@ -79,10 +90,10 @@ async def test_perform_merge_returns_success_on_green_tests(
     from autoskillit.server.git import perform_merge
 
     fake_wt = str(tmp_path)
-    # Queue all 9 steps: rev-parse, branch, test, fetch, rebase, wt-list, merge, remove, branch-D
+    # Queue 8 steps: rev-parse, branch, fetch, rebase, wt-list, merge, remove, branch-D
+    # (test gate now handled by tester, not subprocess)
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
-    conftest_mock_runner.push(_make_result(0, "= 50 passed =", ""))
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
@@ -91,7 +102,11 @@ async def test_perform_merge_returns_success_on_green_tests(
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
     result = await perform_merge(
-        fake_wt, "main", config=default_config, runner=conftest_mock_runner
+        fake_wt,
+        "main",
+        config=default_config,
+        runner=conftest_mock_runner,
+        tester=_MockTester(passed=True),
     )
     assert result.get("merge_succeeded") is True
     assert result["merged_branch"] == "feature-branch"

@@ -14,6 +14,7 @@ from typing import Any
 from autoskillit.core import (
     CONTEXT_EXHAUSTION_MARKER,
     RetryReason,
+    SkillResult,
     TerminationReason,
     get_logger,
     truncate_text,
@@ -22,6 +23,10 @@ from autoskillit.core import (
 logger = get_logger(__name__)
 
 _truncate = truncate_text
+
+# Re-export SkillResult so existing callers (tests, migration_engine) can still
+# import from this module.  Canonical definition lives in core/types.py.
+__all__ = ["SkillResult"]
 
 
 _TOKEN_FIELDS = (

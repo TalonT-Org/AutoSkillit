@@ -16,12 +16,12 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core.logging import get_logger
-from autoskillit.pipeline.context import ToolContext
-from autoskillit.pipeline.gate import (  # noqa: F401
+from autoskillit.core import get_logger
+from autoskillit.pipeline import (  # noqa: F401
     GATED_TOOLS,
     UNGATED_TOOLS,
     GateState,
+    ToolContext,
     gate_error_result,
 )
 
@@ -64,8 +64,7 @@ def version_info() -> dict:
 # Import all tool sub-modules to trigger @mcp.tool() registration.
 # These imports must come AFTER mcp, _ctx, _get_ctx, _get_config are defined
 # because tool modules import `mcp` from this package at import time.
-from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
-from autoskillit.execution.headless import run_headless_core  # noqa: E402, F401
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
 from autoskillit.server import (  # noqa: E402, F401
     helpers,
     prompts,
@@ -75,6 +74,7 @@ from autoskillit.server import (  # noqa: E402, F401
     tools_status,
     tools_workspace,
 )
+from autoskillit.server._factory import make_context  # noqa: E402, F401
 
 # Re-export all tool functions for backward compatibility with test_server.py
 # which does `from autoskillit.server import run_cmd, ...`

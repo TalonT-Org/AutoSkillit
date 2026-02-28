@@ -147,15 +147,36 @@ def test_req_imp_003_tools_import_namespace(path: Path) -> None:
 
 
 def test_req_imp_004_cli_app_namespace_limit() -> None:
-    """cli/app.py imports only from autoskillit.core, .config, and .pipeline."""
+    """cli/app.py must not import from package sub-modules (autoskillit.X.Y).
+
+    Gateway-level imports (autoskillit.X) are allowed.
+    Intra-package imports (autoskillit.cli.*) are allowed.
+    execution sub-module imports are forbidden.
+    """
     path = SRC / "cli" / "app.py"
-    allowed = frozenset(
-        {"autoskillit.core", "autoskillit.config", "autoskillit.pipeline", "autoskillit.server"}
+    # Packages accessible at gateway level (autoskillit.X imports are OK)
+    gateway_allowed = frozenset(
+        {
+            "autoskillit.core",
+            "autoskillit.config",
+            "autoskillit.pipeline",
+            "autoskillit.server",
+            "autoskillit.recipe",
+            "autoskillit.migration",
+            "autoskillit.workspace",
+            "autoskillit.cli",  # intra-package
+        }
     )
     violations: list[str] = []
     for mod, _in_tc in _parse_imports(path):
-        top2 = ".".join(mod.split(".")[:2])
-        if top2 not in allowed and mod != "autoskillit":
+        if mod == "autoskillit":
+            continue
+        parts = mod.split(".")
+        top2 = ".".join(parts[:2])
+        if top2 not in gateway_allowed:
+            violations.append(mod)
+        elif len(parts) >= 3 and top2 not in {"autoskillit.core", "autoskillit.cli"}:
+            # Sub-module import within a gateway package: forbidden (autoskillit.X.Y)
             violations.append(mod)
     assert not violations, "REQ-IMP-004 violations:\n" + "\n".join(violations)
 

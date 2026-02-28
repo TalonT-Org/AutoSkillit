@@ -54,22 +54,17 @@ def tool_ctx(monkeypatch, tmp_path):
     Monkeypatches server._ctx so all server tool calls use this context.
     Gate is enabled (open kitchen) by default — tests that need a closed
     gate should do: tool_ctx.gate = GateState(enabled=False) locally.
+
+    All service fields (executor, tester, db_reader, workspace_mgr, recipes,
+    migrations) are wired via make_context() so routing tests work correctly.
     """
     from autoskillit import server as _server
     from autoskillit.config import AutomationConfig
-    from autoskillit.pipeline.audit import AuditLog
-    from autoskillit.pipeline.context import ToolContext
     from autoskillit.pipeline.gate import GateState
-    from autoskillit.pipeline.tokens import TokenLog
+    from autoskillit.server._factory import make_context
 
     mock_runner = MockSubprocessRunner()
-    ctx = ToolContext(
-        config=AutomationConfig(),
-        audit=AuditLog(),
-        token_log=TokenLog(),
-        gate=GateState(enabled=True),
-        plugin_dir=str(tmp_path),
-        runner=mock_runner,
-    )
+    ctx = make_context(AutomationConfig(), runner=mock_runner, plugin_dir=str(tmp_path))
+    ctx.gate = GateState(enabled=True)
     monkeypatch.setattr(_server, "_ctx", ctx)
     return ctx

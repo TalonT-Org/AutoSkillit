@@ -7,8 +7,7 @@ from pathlib import Path
 
 from fastmcp.prompts import Message, PromptResult
 
-from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
-from autoskillit.pipeline.gate import GateState
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS
 from autoskillit.server import mcp
 
 
@@ -16,7 +15,7 @@ def _open_kitchen_handler() -> None:
     """Set the tools-enabled flag. Extracted for testability."""
     from autoskillit.server import _get_ctx, logger
 
-    _get_ctx().gate = GateState(enabled=True)
+    _get_ctx().gate.enable()
     logger.info("open_kitchen", gate_state="open")
 
 
@@ -24,7 +23,7 @@ def _close_kitchen_handler() -> None:
     """Clear the tools-enabled flag. Extracted for testability."""
     from autoskillit.server import _get_ctx, logger
 
-    _get_ctx().gate = GateState(enabled=False)
+    _get_ctx().gate.disable()
     logger.info("close_kitchen", gate_state="closed")
 
 

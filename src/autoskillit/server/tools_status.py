@@ -278,8 +278,11 @@ async def check_quota(ctx: Context = CurrentContext()) -> str:
     try:
         await ctx.info(
             "check_quota",
-            quota_guard_enabled=config.quota_guard.enabled,
-            threshold=config.quota_guard.threshold,
+            logger_name="autoskillit.check_quota",
+            extra={
+                "quota_guard_enabled": config.quota_guard.enabled,
+                "threshold": config.quota_guard.threshold,
+            },
         )
     except (RuntimeError, AttributeError):
         pass
@@ -292,8 +295,11 @@ async def check_quota(ctx: Context = CurrentContext()) -> str:
         try:
             await ctx.info(
                 "quota above threshold — caller should sleep",
-                sleep_seconds=quota_result["sleep_seconds"],
-                utilization=quota_result["utilization"],
+                logger_name="autoskillit.check_quota",
+                extra={
+                    "sleep_seconds": quota_result["sleep_seconds"],
+                    "utilization": quota_result["utilization"],
+                },
             )
         except (RuntimeError, AttributeError):
             pass

@@ -22,18 +22,46 @@ logger = get_logger(__name__)
 _RUNS_DIR = "autoskillit-runs"
 
 
+def detect_source_dir(cwd: str) -> str:
+    """Detect the git repository root for cwd, falling back to cwd.
+
+    Shells 'git rev-parse --show-toplevel' from cwd. Returns cwd unchanged
+    if not in a git repository or if git is not available.
+    """
+    _cwd = cwd if cwd else str(Path.cwd())
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=_cwd,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return result.stdout.strip()
+    return _cwd
+
+
 def clone_repo(source_dir: str, run_name: str) -> dict[str, str]:
     """Clone source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
 
     Used as a run_python entry point in pipeline recipes. Raises ValueError if
     source_dir does not exist; raises RuntimeError if git clone fails.
 
+    When source_dir is empty, auto-detects from git rev-parse --show-toplevel.
+    Tilde and relative paths are expanded before validation.
+
     Returns:
         {"clone_path": str, "source_dir": str}
     """
-    source = Path(source_dir).resolve()
+    if not source_dir:
+        source_dir = detect_source_dir(str(Path.cwd()))
+    source = Path(source_dir).expanduser().resolve()
     if not source.is_dir():
-        raise ValueError(f"source_dir does not exist: {source_dir}")
+        raise ValueError(
+            f"source_dir does not exist or is not a directory: '{source_dir}' "
+            f"(resolved to: '{source}'). "
+            f"Provide an absolute path, a path starting with '~', or leave empty "
+            f"to auto-detect from git rev-parse --show-toplevel."
+        )
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     runs_parent = source.parent / _RUNS_DIR
     clone_path = runs_parent / f"{run_name}-{timestamp}"
@@ -77,7 +105,12 @@ def remove_clone(clone_path: str, keep: str = "false") -> dict[str, str]:
         return {"removed": "false", "reason": str(exc)}
 
 
-def push_clone_to_origin(clone_path: str, source_dir: str, branch: str) -> dict[str, str]:
+def push_clone_to_origin(
+    clone_path: str,
+    source_dir: str,
+    branch: str,
+    push_to_remote: str = "false",
+) -> dict[str, str]:
     """Propagate merged branch from the clone back to the source repository.
 
     Uses git pull --ff-only from the source_dir side. Running pull from the
@@ -87,6 +120,9 @@ def push_clone_to_origin(clone_path: str, source_dir: str, branch: str) -> dict[
 
     After merge_worktree merges into the clone's main branch, this callable
     propagates the changes to the original source repository.
+
+    When push_to_remote='true', also runs 'git push origin <branch>' from
+    source_dir to propagate changes to the remote.
 
     Returns:
         {"success": "true", "stderr": ""} on success,
@@ -107,6 +143,23 @@ def push_clone_to_origin(clone_path: str, source_dir: str, branch: str) -> dict[
             stderr=result.stderr.strip(),
         )
         return {"success": "false", "stderr": result.stderr.strip()}
+
+    if push_to_remote.strip().lower() == "true":
+        push_result = subprocess.run(
+            ["git", "push", "origin", branch],
+            cwd=source_dir,
+            capture_output=True,
+            text=True,
+        )
+        if push_result.returncode != 0:
+            logger.error(
+                "push_to_remote_failed",
+                source_dir=source_dir,
+                branch=branch,
+                stderr=push_result.stderr.strip(),
+            )
+            return {"success": "false", "stderr": push_result.stderr.strip()}
+
     logger.info(
         "push_clone_succeeded",
         clone_path=clone_path,

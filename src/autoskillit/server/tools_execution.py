@@ -13,6 +13,7 @@ from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
     _import_and_call,
+    _notify,
     _require_enabled,
     _run_subprocess,
 )
@@ -34,14 +35,7 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600, ctx: Context = Current
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="run_cmd", cwd=cwd)
     logger.info("run_cmd", cmd=cmd[:80], cwd=cwd)
-    try:
-        await ctx.info(
-            f"run_cmd: {cmd[:80]}",
-            logger_name="autoskillit.run_cmd",
-            extra={"cwd": cwd},
-        )
-    except (RuntimeError, AttributeError):
-        pass
+    await _notify(ctx, "info", f"run_cmd: {cmd[:80]}", "autoskillit.run_cmd", extra={"cwd": cwd})
     returncode, stdout, stderr = await _run_subprocess(
         ["bash", "-c", cmd],
         cwd=cwd,
@@ -54,14 +48,9 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600, ctx: Context = Current
         "stderr": truncate_text(stderr),
     }
     if not result["success"]:
-        try:
-            await ctx.error(
-                "run_cmd failed",
-                logger_name="autoskillit.run_cmd",
-                extra={"exit_code": returncode},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx, "error", "run_cmd failed", "autoskillit.run_cmd", extra={"exit_code": returncode}
+        )
     return json.dumps(result)
 
 
@@ -92,24 +81,22 @@ async def run_python(
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="run_python")
     logger.info("run_python", callable=callable, timeout=timeout)
-    try:
-        await ctx.info(
-            f"run_python: {callable}",
-            logger_name="autoskillit.run_python",
-            extra={"callable": callable},
-        )
-    except (RuntimeError, AttributeError):
-        pass
+    await _notify(
+        ctx,
+        "info",
+        f"run_python: {callable}",
+        "autoskillit.run_python",
+        extra={"callable": callable},
+    )
     result = await _import_and_call(callable, args=args, timeout=float(timeout))
     if not result.get("success"):
-        try:
-            await ctx.error(
-                "run_python failed",
-                logger_name="autoskillit.run_python",
-                extra={"callable": callable},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "run_python failed",
+            "autoskillit.run_python",
+            extra={"callable": callable},
+        )
     return json.dumps(result)
 
 
@@ -147,14 +134,13 @@ async def run_skill(
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="run_skill", cwd=cwd)
     logger.info("run_skill", command=skill_command[:80], cwd=cwd)
-    try:
-        await ctx.info(
-            f"run_skill: {skill_command[:80]}",
-            logger_name="autoskillit.run_skill",
-            extra={"cwd": cwd, "model": model or "default"},
-        )
-    except AttributeError:
-        pass
+    await _notify(
+        ctx,
+        "info",
+        f"run_skill: {skill_command[:80]}",
+        "autoskillit.run_skill",
+        extra={"cwd": cwd, "model": model or "default"},
+    )
 
     from autoskillit.server import _get_config, _get_ctx
 
@@ -169,14 +155,13 @@ async def run_skill(
         skill_command, cwd, model=model, add_dir=add_dir, step_name=step_name
     )
     if not skill_result.success:
-        try:
-            await ctx.error(
-                "run_skill failed",
-                logger_name="autoskillit.run_skill",
-                extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
-            )
-        except AttributeError:
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "run_skill failed",
+            "autoskillit.run_skill",
+            extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
+        )
     return skill_result.to_json()
 
 
@@ -221,14 +206,13 @@ async def run_skill_retry(
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="run_skill_retry", cwd=cwd)
     logger.info("run_skill_retry", command=skill_command[:80], cwd=cwd)
-    try:
-        await ctx.info(
-            f"run_skill_retry: {skill_command[:80]}",
-            logger_name="autoskillit.run_skill_retry",
-            extra={"cwd": cwd, "model": model or "default"},
-        )
-    except AttributeError:
-        pass
+    await _notify(
+        ctx,
+        "info",
+        f"run_skill_retry: {skill_command[:80]}",
+        "autoskillit.run_skill_retry",
+        extra={"cwd": cwd, "model": model or "default"},
+    )
 
     from autoskillit.server import _get_config, _get_ctx
 
@@ -250,14 +234,13 @@ async def run_skill_retry(
         stale_threshold=cfg.stale_threshold,
     )
     if not skill_result.success:
-        try:
-            await ctx.error(
-                "run_skill_retry failed",
-                logger_name="autoskillit.run_skill_retry",
-                extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
-            )
-        except AttributeError:
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "run_skill_retry failed",
+            "autoskillit.run_skill_retry",
+            extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
+        )
     return skill_result.to_json()
 
 

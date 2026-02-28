@@ -4,12 +4,51 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import RetryReason, TerminationReason, get_logger
+from autoskillit.core import RESERVED_LOG_RECORD_KEYS, RetryReason, TerminationReason, get_logger
 from autoskillit.execution import check_and_sleep_if_needed  # noqa: F401
 from autoskillit.pipeline import gate_error_result
 
+if TYPE_CHECKING:
+    from fastmcp import Context
+
 logger = get_logger(__name__)
+
+
+async def _notify(
+    ctx: Context,
+    level: str,
+    message: str,
+    logger_name: str,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    """Send an MCP progress notification via FastMCP's Context.
+
+    Validates extra dict keys against RESERVED_LOG_RECORD_KEYS before
+    dispatching. Raises ValueError if any reserved key is found — this
+    surfaces programming errors in tests rather than silently crashing
+    at runtime only when DEBUG logging is active.
+
+    Catches (RuntimeError, AttributeError, KeyError) from FastMCP internals:
+    - RuntimeError: no active MCP session (Context.session raises)
+    - AttributeError: ctx is CurrentContext() sentinel during testing
+    - KeyError: makeRecord() collision (defense-in-depth; prevented by validation)
+    """
+    if extra:
+        invalid = RESERVED_LOG_RECORD_KEYS & extra.keys()
+        if invalid:
+            raise ValueError(
+                f"extra dict contains reserved LogRecord keys: {sorted(invalid)!r}. "
+                "Rename these keys to avoid stdlib logging collisions."
+            )
+    try:
+        if level == "info":
+            await ctx.info(message, logger_name=logger_name, extra=extra)
+        elif level == "error":
+            await ctx.error(message, logger_name=logger_name, extra=extra)
+    except (RuntimeError, AttributeError, KeyError):
+        pass
 
 
 def _get_ctx():  # type: ignore[return]

@@ -12,7 +12,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger, truncate_text
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _require_enabled, _run_subprocess
+from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess
 
 logger = get_logger(__name__)
 
@@ -37,14 +37,13 @@ async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="test_check", cwd=worktree_path)
     logger.info("test_check", worktree=worktree_path)
-    try:
-        await ctx.info(
-            f"test_check: {worktree_path}",
-            logger_name="autoskillit.test_check",
-            extra={"worktree": worktree_path},
-        )
-    except (RuntimeError, AttributeError):
-        pass
+    await _notify(
+        ctx,
+        "info",
+        f"test_check: {worktree_path}",
+        "autoskillit.test_check",
+        extra={"worktree": worktree_path},
+    )
 
     from autoskillit.server import _get_ctx
 
@@ -55,14 +54,13 @@ async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str
     passed, output = await tool_ctx.tester.run(Path(worktree_path))
 
     if not passed:
-        try:
-            await ctx.error(
-                "test_check: tests failed",
-                logger_name="autoskillit.test_check",
-                extra={"worktree": worktree_path},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "test_check: tests failed",
+            "autoskillit.test_check",
+            extra={"worktree": worktree_path},
+        )
 
     return json.dumps({"passed": passed, "output": truncate_text(output)})
 
@@ -87,24 +85,22 @@ async def reset_test_dir(
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="reset_test_dir", cwd=resolved)
     logger.info("reset_test_dir", resolved=str(resolved), force=force)
-    try:
-        await ctx.info(
-            f"reset_test_dir: {resolved}",
-            logger_name="autoskillit.reset_test_dir",
-            extra={"resolved": resolved, "force": force},
-        )
-    except (RuntimeError, AttributeError):
-        pass
+    await _notify(
+        ctx,
+        "info",
+        f"reset_test_dir: {resolved}",
+        "autoskillit.reset_test_dir",
+        extra={"resolved": resolved, "force": force},
+    )
 
     if not os.path.isdir(resolved):
-        try:
-            await ctx.error(
-                "reset_test_dir failed",
-                logger_name="autoskillit.reset_test_dir",
-                extra={"reason": "directory does not exist"},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "reset_test_dir failed",
+            "autoskillit.reset_test_dir",
+            extra={"reason": "directory does not exist"},
+        )
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
     from autoskillit.server import _get_config
@@ -112,14 +108,13 @@ async def reset_test_dir(
     marker_name = _get_config().safety.reset_guard_marker
     marker_path = Path(resolved) / marker_name
     if not force and not marker_path.is_file():
-        try:
-            await ctx.error(
-                "reset_test_dir failed",
-                logger_name="autoskillit.reset_test_dir",
-                extra={"reason": "marker missing"},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "reset_test_dir failed",
+            "autoskillit.reset_test_dir",
+            extra={"reason": "marker missing"},
+        )
         return json.dumps(
             {
                 "error": f"Safety: directory missing reset guard marker ({marker_name})",
@@ -152,24 +147,22 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="reset_workspace", cwd=resolved)
     logger.info("reset_workspace", resolved=str(resolved))
-    try:
-        await ctx.info(
-            f"reset_workspace: {resolved}",
-            logger_name="autoskillit.reset_workspace",
-            extra={"resolved": resolved},
-        )
-    except (RuntimeError, AttributeError):
-        pass
+    await _notify(
+        ctx,
+        "info",
+        f"reset_workspace: {resolved}",
+        "autoskillit.reset_workspace",
+        extra={"resolved": resolved},
+    )
 
     if not os.path.isdir(resolved):
-        try:
-            await ctx.error(
-                "reset_workspace failed",
-                logger_name="autoskillit.reset_workspace",
-                extra={"reason": "directory does not exist"},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "reset_workspace failed",
+            "autoskillit.reset_workspace",
+            extra={"reason": "directory does not exist"},
+        )
         return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
     from autoskillit.server import _get_config
@@ -177,14 +170,13 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
     marker_name = _get_config().safety.reset_guard_marker
     marker_path = Path(resolved) / marker_name
     if not marker_path.is_file():
-        try:
-            await ctx.error(
-                "reset_workspace failed",
-                logger_name="autoskillit.reset_workspace",
-                extra={"reason": "marker missing"},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "reset_workspace failed",
+            "autoskillit.reset_workspace",
+            extra={"reason": "marker missing"},
+        )
         return json.dumps(
             {
                 "error": f"Safety: directory missing reset guard marker ({marker_name})",
@@ -194,14 +186,13 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
 
     reset_cmd = _get_config().reset_workspace.command
     if reset_cmd is None:
-        try:
-            await ctx.error(
-                "reset_workspace failed",
-                logger_name="autoskillit.reset_workspace",
-                extra={"reason": "not configured"},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "reset_workspace failed",
+            "autoskillit.reset_workspace",
+            extra={"reason": "not configured"},
+        )
         return json.dumps({"error": "reset_workspace not configured for this project"})
 
     returncode, stdout, stderr = await _run_subprocess(
@@ -211,14 +202,13 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
     )
 
     if returncode != 0:
-        try:
-            await ctx.error(
-                "reset_workspace failed",
-                logger_name="autoskillit.reset_workspace",
-                extra={"reason": "reset command failed", "exit_code": returncode},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "reset_workspace failed",
+            "autoskillit.reset_workspace",
+            extra={"reason": "reset command failed", "exit_code": returncode},
+        )
         return json.dumps(
             {
                 "error": "reset command failed",

@@ -6591,6 +6591,125 @@ class TestGatedToolObservability:
         assert result["success"] is False
 
 
+class TestNotifyHelper:
+    """Unit tests for the centralized _notify() notification helper."""
+
+    @pytest.mark.asyncio
+    async def test_notify_raises_value_error_for_reserved_key_name(self):
+        """The 'name' key that caused the original bug must be rejected."""
+        from autoskillit.server.helpers import _notify
+
+        ctx = AsyncMock()
+        ctx.info = AsyncMock()
+        with pytest.raises(ValueError, match="reserved LogRecord"):
+            await _notify(
+                ctx,
+                "info",
+                "migrate_recipe: foo",
+                "autoskillit.migrate_recipe",
+                extra={"name": "foo"},
+            )
+        ctx.info.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_notify_raises_for_all_reserved_keys(self):
+        """Every key in RESERVED_LOG_RECORD_KEYS must be rejected."""
+        from autoskillit.core.types import RESERVED_LOG_RECORD_KEYS
+        from autoskillit.server.helpers import _notify
+
+        ctx = AsyncMock()
+        ctx.info = AsyncMock()
+        for reserved_key in RESERVED_LOG_RECORD_KEYS:
+            with pytest.raises(ValueError, match="reserved LogRecord"):
+                await _notify(ctx, "info", "msg", "logger", extra={reserved_key: "value"})
+
+    @pytest.mark.asyncio
+    async def test_notify_accepts_safe_key_recipe_name(self):
+        """'recipe_name' (the corrected key for migrate_recipe) must be accepted."""
+        from autoskillit.server.helpers import _notify
+
+        ctx = AsyncMock()
+        ctx.info = AsyncMock()
+        await _notify(
+            ctx,
+            "info",
+            "migrate_recipe: foo",
+            "autoskillit.migrate_recipe",
+            extra={"recipe_name": "foo"},
+        )
+        ctx.info.assert_awaited_once_with(
+            "migrate_recipe: foo",
+            logger_name="autoskillit.migrate_recipe",
+            extra={"recipe_name": "foo"},
+        )
+
+    @pytest.mark.asyncio
+    async def test_notify_accepts_none_extra(self):
+        from autoskillit.server.helpers import _notify
+
+        ctx = AsyncMock()
+        ctx.info = AsyncMock()
+        await _notify(ctx, "info", "msg", "logger")  # no extra
+        ctx.info.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_notify_accepts_empty_extra(self):
+        from autoskillit.server.helpers import _notify
+
+        ctx = AsyncMock()
+        ctx.info = AsyncMock()
+        await _notify(ctx, "info", "msg", "logger", extra={})
+        ctx.info.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_notify_swallows_attribute_error_from_ctx(self):
+        """AttributeError from ctx.info (e.g. _CurrentContext sentinel) is swallowed."""
+        from autoskillit.server.helpers import _notify
+
+        ctx = AsyncMock()
+        ctx.info = AsyncMock(side_effect=AttributeError("no info"))
+        # Must not raise
+        await _notify(ctx, "info", "msg", "logger", extra={"cwd": "/tmp"})
+
+    @pytest.mark.asyncio
+    async def test_notify_swallows_runtime_error_from_ctx(self):
+        """RuntimeError from ctx.info (no active MCP session) is swallowed."""
+        from autoskillit.server.helpers import _notify
+
+        ctx = AsyncMock()
+        ctx.info = AsyncMock(side_effect=RuntimeError("session not available"))
+        await _notify(ctx, "info", "msg", "logger", extra={"cwd": "/tmp"})
+
+    @pytest.mark.asyncio
+    async def test_notify_swallows_key_error_from_ctx(self):
+        """KeyError from FastMCP's stdlib logging path is swallowed.
+        This is the error class that was previously uncaught."""
+        from autoskillit.server.helpers import _notify
+
+        ctx = AsyncMock()
+        ctx.info = AsyncMock(side_effect=KeyError("Attempt to overwrite 'name' in LogRecord"))
+        await _notify(ctx, "info", "msg", "logger", extra={"cwd": "/tmp"})
+
+    @pytest.mark.asyncio
+    async def test_notify_dispatches_error_level(self):
+        from autoskillit.server.helpers import _notify
+
+        ctx = AsyncMock()
+        ctx.error = AsyncMock()
+        await _notify(
+            ctx,
+            "error",
+            "run_cmd failed",
+            "autoskillit.run_cmd",
+            extra={"exit_code": 1},
+        )
+        ctx.error.assert_awaited_once_with(
+            "run_cmd failed",
+            logger_name="autoskillit.run_cmd",
+            extra={"exit_code": 1},
+        )
+
+
 # ---------------------------------------------------------------------------
 # Service routing integration tests (REQ-IMP-003)
 # ---------------------------------------------------------------------------

@@ -118,6 +118,41 @@ class LoadResult(Generic[T]):
 # Centralized here so tests can reference the canonical value.
 CONTEXT_EXHAUSTION_MARKER = "prompt is too long"
 
+# Attribute names set unconditionally by logging.LogRecord.__init__ and makeRecord().
+# Passing any of these as keys in the extra={} dict to ctx.info/ctx.error causes
+# FastMCP's stdlib logging bridge to raise KeyError at runtime.
+# Used by server/helpers._notify() for pre-dispatch validation.
+RESERVED_LOG_RECORD_KEYS: frozenset[str] = frozenset(
+    {
+        # Set unconditionally in LogRecord.__init__
+        "name",
+        "msg",
+        "args",
+        "levelname",
+        "levelno",
+        "pathname",
+        "filename",
+        "module",
+        "exc_info",
+        "exc_text",
+        "stack_info",
+        "lineno",
+        "funcName",
+        "created",
+        "msecs",
+        "relativeCreated",
+        "thread",
+        "threadName",
+        "processName",
+        "process",
+        # Python 3.12+ addition
+        "taskName",
+        # Additional keys checked explicitly in makeRecord (not in __init__)
+        "message",
+        "asctime",
+    }
+)
+
 # Native Claude Code tools that pipeline orchestrators must NEVER use directly.
 # Canonical source of truth — imported by server.py and tests.
 PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (

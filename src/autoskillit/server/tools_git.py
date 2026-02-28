@@ -10,7 +10,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import RestartScope, get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _require_enabled, _run_subprocess
+from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess
 
 logger = get_logger(__name__)
 
@@ -35,14 +35,13 @@ async def merge_worktree(
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="merge_worktree", cwd=worktree_path)
     logger.info("merge_worktree", path=worktree_path, base=base_branch)
-    try:
-        await ctx.info(
-            f"merge_worktree: {worktree_path} -> {base_branch}",
-            logger_name="autoskillit.merge_worktree",
-            extra={"worktree": worktree_path, "base": base_branch},
-        )
-    except (RuntimeError, AttributeError):
-        pass
+    await _notify(
+        ctx,
+        "info",
+        f"merge_worktree: {worktree_path} -> {base_branch}",
+        "autoskillit.merge_worktree",
+        extra={"worktree": worktree_path, "base": base_branch},
+    )
 
     from autoskillit.server import _get_config, _get_ctx
     from autoskillit.server.git import perform_merge
@@ -59,14 +58,13 @@ async def merge_worktree(
     )
 
     if "error" in result:
-        try:
-            await ctx.error(
-                "merge_worktree failed",
-                logger_name="autoskillit.merge_worktree",
-                extra={"reason": result["error"]},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "merge_worktree failed",
+            "autoskillit.merge_worktree",
+            extra={"reason": result["error"]},
+        )
 
     return json.dumps(result)
 
@@ -97,14 +95,13 @@ async def classify_fix(
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="classify_fix", cwd=worktree_path)
     logger.info("classify_fix", worktree=worktree_path, base=base_branch)
-    try:
-        await ctx.info(
-            f"classify_fix: {worktree_path}",
-            logger_name="autoskillit.classify_fix",
-            extra={"worktree": worktree_path, "base": base_branch},
-        )
-    except (RuntimeError, AttributeError):
-        pass
+    await _notify(
+        ctx,
+        "info",
+        f"classify_fix: {worktree_path}",
+        "autoskillit.classify_fix",
+        extra={"worktree": worktree_path, "base": base_branch},
+    )
 
     from autoskillit.server import _get_config
     from autoskillit.server.git import _filter_changed_files
@@ -116,14 +113,13 @@ async def classify_fix(
     )
 
     if returncode != 0:
-        try:
-            await ctx.error(
-                "classify_fix: git diff failed",
-                logger_name="autoskillit.classify_fix",
-                extra={"worktree": worktree_path},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "classify_fix: git diff failed",
+            "autoskillit.classify_fix",
+            extra={"worktree": worktree_path},
+        )
         return json.dumps({"error": f"git diff failed: {stderr}"})
 
     prefixes = _get_config().classify_fix.path_prefixes

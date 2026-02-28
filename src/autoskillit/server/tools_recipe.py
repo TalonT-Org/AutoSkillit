@@ -12,7 +12,7 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import get_logger
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _require_enabled
+from autoskillit.server.helpers import _notify, _require_enabled
 
 logger = get_logger(__name__)
 
@@ -273,16 +273,15 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     if (gate := _require_enabled()) is not None:
         return gate
     structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="migrate_recipe", name=name)
-    logger.info("migrate_recipe", name=name)
-    try:
-        await ctx.info(
-            f"migrate_recipe: {name}",
-            logger_name="autoskillit.migrate_recipe",
-            extra={"name": name},
-        )
-    except (RuntimeError, AttributeError):
-        pass
+    structlog.contextvars.bind_contextvars(tool="migrate_recipe", recipe_name=name)
+    logger.info("migrate_recipe", recipe_name=name)
+    await _notify(
+        ctx,
+        "info",
+        f"migrate_recipe: {name}",
+        "autoskillit.migrate_recipe",
+        extra={"recipe_name": name},
+    )
 
     from autoskillit.server import _get_config, _get_ctx
 

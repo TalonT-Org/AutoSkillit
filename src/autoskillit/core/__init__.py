@@ -19,6 +19,7 @@ from .logging import (
 from .types import (
     CONTEXT_EXHAUSTION_MARKER,
     PIPELINE_FORBIDDEN_TOOLS,
+    RESERVED_LOG_RECORD_KEYS,
     RETRY_RESPONSE_FIELDS,
     SKILL_TOOLS,
     AuditStore,
@@ -61,6 +62,7 @@ __all__ = [
     # types
     "CONTEXT_EXHAUSTION_MARKER",
     "PIPELINE_FORBIDDEN_TOOLS",
+    "RESERVED_LOG_RECORD_KEYS",
     "RETRY_RESPONSE_FIELDS",
     "SKILL_TOOLS",
     "AuditStore",

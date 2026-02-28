@@ -1884,3 +1884,65 @@ def test_violation_str_no_prefix_without_rule_id() -> None:
     s = str(v)
     assert not s.startswith("["), f"Expected no prefix for rule_id='', got: {s!r}"
     assert "some issue" in s
+
+
+def test_no_raw_ctx_notification_calls_in_tool_handlers() -> None:
+    """Architecture guard: all ctx.info/error/warning/debug calls in tools_*.py
+    must be replaced by _notify. If any raw ctx.* call exists, a developer has
+    bypassed the validation layer and this test fails immediately.
+    """
+    import ast
+
+    server_dir = Path("src/autoskillit/server")
+    violations = []
+    for path in sorted(server_dir.glob("tools_*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "ctx"
+                and node.func.attr in ("info", "error", "warning", "debug")
+            ):
+                violations.append(f"{path.name}:{node.lineno}")
+    assert not violations, (
+        "Raw ctx notification calls found — use _notify() from server/helpers.py:\n"
+        + "\n".join(violations)
+    )
+
+
+def test_all_tool_extra_keys_are_not_reserved() -> None:
+    """Architecture guard: statically verify that no literal extra={} dict passed
+    to _notify() in tools_*.py contains a key matching a reserved LogRecord
+    attribute. Catches reserved-key collisions at test time, before any runtime.
+    """
+    import ast
+
+    from autoskillit.core.types import RESERVED_LOG_RECORD_KEYS
+
+    server_dir = Path("src/autoskillit/server")
+    violations = []
+    for path in sorted(server_dir.glob("tools_*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            # Find: _notify(ctx, level, msg, logger_name, extra={...})
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "_notify"
+            ):
+                for kw in node.keywords:
+                    if kw.arg == "extra" and isinstance(kw.value, ast.Dict):
+                        for key_node in kw.value.keys:
+                            if isinstance(key_node, ast.Constant) and isinstance(
+                                key_node.value, str
+                            ):
+                                if key_node.value in RESERVED_LOG_RECORD_KEYS:
+                                    violations.append(
+                                        f"{path.name}:{node.lineno}: "
+                                        f"extra key {key_node.value!r} is reserved"
+                                    )
+    assert not violations, "Reserved LogRecord keys found in _notify() extra dicts:\n" + "\n".join(
+        violations
+    )

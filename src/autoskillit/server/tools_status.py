@@ -12,7 +12,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _require_enabled
+from autoskillit.server.helpers import _notify, _require_enabled
 
 logger = get_logger(__name__)
 
@@ -132,60 +132,51 @@ async def read_db(
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="read_db")
     logger.info("read_db", db_path=db_path, query=query[:80])
-    try:
-        await ctx.info(
-            f"read_db: {query[:80]}",
-            logger_name="autoskillit.read_db",
-            extra={"db_path": db_path},
-        )
-    except (RuntimeError, AttributeError):
-        pass
+    await _notify(
+        ctx, "info", f"read_db: {query[:80]}", "autoskillit.read_db", extra={"db_path": db_path}
+    )
 
     # Parse params
     try:
         parsed_params = json.loads(params)
     except json.JSONDecodeError as exc:
-        try:
-            await ctx.error(
-                "read_db: invalid params JSON",
-                logger_name="autoskillit.read_db",
-                extra={"error": str(exc)},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "read_db: invalid params JSON",
+            "autoskillit.read_db",
+            extra={"error": str(exc)},
+        )
         return json.dumps({"error": f"Invalid params JSON: {exc}"})
     if not isinstance(parsed_params, (list, dict)):
-        try:
-            await ctx.error(
-                "read_db: params must be JSON array or object",
-                logger_name="autoskillit.read_db",
-                extra={},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "read_db: params must be JSON array or object",
+            "autoskillit.read_db",
+            extra={},
+        )
         return json.dumps({"error": "params must be a JSON array or object"})
 
     # Validate db_path
     db = Path(db_path).resolve()
     if not db.exists():
-        try:
-            await ctx.error(
-                "read_db: database does not exist",
-                logger_name="autoskillit.read_db",
-                extra={"db_path": db_path},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "read_db: database does not exist",
+            "autoskillit.read_db",
+            extra={"db_path": db_path},
+        )
         return json.dumps({"error": f"Database does not exist: {db}"})
     if not db.is_file():
-        try:
-            await ctx.error(
-                "read_db: path is not a file",
-                logger_name="autoskillit.read_db",
-                extra={"db_path": db_path},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "read_db: path is not a file",
+            "autoskillit.read_db",
+            extra={"db_path": db_path},
+        )
         return json.dumps({"error": f"Path is not a file: {db}"})
 
     from autoskillit.server import _get_config, _get_ctx
@@ -213,35 +204,32 @@ async def read_db(
         return json.dumps(result)
     except ValueError as exc:
         # Non-SELECT SQL rejected by db_reader's defence-in-depth validation
-        try:
-            await ctx.error(
-                "read_db: non-SELECT query rejected",
-                logger_name="autoskillit.read_db",
-                extra={"error": str(exc)},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "read_db: non-SELECT query rejected",
+            "autoskillit.read_db",
+            extra={"error": str(exc)},
+        )
         return json.dumps({"error": str(exc), "hint": "Only SELECT queries are allowed"})
     except TimeoutError:
-        try:
-            await ctx.error(
-                "read_db: query timed out",
-                logger_name="autoskillit.read_db",
-                extra={"timeout": effective_timeout},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "read_db: query timed out",
+            "autoskillit.read_db",
+            extra={"timeout": effective_timeout},
+        )
         return json.dumps({"error": f"Query exceeded {effective_timeout}s timeout"})
     except Exception as exc:
         logger.warning("read_db query failed", error=type(exc).__name__)
-        try:
-            await ctx.error(
-                "read_db: query failed",
-                logger_name="autoskillit.read_db",
-                extra={"error": type(exc).__name__},
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "error",
+            "read_db: query failed",
+            "autoskillit.read_db",
+            extra={"error": type(exc).__name__},
+        )
         return json.dumps({"error": f"Query failed: {exc}"})
 
 
@@ -275,33 +263,31 @@ async def check_quota(ctx: Context = CurrentContext()) -> str:
     from autoskillit.server import _get_config
 
     config = _get_config()
-    try:
-        await ctx.info(
-            "check_quota",
-            logger_name="autoskillit.check_quota",
-            extra={
-                "quota_guard_enabled": config.quota_guard.enabled,
-                "threshold": config.quota_guard.threshold,
-            },
-        )
-    except (RuntimeError, AttributeError):
-        pass
+    await _notify(
+        ctx,
+        "info",
+        "check_quota",
+        "autoskillit.check_quota",
+        extra={
+            "quota_guard_enabled": config.quota_guard.enabled,
+            "threshold": config.quota_guard.threshold,
+        },
+    )
 
     from autoskillit.server.helpers import check_and_sleep_if_needed
 
     quota_result = await check_and_sleep_if_needed(config.quota_guard)
 
     if quota_result.get("should_sleep"):
-        try:
-            await ctx.info(
-                "quota above threshold — caller should sleep",
-                logger_name="autoskillit.check_quota",
-                extra={
-                    "sleep_seconds": quota_result["sleep_seconds"],
-                    "utilization": quota_result["utilization"],
-                },
-            )
-        except (RuntimeError, AttributeError):
-            pass
+        await _notify(
+            ctx,
+            "info",
+            "quota above threshold — caller should sleep",
+            "autoskillit.check_quota",
+            extra={
+                "sleep_seconds": quota_result["sleep_seconds"],
+                "utilization": quota_result["utilization"],
+            },
+        )
 
     return json.dumps({"success": True, **quota_result})

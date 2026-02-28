@@ -16,7 +16,7 @@ from autoskillit.core import load_yaml
 
 @dataclass
 class TestCheckConfig:
-    command: list[str] = field(default_factory=lambda: ["task", "test-all"])
+    command: list[str] = field(default_factory=lambda: ["task", "test-check"])
     timeout: int = 600
 
 

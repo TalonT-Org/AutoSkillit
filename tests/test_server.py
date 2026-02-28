@@ -1784,7 +1784,7 @@ class TestConfigDefaults:
 
     def test_default_test_command(self):
         cfg = AutomationConfig()
-        assert cfg.test_check.command == ["task", "test-all"]
+        assert cfg.test_check.command == ["task", "test-check"]
 
     def test_default_classify_fix_empty_prefixes(self):
         cfg = AutomationConfig()

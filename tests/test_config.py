@@ -11,7 +11,7 @@ class TestDefaultConfig:
     def test_default_config_matches_current_constants(self):
         """C1: AutomationConfig() defaults reproduce current hardcoded values."""
         cfg = AutomationConfig()
-        assert cfg.test_check.command == ["task", "test-all"]
+        assert cfg.test_check.command == ["task", "test-check"]
         assert cfg.test_check.timeout == 600
         assert cfg.classify_fix.path_prefixes == []
         assert cfg.reset_workspace.command is None
@@ -42,7 +42,7 @@ class TestLoadConfig:
     def test_load_config_no_files_returns_defaults(self, tmp_path):
         """C2: No YAML files on disk -> defaults returned."""
         cfg = load_config(tmp_path)
-        assert cfg.test_check.command == ["task", "test-all"]
+        assert cfg.test_check.command == ["task", "test-check"]
         assert cfg.reset_workspace.command is None
 
     def test_load_yaml_full_config(self, tmp_path):
@@ -139,7 +139,7 @@ class TestLoadConfig:
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text("")
         cfg = load_config(tmp_path)
-        assert cfg.test_check.command == ["task", "test-all"]
+        assert cfg.test_check.command == ["task", "test-check"]
 
     def test_unknown_keys_ignored(self, tmp_path):
         """C8: Extra keys in YAML -> no crash, known keys loaded."""

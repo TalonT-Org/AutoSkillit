@@ -5,14 +5,9 @@ from __future__ import annotations
 import json
 import shutil
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 
-
-class Severity(StrEnum):
-    OK = "ok"
-    WARNING = "warning"
-    ERROR = "error"
+from autoskillit.core import Severity
 
 
 @dataclass

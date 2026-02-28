@@ -47,6 +47,7 @@ class RecipeSource(StrEnum):
 
 
 class Severity(StrEnum):
+    OK = "ok"
     ERROR = "error"
     WARNING = "warning"
 

@@ -8,13 +8,11 @@ explicit `from autoskillit.core.logging import get_logger`.
 from .io import (
     YAMLError,
     _atomic_write,
-    dump_yaml,
     dump_yaml_str,
     ensure_project_temp,
     load_yaml,
 )
 from .logging import (
-    PACKAGE_LOGGER_NAME,
     configure_logging,
     get_logger,
 )
@@ -35,7 +33,6 @@ from .types import (
     SkillSource,
     SubprocessResult,
     SubprocessRunner,
-    T,
     TerminationReason,
 )
 
@@ -43,12 +40,10 @@ __all__ = [
     # io
     "YAMLError",
     "_atomic_write",
-    "dump_yaml",
     "dump_yaml_str",
     "ensure_project_temp",
     "load_yaml",
     # logging
-    "PACKAGE_LOGGER_NAME",
     "configure_logging",
     "get_logger",
     # types
@@ -68,6 +63,5 @@ __all__ = [
     "SkillSource",
     "SubprocessResult",
     "SubprocessRunner",
-    "T",
     "TerminationReason",
 ]

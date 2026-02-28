@@ -146,6 +146,12 @@ async def perform_merge(
     if not main_repo:
         return {"error": "Could not determine main repo path from worktree list"}
 
+    # Detect the actual target branch in main_repo for accurate result reporting
+    rc_main_branch, main_branch_out, _ = await _run_git(
+        ["git", "branch", "--show-current"], main_repo, 10, runner
+    )
+    into_branch = main_branch_out.strip() if rc_main_branch == 0 else base_branch
+
     # 8. Merge
     rc, _, merge_stderr = await _run_git(["git", "merge", worktree_branch], main_repo, 60, runner)
     if rc != 0:
@@ -184,7 +190,7 @@ async def perform_merge(
     return {
         "merge_succeeded": True,
         "merged_branch": worktree_branch,
-        "into_branch": base_branch,
+        "into_branch": into_branch,
         "worktree_removed": wt_rc == 0,
         "branch_deleted": br_rc == 0,
         "cleanup_succeeded": wt_rc == 0 and br_rc == 0,

@@ -3246,6 +3246,7 @@ class TestMergeWorktreeCleanupReporting:
                 "",
             )
         )  # worktree list
+        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # main_repo branch detection
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(
             _make_result(1, "", "error: untracked files")
@@ -3275,6 +3276,7 @@ class TestMergeWorktreeCleanupReporting:
                 "",
             )
         )  # worktree list
+        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # main_repo branch detection
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS
@@ -3319,6 +3321,7 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
         )
+        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # main_repo branch detection
         tool_ctx.runner.push(_make_result(0, "", ""))  # merge
         tool_ctx.runner.push(
             _make_result(1, "", "error: untracked files")
@@ -3348,6 +3351,7 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
         )
+        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # main_repo branch detection
         tool_ctx.runner.push(_make_result(0, "", ""))  # merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS

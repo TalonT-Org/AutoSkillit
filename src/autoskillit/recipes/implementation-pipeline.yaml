@@ -1,6 +1,6 @@
 name: implementation-pipeline
 description: Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
-summary: clone > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > (audit-impl?) > merge > push > cleanup (per group, per plan part)
+summary: clone(+feature_branch) > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge(into feature_branch) > (per group/part) > audit-impl > final-merge(feature→base) > push > cleanup
 autoskillit_version: "0.2.0"
 
 ingredients:
@@ -46,18 +46,26 @@ kitchen_rules:
 
 steps:
   clone:
-    tool: clone_repo
+    python: autoskillit.workspace.clone.clone_repo
     with:
       source_dir: "${{ inputs.source_dir }}"
       run_name: "${{ inputs.run_name }}"
+      feature_branch_prefix: "impl"
     capture:
       work_dir: "${{ result.clone_path }}"
       source_dir: "${{ result.source_dir }}"
+      feature_branch: "${{ result.feature_branch }}"
+      branch_name: "${{ result.feature_branch }}"
     on_success: group
     on_failure: escalate_stop
     note: >
       Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
-      Captures work_dir context used by all subsequent steps as cwd.
+      Creates and checks out an implicit feature branch (impl-<run_name>-<timestamp>)
+      in the clone. All group/part merges target this feature branch; only after
+      audit_impl passes does final_merge land it onto base_branch.
+      Captures work_dir, feature_branch, and branch_name (= feature_branch) for
+      all subsequent steps. branch_name is the stable implementation ref used by
+      audit_impl; feature_branch is used by fix and final_merge.
       On failure, escalate_stop is reached immediately (no clone to remove).
 
   group:
@@ -133,14 +141,16 @@ steps:
       step_name: "implement"
     capture:
       worktree_path: "${{ result.worktree_path }}"
-      branch_name: "${{ result.branch_name }}"
     on_success: test
     on_failure: cleanup_failure
     retry:
       max_attempts: 0
       on: needs_retry
       on_exhausted: retry_worktree
-    note: "Extracts worktree_path and branch_name from result for use in subsequent steps."
+    note: >
+      Extracts worktree_path from result for use in subsequent steps.
+      branch_name is no longer captured here — context.feature_branch is the
+      stable git ref used by audit_impl after all worktrees are removed.
 
   retry_worktree:
     tool: run_skill_retry
@@ -150,7 +160,6 @@ steps:
       step_name: "retry_worktree"
     capture:
       worktree_path: "${{ result.worktree_path }}"
-      branch_name: "${{ result.branch_name }}"
     on_success: test
     on_failure: cleanup_failure
     retry:
@@ -172,27 +181,30 @@ steps:
       base_branch: "${{ inputs.base_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-    on_success: push
+    on_success: next_or_done
     on_failure: cleanup_failure
     note: >
-      After merge, push changes back to source_dir via the push step.
+      Merges the worktree branch into the clone's current HEAD (feature_branch).
+      base_branch is passed as the rebase target (origin/<base_branch>) but the
+      actual merge lands into feature_branch because the clone is checked out there.
       GROUPS MODE: When all plan_parts for the current group are merged, advance to the
       next group (back to plan step with the next group's description). When all groups
-      are complete, go to done.
+      are complete, go to audit_impl.
 
   push:
-    tool: push_to_remote
+    python: autoskillit.workspace.clone.push_to_remote
     with:
       clone_path: "${{ context.work_dir }}"
       source_dir: "${{ context.source_dir }}"
       branch: "${{ inputs.base_branch }}"
-    on_success: next_or_done
+    on_success: cleanup_success
     on_failure: cleanup_failure
     note: >
       Pushes the merged base_branch directly from the clone to the upstream remote.
       Reads the remote URL from source_dir (read-only) and pushes from clone_path,
       preserving clone isolation — source_dir is never modified.
-      On failure, cleanup_failure still removes the clone.
+      Only reached after final_merge (i.e. after audit_impl passes). On failure,
+      cleanup_failure still removes the clone.
 
   fix:
     tool: run_skill
@@ -207,7 +219,10 @@ steps:
       max_attempts: 3
       on: needs_retry
       on_exhausted: cleanup_failure
-    note: "Attempts to fix test failures and merge. After 3 failed attempts, routes to cleanup_failure."
+    note: >
+      Attempts to fix test failures and merge. base_branch is passed so assess-and-merge
+      can rebase against origin/{base_branch}; the merge itself lands on feature_branch
+      because the clone is checked out there. After 3 failed attempts, routes to cleanup_failure.
 
   next_or_done:
     action: route
@@ -235,26 +250,45 @@ steps:
     on_result:
       field: verdict
       routes:
-        GO: cleanup_success
+        GO: final_merge
         NO GO: remediate
     on_failure: escalate_stop
     optional: true
     note: >
-      Only execute if inputs.audit is 'true'. If false, skip directly to cleanup_success.
-      Captures verdict and remediation_path. Routes GO → cleanup_success, NO GO → remediate
-      which re-enters the plan step with the remediation file.
-      All groups and parts have been merged at this point — no worktree exists.
-      Uses context.branch_name (stable git ref) as implementation_ref so audit-impl
-      can diff even after merge_worktree has deleted the worktree directory.
+      Only execute if inputs.audit is 'true'. If false, skip directly to final_merge.
+      All groups and parts have been merged into feature_branch at this point.
+      Uses context.branch_name (= feature_branch, captured by clone step) as
+      implementation_ref so audit-impl can diff against base_branch even after
+      all worktrees have been removed.
+      Routes GO → final_merge, NO GO → remediate (re-enters plan with remediation file).
+
+  final_merge:
+    python: autoskillit.workspace.clone.merge_feature_branch
+    with:
+      clone_path: "${{ context.work_dir }}"
+      feature_branch: "${{ context.feature_branch }}"
+      base_branch: "${{ inputs.base_branch }}"
+    on_success: push
+    on_failure: escalate_stop
+    note: >
+      Checks out base_branch in the clone and merges feature_branch into it.
+      This is the single atomic delivery point: only reached after audit_impl
+      passes (GO verdict). After this step, push sends base_branch to the remote.
+      On failure, escalate_stop is reached (clone preserved for diagnosis if
+      keep_clone_on_failure is true).
 
   remediate:
     action: route
     with:
       remediation_path: "${{ context.remediation_path }}"
     on_success: plan
+    note: >
+      Re-enters the plan step with the remediation file. The full cycle
+      (verify → implement → test → merge into feature_branch) runs again,
+      then returns to audit_impl for re-evaluation.
 
   cleanup_success:
-    tool: remove_clone
+    python: autoskillit.workspace.clone.remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
       keep: "false"
@@ -266,7 +300,7 @@ steps:
       failure should not mask a successful pipeline.
 
   cleanup_failure:
-    tool: remove_clone
+    python: autoskillit.workspace.clone.remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
       keep: "${{ inputs.keep_clone_on_failure }}"

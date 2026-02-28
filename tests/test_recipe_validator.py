@@ -1991,29 +1991,44 @@ class TestImplementationPipelineStructure:
         assert step.on_result is not None
         assert step.on_result.routes.get("all_done") == "audit_impl"
 
-    def test_ip_b1_implement_captures_branch_name(self) -> None:
-        """T_IP_B1: implement step must capture branch_name from result."""
+    def test_ip_b1_implement_does_not_capture_branch_name(self) -> None:
+        """T_IP_B1: implement step no longer captures branch_name.
+
+        branch_name is captured by the clone step (= feature branch name) and
+        remains stable for all subsequent steps including audit_impl. The implement
+        step must NOT overwrite it with an ephemeral worktree branch.
+        """
         step = self.recipe.steps["implement"]
-        assert "branch_name" in step.capture, (
-            "implement step must capture branch_name so audit_impl can pass a "
-            "stable git ref to audit-impl after merge_worktree deletes the worktree"
+        assert "branch_name" not in step.capture, (
+            "implement step must NOT capture branch_name — clone step captures "
+            "branch_name as the feature branch name for audit_impl use."
         )
 
     def test_ip_b2_audit_impl_uses_branch_name_as_ref(self) -> None:
-        """T_IP_B2: audit_impl with: must reference context.branch_name as implementation_ref."""
+        """T_IP_B2: audit_impl with: must reference context.branch_name as implementation_ref.
+
+        branch_name is captured by the clone step as the feature branch name —
+        it holds the stable ref for all merged work and remains valid after
+        all individual worktrees have been removed.
+        """
         step = self.recipe.steps["audit_impl"]
         skill_cmd = step.with_args.get("skill_command", "")
         assert "context.branch_name" in skill_cmd, (
-            "audit_impl must pass context.branch_name as implementation_ref — not "
-            "context.implementation_ref or context.worktree_path (stale after merge)"
+            "audit_impl must pass context.branch_name as implementation_ref — "
+            "branch_name is captured by the clone step as the feature branch name, "
+            "providing a stable ref that survives worktree cleanup."
         )
 
-    def test_ip_b3_retry_worktree_captures_branch_name(self) -> None:
-        """T_IP_B3: retry_worktree step must also capture branch_name."""
+    def test_ip_b3_retry_worktree_does_not_capture_branch_name(self) -> None:
+        """T_IP_B3: retry_worktree step no longer captures branch_name.
+
+        branch_name is captured by the clone step (= feature branch name). The
+        retry_worktree step must NOT overwrite it with an ephemeral worktree branch.
+        """
         step = self.recipe.steps["retry_worktree"]
-        assert "branch_name" in step.capture, (
-            "retry_worktree also updates the active worktree reference; "
-            "it must capture branch_name for downstream audit_impl use"
+        assert "branch_name" not in step.capture, (
+            "retry_worktree must NOT capture branch_name — clone step captures "
+            "branch_name as the feature branch name for audit_impl use."
         )
 
 

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 
 @dataclass(slots=True)
-class GateState:
+class DefaultGateState:
     """Gate enable/disable state consumed by ToolContext (_context.py)."""
 
     enabled: bool = False

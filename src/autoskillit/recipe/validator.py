@@ -642,6 +642,51 @@ def _check_worktree_retry_creates_new(
 
 
 @semantic_rule(
+    name="needs-retry-no-restart",
+    description=(
+        "Worktree-creating skills (implement-worktree, implement-worktree-no-merge) "
+        "must not retry on needs_retry with max_attempts >= 1. "
+        "needs_retry signals partial progress exists in an existing worktree — "
+        "retrying the skill unconditionally creates a new timestamped worktree, "
+        "discarding that partial work. "
+        "Set max_attempts: 0 so on_exhausted fires immediately and routes to "
+        "a retry-worktree step that resumes in the existing worktree."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_needs_retry_no_restart(wf: Recipe) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        if not step.retry:
+            continue
+        if step.retry.on != "needs_retry":
+            continue
+        if step.retry.max_attempts < 1:
+            continue  # max_attempts: 0 is the correct pattern — escalates immediately
+        skill_cmd = step.with_args.get("skill_command", "")
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name and skill_name in _WORKTREE_CREATING_SKILLS:
+            findings.append(
+                RuleFinding(
+                    rule="needs-retry-no-restart",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' retries worktree-creating skill "
+                        f"'{skill_name}' on needs_retry "
+                        f"(max_attempts={step.retry.max_attempts}). "
+                        f"needs_retry signals partial progress exists — the skill "
+                        f"must not restart. "
+                        f"Set max_attempts: 0 to immediately escalate to on_exhausted."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
     name="weak-constraint-text",
     description=(
         "Pipeline constraints should enumerate forbidden native tools by name. "

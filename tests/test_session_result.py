@@ -504,6 +504,41 @@ class TestComputeSuccess:
         assert _compute_success(s, 0, TerminationReason.NATURAL_EXIT) is True
 
 
+class TestComputeSuccessRealisticInputs:
+    """_compute_success contracts using parse_session_result() as input constructor.
+
+    Validates the end-to-end adjudication path with sessions that carry
+    the field values that actually emerge from the parse pipeline — not
+    hand-crafted objects with synthetic field combinations.
+    """
+
+    def test_empty_stdout_parses_to_empty_output_adjudicates_false(self):
+        """parse_session_result('') → empty_output (is_error=True, result='') → False."""
+        session = parse_session_result("")
+        assert session.subtype == "empty_output"
+        assert session.is_error is True
+        assert _compute_success(session, 0, TerminationReason.NATURAL_EXIT) is False
+
+    def test_garbled_stdout_parses_to_unparseable_adjudicates_false(self):
+        """parse_session_result(garbled) → unparseable (is_error=True, result=stdout) → False."""
+        session = parse_session_result("Traceback (most recent call last):\n  boom\n")
+        assert session.subtype == "unparseable"
+        assert session.is_error is True
+        assert _compute_success(session, 0, TerminationReason.NATURAL_EXIT) is False
+
+    def test_empty_stdout_not_bypassed_by_completed_path(self):
+        """COMPLETED bypass requires subtype='success' AND result.strip().
+        empty_output from parse_session_result('') fails both conditions → False.
+        """
+        session = parse_session_result("")
+        assert _compute_success(session, -15, TerminationReason.COMPLETED) is False
+
+    def test_unparseable_not_bypassed_by_completed_path(self):
+        """COMPLETED bypass requires subtype='success'. unparseable → False."""
+        session = parse_session_result("garbled output not json\n")
+        assert _compute_success(session, -15, TerminationReason.COMPLETED) is False
+
+
 # ---------------------------------------------------------------------------
 # _compute_retry
 # ---------------------------------------------------------------------------

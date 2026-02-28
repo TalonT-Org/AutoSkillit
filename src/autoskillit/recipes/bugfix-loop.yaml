@@ -76,7 +76,7 @@ steps:
       worktree_path: "${{ result.worktree_path }}"
       implementation_ref: "${{ result.worktree_path }}"
     retry:
-      max_attempts: 1
+      max_attempts: 0
       on: needs_retry
       on_exhausted: retry_worktree
     on_success: verify

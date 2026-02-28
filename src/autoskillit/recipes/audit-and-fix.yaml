@@ -33,7 +33,7 @@ ingredients:
 
 steps:
   clone:
-    python: autoskillit.workspace.clone.clone_repo
+    tool: clone_repo
     with:
       source_dir: "${{ inputs.source_dir }}"
       run_name: "${{ inputs.run_name }}"
@@ -117,7 +117,7 @@ steps:
     on_failure: cleanup_failure
 
   push:
-    python: autoskillit.workspace.clone.push_to_remote
+    tool: push_to_remote
     with:
       clone_path: "${{ context.work_dir }}"
       source_dir: "${{ context.source_dir }}"
@@ -131,7 +131,7 @@ steps:
       On failure, cleanup_failure still removes the clone.
 
   cleanup_success:
-    python: autoskillit.workspace.clone.remove_clone
+    tool: remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
       keep: "false"
@@ -143,7 +143,7 @@ steps:
       failure should not mask a successful pipeline.
 
   cleanup_failure:
-    python: autoskillit.workspace.clone.remove_clone
+    tool: remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
       keep: "${{ inputs.keep_clone_on_failure }}"

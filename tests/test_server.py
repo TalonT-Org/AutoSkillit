@@ -61,6 +61,7 @@ from autoskillit.server import (
     _run_subprocess,
     check_quota,
     classify_fix,
+    clone_repo,
     get_pipeline_report,
     get_token_summary,
     kitchen_status,
@@ -68,7 +69,9 @@ from autoskillit.server import (
     load_recipe,
     merge_worktree,
     migrate_recipe,
+    push_to_remote,
     read_db,
+    remove_clone,
     reset_test_dir,
     reset_workspace,
     run_cmd,
@@ -6960,3 +6963,109 @@ class TestCheckQuota:
         )
         assert notify_calls[0][0] == "info"
         assert "threshold" in notify_calls[0][1] or "sleep" in notify_calls[0][1]
+
+
+class TestCloneRepoTool:
+    @pytest.mark.asyncio
+    async def test_returns_gate_error_when_disabled(self, tool_ctx):
+        tool_ctx.gate.enabled = False
+        result = json.loads(await clone_repo(source_dir="/src", run_name="test"))
+        assert result["subtype"] == "gate_error"
+
+    @pytest.mark.asyncio
+    async def test_delegates_to_workspace_clone(self, tool_ctx):
+        with patch(
+            "autoskillit.workspace.clone.clone_repo",
+            return_value={"clone_path": "/clone/path", "source_dir": "/src"},
+        ):
+            result = json.loads(await clone_repo(source_dir="/src", run_name="myrun"))
+        assert result["clone_path"] == "/clone/path"
+        assert result["source_dir"] == "/src"
+
+    @pytest.mark.asyncio
+    async def test_returns_error_on_value_error(self, tool_ctx):
+        with patch(
+            "autoskillit.workspace.clone.clone_repo",
+            side_effect=ValueError("resolved to nonexistent"),
+        ):
+            result = json.loads(await clone_repo(source_dir="/bad/path", run_name="run"))
+        assert "error" in result
+        assert "resolved to" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_returns_error_on_runtime_error(self, tool_ctx):
+        with patch(
+            "autoskillit.workspace.clone.clone_repo",
+            side_effect=RuntimeError("git clone failed"),
+        ):
+            result = json.loads(await clone_repo(source_dir="/src", run_name="run"))
+        assert "error" in result
+
+
+class TestRemoveCloneTool:
+    @pytest.mark.asyncio
+    async def test_returns_gate_error_when_disabled(self, tool_ctx):
+        tool_ctx.gate.enabled = False
+        result = json.loads(await remove_clone(clone_path="/clone", keep="false"))
+        assert result["subtype"] == "gate_error"
+
+    @pytest.mark.asyncio
+    async def test_delegates_to_workspace_clone(self, tool_ctx):
+        with patch(
+            "autoskillit.workspace.clone.remove_clone",
+            return_value={"removed": "true"},
+        ):
+            result = json.loads(await remove_clone(clone_path="/clone/path", keep="false"))
+        assert result["removed"] == "true"
+
+    @pytest.mark.asyncio
+    async def test_keep_true_passes_through(self, tool_ctx):
+        with patch(
+            "autoskillit.workspace.clone.remove_clone",
+            return_value={"removed": "false", "reason": "keep=true"},
+        ):
+            result = json.loads(await remove_clone(clone_path="/clone/path", keep="true"))
+        assert result["removed"] == "false"
+
+    @pytest.mark.asyncio
+    async def test_always_routes_success_even_on_partial_failure(self, tool_ctx):
+        with patch(
+            "autoskillit.workspace.clone.remove_clone",
+            return_value={"removed": "false", "reason": "OSError"},
+        ):
+            result = json.loads(await remove_clone(clone_path="/bad", keep="false"))
+        assert "error" not in result
+
+
+class TestPushToRemoteTool:
+    @pytest.mark.asyncio
+    async def test_returns_gate_error_when_disabled(self, tool_ctx):
+        tool_ctx.gate.enabled = False
+        result = json.loads(
+            await push_to_remote(clone_path="/c", source_dir="/s", branch="main")
+        )
+        assert result["subtype"] == "gate_error"
+
+    @pytest.mark.asyncio
+    async def test_delegates_to_workspace_clone_on_success(self, tool_ctx):
+        with patch(
+            "autoskillit.workspace.clone.push_to_remote",
+            return_value={"success": "true", "stderr": ""},
+        ):
+            result = json.loads(
+                await push_to_remote(clone_path="/clone", source_dir="/src", branch="main")
+            )
+        assert result["success"] == "true"
+        assert "error" not in result
+
+    @pytest.mark.asyncio
+    async def test_returns_error_key_when_push_fails(self, tool_ctx):
+        with patch(
+            "autoskillit.workspace.clone.push_to_remote",
+            return_value={"success": "false", "stderr": "remote rejected"},
+        ):
+            result = json.loads(
+                await push_to_remote(clone_path="/clone", source_dir="/src", branch="main")
+            )
+        assert "error" in result
+        assert "remote rejected" in result["stderr"]

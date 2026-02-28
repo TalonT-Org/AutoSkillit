@@ -68,6 +68,7 @@ from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
 from autoskillit.server import (  # noqa: E402, F401
     helpers,
     prompts,
+    tools_clone,
     tools_execution,
     tools_git,
     tools_recipe,
@@ -111,6 +112,11 @@ from autoskillit.server.tools_status import (  # noqa: E402, F401
     get_token_summary,
     kitchen_status,
     read_db,
+)
+from autoskillit.server.tools_clone import (  # noqa: E402, F401
+    clone_repo,
+    push_to_remote,
+    remove_clone,
 )
 from autoskillit.server.tools_workspace import (  # noqa: E402, F401
     reset_test_dir,

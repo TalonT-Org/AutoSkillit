@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 18 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, check_quota + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 12 gated behind MCP prompts for user-only activation, and 19 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 21 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, check_quota, clone_repo, remove_clone, push_to_remote + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 15 gated behind MCP prompts for user-only activation, and 19 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -260,6 +260,9 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 | `read_db` | Run read-only SQL query against SQLite database |
 | `migrate_recipe` | Apply pending migration notes to a recipe file (gated) |
 | `check_quota` | Check 5-hour API quota utilization; returns whether a sleep is needed before the next `run_skill` call |
+| `clone_repo` | Clone a source repository into an isolated run directory |
+| `remove_clone` | Remove a pipeline clone directory (best-effort) |
+| `push_to_remote` | Push merged branch from clone to upstream remote |
 | `kitchen_status` | Return version health and config status (ungated) |
 | `list_recipes` | List pipeline recipes from .autoskillit/recipes/ (ungated) |
 | `load_recipe` | Load a recipe by name as raw YAML — read-only, no migration (ungated) |

@@ -40,6 +40,10 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "reset_workspace",
         "migrate_recipe",
         "check_quota",
+        # Clone lifecycle tools (promoted from python: recipe steps)
+        "clone_repo",
+        "remove_clone",
+        "push_to_remote",
     }
 )
 

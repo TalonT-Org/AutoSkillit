@@ -206,6 +206,60 @@ infrastructure -> depends on nothing project-specific
 
 ---
 
+### Principle 12: Protocol Contracts and Composition Root
+
+**Rule:** All service dependencies injected into the central DI container (`ToolContext`) must be expressed as `@runtime_checkable Protocol` types defined in `core/types.py`. Each Protocol must have exactly one concrete `Default*` adapter in its domain layer. The Composition Root (`server/_factory.py`) is the only location in production code that may instantiate all concrete services simultaneously and wire them into `ToolContext`. All `ToolContext` field annotations must use Protocol types, never concrete classes.
+
+**Rationale:** Protocol-typed fields allow test substitution without import pollution. A single wiring point makes the full dependency graph explicit and auditable. Naming convention (`Default*`) signals the standard production implementation and distinguishes it from test doubles. Concrete class leakage into field annotations couples the container to implementations rather than contracts.
+
+**Audit Strategy:**
+- Scan `core/types.py` for all `@runtime_checkable Protocol` definitions
+- For each Protocol, verify exactly one `Default*` concrete adapter exists in the codebase
+- Check all concrete implementations follow the `Default*` naming convention (e.g., `DefaultTestRunner`, not `RealTestRunner` or `TestRunnerImpl`)
+- Verify `ToolContext` field annotations use only Protocol types (not concrete classes)
+- Confirm `ToolContext` is only instantiated in `server/_factory.py` and test files
+- Flag any `Default*` adapter instantiated outside the Composition Root in production code
+
+**Severity:** HIGH — concrete class leakage in field annotations defeats substitutability; Protocol naming gaps make the DI contract non-discoverable
+
+---
+
+### Principle 13: AST-Based Architectural Rule Enforcement
+
+**Rule:** Architectural constraints that can be expressed as properties of source code structure — rather than runtime behavior — must be encoded as AST-parsed rules in `tests/test_architecture.py`. Each rule must carry: a unique `rule_id`, a `defense_standard` reference, a human-readable `rationale`, and an explicit named `exemptions` list. Exemptions must be file-specific (not pattern-matched) and minimized. Any new architectural commitment discovered during an audit must be translated into an AST rule before the PR merges.
+
+**Rationale:** Runtime tests only catch violations on executed code paths. AST rules catch structural violations at `pytest` time across every source file with zero execution overhead. They scale automatically as new files are added, without requiring test updates. The rule registry self-documents the project's structural invariants. Gaps in AST coverage — constraints known but unenforced — represent architectural debt that accumulates silently.
+
+**Audit Strategy:**
+- Read `tests/test_architecture.py` and enumerate all currently enforced AST rules
+- For each architectural principle in this skill, ask: "Is there a corresponding AST rule?"
+- Check for deferred-import bypass gaps: does the layer enforcement test scan function bodies or only module-level statements?
+- Identify architectural constraints described in CLAUDE.md or doc comments that have no corresponding test
+- Flag any exemption that is a glob pattern rather than an explicit named file
+- Check that the `RuleDescriptor` dataclass (or equivalent) is frozen and fields are complete for all rules
+
+**Severity:** MEDIUM for gaps in existing enforcement; HIGH for any newly agreed architectural rule with no enforcement at all
+
+---
+
+### Principle 14: Gateway API — Package Facade Isolation
+
+**Rule:** All imports of symbols from another sub-package must go through that sub-package's `__init__.py` gateway — never through a submodule path directly (e.g., `from autoskillit.recipe.validator import X` is forbidden outside `recipe/`; use `from autoskillit.recipe import X`). Sub-package `__init__.py` files are the public API contract: their `__all__` is the surface. Submodule paths are internal implementation details free to be restructured. Facade functions in `__init__.py` that require deferred function-body imports (to work around circular initialization) must instead be extracted to a dedicated `_api.py` submodule and re-exported from `__init__.py`.
+
+**Rationale:** Submodule-path imports create tight coupling to internal structure, making refactoring unsafe. The gateway pattern isolates external consumers from internal reorganization. When `__init__.py` contains substantive logic that requires deferred imports to avoid circular initialization, it signals that the function belongs in a real submodule — `__init__.py` should be a pure re-export facade. The `_api.py` convention provides a home for cross-cutting orchestration that needs imports from multiple internal submodules.
+
+**Audit Strategy:**
+- Search for `from autoskillit.X.submodule import` patterns in files outside package `X`
+- Verify all sub-package `__init__.py` files declare a complete `__all__` matching their re-exports
+- Look for substantive function definitions (not just `=` aliases or re-imports) inside `__init__.py` files
+- For each such function in `__init__.py`, check if it uses deferred (function-body) imports — if yes, flag for extraction to `_api.py`
+- Check that no `__init__.py` function body contains 3+ deferred imports (strong signal of misplacement)
+- Verify a `test_no_cross_package_submodule_imports` (or equivalent) AST test exists and covers all sub-packages
+
+**Severity:** MEDIUM for submodule-path leakage; MEDIUM for deferred-import-heavy `__init__.py` functions (circular import debt indicator)
+
+---
+
 ## Cross-Cutting Design Guidelines
 
 These apply across all principles when evaluating architectural decisions:

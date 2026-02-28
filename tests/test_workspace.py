@@ -187,7 +187,7 @@ class TestPushToRemote:
         assert second_call[1]["cwd"] == "/clone"
 
     def test_ds7_push_to_remote_fails_when_no_origin(self) -> None:
-        """T_DS7: push_to_remote returns error when git remote get-url fails — no push attempted."""
+        """T_DS7: push_to_remote returns error when git remote get-url fails, no push attempted."""
         mock_fail = MagicMock()
         mock_fail.returncode = 128
         mock_fail.stdout = ""

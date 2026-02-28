@@ -1165,18 +1165,14 @@ class TestJsonlContainsMarkerEdgeCases:
 
         # Simulate: process killed mid-write on first line, second line is complete.
         truncated = '{"type": "result", "result": "MARKER", "subtype": "succe'
-        valid = json.dumps(
-            {"type": "result", "result": "MARKER", "subtype": "success"}
-        )
+        valid = json.dumps({"type": "result", "result": "MARKER", "subtype": "success"})
         content = truncated + "\n" + valid
         assert _jsonl_contains_marker(content, "MARKER", frozenset({"result"}))
 
     def test_only_truncated_json_returns_false(self):
         """Content with only a truncated JSON line (no valid lines) → False."""
         truncated = '{"type": "assistant", "message": {"content": "Done\nMARKER"'
-        assert not _jsonl_contains_marker(
-            truncated, "MARKER", frozenset({"assistant"})
-        )
+        assert not _jsonl_contains_marker(truncated, "MARKER", frozenset({"assistant"}))
 
 
 class TestHasActiveApiConnection:

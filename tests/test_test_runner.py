@@ -72,10 +72,7 @@ PYTEST_SUMMARY_FORMAT_VARIANTS = [
     ),
     pytest.param(
         "bare_q_multiline",
-        (
-            "FAILED tests/test_foo.py::test_a - AssertionError\n"
-            "2 failed, 98 passed in 4.12s\n"
-        ),
+        ("FAILED tests/test_foo.py::test_a - AssertionError\n2 failed, 98 passed in 4.12s\n"),
         {"failed": 2, "passed": 98},
     ),
     pytest.param(

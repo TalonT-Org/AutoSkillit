@@ -168,10 +168,9 @@ def test_factory_module_exists():
 
 
 def test_factory_make_context_returns_toolcontext():
-    from autoskillit.server._factory import make_context
-
     from autoskillit.config import AutomationConfig
     from autoskillit.pipeline.context import ToolContext
+    from autoskillit.server._factory import make_context
 
     ctx = make_context(AutomationConfig())
     assert isinstance(ctx, ToolContext)
@@ -182,18 +181,16 @@ def test_factory_make_context_returns_toolcontext():
 
 
 def test_factory_make_context_accepts_runner():
-    from autoskillit.server._factory import make_context
-
     from autoskillit.config import AutomationConfig
+    from autoskillit.server._factory import make_context
 
     ctx = make_context(AutomationConfig(), runner=None)
     assert ctx.runner is None
 
 
 def test_factory_make_context_accepts_plugin_dir(tmp_path):
-    from autoskillit.server._factory import make_context
-
     from autoskillit.config import AutomationConfig
+    from autoskillit.server._factory import make_context
 
     ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
     assert ctx.plugin_dir == str(tmp_path)

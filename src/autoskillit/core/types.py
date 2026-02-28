@@ -5,11 +5,12 @@ Zero autoskillit imports. Provides the shared type vocabulary for all higher lay
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable
 from dataclasses import asdict, dataclass, field
-from enum import StrEnum
+from enum import Enum, StrEnum
 from pathlib import Path
-from typing import Generic, Protocol, TypeVar, runtime_checkable
+from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
 
 T = TypeVar("T")
 
@@ -173,3 +174,163 @@ class FailureRecord:
 
     def to_dict(self) -> dict:  # type: ignore[type-arg]
         return asdict(self)
+
+
+def truncate_text(text: str, max_len: int = 5000) -> str:
+    """Truncate text to max_len, appending a count of truncated chars."""
+    if len(text) <= max_len:
+        return text
+    return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]
+
+
+@dataclass
+class SkillResult:
+    """Typed result returned by _build_skill_result and run_headless_core."""
+
+    success: bool
+    result: str
+    session_id: str
+    subtype: str
+    is_error: bool
+    exit_code: int
+    needs_retry: bool
+    retry_reason: RetryReason
+    stderr: str
+    token_usage: dict[str, Any] | None = None
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "success": self.success,
+                "result": self.result,
+                "session_id": self.session_id,
+                "subtype": self.subtype,
+                "is_error": self.is_error,
+                "exit_code": self.exit_code,
+                "needs_retry": self.needs_retry,
+                "retry_reason": self.retry_reason,
+                "stderr": self.stderr,
+                "token_usage": self.token_usage,
+            },
+            default=lambda o: o.value if isinstance(o, Enum) else str(o),
+        )
+
+
+@dataclass
+class CleanupResult:
+    deleted: list[str] = field(default_factory=list)
+    failed: list[tuple[str, str]] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+
+    @property
+    def success(self) -> bool:
+        return len(self.failed) == 0
+
+    def to_dict(self) -> dict:  # type: ignore[type-arg]
+        return {
+            "success": self.success,
+            "deleted": self.deleted,
+            "failed": [{"path": p, "error": e} for p, e in self.failed],
+            "skipped": self.skipped,
+        }
+
+
+@runtime_checkable
+class GatePolicy(Protocol):
+    """Protocol for gate enable/disable state."""
+
+    @property
+    def enabled(self) -> bool: ...
+
+    def enable(self) -> None: ...
+
+    def disable(self) -> None: ...
+
+
+@runtime_checkable
+class AuditStore(Protocol):
+    """Protocol for pipeline failure accumulation."""
+
+    def record_failure(self, record: FailureRecord) -> None: ...
+
+    def get_report(self) -> list[FailureRecord]: ...
+
+    def get_report_as_dicts(self) -> list[dict[str, Any]]: ...
+
+    def clear(self) -> None: ...
+
+
+@runtime_checkable
+class TokenStore(Protocol):
+    """Protocol for per-step token usage accumulation."""
+
+    def record(self, step_name: str, token_usage: dict[str, Any] | None) -> None: ...
+
+    def get_report(self) -> list[dict[str, Any]]: ...
+
+    def compute_total(self) -> dict[str, int]: ...
+
+    def clear(self) -> None: ...
+
+
+@runtime_checkable
+class TestRunner(Protocol):
+    """Protocol for running a test suite and reporting pass/fail."""
+
+    async def run(self, cwd: Path) -> tuple[bool, str]: ...
+
+
+@runtime_checkable
+class HeadlessExecutor(Protocol):
+    """Protocol for running headless Claude Code sessions."""
+
+    async def run(
+        self,
+        skill_command: str,
+        cwd: str,
+        *,
+        model: str = "",
+        step_name: str = "",
+        add_dir: str = "",
+    ) -> SkillResult: ...
+
+
+@runtime_checkable
+class RecipeRepository(Protocol):
+    """Protocol for recipe discovery and loading."""
+
+    def find(self, name: str, project_dir: Path) -> Any: ...
+
+    def list(self, project_dir: Path) -> Any: ...
+
+
+@runtime_checkable
+class MigrationService(Protocol):
+    """Protocol for applying migration notes to a recipe file."""
+
+    async def migrate(self, recipe_path: Path) -> dict[str, Any]: ...
+
+
+@runtime_checkable
+class DatabaseReader(Protocol):
+    """Protocol for read-only SQLite query execution."""
+
+    def query(
+        self,
+        db_path: str,
+        sql: str,
+        params: list | dict,  # type: ignore[type-arg]
+        timeout_sec: int,
+        max_rows: int,
+    ) -> dict[str, Any]: ...
+
+
+@runtime_checkable
+class WorkspaceManager(Protocol):
+    """Protocol for directory teardown operations."""
+
+    def delete_contents(
+        self,
+        directory: Path,
+        preserve: set[str] | None = None,
+    ) -> CleanupResult: ...

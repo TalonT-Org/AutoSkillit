@@ -42,6 +42,20 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - Commit per phase with descriptive messages
 - Leave the worktree intact when done
 
+## Context Limit Behavior
+
+If this skill hits the Claude context limit mid-execution, the headless session
+terminates with `needs_retry=true` in the tool response. The worktree remains
+intact on disk with all commits made up to that point.
+
+The orchestrator **must not** retry this skill when `needs_retry=true`. Retrying
+creates a brand-new timestamped worktree, discarding all partial progress.
+
+Correct orchestration on `needs_retry=true`:
+- Route immediately to `/autoskillit:retry-worktree` (via `retry.on_exhausted`)
+- Pass `worktree_path` from `context.worktree_path` (captured from this step's output)
+- Use `max_attempts: 0` on this step's `retry` block to ensure immediate escalation
+
 ## Workflow
 
 ### Step 0: Validate Prerequisites

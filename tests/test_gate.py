@@ -73,16 +73,16 @@ def test_ungated_tools_contains_expected_names():
 
 
 def test_gate_state_default_disabled():
-    from autoskillit.pipeline.gate import GateState
+    from autoskillit.pipeline.gate import DefaultGateState
 
-    gs = GateState()
+    gs = DefaultGateState()
     assert gs.enabled is False
 
 
 def test_gate_state_can_be_enabled():
-    from autoskillit.pipeline.gate import GateState
+    from autoskillit.pipeline.gate import DefaultGateState
 
-    gs = GateState(enabled=True)
+    gs = DefaultGateState(enabled=True)
     assert gs.enabled is True
 
 

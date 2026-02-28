@@ -88,9 +88,9 @@ class TestServerToolSurfaceContract:
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit.pipeline.gate import GateState
+        from autoskillit.pipeline.gate import DefaultGateState
 
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
 
     def test_open_kitchen_prompt_names_all_forbidden_tools(self):
         """open_kitchen prompt text must name every forbidden tool with prohibition framing."""

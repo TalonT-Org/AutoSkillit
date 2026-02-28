@@ -8,7 +8,11 @@ execution/headless.py has TYPE_CHECKING-only references to pipeline/.
 from autoskillit.core import SkillResult
 from autoskillit.execution.db import DefaultDatabaseReader, _execute_readonly_query
 from autoskillit.execution.headless import DefaultHeadlessExecutor, run_headless_core
-from autoskillit.execution.process import RealSubprocessRunner, run_managed_async, run_managed_sync
+from autoskillit.execution.process import (
+    DefaultSubprocessRunner,
+    run_managed_async,
+    run_managed_sync,
+)
 from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
 from autoskillit.execution.session import (
     ClaudeSessionResult,
@@ -25,7 +29,7 @@ execute_readonly_query = _execute_readonly_query
 
 __all__ = [
     # process
-    "RealSubprocessRunner",
+    "DefaultSubprocessRunner",
     "run_managed_async",
     "run_managed_sync",
     # quota

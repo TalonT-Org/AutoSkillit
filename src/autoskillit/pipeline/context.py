@@ -1,8 +1,8 @@
 """ToolContext: explicit dependency container for server tool implementations.
 
 pipeline/ module — the only pipeline sub-module that imports from config/.
-Replaces four mutable module-level singletons in server.py:
-  _config, _tools_enabled, _audit_log, _token_log
+Replaces two mutable module-level singletons in server.py:
+  _config, _tools_enabled
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ class ToolContext:
     token_log:     TokenStore — per-step token tracking
     gate:          GatePolicy — enables/disables gated tools
     plugin_dir:    Absolute path string to the autoskillit package directory
-    runner:        SubprocessRunner implementation (RealSubprocessRunner in production,
+    runner:        SubprocessRunner implementation (DefaultSubprocessRunner in production,
                    MockSubprocessRunner in tests)
     executor:      HeadlessExecutor — runs headless Claude Code sessions
     tester:        TestRunner — runs the project test suite

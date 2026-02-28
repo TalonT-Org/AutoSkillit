@@ -20,7 +20,7 @@ from autoskillit.core import get_logger
 from autoskillit.pipeline import (  # noqa: F401
     GATED_TOOLS,
     UNGATED_TOOLS,
-    GateState,
+    DefaultGateState,
     ToolContext,
     gate_error_result,
 )

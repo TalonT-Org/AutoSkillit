@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 from autoskillit.config import AutomationConfig
-from autoskillit.pipeline.audit import AuditLog, FailureRecord
+from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from autoskillit.pipeline.context import ToolContext
-from autoskillit.pipeline.gate import GateState
-from autoskillit.pipeline.tokens import TokenLog
+from autoskillit.pipeline.gate import DefaultGateState
+from autoskillit.pipeline.tokens import DefaultTokenLog
 
 
 def test_tool_context_fields_accessible(tmp_path):
     """ToolContext exposes all expected fields."""
     ctx = ToolContext(
         config=AutomationConfig(),
-        audit=AuditLog(),
-        token_log=TokenLog(),
-        gate=GateState(enabled=True),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        gate=DefaultGateState(enabled=True),
         plugin_dir=str(tmp_path),
         runner=None,
     )
@@ -27,17 +27,17 @@ def test_tool_context_audit_isolation():
     """Two ToolContext instances have independent AuditLog instances."""
     ctx_a = ToolContext(
         config=AutomationConfig(),
-        audit=AuditLog(),
-        token_log=TokenLog(),
-        gate=GateState(),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        gate=DefaultGateState(),
         plugin_dir="/a",
         runner=None,
     )
     ctx_b = ToolContext(
         config=AutomationConfig(),
-        audit=AuditLog(),
-        token_log=TokenLog(),
-        gate=GateState(),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        gate=DefaultGateState(),
         plugin_dir="/b",
         runner=None,
     )
@@ -57,17 +57,17 @@ def test_tool_context_audit_isolation():
 
 
 def test_gate_state_replacement():
-    """GateState (frozen) can be replaced on a mutable ToolContext."""
+    """DefaultGateState (frozen) can be replaced on a mutable ToolContext."""
     ctx = ToolContext(
         config=AutomationConfig(),
-        audit=AuditLog(),
-        token_log=TokenLog(),
-        gate=GateState(enabled=False),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        gate=DefaultGateState(enabled=False),
         plugin_dir="/x",
         runner=None,
     )
     assert ctx.gate.enabled is False
-    ctx.gate = GateState(enabled=True)
+    ctx.gate = DefaultGateState(enabled=True)
     assert ctx.gate.enabled is True
 
 
@@ -75,9 +75,9 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
     """New optional service fields default to None when not provided."""
     ctx = ToolContext(
         config=AutomationConfig(),
-        audit=AuditLog(),
-        token_log=TokenLog(),
-        gate=GateState(enabled=True),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        gate=DefaultGateState(enabled=True),
         plugin_dir=str(tmp_path),
         runner=None,
     )
@@ -102,9 +102,9 @@ def test_toolcontext_service_fields_annotated_with_protocols():
     assert "DatabaseReader" in str(fields["db_reader"].type)
     assert "WorkspaceManager" in str(fields["workspace_mgr"].type)
     # Verify concrete class names are NOT used for service fields
-    assert "AuditLog" not in str(fields["audit"].type)
-    assert "GateState" not in str(fields["gate"].type)
-    assert "TokenLog" not in str(fields["token_log"].type)
+    assert "DefaultAuditLog" not in str(fields["audit"].type)
+    assert "DefaultGateState" not in str(fields["gate"].type)
+    assert "DefaultTokenLog" not in str(fields["token_log"].type)
 
 
 def test_headless_executor_protocol_accepts_timeout() -> None:

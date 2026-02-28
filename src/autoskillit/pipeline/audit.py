@@ -3,8 +3,8 @@
 Captures non-success results from _build_skill_result() into an in-memory
 store. The get_pipeline_report MCP tool retrieves the accumulated failures.
 
-This module is intentionally simple: a dataclass record, a list-backed
-store with a defensive copy getter, and a module-level singleton.
+This module is intentionally simple: a dataclass record and a list-backed
+store with a defensive copy getter.
 """
 
 from __future__ import annotations
@@ -18,10 +18,10 @@ logger = get_logger(__name__)
 STDERR_MAX_LEN = 500
 COMMAND_MAX_LEN = 200
 
-__all__ = ["FailureRecord", "AuditLog", "_audit_log", "STDERR_MAX_LEN", "COMMAND_MAX_LEN"]
+__all__ = ["FailureRecord", "DefaultAuditLog", "STDERR_MAX_LEN", "COMMAND_MAX_LEN"]
 
 
-class AuditLog:
+class DefaultAuditLog:
     """In-memory store for pipeline failure records.
 
     Thread-safety: the MCP server is async (single-threaded event loop),
@@ -64,7 +64,3 @@ class AuditLog:
         # Reassign rather than mutate in place: creates a new list object,
         # making the "store is now empty" intent unambiguous.
         self._records = []
-
-
-# Module-level singleton used by server.py
-_audit_log = AuditLog()

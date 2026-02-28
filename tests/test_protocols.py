@@ -93,25 +93,25 @@ def test_all_new_protocols_are_runtime_checkable():
 # ── isinstance checks — existing classes satisfy protocols ─────────────────────
 
 
-def test_gatestate_satisfies_gatepolicy():
+def test_defaultgatestate_satisfies_gatepolicy():
     from autoskillit.core import GatePolicy
-    from autoskillit.pipeline.gate import GateState
+    from autoskillit.pipeline.gate import DefaultGateState
 
-    assert isinstance(GateState(), GatePolicy)
+    assert isinstance(DefaultGateState(), GatePolicy)
 
 
-def test_auditlog_satisfies_auditstore():
+def test_defaultauditlog_satisfies_auditstore():
     from autoskillit.core import AuditStore
-    from autoskillit.pipeline.audit import AuditLog
+    from autoskillit.pipeline.audit import DefaultAuditLog
 
-    assert isinstance(AuditLog(), AuditStore)
+    assert isinstance(DefaultAuditLog(), AuditStore)
 
 
-def test_tokenlog_satisfies_tokenstore():
+def test_defaulttokenlog_satisfies_tokenstore():
     from autoskillit.core import TokenStore
-    from autoskillit.pipeline.tokens import TokenLog
+    from autoskillit.pipeline.tokens import DefaultTokenLog
 
-    assert isinstance(TokenLog(), TokenStore)
+    assert isinstance(DefaultTokenLog(), TokenStore)
 
 
 # ── isinstance checks — Default* classes satisfy protocols ─────────────────────
@@ -169,27 +169,27 @@ def test_default_headless_executor_satisfies_headless_executor():
 # ── GateState mutation (REQ-PROTO-009) ────────────────────────────────────────
 
 
-def test_gatestate_enable_method():
-    from autoskillit.pipeline.gate import GateState
+def test_defaultgatestate_enable_method():
+    from autoskillit.pipeline.gate import DefaultGateState
 
-    gs = GateState()
+    gs = DefaultGateState()
     assert not gs.enabled
     gs.enable()
     assert gs.enabled
 
 
-def test_gatestate_disable_method():
-    from autoskillit.pipeline.gate import GateState
+def test_defaultgatestate_disable_method():
+    from autoskillit.pipeline.gate import DefaultGateState
 
-    gs = GateState(enabled=True)
+    gs = DefaultGateState(enabled=True)
     gs.disable()
     assert not gs.enabled
 
 
-def test_gatestate_direct_mutation_allowed():
-    from autoskillit.pipeline.gate import GateState
+def test_defaultgatestate_direct_mutation_allowed():
+    from autoskillit.pipeline.gate import DefaultGateState
 
-    gs = GateState()
+    gs = DefaultGateState()
     gs.enabled = True  # must not raise FrozenInstanceError
     assert gs.enabled
 

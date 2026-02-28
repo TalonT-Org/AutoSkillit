@@ -668,7 +668,7 @@ def run_managed_sync(
                     pass
 
 
-class RealSubprocessRunner:
+class DefaultSubprocessRunner:
     """Implements SubprocessRunner protocol by delegating to run_managed_async."""
 
     async def __call__(

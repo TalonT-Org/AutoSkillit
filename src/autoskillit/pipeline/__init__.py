@@ -9,31 +9,28 @@ from autoskillit.core import FailureRecord
 from autoskillit.pipeline.audit import (
     COMMAND_MAX_LEN,
     STDERR_MAX_LEN,
-    AuditLog,
-    _audit_log,
+    DefaultAuditLog,
 )
 from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.gate import (
     GATED_TOOLS,
     UNGATED_TOOLS,
-    GateState,
+    DefaultGateState,
     gate_error_result,
 )
-from autoskillit.pipeline.tokens import TokenEntry, TokenLog, _token_log
+from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
 
 __all__ = [
     # audit
-    "AuditLog",
+    "DefaultAuditLog",
     "FailureRecord",
-    "_audit_log",
     "STDERR_MAX_LEN",
     "COMMAND_MAX_LEN",
     # tokens
-    "TokenLog",
+    "DefaultTokenLog",
     "TokenEntry",
-    "_token_log",
     # gate
-    "GateState",
+    "DefaultGateState",
     "GATED_TOOLS",
     "UNGATED_TOOLS",
     "gate_error_result",

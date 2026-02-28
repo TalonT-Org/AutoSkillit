@@ -18,20 +18,20 @@ def test_pipeline_package_exports() -> None:
     from autoskillit.pipeline import (
         GATED_TOOLS,
         UNGATED_TOOLS,
-        AuditLog,
+        DefaultAuditLog,
+        DefaultGateState,
+        DefaultTokenLog,
         FailureRecord,
-        GateState,
         TokenEntry,
-        TokenLog,
         ToolContext,
         gate_error_result,
     )
 
-    assert AuditLog is not None
+    assert DefaultAuditLog is not None
     assert FailureRecord is not None
-    assert TokenLog is not None
+    assert DefaultTokenLog is not None
     assert TokenEntry is not None
-    assert GateState is not None
+    assert DefaultGateState is not None
     assert GATED_TOOLS is not None
     assert UNGATED_TOOLS is not None
     assert gate_error_result is not None

@@ -44,6 +44,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "clone_repo",
         "remove_clone",
         "push_to_remote",
+        "fetch_github_issue",
     }
 )
 

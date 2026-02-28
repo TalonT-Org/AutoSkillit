@@ -103,6 +103,12 @@ class QuotaGuardConfig:
 
 
 @dataclass
+class GitHubConfig:
+    token: str | None = None
+    default_repo: str | None = None
+
+
+@dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
@@ -117,6 +123,7 @@ class AutomationConfig:
     migration: MigrationConfig = field(default_factory=MigrationConfig)
     token_usage: TokenUsageConfig = field(default_factory=TokenUsageConfig)
     quota_guard: QuotaGuardConfig = field(default_factory=QuotaGuardConfig)
+    github: GitHubConfig = field(default_factory=GitHubConfig)
 
 
 def load_config(project_dir: Path | None = None) -> AutomationConfig:

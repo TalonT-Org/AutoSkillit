@@ -9,12 +9,18 @@ construction scattered across callers.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import SubprocessRunner
-from autoskillit.execution import DefaultDatabaseReader, DefaultHeadlessExecutor, DefaultTestRunner
+from autoskillit.execution import (
+    DefaultDatabaseReader,
+    DefaultGitHubFetcher,
+    DefaultHeadlessExecutor,
+    DefaultTestRunner,
+)
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import DefaultAuditLog, DefaultGateState, DefaultTokenLog, ToolContext
 from autoskillit.recipe import DefaultRecipeRepository
@@ -62,6 +68,9 @@ def make_context(
 
         runner = DefaultSubprocessRunner()
 
+    # Resolve token: config → GITHUB_TOKEN env var → None (unauthenticated)
+    github_token = config.github.token or os.environ.get("GITHUB_TOKEN")
+
     resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
     ctx = ToolContext(
         config=config,
@@ -76,6 +85,7 @@ def make_context(
         db_reader=DefaultDatabaseReader(),
         workspace_mgr=DefaultWorkspaceManager(),
         clone_mgr=DefaultCloneManager(),
+        github_client=DefaultGitHubFetcher(token=github_token),
     )
     ctx.executor = DefaultHeadlessExecutor(ctx)
     # Wire the headless runner into migrations for LLM-driven migration support

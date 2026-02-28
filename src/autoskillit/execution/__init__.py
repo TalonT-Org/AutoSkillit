@@ -7,6 +7,7 @@ execution/headless.py has TYPE_CHECKING-only references to pipeline/.
 
 from autoskillit.core import SkillResult
 from autoskillit.execution.db import DefaultDatabaseReader, _execute_readonly_query
+from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.execution.headless import DefaultHeadlessExecutor, run_headless_core
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
@@ -50,4 +51,6 @@ __all__ = [
     # db
     "execute_readonly_query",
     "DefaultDatabaseReader",
+    # github
+    "DefaultGitHubFetcher",
 ]

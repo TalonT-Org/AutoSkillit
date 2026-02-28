@@ -392,3 +392,19 @@ class CloneManager(Protocol):
     def push_to_remote(
         self, clone_path: str, source_dir: str, branch: str
     ) -> dict[str, str]: ...
+
+
+@runtime_checkable
+class GitHubFetcher(Protocol):
+    """Protocol for fetching GitHub issue content as structured data.
+
+    Implementations must never raise — all errors must be captured and
+    returned in the result dict with success=False.
+    """
+
+    async def fetch_issue(
+        self,
+        issue_ref: str,
+        *,
+        include_comments: bool = True,
+    ) -> dict[str, Any]: ...

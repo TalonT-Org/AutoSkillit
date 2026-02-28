@@ -71,6 +71,7 @@ from autoskillit.server import (  # noqa: E402, F401
     tools_clone,
     tools_execution,
     tools_git,
+    tools_integrations,
     tools_recipe,
     tools_status,
     tools_workspace,
@@ -117,6 +118,9 @@ from autoskillit.server.tools_status import (  # noqa: E402, F401
     get_token_summary,
     kitchen_status,
     read_db,
+)
+from autoskillit.server.tools_integrations import (  # noqa: E402, F401
+    fetch_github_issue,
 )
 from autoskillit.server.tools_workspace import (  # noqa: E402, F401
     reset_test_dir,

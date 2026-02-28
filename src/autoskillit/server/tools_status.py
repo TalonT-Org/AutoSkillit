@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 import structlog
@@ -47,6 +48,10 @@ async def kitchen_status() -> str:
         )
     status["token_usage_verbosity"] = _get_config().token_usage.verbosity
     status["quota_guard_enabled"] = _get_config().quota_guard.enabled
+    status["github_token_configured"] = _get_config().github.token is not None or bool(
+        os.environ.get("GITHUB_TOKEN")
+    )
+    status["github_default_repo"] = _get_config().github.default_repo
     return json.dumps(status)
 
 

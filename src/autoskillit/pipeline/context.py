@@ -15,6 +15,7 @@ from autoskillit.core import (
     CloneManager,
     DatabaseReader,
     GatePolicy,
+    GitHubFetcher,
     HeadlessExecutor,
     MigrationService,
     RecipeRepository,
@@ -49,6 +50,7 @@ class ToolContext:
     db_reader:     DatabaseReader — executes read-only SQLite queries
     workspace_mgr: WorkspaceManager — manages workspace directory teardown
     clone_mgr:     CloneManager — clone-based pipeline run isolation
+    github_client: GitHubFetcher — fetches GitHub issue content
     """
 
     config: AutomationConfig
@@ -64,3 +66,4 @@ class ToolContext:
     db_reader: DatabaseReader | None = field(default=None)
     workspace_mgr: WorkspaceManager | None = field(default=None)
     clone_mgr: CloneManager | None = field(default=None)
+    github_client: GitHubFetcher | None = field(default=None)

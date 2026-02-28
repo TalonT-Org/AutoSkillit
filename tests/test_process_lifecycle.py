@@ -1617,28 +1617,28 @@ class TestSubprocessResultAndRunnerTypes:
         from autoskillit.execution.process import SubprocessResult  # noqa: F401
 
     def test_subprocess_runner_protocol_satisfied_by_real(self):
-        """RealSubprocessRunner satisfies the SubprocessRunner protocol."""
+        """DefaultSubprocessRunner satisfies the SubprocessRunner protocol."""
         from autoskillit.core.types import SubprocessRunner
-        from autoskillit.execution.process import RealSubprocessRunner
+        from autoskillit.execution.process import DefaultSubprocessRunner
 
-        runner = RealSubprocessRunner()
+        runner = DefaultSubprocessRunner()
         assert isinstance(runner, SubprocessRunner)
 
     def test_real_subprocess_runner_default_pty_mode_is_false(self):
-        """RealSubprocessRunner must default pty_mode=False.
+        """DefaultSubprocessRunner must default pty_mode=False.
 
         pty_mode=True merges child stderr into PTY stdout, breaking all _run_subprocess
         callers that expect stderr to contain git/shell error messages. Claude CLI callers
         (run_headless_core in execution/headless.py, _llm_triage) already pass pty_mode=True
         explicitly. Note: run_managed_async itself already defaults pty_mode=False; only the
-        RealSubprocessRunner wrapper overrides this with True — making it the sole target for
-        this fix.
+        DefaultSubprocessRunner wrapper overrides this with True — making it the sole target
+        for this fix.
         """
         import inspect
 
-        from autoskillit.execution.process import RealSubprocessRunner
+        from autoskillit.execution.process import DefaultSubprocessRunner
 
-        sig = inspect.signature(RealSubprocessRunner.__call__)
+        sig = inspect.signature(DefaultSubprocessRunner.__call__)
         default = sig.parameters["pty_mode"].default
         assert default is False, (
             f"pty_mode default must be False to prevent silent stderr loss in git commands. "

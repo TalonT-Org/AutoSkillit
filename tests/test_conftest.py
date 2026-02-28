@@ -7,9 +7,9 @@ from autoskillit.core.types import SubprocessResult, TerminationReason
 
 def test_tool_ctx_provides_isolated_gate(tool_ctx):
     """tool_ctx fixture provides a ToolContext with gate enabled."""
-    from autoskillit.pipeline.gate import GateState
+    from autoskillit.pipeline.gate import DefaultGateState
 
-    assert isinstance(tool_ctx.gate, GateState)
+    assert isinstance(tool_ctx.gate, DefaultGateState)
     assert tool_ctx.gate.enabled is True
 
 

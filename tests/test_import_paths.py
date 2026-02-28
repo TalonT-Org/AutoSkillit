@@ -6,7 +6,7 @@ REQ-IMP-002: from autoskillit.core.logging/io/types → from autoskillit.core.
 REQ-IMP-003: server/tools_*.py imports from at most autoskillit.core and autoskillit.pipeline.
 REQ-IMP-004: cli/app.py imports from at most autoskillit.core, .config, and .pipeline.
 REQ-IMP-005: server/git.py only imports autoskillit.core at runtime (TYPE_CHECKING excluded).
-REQ-IMP-006: server/prompts.py has no direct import of GateState or pipeline.gate sub-module.
+REQ-IMP-006: server/prompts.py has no direct import of DefaultGateState or pipeline.gate sub-module.
 """
 
 import ast
@@ -205,16 +205,16 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
 
 
 def test_req_imp_006_prompts_no_gate_state_import() -> None:
-    """server/prompts.py must not directly import GateState or pipeline.gate sub-module."""
+    """server/prompts.py must not directly import DefaultGateState or pipeline.gate sub-module."""
     path = SRC / "server" / "prompts.py"
     tree = ast.parse(path.read_text())
     violations: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
-            # Ban any import of GateState by name
+            # Ban any import of DefaultGateState by name
             names = [alias.name for alias in node.names]
-            if "GateState" in names:
-                violations.append(f"import of GateState from {node.module}")
+            if "DefaultGateState" in names:
+                violations.append(f"import of DefaultGateState from {node.module}")
             # Ban direct sub-module import of pipeline.gate
             if node.module == "autoskillit.pipeline.gate":
                 violations.append(f"sub-module import: {node.module}")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import fields
 
-from autoskillit.pipeline.tokens import TokenEntry, TokenLog
+from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
 
 
 def _make_usage(**overrides: int) -> dict[str, int]:
@@ -58,13 +58,13 @@ class TestTokenEntry:
         assert d["input_tokens"] == 42
 
 
-class TestTokenLog:
+class TestDefaultTokenLog:
     def test_empty_on_init(self):
-        log = TokenLog()
+        log = DefaultTokenLog()
         assert log.get_report() == []
 
     def test_record_single_step(self):
-        log = TokenLog()
+        log = DefaultTokenLog()
         log.record("plan", _make_usage())
         report = log.get_report()
         assert len(report) == 1
@@ -75,7 +75,7 @@ class TestTokenLog:
         assert report[0]["cache_read_input_tokens"] == 5
 
     def test_record_same_step_twice_accumulates(self):
-        log = TokenLog()
+        log = DefaultTokenLog()
         log.record("implement", _make_usage(input_tokens=100, output_tokens=50))
         log.record("implement", _make_usage(input_tokens=200, output_tokens=80))
         report = log.get_report()
@@ -84,14 +84,14 @@ class TestTokenLog:
         assert report[0]["output_tokens"] == 130
 
     def test_invocation_count_increments_per_call(self):
-        log = TokenLog()
+        log = DefaultTokenLog()
         log.record("implement", _make_usage())
         log.record("implement", _make_usage())
         report = log.get_report()
         assert report[0]["invocation_count"] == 2
 
     def test_record_different_steps_produces_separate_entries(self):
-        log = TokenLog()
+        log = DefaultTokenLog()
         log.record("plan", _make_usage())
         log.record("implement", _make_usage())
         report = log.get_report()
@@ -100,24 +100,24 @@ class TestTokenLog:
         assert report[1]["step_name"] == "implement"
 
     def test_record_noop_on_empty_step_name(self):
-        log = TokenLog()
+        log = DefaultTokenLog()
         log.record("", _make_usage())
         assert log.get_report() == []
 
     def test_record_noop_on_none_token_usage(self):
-        log = TokenLog()
+        log = DefaultTokenLog()
         log.record("plan", None)
         assert log.get_report() == []
 
     def test_get_report_is_defensive_copy(self):
-        log = TokenLog()
+        log = DefaultTokenLog()
         log.record("plan", _make_usage())
         report = log.get_report()
         report.clear()
         assert len(log.get_report()) == 1
 
     def test_clear_resets_all_entries(self):
-        log = TokenLog()
+        log = DefaultTokenLog()
         log.record("plan", _make_usage())
         log.record("implement", _make_usage())
         log.record("verify", _make_usage())
@@ -125,24 +125,10 @@ class TestTokenLog:
         assert log.get_report() == []
 
     def test_partial_token_fields_default_missing_to_zero(self):
-        log = TokenLog()
+        log = DefaultTokenLog()
         log.record("plan", {"input_tokens": 42})
         report = log.get_report()
         assert report[0]["input_tokens"] == 42
         assert report[0]["output_tokens"] == 0
         assert report[0]["cache_creation_input_tokens"] == 0
         assert report[0]["cache_read_input_tokens"] == 0
-
-
-class TestTokenLogModuleSingleton:
-    def test_singleton_exists_in_module(self):
-        from autoskillit.pipeline.tokens import _token_log
-
-        assert isinstance(_token_log, TokenLog)
-
-    def test_singleton_importable_from_token_log(self):
-        from autoskillit.pipeline.tokens import (
-            _token_log,
-        )  # always in _token_log, injected into ToolContext
-
-        assert isinstance(_token_log, TokenLog)

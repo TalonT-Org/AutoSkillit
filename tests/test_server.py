@@ -52,7 +52,7 @@ from autoskillit.execution.session import (
 )
 from autoskillit.execution.testing import parse_pytest_summary as _parse_pytest_summary
 from autoskillit.pipeline.audit import FailureRecord
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, GateState
+from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
 from autoskillit.server import (
     _check_dry_walkthrough,
     _close_kitchen_handler,
@@ -716,7 +716,7 @@ class TestKitchenStatus:
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
 
     @pytest.mark.asyncio
     async def test_status_returns_version_info(self, tool_ctx):
@@ -774,7 +774,7 @@ class TestRecipeTools:
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
         """Verify these tools work WITHOUT tool activation."""
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
 
     # SS1
     @pytest.mark.asyncio
@@ -1117,7 +1117,7 @@ class TestValidateRecipe:
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
         """Verify this tool works WITHOUT tool activation."""
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
 
     # VS1
     @pytest.mark.asyncio
@@ -2483,7 +2483,7 @@ class TestGatedToolAccess:
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
         """Override the global autouse fixture — start disabled for gate tests."""
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
 
     @pytest.mark.asyncio
     async def test_tools_return_error_when_disabled(self, tool_ctx):
@@ -2713,9 +2713,9 @@ class TestOpenKitchenVersionReporting:
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit.pipeline.gate import GateState
+        from autoskillit.pipeline.gate import DefaultGateState
 
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
 
     @staticmethod
     def _prompt_text(result) -> str:
@@ -2927,7 +2927,7 @@ class TestConfigDrivenBehavior:
     @pytest.mark.asyncio
     async def test_require_enabled_still_gates_execution(self, tool_ctx):
         """S10: _require_enabled() defense-in-depth still works with config."""
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
         assert result["success"] is False
         assert result["is_error"] is True
@@ -3750,9 +3750,9 @@ class TestReadDb:
 
     @pytest.mark.asyncio
     async def test_gated_when_disabled(self, sample_db, tool_ctx):
-        from autoskillit.pipeline.gate import GateState
+        from autoskillit.pipeline.gate import DefaultGateState
 
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
         result = json.loads(
             await read_db(
                 db_path=str(sample_db),
@@ -3823,9 +3823,9 @@ class TestReadDbGating:
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit.pipeline.gate import GateState
+        from autoskillit.pipeline.gate import DefaultGateState
 
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
 
     @pytest.mark.asyncio
     async def test_read_db_gated(self):
@@ -4232,9 +4232,9 @@ class TestBuildSkillResultCrossValidation:
     def test_gate_disabled_schema(self, tool_ctx):
         """Gate-disabled response has standard keys."""
         import autoskillit.server as srv
-        from autoskillit.pipeline.gate import GateState
+        from autoskillit.pipeline.gate import DefaultGateState
 
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
         response = json.loads(srv._require_enabled())
         assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
 
@@ -4290,9 +4290,9 @@ class TestGateErrorSchemaNormalization:
     def test_require_enabled_gate_returns_standard_schema(self, tool_ctx):
         """Gate errors must use the same schema as normal responses."""
         import autoskillit.server as srv
-        from autoskillit.pipeline.gate import GateState
+        from autoskillit.pipeline.gate import DefaultGateState
 
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
         gate_result = srv._require_enabled()
         assert gate_result is not None
         response = json.loads(gate_result)
@@ -5381,9 +5381,9 @@ class TestMigrationSuggestions:
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
         """Verify these tools work WITHOUT tool activation."""
-        from autoskillit.pipeline.gate import GateState
+        from autoskillit.pipeline.gate import DefaultGateState
 
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
 
     # MSUG2
     @pytest.mark.asyncio
@@ -5404,9 +5404,9 @@ class TestMigrationSuppression:
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
         """Verify these tools work WITHOUT tool activation."""
-        from autoskillit.pipeline.gate import GateState
+        from autoskillit.pipeline.gate import DefaultGateState
 
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
 
     # SUP1
     @pytest.mark.asyncio
@@ -5469,7 +5469,7 @@ class TestLoadRecipeReadOnly:
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
         """load_recipe works WITHOUT tool activation."""
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
 
     @pytest.mark.asyncio
     async def test_load_recipe_does_not_call_migration_engine(self, tmp_path, monkeypatch):
@@ -5505,7 +5505,7 @@ class TestMigrateRecipe:
     @pytest.fixture(autouse=True)
     def _open_kitchen(self, tool_ctx):
         """migrate_recipe requires tool activation."""
-        tool_ctx.gate = GateState(enabled=True)
+        tool_ctx.gate = DefaultGateState(enabled=True)
 
     def _setup_migration_env(
         self,
@@ -5565,7 +5565,7 @@ class TestMigrateRecipe:
     @pytest.mark.asyncio
     async def test_migrate_recipe_requires_gate(self, tool_ctx):
         """migrate_recipe returns gate_error when kitchen is closed."""
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
         result = json.loads(await migrate_recipe(name="test"))
         assert result["success"] is False
         assert result["subtype"] == "gate_error"
@@ -6120,9 +6120,9 @@ class TestGetPipelineReport:
     # Override conftest to test WITHOUT open_kitchen
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit.pipeline.gate import GateState
+        from autoskillit.pipeline.gate import DefaultGateState
 
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
 
     @pytest.mark.asyncio
     async def test_ungated_returns_empty_initially(self, tool_ctx):
@@ -6138,9 +6138,9 @@ class TestGetPipelineReport:
 
     @pytest.mark.asyncio
     async def test_accumulates_failures_from_run_skill(self, tool_ctx):
-        from autoskillit.pipeline.gate import GateState
+        from autoskillit.pipeline.gate import DefaultGateState
 
-        tool_ctx.gate = GateState(enabled=True)
+        tool_ctx.gate = DefaultGateState(enabled=True)
         tool_ctx.runner.push(_make_result(returncode=1, stdout=_failed_session_json()))
         await run_skill(skill_command="/autoskillit:test", cwd="/tmp")
         result = json.loads(await get_pipeline_report())
@@ -6207,7 +6207,7 @@ class TestFailureCaptureInBuildSkillResult:
 
 
 class TestRunSkillStepName:
-    """step_name param drives _token_log accumulation."""
+    """step_name param drives token_log accumulation."""
 
     def _make_ndjson(self) -> str:
         result_rec = json.dumps(
@@ -6281,9 +6281,9 @@ class TestGetTokenSummary:
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):
-        from autoskillit.pipeline.gate import GateState
+        from autoskillit.pipeline.gate import DefaultGateState
 
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
 
     @pytest.mark.asyncio
     async def test_ungated_does_not_require_open_kitchen(self, tool_ctx):
@@ -6408,11 +6408,11 @@ class TestGetTokenSummary:
 
 def test_open_kitchen_has_no_update_advisory(tool_ctx):
     """REQ-APP-004: open_kitchen prompt contains no recipe update advisory."""
-    from autoskillit.pipeline.gate import GateState
+    from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import open_kitchen
 
     # Ensure kitchen is closed before calling open_kitchen
-    tool_ctx.gate = GateState(enabled=False)
+    tool_ctx.gate = DefaultGateState(enabled=False)
     result = open_kitchen()
 
     content = result.messages[0].content
@@ -6844,7 +6844,7 @@ async def test_tools_status_routes_through_db_reader(tool_ctx, monkeypatch, tmp_
 class TestCheckQuota:
     @pytest.mark.asyncio
     async def test_gate_closed_returns_gate_error(self, tool_ctx):
-        tool_ctx.gate = GateState(enabled=False)
+        tool_ctx.gate = DefaultGateState(enabled=False)
         result = json.loads(await check_quota())
         assert result["success"] is False
         assert result["subtype"] == "gate_error"

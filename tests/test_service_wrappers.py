@@ -48,7 +48,9 @@ class TestDefaultRecipeRepository:
 
 class TestDefaultMigrationService:
     @pytest.mark.asyncio
-    async def test_migrate_up_to_date_for_current_version(self, tmp_path: Path, monkeypatch) -> None:  # SW-UPD-1
+    async def test_migrate_up_to_date_for_current_version(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:  # SW-UPD-1
         """A recipe whose autoskillit_version matches the installed version returns up_to_date."""
         from autoskillit.core.io import dump_yaml
         from autoskillit.migration import DefaultMigrationService, default_migration_engine
@@ -64,7 +66,9 @@ class TestDefaultMigrationService:
         recipe_path = tmp_path / "test-recipe.yaml"
         dump_yaml(recipe_data, recipe_path)
 
-        monkeypatch.setattr("autoskillit.recipe.load_recipe_card", lambda *a, **kw: {"skill_hashes": {}})
+        monkeypatch.setattr(
+            "autoskillit.recipe.load_recipe_card", lambda *a, **kw: {"skill_hashes": {}}
+        )
         monkeypatch.setattr("autoskillit.recipe.check_contract_staleness", lambda *a, **kw: [])
 
         service = DefaultMigrationService(default_migration_engine())
@@ -77,7 +81,9 @@ class TestDefaultMigrationService:
         assert result.get("name") == "test-recipe", f"Expected name='test-recipe', got: {result}"
 
     @pytest.mark.asyncio
-    async def test_migrate_result_has_standard_structure(self, tmp_path: Path, monkeypatch) -> None:  # SW-UPD-2
+    async def test_migrate_result_has_standard_structure(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:  # SW-UPD-2
         """migrate() always returns a dict with 'name' and either 'status' or 'error'."""
         from autoskillit.core.io import dump_yaml
         from autoskillit.migration import DefaultMigrationService, default_migration_engine
@@ -93,7 +99,9 @@ class TestDefaultMigrationService:
         recipe_path = tmp_path / "structure-test.yaml"
         dump_yaml(recipe_data, recipe_path)
 
-        monkeypatch.setattr("autoskillit.recipe.load_recipe_card", lambda *a, **kw: {"skill_hashes": {}})
+        monkeypatch.setattr(
+            "autoskillit.recipe.load_recipe_card", lambda *a, **kw: {"skill_hashes": {}}
+        )
         monkeypatch.setattr("autoskillit.recipe.check_contract_staleness", lambda *a, **kw: [])
 
         service = DefaultMigrationService(default_migration_engine())
@@ -255,7 +263,9 @@ class TestDefaultMigrationService:
         # Create temp output file so RecipeMigrationAdapter finds migrated content
         temp_mig_dir = tmp_path / ".autoskillit" / "temp" / "migrations"
         temp_mig_dir.mkdir(parents=True)
-        migrated_content = f"name: test-recipe\nsteps: []\nautoskillit_version: '{installed_ver}'\n"
+        migrated_content = (
+            f"name: test-recipe\nsteps: []\nautoskillit_version: '{installed_ver}'\n"
+        )
         (temp_mig_dir / "test-recipe.yaml").write_text(migrated_content)
 
         success_result = SkillResult(

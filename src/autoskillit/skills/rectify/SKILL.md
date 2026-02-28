@@ -40,6 +40,7 @@ Do not change any code.
 
 **ALWAYS:**
 - Use subagents for parallel exploration
+- Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Focus on architectural immunity over direct fixes
 - Identify how tests missed the issue and similar/related bugs
 - Map the components and their connections thoroughly

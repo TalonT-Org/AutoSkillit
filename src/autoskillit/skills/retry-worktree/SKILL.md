@@ -44,6 +44,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 
 **ALWAYS:**
 - Use the provided worktree path (do NOT create a new one)
+- Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Start by assessing what has already been implemented
 - Continue from where the previous session left off
 - Run the project's test suite from the worktree directory

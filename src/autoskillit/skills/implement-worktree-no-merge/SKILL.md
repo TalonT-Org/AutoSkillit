@@ -37,6 +37,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 **ALWAYS:**
 - Create a new worktree from the current branch
 - Use subagents to deeply understand affected systems BEFORE implementing
+- Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Implement one phase at a time
 - Commit per phase with descriptive messages
 - Leave the worktree intact when done

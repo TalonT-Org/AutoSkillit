@@ -140,6 +140,7 @@ Before writing the final plan, verify:
 
 **ALWAYS:**
 - Write to `temp/make-plan/` directory
+- Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Recommend the single best technical solution
 - Ground decisions in design quality and correctness
 - Include verification steps

@@ -44,6 +44,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 
 **ALWAYS:**
 - Keep the plan as clean implementation instructions only (information/background helpful to implementation is okay)
+- Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Report all findings to terminal output (your response text)
 - Fix issues by directly updating the plan content
 - Verify assumptions against actual codebase

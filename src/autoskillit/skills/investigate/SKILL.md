@@ -33,6 +33,7 @@ Perform deep codebase investigation without making any changes. This skill uses 
 
 **ALWAYS:**
 - Use subagents for parallel exploration
+- Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Write findings as a markdown report with unique name to `temp/investigate/` directory
 - Identify how tests missed the issue (if applicable)
 - Check for similar existing patterns in codebase

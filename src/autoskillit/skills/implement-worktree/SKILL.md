@@ -32,6 +32,7 @@ Implement a provided plan in an isolated git worktree branched from the current 
 **ALWAYS:**
 - Create a new worktree from the current branch
 - Use subagents to deeply understand affected systems BEFORE implementing
+- Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Implement one phase at a time
 - Run the project's test suite after implementation
 - Rebase onto base branch before completion (ready for squash-and-merge)

@@ -42,6 +42,7 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 
 **ALWAYS:**
 - Read the target project using Glob, Read, and Grep — no shell commands against target
+- Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Detect language, test framework, build system, and CI from actual files
 - Present candidate workflows one by one for user approval before generating scripts
 - Show a summary confirmation gate before writing anything to disk

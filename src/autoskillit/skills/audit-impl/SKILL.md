@@ -36,6 +36,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 
 **ALWAYS:**
 - Use Explore subagents for all file reads and diff retrieval
+- Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Resolve all plan files before starting (abort early if any are missing)
 - Write `Dry-walkthrough verified = TRUE` as the absolute first line of any remediation file
 

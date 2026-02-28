@@ -22,42 +22,64 @@ logger = get_logger(__name__)
 _OUTCOME_PATTERN = re.compile(
     r"(\d+)\s+(passed|failed|error|xfailed|xpassed|skipped|warnings?|deselected)"
 )
+_BARE_TIME_ANCHOR = re.compile(r"\bin\s+\d+(?:\.\d+)?s\b")
+
+
+def _matches_to_counts(matches: list[tuple[str, str]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for count_str, outcome in matches:
+        key = outcome.rstrip("s") if outcome == "warnings" else outcome
+        counts[key] = int(count_str)
+    return counts
 
 
 def parse_pytest_summary(stdout: str) -> dict[str, int]:
-    """Extract pytest outcome counts from the last ``=``-delimited summary line.
+    """Extract pytest outcome counts from stdout using two-pass detection.
 
-    Pytest's summary line is always delimited by ``=`` characters, e.g.
-    ``= 5 passed, 1 warning in 2.31s =``. Only lines that start and end
-    with ``=`` are considered, preventing false matches on log output
-    containing phrases like ``"3 failed connections"``.
+    Pass 1 (=-delimited): Scans in reverse for the last line that both starts
+    and ends with ``=``, e.g. ``= 5 passed, 1 warning in 2.31s =``.
 
-    Returns empty dict if no summary line found.
+    Pass 2 (bare -q): If Pass 1 finds nothing, scans in reverse for a line
+    anchored by a pytest timing suffix ``in N.Ns``, e.g. ``3 failed, 97 passed
+    in 2.31s``.  The time anchor prevents false matches on log lines that
+    mention counts but have no timing suffix.
+
+    Returns empty dict if neither pass finds a summary line.
     """
-    for line in reversed(stdout.splitlines()):
+    lines = stdout.splitlines()
+
+    # Pass 1: =-delimited summary line (pytest default verbosity)
+    for line in reversed(lines):
         stripped = line.strip()
-        if not (stripped.startswith("=") and stripped.endswith("=")):
-            continue
-        matches = _OUTCOME_PATTERN.findall(stripped)
-        if matches:
-            counts: dict[str, int] = {}
-            for count_str, outcome in matches:
-                key = outcome.rstrip("s") if outcome == "warnings" else outcome
-                counts[key] = int(count_str)
-            return counts
+        if stripped.startswith("=") and stripped.endswith("="):
+            matches = _OUTCOME_PATTERN.findall(stripped)
+            if matches:
+                return _matches_to_counts(matches)
+
+    # Pass 2: bare -q format anchored by timing suffix
+    for line in reversed(lines):
+        stripped = line.strip()
+        if _BARE_TIME_ANCHOR.search(stripped):
+            matches = _OUTCOME_PATTERN.findall(stripped)
+            if matches:
+                return _matches_to_counts(matches)
+
     return {}
 
 
 def check_test_passed(returncode: int, stdout: str) -> bool:
     """Determine test pass/fail with cross-validation.
 
-    Uses exit code as primary signal, but overrides to False if the
-    output contains failure indicators — defense against exit code bugs
-    in external tools (e.g. Taskfile PIPESTATUS in non-bash shell).
+    Uses exit code as primary signal and cross-validates against parsed output.
+    Enforces closed-world assumption: an absent summary is not evidence of
+    passing.
     """
     if returncode != 0:
         return False
     counts = parse_pytest_summary(stdout)
+    if not counts:
+        # CWA: no summary line found — cannot confirm pass.
+        return False
     if counts.get("failed", 0) > 0 or counts.get("error", 0) > 0:
         return False
     return True

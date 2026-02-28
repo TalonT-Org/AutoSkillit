@@ -1,5 +1,104 @@
 """Tests for test_runner.py public API."""
 
+import pytest
+
+# ---------------------------------------------------------------------------
+# Living spec: all known pytest output format variants
+# ---------------------------------------------------------------------------
+_REALISTIC_VERBOSE = (
+    "============================= test session starts ==============================\n"
+    "platform linux -- Python 3.12\n"
+    "collected 100 items\n"
+    "\n"
+    "tests/test_foo.py::test_a PASSED                                         [  1%]\n"
+    "tests/test_foo.py::test_b FAILED                                         [  2%]\n"
+    "...\n"
+    "=========================== short test summary info ============================\n"
+    "FAILED tests/test_foo.py::test_b - AssertionError\n"
+    "========================== 2 failed, 98 passed in 3.45s ==========================\n"
+)
+
+PYTEST_SUMMARY_FORMAT_VARIANTS = [
+    # id, input_stdout, expected_counts
+    pytest.param(
+        "verbose_single_outcome",
+        "= 5 passed in 1.23s =",
+        {"passed": 5},
+    ),
+    pytest.param(
+        "verbose_multiple_outcomes",
+        "= 3 failed, 97 passed in 2.0s =",
+        {"failed": 3, "passed": 97},
+    ),
+    pytest.param(
+        "verbose_with_warnings",
+        "= 100 passed, 5 warnings in 3s =",
+        {"passed": 100, "warning": 5},
+    ),
+    pytest.param(
+        "verbose_with_xfailed",
+        "= 97 passed, 3 xfailed in 1.2s =",
+        {"passed": 97, "xfailed": 3},
+    ),
+    pytest.param(
+        "verbose_with_xpassed",
+        "= 95 passed, 5 xpassed in 2.0s =",
+        {"passed": 95, "xpassed": 5},
+    ),
+    pytest.param(
+        "verbose_with_errors",
+        "= 1 error in 0.48s =",
+        {"error": 1},
+    ),
+    pytest.param(
+        "verbose_with_deselected",
+        "= 50 passed, 50 deselected in 1.0s =",
+        {"passed": 50, "deselected": 50},
+    ),
+    pytest.param(
+        "bare_q_passed_only",
+        "100 passed in 1.50s",
+        {"passed": 100},
+    ),
+    pytest.param(
+        "bare_q_failed_and_passed",
+        "3 failed, 97 passed in 2.31s",
+        {"failed": 3, "passed": 97},
+    ),
+    pytest.param(
+        "bare_q_with_warnings",
+        "97 passed, 5 warnings in 3.1s",
+        {"passed": 97, "warning": 5},
+    ),
+    pytest.param(
+        "bare_q_multiline",
+        ("FAILED tests/test_foo.py::test_a - AssertionError\n2 failed, 98 passed in 4.12s\n"),
+        {"failed": 2, "passed": 98},
+    ),
+    pytest.param(
+        "empty_string",
+        "",
+        {},
+    ),
+    pytest.param(
+        "no_summary_log_only",
+        "collected 100 items\nsome log output\n",
+        {},
+    ),
+    pytest.param(
+        "realistic_verbose_full_output",
+        _REALISTIC_VERBOSE,
+        {"failed": 2, "passed": 98},
+    ),
+]
+
+
+@pytest.mark.parametrize("_id,stdout,expected", PYTEST_SUMMARY_FORMAT_VARIANTS)
+def test_parse_pytest_summary_format_variants(_id, stdout, expected):
+    from autoskillit.execution.testing import parse_pytest_summary
+
+    assert parse_pytest_summary(stdout) == expected
+
 
 def test_parse_pytest_summary_returns_passed_count():
     from autoskillit.execution.testing import parse_pytest_summary

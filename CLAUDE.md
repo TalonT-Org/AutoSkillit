@@ -289,7 +289,7 @@ All tool behavior is configurable via `.autoskillit/config.yaml`. No config file
 
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
-| `test_check` | `command` | `["task", "test-all"]` | Test command for `test_check` and `merge_worktree` |
+| `test_check` | `command` | `["task", "test-check"]` | Test command for `test_check` and `merge_worktree` |
 | `test_check` | `timeout` | `600` | Test command timeout in seconds |
 | `classify_fix` | `path_prefixes` | `[]` | File path prefixes that trigger `full_restart` |
 | `reset_workspace` | `command` | `null` | Reset command (`null` = not configured) |

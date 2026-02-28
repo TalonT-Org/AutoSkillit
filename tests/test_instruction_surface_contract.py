@@ -340,7 +340,9 @@ class TestClaudeMdConfigSurfaceContract:
         assert table_start != -1, "CLAUDE.md must have a '### **MCP Tools**' section"
         # Find section end (next ###)
         table_end = content.find("\n### ", table_start + 1)
-        table_section = content[table_start:table_end] if table_end != -1 else content[table_start:]
+        table_section = (
+            content[table_start:table_end] if table_end != -1 else content[table_start:]
+        )
         missing = [t for t in GATED_TOOLS if f"`{t}`" not in table_section]
         assert not missing, (
             f"CLAUDE.md MCP Tools table is missing these gated tools: {missing}. "
@@ -358,7 +360,9 @@ class TestClaudeMdConfigSurfaceContract:
         section_start = content.find("## **4. Testing Guidelines**")
         assert section_start != -1, "CLAUDE.md must have a Section 4: Testing Guidelines"
         section_end = content.find("\n## **", section_start + 1)
-        section = content[section_start:section_end] if section_end != -1 else content[section_start:]
+        section = (
+            content[section_start:section_end] if section_end != -1 else content[section_start:]
+        )
         assert "task test-check" in section, (
             "CLAUDE.md Section 4 (Testing Guidelines) does not mention 'task test-check'. "
             "Update the 'Run tests' bullet to document both: "

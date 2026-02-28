@@ -30,7 +30,7 @@ def _close_kitchen_handler() -> None:
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
-    from autoskillit.recipe.io import find_recipe_by_name
+    from autoskillit.recipe import find_recipe_by_name
 
     match = find_recipe_by_name(name, Path.cwd())
     if match is None:

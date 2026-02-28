@@ -71,14 +71,15 @@ def _flush_logger_proxy_caches() -> None:
         mod = sys.modules.get(mod_name)
         if mod is None:
             continue
-        lg = getattr(mod, "logger", None)
-        if lg is None:
-            continue
-        if isinstance(lg, _sc.BoundLoggerLazyProxy):
-            lg.__dict__.pop("bind", None)
-        elif hasattr(lg, "_processors"):
-            # Resolved bound logger — reconnect to current processor list
-            lg._processors = current_procs
+        for attr_name in ("logger", "_logger"):
+            lg = getattr(mod, attr_name, None)
+            if lg is None:
+                continue
+            if isinstance(lg, _sc.BoundLoggerLazyProxy):
+                lg.__dict__.pop("bind", None)
+            elif hasattr(lg, "_processors"):
+                # Resolved bound logger — reconnect to current processor list
+                lg._processors = current_procs
 
 
 class TestConfigureLogging:

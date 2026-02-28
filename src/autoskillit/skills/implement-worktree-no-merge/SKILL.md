@@ -161,6 +161,13 @@ Output to terminal:
 
 Explicitly state: "Worktree left intact for orchestrator to test and merge."
 
+Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
+
+```
+worktree_path=${WORKTREE_PATH}
+branch_name=${WORKTREE_NAME}
+```
+
 ### Step 6.5: Reset Code Index to Original Project (REQUIRED)
 
 **CRITICAL:** After completion, you **MUST** reset the MCP code-index project path back to the original project directory:

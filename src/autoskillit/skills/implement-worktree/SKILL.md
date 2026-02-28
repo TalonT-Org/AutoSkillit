@@ -156,6 +156,13 @@ Change directory before removing worktree to prevent deleting the cwd.
 Always confirm the merge went through before removing work tree.
 Do not merge until user confirms first!
 
+Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
+
+```
+worktree_path=${WORKTREE_PATH}
+branch_name=${WORKTREE_NAME}
+```
+
 ### Step 7.5: Reset Code Index to Original Project (REQUIRED)
 
 **CRITICAL:** After worktree cleanup, you **MUST** reset the MCP code-index project path back to the original project directory:

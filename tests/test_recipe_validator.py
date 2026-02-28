@@ -1991,6 +1991,31 @@ class TestImplementationPipelineStructure:
         assert step.on_result is not None
         assert step.on_result.routes.get("all_done") == "audit_impl"
 
+    def test_ip_b1_implement_captures_branch_name(self) -> None:
+        """T_IP_B1: implement step must capture branch_name from result."""
+        step = self.recipe.steps["implement"]
+        assert "branch_name" in step.capture, (
+            "implement step must capture branch_name so audit_impl can pass a "
+            "stable git ref to audit-impl after merge_worktree deletes the worktree"
+        )
+
+    def test_ip_b2_audit_impl_uses_branch_name_as_ref(self) -> None:
+        """T_IP_B2: audit_impl with: must reference context.branch_name as implementation_ref."""
+        step = self.recipe.steps["audit_impl"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "context.branch_name" in skill_cmd, (
+            "audit_impl must pass context.branch_name as implementation_ref — not "
+            "context.implementation_ref or context.worktree_path (stale after merge)"
+        )
+
+    def test_ip_b3_retry_worktree_captures_branch_name(self) -> None:
+        """T_IP_B3: retry_worktree step must also capture branch_name."""
+        step = self.recipe.steps["retry_worktree"]
+        assert "branch_name" in step.capture, (
+            "retry_worktree also updates the active worktree reference; "
+            "it must capture branch_name for downstream audit_impl use"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Recipe structural tests — bugfix-loop.yaml (T_BL1–T_BL2)
@@ -2015,6 +2040,31 @@ class TestBugfixLoopStructure:
         """T_BL2: a step named remediate exists with on_success == 'plan'."""
         assert "remediate" in self.recipe.steps
         assert self.recipe.steps["remediate"].on_success == "plan"
+
+    def test_bl_b1_implement_captures_branch_name(self) -> None:
+        """T_BL_B1: implement step must capture branch_name from result."""
+        step = self.recipe.steps["implement"]
+        assert "branch_name" in step.capture, (
+            "implement step must capture branch_name so audit_impl can pass a "
+            "stable git ref to audit-impl after merge_worktree deletes the worktree"
+        )
+
+    def test_bl_b2_audit_impl_uses_branch_name_as_ref(self) -> None:
+        """T_BL_B2: audit_impl with: must reference context.branch_name as implementation_ref."""
+        step = self.recipe.steps["audit_impl"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "context.branch_name" in skill_cmd, (
+            "audit_impl must pass context.branch_name as implementation_ref — not "
+            "context.implementation_ref or context.worktree_path (stale after merge)"
+        )
+
+    def test_bl_b3_retry_worktree_captures_branch_name(self) -> None:
+        """T_BL_B3: retry_worktree step must also capture branch_name."""
+        step = self.recipe.steps["retry_worktree"]
+        assert "branch_name" in step.capture, (
+            "retry_worktree also updates the active worktree reference; "
+            "it must capture branch_name for downstream audit_impl use"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -2052,6 +2102,31 @@ class TestInvestigateFirstStructure:
         worktree_arg = self.recipe.steps["merge"].with_args.get("worktree_path", "")
         assert "context.implementation_ref" in worktree_arg
         assert "context.work_dir" not in worktree_arg
+
+    def test_if_b1_implement_captures_branch_name(self) -> None:
+        """T_IF_B1: implement step must capture branch_name from result."""
+        step = self.recipe.steps["implement"]
+        assert "branch_name" in step.capture, (
+            "implement step must capture branch_name so audit_impl can pass a "
+            "stable git ref to audit-impl after merge_worktree deletes the worktree"
+        )
+
+    def test_if_b2_audit_impl_uses_branch_name_as_ref(self) -> None:
+        """T_IF_B2: audit_impl with: must reference context.branch_name as implementation_ref."""
+        step = self.recipe.steps["audit_impl"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "context.branch_name" in skill_cmd, (
+            "audit_impl must pass context.branch_name as implementation_ref — not "
+            "context.implementation_ref or context.worktree_path (stale after merge)"
+        )
+
+    def test_if_b3_retry_worktree_captures_branch_name(self) -> None:
+        """T_IF_B3: retry_worktree step must also capture branch_name."""
+        step = self.recipe.steps["retry_worktree"]
+        assert "branch_name" in step.capture, (
+            "retry_worktree also updates the active worktree reference; "
+            "it must capture branch_name for downstream audit_impl use"
+        )
 
 
 # ---------------------------------------------------------------------------

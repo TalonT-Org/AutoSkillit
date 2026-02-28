@@ -10,6 +10,9 @@ kitchen_rules:
   - "Route to on_failure when a step fails — the downstream skill (e.g.,
     assess-and-merge) has diagnostic access that the orchestrator does not.
     Do not investigate or attempt to fix failures directly."
+  - "SEQUENTIAL EXECUTION: complete full cycle per part before advancing.
+    For each plan_part, run the full cycle (dry_walkthrough → implement →
+    verify → merge) before starting the next part."
 
 ingredients:
   topic:
@@ -33,6 +36,9 @@ ingredients:
   audit:
     description: Run /autoskillit:audit-impl before merge to gate on implementation quality
     default: "true"
+  review_approach:
+    description: Run /autoskillit:review-approach before dry walkthrough? (true/false)
+    default: "false"
 
 steps:
   clone:
@@ -68,7 +74,7 @@ steps:
       plan_path: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
-    on_success: dry_walkthrough
+    on_success: review
     on_failure: cleanup_failure
     note: >
       Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically into plan_parts[].
@@ -76,11 +82,24 @@ steps:
       — pass it to the rectify skill for targeted re-planning.
       Glob plan_dir for *_part_*.md or single plan file.
 
+  review:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:review-approach ${{ context.plan_path }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "review"
+    capture:
+      review_path: "${{ result.review_path }}"
+    on_success: dry_walkthrough
+    on_failure: cleanup_failure
+    note: "Only execute this step if review_approach input is 'true'. Otherwise skip directly to dry_walkthrough."
+
   dry_walkthrough:
     tool: run_skill
     with:
       skill_command: "/autoskillit:dry-walkthrough the plan"
       cwd: "${{ context.work_dir }}"
+      add_dir: "${{ context.review_path }}"
       step_name: "dry_walkthrough"
     on_success: implement
     on_failure: rectify
@@ -119,7 +138,7 @@ steps:
   verify:
     tool: test_check
     with:
-      worktree_path: "${{ context.work_dir }}"
+      worktree_path: "${{ context.implementation_ref }}"
     on_success: audit_impl
     on_failure: assess
 
@@ -158,7 +177,7 @@ steps:
   merge:
     tool: merge_worktree
     with:
-      worktree_path: "${{ context.work_dir }}"
+      worktree_path: "${{ context.implementation_ref }}"
       base_branch: "${{ inputs.base_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"

@@ -16,7 +16,7 @@ from autoskillit.config import AutomationConfig
 from autoskillit.core import SubprocessRunner
 from autoskillit.execution import DefaultDatabaseReader, DefaultHeadlessExecutor, DefaultTestRunner
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
-from autoskillit.pipeline import AuditLog, GateState, TokenLog, ToolContext
+from autoskillit.pipeline import DefaultAuditLog, DefaultGateState, DefaultTokenLog, ToolContext
 from autoskillit.recipe import DefaultRecipeRepository
 from autoskillit.workspace import DefaultWorkspaceManager
 
@@ -45,7 +45,7 @@ def make_context(
 
     Args:
         config: The loaded AutomationConfig (use load_config() to obtain it).
-        runner: Subprocess runner implementation. Defaults to RealSubprocessRunner()
+        runner: Subprocess runner implementation. Defaults to DefaultSubprocessRunner()
                 for production use. Pass runner=None explicitly to disable the
                 tester (useful in tests that don't need real subprocess execution).
         plugin_dir: Absolute path to the autoskillit plugin directory. Defaults
@@ -58,16 +58,16 @@ def make_context(
         tester is left as None.
     """
     if runner is _UNSET:
-        from autoskillit.execution import RealSubprocessRunner
+        from autoskillit.execution import DefaultSubprocessRunner
 
-        runner = RealSubprocessRunner()
+        runner = DefaultSubprocessRunner()
 
     resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
     ctx = ToolContext(
         config=config,
-        audit=AuditLog(),
-        token_log=TokenLog(),
-        gate=GateState(enabled=False),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        gate=DefaultGateState(enabled=False),
         plugin_dir=resolved_dir,
         runner=runner,
         tester=DefaultTestRunner(config=config, runner=runner) if runner is not None else None,

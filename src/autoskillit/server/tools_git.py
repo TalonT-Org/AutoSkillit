@@ -8,8 +8,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core.logging import get_logger
-from autoskillit.core.types import RestartScope
+from autoskillit.core import RestartScope, get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import _require_enabled, _run_subprocess
 
@@ -48,13 +47,15 @@ async def merge_worktree(
     from autoskillit.server import _get_config, _get_ctx
     from autoskillit.server.git import perform_merge
 
-    runner = _get_ctx().runner
+    tool_ctx = _get_ctx()
+    runner = tool_ctx.runner
     assert runner is not None, "No subprocess runner configured"
     result = await perform_merge(
         worktree_path,
         base_branch,
         config=_get_config(),
         runner=runner,
+        tester=tool_ctx.tester,
     )
 
     if "error" in result:

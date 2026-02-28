@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from autoskillit.recipe.contracts import (
+from autoskillit.core import get_logger, load_yaml
+
+_logger = get_logger(__name__)
+
+from autoskillit.recipe.contracts import (  # noqa: E402
     StaleItem,
     check_contract_staleness,
     generate_recipe_card,
@@ -13,16 +18,16 @@ from autoskillit.recipe.contracts import (
     load_recipe_card,
     validate_recipe_cards,
 )
-from autoskillit.recipe.io import (
+from autoskillit.recipe.io import (  # noqa: E402
     DefaultRecipeRepository,
     find_recipe_by_name,
     iter_steps_with_context,
     list_recipes,
     load_recipe,
 )
-from autoskillit.recipe.loader import parse_recipe_metadata
-from autoskillit.recipe.schema import Recipe, RecipeStep
-from autoskillit.recipe.validator import (
+from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
+from autoskillit.recipe.schema import Recipe, RecipeStep  # noqa: E402
+from autoskillit.recipe.validator import (  # noqa: E402
     RuleFinding,
     analyze_dataflow,
     run_semantic_rules,
@@ -58,60 +63,87 @@ def list_all(project_dir: Path | None = None) -> dict[str, Any]:
     """List all recipes from project and built-in sources.
 
     Returns:
-        {"count": int, "recipes": list[{"name", "description", "summary"}]}
+        {"recipes": list[{"name", "description", "summary"}]}
+        Includes "errors" key when recipes fail to parse.
     """
+    from autoskillit.recipe.io import format_recipe_list_response
+
     _pdir = project_dir if project_dir is not None else Path.cwd()
     result = list_recipes(_pdir)
-    recipes_list = [
-        {"name": r.name, "description": r.description, "summary": r.summary} for r in result.items
-    ]
-    return {"count": len(recipes_list), "recipes": recipes_list}
+    return format_recipe_list_response(result)
 
 
 def validate_from_path(path: Path) -> dict[str, Any]:
     """Validate a recipe YAML file at the given path.
 
     Returns:
-        {"valid": bool, "findings": list}
-        On file/parse error: {"valid": False, "findings": [str, ...]}
+        {"valid": bool, "errors": list, "quality": dict, "semantic": list, "contracts": list}
+        On file/parse error: {"error": str}
     """
     from autoskillit.core import YAMLError
     from autoskillit.recipe.contracts import load_recipe_card as _load_card
     from autoskillit.recipe.contracts import validate_recipe_cards as _validate_cards
-    from autoskillit.recipe.validator import compute_recipe_validity, findings_to_dicts
+    from autoskillit.recipe.io import _parse_recipe
+    from autoskillit.recipe.validator import (
+        analyze_dataflow,
+        build_quality_dict,
+        compute_recipe_validity,
+        findings_to_dicts,
+    )
     from autoskillit.recipe.validator import run_semantic_rules as _run_semantic
+    from autoskillit.recipe.validator import validate_recipe as _validate_struct
 
     if not path.is_file():
-        return {"valid": False, "findings": [f"File not found: {path}"]}
+        return {
+            "valid": False,
+            "findings": [{"error": f"File not found: {path}"}],
+        }
 
     try:
-        recipe = load_recipe(path)
+        data = load_yaml(path)
     except YAMLError as exc:
-        return {"valid": False, "findings": [f"YAML parse error: {exc}"]}
-    except ValueError as exc:
-        return {"valid": False, "findings": [f"Invalid recipe structure: {exc}"]}
+        return {
+            "valid": False,
+            "findings": [{"error": f"YAML parse error: {exc}"}],
+        }
 
-    errors = validate_recipe(recipe)
+    if not isinstance(data, dict):
+        return {
+            "valid": False,
+            "findings": [{"error": "File must contain a YAML mapping"}],
+        }
+
+    recipe = _parse_recipe(data)
+    errors = _validate_struct(recipe)
+    report = analyze_dataflow(recipe)
     semantic_findings = _run_semantic(recipe)
 
+    quality = build_quality_dict(report)
+    semantic = findings_to_dicts(semantic_findings)
+
     contract_findings: list[dict[str, Any]] = []
-    contract = _load_card(path.stem, path.parent)
+    recipes_dir = path.parent
+    recipe_name = path.stem
+    contract = _load_card(recipe_name, recipes_dir)
     if contract:
         contract_findings = _validate_cards(recipe, contract)
 
     valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
-    findings: list[Any] = (
-        list(errors) + findings_to_dicts(semantic_findings) + list(contract_findings)
-    )
 
-    return {"valid": valid, "findings": findings}
+    return {
+        "valid": valid,
+        "errors": errors,
+        "quality": quality,
+        "findings": semantic,
+        "contracts": contract_findings,
+    }
 
 
 def load_and_validate(
     name: str,
     project_dir: Path | None = None,
     *,
-    suppressed: list[str] | None = None,
+    suppressed: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Load a recipe by name and run full validation.
 
@@ -124,7 +156,7 @@ def load_and_validate(
         {"content": str, "suggestions": list, "valid": bool}
         On not-found: {"error": str}
     """
-    from autoskillit.core import YAMLError, load_yaml
+    from autoskillit.core import YAMLError
     from autoskillit.recipe.contracts import check_contract_staleness as _check_staleness
     from autoskillit.recipe.contracts import load_recipe_card as _load_card
     from autoskillit.recipe.contracts import stale_to_suggestions
@@ -170,13 +202,36 @@ def load_and_validate(
                 suggestions.extend(stale_to_suggestions(stale))
 
             valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
-    except YAMLError:
+    except YAMLError as exc:
+        _logger.warning("Recipe YAML parse error", name=name, exc_info=True)
         suggestions.append(
             {
-                "rule": "yaml-error",
+                "rule": "validation-error",
                 "severity": "error",
-                "step": "(load)",
-                "message": "YAML parse error",
+                "step": "(validation-pipeline)",
+                "message": f"YAML parse error: {exc}",
+            }
+        )
+        valid = False
+    except ValueError as exc:
+        _logger.warning("Recipe structure invalid", name=name, exc_info=True)
+        suggestions.append(
+            {
+                "rule": "validation-error",
+                "severity": "error",
+                "step": "(validation-pipeline)",
+                "message": f"Invalid recipe structure: {exc}",
+            }
+        )
+        valid = False
+    except (FileNotFoundError, OSError) as exc:
+        _logger.warning("Recipe file not found or unreadable", name=name, exc_info=True)
+        suggestions.append(
+            {
+                "rule": "validation-error",
+                "severity": "error",
+                "step": "(validation-pipeline)",
+                "message": f"File error: {exc}",
             }
         )
         valid = False

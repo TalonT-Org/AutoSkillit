@@ -8,10 +8,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core.logging import get_logger
-from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
-from autoskillit.execution.headless import run_headless_core
-from autoskillit.execution.session import _truncate
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, truncate_text
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
@@ -53,8 +50,8 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600, ctx: Context = Current
     result = {
         "success": returncode == 0,
         "exit_code": returncode,
-        "stdout": _truncate(stdout),
-        "stderr": _truncate(stderr),
+        "stdout": truncate_text(stdout),
+        "stderr": truncate_text(stderr),
     }
     if not result["success"]:
         try:
@@ -165,8 +162,11 @@ async def run_skill(
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
-    skill_result = await run_headless_core(
-        skill_command, cwd, _get_ctx(), model=model, add_dir=add_dir, step_name=step_name
+    tool_ctx = _get_ctx()
+    if tool_ctx.executor is None:
+        return json.dumps({"success": False, "error": "Executor not configured"})
+    skill_result = await tool_ctx.executor.run(
+        skill_command, cwd, model=model, add_dir=add_dir, step_name=step_name
     )
     if not skill_result.success:
         try:
@@ -236,11 +236,13 @@ async def run_skill_retry(
         if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
             return gate_error
 
+    tool_ctx = _get_ctx()
+    if tool_ctx.executor is None:
+        return json.dumps({"success": False, "error": "Executor not configured"})
     cfg = _get_config().run_skill_retry
-    skill_result = await run_headless_core(
+    skill_result = await tool_ctx.executor.run(
         skill_command,
         cwd,
-        _get_ctx(),
         model=model,
         add_dir=add_dir,
         step_name=step_name,

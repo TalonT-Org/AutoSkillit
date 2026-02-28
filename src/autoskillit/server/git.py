@@ -12,13 +12,20 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from autoskillit.config import AutomationConfig
-from autoskillit.core.logging import get_logger
-from autoskillit.core.types import MergeFailedStep, MergeState, SubprocessRunner, TerminationReason
-from autoskillit.execution.session import _truncate
-from autoskillit.execution.testing import check_test_passed
+from autoskillit.core import (
+    MergeFailedStep,
+    MergeState,
+    SubprocessRunner,
+    TerminationReason,
+    get_logger,
+    truncate_text,
+)
+
+if TYPE_CHECKING:
+    from autoskillit.config import AutomationConfig
+    from autoskillit.core import TestRunner
 
 logger = get_logger(__name__)
 
@@ -55,6 +62,7 @@ async def perform_merge(
     *,
     config: AutomationConfig,
     runner: SubprocessRunner,
+    tester: TestRunner | None = None,
 ) -> dict[str, Any]:
     """Execute the full merge pipeline for a git worktree.
 
@@ -83,10 +91,15 @@ async def perform_merge(
 
     # 4. Test gate
     if config.safety.test_gate_on_merge:
-        rc, test_stdout, _ = await _run_git(
-            config.test_check.command, worktree_path, config.test_check.timeout, runner
-        )
-        if not check_test_passed(rc, test_stdout):
+        if tester is None:
+            return {
+                "error": "Test gate required but no tester configured",
+                "failed_step": MergeFailedStep.TEST_GATE,
+                "state": MergeState.WORKTREE_INTACT,
+                "worktree_path": worktree_path,
+            }
+        passed, _ = await tester.run(Path(worktree_path))
+        if not passed:
             return {
                 "error": "Tests failed in worktree — merge blocked",
                 "failed_step": MergeFailedStep.TEST_GATE,
@@ -103,7 +116,7 @@ async def perform_merge(
             "error": "git fetch origin failed",
             "failed_step": MergeFailedStep.FETCH,
             "state": MergeState.WORKTREE_INTACT,
-            "stderr": _truncate(fetch_stderr),
+            "stderr": truncate_text(fetch_stderr),
             "worktree_path": worktree_path,
         }
 

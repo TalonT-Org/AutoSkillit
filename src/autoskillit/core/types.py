@@ -6,7 +6,7 @@ Zero autoskillit imports. Provides the shared type vocabulary for all higher lay
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Sequence
 from dataclasses import asdict, dataclass, field
 from enum import Enum, StrEnum
 from pathlib import Path
@@ -292,6 +292,8 @@ class HeadlessExecutor(Protocol):
         model: str = "",
         step_name: str = "",
         add_dir: str = "",
+        timeout: float | None = None,
+        stale_threshold: float | None = None,
     ) -> SkillResult: ...
 
 
@@ -302,6 +304,14 @@ class RecipeRepository(Protocol):
     def find(self, name: str, project_dir: Path) -> Any: ...
 
     def list(self, project_dir: Path) -> Any: ...
+
+    def load_and_validate(
+        self, name: str, project_dir: Any, *, suppressed: Sequence[str] | None = None
+    ) -> dict[str, Any]: ...
+
+    def validate_from_path(self, script_path: Any) -> dict[str, Any]: ...
+
+    def list_all(self, project_dir: Any | None = None) -> dict[str, Any]: ...
 
 
 @runtime_checkable

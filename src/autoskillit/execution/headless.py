@@ -284,7 +284,12 @@ class DefaultHeadlessExecutor:
         model: str = "",
         step_name: str = "",
         add_dir: str = "",
+        timeout: float | None = None,
+        stale_threshold: float | None = None,
     ) -> SkillResult:
+        cfg = self._ctx.config.run_skill
+        effective_timeout = timeout if timeout is not None else cfg.timeout
+        effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
         return await run_headless_core(
             skill_command,
             cwd,
@@ -292,4 +297,6 @@ class DefaultHeadlessExecutor:
             model=model,
             step_name=step_name,
             add_dir=add_dir,
+            timeout=effective_timeout,
+            stale_threshold=effective_stale,
         )

@@ -19,7 +19,10 @@ class TestCLI:
     def test_default_command_starts_server(self) -> None:
         mock_mcp = MagicMock()
         with patch.object(cli, "serve", wraps=cli.serve):
-            with patch("autoskillit.server.mcp", mock_mcp):
+            with (
+                patch("autoskillit.server.mcp", mock_mcp),
+                patch("autoskillit.core.configure_logging"),
+            ):
                 cli.serve()
         mock_mcp.run.assert_called_once()
 
@@ -1253,7 +1256,7 @@ class TestServeStartupLog:
 
         with (
             patch.object(server_mod.mcp, "run"),
-            patch("autoskillit.core.logging.configure_logging"),
+            patch("autoskillit.core.configure_logging"),
             structlog.testing.capture_logs() as logs,
         ):
             cli_mod.serve()
@@ -1275,7 +1278,7 @@ class TestServeStartupLog:
 
         with (
             patch.object(server_mod.mcp, "run"),
-            patch("autoskillit.core.logging.configure_logging"),
+            patch("autoskillit.core.configure_logging"),
             patch("autoskillit.cli.Path.home", return_value=tmp_path),
             structlog.testing.capture_logs() as logs,
         ):
@@ -1326,8 +1329,8 @@ class TestGroupFRefactoring:
         assert r.check == "test"
 
     def test_upgrade_uses_atomic_write(self, tmp_path, monkeypatch):
-        """upgrade() must call _io._atomic_write, not yaml_file.write_text."""
-        from autoskillit.core import io as _io
+        """upgrade() must call _atomic_write, not yaml_file.write_text."""
+        import autoskillit.core as _core
 
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"
@@ -1335,13 +1338,13 @@ class TestGroupFRefactoring:
         (scripts_dir / "test.yaml").write_text("inputs:\n  foo: bar\n")
 
         atomic_calls: list[tuple] = []
-        original = _io._atomic_write
+        original = _core._atomic_write
 
         def capture(path, content):
             atomic_calls.append((path, content))
             return original(path, content)
 
-        monkeypatch.setattr(_io, "_atomic_write", capture)
+        monkeypatch.setattr(_core, "_atomic_write", capture)
         cli.upgrade()
 
         assert len(atomic_calls) == 1, "Expected exactly one _atomic_write call"

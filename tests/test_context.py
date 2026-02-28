@@ -105,3 +105,26 @@ def test_toolcontext_service_fields_annotated_with_protocols():
     assert "AuditLog" not in str(fields["audit"].type)
     assert "GateState" not in str(fields["gate"].type)
     assert "TokenLog" not in str(fields["token_log"].type)
+
+
+def test_headless_executor_protocol_accepts_timeout() -> None:
+    """HeadlessExecutor.run() signature must include optional timeout and stale_threshold."""
+    import inspect
+
+    from autoskillit.core import HeadlessExecutor
+
+    sig = inspect.signature(HeadlessExecutor.run)
+    params = sig.parameters
+    assert "timeout" in params, "HeadlessExecutor.run missing timeout param"
+    assert "stale_threshold" in params, "HeadlessExecutor.run missing stale_threshold param"
+    # Both must be keyword-only with None default
+    assert params["timeout"].default is None
+    assert params["stale_threshold"].default is None
+
+
+def test_recipe_repository_protocol_has_rich_methods() -> None:
+    """RecipeRepository protocol must expose load_and_validate, validate_from_path, list_all."""
+    from autoskillit.core import RecipeRepository
+
+    for method in ("load_and_validate", "validate_from_path", "list_all"):
+        assert hasattr(RecipeRepository, method), f"RecipeRepository missing {method}"

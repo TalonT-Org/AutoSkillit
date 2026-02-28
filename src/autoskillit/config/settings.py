@@ -93,6 +93,16 @@ class TokenUsageConfig:
 
 
 @dataclass
+class QuotaGuardConfig:
+    enabled: bool = False
+    threshold: float = 80.0
+    buffer_seconds: int = 60
+    cache_max_age: int = 60
+    credentials_path: str = "~/.claude/.credentials.json"
+    cache_path: str = "~/.claude/usage_cache.json"
+
+
+@dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
@@ -106,6 +116,7 @@ class AutomationConfig:
     worktree_setup: WorktreeSetupConfig = field(default_factory=WorktreeSetupConfig)
     migration: MigrationConfig = field(default_factory=MigrationConfig)
     token_usage: TokenUsageConfig = field(default_factory=TokenUsageConfig)
+    quota_guard: QuotaGuardConfig = field(default_factory=QuotaGuardConfig)
 
 
 def load_config(project_dir: Path | None = None) -> AutomationConfig:

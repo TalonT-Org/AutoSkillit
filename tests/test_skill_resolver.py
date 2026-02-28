@@ -11,6 +11,7 @@ from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
 
 BUNDLED_SKILLS = [
+    "analyze-prs",
     "assess-and-merge",
     "audit-friction",
     "audit-impl",
@@ -20,6 +21,7 @@ BUNDLED_SKILLS = [
     "investigate",
     "make-groups",
     "make-plan",
+    "merge-pr",
     "write-recipe",
     "mermaid",
     "migrate-recipes",

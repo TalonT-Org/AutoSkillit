@@ -53,6 +53,11 @@ The worktree is left intact for the orchestrator to test and merge separately.
    - If user declines, abort and suggest running `/autoskillit:dry-walkthrough` first
 3. Check `git status --porcelain` — if dirty, warn user
 4. Parse plan: phases, files per phase, verification commands
+5. **Multi-Part Plan Detection:** Examine the plan filename. If it contains `_part_` (e.g., `_part_a`, `_part_b`, `_part_1`):
+   - Extract the part identifier (A, B, C… or number) from the suffix.
+   - **SCOPE FENCE — MANDATORY:** Before any exploration or implementation begins, output the following constraint:
+     > "🚧 SCOPE FENCE ACTIVE: I am implementing PART {X} ONLY. I MUST NOT open, read, or execute any other part files, regardless of what I encounter in temp/ or any other directory. Sibling part files are out of scope for this entire session."
+   - When launching subagents in Step 2, include this fence instruction explicitly in each subagent prompt so that the subagents do not open, read, or reference sibling part files.
 
 ### Step 1: Create Git Worktree
 

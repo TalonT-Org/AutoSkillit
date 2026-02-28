@@ -24,15 +24,23 @@ tasks:
         TEST_OUTPUT="temp/test-$(date +%Y-%m-%d_%H%M%S).txt"
         echo "Running all tests with -n 4"
         echo "Output: $TEST_OUTPUT"
+
         if [[ -d ".venv" ]]; then
           .venv/bin/lint-imports
-          .venv/bin/python -m pytest tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+          PYTEST_CMD=".venv/bin/python -m pytest"
         else
           lint-imports
-          pytest tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+          PYTEST_CMD="pytest"
         fi
+
+        set +e
+        $PYTEST_CMD tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        PYTEST_EXIT=${PIPESTATUS[0]}
+        set -e
+
         echo ""
         echo "Test output saved to: $TEST_OUTPUT"
+        exit $PYTEST_EXIT
 
   test-check:
     desc: Run all tests and return unambiguous PASS/FAIL (for automation)
@@ -85,13 +93,21 @@ tasks:
         TEST_OUTPUT="temp/smoke-$(date +%Y-%m-%d_%H%M%S).txt"
         echo "Running smoke tests"
         echo "Output: $TEST_OUTPUT"
+
         if [[ -d ".venv" ]]; then
-          .venv/bin/python -m pytest tests/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+          PYTEST_CMD=".venv/bin/python -m pytest"
         else
-          pytest tests/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+          PYTEST_CMD="pytest"
         fi
+
+        set +e
+        $PYTEST_CMD tests/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        PYTEST_EXIT=${PIPESTATUS[0]}
+        set -e
+
         echo ""
         echo "Smoke test output saved to: $TEST_OUTPUT"
+        exit $PYTEST_EXIT
 
   install-worktree:
     desc: Set up development environment (isolated venv in worktrees, direct install in main)

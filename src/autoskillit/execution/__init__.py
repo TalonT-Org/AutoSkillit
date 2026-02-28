@@ -11,11 +11,12 @@ from autoskillit.execution.headless import run_headless_core
 from autoskillit.execution.process import RealSubprocessRunner, run_managed_async, run_managed_sync
 from autoskillit.execution.session import (
     ClaudeSessionResult,
-    _truncate,
     extract_token_usage,
     parse_session_result,
 )
 from autoskillit.execution.testing import check_test_passed, parse_pytest_summary
+
+execute_readonly_query = _execute_readonly_query
 
 __all__ = [
     # process
@@ -27,12 +28,11 @@ __all__ = [
     "SkillResult",
     "extract_token_usage",
     "parse_session_result",
-    "_truncate",
     # headless
     "run_headless_core",
     # testing
     "parse_pytest_summary",
     "check_test_passed",
     # db
-    "_execute_readonly_query",
+    "execute_readonly_query",
 ]

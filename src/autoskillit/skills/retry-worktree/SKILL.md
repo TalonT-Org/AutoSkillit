@@ -65,6 +65,15 @@ If the worktree path does not exist:
 If the environment is missing or broken:
 - Re-create the development environment using the project's configured `worktree_setup.command`, or: `cd {WORKTREE_PATH} && task install-worktree`
 
+**If `worktree_path` argument is empty or missing:**
+Abort with error: "Worktree path argument is empty. The implement step must have
+captured worktree_path before context exhaustion. Check that the implement step's
+capture block ran before context was exhausted."
+
+This is not a fallback — if worktree_path is empty, the recipe must be inspected
+to determine why the capture did not complete. A common cause is context exhaustion
+occurring before the skill reached its Step 6 handoff report.
+
 ### Step 1: Assess Current State
 
 Discover the base branch from git's upstream tracking (primary) or the explicit

@@ -36,7 +36,8 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     import logging as _stdlib_logging
 
     from autoskillit.config import load_config
-    from autoskillit.core.logging import configure_logging, get_logger
+    from autoskillit.core import configure_logging, get_logger
+    from autoskillit.server import _initialize, make_context, mcp
 
     configure_logging(
         level=_stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO,
@@ -45,11 +46,6 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     )
 
     import autoskillit.server as _server
-    from autoskillit.execution.process import RealSubprocessRunner
-    from autoskillit.pipeline.audit import AuditLog
-    from autoskillit.pipeline.context import ToolContext
-    from autoskillit.pipeline.gate import GateState
-    from autoskillit.pipeline.tokens import TokenLog
 
     project_dir = Path.cwd()
     cfg = load_config(project_dir)
@@ -68,18 +64,12 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         test_check_command=cfg.test_check.command,
     )
 
-    ctx = ToolContext(
-        config=cfg,
-        audit=AuditLog(),
-        token_log=TokenLog(),
-        gate=GateState(enabled=False),
-        # server/__init__.py is the package __init__; its parent is server/, so
-        # parent.parent is the autoskillit package root where .claude-plugin/ lives.
-        plugin_dir=str(Path(_server.__file__).parent.parent),
-        runner=RealSubprocessRunner(),
-    )
-    _server._initialize(ctx)
-    _server.mcp.run()
+    # server/__init__.py is the package __init__; its parent is server/, so
+    # parent.parent is the autoskillit package root where .claude-plugin/ lives.
+    plugin_dir = str(Path(_server.__file__).parent.parent)
+    ctx = make_context(cfg, plugin_dir=plugin_dir)
+    _initialize(ctx)
+    mcp.run()
 
 
 @app.command
@@ -100,7 +90,7 @@ def init(
     test_command
         Test command string for non-interactive init (e.g. "pytest -v").
     """
-    from autoskillit.core.io import ensure_project_temp
+    from autoskillit.core import ensure_project_temp
 
     project_dir = Path.cwd()
     config_dir = project_dir / ".autoskillit"
@@ -251,7 +241,7 @@ def upgrade():
     """
     import re
 
-    from autoskillit.core.io import _atomic_write
+    from autoskillit.core import _atomic_write
 
     project_dir = Path.cwd()
     scripts_dir = project_dir / ".autoskillit" / "scripts"
@@ -305,9 +295,9 @@ def migrate(*, check: bool = False):
         Exit with code 1 if any recipes need migration (useful for CI).
     """
     from autoskillit import __version__
-    from autoskillit.core.types import RecipeSource
-    from autoskillit.migration.loader import applicable_migrations
-    from autoskillit.recipe.io import list_recipes as _list_all_recipes
+    from autoskillit.core import RecipeSource
+    from autoskillit.migration import applicable_migrations
+    from autoskillit.recipe import list_recipes as _list_all_recipes
 
     project_dir = Path.cwd()
     scripts_dir = project_dir / ".autoskillit" / "scripts"
@@ -364,7 +354,7 @@ def config_show():
 @skills_app.command(name="list")
 def skills_list():
     """List bundled skills provided by the plugin."""
-    from autoskillit.workspace.skills import SkillResolver
+    from autoskillit.workspace import SkillResolver
 
     resolver = SkillResolver()
     skills = resolver.list_all()
@@ -431,7 +421,7 @@ def workspace_init(path: str):
 @recipes_app.command(name="list")
 def recipes_list():
     """List available recipes with sources."""
-    from autoskillit.recipe.io import list_recipes
+    from autoskillit.recipe import list_recipes
 
     recipes = list_recipes(Path.cwd()).items
     if not recipes:
@@ -449,7 +439,7 @@ def recipes_list():
 @recipes_app.command(name="show")
 def recipes_show(name: str):
     """Print the YAML content of a named recipe."""
-    from autoskillit.recipe.io import find_recipe_by_name
+    from autoskillit.recipe import find_recipe_by_name
 
     match = find_recipe_by_name(name, Path.cwd())
     if match is None:
@@ -562,10 +552,9 @@ def cook(recipe: str):
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
-    from autoskillit.core.io import YAMLError, load_yaml
-    from autoskillit.recipe.io import _parse_recipe, find_recipe_by_name
-    from autoskillit.recipe.io import list_recipes as _list_all_recipes_for_cook
-    from autoskillit.recipe.validator import validate_recipe
+    from autoskillit.core import YAMLError
+    from autoskillit.recipe import find_recipe_by_name, validate_recipe
+    from autoskillit.recipe import list_recipes as _list_all_recipes_for_cook
 
     _match = find_recipe_by_name(recipe, Path.cwd())
     if _match is None:
@@ -581,18 +570,17 @@ def cook(recipe: str):
     recipe_yaml = _match.path.read_text()
 
     # Validate recipe before launching session
+    from autoskillit.recipe import load_recipe as _load_for_cook
 
     try:
-        data = load_yaml(recipe_yaml)
+        parsed = _load_for_cook(_match.path)
     except YAMLError as exc:
         print(f"Recipe YAML parse error: {exc}")
         sys.exit(1)
-
-    if not isinstance(data, dict):
-        print("Recipe must contain a YAML mapping.")
+    except ValueError as exc:
+        print(f"Recipe structure error: {exc}")
         sys.exit(1)
 
-    parsed = _parse_recipe(data)
     errors = validate_recipe(parsed)
     if errors:
         print(f"Recipe '{recipe}' failed validation:")

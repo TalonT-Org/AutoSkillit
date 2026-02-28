@@ -5,12 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from autoskillit.core.logging import get_logger
-from autoskillit.core.types import (
+from autoskillit.core import (
     PIPELINE_FORBIDDEN_TOOLS,
     RETRY_RESPONSE_FIELDS,
     SKILL_TOOLS,
     Severity,
+    get_logger,
 )
 from autoskillit.recipe.contracts import (
     _CONTEXT_REF_RE,
@@ -599,14 +599,7 @@ def _check_retry_without_capture(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="worktree-retry-creates-new",
-    description=(
-        "Worktree-creating skills (implement-worktree, "
-        "implement-worktree-no-merge) must not have retry "
-        "max_attempts > 1. Each retry re-invokes the skill, "
-        "creating a new worktree and orphaning the previous one. "
-        "Use max_attempts: 1 and route on_exhausted to a "
-        "retry-worktree step instead."
-    ),
+    description="Worktree-creating skills must not have retry max_attempts > 1.",
     severity=Severity.ERROR,
 )
 def _check_worktree_retry_creates_new(
@@ -635,6 +628,43 @@ def _check_worktree_retry_creates_new(
                         f"progress. Set max_attempts: 1 and route "
                         f"on_exhausted to a retry-worktree step that "
                         f"resumes in the existing worktree."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="needs-retry-no-restart",
+    description="Worktree-creating skills must not retry on needs_retry with max_attempts >= 1.",
+    severity=Severity.ERROR,
+)
+def _check_needs_retry_no_restart(wf: Recipe) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        if not step.retry:
+            continue
+        if step.retry.on != "needs_retry":
+            continue
+        if step.retry.max_attempts < 1:
+            continue  # max_attempts: 0 is the correct pattern — escalates immediately
+        skill_cmd = step.with_args.get("skill_command", "")
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name and skill_name in _WORKTREE_CREATING_SKILLS:
+            findings.append(
+                RuleFinding(
+                    rule="needs-retry-no-restart",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' retries worktree-creating skill "
+                        f"'{skill_name}' on needs_retry "
+                        f"(max_attempts={step.retry.max_attempts}). "
+                        f"needs_retry signals partial progress exists — the skill "
+                        f"must not restart. "
+                        f"Set max_attempts: 0 to immediately escalate to on_exhausted."
                     ),
                 )
             )
@@ -846,11 +876,7 @@ def _check_implicit_handoff(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="multipart-iteration-notes",
-    description=(
-        "Recipes with make-plan or rectify steps must declare multi-part iteration conventions: "
-        "the plan step note must contain the *_part_*.md glob pattern, kitchen_rules must include "
-        "a sequential execution constraint, and next_or_done must route more_parts back to verify."
-    ),
+    description="Multi-part plan recipes must declare iteration conventions.",
     severity=Severity.ERROR,
 )
 def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
@@ -932,10 +958,7 @@ def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="merge-cleanup-uncaptured",
-    description=(
-        "merge_worktree steps should capture cleanup_succeeded to surface orphaned "
-        "worktrees or branches left behind when cleanup commands fail after a successful merge."
-    ),
+    description="merge_worktree steps should capture cleanup_succeeded to track orphaned results.",
     severity=Severity.WARNING,
 )
 def _check_merge_cleanup_captured(wf: Recipe) -> list[RuleFinding]:
@@ -966,10 +989,7 @@ def _check_merge_cleanup_captured(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="multipart-plan-parts-not-captured",
-    description=(
-        "Recipes with make-plan or rectify steps must capture plan_parts via capture_list "
-        "so the full ordered list of part files is available in pipeline context."
-    ),
+    description="Multi-part plan recipes must capture plan_parts via capture_list.",
     severity=Severity.ERROR,
 )
 def _check_plan_parts_captured(wf: Recipe) -> list[RuleFinding]:

@@ -10,8 +10,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core.logging import get_logger
-from autoskillit.execution.db import _execute_readonly_query, _validate_select_only
+from autoskillit.core import get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import _require_enabled
 
@@ -188,21 +187,11 @@ async def read_db(
             pass
         return json.dumps({"error": f"Path is not a file: {db}"})
 
-    # SQL validation (regex pre-check)
-    try:
-        _validate_select_only(query)
-    except ValueError as exc:
-        try:
-            await ctx.error(
-                "read_db: non-SELECT query rejected",
-                logger_name="autoskillit.read_db",
-                extra={"error": str(exc)},
-            )
-        except (RuntimeError, AttributeError):
-            pass
-        return json.dumps({"error": str(exc), "hint": "Only SELECT queries are allowed"})
+    from autoskillit.server import _get_config, _get_ctx
 
-    from autoskillit.server import _get_config
+    tool_ctx = _get_ctx()
+    if tool_ctx.db_reader is None:
+        return json.dumps({"error": "Database reader not configured"})
 
     # Resolve timeout
     effective_timeout = timeout if timeout > 0 else _get_config().read_db.timeout
@@ -213,7 +202,7 @@ async def read_db(
     try:
         result = await loop.run_in_executor(
             None,
-            _execute_readonly_query,
+            tool_ctx.db_reader.query,
             str(db),
             query,
             parsed_params,
@@ -221,6 +210,17 @@ async def read_db(
             max_rows,
         )
         return json.dumps(result)
+    except ValueError as exc:
+        # Non-SELECT SQL rejected by db_reader's defence-in-depth validation
+        try:
+            await ctx.error(
+                "read_db: non-SELECT query rejected",
+                logger_name="autoskillit.read_db",
+                extra={"error": str(exc)},
+            )
+        except (RuntimeError, AttributeError):
+            pass
+        return json.dumps({"error": str(exc), "hint": "Only SELECT queries are allowed"})
     except TimeoutError:
         try:
             await ctx.error(

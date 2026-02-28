@@ -6,15 +6,20 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from autoskillit import __version__
-from autoskillit.core.io import _atomic_write, dump_yaml_str, load_yaml
-from autoskillit.core.logging import get_logger
-from autoskillit.execution.session import SkillResult
+from autoskillit.core import (
+    RetryReason,
+    SkillResult,
+    _atomic_write,
+    dump_yaml_str,
+    get_logger,
+    load_yaml,
+)
 from autoskillit.migration.loader import applicable_migrations
-from autoskillit.recipe.io import load_recipe as _parse_recipe
-from autoskillit.recipe.loader import parse_recipe_metadata
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe import load_recipe as _parse_recipe
+from autoskillit.recipe import parse_recipe_metadata, validate_recipe
 
 logger = get_logger(__name__)
 
@@ -254,7 +259,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         return files
 
     def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.recipe.contracts import check_contract_staleness, load_recipe_card
+        from autoskillit.recipe import check_contract_staleness, load_recipe_card
 
         recipes_dir = file.path.parent.parent
         contract = load_recipe_card(file.name, recipes_dir)
@@ -268,7 +273,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         *,
         temp_dir: Path,
     ) -> MigrationResult:
-        from autoskillit.recipe.contracts import generate_recipe_card
+        from autoskillit.recipe import generate_recipe_card
 
         recipes_dir = file.path.parent.parent
         recipe_path = recipes_dir / f"{file.name}.yaml"
@@ -299,3 +304,103 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
 def default_migration_engine() -> MigrationEngine:
     """Create a MigrationEngine with all bundled adapters registered."""
     return MigrationEngine([RecipeMigrationAdapter(), ContractMigrationAdapter()])
+
+
+class DefaultMigrationService:
+    """Concrete MigrationService wrapping MigrationEngine.migrate_file.
+
+    Call bind_headless() after construction (in the composition root) to enable
+    LLM-driven recipe migration. Without a headless runner, migrate() returns an
+    error for recipes that require LLM-assisted migration.
+    """
+
+    def __init__(self, engine: MigrationEngine) -> None:
+        self._engine = engine
+        self._run_headless: Callable[..., Awaitable[SkillResult]] | None = None
+
+    def bind_headless(self, run_headless: Callable[..., Awaitable[SkillResult]]) -> None:
+        """Wire in a headless runner for LLM-driven migrations.
+
+        Called by the composition root (_factory.py) after ctx.executor is created.
+        The callable must accept keyword arguments skill_command= and cwd=.
+        """
+        self._run_headless = run_headless
+
+    async def migrate(self, recipe_path: Path) -> dict[str, Any]:
+        """Apply pending migration notes to the recipe file at recipe_path.
+
+        Checks for applicable migrations, runs the migration engine (LLM-driven
+        if a headless runner is wired in), handles FailureStore recording, and
+        regenerates the contract card on success.
+
+        Returns a dict with:
+          {"status": "up_to_date", "name": name}  — no migration needed
+          {"status": "migrated", "name": name}     — migration applied
+          {"error": str, "name": name}             — migration failed
+        """
+        from autoskillit.migration.loader import applicable_migrations as _applicable
+        from autoskillit.migration.store import FailureStore, default_store_path
+        from autoskillit.recipe import generate_recipe_card, parse_recipe_metadata
+
+        meta = parse_recipe_metadata(recipe_path)
+        name = meta.name
+        migrations = _applicable(meta.version, __version__)
+        if not migrations:
+            return {"status": "up_to_date", "name": name}
+
+        # Derive project_dir: recipe_path → recipes_dir → .autoskillit/ → project_dir
+        recipes_dir = recipe_path.parent
+        project_dir = recipes_dir.parent.parent
+        temp_dir = project_dir / ".autoskillit" / "temp"
+
+        file = MigrationFile(
+            name=name,
+            path=recipe_path,
+            file_type="recipe",
+            current_version=meta.version,
+        )
+
+        if self._run_headless is not None:
+            run_headless: Callable[..., Awaitable[SkillResult]] = self._run_headless
+        else:
+
+            async def run_headless(*args: Any, **kwargs: Any) -> SkillResult:  # type: ignore[misc]
+                return SkillResult(
+                    success=False,
+                    result=(
+                        "LLM-driven migration requires a headless runner. "
+                        "Use the migrate_recipe MCP tool directly."
+                    ),
+                    session_id="",
+                    subtype="no_runner",
+                    is_error=True,
+                    exit_code=1,
+                    needs_retry=False,
+                    retry_reason=RetryReason.NONE,
+                    stderr="",
+                    token_usage=None,
+                )
+
+        migration_result = await self._engine.migrate_file(
+            file, run_headless=run_headless, temp_dir=temp_dir
+        )
+
+        failure_store = FailureStore(default_store_path(project_dir))
+
+        if migration_result.success:
+            failure_store.clear(name)
+            try:
+                if recipe_path.exists():
+                    generate_recipe_card(recipe_path, recipes_dir)
+            except Exception:
+                logger.warning("contract_card_generation_failed", name=name, exc_info=True)
+            return {"status": "migrated", "name": name}
+
+        failure_store.record(
+            name=name,
+            file_path=recipe_path,
+            file_type="recipe",
+            error=migration_result.error or "unknown",
+            retries_attempted=migration_result.retries_attempted,
+        )
+        return {"error": f"Migration failed: {migration_result.error}", "name": name}

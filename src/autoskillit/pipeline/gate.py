@@ -11,11 +11,19 @@ import json
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class GateState:
     """Gate enable/disable state consumed by ToolContext (_context.py)."""
 
     enabled: bool = False
+
+    def enable(self) -> None:
+        """Transition gate to enabled state in-place."""
+        self.enabled = True
+
+    def disable(self) -> None:
+        """Transition gate to disabled state in-place."""
+        self.enabled = False
 
 
 GATED_TOOLS: frozenset[str] = frozenset(

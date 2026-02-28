@@ -9,19 +9,24 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
 
-from autoskillit.core.logging import get_logger
-from autoskillit.core.types import CONTEXT_EXHAUSTION_MARKER, RetryReason, TerminationReason
+from autoskillit.core import (
+    CONTEXT_EXHAUSTION_MARKER,
+    RetryReason,
+    SkillResult,
+    TerminationReason,
+    get_logger,
+    truncate_text,
+)
 
 logger = get_logger(__name__)
 
+_truncate = truncate_text
 
-def _truncate(text: str, max_len: int = 5000) -> str:
-    if len(text) <= max_len:
-        return text
-    return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]
+# Re-export SkillResult so existing callers (tests, migration_engine) can still
+# import from this module.  Canonical definition lives in core/types.py.
+__all__ = ["SkillResult"]
 
 
 _TOKEN_FIELDS = (
@@ -119,39 +124,6 @@ class ClaudeSessionResult:
         if self.needs_retry:
             return RetryReason.RESUME
         return RetryReason.NONE
-
-
-@dataclass
-class SkillResult:
-    """Typed result returned by _build_skill_result and _run_headless_core."""
-
-    success: bool
-    result: str
-    session_id: str
-    subtype: str
-    is_error: bool
-    exit_code: int
-    needs_retry: bool
-    retry_reason: RetryReason
-    stderr: str
-    token_usage: dict[str, Any] | None = None
-
-    def to_json(self) -> str:
-        return json.dumps(
-            {
-                "success": self.success,
-                "result": self.result,
-                "session_id": self.session_id,
-                "subtype": self.subtype,
-                "is_error": self.is_error,
-                "exit_code": self.exit_code,
-                "needs_retry": self.needs_retry,
-                "retry_reason": self.retry_reason,
-                "stderr": self.stderr,
-                "token_usage": self.token_usage,
-            },
-            default=lambda o: o.value if isinstance(o, Enum) else str(o),
-        )
 
 
 def extract_token_usage(stdout: str) -> dict[str, Any] | None:

@@ -10,12 +10,9 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core.logging import get_logger
-from autoskillit.execution.session import _truncate
-from autoskillit.execution.testing import check_test_passed
+from autoskillit.core import get_logger, truncate_text
 from autoskillit.server import mcp
 from autoskillit.server.helpers import _require_enabled, _run_subprocess
-from autoskillit.workspace.cleanup import _delete_directory_contents
 
 logger = get_logger(__name__)
 
@@ -49,15 +46,13 @@ async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str
     except (RuntimeError, AttributeError):
         pass
 
-    from autoskillit.server import _get_config
+    from autoskillit.server import _get_ctx
 
-    returncode, stdout, stderr = await _run_subprocess(
-        _get_config().test_check.command,
-        cwd=worktree_path,
-        timeout=_get_config().test_check.timeout,
-    )
+    tool_ctx = _get_ctx()
+    if tool_ctx.tester is None:
+        return json.dumps({"passed": False, "error": "Test runner not configured"})
 
-    passed = check_test_passed(returncode, stdout)
+    passed, output = await tool_ctx.tester.run(Path(worktree_path))
 
     if not passed:
         try:
@@ -69,7 +64,7 @@ async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str
         except (RuntimeError, AttributeError):
             pass
 
-    return json.dumps({"passed": passed})
+    return json.dumps({"passed": passed, "output": truncate_text(output)})
 
 
 @mcp.tool(tags={"automation"})
@@ -132,8 +127,14 @@ async def reset_test_dir(
             }
         )
 
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+    if tool_ctx.workspace_mgr is None:
+        return json.dumps({"error": "Workspace manager not configured"})
+
     preserve = None if force else {marker_name}
-    cleanup = _delete_directory_contents(Path(resolved), preserve=preserve)
+    cleanup = tool_ctx.workspace_mgr.delete_contents(Path(resolved), preserve=preserve)
     return json.dumps({**cleanup.to_dict(), "forced": force})
 
 
@@ -222,10 +223,16 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
             {
                 "error": "reset command failed",
                 "exit_code": returncode,
-                "stderr": _truncate(stderr),
+                "stderr": truncate_text(stderr),
             }
         )
 
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+    if tool_ctx.workspace_mgr is None:
+        return json.dumps({"error": "Workspace manager not configured"})
+
     preserve = set(_get_config().reset_workspace.preserve_dirs) | {marker_name}
-    cleanup = _delete_directory_contents(Path(resolved), preserve=preserve)
+    cleanup = tool_ctx.workspace_mgr.delete_contents(Path(resolved), preserve=preserve)
     return json.dumps(cleanup.to_dict())

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
-from autoskillit.core.types import RecipeSource
+from autoskillit.core import RecipeSource
 
 AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
 

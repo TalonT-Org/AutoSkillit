@@ -5,17 +5,22 @@ All sub-modules depend only on autoskillit.core.* at runtime;
 execution/headless.py has TYPE_CHECKING-only references to pipeline/.
 """
 
-from autoskillit.execution.db import _execute_readonly_query
-from autoskillit.execution.headless import run_headless_core
+from autoskillit.core import SkillResult
+from autoskillit.execution.db import DefaultDatabaseReader, _execute_readonly_query
+from autoskillit.execution.headless import DefaultHeadlessExecutor, run_headless_core
 from autoskillit.execution.process import RealSubprocessRunner, run_managed_async, run_managed_sync
 from autoskillit.execution.session import (
     ClaudeSessionResult,
-    SkillResult,
-    _truncate,
     extract_token_usage,
     parse_session_result,
 )
-from autoskillit.execution.testing import check_test_passed, parse_pytest_summary
+from autoskillit.execution.testing import (
+    DefaultTestRunner,
+    check_test_passed,
+    parse_pytest_summary,
+)
+
+execute_readonly_query = _execute_readonly_query
 
 __all__ = [
     # process
@@ -27,12 +32,14 @@ __all__ = [
     "SkillResult",
     "extract_token_usage",
     "parse_session_result",
-    "_truncate",
     # headless
     "run_headless_core",
+    "DefaultHeadlessExecutor",
     # testing
     "parse_pytest_summary",
     "check_test_passed",
+    "DefaultTestRunner",
     # db
-    "_execute_readonly_query",
+    "execute_readonly_query",
+    "DefaultDatabaseReader",
 ]

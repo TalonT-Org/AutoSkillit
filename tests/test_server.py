@@ -23,6 +23,7 @@ from autoskillit.config import (
     SafetyConfig,
     TokenUsageConfig,
 )
+from autoskillit.core import SkillResult
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     RETRY_RESPONSE_FIELDS,
@@ -42,7 +43,6 @@ from autoskillit.execution.headless import (
 from autoskillit.execution.process import SubprocessResult
 from autoskillit.execution.session import (
     ClaudeSessionResult,
-    SkillResult,
     _compute_retry,
     _compute_success,
     _is_completion_kill_anomaly,
@@ -775,7 +775,7 @@ class TestRecipeTools:
 
     # SS1
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe.io.list_recipes")
+    @patch("autoskillit.recipe.list_recipes")
     async def test_list_returns_json_object(self, mock_list):
         """list_recipes returns JSON object with scripts array (not gated)."""
         from autoskillit.core.types import LoadResult, RecipeSource
@@ -826,7 +826,7 @@ class TestRecipeTools:
 
     # SS4
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe.io.list_recipes")
+    @patch("autoskillit.recipe.list_recipes")
     async def test_list_reports_errors_in_response(self, mock_list):
         """list_recipes includes errors in JSON when recipes fail to parse."""
         from autoskillit.core.types import LoadReport, LoadResult
@@ -1027,7 +1027,7 @@ class TestLoadRecipeExceptionHandling:
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         (recipes_dir / "test.yaml").write_text("name: test\n")
-        with patch("autoskillit.core.io.load_yaml", side_effect=YAMLError("bad yaml")):
+        with patch("autoskillit.recipe.load_yaml", side_effect=YAMLError("bad yaml")):
             result = json.loads(await load_recipe(name="test"))
         assert "error" not in result
         assert any(
@@ -1057,7 +1057,7 @@ class TestLoadRecipeExceptionHandling:
             path=recipe_path,
         )
         with (
-            patch("autoskillit.recipe.io.find_recipe_by_name", return_value=fake_match),
+            patch("autoskillit.recipe.find_recipe_by_name", return_value=fake_match),
             patch("autoskillit.recipe.io._parse_recipe", side_effect=ValueError("bad structure")),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -1155,20 +1155,22 @@ class TestValidateRecipe:
     # VS3
     @pytest.mark.asyncio
     async def test_nonexistent_file_returns_error(self):
-        """validate_recipe returns error for nonexistent file."""
+        """validate_recipe returns valid=False with findings for nonexistent file."""
         result = json.loads(await validate_recipe(script_path="/nonexistent/path.yaml"))
-        assert "error" in result
-        assert "not found" in result["error"].lower() or "File not found" in result["error"]
+        assert result["valid"] is False
+        assert len(result["findings"]) > 0
+        assert "not found" in result["findings"][0]["error"].lower()
 
     # VS4
     @pytest.mark.asyncio
     async def test_malformed_yaml_returns_error(self, tmp_path):
-        """validate_recipe returns error for unparseable YAML."""
+        """validate_recipe returns valid=False with findings for unparseable YAML."""
         script = tmp_path / "broken.yaml"
         script.write_text("key: [\n  unclosed\n")
         result = json.loads(await validate_recipe(script_path=str(script)))
-        assert "error" in result
-        assert "yaml" in result["error"].lower() or "YAML" in result["error"]
+        assert result["valid"] is False
+        assert len(result["findings"]) > 0
+        assert "yaml" in result["findings"][0]["error"].lower()
 
     # T_OR10
     @pytest.mark.asyncio
@@ -1227,7 +1229,7 @@ class TestValidateRecipe:
         assert dead[0]["field"] == "worktree_path"
         semantic_errors = [
             f
-            for f in result.get("semantic", [])
+            for f in result.get("findings", [])
             if f.get("rule") == "dead-output" and f.get("severity") == "error"
         ]
         assert len(semantic_errors) == 1
@@ -1236,7 +1238,7 @@ class TestValidateRecipe:
     # SEM1
     @pytest.mark.asyncio
     async def test_validate_recipe_includes_semantic_findings(self, tmp_path):
-        """validate_recipe response includes 'semantic' key with findings."""
+        """validate_recipe response includes 'findings' key with semantic findings."""
         script = tmp_path / "semantic.yaml"
         script.write_text(
             "name: semantic-test\n"
@@ -1253,9 +1255,9 @@ class TestValidateRecipe:
             '    message: "Done."\n'
         )
         result = json.loads(await validate_recipe(script_path=str(script)))
-        assert "semantic" in result
-        assert isinstance(result["semantic"], list)
-        assert any(f["rule"] == "model-on-non-skill-step" for f in result["semantic"])
+        assert "findings" in result
+        assert isinstance(result["findings"], list)
+        assert any(f["rule"] == "model-on-non-skill-step" for f in result["findings"])
         assert result["valid"] is True  # Warning does not block validity
 
 
@@ -1832,14 +1834,14 @@ class TestTestCheck:
 
     @pytest.mark.asyncio
     async def test_does_not_expose_summary(self, tool_ctx):
-        """test_check returns ONLY passed boolean — no summary, no output_file."""
+        """test_check returns passed + output — no summary, no output_file."""
         tool_ctx.runner.push(
             _make_result(0, "= 100 passed =\nTest output saved to: /tmp/out.txt\n", "")
         )
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert "summary" not in result
         assert "output_file" not in result
-        assert list(result.keys()) == ["passed"]
+        assert set(result.keys()) == {"passed", "output"}
 
     @pytest.mark.asyncio
     async def test_cross_validates_error_in_output(self, tool_ctx):
@@ -2735,10 +2737,13 @@ class TestConfigDrivenBehavior:
     async def test_test_check_uses_config_command(self, tool_ctx):
         """S1: test_check runs config.test_check.command."""
         from autoskillit.config import TestCheckConfig
+        from autoskillit.execution import DefaultTestRunner
 
         tool_ctx.config = AutomationConfig(
             test_check=TestCheckConfig(command=["pytest", "-x"], timeout=300)
         )
+        # Re-create tester with updated config so it reads the new command
+        tool_ctx.tester = DefaultTestRunner(config=tool_ctx.config, runner=tool_ctx.runner)
 
         tool_ctx.runner.push(_make_result(0, "= 100 passed =\n", ""))
         await test_check(worktree_path="/tmp/wt")
@@ -2860,10 +2865,13 @@ class TestConfigDrivenBehavior:
     async def test_merge_worktree_uses_config_test_command(self, tool_ctx, tmp_path):
         """S9: Merge's test gate runs config.test_check.command."""
         from autoskillit.config import TestCheckConfig
+        from autoskillit.execution import DefaultTestRunner
 
         tool_ctx.config = AutomationConfig(
             test_check=TestCheckConfig(command=["make", "test"], timeout=120)
         )
+        # Re-create tester with updated config so it reads the new command
+        tool_ctx.tester = DefaultTestRunner(config=tool_ctx.config, runner=tool_ctx.runner)
 
         wt = tmp_path / "worktree"
         wt.mkdir()
@@ -3002,7 +3010,7 @@ class TestDeleteDirectoryContents:
         assert len(result.deleted) == 3
 
     @pytest.mark.asyncio
-    async def test_reset_test_dir_returns_partial_failure_json(self, tmp_path):
+    async def test_reset_test_dir_returns_partial_failure_json(self, tool_ctx, tmp_path):
         """1e: reset_test_dir returns structured JSON on partial failure."""
         workspace = tmp_path / "workspace"
         workspace.mkdir()
@@ -3014,11 +3022,10 @@ class TestDeleteDirectoryContents:
             failed=[("bad_dir", "PermissionError: denied")],
             skipped=[],
         )
-        with patch(
-            "autoskillit.server.tools_workspace._delete_directory_contents",
-            return_value=mock_result,
-        ):
-            result = json.loads(await reset_test_dir(test_dir=str(workspace), force=False))
+        tool_ctx.workspace_mgr = type(
+            "MockWM", (), {"delete_contents": lambda self, d, preserve=None: mock_result}
+        )()
+        result = json.loads(await reset_test_dir(test_dir=str(workspace), force=False))
 
         assert result["success"] is False
         assert result["failed"] == [{"path": "bad_dir", "error": "PermissionError: denied"}]
@@ -3040,11 +3047,10 @@ class TestDeleteDirectoryContents:
             failed=[("bad_dir", "PermissionError: denied")],
             skipped=[".cache"],
         )
-        with patch(
-            "autoskillit.server.tools_workspace._delete_directory_contents",
-            return_value=mock_result,
-        ):
-            result = json.loads(await reset_workspace(test_dir=str(workspace)))
+        tool_ctx.workspace_mgr = type(
+            "MockWM", (), {"delete_contents": lambda self, d, preserve=None: mock_result}
+        )()
+        result = json.loads(await reset_workspace(test_dir=str(workspace)))
 
         assert result["success"] is False
         assert result["failed"] == [{"path": "bad_dir", "error": "PermissionError: denied"}]
@@ -3649,7 +3655,8 @@ class TestReadDb:
             )
         )
         assert "error" in result
-        assert "forbidden" in result["error"].lower() or "SELECT" in result["error"]
+        err_lower = result["error"].lower()
+        assert "forbidden" in err_lower or "select" in err_lower or "not authorized" in err_lower
 
     @pytest.mark.asyncio
     async def test_rejects_drop(self, sample_db):
@@ -4951,15 +4958,16 @@ class TestBuildSkillResultCompleted:
 
 
 class TestRunSkillRetryConsolidation:
-    """run_skill_retry delegates to _run_headless_core with retry-specific config."""
+    """run_skill_retry delegates to ctx.executor.run() with retry-specific config."""
 
     @pytest.fixture(autouse=True)
     def _setup_ctx(self, tool_ctx):
         """Initialize ToolContext for run_skill_retry consolidation tests."""
+        self._tool_ctx = tool_ctx
 
     @pytest.mark.asyncio
     async def test_run_skill_retry_passes_add_dir_to_subprocess(self):
-        """add_dir is forwarded to _run_headless_core (was silently absent before)."""
+        """add_dir is forwarded to ctx.executor.run()."""
         mock_result = SkillResult(
             success=True,
             result="ok",
@@ -4971,11 +4979,11 @@ class TestRunSkillRetryConsolidation:
             retry_reason=RetryReason.NONE,
             stderr="",
         )
-        mock_core = AsyncMock(return_value=mock_result)
-        with patch("autoskillit.server.tools_execution.run_headless_core", mock_core):
-            await run_skill_retry("/investigate something", "/tmp", add_dir="/extra/dir")
+        mock_run = AsyncMock(return_value=mock_result)
+        self._tool_ctx.executor = type("MockExec", (), {"run": mock_run})()
+        await run_skill_retry("/investigate something", "/tmp", add_dir="/extra/dir")
 
-        assert mock_core.call_args.kwargs.get("add_dir") == "/extra/dir"
+        assert mock_run.call_args.kwargs.get("add_dir") == "/extra/dir"
 
     @pytest.mark.asyncio
     async def test_run_skill_retry_uses_retry_timeout_not_skill_timeout(self):
@@ -4991,11 +4999,11 @@ class TestRunSkillRetryConsolidation:
             retry_reason=RetryReason.NONE,
             stderr="",
         )
-        mock_core = AsyncMock(return_value=mock_result)
-        with patch("autoskillit.server.tools_execution.run_headless_core", mock_core):
-            await run_skill_retry("/investigate something", "/tmp")
+        mock_run = AsyncMock(return_value=mock_result)
+        self._tool_ctx.executor = type("MockExec", (), {"run": mock_run})()
+        await run_skill_retry("/investigate something", "/tmp")
 
-        assert mock_core.call_args.kwargs.get("timeout") == 7200
+        assert mock_run.call_args.kwargs.get("timeout") == 7200
 
 
 class TestMarkerCrossValidation:
@@ -5348,8 +5356,8 @@ class TestMigrationSuggestions:
         script.write_text(_MINIMAL_SCRIPT_YAML)
 
         result = json.loads(await validate_recipe(script_path=str(script)))
-        assert "semantic" in result
-        rules = [s["rule"] for s in result["semantic"]]
+        assert "findings" in result
+        rules = [s["rule"] for s in result["findings"]]
         assert "outdated-recipe-version" in rules
 
 
@@ -5413,8 +5421,8 @@ class TestMigrationSuppression:
         tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=["test-script"]))
 
         result = json.loads(await validate_recipe(script_path=str(script)))
-        assert "semantic" in result
-        rules = [s["rule"] for s in result["semantic"]]
+        assert "findings" in result
+        rules = [s["rule"] for s in result["findings"]]
         assert "outdated-recipe-version" in rules
 
 
@@ -6577,3 +6585,101 @@ class TestGatedToolObservability:
             await run_skill_retry("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
         )
         assert result["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# Service routing integration tests (REQ-IMP-003)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) -> None:
+    """run_skill routes through ctx.executor.run(), not run_headless_core directly."""
+    from autoskillit.core import SkillResult
+
+    calls = []
+
+    class MockExecutor:
+        async def run(
+            self,
+            skill_command: str,
+            cwd: str,
+            *,
+            model: str = "",
+            step_name: str = "",
+            add_dir: str = "",
+            timeout: float | None = None,
+            stale_threshold: float | None = None,
+        ) -> SkillResult:
+            calls.append((skill_command, cwd))
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/test skill", "/tmp")
+    assert calls == [("/test skill", "/tmp")]
+
+
+@pytest.mark.asyncio
+async def test_tools_workspace_routes_through_tester(tool_ctx, monkeypatch) -> None:
+    """test_check routes through ctx.tester.run(), not _run_subprocess directly."""
+    calls = []
+
+    class MockTester:
+        async def run(self, cwd: Path) -> tuple[bool, str]:
+            calls.append(cwd)
+            return (True, "1 passed")
+
+    tool_ctx.tester = MockTester()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_workspace import test_check
+
+    result = await test_check("/tmp/worktree")
+    assert json.loads(result)["passed"] is True
+    assert calls == [Path("/tmp/worktree")]
+
+
+@pytest.mark.asyncio
+async def test_tools_status_routes_through_db_reader(tool_ctx, monkeypatch, tmp_path) -> None:
+    """read_db routes through ctx.db_reader.query()."""
+    calls = []
+
+    class MockDbReader:
+        def query(
+            self,
+            db_path: str,
+            sql: str,
+            params: list | dict,
+            timeout_sec: int,
+            max_rows: int,
+        ) -> dict:
+            calls.append(sql)
+            return {"rows": [], "count": 0}
+
+    tool_ctx.db_reader = MockDbReader()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_status import read_db
+
+    db_path = str(tmp_path / "test.db")
+    # Create an empty sqlite db so path-exists check passes
+    import sqlite3 as _sqlite3
+
+    _sqlite3.connect(db_path).close()
+    await read_db(db_path, "SELECT 1")
+    assert calls == ["SELECT 1"]

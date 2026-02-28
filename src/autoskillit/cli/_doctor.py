@@ -5,14 +5,9 @@ from __future__ import annotations
 import json
 import shutil
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 
-
-class Severity(StrEnum):
-    OK = "ok"
-    WARNING = "warning"
-    ERROR = "error"
+from autoskillit.core import Severity
 
 
 @dataclass
@@ -219,9 +214,9 @@ def run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> N
 
     # Check 7: Script version health
     from autoskillit import __version__
-    from autoskillit.core.types import RecipeSource
-    from autoskillit.migration.store import FailureStore, default_store_path
-    from autoskillit.recipe.io import list_recipes as _list_all_recipes
+    from autoskillit.core import RecipeSource
+    from autoskillit.migration import FailureStore, default_store_path
+    from autoskillit.recipe import list_recipes as _list_all_recipes
 
     _all_result = _list_all_recipes(Path.cwd())
     scripts_result_items = [r for r in _all_result.items if r.source == RecipeSource.PROJECT]

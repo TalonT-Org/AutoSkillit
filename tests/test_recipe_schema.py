@@ -36,9 +36,10 @@ def test_recipe_schema_has_zero_non_stdlib_logic_imports() -> None:
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
-            assert "autoskillit" not in node.module or node.module == "autoskillit.core.types", (
-                f"recipe/schema.py imports non-types autoskillit module: {node.module}"
-            )
+            assert "autoskillit" not in node.module or node.module in (
+                "autoskillit.core.types",
+                "autoskillit.core",
+            ), f"recipe/schema.py imports non-types autoskillit module: {node.module}"
 
 
 def test_autoskillit_version_key_constant_exists() -> None:

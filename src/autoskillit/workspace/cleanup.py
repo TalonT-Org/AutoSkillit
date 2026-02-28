@@ -1,37 +1,14 @@
-"""Worktree and directory teardown utilities.
-
-No dependency on MCP, config, types, or other autoskillit modules beyond _logging.py.
-"""
+"""Worktree and directory teardown utilities."""
 
 from __future__ import annotations
 
 import os
 import shutil
-from dataclasses import dataclass, field
 from pathlib import Path
 
-from autoskillit.core.logging import get_logger
+from autoskillit.core import CleanupResult, get_logger
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class CleanupResult:
-    deleted: list[str] = field(default_factory=list)
-    failed: list[tuple[str, str]] = field(default_factory=list)
-    skipped: list[str] = field(default_factory=list)
-
-    @property
-    def success(self) -> bool:
-        return len(self.failed) == 0
-
-    def to_dict(self) -> dict:  # type: ignore[type-arg]
-        return {
-            "success": self.success,
-            "deleted": self.deleted,
-            "failed": [{"path": p, "error": e} for p, e in self.failed],
-            "skipped": self.skipped,
-        }
 
 
 def _delete_directory_contents(
@@ -60,3 +37,14 @@ def _delete_directory_contents(
         except OSError as exc:
             result.failed.append((item_name, f"{type(exc).__name__}: {exc}"))
     return result
+
+
+class DefaultWorkspaceManager:
+    """Concrete WorkspaceManager backed by _delete_directory_contents."""
+
+    def delete_contents(
+        self,
+        directory: Path,
+        preserve: set[str] | None = None,
+    ) -> CleanupResult:
+        return _delete_directory_contents(directory, preserve)

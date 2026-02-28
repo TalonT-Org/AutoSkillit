@@ -14,11 +14,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core.logging import get_logger
-from autoskillit.core.types import FailureRecord, RetryReason, TerminationReason
+from autoskillit.core import FailureRecord, RetryReason, SkillResult, TerminationReason, get_logger
 from autoskillit.execution.session import (
     ClaudeSessionResult,
-    SkillResult,
     _compute_retry,
     _compute_success,
     _truncate,
@@ -27,8 +25,7 @@ from autoskillit.execution.session import (
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.core.types import SubprocessResult
-    from autoskillit.pipeline.audit import AuditLog
+    from autoskillit.core import AuditStore, SubprocessResult
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
@@ -68,7 +65,7 @@ def _capture_failure(
     needs_retry: bool,
     retry_reason: str,
     stderr: str,
-    audit: AuditLog | None,
+    audit: AuditStore | None,
 ) -> None:
     """Record a failure in the audit log. No-op if skill_command is empty or audit is None."""
     if not skill_command or audit is None:
@@ -101,7 +98,7 @@ def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
     skill_command: str = "",
-    audit: AuditLog | None = None,
+    audit: AuditStore | None = None,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     if result.termination == TerminationReason.STALE:
@@ -271,3 +268,35 @@ async def run_headless_core(
     if step_name:
         ctx.token_log.record(step_name, skill_result.token_usage)
     return skill_result
+
+
+class DefaultHeadlessExecutor:
+    """Concrete HeadlessExecutor backed by run_headless_core."""
+
+    def __init__(self, ctx: ToolContext) -> None:
+        self._ctx = ctx
+
+    async def run(
+        self,
+        skill_command: str,
+        cwd: str,
+        *,
+        model: str = "",
+        step_name: str = "",
+        add_dir: str = "",
+        timeout: float | None = None,
+        stale_threshold: float | None = None,
+    ) -> SkillResult:
+        cfg = self._ctx.config.run_skill
+        effective_timeout = timeout if timeout is not None else cfg.timeout
+        effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
+        return await run_headless_core(
+            skill_command,
+            cwd,
+            self._ctx,
+            model=model,
+            step_name=step_name,
+            add_dir=add_dir,
+            timeout=effective_timeout,
+            stale_threshold=effective_stale,
+        )

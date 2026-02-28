@@ -116,7 +116,7 @@ steps:
     on_success: test
     on_failure: escalate
     retry:
-      max_attempts: 1
+      max_attempts: 0
       on: needs_retry
       on_exhausted: retry_worktree
     note: "Extracts worktree_path and implementation_ref from result for use in subsequent steps."

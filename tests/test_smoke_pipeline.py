@@ -121,14 +121,23 @@ class SmokeExecutor:
         retry = step_def["retry"]
         max_attempts = retry.get("max_attempts", 3)
         retry_field = retry["on"]
-
         tool_fn = _TOOL_MAP[step_def["tool"]]
-        for _ in range(max_attempts):
+
+        # Always execute at least once; max_attempts controls additional retries.
+        # max_attempts=0: run once, if retry_field fires → exhausted immediately.
+        # max_attempts=N: run once, then retry up to N-1 more times.
+        raw_result = await tool_fn(**args)
+        result = json.loads(raw_result)
+        if not result.get(retry_field, False):
+            return result  # succeeded on first try
+
+        for _ in range(max_attempts - 1):
             raw_result = await tool_fn(**args)
             result = json.loads(raw_result)
             if not result.get(retry_field, False):
                 return result
-        return result  # type: ignore[possibly-undefined]
+
+        return result  # exhausted — always defined
 
     def _interpolate(self, with_args: dict) -> dict:
         """Resolve ${{ inputs.X }} and ${{ context.X }} references."""
@@ -171,6 +180,12 @@ class SmokeExecutor:
             if value in routes:
                 return routes[value]
             return step_def.get("on_failure")
+
+        # If a retry block declared on_exhausted and the retry condition still fires,
+        # route to on_exhausted rather than on_failure.
+        retry = step_def.get("retry")
+        if retry and retry.get("on_exhausted") and result.get(retry.get("on", ""), False):
+            return retry["on_exhausted"]
 
         if self._is_success(step_def, result):
             return step_def.get("on_success")
@@ -351,6 +366,48 @@ class TestSmokeScriptValidation:
             result = await executor._execute(step_def)
         assert call_count == 2
         assert result["success"] is True
+
+    async def test_executor_max_attempts_zero_routes_to_on_exhausted(self) -> None:
+        """With max_attempts=0, the first needs_retry result must route to on_exhausted."""
+        steps = {
+            "implement": {
+                "tool": "run_skill_retry",
+                "with": {"skill_command": "/autoskillit:implement-worktree-no-merge plan.md"},
+                "retry": {"max_attempts": 0, "on": "needs_retry", "on_exhausted": "retry_wt"},
+                "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                "on_success": "done",
+                "on_failure": "done",
+            },
+            "retry_wt": {"action": "stop", "message": "reached retry_wt"},
+            "done": {"action": "stop", "message": "reached done"},
+        }
+        call_log: list[dict] = []
+
+        async def mock_run_skill_retry(**kwargs: object) -> str:
+            call_log.append(dict(kwargs))
+            return json.dumps(
+                {
+                    "success": False,
+                    "needs_retry": True,
+                    "result": "context limit",
+                    "retry_reason": "resume",
+                    "session_id": "",
+                    "subtype": "error_max_turns",
+                    "is_error": True,
+                    "exit_code": -1,
+                    "stderr": "",
+                    "token_usage": None,
+                }
+            )
+
+        with patch.dict(_TOOL_MAP, {"run_skill_retry": mock_run_skill_retry}):
+            executor = SmokeExecutor(steps, inputs={})
+            terminal_step, message = await executor.run(start="implement")
+
+        assert len(call_log) == 1, "Tool must be called exactly once with max_attempts=0"
+        assert terminal_step == "retry_wt", (
+            f"Expected on_exhausted route to 'retry_wt', got '{terminal_step}': {message}"
+        )
 
     async def test_script_has_collect_on_branch_input(self, smoke_project: Path) -> None:
         result = json.loads(await load_recipe(name="smoke-test"))

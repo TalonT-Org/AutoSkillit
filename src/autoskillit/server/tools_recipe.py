@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 import json
 from pathlib import Path
 
@@ -10,12 +9,8 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit import __version__
-from autoskillit.core.logging import get_logger
-from autoskillit.migration.engine import MigrationFile, default_migration_engine
-from autoskillit.migration.loader import applicable_migrations
-from autoskillit.migration.store import FailureStore, default_store_path
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
+from autoskillit.core import get_logger
+from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
 from autoskillit.server.helpers import _require_enabled
 
@@ -41,11 +36,12 @@ async def list_recipes() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
-    from autoskillit.recipe.io import format_recipe_list_response
-    from autoskillit.recipe.io import list_recipes as _list_recipes
+    from autoskillit.server import _ctx
 
-    result = _list_recipes(Path.cwd())
-    return json.dumps(format_recipe_list_response(result))
+    if _ctx is None or _ctx.recipes is None:
+        return json.dumps([])
+    result = _ctx.recipes.list_all(Path.cwd())
+    return json.dumps(result)
 
 
 @mcp.tool(tags={"automation"})
@@ -197,100 +193,13 @@ async def load_recipe(name: str) -> str:
     ``suggestions`` (list of semantic findings, possibly empty) keys.
     On error: JSON with ``error`` key.
     """
-    from autoskillit.core.io import YAMLError, load_yaml
-    from autoskillit.recipe.contracts import (
-        check_contract_staleness,
-        load_recipe_card,
-        stale_to_suggestions,
-        validate_recipe_cards,
-    )
-    from autoskillit.recipe.io import _parse_recipe, find_recipe_by_name
-    from autoskillit.recipe.validator import (
-        filter_version_rule,
-        findings_to_dicts,
-        run_semantic_rules,
-    )
-
-    _match = find_recipe_by_name(name, Path.cwd())
-    if _match is None:
-        return json.dumps({"error": f"No recipe named '{name}' found"})
-    content = _match.path.read_text()
-
-    # Resolve migration suppression list once before the try block.
-    # Ungated tool: gracefully handle missing context (e.g. tests without tool_ctx).
     from autoskillit.server import _ctx
 
-    _migration_suppressed: list[str] = _ctx.config.migration.suppressed if _ctx is not None else []
-
-    suggestions: list[dict[str, str]] = []
-    try:
-        data = load_yaml(content)
-        if isinstance(data, dict) and "steps" in data:
-            recipe = _parse_recipe(data)
-
-            findings = run_semantic_rules(recipe)
-            semantic_suggestions = findings_to_dicts(findings)
-
-            if name in _migration_suppressed:
-                semantic_suggestions = filter_version_rule(semantic_suggestions)
-            suggestions.extend(semantic_suggestions)
-
-            # Contract validation
-            recipes_dir = Path.cwd() / ".autoskillit" / "recipes"
-            contract = load_recipe_card(name, recipes_dir)
-
-            if contract:
-                contract_findings = validate_recipe_cards(recipe, contract)
-                suggestions.extend(contract_findings)
-
-                # Staleness check
-                stale = check_contract_staleness(contract)
-                suggestions.extend(stale_to_suggestions(stale))
-    except YAMLError as exc:
-        logger.warning(
-            "Recipe YAML parse error",
-            name=name,
-            exc_info=True,
-        )
-        suggestions.append(
-            {
-                "rule": "validation-error",
-                "severity": "error",
-                "step": "(validation-pipeline)",
-                "message": f"YAML parse error: {exc}",
-            }
-        )
-    except ValueError as exc:
-        logger.warning(
-            "Recipe structure invalid",
-            name=name,
-            exc_info=True,
-        )
-        suggestions.append(
-            {
-                "rule": "validation-error",
-                "severity": "error",
-                "step": "(validation-pipeline)",
-                "message": f"Invalid recipe structure: {exc}",
-            }
-        )
-    except (FileNotFoundError, OSError) as exc:
-        logger.warning(
-            "Recipe file not found or unreadable",
-            name=name,
-            exc_info=True,
-        )
-        suggestions.append(
-            {
-                "rule": "validation-error",
-                "severity": "error",
-                "step": "(validation-pipeline)",
-                "message": f"File error: {exc}",
-            }
-        )
-    # Unexpected exceptions (AttributeError, RuntimeError, etc.) propagate uncaught
-
-    return json.dumps({"content": content, "suggestions": suggestions})
+    if _ctx is None or _ctx.recipes is None:
+        return json.dumps({"error": "Server not initialized"})
+    suppressed = _ctx.config.migration.suppressed
+    result = _ctx.recipes.load_and_validate(name, Path.cwd(), suppressed=suppressed)
+    return json.dumps(result)
 
 
 @mcp.tool(tags={"automation"})
@@ -320,59 +229,12 @@ async def validate_recipe(script_path: str) -> str:
     Args:
         script_path: Absolute path to the .yaml recipe file to validate.
     """
-    from autoskillit.core.io import YAMLError, load_yaml
-    from autoskillit.recipe.contracts import load_recipe_card, validate_recipe_cards
-    from autoskillit.recipe.io import _parse_recipe
-    from autoskillit.recipe.validator import (
-        analyze_dataflow,
-        build_quality_dict,
-        compute_recipe_validity,
-        findings_to_dicts,
-        run_semantic_rules,
-    )
-    from autoskillit.recipe.validator import (
-        validate_recipe as _validate_recipe,
-    )
+    from autoskillit.server import _ctx
 
-    path = Path(script_path)
-    if not path.is_file():
-        return json.dumps({"error": f"File not found: {script_path}"})
-
-    try:
-        data = load_yaml(path)
-    except YAMLError as exc:
-        return json.dumps({"error": f"YAML parse error: {exc}"})
-
-    if not isinstance(data, dict):
-        return json.dumps({"error": "File must contain a YAML mapping"})
-
-    recipe = _parse_recipe(data)
-    errors = _validate_recipe(recipe)
-    report = analyze_dataflow(recipe)
-    semantic_findings = run_semantic_rules(recipe)
-
-    quality = build_quality_dict(report)
-    semantic = findings_to_dicts(semantic_findings)
-
-    # Contract validation
-    contract_findings: list[dict] = []  # type: ignore[type-arg]
-    recipes_dir = path.parent
-    recipe_name = path.stem
-    contract = load_recipe_card(recipe_name, recipes_dir)
-    if contract:
-        contract_findings = validate_recipe_cards(recipe, contract)
-
-    valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
-
-    return json.dumps(
-        {
-            "valid": valid,
-            "errors": errors,
-            "quality": quality,
-            "semantic": semantic,
-            "contracts": contract_findings,
-        }
-    )
+    if _ctx is None or _ctx.recipes is None:
+        return json.dumps({"valid": False, "errors": ["Server not initialized"]})
+    result = _ctx.recipes.validate_from_path(Path(script_path))
+    return json.dumps(result)
 
 
 @mcp.tool(tags={"automation"})
@@ -412,62 +274,21 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     except (RuntimeError, AttributeError):
         pass
 
-    from autoskillit.core.io import load_yaml
-    from autoskillit.execution.headless import run_headless_core
-    from autoskillit.recipe.contracts import generate_recipe_card
-    from autoskillit.recipe.io import _parse_recipe, find_recipe_by_name
-    from autoskillit.server import _ctx, _get_ctx
+    from autoskillit.server import _get_config, _get_ctx
 
-    project_dir = Path.cwd()
-    _match = find_recipe_by_name(name, project_dir)
-    if _match is None:
-        return json.dumps({"error": f"No recipe named '{name}' found"})
+    tool_ctx = _get_ctx()
 
-    recipes_dir = project_dir / ".autoskillit" / "recipes"
-    recipe_path = recipes_dir / f"{name}.yaml"
-    content = _match.path.read_text()
-    data = load_yaml(content)
-    recipe = _parse_recipe(data)
-
-    _migration_suppressed: list[str] = _ctx.config.migration.suppressed if _ctx is not None else []
-    migrations = applicable_migrations(recipe.version, __version__)
-    if not migrations or name in _migration_suppressed:
+    # Check suppression list before attempting migration
+    if name in _get_config().migration.suppressed:
         return json.dumps({"status": "up_to_date", "name": name})
 
-    temp_dir = project_dir / ".autoskillit" / "temp"
-    failure_store = FailureStore(default_store_path(project_dir))
-    engine = default_migration_engine()
-    mfile = MigrationFile(
-        name=name,
-        path=recipe_path,
-        file_type="recipe",
-        current_version=recipe.version,
-    )
-    _bound_headless = functools.partial(run_headless_core, ctx=_get_ctx())
-    migration_result = await engine.migrate_file(
-        mfile,
-        run_headless=_bound_headless,
-        temp_dir=temp_dir,
-    )
+    if tool_ctx.recipes is None:
+        return json.dumps({"error": "Recipe repository not configured"})
+    recipe = tool_ctx.recipes.find(name, Path.cwd())
+    if recipe is None:
+        return json.dumps({"error": f"No recipe named '{name}' found"})
 
-    if migration_result.success:
-        failure_store.clear(name)
-        try:
-            if recipe_path.exists():
-                generate_recipe_card(recipe_path, recipes_dir)
-        except Exception:
-            logger.warning(
-                "migrate_recipe contract card generation failed",
-                name=name,
-                exc_info=True,
-            )
-        return json.dumps({"status": "migrated", "name": name})
-
-    failure_store.record(
-        name=name,
-        file_path=recipe_path,
-        file_type="recipe",
-        error=migration_result.error or "unknown",
-        retries_attempted=migration_result.retries_attempted,
-    )
-    return json.dumps({"error": f"Migration failed: {migration_result.error}", "name": name})
+    if tool_ctx.migrations is None:
+        return json.dumps({"error": "Migration service not configured", "name": name})
+    result = await tool_ctx.migrations.migrate(recipe.path)
+    return json.dumps(result)

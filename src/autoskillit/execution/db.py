@@ -10,7 +10,7 @@ import re
 import sqlite3
 import threading
 
-from autoskillit.core.logging import get_logger
+from autoskillit.core import get_logger
 
 logger = get_logger(__name__)
 
@@ -108,3 +108,17 @@ def _execute_readonly_query(
             timer.cancel()
     finally:
         conn.close()
+
+
+class DefaultDatabaseReader:
+    """Concrete DatabaseReader backed by _execute_readonly_query."""
+
+    def query(
+        self,
+        db_path: str,
+        sql: str,
+        params: list | dict,  # type: ignore[type-arg]
+        timeout_sec: int,
+        max_rows: int,
+    ) -> dict:  # type: ignore[type-arg]
+        return _execute_readonly_query(db_path, sql, params, timeout_sec, max_rows)

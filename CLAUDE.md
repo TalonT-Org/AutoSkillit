@@ -118,7 +118,8 @@ src/autoskillit/
 │   ├── tools_git.py         #   merge_worktree, classify_fix tool handlers
 │   ├── tools_recipe.py      #   migrate_recipe, load_recipe, list_recipes, validate_recipe tool handlers
 │   ├── tools_status.py      #   kitchen_status, get_pipeline_report, get_token_summary tool handlers
-│   └── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace, read_db tool handlers
+│   ├── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace, read_db tool handlers
+│   └── _factory.py              #   Composition Root: make_context() wires ToolContext
 ├── cli/                     # L3 CLI sub-package
 │   ├── __init__.py          #   Re-exports main entry point
 │   ├── _doctor.py           #   Doctor command — 7 project setup checks
@@ -168,6 +169,7 @@ tests/
 ├── test_recipe_schema.py
 ├── test_recipe_validator.py
 ├── test_server.py                       # Server unit tests
+├── test_service_wrappers.py             # REQ-ARCH-006/007: DefaultRecipeRepository and DefaultMigrationService behavior
 ├── test_session_result.py
 ├── test_skill_resolver.py               # Skill resolution tests
 ├── test_smoke_pipeline.py
@@ -194,6 +196,7 @@ temp/                        # Temporary/working files (gitignored)
   * **server/tools_recipe.py**: MCP tool handlers for `migrate_recipe`, `load_recipe`, `list_recipes`, and `validate_recipe`.
   * **server/tools_status.py**: MCP tool handlers for `kitchen_status`, `get_pipeline_report`, and `get_token_summary`.
   * **server/tools_workspace.py**: MCP tool handlers for `test_check`, `reset_test_dir`, `reset_workspace`, and `read_db`.
+  * **server/_factory.py**: Composition Root. `make_context(config, *, runner, plugin_dir)` creates a fully-wired `ToolContext` — the only location that legally instantiates all service fields simultaneously. Imported by `cli/app.py serve()` and tests that need an isolated context without the full server import chain.
   * **pipeline/audit.py**: Pipeline failure tracking. `AuditLog` captures every non-success result from `_build_skill_result()` into an in-memory list. `_audit_log` is the module-level singleton used by `server/__init__.py`. `get_pipeline_report` retrieves the accumulated failures.
   * **pipeline/context.py**: ToolContext DI container. Holds `config`, `audit`, `token_log`, `gate`, `plugin_dir`, `runner`. Passed to `server._initialize(ctx)` at startup. All gated tools access config and gate state through the context instead of module-level singletons.
   * **pipeline/gate.py**: Gate policy layer. `GateState` dataclass with `enabled` flag. `GATED_TOOLS` and `UNGATED_TOOLS` frozensets (the source of truth for the MCP tool registry). `gate_error_result()` builds standard disabled-gate error JSON.

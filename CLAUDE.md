@@ -59,7 +59,7 @@ Install hooks after cloning: `pre-commit install`
 
 Hooks run automatically on commit. To run manually: `pre-commit run --all-files`
 
-Configured hooks: ruff format (auto-fix), ruff check (auto-fix), mypy type checking.
+Configured hooks: ruff format (auto-fix), ruff check (auto-fix), mypy type checking, uv lock check, gitleaks secret scanning.
 
 ## **6. Architecture**
 

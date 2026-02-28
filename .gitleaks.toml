@@ -1,0 +1,29 @@
+title = "AutoSkillit gitleaks configuration"
+
+[[allowlists]]
+description = "Frozenset of keyword strings in test_architecture.py AST analysis — not real secrets"
+condition = "AND"
+paths = ['''tests/test_architecture\.py''']
+regexTarget = "line"
+regexes = ['''_SENSITIVE_KEYWORDS\s*=\s*frozenset''']
+
+[[allowlists]]
+description = "GitHub Actions expression syntax in CI workflows — not a real token value"
+condition = "AND"
+paths = ['''\.github/workflows/''']
+regexTarget = "line"
+regexes = ['''\$\{\{\s*secrets\.GITHUB_TOKEN\s*\}\}''']
+
+[[allowlists]]
+description = "Env var name reference in docstring — no value present"
+condition = "AND"
+paths = ['''tests/test_smoke_pipeline\.py''']
+regexTarget = "line"
+regexes = ['''Requires\s+``ANTHROPIC_API_KEY``''']
+
+[[allowlists]]
+description = "Taskfile task description references env var name only — no value assigned"
+condition = "AND"
+paths = ['''Taskfile\.ya?ml''']
+regexTarget = "line"
+regexes = ['''desc:.*ANTHROPIC_API_KEY''']

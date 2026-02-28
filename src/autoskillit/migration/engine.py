@@ -6,11 +6,12 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from autoskillit import __version__
 from autoskillit.core.io import _atomic_write, dump_yaml_str, load_yaml
 from autoskillit.core.logging import get_logger
-from autoskillit.execution.session import SkillResult
+from autoskillit.core.types import SkillResult
 from autoskillit.migration.loader import applicable_migrations
 from autoskillit.recipe.io import load_recipe as _parse_recipe
 from autoskillit.recipe.loader import parse_recipe_metadata
@@ -299,3 +300,39 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
 def default_migration_engine() -> MigrationEngine:
     """Create a MigrationEngine with all bundled adapters registered."""
     return MigrationEngine([RecipeMigrationAdapter(), ContractMigrationAdapter()])
+
+
+class DefaultMigrationService:
+    """Concrete MigrationService wrapping MigrationEngine.migrate_file."""
+
+    def __init__(self, engine: MigrationEngine) -> None:
+        self._engine = engine
+
+    async def migrate(self, recipe_path: Path) -> dict[str, Any]:
+        """Apply pending migration notes to the recipe file at recipe_path.
+
+        Discovers the recipe as a MigrationFile, delegates to migrate_file with
+        a no-op run_headless callable (callers needing LLM migration must wire
+        in a real run_headless via the MigrationEngine adapters directly).
+        Returns a dict with 'success', 'name', and optional 'error' keys.
+        """
+        from autoskillit.recipe.loader import parse_recipe_metadata
+
+        meta = parse_recipe_metadata(recipe_path)
+        file = MigrationFile(
+            name=meta.name,
+            path=recipe_path,
+            file_type="recipe",
+            current_version=meta.version,
+        )
+
+        async def _no_op_headless(*args: Any, **kwargs: Any) -> Any:
+            raise NotImplementedError(
+                "DefaultMigrationService.migrate does not support LLM-driven migration. "
+                "Use the migrate_recipe MCP tool directly."
+            )
+
+        result = await self._engine.migrate_file(
+            file, run_headless=_no_op_headless, temp_dir=recipe_path.parent
+        )
+        return {"success": result.success, "name": result.name, "error": result.error}

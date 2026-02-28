@@ -15,10 +15,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core.logging import get_logger
-from autoskillit.core.types import FailureRecord, RetryReason, TerminationReason
+from autoskillit.core.types import FailureRecord, RetryReason, SkillResult, TerminationReason
 from autoskillit.execution.session import (
     ClaudeSessionResult,
-    SkillResult,
     _compute_retry,
     _compute_success,
     _truncate,
@@ -271,3 +270,28 @@ async def run_headless_core(
     if step_name:
         ctx.token_log.record(step_name, skill_result.token_usage)
     return skill_result
+
+
+class DefaultHeadlessExecutor:
+    """Concrete HeadlessExecutor backed by run_headless_core."""
+
+    def __init__(self, ctx: ToolContext) -> None:
+        self._ctx = ctx
+
+    async def run(
+        self,
+        skill_command: str,
+        cwd: str,
+        *,
+        model: str = "",
+        step_name: str = "",
+        add_dir: str = "",
+    ) -> SkillResult:
+        return await run_headless_core(
+            skill_command,
+            cwd,
+            self._ctx,
+            model=model,
+            step_name=step_name,
+            add_dir=add_dir,
+        )

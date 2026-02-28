@@ -644,11 +644,8 @@ def _check_worktree_retry_creates_new(
 @semantic_rule(
     name="retry-worktree-cwd",
     description=(
-        "retry-worktree steps must run with cwd set to a worktree context variable "
-        "(e.g. context.worktree_path or context.implementation_ref) so the skill "
-        "executes inside the isolated worktree. Using inputs.work_dir or any static "
-        "path causes git operations to run against the user's live project directory, "
-        "making base-branch discovery unreliable."
+        "retry-worktree steps must use cwd pointing to a context variable "
+        "(e.g. context.worktree_path) so git operations run inside the isolated worktree."
     ),
     severity=Severity.ERROR,
 )
@@ -658,8 +655,7 @@ def _check_retry_worktree_cwd(wf: Recipe) -> list[RuleFinding]:
         if step.tool not in SKILL_TOOLS:
             continue
         skill_cmd = step.with_args.get("skill_command", "")
-        skill_name = resolve_skill_name(skill_cmd)
-        if skill_name != "retry-worktree":
+        if resolve_skill_name(skill_cmd) != "retry-worktree":
             continue
         cwd = step.with_args.get("cwd", "")
         if "${{ context." not in cwd:
@@ -668,14 +664,7 @@ def _check_retry_worktree_cwd(wf: Recipe) -> list[RuleFinding]:
                     rule="retry-worktree-cwd",
                     severity=Severity.ERROR,
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' invokes retry-worktree with "
-                        f"cwd='{cwd}'. The cwd must reference a worktree context variable "
-                        f"(e.g. '${{{{ context.worktree_path }}}}'). Using an inputs.* "
-                        f"variable or empty cwd causes git operations to run against the "
-                        f"user's live project directory instead of the isolated worktree, "
-                        f"making base-branch discovery unreliable."
-                    ),
+                    message=f"Step '{step_name}': retry-worktree cwd must use a context variable.",
                 )
             )
     return findings

@@ -157,16 +157,6 @@ async def load_recipe(name: str) -> str:
     - Non-skill steps (test_check, run_cmd, merge_worktree) have no token usage —
       they are not included in get_token_summary output. Do not add rows for them.
 
-    QUOTA GUARD:
-    - At pipeline start, call kitchen_status() and check quota_guard_enabled.
-    - If quota_guard_enabled is true: call check_quota() before EACH run_skill or
-      run_skill_retry step. check_quota is fast (≤10s) and always returns success=true.
-    - If check_quota returns should_sleep=true: call run_cmd with
-      python3 -c "import time; time.sleep(<sleep_seconds>)" and set the run_cmd
-      timeout to sleep_seconds + 30. After run_cmd completes, proceed with run_skill.
-    - If check_quota returns should_sleep=false: proceed with run_skill immediately.
-    - check_quota is a gated tool — kitchen must be open.
-
     ROUTING RULES — MANDATORY:
     - When a tool returns a failure result, you MUST follow the step's on_failure route.
     - When a step fails, route to on_failure — do not use Read, Grep, Glob, Edit,

@@ -39,7 +39,6 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "classify_fix",
         "reset_workspace",
         "migrate_recipe",
-        "check_quota",
         # Clone lifecycle tools (promoted from python: recipe steps)
         "clone_repo",
         "remove_clone",
@@ -56,6 +55,7 @@ UNGATED_TOOLS: frozenset[str] = frozenset(
         "list_recipes",
         "load_recipe",
         "validate_recipe",
+        "check_quota",
     }
 )
 

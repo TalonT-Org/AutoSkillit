@@ -22,8 +22,8 @@ def test_tool_sets_are_disjoint():
 def test_tool_sets_total_count():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    assert len(GATED_TOOLS) == 16  # +3 for clone_repo/remove_clone/push_to_remote, +1 for fetch_github_issue
-    assert len(UNGATED_TOOLS) == 6
+    assert len(GATED_TOOLS) == 15  # clone_repo/remove_clone/push_to_remote/fetch_github_issue; check_quota moved to ungated
+    assert len(UNGATED_TOOLS) == 7
 
 
 def test_gated_tools_contains_expected_names():
@@ -41,7 +41,6 @@ def test_gated_tools_contains_expected_names():
         "classify_fix",
         "reset_workspace",
         "migrate_recipe",
-        "check_quota",
         "clone_repo",
         "remove_clone",
         "push_to_remote",
@@ -50,10 +49,12 @@ def test_gated_tools_contains_expected_names():
     assert GATED_TOOLS == expected
 
 
-def test_check_quota_in_gated_tools():
-    from autoskillit.pipeline.gate import GATED_TOOLS
+def test_check_quota_is_ungated():
+    """check_quota is a passive diagnostic, not a pipeline step — must be always available."""
+    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    assert "check_quota" in GATED_TOOLS
+    assert "check_quota" in UNGATED_TOOLS
+    assert "check_quota" not in GATED_TOOLS
 
 
 def test_gated_and_ungated_are_disjoint_after_addition():
@@ -72,6 +73,7 @@ def test_ungated_tools_contains_expected_names():
         "list_recipes",
         "load_recipe",
         "validate_recipe",
+        "check_quota",
     }
     assert UNGATED_TOOLS == expected
 

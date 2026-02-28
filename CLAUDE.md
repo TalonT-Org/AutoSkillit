@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 22 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, check_quota, clone_repo, remove_clone, push_to_remote, fetch_github_issue + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 16 gated behind MCP prompts for user-only activation, and 19 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 22 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, fetch_github_issue + ungated check_quota, kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 15 gated behind MCP prompts for user-only activation, and 19 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -128,6 +128,10 @@ src/autoskillit/
 │   ├── __init__.py          #   Re-exports main entry point
 │   ├── _doctor.py           #   Doctor command — 7 project setup checks
 │   └── app.py               #   CLI: serve, init, config show, skills, recipes, workspace, doctor
+├── hooks/                   # Claude Code PreToolUse hook scripts
+│   ├── __init__.py
+│   ├── hooks.json           #   Plugin hook registration (auto-discovered by Claude Code)
+│   └── quota_check.py       #   Quota guard hook — blocks run_skill when threshold exceeded
 ├── migrations/              # Data: versioned migration YAML notes
 │   └── __init__.py
 ├── recipes/                 # Bundled recipe YAML definitions
@@ -190,9 +194,9 @@ temp/                        # Temporary/working files (gitignored)
 ### **Key Components**
 
   * **config/settings.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
-  * **cli/app.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `skills list`, `recipes list/show`, `workspace init`, `install`, `upgrade`, `migrate`, `cook`, and `doctor`.
+  * **cli/app.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `quota-status`, `skills list`, `recipes list/show`, `workspace init`, `install`, `upgrade`, `migrate`, `cook`, and `doctor`.
   * **cli/_doctor.py**: CLI support layer: project health checks. `run_doctor()` runs 7 checks: stale MCP servers, duplicate autoskillit registrations, plugin metadata presence, PATH availability, project config existence, version consistency (package vs plugin.json), and recipe migration health (via migration/store.py). Depends on `version.py`, `migration/store.py`, `recipe/io.py`, `core/types.py`. Imported by `cli/app.py`.
-  * **server/__init__.py**: FastMCP server. 16 gated tools require user activation via MCP prompts. 6 ungated tools (`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) are always available. Uses ToolContext DI (`pipeline/context.py`) — single module-level `_ctx: ToolContext | None`. `_initialize(ctx)` wires everything at startup. Gate policy in `pipeline/gate.py`. `version_info()` is public. Registers `recipe://` resource handler. **Ungated vs gated notifications:** Ungated tools accept no `ctx: Context` parameter and emit no MCP progress notifications. This is intentional — they are fast, lightweight reads. MCP notifications are reserved for long-running gated operations. This asymmetry is documented in each ungated tool's docstring.
+  * **server/__init__.py**: FastMCP server. 15 gated tools require user activation via MCP prompts. 7 ungated tools (`check_quota`, `kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) are always available. Uses ToolContext DI (`pipeline/context.py`) — single module-level `_ctx: ToolContext | None`. `_initialize(ctx)` wires everything at startup. Gate policy in `pipeline/gate.py`. `version_info()` is public. Registers `recipe://` resource handler. **Ungated vs gated notifications:** Ungated tools accept no `ctx: Context` parameter and emit no MCP progress notifications. This is intentional — they are fast, lightweight reads. MCP notifications are reserved for long-running gated operations. This asymmetry is documented in each ungated tool's docstring.
   * **server/git.py**: L3 service module for the git merge workflow. `perform_merge(worktree_path, base_branch, *, config, runner)` executes the full merge pipeline: path validation → worktree verification → branch detection → test gate → fetch → rebase → main-repo merge → worktree cleanup. Uses injected `SubprocessRunner` so existing test mocks apply unchanged.
   * **server/helpers.py**: Shared server-layer utilities — worktree environment setup, path normalization, and other helpers shared across `tools_*.py` modules.
   * **server/prompts.py**: MCP prompt handlers for `open_kitchen` and `close_kitchen` activation prompts (user-only, model cannot invoke).
@@ -215,6 +219,7 @@ temp/                        # Temporary/working files (gitignored)
   * **execution/db.py**: Data access layer: read-only SQLite execution with defence-in-depth. Regex pre-validation rejects non-SELECT queries; OS-level `file:...?mode=ro` connection; `set_authorizer` callback blocks any non-SELECT/READ/FUNCTION engine operation. `_execute_readonly_query` is the main entry point. Depends only on `core/logging.py`.
   * **execution/github.py**: GitHub issue fetcher. `DefaultGitHubFetcher` implements `GitHubFetcher` protocol via httpx. `_parse_issue_ref(ref)` parses full URLs and `owner/repo#N` shorthand. `_format_issue_markdown(...)` renders issue data as Markdown. Never raises — all errors returned as `{"success": False, "error": "..."}`. L1 module: depends only on stdlib, httpx, and `core/logging`.
   * **execution/quota.py**: Quota-aware check for long-running pipeline recipes. `QuotaStatus` dataclass. `_read_credentials(path)` reads Bearer token from `~/.claude/.credentials.json`. `_read_cache(path, max_age)` returns fresh status or None. `_write_cache(path, status)` persists to cache (silent on failure). `_fetch_quota(credentials_path)` fetches 5-hour utilization from Anthropic quota API via `httpx`. `check_and_sleep_if_needed(config)` is the main async entry point — returns metadata dict; does NOT sleep. L1 module: depends only on stdlib, httpx, and `core/logging`.
+  * **hooks/quota_check.py**: PreToolUse hook that runs `autoskillit quota-status` before each `run_skill`/`run_skill_retry` call. Blocks with a recovery message if quota threshold is exceeded. Silently approves otherwise. Registered in `.claude/settings.json` by `autoskillit install` and auto-discovered as `hooks/hooks.json` for plugin installs.
   * **workspace/cleanup.py**: Infrastructure layer for directory teardown. `_delete_directory_contents(directory, preserve)` removes all items in a directory except preserved names, recording failures in `CleanupResult` without raising. Depends only on `core/logging.py`.
   * **workspace/clone.py**: Clone-based run isolation for pipeline recipes. `clone_repo(source_dir, run_name)` clones source into `../autoskillit-runs/<run_name>-<timestamp>/` and returns `{"clone_path", "source_dir"}`. `remove_clone(clone_path, keep)` tears down the clone (never raises). `push_to_remote(clone_path, source_dir, branch)` reads the upstream remote URL from source_dir via `git remote get-url origin` (read-only) and pushes from clone_path directly to the remote, never touching source_dir. L1 module: depends only on stdlib and `core/logging`.
   * **workspace/skills.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
@@ -263,11 +268,11 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 | `reset_workspace` | Reset workspace, preserving configured directories |
 | `read_db` | Run read-only SQL query against SQLite database |
 | `migrate_recipe` | Apply pending migration notes to a recipe file (gated) |
-| `check_quota` | Check 5-hour API quota utilization; returns whether a sleep is needed before the next `run_skill` call |
 | `clone_repo` | Clone a source repository into an isolated run directory |
 | `remove_clone` | Remove a pipeline clone directory (best-effort) |
 | `push_to_remote` | Push merged branch from clone to upstream remote |
 | `fetch_github_issue` | Retrieve a GitHub issue as formatted Markdown (auto-call on any GitHub issue reference) |
+| `check_quota` | Passive diagnostic — check 5-hour quota utilization and return whether quota guard would block. Always available. |
 | `kitchen_status` | Return version health and config status (ungated) |
 | `list_recipes` | List pipeline recipes from .autoskillit/recipes/ (ungated) |
 | `load_recipe` | Load a recipe by name as raw YAML — read-only, no migration (ungated) |
@@ -279,13 +284,13 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 
 ### **Tool Activation**
 
-16 tools are gated by default. At the start of a session, the user must type
+15 tools are gated by default. At the start of a session, the user must type
 the `open_kitchen` prompt to activate. The exact prompt name is prefixed by
 Claude Code based on how the server was loaded (e.g. `plugin_autoskillit_autoskillit`
 for plugin installs). This uses MCP prompts (user-only, model cannot invoke)
 and survives `--dangerously-skip-permissions`.
 
-`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, and `get_token_summary` are ungated — available without calling `open_kitchen`.
+`check_quota`, `kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, and `get_token_summary` are ungated — available without calling `open_kitchen`.
 
 ### **Configuration**
 

@@ -260,11 +260,9 @@ async def check_quota(ctx: Context = CurrentContext()) -> str:
             "error": str          # only present on credential/network failure
         }
 
-    This tool is gated — open_kitchen must be active to call it.
+    This tool is always available (not gated by open_kitchen).
+    Quota enforcement is handled automatically by the PreToolUse hook.
     """
-    if (gate := _require_enabled()) is not None:
-        return gate
-
     from autoskillit.server import _get_config
 
     config = _get_config()

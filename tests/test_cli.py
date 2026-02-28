@@ -1384,3 +1384,58 @@ class TestGroupFRefactoring:
         _, content = atomic_calls[0]
         assert "ingredients:" in content
         assert "inputs:" not in content
+
+    def test_quota_status_subcommand_outputs_json(self, monkeypatch, capsys, tmp_path):
+        """quota-status must emit JSON with required keys."""
+
+        async def _mock_check(config):
+            return {"should_sleep": False, "sleep_seconds": 0, "utilization": 45.0}
+
+        monkeypatch.setattr("autoskillit.execution.quota.check_and_sleep_if_needed", _mock_check)
+        monkeypatch.chdir(tmp_path)
+        cli.quota_status()
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert "should_sleep" in data
+        assert "sleep_seconds" in data
+
+    def test_quota_hook_script_exists(self):
+        """The hook script must be present as a runnable module in the installed package."""
+        from pathlib import Path
+
+        import autoskillit
+
+        pkg_dir = Path(autoskillit.__file__).parent
+        hook_script = pkg_dir / "hooks" / "quota_check.py"
+        assert hook_script.exists(), f"Expected hook script at {hook_script}"
+
+    def test_quota_hook_json_exists(self):
+        """The plugin hooks.json must be present for automatic hook registration."""
+        from pathlib import Path
+
+        import autoskillit
+
+        pkg_dir = Path(autoskillit.__file__).parent
+        hooks_json = pkg_dir / "hooks" / "hooks.json"
+        assert hooks_json.exists(), f"Expected hooks.json at {hooks_json}"
+
+    def test_install_writes_pretooluse_hooks(self, tmp_path, monkeypatch):
+        """install must register the quota PreToolUse hook in .claude/settings.json."""
+        settings_path = tmp_path / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True)
+
+        monkeypatch.setattr(
+            "autoskillit.cli.app._claude_settings_path", lambda scope: settings_path
+        )
+        monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
+        monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
+
+        cli.install(scope="local")
+
+        data = json.loads(settings_path.read_text())
+        hooks = data.get("hooks", {})
+        pretooluse = hooks.get("PreToolUse", [])
+        matchers = [h.get("matcher", "") for h in pretooluse]
+        assert any("run_skill" in m for m in matchers), (
+            "PreToolUse hook for run_skill not found in settings.json"
+        )

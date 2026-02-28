@@ -6899,11 +6899,17 @@ async def test_tools_status_routes_through_db_reader(tool_ctx, monkeypatch, tmp_
 
 class TestCheckQuota:
     @pytest.mark.asyncio
-    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+    async def test_check_quota_executes_without_open_kitchen(self, tool_ctx):
+        """check_quota must work even when the gate is closed."""
+        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
+
         tool_ctx.gate = DefaultGateState(enabled=False)
+        # quota_guard.enabled=False avoids real network/credential reads
+        tool_ctx.config = AutomationConfig(quota_guard=QuotaGuardConfig(enabled=False))
         result = json.loads(await check_quota())
-        assert result["success"] is False
-        assert result["subtype"] == "gate_error"
+        # Should return a result (not a gate error)
+        assert result.get("subtype") != "gate_error"
+        assert "should_sleep" in result or result.get("success") is True
 
     @pytest.mark.asyncio
     async def test_disabled_quota_guard_returns_success_no_sleep(self, tool_ctx):

@@ -11,6 +11,7 @@ from pathlib import Path  # noqa: F401 — tests patch autoskillit.cli.Path.home
 
 from autoskillit.cli.app import (
     _build_orchestrator_prompt,
+    _claude_settings_path,
     _ensure_marketplace,
     _generate_config_yaml,
     _print_next_steps,
@@ -24,6 +25,7 @@ from autoskillit.cli.app import (
     install,
     main,
     migrate,
+    quota_status,
     recipes_app,
     recipes_list,
     recipes_show,
@@ -38,6 +40,7 @@ from autoskillit.cli.app import (
 
 __all__ = [
     "_build_orchestrator_prompt",
+    "_claude_settings_path",
     "_ensure_marketplace",
     "_generate_config_yaml",
     "_print_next_steps",
@@ -51,6 +54,7 @@ __all__ = [
     "install",
     "main",
     "migrate",
+    "quota_status",
     "recipes_app",
     "recipes_list",
     "recipes_show",

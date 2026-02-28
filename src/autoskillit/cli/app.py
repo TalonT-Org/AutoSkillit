@@ -190,7 +190,48 @@ def install(*, scope: str = "user"):
         sys.exit(1)
 
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
+    settings_path = _claude_settings_path(scope)
+    _register_quota_hook(settings_path)
     _print_next_steps()
+
+
+def _claude_settings_path(scope: str) -> Path:
+    """Return the Claude Code settings.json path for the given scope."""
+    if scope == "user":
+        return Path.home() / ".claude" / "settings.json"
+    return Path.cwd() / ".claude" / "settings.json"
+
+
+def _register_quota_hook(settings_path: Path) -> None:
+    """Idempotently add the quota PreToolUse hook to .claude/settings.json."""
+    from autoskillit.core.io import _atomic_write
+
+    data: dict = {}
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text())
+        except Exception:
+            pass
+
+    hooks = data.setdefault("hooks", {})
+    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
+
+    MATCHER = "mcp__.*autoskillit.*__run_skill.*"
+    COMMAND = "python3 -m autoskillit.hooks.quota_check"
+    for entry in pretooluse:
+        if entry.get("matcher") == MATCHER or (
+            entry.get("hooks", [{}])[0].get("command") == COMMAND
+        ):
+            return  # already registered
+
+    pretooluse.append(
+        {
+            "matcher": MATCHER,
+            "hooks": [{"type": "command", "command": COMMAND}],
+        }
+    )
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(settings_path, json.dumps(data, indent=2))
 
 
 def _ensure_marketplace() -> Path:
@@ -340,6 +381,19 @@ def migrate(*, check: bool = False):
         "\nRecipes are auto-migrated when loaded. "
         "Use `--check` in CI to gate on pending migrations."
     )
+
+
+@app.command
+def quota_status() -> None:
+    """Check current 5-hour quota utilization. Exits 0 always; outputs JSON."""
+    import asyncio
+
+    from autoskillit.config import load_config
+    from autoskillit.execution.quota import check_and_sleep_if_needed
+
+    config = load_config(Path.cwd())
+    result = asyncio.run(check_and_sleep_if_needed(config.quota_guard))
+    print(json.dumps(result))
 
 
 @config_app.command(name="show")

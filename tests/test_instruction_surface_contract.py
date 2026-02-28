@@ -384,3 +384,17 @@ class TestClaudeMdConfigSurfaceContract:
             f"does not match settings.py default ({default_cmd!r}). "
             f"Update the config table row for test_check/command in CLAUDE.md."
         )
+
+
+class TestQuotaGuardStructuralEnforcement:
+    """Quota guard must be structurally enforced by the PreToolUse hook, not via docstring."""
+
+    def test_load_recipe_has_no_quota_guard_instructions(self):
+        """Quota guard enforcement is structural (hook), not instructional (docstring)."""
+        from autoskillit.server.tools_recipe import load_recipe
+
+        docstring = load_recipe.__doc__ or ""
+        assert "QUOTA GUARD" not in docstring, (
+            "QUOTA GUARD instructions must not appear in load_recipe docstring; "
+            "quota enforcement is now handled by the PreToolUse hook."
+        )

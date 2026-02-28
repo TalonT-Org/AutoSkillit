@@ -3,8 +3,8 @@
 Accumulates token counts keyed by YAML step name. The get_token_summary MCP
 tool retrieves the accumulated data grouped by step.
 
-This module is intentionally simple: a dataclass entry, a dict-backed store
-with a defensive copy getter, and a module-level singleton.
+This module is intentionally simple: a dataclass entry and a dict-backed store
+with a defensive copy getter.
 """
 
 from __future__ import annotations
@@ -32,7 +32,10 @@ class TokenEntry:
         return asdict(self)
 
 
-class TokenLog:
+__all__ = ["TokenEntry", "DefaultTokenLog"]
+
+
+class DefaultTokenLog:
     """In-memory store for per-step token usage.
 
     Thread-safety: the MCP server is async (single-threaded event loop),
@@ -86,6 +89,3 @@ class TokenLog:
         """Reset the store."""
         self._entries = {}
 
-
-# Module-level singleton used by server.py
-_token_log = TokenLog()

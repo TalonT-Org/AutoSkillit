@@ -121,14 +121,23 @@ class SmokeExecutor:
         retry = step_def["retry"]
         max_attempts = retry.get("max_attempts", 3)
         retry_field = retry["on"]
-
         tool_fn = _TOOL_MAP[step_def["tool"]]
-        for _ in range(max_attempts):
+
+        # Always execute at least once; max_attempts controls additional retries.
+        # max_attempts=0: run once, if retry_field fires → exhausted immediately.
+        # max_attempts=N: run once, then retry up to N-1 more times.
+        raw_result = await tool_fn(**args)
+        result = json.loads(raw_result)
+        if not result.get(retry_field, False):
+            return result  # succeeded on first try
+
+        for _ in range(max_attempts - 1):
             raw_result = await tool_fn(**args)
             result = json.loads(raw_result)
             if not result.get(retry_field, False):
                 return result
-        return result  # type: ignore[possibly-undefined]
+
+        return result  # exhausted — always defined
 
     def _interpolate(self, with_args: dict) -> dict:
         """Resolve ${{ inputs.X }} and ${{ context.X }} references."""
@@ -171,6 +180,12 @@ class SmokeExecutor:
             if value in routes:
                 return routes[value]
             return step_def.get("on_failure")
+
+        # If a retry block declared on_exhausted and the retry condition still fires,
+        # route to on_exhausted rather than on_failure.
+        retry = step_def.get("retry")
+        if retry and retry.get("on_exhausted") and result.get(retry.get("on", ""), False):
+            return retry["on_exhausted"]
 
         if self._is_success(step_def, result):
             return step_def.get("on_success")

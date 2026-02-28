@@ -58,6 +58,7 @@ from autoskillit.server import (
     _open_kitchen_handler,
     _require_enabled,
     _run_subprocess,
+    check_quota,
     classify_fix,
     get_pipeline_report,
     get_token_summary,
@@ -661,7 +662,7 @@ class TestRunSkillRetryGate:
 
 
 class TestToolRegistration:
-    """All 17 tools are registered on the MCP server."""
+    """All 18 tools are registered on the MCP server."""
 
     def test_all_tools_exist(self):
         from fastmcp.tools import Tool
@@ -689,6 +690,7 @@ class TestToolRegistration:
             "validate_recipe",
             "get_pipeline_report",
             "get_token_summary",
+            "check_quota",
         }
         assert expected == tool_names
 
@@ -2489,7 +2491,7 @@ class TestGatedToolAccess:
         assert prompt_names == {"open_kitchen", "close_kitchen"}
 
     def test_all_tools_still_registered(self):
-        """All 17 tools remain registered (gated + ungated)."""
+        """All 18 tools remain registered (gated + ungated)."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -2514,6 +2516,7 @@ class TestGatedToolAccess:
             "validate_recipe",
             "get_pipeline_report",
             "get_token_summary",
+            "check_quota",
         }
         assert expected == tool_names
 
@@ -6683,3 +6686,54 @@ async def test_tools_status_routes_through_db_reader(tool_ctx, monkeypatch, tmp_
     _sqlite3.connect(db_path).close()
     await read_db(db_path, "SELECT 1")
     assert calls == ["SELECT 1"]
+
+
+class TestCheckQuota:
+    @pytest.mark.asyncio
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        tool_ctx.gate = GateState(enabled=False)
+        result = json.loads(await check_quota())
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+
+    @pytest.mark.asyncio
+    async def test_disabled_quota_guard_returns_success_no_sleep(self, tool_ctx):
+        # Default config has quota_guard.enabled=False
+        result = json.loads(await check_quota())
+        assert result["success"] is True
+        assert result["should_sleep"] is False
+
+    @pytest.mark.asyncio
+    async def test_above_threshold_returns_should_sleep(self, tool_ctx, monkeypatch, tmp_path):
+        from datetime import datetime, timedelta, timezone
+
+        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
+        from autoskillit.execution.quota import QuotaStatus
+
+        resets_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        tool_ctx.config = AutomationConfig(
+            quota_guard=QuotaGuardConfig(
+                enabled=True,
+                threshold=80.0,
+                buffer_seconds=0,
+                credentials_path=str(tmp_path / ".credentials.json"),
+                cache_path=str(tmp_path / "cache.json"),
+            )
+        )
+
+        async def mock_fetch(path):
+            return QuotaStatus(utilization=95.0, resets_at=resets_at)
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        result = json.loads(await check_quota())
+        assert result["success"] is True
+        assert result["should_sleep"] is True
+        assert result["sleep_seconds"] > 0
+
+    def test_check_quota_in_tool_registry(self):
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp as server
+
+        tools = [c for c in server._local_provider._components.values() if isinstance(c, Tool)]
+        assert "check_quota" in {t.name for t in tools}

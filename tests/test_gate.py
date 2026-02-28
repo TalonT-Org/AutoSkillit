@@ -22,7 +22,7 @@ def test_tool_sets_are_disjoint():
 def test_tool_sets_total_count():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    assert len(GATED_TOOLS) == 11
+    assert len(GATED_TOOLS) == 12
     assert len(UNGATED_TOOLS) == 6
 
 
@@ -41,8 +41,21 @@ def test_gated_tools_contains_expected_names():
         "classify_fix",
         "reset_workspace",
         "migrate_recipe",
+        "check_quota",
     }
     assert GATED_TOOLS == expected
+
+
+def test_check_quota_in_gated_tools():
+    from autoskillit.pipeline.gate import GATED_TOOLS
+
+    assert "check_quota" in GATED_TOOLS
+
+
+def test_gated_and_ungated_are_disjoint_after_addition():
+    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
+
+    assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
 
 
 def test_ungated_tools_contains_expected_names():

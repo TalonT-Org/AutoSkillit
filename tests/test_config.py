@@ -353,3 +353,28 @@ class TestRunSkillConfigExitAfterStopDelay:
     def test_run_skill_config_fields_include_exit_delay(self):
         names = {f.name for f in dc_fields(RunSkillConfig)}
         assert "exit_after_stop_delay_ms" in names
+
+
+class TestQuotaGuardConfig:
+    def test_default_disabled(self):
+        import pytest
+
+        config = AutomationConfig()
+        assert config.quota_guard.enabled is False
+        assert config.quota_guard.threshold == pytest.approx(80.0)
+        assert config.quota_guard.buffer_seconds == 60
+        assert config.quota_guard.cache_max_age == 60
+
+    def test_load_quota_guard_from_yaml(self, tmp_path):
+        import pytest
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump({"quota_guard": {"enabled": True, "threshold": 90.0}})
+        )
+        config = load_config(tmp_path)
+        assert config.quota_guard.enabled is True
+        assert config.quota_guard.threshold == pytest.approx(90.0)
+        # Unspecified fields keep defaults
+        assert config.quota_guard.buffer_seconds == 60

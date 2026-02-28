@@ -1,13 +1,18 @@
-"""workspace/ L1 package: directory cleanup and skill resolution.
+"""workspace/ L1 package: directory cleanup, skill resolution, and clone isolation.
 
-Re-exports the full public surface of cleanup.py and skills.py.
-Both sub-modules depend only on autoskillit.core.*.
+Re-exports the full public surface of cleanup.py, skills.py, and clone.py.
+All sub-modules depend only on autoskillit.core.*.
 """
 
 from autoskillit.workspace.cleanup import (
     CleanupResult,
     DefaultWorkspaceManager,
     _delete_directory_contents,
+)
+from autoskillit.workspace.clone import (
+    clone_repo,
+    push_clone_to_origin,
+    remove_clone,
 )
 from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
 
@@ -20,4 +25,7 @@ __all__ = [
     "DefaultWorkspaceManager",
     "SkillResolver",
     "bundled_skills_dir",
+    "clone_repo",
+    "push_clone_to_origin",
+    "remove_clone",
 ]

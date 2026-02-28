@@ -46,6 +46,7 @@ async def kitchen_status() -> str:
             f"`autoskillit install` to refresh the plugin cache."
         )
     status["token_usage_verbosity"] = _get_config().token_usage.verbosity
+    status["quota_guard_enabled"] = _get_config().quota_guard.enabled
     return json.dumps(status)
 
 
@@ -242,3 +243,59 @@ async def read_db(
         except (RuntimeError, AttributeError):
             pass
         return json.dumps({"error": f"Query failed: {exc}"})
+
+
+@mcp.tool(tags={"automation"})
+async def check_quota(ctx: Context = CurrentContext()) -> str:
+    """Check 5-hour quota utilization and return whether a sleep is needed.
+
+    When quota_guard.enabled=True (opt-in, off by default) and utilization
+    exceeds quota_guard.threshold, returns should_sleep=True with sleep_seconds
+    set to the number of seconds until resets_at + buffer_seconds. This tool
+    does NOT sleep internally. When should_sleep=True, the orchestrator must
+    call run_cmd to sleep before proceeding with run_skill/run_skill_retry.
+
+    Always returns success=True so pipeline routing is unaffected.
+
+    Returns JSON:
+        {
+            "success": true,
+            "should_sleep": bool,
+            "sleep_seconds": int,
+            "utilization": float | null,
+            "resets_at": str | null,
+            "error": str          # only present on credential/network failure
+        }
+
+    This tool is gated — open_kitchen must be active to call it.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    from autoskillit.server import _get_config
+
+    config = _get_config()
+    try:
+        await ctx.info(
+            "check_quota",
+            quota_guard_enabled=config.quota_guard.enabled,
+            threshold=config.quota_guard.threshold,
+        )
+    except (RuntimeError, AttributeError):
+        pass
+
+    from autoskillit.execution.quota import check_and_sleep_if_needed
+
+    quota_result = await check_and_sleep_if_needed(config.quota_guard)
+
+    if quota_result.get("should_sleep"):
+        try:
+            await ctx.info(
+                "quota above threshold — caller should sleep",
+                sleep_seconds=quota_result["sleep_seconds"],
+                utilization=quota_result["utilization"],
+            )
+        except (RuntimeError, AttributeError):
+            pass
+
+    return json.dumps({"success": True, **quota_result})

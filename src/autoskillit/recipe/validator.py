@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
-
 from autoskillit.core import (
     PIPELINE_FORBIDDEN_TOOLS,
     RETRY_RESPONSE_FIELDS,
@@ -25,109 +22,34 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.io import iter_steps_with_context
+from autoskillit.recipe.registry import (
+    RuleFinding,
+    RuleSpec,
+    _RULE_REGISTRY,
+    build_quality_dict,
+    compute_recipe_validity,
+    filter_version_rule,
+    findings_to_dicts,
+    run_semantic_rules,
+    semantic_rule,
+)
 from autoskillit.recipe.schema import DataFlowReport, DataFlowWarning, Recipe
 
 logger = get_logger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Severity findings and rule registry
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class RuleFinding:
-    """A single finding produced by a semantic rule."""
-
-    rule: str
-    severity: Severity
-    step_name: str
-    message: str
-
-    def to_dict(self) -> dict[str, str]:
-        return {
-            "rule": self.rule,
-            "severity": self.severity.value,
-            "step": self.step_name,
-            "message": self.message,
-        }
-
-
-@dataclass
-class RuleSpec:
-    """Internal: metadata for one registered rule."""
-
-    name: str
-    description: str
-    severity: Severity
-    check: Callable[[Recipe], list[RuleFinding]]
-
-
-_RULE_REGISTRY: list[RuleSpec] = []
-
-
-def semantic_rule(
-    name: str,
-    description: str,
-    severity: Severity = Severity.WARNING,
-) -> Callable:
-    """Decorator that registers a semantic validation rule."""
-
-    def decorator(
-        fn: Callable[[Recipe], list[RuleFinding]],
-    ) -> Callable[[Recipe], list[RuleFinding]]:
-        _RULE_REGISTRY.append(
-            RuleSpec(name=name, description=description, severity=severity, check=fn)
-        )
-        return fn
-
-    return decorator
-
-
-def run_semantic_rules(wf: Recipe) -> list[RuleFinding]:
-    """Execute all registered semantic rules against a workflow."""
-    findings: list[RuleFinding] = []
-    for spec in _RULE_REGISTRY:
-        findings.extend(spec.check(wf))
-    return findings
-
-
-def findings_to_dicts(findings: list[RuleFinding]) -> list[dict[str, str]]:
-    """Convert a list of RuleFindings to serializable dicts."""
-    return [f.to_dict() for f in findings]
-
-
-def filter_version_rule(suggestions: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Remove 'outdated-recipe-version' rule findings from suggestions."""
-    return [s for s in suggestions if s.get("rule") != "outdated-recipe-version"]
-
-
-def build_quality_dict(report: DataFlowReport) -> dict[str, object]:
-    """Build the quality analysis dict from a DataFlowReport."""
-    return {
-        "warnings": [
-            {
-                "code": w.code,
-                "step": w.step_name,
-                "field": w.field,
-                "message": w.message,
-            }
-            for w in report.warnings
-        ],
-        "summary": report.summary,
-    }
-
-
-def compute_recipe_validity(
-    errors: list[str],
-    semantic_findings: list[RuleFinding],
-    contract_findings: list[dict],  # type: ignore[type-arg]
-) -> bool:
-    """Return True if no schema, semantic, or contract errors are present."""
-    has_schema_errors = bool(errors)
-    has_semantic_errors = any(f.severity == Severity.ERROR for f in semantic_findings)
-    has_contract_errors = any(f.get("severity") == "error" for f in contract_findings)
-    return not has_schema_errors and not has_semantic_errors and not has_contract_errors
+# Re-export registry symbols so existing ``from autoskillit.recipe.validator import X``
+# imports continue to work without modification.
+__all__ = [
+    "RuleFinding",
+    "RuleSpec",
+    "_RULE_REGISTRY",
+    "build_quality_dict",
+    "compute_recipe_validity",
+    "filter_version_rule",
+    "findings_to_dicts",
+    "run_semantic_rules",
+    "semantic_rule",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -963,6 +885,54 @@ def _check_merge_cleanup_captured(wf: Recipe) -> list[RuleFinding]:
                     ),
                 )
             )
+
+    return findings
+
+
+@semantic_rule(
+    name="clone-root-as-worktree",
+    description=(
+        "test_check/merge_worktree worktree_path must not trace back to "
+        "result.clone_path — that is the clone root, not a git worktree."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_clone_root_as_worktree(wf: Recipe) -> list[RuleFinding]:
+    """Error when worktree_path for test_check/merge_worktree originates from clone_path.
+
+    Builds a capture map by iterating recipe steps in declaration order.
+    For each test_check or merge_worktree step, resolves the context variable
+    used for worktree_path and checks whether it was captured from result.clone_path.
+    """
+    captures: dict[str, str] = {}  # var_name -> capture expression
+    findings: list[RuleFinding] = []
+
+    for step_name, step in wf.steps.items():
+        if step.tool in ("test_check", "merge_worktree"):
+            worktree_arg = step.with_args.get("worktree_path", "")
+            if isinstance(worktree_arg, str):
+                for var_name in _CONTEXT_REF_RE.findall(worktree_arg):
+                    cap_expr = captures.get(var_name, "")
+                    if "result.clone_path" in cap_expr:
+                        findings.append(
+                            RuleFinding(
+                                rule="clone-root-as-worktree",
+                                severity=Severity.ERROR,
+                                step_name=step_name,
+                                message=(
+                                    f"Step '{step_name}' passes worktree_path via "
+                                    f"'context.{var_name}', which was captured from "
+                                    f"result.clone_path. clone_path is the root of the "
+                                    f"cloned repository, not a git worktree. "
+                                    f"Capture worktree_path from result.worktree_path "
+                                    f"(e.g., from an implement-worktree step's capture block)."
+                                ),
+                            )
+                        )
+
+        # Update capture map AFTER the tool check so captures only affect later steps
+        for cap_key, cap_val in step.capture.items():
+            captures[cap_key] = str(cap_val)
 
     return findings
 

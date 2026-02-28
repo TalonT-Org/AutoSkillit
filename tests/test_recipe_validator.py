@@ -2048,6 +2048,140 @@ class TestInvestigateFirstStructure:
 
 
 # ---------------------------------------------------------------------------
+# Semantic rule tests — clone-root-as-worktree (T_CRW1–T_CRW5)
+# ---------------------------------------------------------------------------
+
+
+class TestCloneRootAsWorktreeRule:
+    def test_crw1_rule_in_registry(self) -> None:
+        """T_CRW1: clone-root-as-worktree is registered in _RULE_REGISTRY."""
+        from autoskillit.recipe.validator import _RULE_REGISTRY
+
+        assert "clone-root-as-worktree" in {r.name for r in _RULE_REGISTRY}
+
+    def _bad_recipe_test_check(self) -> Recipe:
+        """Helper: recipe where work_dir is captured from clone_path, test_check uses it."""
+        from autoskillit.recipe.io import _parse_recipe
+
+        return _parse_recipe(
+            {
+                "name": "bad-recipe",
+                "description": "test",
+                "kitchen_rules": ["NEVER use native tools"],
+                "steps": {
+                    "clone": {
+                        "python": "autoskillit.workspace.clone.clone_repo",
+                        "with": {"source_dir": "/src", "run_name": "r"},
+                        "capture": {"work_dir": "${{ result.clone_path }}"},
+                        "on_success": "test",
+                        "on_failure": "stop_err",
+                    },
+                    "test": {
+                        "tool": "test_check",
+                        "with": {"worktree_path": "${{ context.work_dir }}"},
+                        "on_success": "stop_ok",
+                        "on_failure": "stop_err",
+                    },
+                    "stop_ok": {"action": "stop", "message": "ok"},
+                    "stop_err": {"action": "stop", "message": "err"},
+                },
+            }
+        )
+
+    def test_crw2_rule_fires_for_test_check(self) -> None:
+        """T_CRW2: clone-root-as-worktree fires ERROR when test_check uses work_dir from clone_path."""
+        recipe = self._bad_recipe_test_check()
+        findings = run_semantic_rules(recipe)
+        crw = [f for f in findings if f.rule == "clone-root-as-worktree"]
+        assert len(crw) >= 1
+        assert crw[0].severity == Severity.ERROR
+        assert crw[0].step_name == "test"
+
+    def test_crw3_rule_fires_for_merge_worktree(self) -> None:
+        """T_CRW3: clone-root-as-worktree fires ERROR when merge_worktree uses work_dir from clone_path."""
+        from autoskillit.recipe.io import _parse_recipe
+
+        recipe = _parse_recipe(
+            {
+                "name": "bad-merge",
+                "description": "test",
+                "kitchen_rules": ["NEVER use native tools"],
+                "steps": {
+                    "clone": {
+                        "python": "autoskillit.workspace.clone.clone_repo",
+                        "with": {"source_dir": "/src", "run_name": "r"},
+                        "capture": {"work_dir": "${{ result.clone_path }}"},
+                        "on_success": "merge",
+                        "on_failure": "stop_err",
+                    },
+                    "merge": {
+                        "tool": "merge_worktree",
+                        "with": {
+                            "worktree_path": "${{ context.work_dir }}",
+                            "base_branch": "main",
+                        },
+                        "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+                        "on_success": "stop_ok",
+                        "on_failure": "stop_err",
+                    },
+                    "stop_ok": {"action": "stop", "message": "ok"},
+                    "stop_err": {"action": "stop", "message": "err"},
+                },
+            }
+        )
+        findings = run_semantic_rules(recipe)
+        crw = [f for f in findings if f.rule == "clone-root-as-worktree"]
+        assert len(crw) >= 1
+        assert crw[0].severity == Severity.ERROR
+        assert crw[0].step_name == "merge"
+
+    def test_crw4_passes_for_worktree_from_result_worktree_path(self) -> None:
+        """T_CRW4: no finding when worktree_path captured from result.worktree_path (correct)."""
+        from autoskillit.recipe.io import _parse_recipe
+
+        recipe = _parse_recipe(
+            {
+                "name": "good-recipe",
+                "description": "test",
+                "kitchen_rules": ["NEVER use native tools"],
+                "steps": {
+                    "implement": {
+                        "tool": "run_skill_retry",
+                        "with": {
+                            "skill_command": "/autoskillit:implement-worktree-no-merge plan.md"
+                        },
+                        "capture": {"implementation_ref": "${{ result.worktree_path }}"},
+                        "on_success": "test",
+                        "on_failure": "stop_err",
+                    },
+                    "test": {
+                        "tool": "test_check",
+                        "with": {"worktree_path": "${{ context.implementation_ref }}"},
+                        "on_success": "stop_ok",
+                        "on_failure": "stop_err",
+                    },
+                    "stop_ok": {"action": "stop", "message": "ok"},
+                    "stop_err": {"action": "stop", "message": "err"},
+                },
+            }
+        )
+        findings = run_semantic_rules(recipe)
+        crw = [f for f in findings if f.rule == "clone-root-as-worktree"]
+        assert crw == []
+
+    def test_crw5_bundled_recipes_pass_clone_root_rule(self) -> None:
+        """T_CRW5: no bundled recipe triggers clone-root-as-worktree."""
+        from autoskillit.recipe.io import builtin_recipes_dir
+
+        bd = builtin_recipes_dir()
+        for yaml_path in sorted(bd.glob("*.yaml")):
+            recipe = load_recipe(yaml_path)
+            findings = run_semantic_rules(recipe)
+            crw = [f for f in findings if f.rule == "clone-root-as-worktree"]
+            assert crw == [], f"{yaml_path.name} triggered clone-root-as-worktree: {crw}"
+
+
+# ---------------------------------------------------------------------------
 # Semantic rule tests — multipart iteration conventions (T_MI1–T_MI2)
 # ---------------------------------------------------------------------------
 

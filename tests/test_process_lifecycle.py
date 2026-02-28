@@ -1152,6 +1152,33 @@ class TestJsonlContainsMarkerContentBlocks:
         )
 
 
+class TestJsonlContainsMarkerEdgeCases:
+    """Edge cases: empty input and partial/truncated NDJSON."""
+
+    def test_empty_string_returns_false(self):
+        """Empty input contains no records → False."""
+        assert not _jsonl_contains_marker("", "MARKER", frozenset({"assistant"}))
+
+    def test_partial_truncated_json_skipped_valid_line_matches(self):
+        """Partial JSON from a mid-write kill is skipped; valid subsequent line matches."""
+        import json
+
+        # Simulate: process killed mid-write on first line, second line is complete.
+        truncated = '{"type": "result", "result": "MARKER", "subtype": "succe'
+        valid = json.dumps(
+            {"type": "result", "result": "MARKER", "subtype": "success"}
+        )
+        content = truncated + "\n" + valid
+        assert _jsonl_contains_marker(content, "MARKER", frozenset({"result"}))
+
+    def test_only_truncated_json_returns_false(self):
+        """Content with only a truncated JSON line (no valid lines) → False."""
+        truncated = '{"type": "assistant", "message": {"content": "Done\nMARKER"'
+        assert not _jsonl_contains_marker(
+            truncated, "MARKER", frozenset({"assistant"})
+        )
+
+
 class TestHasActiveApiConnection:
     """Unit tests for _has_active_api_connection."""
 

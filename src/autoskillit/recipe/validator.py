@@ -23,9 +23,9 @@ from autoskillit.recipe.contracts import (
 )
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import (
+    _RULE_REGISTRY,
     RuleFinding,
     RuleSpec,
-    _RULE_REGISTRY,
     build_quality_dict,
     compute_recipe_validity,
     filter_version_rule,

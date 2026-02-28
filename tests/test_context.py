@@ -69,3 +69,39 @@ def test_gate_state_replacement():
     assert ctx.gate.enabled is False
     ctx.gate = GateState(enabled=True)
     assert ctx.gate.enabled is True
+
+
+def test_toolcontext_new_optional_fields_default_none(tmp_path):
+    """New optional service fields default to None when not provided."""
+    ctx = ToolContext(
+        config=AutomationConfig(),
+        audit=AuditLog(),
+        token_log=TokenLog(),
+        gate=GateState(enabled=True),
+        plugin_dir=str(tmp_path),
+        runner=None,
+    )
+    assert ctx.executor is None
+    assert ctx.tester is None
+    assert ctx.recipes is None
+    assert ctx.migrations is None
+    assert ctx.db_reader is None
+    assert ctx.workspace_mgr is None
+
+
+def test_toolcontext_service_fields_annotated_with_protocols():
+    """Service fields reference Protocol type names, not concrete class names."""
+    fields = ToolContext.__dataclass_fields__
+    assert "AuditStore" in str(fields["audit"].type)
+    assert "GatePolicy" in str(fields["gate"].type)
+    assert "TokenStore" in str(fields["token_log"].type)
+    assert "HeadlessExecutor" in str(fields["executor"].type)
+    assert "TestRunner" in str(fields["tester"].type)
+    assert "RecipeRepository" in str(fields["recipes"].type)
+    assert "MigrationService" in str(fields["migrations"].type)
+    assert "DatabaseReader" in str(fields["db_reader"].type)
+    assert "WorkspaceManager" in str(fields["workspace_mgr"].type)
+    # Verify concrete class names are NOT used for service fields
+    assert "AuditLog" not in str(fields["audit"].type)
+    assert "GateState" not in str(fields["gate"].type)
+    assert "TokenLog" not in str(fields["token_log"].type)

@@ -13,8 +13,11 @@ kitchen_rules:
 
 ingredients:
   source_dir:
-    description: Path to the source repository to clone and work in
-    required: true
+    description: >
+      Path to the source repository to clone and work in.
+      Leave empty to auto-detect from git rev-parse --show-toplevel.
+    required: false
+    default: ""
   run_name:
     description: Name prefix for this pipeline run (used in clone directory name)
     default: "audit-fix"
@@ -36,6 +39,7 @@ steps:
       run_name: "${{ inputs.run_name }}"
     capture:
       work_dir: "${{ result.clone_path }}"
+      source_dir: "${{ result.source_dir }}"
     on_success: audit
     on_failure: escalate_stop
     note: >
@@ -116,7 +120,7 @@ steps:
     python: autoskillit.workspace.clone.push_clone_to_origin
     with:
       clone_path: "${{ context.work_dir }}"
-      source_dir: "${{ inputs.source_dir }}"
+      source_dir: "${{ context.source_dir }}"
       branch: "${{ inputs.base_branch }}"
     on_success: cleanup_success
     on_failure: cleanup_failure

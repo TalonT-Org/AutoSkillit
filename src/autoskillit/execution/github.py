@@ -115,7 +115,7 @@ class DefaultGitHubFetcher:
         base = f"https://api.github.com/repos/{owner}/{repo}/issues/{number}"
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=15.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
                 resp = await client.get(base, headers=headers)
                 if resp.status_code == 404:
                     return {"success": False, "error": f"Issue not found: {issue_ref}"}

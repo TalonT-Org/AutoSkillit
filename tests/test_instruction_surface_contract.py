@@ -253,9 +253,7 @@ class TestMultiPartScopeContract:
 
     def test_dry_walkthrough_detects_part_suffix(self):
         text = self._skill_text("dry-walkthrough")
-        assert "_part_" in text, (
-            "dry-walkthrough SKILL.md must contain '_part_' detection logic"
-        )
+        assert "_part_" in text, "dry-walkthrough SKILL.md must contain '_part_' detection logic"
 
     def test_dry_walkthrough_scope_warning_verification(self):
         text = self._skill_text("dry-walkthrough")

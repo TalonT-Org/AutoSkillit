@@ -378,8 +378,6 @@ _LAYER_EXEMPT_STEMS: frozenset[str] = frozenset(
 # "server" allows mcp = FastMCP(...); "cli" allows app = App(...) etc.
 SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
     {
-        "audit",  # pipeline/audit.py: _audit_log singleton
-        "tokens",  # pipeline/tokens.py: _token_log singleton
         "__init__",  # server/__init__.py: mcp = FastMCP(...)
         "app",  # cli/app.py: app = App(...), config_app = App(...), etc.
         "store",  # migration/store.py: defensive exemption for future module-level construction
@@ -1946,3 +1944,31 @@ def test_all_tool_extra_keys_are_not_reserved() -> None:
     assert not violations, "Reserved LogRecord keys found in _notify() extra dicts:\n" + "\n".join(
         violations
     )
+
+
+def test_default_prefix_convention_enforced() -> None:
+    """P12-F1..F4: All concrete protocol implementations in pipeline/ and execution/
+    must use the Default* naming convention.
+
+    Old names (RealSubprocessRunner, GateState, AuditLog, TokenLog) must not exist.
+    New names must be importable.
+    """
+    import importlib
+
+    # Renames that must be complete
+    renames = [
+        ("autoskillit.execution.process", "DefaultSubprocessRunner", "RealSubprocessRunner"),
+        ("autoskillit.pipeline.gate", "DefaultGateState", "GateState"),
+        ("autoskillit.pipeline.audit", "DefaultAuditLog", "AuditLog"),
+        ("autoskillit.pipeline.tokens", "DefaultTokenLog", "TokenLog"),
+    ]
+    missing_new: list[str] = []
+    surviving_old: list[str] = []
+    for module_name, new_name, old_name in renames:
+        mod = importlib.import_module(module_name)
+        if not hasattr(mod, new_name):
+            missing_new.append(f"{module_name}.{new_name}")
+        if hasattr(mod, old_name):
+            surviving_old.append(f"{module_name}.{old_name}")
+    assert not missing_new, f"New Default* names not found: {missing_new}"
+    assert not surviving_old, f"Old names still present: {surviving_old}"

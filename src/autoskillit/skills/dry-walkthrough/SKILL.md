@@ -61,6 +61,21 @@ Read the plan from:
 - Plan content pasted directly
 - Most recent plan in temp/ subdirectories
 
+### Multi-Part Plan Detection
+
+After resolving the plan path, check whether this is a part file of a multi-part plan:
+
+1. **Detect the part suffix:** If the plan filename contains `_part_` (e.g., `_part_a`, `_part_b`, `_part_1`), this is one part of a multi-part plan. Extract the part identifier (A, B, C… or number) from the suffix.
+
+2. **⚠️ SCOPE BOUNDARY — CRITICAL:** If a part suffix is detected, immediately output to the terminal:
+   > "⚠️ MULTI-PART PLAN DETECTED: Validating PART {X} ONLY. This session MUST NOT read, open, reference, or validate any other part files. Sibling part files visible in temp/ or any other directory are entirely out of scope and must be ignored."
+
+3. **Verify the scope warning block:** Check that the plan file contains the mandatory scope warning block immediately after the title line. The block must match this form:
+   ```
+   > **PART {X} ONLY. Do not implement any other part. Other parts are separate tasks requiring explicit authorization.**
+   ```
+   If the block is absent, or contains the wrong part label or wording, insert or correct it as your **first** edit to the plan file before proceeding to phase validation.
+
 ### Step 2: Extract and Validate Each Phase
 
 For each phase, verify using subagents:

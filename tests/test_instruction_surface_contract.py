@@ -242,3 +242,46 @@ class TestRunPythonCallableContract:
             "Deleted module 'autoskillit.contract_validator' still referenced:\n"
             + "\n".join(stale_refs)
         )
+
+
+class TestMultiPartScopeContract:
+    """Consuming skills must carry scope-fence instructions for multi-part plans."""
+
+    def _skill_text(self, skill_name: str) -> str:
+        skills_dir = _project_root() / "src" / "autoskillit" / "skills"
+        return (skills_dir / skill_name / "SKILL.md").read_text()
+
+    def test_dry_walkthrough_detects_part_suffix(self):
+        text = self._skill_text("dry-walkthrough")
+        assert "_part_" in text, "dry-walkthrough SKILL.md must contain '_part_' detection logic"
+
+    def test_dry_walkthrough_scope_warning_verification(self):
+        text = self._skill_text("dry-walkthrough")
+        assert "scope warning block" in text.lower(), (
+            "dry-walkthrough SKILL.md must describe verification of the scope warning block"
+        )
+
+    def test_dry_walkthrough_emits_terminal_notice(self):
+        text = self._skill_text("dry-walkthrough")
+        assert "PART" in text and "do not" in text.lower(), (
+            "dry-walkthrough SKILL.md must instruct the agent to emit a scope-boundary "
+            "terminal notice when a part suffix is detected"
+        )
+
+    def test_implement_worktree_scope_fence(self):
+        text = self._skill_text("implement-worktree")
+        assert "_part_" in text, (
+            "implement-worktree SKILL.md must contain '_part_' detection logic"
+        )
+        assert "SCOPE FENCE" in text or "scope fence" in text.lower(), (
+            "implement-worktree SKILL.md must contain a SCOPE FENCE instruction"
+        )
+
+    def test_implement_worktree_no_merge_scope_fence(self):
+        text = self._skill_text("implement-worktree-no-merge")
+        assert "_part_" in text, (
+            "implement-worktree-no-merge SKILL.md must contain '_part_' detection logic"
+        )
+        assert "SCOPE FENCE" in text or "scope fence" in text.lower(), (
+            "implement-worktree-no-merge SKILL.md must contain a SCOPE FENCE instruction"
+        )

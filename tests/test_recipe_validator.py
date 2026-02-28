@@ -773,6 +773,97 @@ def test_unsatisfied_input_inline_positional_args_skipped() -> None:
     assert not any(f.rule == "missing-ingredient" for f in findings)
 
 
+def test_retry_worktree_cwd_inputs_triggers_error() -> None:
+    """retry-worktree step with cwd=inputs.* fires retry-worktree-cwd ERROR."""
+    wf = _make_workflow(
+        {
+            "impl": {
+                "tool": "run_skill_retry",
+                "with": {"skill_command": "/autoskillit:implement-worktree-no-merge the plan"},
+                "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                "retry": {"on": "needs_retry", "max_attempts": 1, "on_exhausted": "retry_step"},
+                "on_success": "done",
+            },
+            "retry_step": {
+                "tool": "run_skill_retry",
+                "with": {
+                    "skill_command": "/autoskillit:retry-worktree ${{ context.worktree_path }}",
+                    "cwd": "${{ inputs.work_dir }}",
+                },
+                "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    errors = [f for f in findings if f.severity == Severity.ERROR]
+    assert any(f.rule == "retry-worktree-cwd" for f in errors)
+
+
+def test_retry_worktree_cwd_context_clean() -> None:
+    """retry-worktree step with cwd=context.worktree_path has no retry-worktree-cwd finding."""
+    wf = _make_workflow(
+        {
+            "impl": {
+                "tool": "run_skill_retry",
+                "with": {"skill_command": "/autoskillit:implement-worktree-no-merge the plan"},
+                "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                "retry": {"on": "needs_retry", "max_attempts": 1, "on_exhausted": "retry_step"},
+                "on_success": "done",
+            },
+            "retry_step": {
+                "tool": "run_skill_retry",
+                "with": {
+                    "skill_command": "/autoskillit:retry-worktree ${{ context.worktree_path }}",
+                    "cwd": "${{ context.worktree_path }}",
+                },
+                "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "retry-worktree-cwd" for f in findings)
+
+
+def test_retry_worktree_cwd_missing_triggers_error() -> None:
+    """retry-worktree step with no cwd fires retry-worktree-cwd ERROR."""
+    wf = _make_workflow(
+        {
+            "retry_step": {
+                "tool": "run_skill_retry",
+                "with": {
+                    "skill_command": "/autoskillit:retry-worktree ${{ context.worktree_path }}",
+                },
+                "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    errors = [f for f in findings if f.severity == Severity.ERROR]
+    assert any(f.rule == "retry-worktree-cwd" for f in errors)
+
+
+def test_retry_worktree_cwd_non_skill_step_ignored() -> None:
+    """retry-worktree-cwd rule only fires on skill steps, not run_cmd."""
+    wf = _make_workflow(
+        {
+            "cmd": {
+                "tool": "run_cmd",
+                "with": {"cmd": "echo hello", "cwd": "${{ inputs.work_dir }}"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "retry-worktree-cwd" for f in findings)
+
+
 def test_unreachable_steps_detects_orphan() -> None:
     wf = _make_workflow(
         {

@@ -672,6 +672,35 @@ def _check_needs_retry_no_restart(wf: Recipe) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="retry-worktree-cwd",
+    description=(
+        "retry-worktree steps must use cwd pointing to a context variable "
+        "(e.g. context.worktree_path) so git operations run inside the isolated worktree."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_retry_worktree_cwd(wf: Recipe) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if resolve_skill_name(skill_cmd) != "retry-worktree":
+            continue
+        cwd = step.with_args.get("cwd", "")
+        if "${{ context." not in cwd:
+            findings.append(
+                RuleFinding(
+                    rule="retry-worktree-cwd",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=f"Step '{step_name}': retry-worktree cwd must use a context variable.",
+                )
+            )
+    return findings
+
+
+@semantic_rule(
     name="weak-constraint-text",
     description=(
         "Pipeline constraints should enumerate forbidden native tools by name. "

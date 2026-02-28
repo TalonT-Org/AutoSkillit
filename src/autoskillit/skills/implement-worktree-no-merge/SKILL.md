@@ -67,13 +67,27 @@ Correct orchestration on `needs_retry=true`:
    - If user declines, abort and suggest running `/autoskillit:dry-walkthrough` first
 3. Check `git status --porcelain` — if dirty, warn user
 4. Parse plan: phases, files per phase, verification commands
+5. **Multi-Part Plan Detection:** Examine the plan filename. If it contains `_part_` (e.g., `_part_a`, `_part_b`, `_part_1`):
+   - Extract the part identifier (A, B, C… or number) from the suffix.
+   - **SCOPE FENCE — MANDATORY:** Before any exploration or implementation begins, output the following constraint:
+     > "🚧 SCOPE FENCE ACTIVE: I am implementing PART {X} ONLY. I MUST NOT open, read, or execute any other part files, regardless of what I encounter in temp/ or any other directory. Sibling part files are out of scope for this entire session."
+   - When launching subagents in Step 2, include this fence instruction explicitly in each subagent prompt so that the subagents do not open, read, or reference sibling part files.
 
 ### Step 1: Create Git Worktree
 
 ```bash
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 WORKTREE_NAME="impl-{plan_name}-$(date +%Y%m%d-%H%M%S)"
 WORKTREE_PATH="../worktrees/${WORKTREE_NAME}"
 git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
+
+# Record the base branch in two ways for reliable discovery by retry-worktree:
+# 1) Write an explicit file store (works with any Git version, works offline)
+mkdir -p ".autoskillit/temp/worktrees/${WORKTREE_NAME}"
+echo "${CURRENT_BRANCH}" > ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch"
+# 2) Set git upstream tracking (requires remote tracking ref in local fetch cache)
+git fetch origin "${CURRENT_BRANCH}" 2>/dev/null || true
+git -C "${WORKTREE_PATH}" branch --set-upstream-to="origin/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null || true
 ```
 
 ### Step 1.5: Initialize Code Index for Original Project

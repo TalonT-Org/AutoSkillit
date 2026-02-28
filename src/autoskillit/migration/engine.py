@@ -426,5 +426,9 @@ class DefaultMigrationService:
                     )
 
         if did_version_migrate or contracts_regenerated:
-            return {"status": "migrated", "name": name, "contracts_regenerated": contracts_regenerated}
+            return {
+                "status": "migrated",
+                "name": name,
+                "contracts_regenerated": contracts_regenerated,
+            }
         return {"status": "up_to_date", "name": name}

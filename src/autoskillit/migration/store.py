@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoskillit.core.io import _atomic_write
+from autoskillit.core import _atomic_write
 
 
 @dataclass

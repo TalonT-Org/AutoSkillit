@@ -14,11 +14,13 @@ from autoskillit.recipe.contracts import (
     validate_recipe_cards,
 )
 from autoskillit.recipe.io import (
+    DefaultRecipeRepository,
     find_recipe_by_name,
     iter_steps_with_context,
     list_recipes,
     load_recipe,
 )
+from autoskillit.recipe.loader import parse_recipe_metadata
 from autoskillit.recipe.schema import Recipe, RecipeStep
 from autoskillit.recipe.validator import (
     RuleFinding,
@@ -44,6 +46,8 @@ __all__ = [
     "load_bundled_manifest",
     "load_recipe_card",
     "validate_recipe_cards",
+    "DefaultRecipeRepository",
+    "parse_recipe_metadata",
     "load_and_validate",
     "validate_from_path",
     "list_all",
@@ -71,7 +75,7 @@ def validate_from_path(path: Path) -> dict[str, Any]:
         {"valid": bool, "findings": list}
         On file/parse error: {"valid": False, "findings": [str, ...]}
     """
-    from autoskillit.core.io import YAMLError
+    from autoskillit.core import YAMLError
     from autoskillit.recipe.contracts import load_recipe_card as _load_card
     from autoskillit.recipe.contracts import validate_recipe_cards as _validate_cards
     from autoskillit.recipe.validator import compute_recipe_validity, findings_to_dicts
@@ -120,7 +124,7 @@ def load_and_validate(
         {"content": str, "suggestions": list, "valid": bool}
         On not-found: {"error": str}
     """
-    from autoskillit.core.io import YAMLError, load_yaml
+    from autoskillit.core import YAMLError, load_yaml
     from autoskillit.recipe.contracts import check_contract_staleness as _check_staleness
     from autoskillit.recipe.contracts import load_recipe_card as _load_card
     from autoskillit.recipe.contracts import stale_to_suggestions

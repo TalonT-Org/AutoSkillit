@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core.types import (
+from autoskillit.core import (
     AuditStore,
     DatabaseReader,
     GatePolicy,

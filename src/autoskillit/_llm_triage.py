@@ -12,12 +12,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core.logging import get_logger
-from autoskillit.core.types import SubprocessResult, TerminationReason
-from autoskillit.execution.process import run_managed_async
-from autoskillit.execution.session import parse_session_result
-from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest
-from autoskillit.workspace.skills import bundled_skills_dir
+from autoskillit.core import SubprocessResult, TerminationReason, get_logger
+from autoskillit.execution import parse_session_result, run_managed_async
+from autoskillit.recipe import StaleItem, load_bundled_manifest
+from autoskillit.workspace import bundled_skills_dir
 
 logger = get_logger(__name__)
 

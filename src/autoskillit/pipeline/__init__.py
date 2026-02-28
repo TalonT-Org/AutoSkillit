@@ -5,7 +5,7 @@ Only pipeline/context.py imports from config/; the other three modules
 depend only on autoskillit.core.*.
 """
 
-from autoskillit.core.types import FailureRecord
+from autoskillit.core import FailureRecord
 from autoskillit.pipeline.audit import (
     COMMAND_MAX_LEN,
     STDERR_MAX_LEN,

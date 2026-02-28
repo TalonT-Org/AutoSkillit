@@ -9,13 +9,10 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit import __version__
-from autoskillit.core.io import _atomic_write, dump_yaml_str, load_yaml
-from autoskillit.core.logging import get_logger
-from autoskillit.core.types import SkillResult
+from autoskillit.core import SkillResult, _atomic_write, dump_yaml_str, get_logger, load_yaml
 from autoskillit.migration.loader import applicable_migrations
-from autoskillit.recipe.io import load_recipe as _parse_recipe
-from autoskillit.recipe.loader import parse_recipe_metadata
-from autoskillit.recipe.validator import validate_recipe
+from autoskillit.recipe import load_recipe as _parse_recipe
+from autoskillit.recipe import parse_recipe_metadata, validate_recipe
 
 logger = get_logger(__name__)
 
@@ -255,7 +252,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         return files
 
     def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.recipe.contracts import check_contract_staleness, load_recipe_card
+        from autoskillit.recipe import check_contract_staleness, load_recipe_card
 
         recipes_dir = file.path.parent.parent
         contract = load_recipe_card(file.name, recipes_dir)
@@ -269,7 +266,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         *,
         temp_dir: Path,
     ) -> MigrationResult:
-        from autoskillit.recipe.contracts import generate_recipe_card
+        from autoskillit.recipe import generate_recipe_card
 
         recipes_dir = file.path.parent.parent
         recipe_path = recipes_dir / f"{file.name}.yaml"
@@ -316,7 +313,7 @@ class DefaultMigrationService:
         in a real run_headless via the MigrationEngine adapters directly).
         Returns a dict with 'success', 'name', and optional 'error' keys.
         """
-        from autoskillit.recipe.loader import parse_recipe_metadata
+        from autoskillit.recipe import parse_recipe_metadata
 
         meta = parse_recipe_metadata(recipe_path)
         file = MigrationFile(

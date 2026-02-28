@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.migration.engine import (
+    DefaultMigrationService,
     MigrationEngine,
     MigrationFile,
     default_migration_engine,
@@ -16,6 +17,7 @@ from autoskillit.migration.store import FailureStore, default_store_path
 __all__ = [
     "MigrationEngine",
     "MigrationFile",
+    "DefaultMigrationService",
     "default_migration_engine",
     "applicable_migrations",
     "list_migrations",
@@ -47,12 +49,12 @@ async def check_and_migrate(
     from pathlib import Path as _Path
     from typing import Any as _Any
 
-    from autoskillit.core.types import RetryReason, SkillResult
+    from autoskillit.core import RetryReason, SkillResult
     from autoskillit.migration.engine import MigrationFile as _MigFile
     from autoskillit.migration.engine import default_migration_engine as _engine_factory
     from autoskillit.migration.loader import applicable_migrations as _applicable
-    from autoskillit.recipe.io import find_recipe_by_name
-    from autoskillit.recipe.io import load_recipe as _parse
+    from autoskillit.recipe import find_recipe_by_name
+    from autoskillit.recipe import load_recipe as _parse
 
     _pdir = project_dir if isinstance(project_dir, _Path) else _Path(project_dir)
     match = find_recipe_by_name(name, _pdir)

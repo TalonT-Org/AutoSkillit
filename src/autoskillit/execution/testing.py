@@ -11,11 +11,11 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core.logging import get_logger
+from autoskillit.core import get_logger
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.core.types import SubprocessRunner
+    from autoskillit.core import SubprocessRunner
 
 logger = get_logger(__name__)
 

@@ -11,8 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from autoskillit.core.logging import get_logger
-from autoskillit.core.types import FailureRecord
+from autoskillit.core import FailureRecord, get_logger
 
 logger = get_logger(__name__)
 

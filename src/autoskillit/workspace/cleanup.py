@@ -6,8 +6,7 @@ import os
 import shutil
 from pathlib import Path
 
-from autoskillit.core.logging import get_logger
-from autoskillit.core.types import CleanupResult
+from autoskillit.core import CleanupResult, get_logger
 
 logger = get_logger(__name__)
 

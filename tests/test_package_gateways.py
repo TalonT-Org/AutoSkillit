@@ -226,3 +226,44 @@ def test_config_all_complete():
     # Spot-check all sub-config classes are present
     for cls in ["TestCheckConfig", "SafetyConfig", "ModelConfig", "TokenUsageConfig"]:
         assert cls in config_all, f"{cls} missing from config.__all__"
+
+
+# ---------------------------------------------------------------------------
+# REQ-IMP-001 gateway completeness — Default* concrete classes
+# ---------------------------------------------------------------------------
+
+
+def test_execution_gateway_exports_default_classes() -> None:
+    import autoskillit.execution as m
+
+    for name in ("DefaultDatabaseReader", "DefaultHeadlessExecutor", "DefaultTestRunner"):
+        assert name in m.__all__, f"{name} missing from execution.__all__"
+        assert callable(getattr(m, name))
+
+
+def test_migration_gateway_exports_default_migration_service() -> None:
+    import autoskillit.migration as m
+
+    assert "DefaultMigrationService" in m.__all__
+    assert callable(m.DefaultMigrationService)
+
+
+def test_recipe_gateway_exports_default_recipe_repository() -> None:
+    import autoskillit.recipe as m
+
+    assert "DefaultRecipeRepository" in m.__all__
+    assert callable(m.DefaultRecipeRepository)
+
+
+def test_workspace_gateway_exports_default_workspace_manager() -> None:
+    import autoskillit.workspace as m
+
+    assert "DefaultWorkspaceManager" in m.__all__
+    assert callable(m.DefaultWorkspaceManager)
+
+
+def test_workspace_gateway_exports_public_delete_alias() -> None:
+    import autoskillit.workspace as m
+
+    assert "delete_directory_contents" in m.__all__
+    assert callable(m.delete_directory_contents)

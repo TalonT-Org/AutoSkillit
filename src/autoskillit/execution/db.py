@@ -10,7 +10,7 @@ import re
 import sqlite3
 import threading
 
-from autoskillit.core.logging import get_logger
+from autoskillit.core import get_logger
 
 logger = get_logger(__name__)
 

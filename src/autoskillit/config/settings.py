@@ -94,7 +94,7 @@ class TokenUsageConfig:
 
 @dataclass
 class QuotaGuardConfig:
-    enabled: bool = False
+    enabled: bool = True
     threshold: float = 80.0
     buffer_seconds: int = 60
     cache_max_age: int = 60

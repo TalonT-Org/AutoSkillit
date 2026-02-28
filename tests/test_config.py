@@ -356,11 +356,11 @@ class TestRunSkillConfigExitAfterStopDelay:
 
 
 class TestQuotaGuardConfig:
-    def test_default_disabled(self):
+    def test_default_enabled(self):
         import pytest
 
         config = AutomationConfig()
-        assert config.quota_guard.enabled is False
+        assert config.quota_guard.enabled is True
         assert config.quota_guard.threshold == pytest.approx(80.0)
         assert config.quota_guard.buffer_seconds == 60
         assert config.quota_guard.cache_max_age == 60

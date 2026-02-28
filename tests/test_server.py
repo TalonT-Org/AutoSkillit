@@ -6699,7 +6699,9 @@ class TestCheckQuota:
 
     @pytest.mark.asyncio
     async def test_disabled_quota_guard_returns_success_no_sleep(self, tool_ctx):
-        # Default config has quota_guard.enabled=False
+        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
+
+        tool_ctx.config = AutomationConfig(quota_guard=QuotaGuardConfig(enabled=False))
         result = json.loads(await check_quota())
         assert result["success"] is True
         assert result["should_sleep"] is False

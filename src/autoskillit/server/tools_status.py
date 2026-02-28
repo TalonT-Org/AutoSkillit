@@ -249,7 +249,7 @@ async def read_db(
 async def check_quota(ctx: Context = CurrentContext()) -> str:
     """Check 5-hour quota utilization and return whether a sleep is needed.
 
-    When quota_guard.enabled=True (opt-in, off by default) and utilization
+    When quota_guard.enabled=True (on by default) and utilization
     exceeds quota_guard.threshold, returns should_sleep=True with sleep_seconds
     set to the number of seconds until resets_at + buffer_seconds. This tool
     does NOT sleep internally. When should_sleep=True, the orchestrator must

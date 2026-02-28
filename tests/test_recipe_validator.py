@@ -2089,7 +2089,7 @@ class TestCloneRootAsWorktreeRule:
         )
 
     def test_crw2_rule_fires_for_test_check(self) -> None:
-        """T_CRW2: clone-root-as-worktree fires ERROR when test_check uses work_dir from clone_path."""
+        """T_CRW2: ERROR when test_check passes work_dir (from clone_path) as worktree_path."""
         recipe = self._bad_recipe_test_check()
         findings = run_semantic_rules(recipe)
         crw = [f for f in findings if f.rule == "clone-root-as-worktree"]
@@ -2098,7 +2098,7 @@ class TestCloneRootAsWorktreeRule:
         assert crw[0].step_name == "test"
 
     def test_crw3_rule_fires_for_merge_worktree(self) -> None:
-        """T_CRW3: clone-root-as-worktree fires ERROR when merge_worktree uses work_dir from clone_path."""
+        """T_CRW3: ERROR when merge_worktree passes work_dir (from clone_path) as worktree_path."""
         from autoskillit.recipe.io import _parse_recipe
 
         recipe = _parse_recipe(

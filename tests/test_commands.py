@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from autoskillit.execution.commands import (
     ClaudeHeadlessCmd,
     ClaudeInteractiveCmd,

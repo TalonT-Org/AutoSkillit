@@ -849,7 +849,8 @@ kitchen_rules:
         tools_idx = cmd.index("--tools")
         assert cmd[tools_idx + 1] == "AskUserQuestion"
         assert "--append-system-prompt" in cmd
-        # Interactive: must have --allow-dangerous-permissions, no -p, no --dangerously-skip-permissions
+        # Interactive: must have --allow-dangerous-permissions, no -p, no
+        # --dangerously-skip-permissions
         assert "--allow-dangerous-permissions" in cmd
         assert "-p" not in cmd
         assert "--dangerously-skip-permissions" not in cmd

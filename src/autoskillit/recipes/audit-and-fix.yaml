@@ -101,7 +101,7 @@ steps:
   retry_worktree:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:retry-worktree the plan ${{ context.worktree_path }}"
+      skill_command: "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}"
       cwd: "${{ context.worktree_path }}"
       step_name: "retry_worktree"
     capture:

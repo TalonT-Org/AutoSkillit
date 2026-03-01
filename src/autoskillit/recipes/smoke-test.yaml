@@ -165,7 +165,7 @@ steps:
   create_summary:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:pipeline-summary ${{ inputs.workspace }}/bug_report.json smoke-run ${{ inputs.original_base_branch }} ${{ inputs.workspace }}"
+      skill_command: "/autoskillit:pipeline-summary ${{ inputs.workspace }}/bug_report.json ${{ context.feature_branch }} ${{ inputs.original_base_branch }} ${{ inputs.workspace }}"
       cwd: "${{ inputs.workspace }}"
     on_success: done
     on_failure: escalate

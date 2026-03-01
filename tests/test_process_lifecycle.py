@@ -26,7 +26,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
-from autoskillit.execution.headless import _recover_from_separate_marker
+from autoskillit.execution.headless import _build_skill_result, _recover_from_separate_marker
 from autoskillit.execution.process import (
     _has_active_api_connection,
     _heartbeat,
@@ -44,6 +44,32 @@ from autoskillit.execution.process import (
     scan_done_signals,
 )
 from autoskillit.execution.session import ClaudeSessionResult
+
+# ---------------------------------------------------------------------------
+# Module-level helpers
+# ---------------------------------------------------------------------------
+
+
+def _result_ndjson(
+    result: str = "done",
+    subtype: str = "success",
+    is_error: bool = False,
+    session_id: str = "s1",
+) -> str:
+    """Build a minimal NDJSON string with a single type=result record."""
+    import json
+
+    return json.dumps(
+        {
+            "type": "result",
+            "subtype": subtype,
+            "is_error": is_error,
+            "result": result,
+            "session_id": session_id,
+            "errors": [],
+        }
+    )
+
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
@@ -2535,3 +2561,86 @@ class TestRecoverFromSeparateMarker:
         )
         recovered = _recover_from_separate_marker(session, "%%ORDER_UP%%")
         assert recovered is None
+
+
+# ---------------------------------------------------------------------------
+# Adjudication guards — integration through _build_skill_result
+# ---------------------------------------------------------------------------
+
+
+class TestAdjudicationGuards:
+    """Verify _build_skill_result guards prevent impossible (success, needs_retry) states.
+
+    These integration tests exercise the composition guards added to _build_skill_result.
+    They fail before the guards are implemented and pass after.
+    """
+
+    def test_channel_a_empty_result_not_dead_end(self) -> None:
+        """CHANNEL_A + empty result: dead-end guard escalates to retriable."""
+        result = SubprocessResult(
+            returncode=0,
+            stdout=_result_ndjson(subtype="success", result=""),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="",
+            skill_command="/test",
+            audit=None,
+        )
+        # Must not be a dead end — guard must escalate to retriable
+        assert skill_result.success or skill_result.needs_retry, (
+            f"Dead end: success={skill_result.success}, needs_retry={skill_result.needs_retry}"
+        )
+        assert skill_result.needs_retry is True
+        assert skill_result.retry_reason == RetryReason.RESUME
+
+    def test_channel_b_max_turns_no_contradiction(self) -> None:
+        """CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""
+        result = SubprocessResult(
+            returncode=0,
+            stdout=_result_ndjson(subtype="error_max_turns", result="partial", is_error=True),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="",
+            skill_command="/test",
+            audit=None,
+        )
+        # Must not be contradictory — contradiction guard must set success=False
+        assert not (skill_result.success and skill_result.needs_retry), (
+            f"Contradiction: success={skill_result.success}, "
+            f"needs_retry={skill_result.needs_retry}"
+        )
+        assert skill_result.needs_retry is True
+        assert skill_result.success is False
+
+    def test_completed_channel_b_max_turns_no_contradiction(self) -> None:
+        """COMPLETED + CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""
+        result = SubprocessResult(
+            returncode=-15,
+            stdout=_result_ndjson(subtype="error_max_turns", result="partial", is_error=True),
+            stderr="",
+            termination=TerminationReason.COMPLETED,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="",
+            skill_command="/test",
+            audit=None,
+        )
+        assert not (skill_result.success and skill_result.needs_retry), (
+            f"Contradiction: success={skill_result.success}, "
+            f"needs_retry={skill_result.needs_retry}"
+        )
+        assert skill_result.needs_retry is True
+        assert skill_result.success is False

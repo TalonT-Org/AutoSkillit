@@ -13,9 +13,10 @@ from __future__ import annotations
 import dataclasses
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 from autoskillit.core import (
+    ChannelConfirmation,
     FailureRecord,
     RetryReason,
     SkillResult,
@@ -230,6 +231,19 @@ def _build_skill_result(
         channel_confirmation=result.channel_confirmation,
     )
 
+    # --- Composition guard: contradiction ---
+    # success=True AND needs_retry=True is an impossible state.
+    # The retry signal (session-level error) is authoritative over the
+    # channel provenance bypass in _compute_success.
+    if success and needs_retry:
+        logger.warning(
+            "contradiction_guard_resolved",
+            subtype=session.subtype,
+            termination=result.termination.value,
+            channel=result.channel_confirmation.value,
+        )
+        success = False
+
     if not success and completion_marker:
         recovered = _recover_from_separate_marker(session, completion_marker)
         if recovered is not None:
@@ -245,6 +259,28 @@ def _build_skill_result(
                 success = True
                 needs_retry = False
                 retry_reason = RetryReason.NONE
+
+    # --- Composition guard: dead end ---
+    # success=False AND needs_retry=False with channel confirmation is a dead end.
+    # A channel confirmed the session completed, but content validation failed.
+    # This is a data-availability issue, not a permanent session failure.
+    # Escalate to retriable so the orchestrator has a recovery path.
+    if not success and not needs_retry:
+        match result.channel_confirmation:
+            case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.CHANNEL_B:
+                logger.warning(
+                    "dead_end_guard_escalated",
+                    channel=result.channel_confirmation.value,
+                    termination=result.termination.value,
+                    subtype=session.subtype,
+                    result_empty=not session.result.strip(),
+                )
+                needs_retry = True
+                retry_reason = RetryReason.RESUME
+            case ChannelConfirmation.UNMONITORED:
+                pass  # legitimate terminal failure — no channel confirmed completion
+            case _ as unreachable_cc:
+                assert_never(unreachable_cc)
 
     if not success or needs_retry:
         _capture_failure(

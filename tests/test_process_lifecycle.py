@@ -368,9 +368,15 @@ class TestProcessTreeKill:
                 pids.append(int(line.split(":")[1]))
 
         # All PIDs should be dead — use _wait_process_dead to avoid the flaky
-        # asyncio.sleep(0.5) + pid_exists() pattern that races kernel cleanup
+        # asyncio.sleep(0.5) + pid_exists() pattern that races kernel cleanup.
+        # Guard: run_managed_async calls wait_procs() which reaps zombies, so the
+        # PID may already be gone by the time we construct psutil.Process(pid).
         for pid in pids:
-            dead = await _wait_process_dead(psutil.Process(pid), timeout=5.0)
+            try:
+                proc = psutil.Process(pid)
+            except psutil.NoSuchProcess:
+                continue  # Already reaped — the process is definitely dead
+            dead = await _wait_process_dead(proc, timeout=5.0)
             assert dead, f"PID {pid} still alive 5s after kill"
 
     @pytest.mark.asyncio
@@ -392,7 +398,12 @@ class TestProcessTreeKill:
         )
         assert result.termination == TerminationReason.TIMED_OUT
 
-        dead = await _wait_process_dead(psutil.Process(result.pid), timeout=5.0)
+        # Guard: run_managed_async calls wait_procs() which may already reap the zombie.
+        try:
+            proc = psutil.Process(result.pid)
+            dead = await _wait_process_dead(proc, timeout=5.0)
+        except psutil.NoSuchProcess:
+            dead = True  # Already reaped — the process is definitely dead
         assert dead, f"PID {result.pid} still alive 5s after kill"
 
 
@@ -417,8 +428,13 @@ class TestTimeoutKillsHangingProcess:
         assert elapsed < 8, f"Should return within ~2s timeout, took {elapsed:.1f}s"
         assert "before hang" in result.stdout  # Partial output captured
         # Process should be dead — use _wait_process_dead to avoid the flaky
-        # asyncio.sleep(0.5) + pid_exists() pattern that races kernel cleanup
-        dead = await _wait_process_dead(psutil.Process(result.pid), timeout=5.0)
+        # asyncio.sleep(0.5) + pid_exists() pattern that races kernel cleanup.
+        # Guard: run_managed_async calls wait_procs() which may already reap the zombie.
+        try:
+            proc = psutil.Process(result.pid)
+            dead = await _wait_process_dead(proc, timeout=5.0)
+        except psutil.NoSuchProcess:
+            dead = True  # Already reaped — the process is definitely dead
         assert dead, f"PID {result.pid} still alive 5s after kill"
 
 

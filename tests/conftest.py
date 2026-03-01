@@ -54,18 +54,21 @@ def _flush_structlog_proxy_caches() -> None:
     Secondary defense only — the primary mechanism is cache_logger_on_first_use=False
     set at fixture entry, which prevents new caching during the test. This flush
     handles the edge case of module-level loggers cached at import time.
+
+    Scans ALL module attributes (not just 'logger'/'_logger') so that loggers
+    stored under any name (e.g. '_log' in execution.quota) are repaired.
     """
     import structlog
     import structlog._config as _sc
 
     current_procs = structlog.get_config()["processors"]
-    for mod_name, mod in list(sys.modules.items()):
+    for mod_name in list(sys.modules):
         if not mod_name.startswith("autoskillit"):
             continue
-        for attr_name in ("logger", "_logger"):
-            lg = getattr(mod, attr_name, None)
-            if lg is None:
-                continue
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            continue
+        for lg in vars(mod).values():
             if isinstance(lg, _sc.BoundLoggerLazyProxy):
                 lg.__dict__.pop("bind", None)
             elif hasattr(lg, "_processors"):

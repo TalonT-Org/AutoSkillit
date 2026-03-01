@@ -63,30 +63,30 @@ Use a vertical spine with `├──` branches. The structure reads top-to-botto
 **Reference example for implementation-pipeline:**
 
 ```
-  clone
-       │
-       ├── [create_branch]  ← only if open_pr=true
-       │
-       ├── [make-groups]    ← only if make_groups=true
-       │
-  ┌────┤ FOR EACH GROUP:
-  │    │
-  │    plan ─── [review] ─── verify ─── implement ─── test ─── merge ─── push
-  │         │                                           │
-  │         │                                    fix ───┘ (on failure)
-  │         │
-  │         └── next_or_done: more parts? → verify↑
-  │                           more groups? → plan↑
-  │                           all done? ↓
-  └────┘
-       │
-       ├── [audit-impl]    ← only if audit=true
-       │     GO → open_pr / done
-       │     NO GO → remediate → plan↑
-       │
-       ├── [open-pr]       ← only if open_pr=true
-       │
-       cleanup ─── done
+    clone
+      │
+      ├── [create_branch]          ← only if open_pr=true
+      │
+      ├── [group]                  ← only if make_groups=true
+      │
+ ┌────┤ FOR EACH GROUP:
+ │    │
+ │    plan ─── [review] ─── verify ─── implement (retry ×∞) ─── test ─── merge ─── push
+ │         │                                │                      │
+ │         │                         retry_worktree (retry ×3)   fix ───┘ (on failure → test↑)
+ │         │
+ │         └── next_or_done: more parts?  → verify↑
+ │                           more groups? → plan↑
+ │                           all done?    ↓
+ └────┘
+      │
+      ├── [audit_impl]             ← only if audit=true
+      │     GO    → open_pr_step
+      │     NO GO → remediate → plan↑
+      │
+      ├── [open_pr_step]           ← only if open_pr=true
+      │
+    cleanup_success ─── done
 
   ─────────────────────────────────
   done       "Pipeline complete."
@@ -147,11 +147,22 @@ Read the recipe YAML from the prompt context or from disk if a path is given. Id
 
 Construct the ASCII diagram following the rules in Section 2. Start with the happy path, omit infrastructure steps, then layer in branches and optional annotations.
 
-### Step 3: Build the Inputs Table
+### Step 3: Verify the Diagram
+
+Before writing, check the diagram for alignment errors. Scan every line and verify:
+
+1. **Spine consistency.** The main vertical spine (`│`, `├`, `└`) must stay in the same column throughout the diagram. Find the column of the first `│` — every subsequent `│`, `├──`, and `└──` on the main spine must start in that same column. If a `FOR EACH` block's `┌`, `│`, `└` characters are indented further than the spine, shift them left to match.
+2. **Box closure.** Every `┌` must have a matching `└` at the same indentation level.
+3. **Branch alignment.** All `├──` branches off the same spine share the same column.
+4. **No trailing whitespace drift.** Right-side annotations (`← only if ...`) should be column-aligned with each other where practical.
+
+If any check fails, fix the diagram before proceeding. This is a mechanical check — count character positions, do not eyeball it.
+
+### Step 4: Build the Inputs Table
 
 Construct the table following the rules in Section 3.
 
-### Step 4: Assemble and Write
+### Step 5: Assemble and Write
 
 Combine all three sections. Write to `temp/render-recipe/{recipe-name}.md`. Print the full content to terminal.
 

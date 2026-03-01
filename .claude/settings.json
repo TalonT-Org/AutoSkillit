@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__.*autoskillit.*__run_skill.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -m autoskillit.hooks.quota_check"
+          }
+        ]
+      }
+    ]
+  }
+}

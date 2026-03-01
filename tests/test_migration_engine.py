@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from autoskillit.core.paths import pkg_root
-
 from autoskillit.core.types import RetryReason
 from autoskillit.execution.session import SkillResult
 from autoskillit.migration.engine import (
@@ -215,9 +214,7 @@ class TestRecipeMigrationAdapter:
         assert error == ""
 
     # ME9
-    def test_recipe_adapter_validate_invalid_yaml_structure(
-        self, tmp_path: Path
-    ) -> None:
+    def test_recipe_adapter_validate_invalid_yaml_structure(self, tmp_path: Path) -> None:
         recipe_path = tmp_path / "broken.yaml"
         recipe_path.write_text("steps: 'not_a_dict'\ningredients: 42\n")
 
@@ -228,9 +225,7 @@ class TestRecipeMigrationAdapter:
         assert len(error) > 0
 
     # ME9b
-    def test_recipe_adapter_validate_errors_non_empty_branch(
-        self, tmp_path: Path
-    ) -> None:
+    def test_recipe_adapter_validate_errors_non_empty_branch(self, tmp_path: Path) -> None:
         recipe_path = tmp_path / "no-kitchen-rules.yaml"
         recipe_path.write_text(
             textwrap.dedent("""\

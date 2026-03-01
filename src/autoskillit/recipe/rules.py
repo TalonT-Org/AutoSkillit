@@ -992,3 +992,46 @@ def _check_skill_command_prefix(wf: Recipe) -> list[RuleFinding]:
                 )
             )
     return findings
+
+
+@semantic_rule(
+    name="push-missing-explicit-remote-url",
+    description=(
+        "push_to_remote step does not pass an explicit remote_url. "
+        "The implicit source_dir lookup will fail silently if source_dir's "
+        "origin is a local non-bare repository. "
+        "Capture remote_url from the clone step and pass it explicitly."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_push_missing_explicit_remote_url(recipe: Recipe) -> list[RuleFinding]:
+    """Detect push_to_remote steps that omit an explicit remote_url.
+
+    When remote_url is absent, push_to_remote falls back to reading the upstream
+    URL from source_dir at push time. This fails silently if source_dir's origin
+    is a local non-bare repository (branch checked out), which is a common topology
+    in clone-based pipelines run against local repos.
+
+    The fix: capture remote_url from the clone step's result and pass it explicitly
+    to push_to_remote. The validator fires this warning so recipe authors are alerted
+    before a pipeline run.
+    """
+    findings = []
+    for step_name, step in recipe.steps.items():
+        if step.tool == "push_to_remote":
+            with_args = step.with_args or {}
+            if "remote_url" not in with_args:
+                findings.append(
+                    RuleFinding(
+                        rule="push-missing-explicit-remote-url",
+                        severity=Severity.WARNING,
+                        step_name=step_name,
+                        message=(
+                            f"'{step_name}' uses push_to_remote without an explicit remote_url. "
+                            "The implicit source_dir lookup will fail silently if source_dir's "
+                            "origin is a local non-bare repository. "
+                            "Capture remote_url from the clone step and pass it explicitly."
+                        ),
+                    )
+                )
+    return findings

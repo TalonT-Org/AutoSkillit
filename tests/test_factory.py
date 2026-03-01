@@ -9,7 +9,7 @@ from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.execution.testing import DefaultTestRunner
 from autoskillit.migration.engine import DefaultMigrationService
 from autoskillit.pipeline.context import ToolContext
-from autoskillit.recipe.io import DefaultRecipeRepository
+from autoskillit.recipe.repository import DefaultRecipeRepository
 from autoskillit.server._factory import make_context
 from autoskillit.workspace.cleanup import DefaultWorkspaceManager
 from tests.conftest import MockSubprocessRunner

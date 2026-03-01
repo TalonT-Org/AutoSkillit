@@ -17,6 +17,7 @@ from .logging import (
     get_logger,
 )
 from .types import (
+    AUTOSKILLIT_INSTALLED_VERSION,
     CONTEXT_EXHAUSTION_MARKER,
     PIPELINE_FORBIDDEN_TOOLS,
     RESERVED_LOG_RECORD_KEYS,
@@ -62,6 +63,7 @@ __all__ = [
     "configure_logging",
     "get_logger",
     # types
+    "AUTOSKILLIT_INSTALLED_VERSION",
     "CONTEXT_EXHAUSTION_MARKER",
     "PIPELINE_FORBIDDEN_TOOLS",
     "RESERVED_LOG_RECORD_KEYS",

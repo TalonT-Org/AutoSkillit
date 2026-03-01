@@ -9,10 +9,13 @@ import json
 from collections.abc import Awaitable, Sequence
 from dataclasses import asdict, dataclass, field
 from enum import Enum, StrEnum
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
 
 T = TypeVar("T")
+
+AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
 
 
 class RetryReason(StrEnum):
@@ -389,9 +392,7 @@ class CloneManager(Protocol):
 
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]: ...
 
-    def push_to_remote(
-        self, clone_path: str, source_dir: str, branch: str
-    ) -> dict[str, str]: ...
+    def push_to_remote(self, clone_path: str, source_dir: str, branch: str) -> dict[str, str]: ...
 
 
 @runtime_checkable

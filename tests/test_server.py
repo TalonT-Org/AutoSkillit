@@ -785,7 +785,7 @@ class TestRecipeTools:
 
     # SS1
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe.list_recipes")
+    @patch("autoskillit.recipe._api.list_recipes")
     async def test_list_returns_json_object(self, mock_list):
         """list_recipes returns JSON object with scripts array (not gated)."""
         from autoskillit.core.types import LoadResult, RecipeSource
@@ -836,7 +836,7 @@ class TestRecipeTools:
 
     # SS4
     @pytest.mark.asyncio
-    @patch("autoskillit.recipe.list_recipes")
+    @patch("autoskillit.recipe._api.list_recipes")
     async def test_list_reports_errors_in_response(self, mock_list):
         """list_recipes includes errors in JSON when recipes fail to parse."""
         from autoskillit.core.types import LoadReport, LoadResult
@@ -939,17 +939,15 @@ class TestRecipeTools:
 
         with (
             patch(
-                "autoskillit.recipe.validator.run_semantic_rules",
+                "autoskillit.recipe._api.run_semantic_rules",
                 side_effect=ValueError("injected parse failure"),
             ),
-            structlog.testing.capture_logs() as logs,
+            patch("autoskillit.recipe._api._logger") as mock_logger,
         ):
             result = json.loads(await load_recipe(name="test"))
 
         assert "content" in result, "load_recipe must be non-blocking even on parse failure"
-        assert any(log.get("log_level") == "warning" for log in logs), (
-            f"Expected a warning log entry for parse failure, got: {logs}"
-        )
+        mock_logger.warning.assert_called_once()
         assert any(s.get("rule") == "validation-error" for s in result["suggestions"]), (
             "Unexpected exception must appear as a validation-error finding in suggestions"
         )
@@ -966,7 +964,7 @@ class TestRecipeTools:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with patch(
-            "autoskillit.recipe.validator.run_semantic_rules",
+            "autoskillit.recipe._api.run_semantic_rules",
             side_effect=ValueError("injected crash"),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -1037,7 +1035,7 @@ class TestLoadRecipeExceptionHandling:
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         (recipes_dir / "test.yaml").write_text("name: test\n")
-        with patch("autoskillit.recipe.load_yaml", side_effect=YAMLError("bad yaml")):
+        with patch("autoskillit.recipe._api.load_yaml", side_effect=YAMLError("bad yaml")):
             result = json.loads(await load_recipe(name="test"))
         assert "error" not in result
         assert any(
@@ -1068,7 +1066,9 @@ class TestLoadRecipeExceptionHandling:
         )
         with (
             patch("autoskillit.recipe.find_recipe_by_name", return_value=fake_match),
-            patch("autoskillit.recipe.io._parse_recipe", side_effect=ValueError("bad structure")),
+            patch(
+                "autoskillit.recipe._api._parse_recipe", side_effect=ValueError("bad structure")
+            ),
         ):
             result = json.loads(await load_recipe(name="test"))
         assert "error" not in result
@@ -1089,7 +1089,7 @@ class TestLoadRecipeExceptionHandling:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with patch(
-            "autoskillit.recipe.contracts.load_recipe_card",
+            "autoskillit.recipe._api.load_recipe_card",
             side_effect=FileNotFoundError("missing"),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -1111,7 +1111,7 @@ class TestLoadRecipeExceptionHandling:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with patch(
-            "autoskillit.recipe.validator.run_semantic_rules",
+            "autoskillit.recipe._api.run_semantic_rules",
             side_effect=AttributeError("programming error"),
         ):
             with pytest.raises(AttributeError, match="programming error"):
@@ -3246,7 +3246,6 @@ class TestMergeWorktreeCleanupReporting:
                 "",
             )
         )  # worktree list
-        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # main_repo branch detection
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(
             _make_result(1, "", "error: untracked files")
@@ -3276,7 +3275,6 @@ class TestMergeWorktreeCleanupReporting:
                 "",
             )
         )  # worktree list
-        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # main_repo branch detection
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS
@@ -3321,7 +3319,6 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
         )
-        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # main_repo branch detection
         tool_ctx.runner.push(_make_result(0, "", ""))  # merge
         tool_ctx.runner.push(
             _make_result(1, "", "error: untracked files")
@@ -3351,7 +3348,6 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
         )
-        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # main_repo branch detection
         tool_ctx.runner.push(_make_result(0, "", ""))  # merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS

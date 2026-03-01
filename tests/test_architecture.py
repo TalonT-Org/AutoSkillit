@@ -1985,3 +1985,67 @@ def test_default_prefix_convention_enforced() -> None:
             surviving_old.append(f"{module_name}.{old_name}")
     assert not missing_new, f"New Default* names not found: {missing_new}"
     assert not surviving_old, f"Old names still present: {surviving_old}"
+
+
+# ---------------------------------------------------------------------------
+# groupC Part A tests
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_rules_module_exists() -> None:
+    """P8: recipe/rules.py must exist and be importable."""
+    from autoskillit.recipe import rules  # noqa: F401
+
+    assert rules is not None
+
+
+def test_semantic_rule_functions_defined_in_rules_module() -> None:
+    """P8: Semantic rule functions must be defined in recipe/rules.py."""
+    from autoskillit.recipe.validator import _check_outdated_version
+
+    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules"
+
+
+def test_installed_version_in_core_types() -> None:
+    """P3-F2: AUTOSKILLIT_INSTALLED_VERSION must be in autoskillit.core."""
+    from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION
+
+    assert isinstance(AUTOSKILLIT_INSTALLED_VERSION, str) and AUTOSKILLIT_INSTALLED_VERSION
+
+
+def test_rules_module_no_autoskillit_init_import() -> None:
+    """P3-F2: recipe/rules.py must not import from autoskillit top-level __init__."""
+    rules_path = SRC_ROOT / "recipe" / "rules.py"
+    assert "from autoskillit import __version__" not in rules_path.read_text()
+
+
+def test_recipe_api_module_exists() -> None:
+    """P14-F1/F2: recipe/_api.py must exist and be importable."""
+    import autoskillit.recipe._api  # noqa: F401
+
+
+def test_default_recipe_repository_in_repository_module() -> None:
+    """P2-F1: DefaultRecipeRepository must live in recipe/repository.py."""
+    from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: F401
+
+
+def test_default_recipe_repository_not_in_io() -> None:
+    """P2-F1: DefaultRecipeRepository must be removed from recipe/io.py."""
+    io_path = SRC_ROOT / "recipe" / "io.py"
+    assert "class DefaultRecipeRepository" not in io_path.read_text()
+
+
+def test_migration_api_module_exists() -> None:
+    """P14-F3: migration/_api.py must exist and be importable."""
+    import autoskillit.migration._api  # noqa: F401
+
+
+def test_migration_engine_no_module_level_recipe_imports() -> None:
+    """P4-F1: migration/engine.py must have no module-level recipe imports."""
+    engine_path = SRC_ROOT / "migration" / "engine.py"
+    recipe_violations = [
+        (stem, ln)
+        for stem, ln in _extract_module_level_internal_imports(engine_path)
+        if stem == "recipe"
+    ]
+    assert not recipe_violations, f"module-level recipe imports remain: {recipe_violations}"

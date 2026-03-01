@@ -40,26 +40,17 @@ def detect_source_dir(cwd: str) -> str:
     return _cwd
 
 
-def clone_repo(
-    source_dir: str,
-    run_name: str,
-    feature_branch_prefix: str = "",
-) -> dict[str, str]:
+def clone_repo(source_dir: str, run_name: str) -> dict[str, str]:
     """Clone source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
 
     Used as a run_python entry point in pipeline recipes. Raises ValueError if
-    source_dir does not exist; raises RuntimeError if git clone or feature branch
-    creation fails.
+    source_dir does not exist; raises RuntimeError if git clone fails.
 
     When source_dir is empty, auto-detects from git rev-parse --show-toplevel.
     Tilde and relative paths are expanded before validation.
 
-    When feature_branch_prefix is non-empty, creates and checks out a feature branch
-    named '<prefix>-<run_name>-<timestamp>' in the clone after cloning.
-
     Returns:
-        {"clone_path": str, "source_dir": str, "feature_branch": str}
-        feature_branch is the branch name if created, or "" if not.
+        {"clone_path": str, "source_dir": str}
     """
     if not source_dir:
         source_dir = detect_source_dir(str(Path.cwd()))
@@ -85,33 +76,7 @@ def clone_repo(
             f"git clone failed:\nstderr: {result.stderr.strip()}\nstdout: {result.stdout.strip()}"
         )
     logger.info("clone_created", clone_path=str(clone_path), source=str(source))
-
-    feature_branch = ""
-    if feature_branch_prefix:
-        feature_branch = f"{feature_branch_prefix}-{run_name}-{timestamp}"
-        checkout_result = subprocess.run(
-            ["git", "checkout", "-b", feature_branch],
-            cwd=str(clone_path),
-            capture_output=True,
-            text=True,
-        )
-        if checkout_result.returncode != 0:
-            raise RuntimeError(
-                f"git checkout -b {feature_branch} failed:\n"
-                f"stderr: {checkout_result.stderr.strip()}\n"
-                f"stdout: {checkout_result.stdout.strip()}"
-            )
-        logger.info(
-            "feature_branch_created",
-            clone_path=str(clone_path),
-            feature_branch=feature_branch,
-        )
-
-    return {
-        "clone_path": str(clone_path),
-        "source_dir": str(source),
-        "feature_branch": feature_branch,
-    }
+    return {"clone_path": str(clone_path), "source_dir": str(source)}
 
 
 def remove_clone(clone_path: str, keep: str = "false") -> dict[str, str]:
@@ -199,61 +164,6 @@ def push_to_remote(
     return {"success": "true", "stderr": ""}
 
 
-def merge_feature_branch(
-    clone_path: str,
-    feature_branch: str,
-    base_branch: str,
-) -> dict[str, str]:
-    """Merge feature_branch into base_branch in the clone.
-
-    Checks out base_branch, then merges feature_branch into it.
-    Used as a run_python entry point in implementation-pipeline.yaml
-    for the final delivery step after audit_impl passes.
-
-    Returns:
-        {"success": "true"} on success,
-        {"success": "false", "error": str} on failure (does not raise).
-    """
-    checkout_result = subprocess.run(
-        ["git", "checkout", base_branch],
-        cwd=clone_path,
-        capture_output=True,
-        text=True,
-    )
-    if checkout_result.returncode != 0:
-        logger.error(
-            "merge_feature_branch_checkout_failed",
-            clone_path=clone_path,
-            base_branch=base_branch,
-            stderr=checkout_result.stderr.strip(),
-        )
-        return {"success": "false", "error": f"checkout failed: {checkout_result.stderr.strip()}"}
-
-    merge_result = subprocess.run(
-        ["git", "merge", feature_branch],
-        cwd=clone_path,
-        capture_output=True,
-        text=True,
-    )
-    if merge_result.returncode != 0:
-        logger.error(
-            "merge_feature_branch_merge_failed",
-            clone_path=clone_path,
-            feature_branch=feature_branch,
-            base_branch=base_branch,
-            stderr=merge_result.stderr.strip(),
-        )
-        return {"success": "false", "error": f"merge failed: {merge_result.stderr.strip()}"}
-
-    logger.info(
-        "feature_branch_merged",
-        clone_path=clone_path,
-        feature_branch=feature_branch,
-        base_branch=base_branch,
-    )
-    return {"success": "true"}
-
-
 class DefaultCloneManager:
     """Concrete CloneManager that delegates to module-level clone functions."""
 
@@ -263,7 +173,5 @@ class DefaultCloneManager:
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]:
         return remove_clone(clone_path, keep)
 
-    def push_to_remote(
-        self, clone_path: str, source_dir: str, branch: str
-    ) -> dict[str, str]:
+    def push_to_remote(self, clone_path: str, source_dir: str, branch: str) -> dict[str, str]:
         return push_to_remote(clone_path, source_dir, branch)

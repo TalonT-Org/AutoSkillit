@@ -133,7 +133,7 @@ def test_default_database_reader_satisfies_database_reader():
 
 def test_default_recipe_repository_satisfies_recipe_repository():
     from autoskillit.core import RecipeRepository
-    from autoskillit.recipe.io import DefaultRecipeRepository
+    from autoskillit.recipe.repository import DefaultRecipeRepository
 
     assert isinstance(DefaultRecipeRepository(), RecipeRepository)
 

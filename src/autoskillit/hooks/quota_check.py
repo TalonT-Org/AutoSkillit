@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """PreToolUse hook: quota check before run_skill / run_skill_retry."""
+
 import json
 import subprocess
 import sys

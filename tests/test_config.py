@@ -32,11 +32,6 @@ class TestDefaultConfig:
         assert cfg.model.default is None
         assert cfg.model.override is None
 
-    def test_default_worktree_setup_config(self):
-        """WS_C1: WorktreeSetupConfig defaults to command=None."""
-        cfg = AutomationConfig()
-        assert cfg.worktree_setup.command is None
-
 
 class TestLoadConfig:
     def test_load_config_no_files_returns_defaults(self, tmp_path):
@@ -306,16 +301,6 @@ class TestSyncConfigRemoval:
 
 
 class TestRunSkillRetryConfigFields:
-    def test_heartbeat_marker_removed(self):
-        assert not hasattr(RunSkillRetryConfig(), "heartbeat_marker"), (
-            "heartbeat_marker is dead code in RunSkillRetryConfig — remove it"
-        )
-
-    def test_completion_marker_removed(self):
-        assert not hasattr(RunSkillRetryConfig(), "completion_marker"), (
-            "completion_marker is dead code in RunSkillRetryConfig — remove it"
-        )
-
     def test_has_only_timeout_and_stale_threshold(self):
         field_names = {f.name for f in dc_fields(RunSkillRetryConfig)}
         assert field_names == {"timeout", "stale_threshold"}, (

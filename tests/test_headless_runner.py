@@ -41,32 +41,20 @@ def test_inject_completion_directive_appends_marker():
     assert "ORCHESTRATION DIRECTIVE" in result
 
 
-def test_resolve_model_prefers_override(make_config):
+@pytest.mark.parametrize(
+    "override,step,default,expected",
+    [
+        ("opus", "haiku", None, "opus"),  # override wins regardless of step
+        (None, "haiku", None, "haiku"),  # step model used when no override/default
+        (None, "", "sonnet", "sonnet"),  # config default fills empty step
+        (None, "", None, None),  # all empty → None
+    ],
+)
+def test_resolve_model_priority(make_config, override, step, default, expected):
     from autoskillit.execution.headless import _resolve_model
 
-    cfg = make_config(model_override="opus")
-    assert _resolve_model("sonnet", cfg) == "opus"
-
-
-def test_resolve_model_uses_step_model_when_no_override(make_config):
-    from autoskillit.execution.headless import _resolve_model
-
-    cfg = make_config(model_override=None, model_default=None)
-    assert _resolve_model("haiku", cfg) == "haiku"
-
-
-def test_resolve_model_uses_config_default_when_step_empty(make_config):
-    from autoskillit.execution.headless import _resolve_model
-
-    cfg = make_config(model_override=None, model_default="sonnet")
-    assert _resolve_model("", cfg) == "sonnet"
-
-
-def test_resolve_model_returns_none_when_all_empty(make_config):
-    from autoskillit.execution.headless import _resolve_model
-
-    cfg = make_config(model_override=None, model_default=None)
-    assert _resolve_model("", cfg) is None
+    cfg = make_config(model_override=override, model_default=default)
+    assert _resolve_model(step, cfg) == expected
 
 
 def _sr(returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT):

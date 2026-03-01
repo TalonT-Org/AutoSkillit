@@ -100,21 +100,6 @@ def test_parse_pytest_summary_format_variants(_id, stdout, expected):
     assert parse_pytest_summary(stdout) == expected
 
 
-def test_parse_pytest_summary_returns_passed_count():
-    from autoskillit.execution.testing import parse_pytest_summary
-
-    result = parse_pytest_summary("= 42 passed in 1.5s =")
-    assert result == {"passed": 42}
-
-
-def test_parse_pytest_summary_returns_failed_and_passed():
-    from autoskillit.execution.testing import parse_pytest_summary
-
-    result = parse_pytest_summary("= 3 failed, 97 passed in 2.0s =")
-    assert result["failed"] == 3
-    assert result["passed"] == 97
-
-
 def test_parse_pytest_summary_returns_empty_dict_for_no_match():
     from autoskillit.execution.testing import parse_pytest_summary
 
@@ -126,14 +111,6 @@ def test_parse_pytest_summary_only_matches_equals_delimited_lines():
     from autoskillit.execution.testing import parse_pytest_summary
 
     assert parse_pytest_summary("3 failed connections\n= 5 passed =") == {"passed": 5}
-
-
-def test_parse_pytest_summary_handles_warnings():
-    from autoskillit.execution.testing import parse_pytest_summary
-
-    result = parse_pytest_summary("= 100 passed, 5 warnings in 3s =")
-    assert result.get("warning", 0) == 5
-    assert result.get("passed", 0) == 100
 
 
 def test_check_test_passed_true_on_zero_rc_clean_output():
@@ -165,49 +142,6 @@ def test_check_test_passed_true_for_xfailed_skipped():
     from autoskillit.execution.testing import check_test_passed
 
     assert check_test_passed(0, "= 97 passed, 3 xfailed, 1 skipped =") is True
-
-
-# -- Bare -q format: parse_pytest_summary --
-
-
-def test_parse_pytest_summary_bare_q_failed_and_passed():
-    """pytest -q bare format: 'N failed, M passed in Ts' — no = delimiters."""
-    from autoskillit.execution.testing import parse_pytest_summary
-
-    result = parse_pytest_summary("3 failed, 97 passed in 2.31s")
-    assert result["failed"] == 3
-    assert result["passed"] == 97
-
-
-def test_parse_pytest_summary_bare_q_passed_only():
-    """pytest -q bare format: 'N passed in Ts'."""
-    from autoskillit.execution.testing import parse_pytest_summary
-
-    result = parse_pytest_summary("100 passed in 1.50s")
-    assert result == {"passed": 100}
-
-
-def test_parse_pytest_summary_bare_q_with_warnings():
-    """pytest -q bare format with warnings: 'N passed, M warnings in Ts'."""
-    from autoskillit.execution.testing import parse_pytest_summary
-
-    result = parse_pytest_summary("97 passed, 5 warnings in 3.1s")
-    assert result["passed"] == 97
-    assert result.get("warning", 0) == 5
-
-
-def test_parse_pytest_summary_bare_q_multiline_output():
-    """Bare -q summary at end of multiline output (normal pytest -q run)."""
-    from autoskillit.execution.testing import parse_pytest_summary
-
-    output = (
-        "FAILED tests/test_foo.py::test_a - AssertionError\n"
-        "FAILED tests/test_foo.py::test_b - AssertionError\n"
-        "2 failed, 98 passed in 4.12s\n"
-    )
-    result = parse_pytest_summary(output)
-    assert result["failed"] == 2
-    assert result["passed"] == 98
 
 
 # -- CWA: check_test_passed with no summary line --

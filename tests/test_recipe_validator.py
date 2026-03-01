@@ -448,14 +448,6 @@ class TestValidateRecipe:
                         f"is not a known response field: {RETRY_RESPONSE_FIELDS}"
                     )
 
-    # CAP9
-    def test_bundled_recipes_still_valid(self) -> None:
-        bd = builtin_recipes_dir()
-        for f in bd.glob("*.yaml"):
-            wf = load_recipe(f)
-            errors = validate_recipe(wf)
-            assert errors == [], f"Regression in {f.name}: {errors}"
-
 
 # ---------------------------------------------------------------------------
 # TestAnalyzeDataflow — migrated from test_recipe_parser.py

@@ -1889,13 +1889,28 @@ def test_sc5_make_groups_outputs_include_group_files() -> None:
     assert "group_files" in output_names
 
 
+def test_pipeline_summary_contract_declared() -> None:
+    from autoskillit.core.paths import pkg_root
+
+    contracts_path = pkg_root() / "recipe" / "skill_contracts.yaml"
+    contracts = yaml.safe_load(contracts_path.read_text())
+    assert "pipeline-summary" in contracts["skills"]
+    skill = contracts["skills"]["pipeline-summary"]
+    required_inputs = [i["name"] for i in skill["inputs"] if i.get("required", False)]
+    assert "bug_report_path" in required_inputs
+    assert "feature_branch" in required_inputs
+    assert "target_branch" in required_inputs
+    assert "workspace" in required_inputs
+
+
 # ---------------------------------------------------------------------------
 # Recipe structural tests — implementation-pipeline.yaml (T_IP1–T_IP5)
 # ---------------------------------------------------------------------------
 
 
 class TestImplementationPipelineStructure:
-    def setup_method(self) -> None:
+    @pytest.fixture(scope="class", autouse=True)
+    def _load_recipe(self) -> None:
         self.recipe = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
 
     def test_ip1_group_step_captures_group_files(self) -> None:
@@ -2088,7 +2103,8 @@ class TestImplementationPipelineStructure:
 
 
 class TestBugfixLoopStructure:
-    def setup_method(self) -> None:
+    @pytest.fixture(scope="class", autouse=True)
+    def _load_recipe(self) -> None:
         self.recipe = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
 
     def test_bl1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
@@ -2138,7 +2154,8 @@ class TestBugfixLoopStructure:
 
 
 class TestInvestigateFirstStructure:
-    def setup_method(self) -> None:
+    @pytest.fixture(scope="class", autouse=True)
+    def _load_recipe(self) -> None:
         self.recipe = load_recipe(builtin_recipes_dir() / "investigate-first.yaml")
 
     def test_if1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
@@ -2228,7 +2245,8 @@ class TestInvestigateFirstStructure:
 
 
 class TestAuditAndFixStructure:
-    def setup_method(self) -> None:
+    @pytest.fixture(scope="class", autouse=True)
+    def _load_recipe(self) -> None:
         self.recipe = load_recipe(builtin_recipes_dir() / "audit-and-fix.yaml")
 
     def test_aaf1_implement_uses_no_merge_skill(self) -> None:

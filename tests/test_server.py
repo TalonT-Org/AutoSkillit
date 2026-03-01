@@ -34,6 +34,7 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.db import _select_only_authorizer, _validate_select_only
+from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.execution.headless import (
     _build_skill_result,
     _ensure_skill_prefix,
@@ -270,7 +271,7 @@ class TestNoSkillsDirectoryProvider:
 class TestPluginDirConstant:
     """T6: tool_ctx.plugin_dir defaults to the package root directory."""
 
-    def test_plugin_dir_returns_package_root(self, tool_ctx):
+    def test_plugin_dir_assignment_is_visible_via_get_ctx(self, tool_ctx):
         """By default tool_ctx.plugin_dir is set to tmp_path by the fixture.
 
         The real package dir is what the server uses at runtime (set by cli.py serve()).
@@ -769,6 +770,40 @@ class TestKitchenStatus:
         tool_ctx.config = cfg
         result = json.loads(await kitchen_status())
         assert result["token_usage_verbosity"] == "none"
+
+    @pytest.mark.asyncio
+    async def test_kitchen_status_includes_github_config(self, tool_ctx):
+        tool_ctx.config.github.default_repo = "owner/repo"
+        status = json.loads(await kitchen_status())
+        assert "github_default_repo" in status
+        assert status["github_default_repo"] == "owner/repo"
+        assert "github_token_configured" in status
+
+    @pytest.mark.asyncio
+    async def test_kitchen_status_github_token_configured_true_from_client(self, tool_ctx):
+        """kitchen_status must read github_token_configured from ctx.github_client.has_token."""
+        tool_ctx.github_client = DefaultGitHubFetcher(token="my-token")
+        status = json.loads(await kitchen_status())
+        assert status["github_token_configured"] is True
+
+    @pytest.mark.asyncio
+    async def test_kitchen_status_github_token_not_configured_from_client(
+        self, tool_ctx, monkeypatch
+    ):
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        tool_ctx.github_client = DefaultGitHubFetcher(token=None)
+        status = json.loads(await kitchen_status())
+        assert status["github_token_configured"] is False
+
+    @pytest.mark.asyncio
+    async def test_kitchen_status_github_token_does_not_reflect_post_construction_env(
+        self, tool_ctx, monkeypatch
+    ):
+        """kitchen_status must NOT re-read os.environ — reflects ctx.github_client.has_token."""
+        tool_ctx.github_client = DefaultGitHubFetcher(token=None)
+        monkeypatch.setenv("GITHUB_TOKEN", "set-after-construction")
+        status = json.loads(await kitchen_status())
+        assert status["github_token_configured"] is False
 
 
 class TestRecipeTools:
@@ -2653,7 +2688,7 @@ class TestGatedToolAccess:
         assert "open_kitchen" in parsed["result"]
 
     def test_all_tools_tagged_automation(self):
-        """All 8 tools have the 'automation' tag for future visibility control."""
+        """All registered tools have the 'automation' tag for future visibility control."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -5475,7 +5510,7 @@ _MINIMAL_SCRIPT_YAML = """\
 name: test-script
 description: Test
 summary: test
-inputs:
+ingredients:
   task:
     description: What to do
     required: true
@@ -5493,7 +5528,7 @@ steps:
   escalate:
     action: stop
     message: "Failed."
-constraints:
+kitchen_rules:
   - "Follow routing rules"
 """
 

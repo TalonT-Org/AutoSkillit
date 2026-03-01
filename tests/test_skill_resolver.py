@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import yaml
 
@@ -73,11 +72,14 @@ class TestSkillResolver:
         sources = {s.source for s in skills}
         assert sources == {SkillSource.BUNDLED}
 
+    def test_pipeline_summary_skill_exists(self) -> None:
+        resolver = SkillResolver()
+        names = [s.name for s in resolver.list_all()]
+        assert "pipeline-summary" in names
+
     def test_skill_md_cross_references_are_namespaced(self) -> None:
         """All /skill-name references in SKILL.md files use /autoskillit: prefix."""
-        import autoskillit
-
-        skills_dir = Path(autoskillit.__file__).parent / "skills"
+        skills_dir = bundled_skills_dir()
         for skill_md in skills_dir.rglob("SKILL.md"):
             content = skill_md.read_text()
             for match in re.finditer(r"(?<!\w)/([a-z][\w-]+)", content):
@@ -97,7 +99,6 @@ class TestSkillResolver:
         """YAML workflow examples embedded in SKILL.md files must pass validation."""
         import yaml as _yaml
 
-        import autoskillit
         from autoskillit.recipe.io import (
             _parse_recipe as _parse_workflow,
         )
@@ -105,7 +106,7 @@ class TestSkillResolver:
             validate_recipe as validate_workflow,
         )
 
-        skills_dir = Path(autoskillit.__file__).parent / "skills"
+        skills_dir = bundled_skills_dir()
         yaml_block_re = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
 
         for skill_md in skills_dir.rglob("SKILL.md"):

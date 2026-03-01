@@ -91,7 +91,10 @@ class TestServerToolSurfaceContract:
     def _close_kitchen(self, tool_ctx):
         from autoskillit.pipeline.gate import DefaultGateState
 
+        original_gate = tool_ctx.gate
         tool_ctx.gate = DefaultGateState(enabled=False)
+        yield
+        tool_ctx.gate = original_gate
 
     def test_open_kitchen_prompt_names_all_forbidden_tools(self):
         """open_kitchen prompt text must name every forbidden tool with prohibition framing."""

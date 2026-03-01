@@ -247,7 +247,12 @@ class TestSmokeScriptValidation:
 
     @pytest.fixture(autouse=True)
     def _setup_ctx(self, tool_ctx):
-        """Initialize ToolContext for smoke script validation tests."""
+        """Pull tool_ctx into scope to trigger its monkeypatch side-effect.
+
+        The server module's _ctx is set by the tool_ctx fixture. Tests in this
+        class call server tools (e.g. validate_recipe) that read _ctx. Without
+        this fixture, _ctx is None and every server call raises.
+        """
 
     async def test_script_validates(self, smoke_script_path: Path) -> None:
         result = json.loads(await validate_recipe(script_path=str(smoke_script_path)))
@@ -415,24 +420,6 @@ class TestSmokeScriptValidation:
         pipeline = yaml.safe_load(SMOKE_SCRIPT.read_text())
         assess_cmd = pipeline["steps"]["assess"]["with"]["skill_command"]
         assert "bug_report.json" in assess_cmd
-
-    def test_pipeline_summary_skill_exists(self) -> None:
-        from autoskillit.workspace.skills import SkillResolver
-
-        resolver = SkillResolver()
-        names = [s.name for s in resolver.list_all()]
-        assert "pipeline-summary" in names
-
-    def test_pipeline_summary_contract_declared(self) -> None:
-        contracts_path = PROJECT_ROOT / "src" / "autoskillit" / "recipe" / "skill_contracts.yaml"
-        contracts = yaml.safe_load(contracts_path.read_text())
-        assert "pipeline-summary" in contracts["skills"]
-        skill = contracts["skills"]["pipeline-summary"]
-        required_inputs = [i["name"] for i in skill["inputs"] if i.get("required", False)]
-        assert "bug_report_path" in required_inputs
-        assert "feature_branch" in required_inputs
-        assert "target_branch" in required_inputs
-        assert "workspace" in required_inputs
 
 
 # ---------------------------------------------------------------------------

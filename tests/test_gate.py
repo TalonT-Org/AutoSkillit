@@ -156,11 +156,10 @@ def test_helpers_has_no_gate_error_result_duplicate():
 def test_gate_has_no_internal_imports():
     """_gate.py must have zero autoskillit internal imports (L0 constraint)."""
     import ast
-    from pathlib import Path
 
-    src = (
-        Path(__file__).parent.parent / "src" / "autoskillit" / "pipeline" / "gate.py"
-    ).read_text()
+    from autoskillit.core.paths import pkg_root
+
+    src = (pkg_root() / "pipeline" / "gate.py").read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):

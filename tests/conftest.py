@@ -47,6 +47,9 @@ class MockSubprocessRunner(SubprocessRunner):
         return self._default
 
 
+# NOTE (groupE): After groupE creates tests/server/, move this fixture to
+# tests/server/conftest.py so its scope can be safely narrowed.
+# Do not move it before tests/server/ exists.
 @pytest.fixture
 def tool_ctx(monkeypatch, tmp_path):
     """Provide a fully isolated ToolContext for server tests.

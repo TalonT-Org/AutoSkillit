@@ -943,7 +943,7 @@ def test_singleton_definition_locality(source_file: Path) -> None:
     """Module-level constructor calls are only permitted in SINGLETON_ALLOWED_MODULES."""
     mod_stem = source_file.stem
     if mod_stem in SINGLETON_ALLOWED_MODULES:
-        return  # exempt
+        pytest.skip(f"{mod_stem!r} is in SINGLETON_ALLOWED_MODULES")
 
     tree = ast.parse(source_file.read_text())
     violations: list[str] = []

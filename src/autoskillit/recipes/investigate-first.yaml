@@ -158,6 +158,10 @@ steps:
       step_name: "assess"
     on_success: verify
     on_failure: cleanup_failure
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: cleanup_failure
 
   audit_impl:
     tool: run_skill

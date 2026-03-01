@@ -76,12 +76,18 @@ def validate_recipe(recipe: Recipe) -> list[str]:
             )
         if step.action == "stop" and not step.message:
             errors.append(f"Terminal step '{step_name}' (action: stop) must have a 'message'.")
-        for goto_field in ("on_success", "on_failure"):
+        for goto_field in ("on_success", "on_failure", "on_retry"):
             target = getattr(step, goto_field)
             if target and target not in step_names and target != "done":
                 errors.append(
                     f"Step '{step_name}'.{goto_field} references unknown step '{target}'."
                 )
+        if step.on_retry is not None and step.retry is not None and step.retry.on == "needs_retry":
+            errors.append(
+                f"Step '{step_name}' has both 'on_retry' and 'retry.on=\"needs_retry\"'; "
+                f"they are mutually exclusive. Use 'on_retry' to route to a different step "
+                f"on needs_retry=True, or 'retry' to re-run the same step — not both."
+            )
         if step.retry and step.retry.on_exhausted not in step_names:
             errors.append(
                 f"Step '{step_name}'.retry.on_exhausted references "
@@ -171,7 +177,7 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
     graph: dict[str, set[str]] = {name: set() for name in step_names}
 
     for name, step in recipe.steps.items():
-        for target in (step.on_success, step.on_failure):
+        for target in (step.on_success, step.on_failure, step.on_retry):
             if target and target in step_names:
                 graph[name].add(target)
         if step.on_result:

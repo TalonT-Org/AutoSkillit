@@ -64,3 +64,17 @@ def test_recipe_step_has_expected_fields() -> None:
         "on_success",
         "on_failure",
     } <= fields
+
+
+def test_recipe_step_has_on_retry_field() -> None:
+    """RecipeStep must support on_retry as a first-class routing field."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep(
+        tool="run_skill",
+        on_success="done",
+        on_failure="cleanup",
+        on_retry="verify",
+        with_args={"skill_command": "test", "cwd": "/tmp"},
+    )
+    assert step.on_retry == "verify"

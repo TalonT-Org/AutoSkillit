@@ -42,6 +42,7 @@ class RecipeStep:
     with_args: dict[str, str] = field(default_factory=dict)
     on_success: str | None = None
     on_failure: str | None = None
+    on_retry: str | None = None
     on_result: StepResultRoute | None = None
     retry: StepRetry | None = None
     message: str | None = None

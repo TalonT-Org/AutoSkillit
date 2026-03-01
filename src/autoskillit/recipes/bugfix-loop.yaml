@@ -114,6 +114,10 @@ steps:
       step_name: "assess"
     on_success: verify
     on_failure: classify
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: classify
 
   classify:
     tool: classify_fix

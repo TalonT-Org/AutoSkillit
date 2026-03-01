@@ -129,10 +129,7 @@ steps:
       step_name: "fix"
     on_success: test
     on_failure: cleanup_failure
-    retry:
-      max_attempts: 3
-      on: needs_retry
-      on_exhausted: cleanup_failure
+    on_retry: test
 
   merge:
     tool: merge_worktree

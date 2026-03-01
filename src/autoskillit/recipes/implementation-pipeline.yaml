@@ -262,11 +262,8 @@ steps:
       step_name: "fix"
     on_success: test
     on_failure: cleanup_failure
-    retry:
-      max_attempts: 3
-      on: needs_retry
-      on_exhausted: cleanup_failure
-    note: "Fixes test failures without merging. Routes back to test for re-validation before merge_worktree."
+    on_retry: test
+    note: "Fixes test failures without merging. Routes back to test for re-validation before merge_worktree. on_retry routes needs_retry=True to test (worktree may already be green) instead of re-running fix blindly."
 
   next_or_done:
     action: route

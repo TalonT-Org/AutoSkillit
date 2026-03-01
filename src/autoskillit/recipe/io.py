@@ -135,6 +135,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         with_args=data.get("with", {}),
         on_success=data.get("on_success"),
         on_failure=data.get("on_failure"),
+        on_retry=data.get("on_retry"),
         on_result=on_result,
         retry=retry,
         message=data.get("message"),

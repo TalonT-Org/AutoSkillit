@@ -25,7 +25,13 @@ from autoskillit.recipe.io import (
     list_recipes,
     load_recipe,
 )
-from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep, StepResultRoute
+from autoskillit.recipe.schema import (
+    Recipe,
+    RecipeIngredient,
+    RecipeStep,
+    StepResultRoute,
+    StepRetry,
+)
 from autoskillit.recipe.validator import (
     RuleFinding,
     analyze_dataflow,
@@ -3068,3 +3074,182 @@ class TestStaleRefAfterMerge:
         ref_warnings = [w for w in report.warnings if w.code == "REF_INVALIDATED"]
         assert ref_warnings, "Expected REF_INVALIDATED warnings in DataFlowReport"
         assert any(w.step_name == "audit" for w in ref_warnings)
+
+
+# ---------------------------------------------------------------------------
+# on_retry field — structural validation and cycle detection
+# ---------------------------------------------------------------------------
+
+
+class TestOnRetryField:
+    """Tests for on_retry as a first-class routing field and cycle detection."""
+
+    def test_on_retry_invalid_target_raises_validation_error(self) -> None:
+        """on_retry must reference a declared step name."""
+        recipe = Recipe(
+            name="test",
+            description="test",
+            summary="test",
+            ingredients={},
+            kitchen_rules=["test"],
+            steps={
+                "fix": RecipeStep(
+                    tool="run_skill",
+                    on_success="done",
+                    on_failure="cleanup",
+                    on_retry="nonexistent_step",
+                    with_args={"skill_command": "x", "cwd": "/tmp"},
+                ),
+                "cleanup": RecipeStep(action="stop", message="done"),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        errors = validate_recipe(recipe)
+        assert errors, "Expected validation errors for unknown on_retry target"
+        assert any("on_retry" in e for e in errors)
+
+    def test_on_retry_valid_target_passes_validation(self) -> None:
+        """on_retry referencing a valid step passes validation."""
+        recipe = Recipe(
+            name="test",
+            description="test",
+            summary="test",
+            ingredients={},
+            kitchen_rules=["test"],
+            steps={
+                "fix": RecipeStep(
+                    tool="run_skill",
+                    on_success="done",
+                    on_failure="cleanup",
+                    on_retry="verify",
+                    with_args={"skill_command": "x", "cwd": "/tmp"},
+                ),
+                "verify": RecipeStep(
+                    tool="test_check",
+                    on_success="done",
+                    on_failure="cleanup",
+                    with_args={"worktree_path": "/tmp"},
+                ),
+                "cleanup": RecipeStep(action="stop", message="done"),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        errors = validate_recipe(recipe)
+        assert not errors, f"Expected no errors but got: {errors}"
+
+    def test_on_retry_and_retry_on_needs_retry_is_mutually_exclusive(self) -> None:
+        """A step with both on_retry and retry.on='needs_retry' must be a validation error."""
+        recipe = Recipe(
+            name="test",
+            description="test",
+            summary="test",
+            ingredients={},
+            kitchen_rules=["test"],
+            steps={
+                "fix": RecipeStep(
+                    tool="run_skill",
+                    on_success="done",
+                    on_failure="cleanup",
+                    on_retry="verify",
+                    with_args={"skill_command": "x", "cwd": "/tmp"},
+                    retry=StepRetry(max_attempts=3, on="needs_retry", on_exhausted="cleanup"),
+                ),
+                "verify": RecipeStep(action="stop", message="done"),
+                "cleanup": RecipeStep(action="stop", message="done"),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        errors = validate_recipe(recipe)
+        assert any("on_retry" in e and "retry" in e for e in errors)
+
+    def test_unbounded_cycle_without_retry_block_produces_warning(self) -> None:
+        """verify → assess → verify cycle without retry.max_attempts must produce a warning."""
+        recipe = Recipe(
+            name="test",
+            description="test",
+            summary="test",
+            ingredients={},
+            kitchen_rules=["test"],
+            steps={
+                "assess": RecipeStep(
+                    tool="run_skill",
+                    on_success="verify",
+                    on_failure="cleanup",
+                    with_args={"skill_command": "x", "cwd": "/tmp"},
+                ),
+                "verify": RecipeStep(
+                    tool="test_check",
+                    on_success="done",
+                    on_failure="assess",
+                    with_args={"worktree_path": "/tmp"},
+                ),
+                "cleanup": RecipeStep(action="stop", message="done"),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        findings = run_semantic_rules(recipe)
+        warnings = [f for f in findings if f.severity == Severity.WARNING]
+        assert any(
+            "unbounded" in f.message.lower() or "cycle" in f.message.lower() for f in warnings
+        )
+
+    def test_bounded_cycle_with_retry_block_does_not_warn(self) -> None:
+        """A cycle with retry.max_attempts on the cycling step should NOT warn."""
+        recipe = Recipe(
+            name="test",
+            description="test",
+            summary="test",
+            ingredients={},
+            kitchen_rules=["test"],
+            steps={
+                "fix": RecipeStep(
+                    tool="run_skill",
+                    on_success="test",
+                    on_failure="cleanup",
+                    with_args={"skill_command": "x", "cwd": "/tmp"},
+                    retry=StepRetry(max_attempts=3, on="needs_retry", on_exhausted="cleanup"),
+                ),
+                "test": RecipeStep(
+                    tool="test_check",
+                    on_success="done",
+                    on_failure="fix",
+                    with_args={"worktree_path": "/tmp"},
+                ),
+                "cleanup": RecipeStep(action="stop", message="done"),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        findings = run_semantic_rules(recipe)
+        cycle_warnings = [
+            f for f in findings if "cycle" in f.message.lower() or "unbounded" in f.message.lower()
+        ]
+        assert not cycle_warnings, f"Expected no cycle warnings but got: {cycle_warnings}"
+
+    def test_truly_trapped_cycle_without_exit_produces_error(self) -> None:
+        """A cycle where every step's edges stay inside the cycle must produce an ERROR."""
+        recipe = Recipe(
+            name="test",
+            description="test",
+            summary="test",
+            ingredients={},
+            kitchen_rules=["test"],
+            steps={
+                "assess": RecipeStep(
+                    tool="run_skill",
+                    on_success="verify",
+                    on_failure="verify",
+                    with_args={"skill_command": "x", "cwd": "/tmp"},
+                ),
+                "verify": RecipeStep(
+                    tool="test_check",
+                    on_success="assess",
+                    on_failure="assess",
+                    with_args={"worktree_path": "/tmp"},
+                ),
+            },
+        )
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.severity == Severity.ERROR]
+        assert any(
+            "cycle" in f.message.lower() or "unbounded" in f.message.lower() for f in errors
+        )

@@ -145,10 +145,10 @@ def _check_unreachable_steps(wf: Recipe) -> list[RuleFinding]:
 
     referenced: set[str] = set()
     for step in wf.steps.values():
-        if step.on_success:
-            referenced.add(step.on_success)
-        if step.on_failure:
-            referenced.add(step.on_failure)
+        for field in ("on_success", "on_failure", "on_retry"):
+            target = getattr(step, field, None)
+            if target:
+                referenced.add(target)
         if step.on_result:
             referenced.update(step.on_result.routes.values())
         if step.retry and step.retry.on_exhausted:
@@ -697,6 +697,106 @@ def _check_plan_parts_captured(wf: Recipe) -> list[RuleFinding]:
                     ),
                 )
             )
+
+    return findings
+
+
+@semantic_rule(
+    name="unbounded-cycle",
+    description="Routing cycle with no structural termination guarantee",
+    severity=Severity.ERROR,
+)
+def _check_unbounded_cycles(recipe: Recipe) -> list[RuleFinding]:
+    """Detect routing cycles and classify by whether they have any exit guarantee.
+
+    Severity rules:
+    - ERROR: no step in the cycle has any exit edge — the cycle is a guaranteed infinite loop.
+    - WARNING: at least one step has an exit edge (on_failure exits the SCC, or
+      retry.max_attempts + on_exhausted exits the SCC) — the cycle can terminate
+      conditionally, but relies on skill-internal discipline rather than schema enforcement.
+    """
+    from autoskillit.recipe.validator import _build_step_graph  # deferred — breaks circular import
+
+    graph = _build_step_graph(recipe)
+    findings: list[RuleFinding] = []
+    reported_cycles: set[frozenset[str]] = set()
+
+    visited: set[str] = set()
+    rec_stack: set[str] = set()
+
+    def dfs(node: str, path: list[str]) -> None:
+        visited.add(node)
+        rec_stack.add(node)
+        for neighbor in graph.get(node, set()):
+            if neighbor not in recipe.steps:
+                continue  # dead reference — caught by validate_recipe
+            if neighbor not in visited:
+                dfs(neighbor, path + [neighbor])
+            elif neighbor in rec_stack:
+                # Reconstruct the cycle steps from the path
+                if neighbor in path:
+                    cycle_steps = path[path.index(neighbor) :]
+                else:
+                    cycle_steps = path
+                cycle_key = frozenset(cycle_steps)
+                if cycle_key in reported_cycles:
+                    rec_stack.discard(node)
+                    return
+                reported_cycles.add(cycle_key)
+                cycle_set = set(cycle_steps)
+
+                # Structural exit: retry.max_attempts > 0 with on_exhausted outside cycle
+                # (a retry block with max_attempts is a structural bound — no finding)
+                has_retry_exit = any(
+                    (r := recipe.steps[s].retry) is not None
+                    and r.max_attempts > 0
+                    and r.on_exhausted not in cycle_set
+                    for s in cycle_steps
+                    if s in recipe.steps
+                )
+                if has_retry_exit:
+                    # Structurally bounded — no finding
+                    rec_stack.discard(node)
+                    return
+
+                # Conditional exit: on_failure pointing outside the cycle (unbounded but escapable)
+                has_failure_exit = any(
+                    recipe.steps[s].on_failure is not None
+                    and recipe.steps[s].on_failure not in cycle_set
+                    for s in cycle_steps
+                    if s in recipe.steps
+                )
+
+                if has_failure_exit:
+                    severity = Severity.WARNING
+                    message = (
+                        f"Routing cycle detected: {' → '.join(cycle_steps)} → {neighbor}. "
+                        f"The cycle has a conditional exit path but no structural bound on "
+                        f"iterations. Add retry.max_attempts to at least one cycling step "
+                        f"to enforce a maximum iteration count."
+                    )
+                else:
+                    severity = Severity.ERROR
+                    message = (
+                        f"Routing cycle detected: {' → '.join(cycle_steps)} → {neighbor}. "
+                        f"No step in this cycle has an exit edge — this cycle has no "
+                        f"termination guarantee and will loop forever. Add retry.max_attempts "
+                        f"with on_exhausted outside the cycle, or route on_failure to a step "
+                        f"outside the cycle."
+                    )
+                findings.append(
+                    RuleFinding(
+                        rule="unbounded-cycle",
+                        severity=severity,
+                        step_name=node,
+                        message=message,
+                    )
+                )
+        rec_stack.discard(node)
+
+    for step_name in recipe.steps:
+        if step_name not in visited:
+            dfs(step_name, [step_name])
 
     return findings
 

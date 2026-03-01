@@ -1850,17 +1850,6 @@ class TestProcessRunnerResult:
         assert "timed out" in stderr
         assert "5" in stderr
 
-    def test_run_git_uses_shared_converter(self):
-        """_run_git and _process_runner_result produce identical output for identical input."""
-        # Verifies git.py delegates to the shared helper rather than inline logic.
-        import inspect
-
-        import autoskillit.server.git as git_mod
-
-        source = inspect.getsource(git_mod._run_git)
-        assert "_process_runner_result" in source, (
-            "_run_git must delegate to _process_runner_result from server.helpers"
-        )
 
 
 def test_server_init_has_no_shim_reexports():
@@ -4328,11 +4317,11 @@ class TestBuildSkillResultCrossValidation:
 
     def test_gate_disabled_schema(self, tool_ctx):
         """Gate-disabled response has standard keys."""
-        import autoskillit.server as srv
         from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server.helpers import _require_enabled
 
         tool_ctx.gate = DefaultGateState(enabled=False)
-        response = json.loads(srv._require_enabled())
+        response = json.loads(_require_enabled())
         assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
 
     def test_stale_schema(self):
@@ -4386,11 +4375,11 @@ class TestGateErrorSchemaNormalization:
 
     def test_require_enabled_gate_returns_standard_schema(self, tool_ctx):
         """Gate errors must use the same schema as normal responses."""
-        import autoskillit.server as srv
         from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server.helpers import _require_enabled
 
         tool_ctx.gate = DefaultGateState(enabled=False)
-        gate_result = srv._require_enabled()
+        gate_result = _require_enabled()
         assert gate_result is not None
         response = json.loads(gate_result)
         assert response["success"] is False
@@ -6547,7 +6536,7 @@ class TestGetTokenSummary:
 def test_open_kitchen_has_no_update_advisory(tool_ctx):
     """REQ-APP-004: open_kitchen prompt contains no recipe update advisory."""
     from autoskillit.pipeline.gate import DefaultGateState
-    from autoskillit.server import open_kitchen
+    from autoskillit.server.prompts import open_kitchen
 
     # Ensure kitchen is closed before calling open_kitchen
     tool_ctx.gate = DefaultGateState(enabled=False)

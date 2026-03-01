@@ -24,6 +24,7 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.execution.commands import build_headless_cmd
+from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     _compute_retry,
@@ -107,7 +108,7 @@ def _recover_from_separate_marker(
     """
     if not session.assistant_messages:
         return None
-    if not any(completion_marker in msg for msg in session.assistant_messages):
+    if not any(_marker_is_standalone(msg, completion_marker) for msg in session.assistant_messages):
         return None
     combined = "\n\n".join(session.assistant_messages)
     stripped = combined.replace(completion_marker, "").strip()

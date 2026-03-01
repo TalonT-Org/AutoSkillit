@@ -99,16 +99,12 @@ def test_compute_recipe_hash_format(tmp_path):
 # SC-7: check_contract_staleness returns [] without calling compute_skill_hash
 #       when cache hit and is_stale=False
 def test_check_staleness_fast_path_on_not_stale_cache_hit(monkeypatch, tmp_path):
-    from autoskillit.recipe.contracts import check_contract_staleness
+    from autoskillit.recipe.contracts import check_contract_staleness, load_bundled_manifest
 
     recipe_file = tmp_path / "r.yaml"
     recipe_file.write_bytes(b"name: x")
 
-    manifest_version = "0.99.test"
-    monkeypatch.setattr(
-        "autoskillit.recipe.contracts.load_bundled_manifest",
-        lambda: {"version": manifest_version, "skills": {}},
-    )
+    manifest_version = load_bundled_manifest()["version"]
 
     entry = _make_entry(
         recipe_hash=compute_recipe_hash(recipe_file),
@@ -136,17 +132,13 @@ def test_check_staleness_fast_path_on_not_stale_cache_hit(monkeypatch, tmp_path)
 
 # SC-8: cache miss causes compute_skill_hash to be called and cache to be written
 def test_check_staleness_writes_cache_on_miss(monkeypatch, tmp_path):
-    from autoskillit.recipe.contracts import check_contract_staleness
+    from autoskillit.recipe.contracts import check_contract_staleness, load_bundled_manifest
 
     recipe_file = tmp_path / "r.yaml"
     recipe_file.write_bytes(b"name: x")
     cache_path = tmp_path / "c.json"
 
-    manifest_version = "0.99.test"
-    monkeypatch.setattr(
-        "autoskillit.recipe.contracts.load_bundled_manifest",
-        lambda: {"version": manifest_version, "skills": {}},
-    )
+    manifest_version = load_bundled_manifest()["version"]
 
     compute_called: list[str] = []
 
@@ -180,17 +172,13 @@ def test_check_staleness_writes_cache_on_miss(monkeypatch, tmp_path):
 
 # SC-9: cache hit with is_stale=True falls through to full check for StaleItem details
 def test_check_staleness_stale_hit_still_returns_items(monkeypatch, tmp_path):
-    from autoskillit.recipe.contracts import check_contract_staleness
+    from autoskillit.recipe.contracts import check_contract_staleness, load_bundled_manifest
 
     recipe_file = tmp_path / "r.yaml"
     recipe_file.write_bytes(b"name: x")
     cache_path = tmp_path / "c.json"
 
-    manifest_version = "0.99.test"
-    monkeypatch.setattr(
-        "autoskillit.recipe.contracts.load_bundled_manifest",
-        lambda: {"version": manifest_version, "skills": {}},
-    )
+    manifest_version = load_bundled_manifest()["version"]
 
     entry = _make_entry(
         recipe_hash=compute_recipe_hash(recipe_file),

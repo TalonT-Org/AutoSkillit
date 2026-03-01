@@ -406,17 +406,16 @@ def test_default_recipe_repository_find_uses_index(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """find() after list() must not call list_recipes() again."""
-    import autoskillit.recipe.io as recipe_io
+    from autoskillit.recipe.io import list_recipes as _original_list_recipes
     from autoskillit.recipe.repository import DefaultRecipeRepository
 
     call_count: dict[str, int] = {"n": 0}
-    original = recipe_io.list_recipes
 
     def counting_list(project_dir: Path) -> object:
         call_count["n"] += 1
-        return original(project_dir)
+        return _original_list_recipes(project_dir)
 
-    monkeypatch.setattr(recipe_io, "list_recipes", counting_list)
+    monkeypatch.setattr("autoskillit.recipe.repository.list_recipes", counting_list)
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)

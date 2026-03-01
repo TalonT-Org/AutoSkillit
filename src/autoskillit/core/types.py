@@ -239,6 +239,7 @@ PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
 # recipe_validator.py.
 SKILL_TOOLS: frozenset[str] = frozenset({"run_skill", "run_skill_retry"})
 
+
 @dataclass
 class FailureRecord:
     """Structured record of a single run_skill / run_skill_retry failure.

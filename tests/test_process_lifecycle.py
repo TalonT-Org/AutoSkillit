@@ -1709,7 +1709,9 @@ class TestChannelBDrainWait:
             _heartbeat_poll=0.05,
         )
         assert result.termination == TerminationReason.COMPLETED
-        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B  # FAILS before fix: UNMONITORED (was True)
+        assert (
+            result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        )  # FAILS before fix: UNMONITORED (was True)
 
     @pytest.mark.asyncio
     async def test_channel_b_no_heartbeat_produces_channel_b_confirmation(self, tmp_path):

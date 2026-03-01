@@ -94,7 +94,9 @@ def _make_result(
     """Create a SubprocessResult for mocking run_managed_async."""
     if data_confirmed is not None:
         channel_confirmation = (
-            ChannelConfirmation.CHANNEL_B if not data_confirmed else ChannelConfirmation.UNMONITORED
+            ChannelConfirmation.CHANNEL_B
+            if not data_confirmed
+            else ChannelConfirmation.UNMONITORED
         )
     return SubprocessResult(
         returncode=returncode,

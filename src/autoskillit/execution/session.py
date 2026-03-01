@@ -326,8 +326,8 @@ def _compute_success(
             return True
         case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
             pass  # fall through to termination dispatch
-        case _ as unreachable:
-            assert_never(unreachable)
+        case _ as _unreachable_cc:
+            assert_never(_unreachable_cc)
 
     match termination:
         case TerminationReason.TIMED_OUT:
@@ -431,8 +431,8 @@ def _compute_retry(
                     if _is_kill_anomaly(session):
                         return True, RetryReason.RESUME
                     return False, RetryReason.NONE
-                case _ as unreachable:
-                    assert_never(unreachable)
+                case _ as _unreachable_cc:
+                    assert_never(_unreachable_cc)
 
         case TerminationReason.STALE:
             # _build_skill_result intercepts STALE before calling _compute_retry.

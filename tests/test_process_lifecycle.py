@@ -1621,6 +1621,7 @@ class TestChannelBDrainWait:
             timeout=30,
             heartbeat_marker='"type":"result"',
             # No session_log_dir: Channel B cannot fire
+            _heartbeat_poll=0.05,
         )
 
         assert result.termination == TerminationReason.COMPLETED
@@ -1669,6 +1670,7 @@ class TestChannelBDrainWait:
             timeout=30,
             heartbeat_marker='"type":"result"',
             # No session_log_dir: Channel B cannot fire
+            _heartbeat_poll=0.05,
         )
 
         assert result.termination == TerminationReason.COMPLETED

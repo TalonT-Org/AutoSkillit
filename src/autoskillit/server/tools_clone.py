@@ -29,7 +29,7 @@ async def clone_repo(
     Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
     When source_dir is empty, auto-detects the git root via git rev-parse.
 
-    Returns {"clone_path": str, "source_dir": str} on success,
+    Returns {"clone_path": str, "source_dir": str, "remote_url": str} on success,
     or {"error": str} on failure.
 
     When uncommitted changes are detected and strategy is "" (default), returns
@@ -132,33 +132,53 @@ async def remove_clone(
 
 @mcp.tool(tags={"automation"})
 async def push_to_remote(
-    clone_path: str, source_dir: str, branch: str, ctx: Context = CurrentContext()
+    clone_path: str,
+    branch: str,
+    source_dir: str = "",
+    remote_url: str = "",
+    ctx: Context = CurrentContext(),
 ) -> str:
     """Push the merged branch from a pipeline clone back to the upstream remote.
 
-    Reads the remote URL from source_dir (read-only via git remote get-url)
-    and pushes from clone_path. source_dir is never modified — clone isolation
-    is preserved.
+    When remote_url is provided, it is used directly and source_dir is not
+    accessed for URL lookup. This is the preferred calling convention — capture
+    remote_url from the clone step and pass it explicitly here.
+
+    When remote_url is empty, falls back to reading the upstream URL from
+    source_dir via git remote get-url (read-only). source_dir is never modified
+    — clone isolation is preserved.
 
     Returns {"success": "true", "stderr": str} on success.
-    Returns {"error": str, "stderr": str} on failure (triggers on_failure routing).
+    Returns {"error": str, "stderr": str, "error_type": str} on failure (triggers on_failure routing).
 
     Args:
         clone_path: Absolute path to the clone directory to push from.
-        source_dir: Absolute path to the source repo (used only to read remote URL).
         branch: Branch name to push (e.g. "main").
+        source_dir: Absolute path to the source repo (used only to read remote URL when remote_url is empty).
+        remote_url: Pre-resolved upstream remote URL. When provided, source_dir lookup is skipped.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="push_to_remote", clone_path=clone_path)
-    logger.info("push_to_remote", clone_path=clone_path, source_dir=source_dir, branch=branch)
+    logger.info(
+        "push_to_remote",
+        clone_path=clone_path,
+        source_dir=source_dir,
+        remote_url=remote_url,
+        branch=branch,
+    )
     await _notify(
         ctx,
         "info",
         f"push_to_remote: {clone_path!r} → branch={branch!r}",
         "autoskillit.push_to_remote",
-        extra={"clone_path": clone_path, "source_dir": source_dir, "branch": branch},
+        extra={
+            "clone_path": clone_path,
+            "source_dir": source_dir,
+            "remote_url": remote_url,
+            "branch": branch,
+        },
     )
 
     from autoskillit.server import _get_ctx
@@ -168,7 +188,11 @@ async def push_to_remote(
         return json.dumps({"error": "Clone manager not configured", "stderr": ""})
 
     result = await asyncio.to_thread(
-        tool_ctx.clone_mgr.push_to_remote, clone_path, source_dir, branch
+        tool_ctx.clone_mgr.push_to_remote,
+        clone_path,
+        source_dir,
+        branch,
+        remote_url=remote_url,
     )
 
     if not result.get("success"):
@@ -177,8 +201,14 @@ async def push_to_remote(
             "error",
             "push_to_remote failed",
             "autoskillit.push_to_remote",
-            extra={"stderr": result.get("stderr", "")},
+            extra={"stderr": result.get("stderr", ""), "error_type": result.get("error_type", "")},
         )
-        return json.dumps({"error": "push failed", "stderr": result.get("stderr", "")})
+        return json.dumps(
+            {
+                "error": "push failed",
+                "stderr": result.get("stderr", ""),
+                "error_type": result.get("error_type", ""),
+            }
+        )
 
     return json.dumps(result)

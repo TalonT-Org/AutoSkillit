@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import FailureRecord, RetryReason, SkillResult, TerminationReason, get_logger
+from autoskillit.execution.commands import build_headless_cmd
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     _compute_retry,
@@ -266,21 +267,11 @@ async def run_headless_core(
         _ensure_skill_prefix(skill_command), cfg.completion_marker
     )
     effective_plugin_dir = ctx.plugin_dir
-    cmd = [
-        "claude",
-        "-p",
-        skill_command,
-        "--plugin-dir",
-        effective_plugin_dir,
-        "--output-format",
-        "json",
-        "--dangerously-skip-permissions",
-    ]
+    resolved_model = _resolve_model(model, ctx.config)
+    spec = build_headless_cmd(skill_command, model=resolved_model)
+    cmd = spec.cmd + ["--plugin-dir", effective_plugin_dir, "--output-format", "json"]
     if add_dir:
         cmd.extend(["--add-dir", add_dir])
-    resolved_model = _resolve_model(model, ctx.config)
-    if resolved_model:
-        cmd.extend(["--model", resolved_model])
 
     delay_ms = cfg.exit_after_stop_delay_ms
     if delay_ms > 0:

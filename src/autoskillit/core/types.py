@@ -29,6 +29,7 @@ class MergeFailedStep(StrEnum):
     TEST_GATE = "test_gate"
     FETCH = "fetch"
     REBASE = "rebase"
+    POST_REBASE_TEST_GATE = "post_rebase_test_gate"
     MERGE = "merge"
 
 

@@ -7,6 +7,31 @@ import dataclasses
 import pathlib
 
 
+def test_all_dataclasses_importable() -> None:
+    """All dataclasses are importable from recipe.schema."""
+    from autoskillit.recipe.schema import (
+        DataFlowReport,
+        DataFlowWarning,
+        Recipe,
+        RecipeInfo,
+        RecipeIngredient,
+        RecipeStep,
+        StepResultCondition,
+        StepResultRoute,
+        StepRetry,
+    )
+
+    assert Recipe is not None
+    assert RecipeStep is not None
+    assert RecipeIngredient is not None
+    assert RecipeInfo is not None
+    assert DataFlowWarning is not None
+    assert DataFlowReport is not None
+    assert StepRetry is not None
+    assert StepResultRoute is not None
+    assert StepResultCondition is not None
+
+
 def test_recipe_schema_has_zero_non_stdlib_logic_imports() -> None:
     """recipe/schema.py has zero non-stdlib logic imports (no _logging, no yaml)."""
     src = (pathlib.Path(__file__).parent.parent / "src/autoskillit/recipe/schema.py").read_text()
@@ -55,3 +80,39 @@ def test_recipe_step_has_on_retry_field() -> None:
         with_args={"skill_command": "test", "cwd": "/tmp"},
     )
     assert step.on_retry == "verify"
+
+
+def test_step_result_condition_dataclass_exists() -> None:
+    """StepResultCondition is importable and has route and when fields."""
+    from autoskillit.recipe.schema import StepResultCondition
+
+    cond = StepResultCondition(route="assess")
+    assert cond.route == "assess"
+    assert cond.when is None
+
+    cond2 = StepResultCondition(when="result.failed_step == 'test_gate'", route="assess")
+    assert cond2.when == "result.failed_step == 'test_gate'"
+    assert cond2.route == "assess"
+
+
+def test_step_result_route_has_conditions_field() -> None:
+    """StepResultRoute has a conditions field that defaults to an empty list."""
+    from autoskillit.recipe.schema import StepResultRoute
+
+    route = StepResultRoute(field="verdict", routes={"GO": "done"})
+    assert route.conditions == []
+
+
+def test_step_result_route_is_predicate_when_conditions_non_empty() -> None:
+    """StepResultRoute with non-empty conditions is predicate format (conditions != [])."""
+    from autoskillit.recipe.schema import StepResultCondition, StepResultRoute
+
+    route = StepResultRoute(
+        conditions=[
+            StepResultCondition(when="result.error", route="cleanup"),
+            StepResultCondition(route="push"),
+        ]
+    )
+    assert len(route.conditions) == 2
+    assert route.field == ""
+    assert route.routes == {}

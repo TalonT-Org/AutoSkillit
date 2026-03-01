@@ -28,6 +28,7 @@ def test_merge_failed_step_values():
         MergeFailedStep.TEST_GATE,
         MergeFailedStep.FETCH,
         MergeFailedStep.REBASE,
+        MergeFailedStep.POST_REBASE_TEST_GATE,
         MergeFailedStep.MERGE,
     }
 

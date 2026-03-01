@@ -309,6 +309,90 @@ class TestRecipeParser:
         wf = load_recipe(f)
         assert wf.steps["run_tests"].on_result is None
 
+    def test_on_result_list_format_parsed_as_conditions(self, tmp_path: Path) -> None:
+        """List-format on_result parses into StepResultRoute with conditions list."""
+
+        data = {
+            "name": "predicate-recipe",
+            "description": "Uses predicate on_result",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "merge": {
+                    "tool": "merge_worktree",
+                    "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                    "on_result": [
+                        {"when": "result.failed_step == 'test_gate'", "route": "assess"},
+                        {"when": "result.error", "route": "cleanup"},
+                        {"route": "push"},
+                    ],
+                },
+                "assess": {"action": "stop", "message": "Assess."},
+                "cleanup": {"action": "stop", "message": "Cleanup."},
+                "push": {"action": "stop", "message": "Push."},
+            },
+        }
+        f = _write_yaml(tmp_path / "recipe.yaml", data)
+        wf = load_recipe(f)
+        step = wf.steps["merge"]
+        assert step.on_result is not None
+        assert isinstance(step.on_result, StepResultRoute)
+        assert len(step.on_result.conditions) == 3
+        assert step.on_result.conditions[0].when == "result.failed_step == 'test_gate'"
+        assert step.on_result.conditions[0].route == "assess"
+        assert step.on_result.conditions[1].when == "result.error"
+        assert step.on_result.conditions[1].route == "cleanup"
+        assert step.on_result.conditions[2].when is None
+        assert step.on_result.conditions[2].route == "push"
+
+    def test_on_result_list_without_when_is_default_condition(self, tmp_path: Path) -> None:
+        """A list entry with only route (no when key) parses as when=None (default)."""
+        data = {
+            "name": "default-cond-recipe",
+            "description": "Default condition",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "merge": {
+                    "tool": "merge_worktree",
+                    "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                    "on_result": [{"route": "push"}],
+                },
+                "push": {"action": "stop", "message": "Push."},
+            },
+        }
+        f = _write_yaml(tmp_path / "recipe.yaml", data)
+        wf = load_recipe(f)
+        step = wf.steps["merge"]
+        assert step.on_result is not None
+        assert len(step.on_result.conditions) == 1
+        assert step.on_result.conditions[0].when is None
+        assert step.on_result.conditions[0].route == "push"
+
+    def test_on_result_list_format_field_and_routes_empty(self, tmp_path: Path) -> None:
+        """When list-format is used, field == '' and routes == {}."""
+        data = {
+            "name": "list-empty-legacy-recipe",
+            "description": "List format clears legacy fields",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "merge": {
+                    "tool": "merge_worktree",
+                    "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                    "on_result": [
+                        {"when": "result.error", "route": "cleanup"},
+                        {"route": "push"},
+                    ],
+                },
+                "cleanup": {"action": "stop", "message": "Cleanup."},
+                "push": {"action": "stop", "message": "Push."},
+            },
+        }
+        f = _write_yaml(tmp_path / "recipe.yaml", data)
+        wf = load_recipe(f)
+        step = wf.steps["merge"]
+        assert step.on_result is not None
+        assert step.on_result.field == ""
+        assert step.on_result.routes == {}
+
     # CON2
     def test_parse_recipe_extracts_kitchen_rules(self, tmp_path: Path) -> None:
         data = {

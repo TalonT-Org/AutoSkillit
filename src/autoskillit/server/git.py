@@ -209,6 +209,20 @@ async def perform_merge(
             **({"abort_failed": True, "abort_stderr": abort_stderr} if abort_failed else {}),
         }
 
+    # 6.5. Post-rebase test gate — re-tests the rebased commits before merging
+    if tester is not None and config.safety.test_gate_on_merge:
+        passed, _ = await tester.run(Path(worktree_path))
+        if not passed:
+            return {
+                "error": (
+                    "Tests failed after rebase. The worktree is intact; "
+                    "run resolve-failures to fix the regressions."
+                ),
+                "failed_step": MergeFailedStep.POST_REBASE_TEST_GATE,
+                "state": MergeState.WORKTREE_INTACT,
+                "worktree_path": worktree_path,
+            }
+
     # 7. Discover main repo path
     rc, wt_list, _ = await _run_git(
         ["git", "worktree", "list", "--porcelain"], worktree_path, 10, runner

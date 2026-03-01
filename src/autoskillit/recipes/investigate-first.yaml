@@ -208,8 +208,13 @@ steps:
       base_branch: "${{ inputs.base_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-    on_success: push
-    on_failure: cleanup_failure
+      worktree_path: "${{ result.worktree_path }}"
+    on_result:
+      - when: "result.failed_step == 'test_gate'"
+        route: assess
+      - when: "result.error"
+        route: cleanup_failure
+      - route: push
 
   push:
     tool: push_to_remote

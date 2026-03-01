@@ -27,11 +27,34 @@ class StepRetry:
 
 
 @dataclass
-class StepResultRoute:
-    """Multi-way routing based on a named field in a tool's JSON response."""
+class StepResultCondition:
+    """A single conditional route in a predicate-based on_result block.
 
-    field: str
+    when=None means the default/else condition (no guard — always matches).
+    Conditions are evaluated in declaration order; first match wins.
+    """
+
+    route: str
+    when: str | None = None
+
+
+@dataclass
+class StepResultRoute:
+    """Multi-way routing based on result fields.
+
+    Two mutually exclusive formats:
+    - Legacy (field+routes): field is non-empty, conditions is empty.
+      Routes based on an exact match of result.<field> to a known string value.
+    - Predicate (conditions): conditions is non-empty, field and routes are empty.
+      Conditions are evaluated in order; first matching `when` predicate wins.
+      A condition with when=None is the default/else case.
+    """
+
+    # Legacy format
+    field: str = ""
     routes: dict[str, str] = dataclasses.field(default_factory=dict)
+    # Predicate format (mutually exclusive with field+routes)
+    conditions: list[StepResultCondition] = dataclasses.field(default_factory=list)
 
 
 @dataclass

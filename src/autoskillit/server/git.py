@@ -18,10 +18,10 @@ from autoskillit.core import (
     MergeFailedStep,
     MergeState,
     SubprocessRunner,
-    TerminationReason,
     get_logger,
     truncate_text,
 )
+from autoskillit.server.helpers import _process_runner_result
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -51,9 +51,7 @@ async def _run_git(
     Returns (returncode, stdout, stderr). Handles TIMED_OUT termination.
     """
     result = await runner(cmd, cwd=Path(cwd), timeout=timeout)
-    if result.termination == TerminationReason.TIMED_OUT:
-        return -1, result.stdout, f"Process timed out after {timeout}s"
-    return result.returncode, result.stdout, result.stderr
+    return _process_runner_result(result, timeout)
 
 
 async def perform_merge(

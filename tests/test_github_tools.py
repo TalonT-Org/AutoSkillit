@@ -11,7 +11,8 @@ from autoskillit.config import AutomationConfig
 from autoskillit.core import GitHubFetcher
 from autoskillit.execution.github import DefaultGitHubFetcher, _parse_issue_ref
 from autoskillit.pipeline.gate import GATED_TOOLS
-from autoskillit.server import fetch_github_issue, kitchen_status
+from autoskillit.server.tools_integrations import fetch_github_issue
+from autoskillit.server.tools_status import kitchen_status
 
 # ---------------------------------------------------------------------------
 # _parse_issue_ref unit tests

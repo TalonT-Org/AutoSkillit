@@ -28,18 +28,10 @@ import yaml
 from autoskillit import server
 from autoskillit.config import AutomationConfig, TestCheckConfig
 from autoskillit.recipe.io import builtin_recipes_dir
-from autoskillit.server import (
-    classify_fix,
-    list_recipes,
-    load_recipe,
-    merge_worktree,
-    run_cmd,
-    run_python,
-    run_skill,
-    run_skill_retry,
-    test_check,
-    validate_recipe,
-)
+from autoskillit.server.tools_execution import run_cmd, run_python, run_skill, run_skill_retry
+from autoskillit.server.tools_git import classify_fix, merge_worktree
+from autoskillit.server.tools_recipe import list_recipes, load_recipe, validate_recipe
+from autoskillit.server.tools_workspace import test_check
 
 test_check.__test__ = False  # type: ignore[attr-defined]
 

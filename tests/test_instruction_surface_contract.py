@@ -94,7 +94,7 @@ class TestServerToolSurfaceContract:
 
     def test_open_kitchen_prompt_names_all_forbidden_tools(self):
         """open_kitchen prompt text must name every forbidden tool with prohibition framing."""
-        from autoskillit.server import open_kitchen
+        from autoskillit.server.prompts import open_kitchen
 
         result = open_kitchen()
         content = result.messages[0].content
@@ -108,7 +108,7 @@ class TestServerToolSurfaceContract:
 
     def test_run_skill_docstring_names_all_forbidden_tools(self):
         """run_skill docstring must name every forbidden tool."""
-        from autoskillit.server import run_skill
+        from autoskillit.server.tools_execution import run_skill
 
         doc = run_skill.__doc__
         assert doc, "run_skill has no docstring"
@@ -117,7 +117,7 @@ class TestServerToolSurfaceContract:
 
     def test_run_skill_retry_docstring_names_all_forbidden_tools(self):
         """run_skill_retry docstring must name every forbidden tool."""
-        from autoskillit.server import run_skill_retry
+        from autoskillit.server.tools_execution import run_skill_retry
 
         doc = run_skill_retry.__doc__
         assert doc, "run_skill_retry has no docstring"
@@ -126,7 +126,7 @@ class TestServerToolSurfaceContract:
 
     def test_load_recipe_docstring_names_all_forbidden_tools(self):
         """load_recipe docstring must name every forbidden tool."""
-        from autoskillit.server import load_recipe
+        from autoskillit.server.tools_recipe import load_recipe
 
         doc = load_recipe.__doc__
         assert doc, "load_skill_script has no docstring"

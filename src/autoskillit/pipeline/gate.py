@@ -60,21 +60,26 @@ UNGATED_TOOLS: frozenset[str] = frozenset(
 )
 
 
-def gate_error_result() -> str:
-    """Return the canonical JSON error string for a closed gate.
+_DEFAULT_GATE_MESSAGE = (
+    "AutoSkillit tools are not enabled. "
+    "User must type the open_kitchen prompt to activate. "
+    "Check the MCP prompt list for the exact name."
+)
 
-    Used by _require_enabled() in server.py when _tools_enabled is False.
+
+def gate_error_result(message: str | None = None) -> str:
+    """Return the canonical JSON error string for a closed or blocked gate.
+
+    message: Optional custom error text. When omitted, returns the default
+    'tools not enabled' message for gate-closed errors.
+
     Hardcodes retry_reason as "none" (the StrEnum value of RetryReason.NONE)
     to preserve the L0 zero-internal-imports constraint.
     """
     return json.dumps(
         {
             "success": False,
-            "result": (
-                "AutoSkillit tools are not enabled. "
-                "User must type the open_kitchen prompt to activate. "
-                "Check the MCP prompt list for the exact name."
-            ),
+            "result": message if message is not None else _DEFAULT_GATE_MESSAGE,
             "session_id": "",
             "subtype": "gate_error",
             "is_error": True,

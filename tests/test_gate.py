@@ -119,6 +119,40 @@ def test_gate_error_result_fields():
     assert "open_kitchen" in parsed["result"]
 
 
+def test_gate_error_result_accepts_custom_message():
+    import json
+
+    from autoskillit.pipeline.gate import gate_error_result
+
+    parsed = json.loads(gate_error_result("Custom gate error text"))
+    assert parsed["result"] == "Custom gate error text"
+    assert parsed["success"] is False
+    assert parsed["subtype"] == "gate_error"
+    assert parsed["retry_reason"] == "none"
+    assert parsed["is_error"] is True
+    assert parsed["exit_code"] == -1
+    assert parsed["needs_retry"] is False
+
+
+def test_gate_error_result_no_arg_preserves_default_message():
+    import json
+
+    from autoskillit.pipeline.gate import gate_error_result
+
+    # Existing no-arg call still works and keeps the original message
+    parsed = json.loads(gate_error_result())
+    assert "open_kitchen" in parsed["result"]
+
+
+def test_helpers_has_no_gate_error_result_duplicate():
+    import autoskillit.server.helpers as helpers_mod
+
+    assert not hasattr(helpers_mod, "_gate_error_result"), (
+        "_gate_error_result must be removed from server.helpers — "
+        "use gate_error_result() from pipeline.gate instead"
+    )
+
+
 def test_gate_has_no_internal_imports():
     """_gate.py must have zero autoskillit internal imports (L0 constraint)."""
     import ast

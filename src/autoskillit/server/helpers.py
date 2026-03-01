@@ -6,12 +6,14 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import RESERVED_LOG_RECORD_KEYS, RetryReason, TerminationReason, get_logger
+from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
 from autoskillit.execution import check_and_sleep_if_needed  # noqa: F401
 from autoskillit.pipeline import gate_error_result
 
 if TYPE_CHECKING:
     from fastmcp import Context
+
+    from autoskillit.execution.process import SubprocessResult
 
 logger = get_logger(__name__)
 
@@ -65,24 +67,6 @@ def _get_config():  # type: ignore[return]
     return _cfg_fn()
 
 
-def _gate_error_result(error_message: str) -> str:
-    """Build a standard skill result for gate errors (tools disabled, dry-walkthrough)."""
-    return json.dumps(
-        {
-            "success": False,
-            "result": error_message,
-            "session_id": "",
-            "subtype": "gate_error",
-            "is_error": True,
-            "exit_code": -1,
-            "needs_retry": False,
-            "retry_reason": RetryReason.NONE,
-            "stderr": "",
-            "token_usage": None,
-        }
-    )
-
-
 def _require_enabled() -> str | None:
     """Return error JSON if tools are not enabled, None if OK.
 
@@ -95,6 +79,20 @@ def _require_enabled() -> str | None:
     if not _get_ctx().gate.enabled:
         return gate_error_result()
     return None
+
+
+def _process_runner_result(
+    result: "SubprocessResult",
+    timeout: float,
+) -> tuple[int, str, str]:
+    """Convert a SubprocessResult to (returncode, stdout, stderr).
+
+    Translates TIMED_OUT termination into (-1, stdout, "Process timed out after {timeout}s").
+    Shared by _run_subprocess (helpers.py) and _run_git (git.py).
+    """
+    if result.termination == TerminationReason.TIMED_OUT:
+        return -1, result.stdout, f"Process timed out after {timeout}s"
+    return result.returncode, result.stdout, result.stderr
 
 
 async def _run_subprocess(
@@ -111,9 +109,7 @@ async def _run_subprocess(
     runner = _get_ctx().runner
     assert runner is not None, "No subprocess runner configured"
     result = await runner(cmd, cwd=Path(cwd), timeout=timeout)
-    if result.termination == TerminationReason.TIMED_OUT:
-        return -1, result.stdout, f"Process timed out after {timeout}s"
-    return result.returncode, result.stdout, result.stderr
+    return _process_runner_result(result, timeout)
 
 
 def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
@@ -128,11 +124,11 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
     skill_name = parts[0]
 
     if len(parts) < 2:
-        return _gate_error_result(f"Missing plan path argument for {skill_name}")
+        return gate_error_result(f"Missing plan path argument for {skill_name}")
 
     plan_path = Path(cwd) / parts[1].strip().strip('"').strip("'")
     if not plan_path.is_file():
-        return _gate_error_result(f"Plan file not found: {plan_path}")
+        return gate_error_result(f"Plan file not found: {plan_path}")
 
     # TOCTOU acceptance (option c, per P1-5): This function reads the plan file
     # once here. If the file is modified or deleted between this gate check and
@@ -143,7 +139,7 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
     # involve significant scope and are deferred.
     first_line = plan_path.read_text().split("\n", 1)[0].strip()
     if first_line != _get_config().implement_gate.marker:
-        return _gate_error_result(
+        return gate_error_result(
             f"Plan has NOT been dry-walked. Run /dry-walkthrough on the plan first. "
             f"Expected first line: {_get_config().implement_gate.marker!r}, "
             f"actual: {first_line[:100]!r}"

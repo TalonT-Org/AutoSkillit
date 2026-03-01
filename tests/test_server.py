@@ -53,34 +53,24 @@ from autoskillit.execution.session import (
 from autoskillit.execution.testing import parse_pytest_summary as _parse_pytest_summary
 from autoskillit.pipeline.audit import FailureRecord
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
-from autoskillit.server import (
+from autoskillit.server.helpers import (
     _check_dry_walkthrough,
-    _close_kitchen_handler,
-    _open_kitchen_handler,
     _require_enabled,
     _run_subprocess,
+)
+from autoskillit.server.prompts import _close_kitchen_handler, _open_kitchen_handler
+from autoskillit.server.tools_clone import clone_repo, push_to_remote, remove_clone
+from autoskillit.server.tools_execution import run_cmd, run_python, run_skill, run_skill_retry
+from autoskillit.server.tools_git import classify_fix, merge_worktree
+from autoskillit.server.tools_recipe import list_recipes, load_recipe, migrate_recipe, validate_recipe
+from autoskillit.server.tools_status import (
     check_quota,
-    classify_fix,
-    clone_repo,
     get_pipeline_report,
     get_token_summary,
     kitchen_status,
-    list_recipes,
-    load_recipe,
-    merge_worktree,
-    migrate_recipe,
-    push_to_remote,
     read_db,
-    remove_clone,
-    reset_test_dir,
-    reset_workspace,
-    run_cmd,
-    run_python,
-    run_skill,
-    run_skill_retry,
-    test_check,
-    validate_recipe,
 )
+from autoskillit.server.tools_workspace import reset_test_dir, reset_workspace, test_check
 from autoskillit.workspace import CleanupResult, _delete_directory_contents
 
 test_check.__test__ = False  # type: ignore[attr-defined]
@@ -1817,6 +1807,74 @@ class TestRunSubprocessDelegatesToManaged:
         assert "timed out" in stderr
 
 
+class TestProcessRunnerResult:
+    """_process_runner_result shared helper lives in server.helpers."""
+
+    def test_normal_exit_preserves_fields(self):
+        from autoskillit.core import TerminationReason
+        from autoskillit.execution.process import SubprocessResult
+        from autoskillit.server.helpers import _process_runner_result
+
+        result = SubprocessResult(
+            returncode=0, stdout="hello", stderr="",
+            termination=TerminationReason.NATURAL_EXIT, pid=1,
+        )
+        rc, stdout, stderr = _process_runner_result(result, timeout=10)
+        assert rc == 0
+        assert stdout == "hello"
+        assert stderr == ""
+
+    def test_timed_out_returns_minus_one_with_message(self):
+        from autoskillit.core import TerminationReason
+        from autoskillit.execution.process import SubprocessResult
+        from autoskillit.server.helpers import _process_runner_result
+
+        result = SubprocessResult(
+            returncode=-1, stdout="partial", stderr="",
+            termination=TerminationReason.TIMED_OUT, pid=1,
+        )
+        rc, stdout, stderr = _process_runner_result(result, timeout=5)
+        assert rc == -1
+        assert stdout == "partial"
+        assert "timed out" in stderr
+        assert "5" in stderr
+
+    def test_run_git_uses_shared_converter(self):
+        """_run_git and _process_runner_result produce identical output for identical input."""
+        # Verifies git.py delegates to the shared helper rather than inline logic.
+        import inspect
+
+        import autoskillit.server.git as git_mod
+
+        source = inspect.getsource(git_mod._run_git)
+        assert "_process_runner_result" in source, (
+            "_run_git must delegate to _process_runner_result from server.helpers"
+        )
+
+
+def test_server_init_has_no_shim_reexports():
+    """server/__init__.py must not re-export tool symbols (shim removed)."""
+    import autoskillit.server as srv
+
+    # These symbols must NOT be in the server package namespace after shim removal.
+    # They should only be accessible via their actual submodule paths.
+    shim_symbols = [
+        "_check_dry_walkthrough", "_require_enabled", "_run_subprocess",
+        "_open_kitchen_handler", "_close_kitchen_handler",
+        "run_cmd", "run_python", "run_skill", "run_skill_retry",
+        "test_check", "reset_test_dir", "reset_workspace",
+        "merge_worktree", "classify_fix",
+        "clone_repo", "remove_clone", "push_to_remote",
+        "list_recipes", "load_recipe", "migrate_recipe", "validate_recipe",
+        "check_quota", "get_pipeline_report", "get_token_summary",
+        "kitchen_status", "read_db", "fetch_github_issue",
+    ]
+    present = [sym for sym in shim_symbols if hasattr(srv, sym)]
+    assert not present, (
+        f"Shim re-exports found in server namespace (must be removed): {present}"
+    )
+
+
 class TestTestCheck:
     """test_check returns unambiguous PASS/FAIL with cross-validation."""
 
@@ -2708,7 +2766,7 @@ class TestPromptSchemas:
 
     def test_close_kitchen_returns_cooking_confirmation(self, tool_ctx):
         """close_kitchen must return a cooking-themed closing message."""
-        from autoskillit.server import _close_kitchen_handler
+        from autoskillit.server.prompts import _close_kitchen_handler
 
         _close_kitchen_handler()  # ensure closed state
         prompts = self._get_prompts()
@@ -2735,7 +2793,7 @@ class TestOpenKitchenVersionReporting:
         return content.text if hasattr(content, "text") else str(content)
 
     def test_open_kitchen_instructs_status_call(self):
-        from autoskillit.server import open_kitchen
+        from autoskillit.server.prompts import open_kitchen
 
         result = open_kitchen()
         msg = self._prompt_text(result)
@@ -2743,7 +2801,8 @@ class TestOpenKitchenVersionReporting:
 
     def test_open_kitchen_carries_orchestrator_contract(self):
         """open_kitchen prompt must use prohibition framing and name all forbidden tools."""
-        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS, open_kitchen
+        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
+        from autoskillit.server.prompts import open_kitchen
 
         result = open_kitchen()
         msg = self._prompt_text(result)
@@ -2766,7 +2825,7 @@ class TestOpenKitchenVersionReporting:
         )
 
     def test_open_kitchen_still_enables_on_mismatch(self, tmp_path, tool_ctx):
-        from autoskillit.server import open_kitchen
+        from autoskillit.server.prompts import open_kitchen
 
         plugin_dir = tmp_path / ".claude-plugin"
         plugin_dir.mkdir()

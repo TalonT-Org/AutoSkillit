@@ -133,7 +133,7 @@ class AutomationConfig:
     github: GitHubConfig = field(default_factory=GitHubConfig)
 
     @classmethod
-    def from_dynaconf(cls, d: "Dynaconf") -> "AutomationConfig":
+    def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
         """Build a typed AutomationConfig from a loaded Dynaconf instance.
 
         d.as_dict() returns UPPERCASE keys — map them explicitly.
@@ -188,9 +188,7 @@ class AutomationConfig:
                 ),
             ),
             safety=SafetyConfig(
-                reset_guard_marker=str(
-                    val(sf, "reset_guard_marker", ".autoskillit-workspace")
-                ),
+                reset_guard_marker=str(val(sf, "reset_guard_marker", ".autoskillit-workspace")),
                 require_dry_walkthrough=bool(val(sf, "require_dry_walkthrough", True)),
                 test_gate_on_merge=bool(val(sf, "test_gate_on_merge", True)),
             ),
@@ -228,9 +226,7 @@ class AutomationConfig:
                 threshold=float(val(qg, "threshold", 80.0)),
                 buffer_seconds=int(val(qg, "buffer_seconds", 60)),
                 cache_max_age=int(val(qg, "cache_max_age", 60)),
-                credentials_path=str(
-                    val(qg, "credentials_path", "~/.claude/.credentials.json")
-                ),
+                credentials_path=str(val(qg, "credentials_path", "~/.claude/.credentials.json")),
                 cache_path=str(val(qg, "cache_path", "~/.claude/usage_cache.json")),
             ),
             github=GitHubConfig(
@@ -275,7 +271,7 @@ def _merge_yaml_layers(*paths: Path) -> dict[str, Any]:
     return result
 
 
-def _make_dynaconf(project_dir: Path | None = None) -> "Dynaconf":
+def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
     """Create a Dynaconf instance for env-var overrides over pre-merged file layers.
 
     File layers (defaults, user, project, secrets) are merged in advance using
@@ -300,9 +296,7 @@ def _make_dynaconf(project_dir: Path | None = None) -> "Dynaconf":
     # Write to a temp file so Dynaconf can load it and apply env var overrides.
     # Dynaconf reads files lazily; we trigger eager loading before the file is
     # deleted so the in-memory cache remains valid.
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".yaml", delete=False
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
         tmp.write(dump_yaml_str(merged))
         tmp_path = Path(tmp.name)
 

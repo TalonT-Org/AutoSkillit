@@ -397,9 +397,7 @@ class TestDynaconfIntegration:
         """ENV-3: Env var overrides value set in project config.yaml."""
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
-        (config_dir / "config.yaml").write_text(
-            yaml.dump({"test_check": {"timeout": 300}})
-        )
+        (config_dir / "config.yaml").write_text(yaml.dump({"test_check": {"timeout": 300}}))
         monkeypatch.setenv("AUTOSKILLIT_TEST_CHECK__TIMEOUT", "42")
         cfg = load_config(tmp_path)
         assert cfg.test_check.timeout == 42
@@ -420,12 +418,8 @@ class TestDynaconfIntegration:
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
-        (config_dir / "config.yaml").write_text(
-            yaml.dump({"github": {"token": "from_config"}})
-        )
-        (config_dir / ".secrets.yaml").write_text(
-            yaml.dump({"github": {"token": "from_secrets"}})
-        )
+        (config_dir / "config.yaml").write_text(yaml.dump({"github": {"token": "from_config"}}))
+        (config_dir / ".secrets.yaml").write_text(yaml.dump({"github": {"token": "from_secrets"}}))
         cfg = load_config(tmp_path)
         assert cfg.github.token == "from_secrets"
 
@@ -439,9 +433,7 @@ class TestDynaconfIntegration:
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
         user_dir = tmp_path / "home" / ".autoskillit"
         user_dir.mkdir(parents=True)
-        (user_dir / "config.yaml").write_text(
-            yaml.dump({"github": {"token": "ghp_user_token"}})
-        )
+        (user_dir / "config.yaml").write_text(yaml.dump({"github": {"token": "ghp_user_token"}}))
         project_dir = tmp_path / ".autoskillit"
         project_dir.mkdir()
         (project_dir / "config.yaml").write_text(

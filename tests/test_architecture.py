@@ -455,6 +455,27 @@ def _extract_module_level_internal_imports(path: Path) -> list[tuple[str, int]]:
     return results
 
 
+def _collect_deferred_imports(tree: ast.Module) -> list[ast.Import | ast.ImportFrom]:
+    """Return Import/ImportFrom nodes not at module level (inside function or class bodies).
+
+    Identifies deferred imports by excluding nodes whose line number appears in
+    module-level statements (tree.body). This is the complement of
+    _extract_module_level_internal_imports and catches the function-body equivalent
+    of layer violations.
+    """
+    module_level_linenos = {
+        node.lineno for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))
+    }
+    deferred: list[ast.Import | ast.ImportFrom] = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, (ast.Import, ast.ImportFrom))
+            and node.lineno not in module_level_linenos
+        ):
+            deferred.append(node)
+    return deferred
+
+
 def _get_call_func_name(node: ast.Call) -> str | None:
     """Return the function name for simple calls, or None for complex expressions."""
     func = node.func
@@ -814,6 +835,56 @@ def test_import_layer_enforcement(pkg_name: str, layer: int) -> None:
                 )
 
     assert not violations, f"Layer violations in {pkg_name}/:\n" + "\n".join(violations)
+
+
+@pytest.mark.parametrize(
+    "pkg_name",
+    [pkg for pkg, layer in SUBPACKAGE_LAYERS.items() if layer == 2],
+)
+def test_l2_no_deferred_upward_imports(pkg_name: str) -> None:
+    """L2 sub-packages must not use deferred imports that violate layer contracts.
+
+    Extends test_import_layer_enforcement to cover function-body (deferred) imports
+    via ast.walk, not just tree.body scans. Mirrors the upward-only rule applied at
+    module level: L2 package (recipe, migration) may not deferred-import an L3 package
+    (server, cli) — always forbidden.
+    """
+    pkg_dir = SRC_ROOT / pkg_name
+    if not pkg_dir.exists():
+        pytest.skip(f"{pkg_name}/ not found — prerequisite group not merged")
+
+    pkg_layer = SUBPACKAGE_LAYERS[pkg_name]  # == 2 for all L2 packages
+    violations: list[str] = []
+
+    for py_file in pkg_dir.rglob("*.py"):
+        source = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(py_file))
+        deferred_nodes = _collect_deferred_imports(tree)
+
+        for node in deferred_nodes:
+            stems_to_check: list[str] = []
+            if isinstance(node, ast.ImportFrom) and node.module:
+                parts = node.module.split(".")
+                if parts[0] == "autoskillit" and len(parts) > 1:
+                    stems_to_check = [parts[1]]
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    parts = alias.name.split(".")
+                    if parts[0] == "autoskillit" and len(parts) > 1:
+                        stems_to_check.append(parts[1])
+
+            for imported_stem in stems_to_check:
+                if imported_stem not in SUBPACKAGE_LAYERS:
+                    continue
+                imported_layer = SUBPACKAGE_LAYERS[imported_stem]
+                if imported_layer > pkg_layer:
+                    violations.append(
+                        f"  {_rel(py_file)}:{node.lineno}: {pkg_name} (L{pkg_layer}) "
+                        f"deferred-imports {imported_stem} (L{imported_layer})"
+                        f" — upward deferred import"
+                    )
+
+    assert not violations, f"Deferred layer violations in {pkg_name}/:\n" + "\n".join(violations)
 
 
 # ── Rule 2: test_singleton_definition_locality ────────────────────────────────

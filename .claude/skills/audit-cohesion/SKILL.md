@@ -32,7 +32,7 @@ Audit the codebase for internal cohesion: how well components integrate and main
 **ALWAYS:**
 - Use subagents for parallel exploration (one per cohesion dimension)
 - All output goes under `temp/audit-cohesion/` (create if needed)
-- Final report: `temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md`
+- Final report: `temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md` — always one file, never split
 - Subagents must NOT create their own files — they return findings in their response text only
 - Score each dimension (STRONG, ADEQUATE, WEAK, FRACTURED)
 
@@ -125,29 +125,35 @@ List ALL directories and key files, not just divergent ones.
 
 ### C2: Interface Completeness
 
-**Question:** Are adapter, factory, and contract chains complete with no missing links?
+**Question:** Are Protocol/ABC contracts complete — every interface fully implemented, every DI slot wired?
 
 **Audit Strategy:**
 
-1. **Adapter field coverage** — for each graph state field, verify adapter mapping:
+1. **Protocol → concrete implementation mapping** — find every `Protocol` and `ABC` class, then find its concrete implementation(s):
 
-| State Field | In Adapter? | Database Column | Bidirectional? |
-|------------|----------------------|----------------|---------------|
+| Protocol/ABC | File:Line | Methods Defined | Concrete Implementation | Impl File:Line | All Methods Implemented? |
+|---|---|---|---|---|---|
 
-2. **Factory method coverage** — for each table model, verify factory access:
+Flag any protocol with zero implementations, or any concrete class missing an abstract method.
 
-| Table Model | Has Repository? | Has Factory Method? | Factory Method Name |
-|------------|----------------|--------------------|--------------------|
+2. **DI container field population** — for the main dependency injection container(s), compare declared fields vs factory wiring:
 
-3. **Contract test inventory** — for each interface, verify contract exists:
+| Field | Type | Optional? | Wired in Factory? | Factory Value | Notes |
+|---|---|---|---|---|---|
 
-| Interface | Contract Test File | Tests Count | Full Surface Covered? |
-|-----------|-------------------|-------------|---------------------|
+Flag any field that is declared but not populated in the composition root factory.
 
-4. **Type boundary audit** — find every place ORM model instances cross boundaries:
+3. **Abstract method coverage** — for ABC hierarchies with multiple levels (base → sub-ABC → concrete), verify each concrete class implements all inherited abstract methods:
 
-| Location (file:line) | ORM Model Type | Destination | Violation? |
-|---------------------|--------------|------------|-----------|
+| Concrete Class | Inherits From | Abstract Methods Required | Methods Implemented | Complete? |
+|---|---|---|---|---|
+
+4. **Factory function completeness** — for each factory/builder pattern:
+
+| Factory Function | File:Line | Returns | All Fields Populated? | Stale Comments? |
+|---|---|---|---|---|
+
+Flag any factory whose docstring or inline comments claim a different field count than the actual implementation.
 
 ---
 
@@ -246,61 +252,67 @@ List ALL gaps — every source file without a corresponding test file.
 
 ### C6: Registration Completeness
 
-**Question:** Are all registries internally consistent and complete?
+**Question:** Are all registries internally consistent and complete — every registered entry has an implementation, every implementation is registered?
 
 **Audit Strategy:**
 
-1. **Field registry gap analysis** — compare state schema fields vs registry:
+1. **MCP tool registry completeness** — find the gate frozensets (`GATED_TOOLS`, `UNGATED_TOOLS`) and cross-reference every tool name against handler functions and documentation:
 
-| Field Name | In State Schema? | In Field Registry? | Lifecycle Category | Source File:Line |
-|-----------|-----------------|-------------------|-------------------|-----------------|
-| `session_started_at` | Yes (`unified_state.py:42`) | NO | — | Missing |
+| Tool Name | In Gate Frozenset (which) | Handler Function | Handler File:Line | @app.tool() registered? | In CLAUDE.md? | Notes |
+|---|---|---|---|---|---|---|
 
-List EVERY missing field.
+Flag any tool in the frozenset without a handler, any handler not in the frozenset, and any CLAUDE.md attribution to the wrong file.
 
-2. **Phase registry audit:**
+2. **Decorator-based rule registry** — for `@semantic_rule` (or equivalent auto-registration decorator) find all decorated functions vs all emitted finding IDs:
 
-| Phase | In Registry? | Hardcoded Elsewhere? | Location of Hardcode |
-|-------|-------------|---------------------|---------------------|
+| Decorator `name=` | Registered Under | Emitted Finding IDs | Mismatch? |
+|---|---|---|---|
 
-3. **Role registry vs prompt template audit:**
+Flag cases where one decorated function emits findings under different IDs than the one it is registered under.
 
-| Role | In Registry? | Has Prompt Template? | Template Path | Gap |
-|------|-------------|---------------------|--------------|-----|
-| Provider | Yes | NO | — | Missing `provider_guidance.j2` |
+3. **CLI command registration** — enumerate all `@app.command()` (or equivalent) decorators and cross-reference against documentation:
 
-4. **DevToolRegistry audit:**
+| Command | Registered at File:Line | Documented? | Notes |
+|---|---|---|---|
 
-| Tool | In Registry? | In pyproject.toml? | In pre-commit? | Gap |
-|------|-------------|-------------------|---------------|-----|
+Flag commands registered in code but absent from CLAUDE.md.
+
+4. **Skill/plugin registry completeness** — count skill directories (those with `SKILL.md`) and verify count matches documented claim:
+
+| Skill Directory | Has SKILL.md? | Listed in CLAUDE.md? | Name Match? |
+|---|---|---|---|
 
 ---
 
-### C7: Prompt-Agent Alignment
+### C7: Recipe-to-Skill Coherence
 
-**Question:** Do prompt templates match the agents and nodes that consume them?
+**Question:** Are pipeline recipe YAML definitions internally consistent — do all external references (skills, tools, Python callables, capture keys) resolve?
 
 **Audit Strategy:**
 
-1. **Template-consumer mapping** — for EVERY template file, find its consumer:
+1. **Skill reference resolution** — for every `run_skill` / `run_skill_retry` step in every recipe, verify the `skill_command` resolves to an existing skill:
 
-| Template File | Consumer (renderer method or node) | Variables Expected | Variables Provided | Gap |
-|--------------|----------------------------------|-------------------|-------------------|-----|
+| Recipe | Step Name | Skill Command | Is Dynamic (`${{...}}`)? | Skill Directory Exists? | Has SKILL.md? |
+|---|---|---|---|---|---|
 
-2. **Dead template detection:**
+Flag any static reference that does not resolve. Flag dynamic references as unverifiable and note the input variable that controls them.
 
-| Template File | Any Consumer Found? | Last Modified |
-|--------------|-------------------|--------------|
+2. **Tool name validity** — for every step that specifies a tool type (`run_cmd`, `run_skill`, `run_python`, etc.), verify the tool name appears in the registry (GATED_TOOLS or UNGATED_TOOLS):
 
-3. **Shared partial audit:**
+| Recipe | Step Name | Tool Name | In Registry? |
+|---|---|---|---|
 
-| Partial File | Used by Module A? | Used by Module B? | Truly Shared? |
-|-------------|-----------------|------------------|--------------|
+3. **Python callable resolution** — for every `run_python` step, verify the dotted module path and function name resolve to an importable callable:
 
-4. **Inline prompt detection** — nodes that bypass the template system:
+| Recipe | Step Name | Module Path | Function Name | Module Importable? | Function Exists? |
+|---|---|---|---|---|---|
 
-| Node File:Line | Prompt Construction | Should Use Template? |
-|---------------|--------------------|--------------------|
+4. **Capture key coherence** — for every `${{ captures.X }}` reference in a recipe step (in `skill_command`, `cwd`, `python_args`, etc.), verify that key `X` was declared as a `capture_key` in an upstream step:
+
+| Recipe | Step Name | References `captures.X` | X Defined Upstream? | Defining Step |
+|---|---|---|---|---|
+
+Flag forward references (using a key before the step that defines it) and phantom references (key never defined).
 
 ---
 
@@ -366,6 +378,41 @@ Flag duplicates (same name in different agents).
 
 ---
 
+### C10: Documentation-Code Alignment
+
+**Question:** Does the project's primary architectural documentation (CLAUDE.md) accurately describe the actual code — no stale attributions, wrong names, or missing entries?
+
+This dimension is distinct from audit-arch (which checks rule violations) and from C6 (which checks registry completeness). C10 checks whether PROSE DOCUMENTATION matches CODE REALITY. In this repo, CLAUDE.md is loaded as context in every Claude Code session, so inaccuracies there are directly load-bearing: a wrong file attribution misleads every investigation that uses CLAUDE.md as a starting point.
+
+**Audit Strategy:**
+
+1. **Tool-to-file attribution** — for every tool listed in the CLAUDE.md MCP tools table or server module descriptions, verify the documented handler file matches the actual location:
+
+| Tool Name | CLAUDE.md Claims File | Actual Handler File:Line | Match? |
+|---|---|---|---|
+
+2. **`__init__.py` re-export descriptions** — for every sub-package whose CLAUDE.md description mentions re-exported symbols, verify the named symbols actually appear in that package's `__all__`:
+
+| Sub-package | CLAUDE.md States Exports | Actual `__all__` | Missing from Docs | Wrong Names |
+|---|---|---|---|---|
+
+3. **Test file listing accuracy** — compare the `tests/` section of CLAUDE.md against actual test files on disk:
+
+| Test File (CLAUDE.md) | Exists on Disk? | | Test File (on disk) | In CLAUDE.md? |
+|---|---|---|---|---|
+
+Flag files listed in CLAUDE.md that do not exist, and files on disk not listed in CLAUDE.md.
+
+4. **Key Components description accuracy** — for each module entry in CLAUDE.md's Key Components section, verify:
+   - The described functions/classes actually exist at the stated location
+   - The described public API matches the actual function signatures (param names, return types)
+   - Any numeric claims (e.g., "7 checks", "15 gated tools") match the actual count in code
+
+| CLAUDE.md Claim | File:Line | Verified? | Actual |
+|---|---|---|---|
+
+---
+
 ## Audit Workflow
 
 ### Step 0: Initialize Code Index
@@ -380,15 +427,15 @@ Spawn subagents for each cohesion dimension. Each subagent MUST be instructed:
 
 > "You are conducting a thorough cohesion audit. Your output must be EXHAUSTIVE — enumerate every item, do not summarize. Return structured tables, not prose. Every finding needs a file:line reference. If you find 16 missing fields, list all 16 with their source locations. If you find 48 files with broad exception handlers, list all 48. Completeness is more important than brevity. This is a research task — DO NOT modify any code."
 
-**Grouping** (spawn 5 subagents, one dimension each or grouped by relatedness):
+**Grouping** (spawn 6 subagents, one dimension each or grouped by relatedness):
 
 | Subagent | Dimensions | Focus |
 |----------|-----------|-------|
 | 1 | C1, C4 | Structural symmetry + naming consistency (side-by-side comparison tables) |
-| 2 | C2, C8 | Interface completeness + export surface (adapter/factory chain verification) |
+| 2 | C2, C8 | Interface completeness + export surface (Protocol/DI audit + __init__ gaps) |
 | 3 | C3, C9 | Feature locality + error handling (file mapping + exception census) |
-| 4 | C5 | Test-source alignment (enumerate EVERY source module and its test status) |
-| 5 | C6, C7 | Registration completeness + prompt-agent alignment (registry gap tables) |
+| 4 | C5, C10 | Test-source alignment + documentation-code alignment (enumerate EVERY source module, cross-reference CLAUDE.md) |
+| 5 | C6, C7 | Registration completeness + recipe-to-skill coherence (registry gap tables + YAML reference resolution) |
 
 ### Step 2: Consolidate Findings
 
@@ -399,23 +446,16 @@ After all subagents return:
 3. Assign dimension scores based on the enumerated data
 4. Compute overall cohesion score:
    - STRONG = 4, ADEQUATE = 3, WEAK = 2, FRACTURED = 1
-   - Average across dimensions, weighted: C2 gets 2x weight (interface completeness is foundational)
+   - Average across dimensions, weighted: C2 gets 2x weight (interface completeness is foundational), C10 gets 2x weight (documentation drift is load-bearing in a Claude Code context repo)
 5. Identify **cross-dimension patterns** — same subsystem appearing as a gap in multiple dimensions
 
 ### Step 3: Write Report
 
 Ensure `temp/audit-cohesion/` exists (`mkdir -p`).
 
-Write to `temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md`.
+Write to `temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md` — **always one file, never split**.
 
-The report WILL be long. This is expected and correct — thoroughness over brevity.
-
-If report exceeds 500 lines, split into parts at natural dimension boundaries:
-- `_scorecard.md` — scorecard, cross-dimension patterns, recommended focus areas
-- `_c1_c4.md` — dimensions C1 through C4 with full tables
-- `_c5_c9.md` — dimensions C5 through C9 with full tables
-
-Each part must reference the other parts by filename.
+The report WILL be long. This is expected and correct — thoroughness over brevity. Do not reduce content to stay under any line count.
 
 ### Step 4: Output Summary to Terminal
 

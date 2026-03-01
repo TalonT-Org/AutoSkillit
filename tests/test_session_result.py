@@ -20,6 +20,7 @@ from autoskillit.execution.session import (
     SkillResult,
     _compute_retry,
     _compute_success,
+    _is_kill_anomaly,
     extract_token_usage,
     parse_session_result,
 )
@@ -624,102 +625,6 @@ class TestComputeRetry:
         assert needs_retry is True
         assert reason == RetryReason.RESUME
 
-    def test_compute_retry_unconfirmed_completed_success_empty_result_not_retriable(self):
-        """When data_confirmed=False + COMPLETED: success was declared, no retry needed.
-
-        In practice parse_session_result("") produces empty_output, but the bypass
-        must fire regardless of subtype when data_confirmed=False.
-        """
-        for subtype, is_error in [("success", False), ("empty_output", True)]:
-            session = ClaudeSessionResult(
-                subtype=subtype,
-                is_error=is_error,
-                result="",
-                session_id="s1",
-                errors=[],
-            )
-            retriable, reason = _compute_retry(
-                session, -15, TerminationReason.COMPLETED, data_confirmed=False
-            )
-            assert retriable is False, f"subtype={subtype} should not be retriable"
-            assert reason == RetryReason.NONE
-
-
-# ---------------------------------------------------------------------------
-# _compute_success: provenance bypass (data_confirmed=False)
-# ---------------------------------------------------------------------------
-
-
-class TestComputeSuccessProvenanceBypass:
-    """_compute_success trusts Channel B's signal when data_confirmed=False."""
-
-    def test_compute_success_unconfirmed_completed_empty_output_is_true(self):
-        """Channel B confirmed completion; stdout was not flushed → empty_output.
-
-        parse_session_result("") produces subtype="empty_output", is_error=True.
-        When data_confirmed=False the provenance bypass must fire regardless of
-        subtype so that Channel B's session-JSONL signal is authoritative.
-        """
-        session = ClaudeSessionResult(
-            subtype="empty_output",
-            is_error=True,
-            result="",
-            session_id="",
-            errors=[],
-            token_usage=None,
-        )
-        assert (
-            _compute_success(
-                session,
-                returncode=-15,
-                termination=TerminationReason.COMPLETED,
-                completion_marker="",
-                data_confirmed=False,
-            )
-            is True
-        )
-
-    def test_compute_success_unconfirmed_completed_success_empty_result_is_true(self):
-        """Provenance bypass fires for success+empty-result when data_confirmed=False."""
-        session = ClaudeSessionResult(
-            subtype="success",
-            is_error=False,
-            result="",
-            session_id="s1",
-            errors=[],
-            token_usage=None,
-        )
-        assert (
-            _compute_success(
-                session,
-                returncode=-15,
-                termination=TerminationReason.COMPLETED,
-                completion_marker="",
-                data_confirmed=False,
-            )
-            is True
-        )
-
-    def test_compute_success_confirmed_completed_empty_output_is_false(self):
-        """When data_confirmed=True, the existing strict behavior is preserved."""
-        session = ClaudeSessionResult(
-            subtype="empty_output",
-            is_error=True,
-            result="",
-            session_id="",
-            errors=[],
-            token_usage=None,
-        )
-        assert (
-            _compute_success(
-                session,
-                returncode=-15,
-                termination=TerminationReason.COMPLETED,
-                completion_marker="",
-                data_confirmed=True,
-            )
-            is False
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -771,6 +676,27 @@ def test_compute_success_handles_all_termination_reasons_without_raising(
         completion_marker="%%ORDER_UP%%",
     )
     assert isinstance(result, bool)
+
+
+# ---------------------------------------------------------------------------
+# _is_kill_anomaly
+# ---------------------------------------------------------------------------
+
+
+def test_is_kill_anomaly_returns_true_for_interrupted_subtype():
+    """
+    'interrupted' is a real Claude CLI subtype produced when the process is
+    killed mid-generation. Under COMPLETED termination, this is a kill-race
+    artifact that must be classified as retriable.
+    """
+    session = ClaudeSessionResult(
+        subtype="interrupted",
+        result="",
+        is_error=True,
+        session_id="abc",
+        errors=[],
+    )
+    assert _is_kill_anomaly(session) is True
 
 
 # ---------------------------------------------------------------------------

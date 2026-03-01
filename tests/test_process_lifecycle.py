@@ -1576,52 +1576,6 @@ class TestChannelBDrainWait:
         assert result.data_confirmed is True
 
 
-class TestChannelBFullPipelineAdjudication:
-    """Integration: Channel B drain-race flows through to correct SkillResult.
-
-    These tests exercise the full pipeline from run_managed_async through
-    _build_skill_result to SkillResult, closing the cross-boundary gap
-    identified in the drain-race false-negative investigation.
-    """
-
-    @pytest.mark.asyncio
-    async def test_channel_b_drain_timeout_produces_success_skill_result(self, tmp_path):
-        """Full pipeline: Channel B wins + drain timeout → success=True, needs_retry=False.
-
-        Without the fix, this produces success=False (Gate 4 rejects empty result).
-        With the fix, data_confirmed=False triggers the provenance bypass and
-        the SkillResult is (success=True, needs_retry=False).
-        """
-        from autoskillit.execution.headless import _build_skill_result
-
-        session_dir = tmp_path / "session"
-        session_dir.mkdir()
-        script = tmp_path / "channel_b_no_stdout.py"
-        script.write_text(CHANNEL_B_NO_STDOUT_SCRIPT)
-
-        result = await run_managed_async(
-            [sys.executable, str(script), str(session_dir)],
-            cwd=tmp_path,
-            timeout=30,
-            heartbeat_marker='"type":"result"',
-            session_log_dir=session_dir,
-            completion_marker="%%ORDER_UP%%",
-            completion_drain_timeout=0.1,
-            _phase1_poll=0.01,
-            _phase2_poll=0.05,
-        )
-
-        skill_result = _build_skill_result(
-            result,
-            completion_marker="%%ORDER_UP%%",
-            skill_command="resolve-failures",
-            audit=None,
-        )
-
-        assert skill_result.success is True
-        assert skill_result.needs_retry is False
-
-
 class TestHeartbeatScanPosition:
     """_heartbeat uses byte-safe scan position — regression test for multi-byte content."""
 

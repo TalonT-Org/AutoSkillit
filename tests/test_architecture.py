@@ -39,6 +39,14 @@ _BROAD_EXCEPTION_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"
 # Standalone hook scripts: fail-open design requires silent broad excepts and print() for JSON
 _BROAD_EXCEPT_EXEMPT = frozenset({"quota_check.py", "remove_clone_guard.py"})
 
+# ARCH-007: Functions that check TerminationReason as sequential early-exit guards
+# (single-value checks), not as dispatch tables (≥2 values). Exempt from ARCH-007.
+_DISPATCH_TABLE_EXEMPT_FUNCTIONS: frozenset[str] = frozenset(
+    {
+        "_build_skill_result",  # sequential early-exit guards, not a dispatch table
+    }
+)
+
 
 def _has_log_call(body: list[ast.stmt]) -> bool:
     """Return True if body contains any logger.<method>(…) call."""
@@ -2294,3 +2302,85 @@ def test_make_context_no_isinstance_against_concrete_migration() -> None:
                         "_factory.py must not downcast to DefaultMigrationService via isinstance. "
                         "Wire using Protocol only."
                     )
+
+
+# ---------------------------------------------------------------------------
+# ARCH-007: Exhaustive TerminationReason dispatch
+# ---------------------------------------------------------------------------
+
+
+def _check_termination_dispatch_exhaustive(src_dir: Path) -> list[str]:
+    """
+    ARCH-007: Detect functions that dispatch over TerminationReason via if/elif
+    chains (dispatch tables) rather than exhaustive match/case + assert_never.
+
+    A "dispatch table" is detected when a single FunctionDef contains comparisons
+    to ≥2 distinct TerminationReason.* values (including values inside tuple
+    membership tests like `termination in (TerminationReason.X, TerminationReason.Y)`).
+    A single comparison (guard) is exempt. Functions in
+    _DISPATCH_TABLE_EXEMPT_FUNCTIONS are also exempt.
+
+    Returns a list of violation strings for failing tests.
+    """
+    violations = []
+    for py_file in src_dir.rglob("*.py"):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            if node.name in _DISPATCH_TABLE_EXEMPT_FUNCTIONS:
+                continue
+            # Collect all TerminationReason.VALUE names compared with == or in
+            tr_values: set[str] = set()
+            has_assert_never = False
+            has_match = False
+            for child in ast.walk(node):
+                # Detect: termination == TerminationReason.SOME_VALUE
+                # and: termination in (TerminationReason.X, TerminationReason.Y)
+                if isinstance(child, ast.Compare):
+                    for comparator in child.comparators:
+                        if (
+                            isinstance(comparator, ast.Attribute)
+                            and isinstance(comparator.value, ast.Name)
+                            and comparator.value.id == "TerminationReason"
+                        ):
+                            tr_values.add(comparator.attr)
+                        elif isinstance(comparator, ast.Tuple):
+                            # Handle: termination in (TerminationReason.X, TerminationReason.Y)
+                            for elt in comparator.elts:
+                                if (
+                                    isinstance(elt, ast.Attribute)
+                                    and isinstance(elt.value, ast.Name)
+                                    and elt.value.id == "TerminationReason"
+                                ):
+                                    tr_values.add(elt.attr)
+                # Detect match statements (Python 3.10+: ast.Match)
+                if hasattr(ast, "Match") and isinstance(child, ast.Match):
+                    has_match = True
+                # Detect assert_never calls
+                if (
+                    isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Name)
+                    and child.func.id == "assert_never"
+                ):
+                    has_assert_never = True
+            # Dispatch table = ≥2 distinct TerminationReason values checked
+            if len(tr_values) >= 2 and not (has_match and has_assert_never):
+                violations.append(
+                    f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
+                    f"{node.name}() dispatches on {tr_values} via if/elif — "
+                    f"use match/case + assert_never"
+                )
+    return violations
+
+
+def test_arch007_termination_dispatch_tables_use_exhaustive_match() -> None:
+    """
+    ARCH-007: Any function in execution/ that dispatches on ≥2 distinct
+    TerminationReason values via if/elif must use match/case with assert_never.
+    Single-value guard checks (e.g., `if termination == TIMED_OUT:`) are exempt.
+    """
+    violations = _check_termination_dispatch_exhaustive(SRC_ROOT / "execution")
+    assert violations == [], (
+        "Non-exhaustive TerminationReason dispatch tables found:\n" + "\n".join(violations)
+    )

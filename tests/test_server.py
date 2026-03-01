@@ -4748,43 +4748,6 @@ class TestComputeRetrySuccessEmptyResult:
         assert reason == RetryReason.RESUME
 
 
-class TestComputeSuccessCompletedBypassEmptyResult:
-    """COMPLETED bypass and provenance bypass for empty-result scenarios."""
-
-    def test_completed_success_empty_result_nonzero_rc_is_failure(self) -> None:
-        """When data_confirmed=False (Channel B killed, drain timeout), empty result IS success."""
-        session = ClaudeSessionResult(
-            subtype="success",
-            is_error=False,
-            result="",
-            session_id="s1",
-            errors=[],
-            token_usage=None,
-        )
-        # data_confirmed=True (default) keeps the strict behavior
-        assert (
-            _compute_success(
-                session,
-                returncode=-15,
-                termination=TerminationReason.COMPLETED,
-                completion_marker="",
-                data_confirmed=True,
-            )
-            is False
-        )
-        # data_confirmed=False (Channel B drain-race) trusts Channel B's signal
-        assert (
-            _compute_success(
-                session,
-                returncode=-15,
-                termination=TerminationReason.COMPLETED,
-                completion_marker="",
-                data_confirmed=False,
-            )
-            is True
-        )
-
-
 class TestBuildSkillResultStderr:
     """_build_skill_result includes stderr in responses."""
 

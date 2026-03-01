@@ -282,54 +282,17 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
     )
 
 
-def _compute_success(
+def _check_session_content(
     session: ClaudeSessionResult,
-    returncode: int,
-    termination: TerminationReason,
-    completion_marker: str = "",
-    data_confirmed: bool = True,
+    completion_marker: str,
 ) -> bool:
-    """Cross-validate all signals to determine unambiguous success/failure."""
-    if termination in (TerminationReason.TIMED_OUT, TerminationReason.STALE):
-        return False
-
-    # Provenance bypass: Channel B confirmed completion via session JSONL but the
-    # bounded drain wait expired before Channel A confirmed stdout data.  Trust
-    # Channel B's independent, authoritative signal and declare success without
-    # demanding stdout content that was not flushed before the kill.
-    # Placed before the returncode gate because a killed process has nonzero
-    # returncode, which Gate 2 would otherwise reject.
-    # Note: when stdout is empty, parse_session_result produces subtype="empty_output"
-    # with is_error=True — do not gate on subtype or is_error here; those fields
-    # reflect the absence of stdout data, not an actual session error.
-    if not data_confirmed and termination == TerminationReason.COMPLETED:
-        return True
-
-    if returncode != 0:
-        # COMPLETED path: the process was killed by our own async_kill_process_tree
-        # (signal -15 or -9), so a non-zero returncode is expected and trustworthy
-        # when the session envelope says "success". Trust the envelope.
-        #
-        # NATURAL_EXIT path: the process exited on its own with an error code.
-        # We cannot distinguish PTY-masking quirks from genuine CLI errors here,
-        # so we fail conservatively. The session result record (if any) may still
-        # be present in stdout — but a non-zero natural exit is treated as authoritative
-        # evidence of failure. No asymmetric bypass is applied.
-        if (
-            termination == TerminationReason.COMPLETED
-            and session.subtype == "success"
-            and session.result.strip()
-        ):
-            pass  # fall through to remaining checks
-        else:
-            return False
+    """Validate session content fields after termination-specific gates pass."""
     if session.is_error:
         return False
     if not session.result.strip():
         return False
     if session.subtype in _FAILURE_SUBTYPES:
         return False
-
     if completion_marker:
         result_text = session.result.strip()
         marker_stripped = result_text.replace(completion_marker, "").strip()
@@ -337,14 +300,51 @@ def _compute_success(
             return False
         if completion_marker not in result_text:
             return False
-
     return True
+
+
+def _compute_success(
+    session: ClaudeSessionResult,
+    returncode: int,
+    termination: TerminationReason,
+    completion_marker: str = "",
+) -> bool:
+    """Cross-validate all signals to determine unambiguous success/failure.
+
+    Exhaustive match dispatch over TerminationReason ensures mypy flags any
+    unhandled value when the enum is extended (ARCH-007).
+    """
+    match termination:
+        case TerminationReason.TIMED_OUT:
+            return False
+
+        case TerminationReason.STALE:
+            return False
+
+        case TerminationReason.COMPLETED:
+            # The process was killed by our own async_kill_process_tree
+            # (signal -15 or -9), so a non-zero returncode is expected and
+            # trustworthy when the session envelope says "success".
+            if returncode != 0 and not (session.subtype == "success" and session.result.strip()):
+                return False
+            return _check_session_content(session, completion_marker)
+
+        case TerminationReason.NATURAL_EXIT:
+            # The process exited on its own. A non-zero returncode is treated
+            # as authoritative evidence of failure — no asymmetric bypass.
+            if returncode != 0:
+                return False
+            return _check_session_content(session, completion_marker)
+
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 _KILL_ANOMALY_SUBTYPES: frozenset[str] = frozenset(
     {
         "unparseable",  # killed mid-write → partial NDJSON
         "empty_output",  # killed before any stdout was written
+        "interrupted",  # killed mid-generation → real Claude CLI subtype
     }
 )
 
@@ -359,6 +359,7 @@ def _is_kill_anomaly(session: ClaudeSessionResult) -> bool:
     Covers:
     - unparseable: process killed mid-write, stdout is partial NDJSON
     - empty_output: process killed before any stdout was written
+    - interrupted: process killed mid-generation (real Claude CLI subtype)
     - success with empty result: kill occurred after result record was written
       but with empty content (Channel B / Channel A drain-race, or
       CLAUDE_CODE_EXIT_AFTER_STOP_DELAY timer-based self-exit)
@@ -374,7 +375,6 @@ def _compute_retry(
     session: ClaudeSessionResult,
     returncode: int,
     termination: TerminationReason,
-    data_confirmed: bool = True,
 ) -> tuple[bool, RetryReason]:
     """Compute whether the session result warrants a retry.
 
@@ -400,13 +400,6 @@ def _compute_retry(
         case TerminationReason.COMPLETED:
             # Infrastructure killed the process. SIGTERM/SIGKILL produce nonzero
             # returncode by design — do not gate on returncode here.
-            # Provenance check: when Channel B confirmed completion and stdout was
-            # not flushed, _compute_success already declared success. A retry
-            # would re-run a completed session — suppress it.
-            # Note: parse_session_result("") produces empty_output, not success;
-            # do not gate on subtype here.
-            if not data_confirmed:
-                return False, RetryReason.NONE
             if _is_kill_anomaly(session):
                 return True, RetryReason.RESUME
             return False, RetryReason.NONE

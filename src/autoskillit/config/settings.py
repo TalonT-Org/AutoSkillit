@@ -69,7 +69,7 @@ class RunSkillConfig:
     stale_threshold: int = 1200  # 20 minutes
     completion_marker: str = "%%ORDER_UP%%"
     completion_drain_timeout: float = 5.0
-    exit_after_stop_delay_ms: int = 60000
+    exit_after_stop_delay_ms: int = 120000
 
 
 @dataclass
@@ -202,7 +202,7 @@ class AutomationConfig:
                 stale_threshold=int(val(rs, "stale_threshold", 1200)),
                 completion_marker=str(val(rs, "completion_marker", "%%ORDER_UP%%")),
                 completion_drain_timeout=float(val(rs, "completion_drain_timeout", 5.0)),
-                exit_after_stop_delay_ms=int(val(rs, "exit_after_stop_delay_ms", 60000)),
+                exit_after_stop_delay_ms=int(val(rs, "exit_after_stop_delay_ms", 120000)),
             ),
             run_skill_retry=RunSkillRetryConfig(
                 timeout=int(val(rsr, "timeout", 7200)),

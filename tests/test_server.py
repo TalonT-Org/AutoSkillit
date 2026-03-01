@@ -4111,7 +4111,7 @@ class TestRunSkillEnvPrefix:
         await run_skill("/investigate something", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
         assert cmd[0] == "env"
-        assert cmd[1] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=60000"
+        assert cmd[1] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000"
         assert "claude" in cmd
 
     @pytest.mark.asyncio
@@ -4144,7 +4144,7 @@ class TestRunSkillEnvPrefix:
         await run_skill_retry("/investigate something", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
         assert cmd[0] == "env"
-        assert cmd[1] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=60000"
+        assert cmd[1] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000"
 
 
 class TestSessionLogDir:

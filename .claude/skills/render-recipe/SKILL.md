@@ -1,6 +1,6 @@
 ---
 name: render-recipe
-description: Render a recipe YAML as a compact visual overview with ASCII flow diagram, input table, and step summary. Use when presenting a loaded recipe to the user.
+description: Render a recipe YAML as a compact visual overview with ASCII flow diagram and input table. Use when presenting a loaded recipe to the user.
 ---
 
 # Render Recipe
@@ -30,7 +30,7 @@ Produce a compact, structured overview of an AutoSkillit recipe. Reads the recip
 
 ## Rendering Specification
 
-The output has exactly four sections. Follow this structure precisely.
+The output has exactly three sections. Follow this structure precisely.
 
 ### Section 1: Header
 
@@ -43,59 +43,65 @@ The output has exactly four sections. Follow this structure precisely.
 
 Build an ASCII flow diagram showing the step graph. This is the core visual.
 
-**Rules:**
+**Infrastructure steps to hide:**
+Steps whose sole purpose is capturing a value via `run_cmd` (e.g., `capture_base_sha`, `set_merge_target`, shell one-liners that just `printf` or `git rev-parse`) should be **omitted** from the diagram. They are plumbing — the user does not need to see them. If in doubt: if a step uses `run_cmd` and its `note:` describes it as capturing/setting a value, hide it.
 
-1. Identify the **happy path** — the longest chain following `on_success` from the first step to a terminal `stop` step.
-2. Show the happy path as a horizontal or vertical chain using `───` connectors.
-3. Show **optional steps** in brackets: `[step-name]`.
-4. Show **branch points** where `on_failure` diverges to a non-terminal step (e.g., `fix`). Use a vertical tap off the main line.
-5. Show **loops** (back-edges to earlier steps) with a return arrow and label.
-6. Show **on_result routing** (multi-way branches) with labeled paths.
-7. Show **retry blocks** as a note on the step: `(retry ×N)`.
-8. Group repeated cycles with `FOR EACH` notation when `note:` fields indicate iteration over plan_parts or groups.
-9. Terminal steps go at the bottom, separated by a line.
+**Diagram layout:**
 
-**Connectors:**
-- `───` horizontal flow
-- `│` vertical flow
-- `├──` branch off main line
-- `└──` last branch
-- `↑` back-edge (loop to earlier step)
+Use a vertical spine with `├──` branches. The structure reads top-to-bottom:
 
-**Example for implementation-pipeline:**
+1. **Main flow** runs down the left spine. Show meaningful steps in order.
+2. **Optional steps** are shown in brackets `[step-name]` with a right-side annotation: `← only if {condition}`.
+3. **Iteration loops** are wrapped in a `FOR EACH` block using box-drawing characters (`┌────┤` / `└────┘`). Only use this when `note:` fields indicate iteration over plan_parts or groups.
+4. **Failure branches** are shown inline where they diverge: `fix ───┘ (on failure)`.
+5. **Multi-way routing** (`on_result`) is shown with labeled paths on separate lines.
+6. **Retry blocks** are noted parenthetically on the step: `(retry ×N)`. Use `×∞` for `max_attempts: 0`.
+7. **Back-edges** use `↑` suffix: `→ verify↑`, `→ plan↑`.
+8. **Terminal steps** go at the bottom after a separator line.
+9. Do **not** show model annotations (e.g., `[sonnet]`) in the diagram.
+
+**Reference example for implementation-pipeline:**
 
 ```
-clone ─── capture_sha ─── set_target ─── [create_branch]
-                                              │
-                                         [make-groups]
-                                              │
-┌─────────────────────────────────────────────┤
-│  FOR EACH group / plan part:                │
-│                                             │
-│  plan ─── [review] ─── verify ─── implement (retry) ─── test ─── merge ─── push
-│                                                           │
-│                                                    fix ───┘ (on fail)
-│                                                                       │
-│  next_or_done:  more parts → verify↑ │ more groups → plan↑ │ done ↓  │
-└───────────────────────────────────────────────────────────────────────┘
-                              │
-                        [audit-impl]
-                         GO ↓  NO GO → plan↑
-                              │
-                         [open-pr]
-                              │
-                          cleanup
-                              │
+  clone
+       │
+       ├── [create_branch]  ← only if open_pr=true
+       │
+       ├── [make-groups]    ← only if make_groups=true
+       │
+  ┌────┤ FOR EACH GROUP:
+  │    │
+  │    plan ─── [review] ─── verify ─── implement ─── test ─── merge ─── push
+  │         │                                           │
+  │         │                                    fix ───┘ (on failure)
+  │         │
+  │         └── next_or_done: more parts? → verify↑
+  │                           more groups? → plan↑
+  │                           all done? ↓
+  └────┘
+       │
+       ├── [audit-impl]    ← only if audit=true
+       │     GO → open_pr / done
+       │     NO GO → remediate → plan↑
+       │
+       ├── [open-pr]       ← only if open_pr=true
+       │
+       cleanup ─── done
+
   ─────────────────────────────────
   done       "Pipeline complete."
   escalate   "Failed — human intervention needed."
 ```
 
-This is an example — adapt the shape to the actual recipe. Simpler recipes get simpler diagrams. Do not force the `FOR EACH` notation if the recipe has no iteration.
+**Adapting to simpler recipes:**
+- Recipes without iteration do not use `FOR EACH` blocks. Just show the linear flow with branches.
+- Recipes with few optional steps can show them inline on the main flow: `clone ─── audit ─── investigate ─── plan ─── implement ─── test ─── merge ─── push`.
+- Very simple recipes (under 8 meaningful steps) can use a single horizontal chain.
+- Always adapt the shape to the recipe — do not force a complex layout on a simple recipe.
 
 ### Section 3: Inputs Table
 
-Render all ingredients as a single Markdown table. Separate user-supplied inputs from agent-managed state.
+Render all ingredients as a single Markdown table.
 
 ```
 ### Inputs
@@ -105,7 +111,7 @@ Render all ingredients as a single Markdown table. Separate user-supplied inputs
 | task | What to implement | — |
 | source_dir | Repository path | auto-detect |
 | base_branch | Merge target | main |
-| run_name | Run name prefix | "impl" |
+| run_name | Run name prefix | impl |
 | make_groups | Decompose into groups | off |
 | review_approach | Research first | off |
 | audit | Post-merge audit | on |
@@ -117,47 +123,8 @@ Render all ingredients as a single Markdown table. Separate user-supplied inputs
 - Show `—` for no default (required inputs).
 - Show `off`/`on` for boolean-like flags with `"false"`/`"true"` defaults.
 - Show `auto-detect` for empty-string defaults that auto-resolve.
-- If an ingredient is conditionally required (e.g., `task` required when `make_groups=false`), note it parenthetically in the description: "What to implement (when no groups)".
+- If an ingredient is conditionally required (e.g., `task` required when `make_groups=false`), note it parenthetically: "What to implement (when no groups)".
 - Omit agent-managed state (ingredients with no default that are populated by step captures). If any exist, add a brief line below the table: `Agent-managed: work_dir, worktree_path, plan_path, ...`
-
-### Section 4: Steps Summary
-
-List non-terminal steps in declaration order. One line per step.
-
-```
-### Steps (N total, M optional)
-
-| # | Step | Tool | On Fail | Notes |
-|---|------|------|---------|-------|
-| 1 | clone | clone_repo | stop | captures work_dir |
-| 2 | capture_sha | run_cmd | stop | captures base_sha |
-| 3 | set_target | run_cmd | stop | sets merge_target default |
-| 4 | create_branch | run_cmd | cleanup | [optional] only if open_pr=true |
-| 5 | group | run_skill | cleanup | [optional] only if make_groups=true |
-| 6 | plan | run_skill | cleanup | make-plan; captures plan_path |
-| 7 | review | run_skill | cleanup | [optional] only if review_approach=true |
-| 8 | verify | run_skill | cleanup | dry-walkthrough; per plan part |
-| 9 | implement | run_skill_retry | cleanup | retry ×∞ → retry_worktree |
-| 10 | retry_worktree | run_skill_retry | cleanup | retry ×3 → cleanup |
-| 11 | test | test_check | fix | pipeline gate |
-| 12 | merge | merge_worktree | cleanup | merges into merge_target |
-| 13 | push | push_to_remote | cleanup | pushes merge_target to remote |
-| 14 | fix | run_skill [sonnet] | cleanup | resolve-failures → test↑ |
-| 15 | next_or_done | route | — | 3-way: parts/groups/done |
-| 16 | audit_impl | run_skill | stop | [optional] GO/NO GO routing |
-| 17 | remediate | route | — | → plan↑ with remediation file |
-| 18 | open_pr_step | run_skill | cleanup | [optional] only if open_pr=true |
-```
-
-**Rules:**
-- `#` is the ordinal position (1-indexed), not the YAML key.
-- `Tool` column: show the tool/action value. Append `[model]` if a `model:` field is set.
-- `On Fail` column: show the on_failure target. Use `stop` for terminal targets, `—` for route steps with no on_failure.
-- `Notes` column: keep to one short phrase. Prioritize: [optional] flag, retry info, what it captures, skill name if it's a run_skill step.
-- Omit terminal steps (action: stop) and cleanup steps from the table. List terminals below it:
-  ```
-  Terminals: done ("Pipeline complete."), escalate_stop ("Failed — human intervention needed.")
-  ```
 
 ---
 
@@ -168,6 +135,7 @@ List non-terminal steps in declaration order. One line per step.
 Read the recipe YAML from the prompt context or from disk if a path is given. Identify:
 - All ingredients and their properties
 - All steps in declaration order
+- Infrastructure steps to hide (run_cmd steps that just capture values)
 - The happy path (follow on_success chain from first step)
 - Branch points (on_failure to non-terminal, on_result routing)
 - Back-edges (on_success/on_failure targets that appear earlier in declaration order)
@@ -177,15 +145,15 @@ Read the recipe YAML from the prompt context or from disk if a path is given. Id
 
 ### Step 2: Build the Flow Diagram
 
-Construct the ASCII diagram following the rules in Section 2. Start with the happy path, then layer in branches, loops, and optional annotations.
+Construct the ASCII diagram following the rules in Section 2. Start with the happy path, omit infrastructure steps, then layer in branches and optional annotations.
 
-### Step 3: Build the Tables
+### Step 3: Build the Inputs Table
 
-Construct the Inputs table and Steps table following the rules in Sections 3 and 4.
+Construct the table following the rules in Section 3.
 
 ### Step 4: Assemble and Write
 
-Combine all four sections. Write to `temp/render-recipe/{recipe-name}.md`. Print the full content to terminal.
+Combine all three sections. Write to `temp/render-recipe/{recipe-name}.md`. Print the full content to terminal.
 
 ---
 

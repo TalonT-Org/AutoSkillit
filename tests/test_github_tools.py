@@ -135,7 +135,7 @@ async def test_default_github_fetcher_no_token_omits_auth_header(httpx_mock):
     fetcher = DefaultGitHubFetcher(token=None)
     await fetcher.fetch_issue("owner/repo#1", include_comments=False)
     requests = httpx_mock.get_requests()
-    assert len(requests) >= 1
+    assert len(requests) == 1
     assert "authorization" not in {k.lower() for k in requests[0].headers}
 
 

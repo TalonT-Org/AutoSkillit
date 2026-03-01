@@ -355,7 +355,7 @@ class TestTimeoutKillsHangingProcess:
         elapsed = time.monotonic() - start
 
         assert result.termination == TerminationReason.TIMED_OUT
-        assert elapsed < 8, f"Should return within ~2s timeout, took {elapsed:.1f}s"
+        assert elapsed < 5, f"Should return within ~2s timeout, took {elapsed:.1f}s"
         assert "before hang" in result.stdout  # Partial output captured
         # Process should be dead
         await asyncio.sleep(0.5)

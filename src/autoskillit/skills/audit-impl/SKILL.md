@@ -23,9 +23,10 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 
 - `plans_input` — path to a single plan `.md` file, a directory containing `*_plan_*.md`
   files, or a `manifest_*.json` from `/autoskillit:make-groups`
-- `branch_name` — branch name containing the implementation (preferred, stable after merge);
-  a live worktree path is also accepted for legacy manual invocations (Step 0 extracts
-  the branch name from the directory automatically)
+- `branch_name` — commit SHA of the pre-implementation base ref (preferred from pipeline,
+  stable after merge_worktree destroys named refs); a branch name is also accepted for
+  standalone invocations. A live worktree path is accepted for legacy use (Step 0 extracts
+  the branch name automatically).
 - `base_branch` — branch to diff against (default: `main`)
 
 ## Critical Constraints
@@ -62,11 +63,17 @@ Determine the diff source from `implementation_ref`:
    - Run: `git diff {base_branch}...{branch_name}` from the current working directory
    - (This handles legacy manual invocations where a live worktree path is passed.)
 
-2. **Otherwise, treat `implementation_ref` as a branch name:**
-   - Run: `git diff {base_branch}...{implementation_ref}` from the current working directory
+2. **Otherwise, detect whether `implementation_ref` is a commit SHA or branch name:**
+   - Detect SHA: `echo "$implementation_ref" | grep -qE '^[0-9a-f]{40}$'`
+   - **If SHA (pre-implementation base ref, preferred from pipeline):**
+     - Run: `git diff {implementation_ref}..{base_branch}` — two-dot, SHA on the left
+     - This shows all commits added to base_branch since the pre-implementation snapshot,
+       covering the full multi-group implementation across all merged worktrees.
+   - **If branch name:**
+     - Run: `git diff {base_branch}...{implementation_ref}` — three-dot (unchanged)
    - If git reports "unknown revision or path not in the working tree", abort with:
      > "implementation_ref '{implementation_ref}' is neither an existing worktree
-     > directory nor a known git branch. If you are passing a worktree path, ensure
+     > directory nor a known git ref. If you are passing a worktree path, ensure
      > the worktree has not been deleted before calling audit-impl."
 
 The old silent fallthrough (non-existent path treated as branch name without error)
@@ -85,27 +92,29 @@ Aggregate into a unified requirements inventory.
 
 ### Step 2 — Load Implementation Diff
 
-**Stale branch guard:**
-Before loading the diff, verify the branch ref is usable:
+**Stale branch guard (branch name refs only — skip for SHA refs):**
+
+Skip this check when `implementation_ref` is a commit SHA (a SHA-as-ancestor of base_branch
+is expected after all worktrees are merged — this check is only meaningful for named refs).
 
 ```bash
-# Step 1: ref must exist at all
-git rev-parse --verify {branch_name} 2>/dev/null
+# Only run for branch name refs (not SHA):
+if ! echo "$implementation_ref" | grep -qE '^[0-9a-f]{40}$'; then
+    # Step 1: ref must exist at all
+    git rev-parse --verify {implementation_ref} 2>/dev/null
+    # Step 2: branch must not already be fully merged into base (fast-forward absorption check)
+    git merge-base --is-ancestor {implementation_ref} {base_branch}
+fi
 ```
 
-- If this fails (branch ref not found): abort with a clear error —
-  `"branch ref '{branch_name}' not found — it may have been absorbed by a fast-forward
+- If ref lookup fails (branch ref not found): abort with a clear error —
+  `"branch ref '{implementation_ref}' not found — it may have been absorbed by a fast-forward
    merge before audit_impl ran. This is a pipeline routing error."` Output `{"success": false}`
   with this message. Do not proceed to audit.
 
-```bash
-# Step 2: branch must not already be fully merged into base (fast-forward absorption check)
-git merge-base --is-ancestor {branch_name} {base_branch}
-```
-
-- If this exits 0 (branch is an ancestor of base — already fully merged): log a warning,
-  then treat this as **GO** with note:
-  `"Branch '{branch_name}' is already an ancestor of '{base_branch}' — absorbed by
+- If `--is-ancestor` exits 0 (branch is an ancestor of base — already fully merged): log a
+  warning, then treat this as **GO** with note:
+  `"Branch '{implementation_ref}' is already an ancestor of '{base_branch}' — absorbed by
    fast-forward merge prior to audit. No delta to evaluate; returning GO."` This is
   O(1), unambiguous, and distinguishes the stale-fast-forward case from legitimate no-op
   branches (empty diff is an unreliable guard; `--is-ancestor` is the correct tool).

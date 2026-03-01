@@ -236,39 +236,3 @@ async def read_db(
             extra={"error": type(exc).__name__},
         )
         return json.dumps({"error": f"Query failed: {exc}"})
-
-
-@mcp.tool(tags={"automation"})
-async def check_quota() -> str:
-    """Check 5-hour quota utilization and return whether a sleep is needed.
-
-    When quota_guard.enabled=True (on by default) and utilization
-    exceeds quota_guard.threshold, returns should_sleep=True with sleep_seconds
-    set to the number of seconds until resets_at + buffer_seconds. This tool
-    does NOT sleep internally. When should_sleep=True, the orchestrator must
-    call run_cmd to sleep before proceeding with run_skill/run_skill_retry.
-
-    Always returns success=True so pipeline routing is unaffected.
-
-    Returns JSON:
-        {
-            "success": true,
-            "should_sleep": bool,
-            "sleep_seconds": int,
-            "utilization": float | null,
-            "resets_at": str | null,
-            "error": str          # only present on credential/network failure
-        }
-
-    This tool is always available (not gated by open_kitchen).
-    Quota enforcement is handled automatically by the PreToolUse hook.
-    """
-    from autoskillit.server import _get_config
-
-    config = _get_config()
-
-    from autoskillit.server.helpers import check_and_sleep_if_needed
-
-    quota_result = await check_and_sleep_if_needed(config.quota_guard)
-
-    return json.dumps({"success": True, **quota_result})

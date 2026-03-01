@@ -55,7 +55,6 @@ UNGATED_TOOLS: frozenset[str] = frozenset(
         "list_recipes",
         "load_recipe",
         "validate_recipe",
-        "check_quota",
     }
 )
 

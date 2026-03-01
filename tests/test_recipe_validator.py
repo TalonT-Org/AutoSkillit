@@ -3526,6 +3526,28 @@ class TestPredicateOnResultValidation:
         errors = validate_recipe(wf)
         assert errors == []
 
+    def test_predicate_on_result_empty_conditions_rejected(self) -> None:
+        """on_result with conditions=[] bypasses predicate path; legacy validator emits field error.
+
+        When StepResultRoute(conditions=[]) is constructed directly (bypassing _parse_step,
+        which collapses empty conditions to on_result=None), the validator falls through to
+        legacy format validation and emits an explicit error for the missing field.
+        """
+        recipe = Recipe(
+            name="test-predicate-empty",
+            description="test",
+            steps={
+                "start": RecipeStep(
+                    tool="run_skill",
+                    with_args={"skill_command": "x", "cwd": "y"},
+                    on_result=StepResultRoute(conditions=[]),
+                ),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        errors = validate_recipe(recipe)
+        assert any("on_result.field must be non-empty" in e for e in errors)
+
 
 class TestPredicateBuildStepGraph:
     """_build_step_graph includes condition.route edges."""

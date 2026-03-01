@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import textwrap
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+
+from autoskillit.core.paths import pkg_root
 
 from autoskillit.core.types import RetryReason
 from autoskillit.execution.session import SkillResult
@@ -202,15 +205,8 @@ class TestRecipeMigrationAdapter:
         assert result == temp_dir / "migrations" / "myscript.yaml"
 
     # ME8
-    def test_recipe_adapter_validate_valid_file(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        recipe_path = tmp_path / "valid.yaml"
-        recipe_path.write_text("name: valid\n")
-
-        mock_recipe = Mock()
-        monkeypatch.setattr("autoskillit.recipe.load_recipe", lambda p: mock_recipe)
-        monkeypatch.setattr("autoskillit.recipe.validate_recipe", lambda r: [])
+    def test_recipe_adapter_validate_valid_bundled_recipe(self) -> None:
+        recipe_path = pkg_root() / "recipes" / "implementation-pipeline.yaml"
 
         adapter = RecipeMigrationAdapter()
         is_valid, error = adapter.validate(recipe_path)
@@ -219,22 +215,40 @@ class TestRecipeMigrationAdapter:
         assert error == ""
 
     # ME9
-    def test_recipe_adapter_validate_invalid_file(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_recipe_adapter_validate_invalid_yaml_structure(
+        self, tmp_path: Path
     ) -> None:
-        recipe_path = tmp_path / "invalid.yaml"
-        recipe_path.write_text("name: invalid\n")
+        recipe_path = tmp_path / "broken.yaml"
+        recipe_path.write_text("steps: 'not_a_dict'\ningredients: 42\n")
 
-        monkeypatch.setattr(
-            "autoskillit.recipe.load_recipe",
-            Mock(side_effect=ValueError("invalid recipe structure")),
+        adapter = RecipeMigrationAdapter()
+        is_valid, error = adapter.validate(recipe_path)
+
+        assert is_valid is False
+        assert len(error) > 0
+
+    # ME9b
+    def test_recipe_adapter_validate_errors_non_empty_branch(
+        self, tmp_path: Path
+    ) -> None:
+        recipe_path = tmp_path / "no-kitchen-rules.yaml"
+        recipe_path.write_text(
+            textwrap.dedent("""\
+                name: bad-recipe
+                steps:
+                  step1:
+                    tool: run_skill
+                    with:
+                      skill_command: "/foo"
+                    on_success: step1
+            """)
         )
 
         adapter = RecipeMigrationAdapter()
         is_valid, error = adapter.validate(recipe_path)
 
         assert is_valid is False
-        assert "invalid recipe structure" in error
+        assert len(error) > 0
 
 
 # ---------------------------------------------------------------------------

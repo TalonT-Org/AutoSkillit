@@ -1890,10 +1890,10 @@ def test_sc1_audit_impl_has_real_inputs_and_outputs() -> None:
     assert remediation_out["type"] == "file_path"
 
 
-def test_sc2_assess_and_merge_has_empty_outputs() -> None:
-    """T_SC2: assess-and-merge has outputs: []."""
+def test_sc2_resolve_failures_has_empty_outputs() -> None:
+    """T_SC2: resolve-failures has outputs: []."""
     manifest = load_bundled_manifest()
-    assert manifest["skills"]["assess-and-merge"]["outputs"] == []
+    assert manifest["skills"]["resolve-failures"]["outputs"] == []
 
 
 def test_sc3_dry_walkthrough_has_empty_outputs() -> None:
@@ -2014,6 +2014,19 @@ class TestImplementationPipelineStructure:
         assert "branch_name" in step.capture, (
             "retry_worktree also updates the active worktree reference; "
             "it must capture branch_name for downstream audit_impl use"
+        )
+
+    def test_ip_c1_fix_step_routes_on_success_to_test(self) -> None:
+        """T_IP_C1: fix step must route on_success back to test (not next_or_done).
+
+        assess-and-merge used to merge internally, so fix routed to next_or_done
+        after the internal merge. resolve-failures does not merge, so the orchestrator
+        must route fix → test to re-validate before entering merge_worktree.
+        """
+        step = self.recipe.steps["fix"]
+        assert step.on_success == "test", (
+            "fix step must route back to test — resolve-failures only fixes failures, "
+            "it does not merge. The orchestrator must re-validate before merge_worktree."
         )
 
 

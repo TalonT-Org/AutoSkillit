@@ -8,7 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.workspace.clone import classify_remote_url, clone_repo, push_to_remote, remove_clone
+from autoskillit.workspace.clone import (
+    clone_repo,
+    push_to_remote,
+    remove_clone,
+)
 
 
 @pytest.fixture
@@ -405,9 +409,7 @@ class TestPushToRemoteNonBare:
         remote = tmp_path / "remote.git"
         subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
         source = tmp_path / "source"
-        subprocess.run(
-            ["git", "clone", str(remote), str(source)], check=True, capture_output=True
-        )
+        subprocess.run(["git", "clone", str(remote), str(source)], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(source), "config", "user.email", "t@t.com"],
             check=True,
@@ -433,9 +435,7 @@ class TestPushToRemoteNonBare:
 
         shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
 
-    def test_clone_repo_returns_empty_remote_url_when_no_origin(
-        self, tmp_path: Path
-    ) -> None:
+    def test_clone_repo_returns_empty_remote_url_when_no_origin(self, tmp_path: Path) -> None:
         """clone_repo returns remote_url='' when source_dir has no remote configured."""
         source = tmp_path / "source"
         subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
@@ -471,9 +471,7 @@ class TestPushToRemoteNonBare:
         remote = tmp_path / "remote.git"
         subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
         source = tmp_path / "source"
-        subprocess.run(
-            ["git", "clone", str(remote), str(source)], check=True, capture_output=True
-        )
+        subprocess.run(["git", "clone", str(remote), str(source)], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(source), "config", "user.email", "t@t.com"],
             check=True,

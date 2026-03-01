@@ -149,13 +149,14 @@ async def push_to_remote(
     — clone isolation is preserved.
 
     Returns {"success": "true", "stderr": str} on success.
-    Returns {"error": str, "stderr": str, "error_type": str} on failure (triggers on_failure routing).
+    Returns {"error": str, "stderr": str, "error_type": str} on failure
+    (triggers on_failure routing).
 
     Args:
         clone_path: Absolute path to the clone directory to push from.
         branch: Branch name to push (e.g. "main").
-        source_dir: Absolute path to the source repo (used only to read remote URL when remote_url is empty).
-        remote_url: Pre-resolved upstream remote URL. When provided, source_dir lookup is skipped.
+        source_dir: Source repo path (read-only URL lookup when remote_url is empty).
+        remote_url: Pre-resolved upstream remote URL. When provided, source_dir is skipped.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -184,15 +185,12 @@ async def push_to_remote(
     from autoskillit.server import _get_ctx
 
     tool_ctx = _get_ctx()
-    if tool_ctx.clone_mgr is None:
+    clone_mgr = tool_ctx.clone_mgr
+    if clone_mgr is None:
         return json.dumps({"error": "Clone manager not configured", "stderr": ""})
 
     result = await asyncio.to_thread(
-        tool_ctx.clone_mgr.push_to_remote,
-        clone_path,
-        source_dir,
-        branch,
-        remote_url=remote_url,
+        lambda: clone_mgr.push_to_remote(clone_path, source_dir, branch, remote_url=remote_url)
     )
 
     if not result.get("success"):

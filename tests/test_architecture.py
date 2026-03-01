@@ -1857,6 +1857,20 @@ def test_rule_registry_completeness() -> None:
     )
 
 
+def test_all_rules_have_defense_standard() -> None:
+    """P13 LOW: every entry in RULES must declare a defense_standard.
+
+    Prevents future @semantic_rule additions from silently omitting
+    the defense_standard field, which would break audit-defense-standards
+    traceability.
+    """
+    missing = [r.rule_id for r in RULES if r.defense_standard is None]
+    assert not missing, (
+        f"RULES entries missing defense_standard: {missing}. "
+        "Every architectural rule must trace to a defense standard."
+    )
+
+
 def test_violation_has_rule_id_and_lens_fields() -> None:
     """REQ-SYMB-003: Violation gains rule_id and lens while preserving 4 original fields."""
     v = Violation(

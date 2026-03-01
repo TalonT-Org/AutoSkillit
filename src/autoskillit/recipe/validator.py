@@ -104,16 +104,36 @@ def validate_recipe(recipe: Recipe) -> list[str]:
                     f"Step '{step_name}' has both 'on_result' and 'on_success'; "
                     f"they are mutually exclusive."
                 )
-            if not step.on_result.field:
-                errors.append(f"Step '{step_name}'.on_result.field must be non-empty.")
-            if not step.on_result.routes:
-                errors.append(f"Step '{step_name}'.on_result.routes must be non-empty.")
-            for value, target in step.on_result.routes.items():
-                if target not in step_names and target != "done":
+            if step.on_result.conditions:
+                # Predicate format validation
+                if step.on_failure is not None:
                     errors.append(
-                        f"Step '{step_name}'.on_result.routes.{value} references "
-                        f"unknown step '{target}'."
+                        f"Step '{step_name}' has both 'on_result' (predicate format) and "
+                        f"'on_failure'; they are mutually exclusive. Predicate conditions "
+                        f"handle all routing paths including failures."
                     )
+                for i, cond in enumerate(step.on_result.conditions):
+                    if not cond.route:
+                        errors.append(
+                            f"Step '{step_name}'.on_result[{i}].route must be non-empty."
+                        )
+                    elif cond.route not in step_names and cond.route != "done":
+                        errors.append(
+                            f"Step '{step_name}'.on_result[{i}].route references "
+                            f"unknown step '{cond.route}'."
+                        )
+            else:
+                # Legacy format validation
+                if not step.on_result.field:
+                    errors.append(f"Step '{step_name}'.on_result.field must be non-empty.")
+                if not step.on_result.routes:
+                    errors.append(f"Step '{step_name}'.on_result.routes must be non-empty.")
+                for value, target in step.on_result.routes.items():
+                    if target not in step_names and target != "done":
+                        errors.append(
+                            f"Step '{step_name}'.on_result.routes.{value} references "
+                            f"unknown step '{target}'."
+                        )
 
     # Validate capture values: must contain ${{ result.* }} expressions
     for step_name, step in recipe.steps.items():
@@ -184,6 +204,9 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
             for target in step.on_result.routes.values():
                 if target in step_names:
                     graph[name].add(target)
+            for condition in step.on_result.conditions:
+                if condition.route in step_names:
+                    graph[name].add(condition.route)
         if step.retry and step.retry.on_exhausted in step_names:
             graph[name].add(step.retry.on_exhausted)
 

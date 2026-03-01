@@ -162,10 +162,43 @@ class SmokeExecutor:
                     if kv_match:
                         self.context[ctx_key] = kv_match.group(1).strip()
 
+    @staticmethod
+    def _evaluate_predicate(when: str, result: dict) -> bool:
+        """Evaluate a simple predicate expression against a tool result dict.
+
+        Supports:
+        - ``result.<field> == '<value>'`` — equality check
+        - ``result.<field>`` — truthiness check
+        """
+        when = when.strip()
+        # Equality check: result.<field> == '<value>'
+        eq_match = re.match(r"result\.(\w+)\s*==\s*['\"](.+)['\"]", when)
+        if eq_match:
+            field, expected = eq_match.group(1), eq_match.group(2)
+            return result.get(field) == expected
+        # Truthiness check: result.<field>
+        truth_match = re.match(r"result\.(\w+)$", when)
+        if truth_match:
+            field = truth_match.group(1)
+            return bool(result.get(field))
+        return False
+
     def _route(self, step_def: dict, result: dict) -> str | None:
         """Determine the next step based on result and routing rules."""
         if "on_result" in step_def:
             on_result = step_def["on_result"]
+            if isinstance(on_result, list):
+                # Predicate format: evaluate conditions in order
+                for condition in on_result:
+                    when = condition.get("when")
+                    route = condition.get("route", "")
+                    if when is None:
+                        # Default/else condition — always matches
+                        return route
+                    if self._evaluate_predicate(when, result):
+                        return route
+                return None
+            # Legacy format
             field = on_result["field"]
             value = result.get(field)
             routes = on_result.get("routes", {})

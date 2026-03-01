@@ -214,6 +214,8 @@ def _check_unreachable_steps(wf: Recipe) -> list[RuleFinding]:
                 referenced.add(target)
         if step.on_result:
             referenced.update(step.on_result.routes.values())
+            for cond in step.on_result.conditions:
+                referenced.add(cond.route)
         if step.retry and step.retry.on_exhausted:
             referenced.add(step.retry.on_exhausted)
     referenced.discard("done")
@@ -864,19 +866,24 @@ def _check_on_result_missing_failure_route(wf: Recipe) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
         is_tool_invocation = step.tool is not None or step.python is not None
-        if is_tool_invocation and step.on_result is not None and step.on_failure is None:
-            findings.append(
-                RuleFinding(
-                    rule="on-result-missing-failure-route",
-                    severity=Severity.ERROR,
-                    step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' uses on_result but has no on_failure. "
-                        f"If the tool call fails before a verdict is returned, the "
-                        f"orchestrator has no route. Add on_failure: <target>."
-                    ),
-                )
+        if not (is_tool_invocation and step.on_result is not None and step.on_failure is None):
+            continue
+        # Predicate format: conditions encode all routing paths including failure.
+        # on_failure is neither required nor expected for predicate-format steps.
+        if step.on_result.conditions:
+            continue
+        findings.append(
+            RuleFinding(
+                rule="on-result-missing-failure-route",
+                severity=Severity.ERROR,
+                step_name=step_name,
+                message=(
+                    f"Step '{step_name}' uses on_result but has no on_failure. "
+                    f"If the tool call fails before a verdict is returned, the "
+                    f"orchestrator has no route. Add on_failure: <target>."
+                ),
             )
+        )
     return findings
 
 

@@ -13,6 +13,7 @@ from autoskillit.recipe.schema import (
     RecipeInfo,
     RecipeIngredient,
     RecipeStep,
+    StepResultCondition,
     StepResultRoute,
     StepRetry,
 )
@@ -127,6 +128,18 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
             field=on_result_data.get("field", ""),
             routes=on_result_data.get("routes", {}),
         )
+    elif isinstance(on_result_data, list):
+        conditions = []
+        for item in on_result_data:
+            if isinstance(item, dict):
+                conditions.append(
+                    StepResultCondition(
+                        when=item.get("when"),
+                        route=item.get("route", ""),
+                    )
+                )
+        if conditions:
+            on_result = StepResultRoute(conditions=conditions)
 
     return RecipeStep(
         tool=data.get("tool"),

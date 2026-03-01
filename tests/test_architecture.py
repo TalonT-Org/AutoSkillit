@@ -1535,6 +1535,28 @@ def test_doctor_moved_to_cli_package() -> None:
 # ── New REQ-CNST tests (groupE) ───────────────────────────────────────────────
 
 
+def test_test_suite_has_domain_subdirectories():
+    """All 12 domain-aligned test subdirectories exist after groupE reorganization."""
+    tests_root = Path(__file__).parent
+    expected = [
+        "core", "config", "pipeline", "execution", "workspace",
+        "recipe", "migration", "server", "cli", "arch", "contracts", "infra",
+    ]
+    missing = [d for d in expected if not (tests_root / d / "__init__.py").exists()]
+    assert not missing, f"Missing test subdirectories (run groupE): {missing}"
+
+
+def test_test_suite_oversized_files_split():
+    """No test file at tests/ root exceeds 1,000 lines after groupE split."""
+    tests_root = Path(__file__).parent
+    over = [
+        f"{f.name} ({len(f.read_text().splitlines())} lines)"
+        for f in tests_root.glob("test_*.py")
+        if len(f.read_text().splitlines()) > 1000
+    ]
+    assert not over, f"Oversized test files remain (run groupE): {over}"
+
+
 def test_no_file_exceeds_1000_lines() -> None:
     """REQ-CNST-002: No Python file in src/autoskillit/ may exceed 1,000 lines."""
     violations: list[str] = []

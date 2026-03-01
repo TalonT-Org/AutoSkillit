@@ -71,3 +71,32 @@ def tool_ctx(monkeypatch, tmp_path):
     ctx.gate = DefaultGateState(enabled=True)
     monkeypatch.setattr(_server, "_ctx", ctx)
     return ctx
+
+
+def _make_result(
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+    termination_reason: TerminationReason = TerminationReason.NATURAL_EXIT,
+    data_confirmed: bool = True,
+):
+    """Create a SubprocessResult for mocking run_managed_async."""
+    return SubprocessResult(
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        termination=termination_reason,
+        pid=12345,
+        data_confirmed=data_confirmed,
+    )
+
+
+def _make_timeout_result(stdout: str = "", stderr: str = ""):
+    """Create a timed-out SubprocessResult."""
+    return SubprocessResult(
+        returncode=-1,
+        stdout=stdout,
+        stderr=stderr,
+        termination=TerminationReason.TIMED_OUT,
+        pid=12345,
+    )

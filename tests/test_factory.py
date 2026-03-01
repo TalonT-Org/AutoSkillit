@@ -51,7 +51,7 @@ def test_make_context_tester_is_default_test_runner():
 
 
 def test_make_context_all_service_fields_populated_includes_github_client():
-    """Composite assertion: ALL optional service fields must be populated, including github_client."""
+    """All optional service fields must be populated, including github_client and clone_mgr."""
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert ctx.executor is not None
     assert ctx.tester is not None

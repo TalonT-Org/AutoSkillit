@@ -8,6 +8,14 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
 from autoskillit.execution import check_and_sleep_if_needed  # noqa: F401
 from autoskillit.pipeline import gate_error_result
+from autoskillit.recipe import (
+    StaleItem,
+    StalenessEntry,
+    compute_recipe_hash,
+    load_bundled_manifest,
+    read_staleness_cache,
+    write_staleness_cache,
+)
 
 if TYPE_CHECKING:
     from fastmcp import Context
@@ -78,6 +86,78 @@ def _require_enabled() -> str | None:
     if not _get_ctx().gate.enabled:
         return gate_error_result()
     return None
+
+
+async def _apply_triage_gate(result: dict[str, Any], name: str) -> dict[str, Any]:
+    """Apply LLM triage to stale-contract suggestions, suppressing cosmetic ones.
+
+    Checks the staleness cache for a cached triage result. If not cached,
+    runs triage_staleness() (a 30s Haiku call) for hash_mismatch items only.
+    version_mismatch items are always treated as meaningful and never suppressed.
+
+    Modifies ``result`` in-place and returns it.
+    """
+    from autoskillit.server import _ctx
+
+    if _ctx is None or _ctx.recipes is None:
+        return result
+
+    stale_suggs = [s for s in result.get("suggestions", []) if s.get("rule") == "stale-contract"]
+    if not stale_suggs:
+        return result
+
+    recipe_info = _ctx.recipes.find(name, Path.cwd())
+    if recipe_info is None:
+        return result
+
+    cache_path = Path.cwd() / ".autoskillit" / "temp" / "recipe_staleness_cache.json"
+    cached = read_staleness_cache(cache_path, name)
+
+    if cached is not None and cached.triage_result == "cosmetic":
+        result["suggestions"] = [
+            s for s in result["suggestions"] if s.get("rule") != "stale-contract"
+        ]
+        return result
+
+    if cached is None or cached.triage_result is None:
+        hash_items = [
+            StaleItem(
+                skill=s["skill"],
+                reason=s["reason"],
+                stored_value=s.get("stored_value", ""),
+                current_value=s.get("current_value", ""),
+            )
+            for s in stale_suggs
+            if s.get("reason") == "hash_mismatch"
+        ]
+        if hash_items:
+            from autoskillit._llm_triage import triage_staleness
+            from datetime import UTC, datetime
+
+            triage = await triage_staleness(hash_items)
+            all_cosmetic = all(not r.get("meaningful", True) for r in triage)
+            triage_str = "cosmetic" if all_cosmetic else "meaningful"
+            current_hash = compute_recipe_hash(recipe_info.path)
+            current_ver = load_bundled_manifest().get("version", "")
+            write_staleness_cache(
+                cache_path,
+                name,
+                StalenessEntry(
+                    recipe_hash=current_hash,
+                    manifest_version=current_ver,
+                    is_stale=True,
+                    triage_result=triage_str,
+                    checked_at=datetime.now(UTC).isoformat(),
+                ),
+            )
+            if all_cosmetic and not any(
+                s.get("reason") == "version_mismatch" for s in stale_suggs
+            ):
+                result["suggestions"] = [
+                    s for s in result["suggestions"] if s.get("rule") != "stale-contract"
+                ]
+
+    return result
 
 
 def _process_runner_result(

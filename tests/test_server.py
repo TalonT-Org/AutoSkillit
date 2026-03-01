@@ -1007,17 +1007,17 @@ class TestRecipeTools:
         tool_ctx.recipes = mock_repo
 
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.read_staleness_cache", lambda *a, **kw: None
+            "autoskillit.server.helpers.read_staleness_cache", lambda *a, **kw: None
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.write_staleness_cache", lambda *a, **kw: None
+            "autoskillit.server.helpers.write_staleness_cache", lambda *a, **kw: None
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.compute_recipe_hash",
+            "autoskillit.server.helpers.compute_recipe_hash",
             lambda *a: "sha256:" + "b" * 64,
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.load_bundled_manifest",
+            "autoskillit.server.helpers.load_bundled_manifest",
             lambda: {"version": "0.2.0"},
         )
         monkeypatch.setattr(
@@ -1068,17 +1068,17 @@ class TestRecipeTools:
         tool_ctx.recipes = mock_repo
 
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.read_staleness_cache", lambda *a, **kw: None
+            "autoskillit.server.helpers.read_staleness_cache", lambda *a, **kw: None
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.write_staleness_cache", lambda *a, **kw: None
+            "autoskillit.server.helpers.write_staleness_cache", lambda *a, **kw: None
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.compute_recipe_hash",
+            "autoskillit.server.helpers.compute_recipe_hash",
             lambda *a: "sha256:" + "b" * 64,
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.load_bundled_manifest",
+            "autoskillit.server.helpers.load_bundled_manifest",
             lambda: {"version": "0.2.0"},
         )
         monkeypatch.setattr(
@@ -1137,7 +1137,7 @@ class TestRecipeTools:
             checked_at="2026-01-01T00:00:00+00:00",
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.read_staleness_cache",
+            "autoskillit.server.helpers.read_staleness_cache",
             lambda *a, **kw: cached_entry,
         )
 
@@ -1197,17 +1197,17 @@ class TestRecipeTools:
         tool_ctx.recipes = mock_repo
 
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.read_staleness_cache", lambda *a, **kw: None
+            "autoskillit.server.helpers.read_staleness_cache", lambda *a, **kw: None
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.write_staleness_cache", lambda *a, **kw: None
+            "autoskillit.server.helpers.write_staleness_cache", lambda *a, **kw: None
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.compute_recipe_hash",
+            "autoskillit.server.helpers.compute_recipe_hash",
             lambda *a: "sha256:" + "b" * 64,
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools_recipe.load_bundled_manifest",
+            "autoskillit.server.helpers.load_bundled_manifest",
             lambda: {"version": "0.2.0"},
         )
         # Triage says the hash_mismatch item is cosmetic

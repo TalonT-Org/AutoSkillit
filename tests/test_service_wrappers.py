@@ -279,8 +279,9 @@ class TestDefaultMigrationService:
             retry_reason=RetryReason.NONE,
             stderr="",
         )
-        service = DefaultMigrationService(default_migration_engine())
-        service._run_headless = AsyncMock(return_value=success_result)
+        service = DefaultMigrationService(
+            default_migration_engine(), run_headless=AsyncMock(return_value=success_result)
+        )
 
         monkeypatch.setattr("autoskillit.recipe.load_recipe_card", lambda *a, **kw: None)
         monkeypatch.setattr("autoskillit.recipe.generate_recipe_card", lambda *a, **kw: {})

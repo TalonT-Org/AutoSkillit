@@ -135,6 +135,68 @@ def _check_unsatisfied_skill_input(wf: Recipe) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="shadowed-required-input",
+    description=(
+        "A skill step uses inline positional text for an argument that the skill's contract "
+        "declares as required, and that argument is already available in the recipe context. "
+        "Replace the prose placeholder with ${{ context.<name> }} or ${{ inputs.<name> }}."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_shadowed_required_inputs(wf: Recipe) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+    ingredient_names = set(wf.ingredients.keys())
+
+    for step_name, step, available_context in iter_steps_with_context(wf):
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "") if step.with_args else ""
+        if not skill_cmd:
+            continue
+        # Only applies when there are positional (non-template) args.
+        # Steps with count == 0 are already handled by missing-ingredient.
+        if count_positional_args(skill_cmd) == 0:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if not skill_name:
+            continue
+        contract = get_skill_contract(skill_name, manifest)
+        if not contract:
+            continue
+
+        used_refs = extract_context_refs(step) | extract_input_refs(step)
+
+        for req_input in contract.inputs:
+            if not req_input.required:
+                continue
+            name = req_input.name
+            if name in used_refs:
+                continue  # Correctly passed as template ref
+            # Only fire when the input IS available — if it's not in context yet,
+            # the missing-ingredient rule (or runtime) will surface that separately.
+            if name not in available_context and name not in ingredient_names:
+                continue
+            findings.append(
+                RuleFinding(
+                    rule="shadowed-required-input",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' invokes /{skill_name} which requires "
+                        f"'{name}' (type: {req_input.type}), and '{name}' is available "
+                        f"in the recipe context, but the skill_command passes prose text "
+                        f"instead of the template reference. "
+                        f"Replace the prose placeholder with "
+                        f"'${{{{ context.{name} }}}}'."
+                    ),
+                )
+            )
+
+    return findings
+
+
+@semantic_rule(
     name="unreachable-step",
     description="Steps that no other step routes to (and are not the entry point) are dead code.",
     severity=Severity.WARNING,

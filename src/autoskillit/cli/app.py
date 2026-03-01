@@ -164,6 +164,8 @@ def install(*, scope: str = "user"):
         print("\nThen run: autoskillit init (in your project directory)")
         sys.exit(1)
 
+    _clear_plugin_cache()
+
     # Register the marketplace (idempotent)
     result = subprocess.run(
         ["claude", "plugin", "marketplace", "add", str(marketplace_dir)],
@@ -265,6 +267,31 @@ def _register_remove_clone_guard_hook(settings_path: Path) -> None:
     )
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write(settings_path, json.dumps(data, indent=2))
+
+
+def _clear_plugin_cache() -> None:
+    """Remove the cached plugin snapshot and installed_plugins.json entry.
+
+    Claude Code caches a snapshot of the plugin at install time, keyed by
+    version. When the version changes, it orphans the old cache but does not
+    automatically create the new one until a second install is run. Clearing
+    the cache beforehand ensures a single ``autoskillit install`` is always
+    sufficient.
+    """
+    cache_dir = Path.home() / ".claude" / "plugins" / "cache" / _MARKETPLACE_NAME / "autoskillit"
+    if cache_dir.is_dir():
+        shutil.rmtree(cache_dir)
+
+    installed_json = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+    if installed_json.exists():
+        try:
+            data = json.loads(installed_json.read_text())
+            plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
+            if plugin_ref in data:
+                del data[plugin_ref]
+                installed_json.write_text(json.dumps(data, indent=2))
+        except (OSError, json.JSONDecodeError):
+            pass  # non-fatal — install will proceed regardless
 
 
 def _ensure_marketplace() -> Path:

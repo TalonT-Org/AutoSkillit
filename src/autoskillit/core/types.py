@@ -246,6 +246,7 @@ SKILL_COMMAND_PREFIX: str = "/"
 # Canonical prefix for bundled autoskillit slash commands.
 AUTOSKILLIT_SKILL_PREFIX: str = "/autoskillit:"
 
+
 @dataclass
 class FailureRecord:
     """Structured record of a single run_skill / run_skill_retry failure.

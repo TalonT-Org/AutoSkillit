@@ -40,7 +40,7 @@ run_skill:
   stale_threshold: 1200
   completion_marker: "%%ORDER_UP%%"
   completion_drain_timeout: 5.0
-  exit_after_stop_delay_ms: 30000
+  exit_after_stop_delay_ms: 60000
 
 run_skill_retry:
   timeout: 7200

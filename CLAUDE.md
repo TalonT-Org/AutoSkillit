@@ -267,7 +267,7 @@ The Python package directory (`src/autoskillit/`) is the plugin root:
 
 Skills are discovered by Claude Code via the plugin structure. Headless sessions receive `--plugin-dir` automatically via `run_skill` and `run_skill_retry`. Project-specific pipeline recipes go in `.autoskillit/recipes/` as YAML files, discovered via `list_recipes` and loaded via `load_recipe`.
 
-**CRITICAL**: When using subagents, invoke with "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=30000" to ensure subagents exit when finished.
+**CRITICAL**: When using subagents, invoke with "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=60000" to ensure subagents exit when finished.
 
 ### **MCP Tools**
 

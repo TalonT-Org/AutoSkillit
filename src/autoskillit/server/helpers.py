@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -82,7 +81,7 @@ def _require_enabled() -> str | None:
 
 
 def _process_runner_result(
-    result: "SubprocessResult",
+    result: SubprocessResult,
     timeout: float,
 ) -> tuple[int, str, str]:
     """Convert a SubprocessResult to (returncode, stdout, stderr).

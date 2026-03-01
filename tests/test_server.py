@@ -62,7 +62,12 @@ from autoskillit.server.prompts import _close_kitchen_handler, _open_kitchen_han
 from autoskillit.server.tools_clone import clone_repo, push_to_remote, remove_clone
 from autoskillit.server.tools_execution import run_cmd, run_python, run_skill, run_skill_retry
 from autoskillit.server.tools_git import classify_fix, merge_worktree
-from autoskillit.server.tools_recipe import list_recipes, load_recipe, migrate_recipe, validate_recipe
+from autoskillit.server.tools_recipe import (
+    list_recipes,
+    load_recipe,
+    migrate_recipe,
+    validate_recipe,
+)
 from autoskillit.server.tools_status import (
     check_quota,
     get_pipeline_report,
@@ -1816,8 +1821,11 @@ class TestProcessRunnerResult:
         from autoskillit.server.helpers import _process_runner_result
 
         result = SubprocessResult(
-            returncode=0, stdout="hello", stderr="",
-            termination=TerminationReason.NATURAL_EXIT, pid=1,
+            returncode=0,
+            stdout="hello",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
         )
         rc, stdout, stderr = _process_runner_result(result, timeout=10)
         assert rc == 0
@@ -1830,8 +1838,11 @@ class TestProcessRunnerResult:
         from autoskillit.server.helpers import _process_runner_result
 
         result = SubprocessResult(
-            returncode=-1, stdout="partial", stderr="",
-            termination=TerminationReason.TIMED_OUT, pid=1,
+            returncode=-1,
+            stdout="partial",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=1,
         )
         rc, stdout, stderr = _process_runner_result(result, timeout=5)
         assert rc == -1
@@ -1859,20 +1870,36 @@ def test_server_init_has_no_shim_reexports():
     # These symbols must NOT be in the server package namespace after shim removal.
     # They should only be accessible via their actual submodule paths.
     shim_symbols = [
-        "_check_dry_walkthrough", "_require_enabled", "_run_subprocess",
-        "_open_kitchen_handler", "_close_kitchen_handler",
-        "run_cmd", "run_python", "run_skill", "run_skill_retry",
-        "test_check", "reset_test_dir", "reset_workspace",
-        "merge_worktree", "classify_fix",
-        "clone_repo", "remove_clone", "push_to_remote",
-        "list_recipes", "load_recipe", "migrate_recipe", "validate_recipe",
-        "check_quota", "get_pipeline_report", "get_token_summary",
-        "kitchen_status", "read_db", "fetch_github_issue",
+        "_check_dry_walkthrough",
+        "_require_enabled",
+        "_run_subprocess",
+        "_open_kitchen_handler",
+        "_close_kitchen_handler",
+        "run_cmd",
+        "run_python",
+        "run_skill",
+        "run_skill_retry",
+        "test_check",
+        "reset_test_dir",
+        "reset_workspace",
+        "merge_worktree",
+        "classify_fix",
+        "clone_repo",
+        "remove_clone",
+        "push_to_remote",
+        "list_recipes",
+        "load_recipe",
+        "migrate_recipe",
+        "validate_recipe",
+        "check_quota",
+        "get_pipeline_report",
+        "get_token_summary",
+        "kitchen_status",
+        "read_db",
+        "fetch_github_issue",
     ]
     present = [sym for sym in shim_symbols if hasattr(srv, sym)]
-    assert not present, (
-        f"Shim re-exports found in server namespace (must be removed): {present}"
-    )
+    assert not present, f"Shim re-exports found in server namespace (must be removed): {present}"
 
 
 class TestTestCheck:

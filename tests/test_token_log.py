@@ -41,7 +41,8 @@ class TestTokenEntry:
 
     def test_to_dict_is_json_serializable(self):
         entry = TokenEntry(step_name="plan")
-        json.dumps(entry.to_dict())  # must not raise
+        d = entry.to_dict()
+        assert json.loads(json.dumps(d)) == d
 
     def test_to_dict_contains_all_fields(self):
         entry = TokenEntry(step_name="implement", input_tokens=42)

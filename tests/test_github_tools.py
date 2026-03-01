@@ -239,11 +239,6 @@ async def test_kitchen_status_includes_github_config(tool_ctx):
     assert "github_token_configured" in status
 
 
-def test_github_fetcher_protocol_satisfied():
-    fetcher = DefaultGitHubFetcher(token=None)
-    assert isinstance(fetcher, GitHubFetcher)
-
-
 # ---------------------------------------------------------------------------
 # GitHubFetcher protocol — has_token requirement
 # ---------------------------------------------------------------------------

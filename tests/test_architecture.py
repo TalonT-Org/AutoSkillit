@@ -1388,9 +1388,6 @@ def test_contracts_module_has_staleitem() -> None:
     """T2: recipe/contracts.py exposes StaleItem and load_bundled_manifest."""
     from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest  # noqa: F401
 
-    assert StaleItem is not None
-    assert load_bundled_manifest is not None
-
 
 def test_validator_module_has_validate() -> None:
     """T3: recipe/validator.py exposes validate_recipe, run_semantic_rules, analyze_dataflow."""
@@ -1399,10 +1396,6 @@ def test_validator_module_has_validate() -> None:
         run_semantic_rules,
         validate_recipe,
     )
-
-    assert validate_recipe is not None
-    assert run_semantic_rules is not None
-    assert analyze_dataflow is not None
 
 
 def test_migration_subpackage_importable() -> None:

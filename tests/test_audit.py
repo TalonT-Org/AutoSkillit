@@ -38,7 +38,7 @@ class TestFailureRecord:
     def test_to_dict_is_json_serializable(self):
         record = _make_record()
         d = record.to_dict()
-        json.dumps(d)  # must not raise
+        assert json.loads(json.dumps(d)) == d
 
     def test_to_dict_contains_all_fields(self):
         record = _make_record(skill_command="/test:cmd", exit_code=42)

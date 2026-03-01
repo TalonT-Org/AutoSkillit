@@ -1,8 +1,11 @@
 """Tests for headless_runner.py extracted helpers."""
 
+import json
+
 import pytest
 
 from autoskillit.config import AutomationConfig, ModelConfig
+from autoskillit.core.types import SubprocessResult, TerminationReason
 
 
 @pytest.fixture
@@ -64,3 +67,64 @@ def test_resolve_model_returns_none_when_all_empty(make_config):
 
     cfg = make_config(model_override=None, model_default=None)
     assert _resolve_model("", cfg) is None
+
+
+def _sr(returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT):
+    """Build a minimal SubprocessResult for _build_skill_result tests."""
+    return SubprocessResult(returncode, stdout, stderr, termination, pid=12345)
+
+
+class TestBuildSkillResult:
+    """Coverage for _build_skill_result — the primary output-routing function."""
+
+    def test_natural_exit_with_success_json_returns_success(self):
+        """COMPLETED + valid type=result success JSON → success=True, needs_retry=False."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        payload = json.dumps({
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "Task completed.",
+            "session_id": "sess-abc",
+        })
+        skill = _build_skill_result(_sr(stdout=payload))
+        assert skill.success is True
+        assert skill.needs_retry is False
+
+    def test_timed_out_returns_failure_no_retry(self):
+        """TIMED_OUT termination → success=False, needs_retry=False (timeout is non-retriable)."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        skill = _build_skill_result(
+            _sr(returncode=-1, termination=TerminationReason.TIMED_OUT)
+        )
+        assert skill.success is False
+        assert skill.needs_retry is False
+
+    def test_stale_with_valid_result_in_stdout_recovers(self):
+        """STALE termination + valid result JSON in stdout → recovered_from_stale."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        payload = json.dumps({
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "Recovered output.",
+            "session_id": "sess-stale",
+        })
+        skill = _build_skill_result(
+            _sr(returncode=-15, stdout=payload, termination=TerminationReason.STALE)
+        )
+        assert skill.success is True
+        assert skill.subtype == "recovered_from_stale"
+
+    def test_stale_with_empty_stdout_returns_failure_and_retry(self):
+        """STALE termination + no result in stdout → success=False, needs_retry=True."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        skill = _build_skill_result(
+            _sr(returncode=-15, stdout="", termination=TerminationReason.STALE)
+        )
+        assert skill.success is False
+        assert skill.needs_retry is True

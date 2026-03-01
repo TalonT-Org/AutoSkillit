@@ -8,14 +8,11 @@ from __future__ import annotations
 
 
 def test_config_package_exports() -> None:
-    from autoskillit.config import AutomationConfig, load_config
-
-    assert AutomationConfig is not None
-    assert load_config is not None
+    from autoskillit.config import AutomationConfig, load_config  # noqa: F401
 
 
 def test_pipeline_package_exports() -> None:
-    from autoskillit.pipeline import (
+    from autoskillit.pipeline import (  # noqa: F401
         GATED_TOOLS,
         UNGATED_TOOLS,
         DefaultAuditLog,
@@ -27,19 +24,9 @@ def test_pipeline_package_exports() -> None:
         gate_error_result,
     )
 
-    assert DefaultAuditLog is not None
-    assert FailureRecord is not None
-    assert DefaultTokenLog is not None
-    assert TokenEntry is not None
-    assert DefaultGateState is not None
-    assert GATED_TOOLS is not None
-    assert UNGATED_TOOLS is not None
-    assert gate_error_result is not None
-    assert ToolContext is not None
-
 
 def test_execution_package_exports() -> None:
-    from autoskillit.execution import (
+    from autoskillit.execution import (  # noqa: F401
         ClaudeSessionResult,
         SkillResult,
         check_test_passed,
@@ -47,19 +34,9 @@ def test_execution_package_exports() -> None:
         run_headless_core,
     )
 
-    assert SkillResult is not None
-    assert ClaudeSessionResult is not None
-    assert run_headless_core is not None
-    assert check_test_passed is not None
-    assert parse_pytest_summary is not None
-
 
 def test_workspace_package_exports() -> None:
-    from autoskillit.workspace import CleanupResult, SkillResolver, bundled_skills_dir
-
-    assert CleanupResult is not None
-    assert SkillResolver is not None
-    assert bundled_skills_dir is not None
+    from autoskillit.workspace import CleanupResult, SkillResolver, bundled_skills_dir  # noqa: F401
 
 
 def test_failure_record_in_core_types() -> None:
@@ -87,18 +64,12 @@ def test_failure_record_re_exported_from_pipeline() -> None:
 
 
 def test_execution_db_export() -> None:
-    from autoskillit.execution import _execute_readonly_query
-
-    assert _execute_readonly_query is not None
+    from autoskillit.execution import _execute_readonly_query  # noqa: F401
 
 
 def test_config_settings_all_classes_exported() -> None:
-    from autoskillit.config import (
+    from autoskillit.config import (  # noqa: F401
         ModelConfig,
         SafetyConfig,
         TestCheckConfig,
     )
-
-    assert TestCheckConfig is not None
-    assert SafetyConfig is not None
-    assert ModelConfig is not None

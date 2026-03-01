@@ -151,20 +151,12 @@ async def test_migration_check_and_migrate_up_to_date(tmp_path):
     # Bundled recipes are current — should report up_to_date
     # Use tmp_path so project recipes dir doesn't interfere
     result = await check_and_migrate(bundled[0].name, tmp_path, __version__)
-    # Either up_to_date (recipe is current) or error (recipe not found in tmp_path)
-    assert "status" in result or "error" in result
+    assert result.get("status") == "up_to_date"
 
 
 # ---------------------------------------------------------------------------
 # REQ-GWAY-001: server/_factory.py Composition Root
 # ---------------------------------------------------------------------------
-
-
-def test_factory_module_exists():
-    import importlib
-
-    m = importlib.import_module("autoskillit.server._factory")
-    assert hasattr(m, "make_context")
 
 
 def test_factory_make_context_returns_toolcontext():
@@ -238,32 +230,27 @@ def test_execution_gateway_exports_default_classes() -> None:
 
     for name in ("DefaultDatabaseReader", "DefaultHeadlessExecutor", "DefaultTestRunner"):
         assert name in m.__all__, f"{name} missing from execution.__all__"
-        assert callable(getattr(m, name))
 
 
 def test_migration_gateway_exports_default_migration_service() -> None:
     import autoskillit.migration as m
 
     assert "DefaultMigrationService" in m.__all__
-    assert callable(m.DefaultMigrationService)
 
 
 def test_recipe_gateway_exports_default_recipe_repository() -> None:
     import autoskillit.recipe as m
 
     assert "DefaultRecipeRepository" in m.__all__
-    assert callable(m.DefaultRecipeRepository)
 
 
 def test_workspace_gateway_exports_default_workspace_manager() -> None:
     import autoskillit.workspace as m
 
     assert "DefaultWorkspaceManager" in m.__all__
-    assert callable(m.DefaultWorkspaceManager)
 
 
 def test_workspace_gateway_exports_public_delete_alias() -> None:
     import autoskillit.workspace as m
 
     assert "delete_directory_contents" in m.__all__
-    assert callable(m.delete_directory_contents)

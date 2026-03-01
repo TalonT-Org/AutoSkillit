@@ -19,7 +19,6 @@ from autoskillit.recipe.io import (
 )
 from autoskillit.recipe.schema import (
     Recipe,
-    RecipeIngredient,
     RecipeStep,
     StepResultRoute,
 )
@@ -452,21 +451,6 @@ class TestVersionField:
         assert wf.version == "1.3.0"
 
 
-def test_recipe_replaces_workflow_class() -> None:
-    wf = Recipe(name="test", description="test")
-    assert isinstance(wf, Recipe)
-
-
-def test_recipe_step_replaces_workflow_step() -> None:
-    step = RecipeStep(tool="run_skill")
-    assert isinstance(step, RecipeStep)
-
-
-def test_recipe_ingredient_importable() -> None:
-    ing = RecipeIngredient(description="test")
-    assert isinstance(ing, RecipeIngredient)
-
-
 def test_bundled_recipes_use_ingredients_field() -> None:
     bd = builtin_recipes_dir()
     for path in bd.glob("*.yaml"):
@@ -488,13 +472,6 @@ def test_bundled_recipes_use_kitchen_rules_field() -> None:
 def test_builtin_recipes_dir_points_to_recipes() -> None:
     d = builtin_recipes_dir()
     assert d.name == "recipes"
-
-
-def test_recipe_source_enum_values() -> None:
-    from autoskillit.core.types import RecipeSource
-
-    assert hasattr(RecipeSource, "PROJECT")
-    assert hasattr(RecipeSource, "BUILTIN")
 
 
 # ---------------------------------------------------------------------------

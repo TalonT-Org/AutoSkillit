@@ -9,38 +9,12 @@ from pathlib import Path
 import pytest
 
 
-def test_core_package_importable():
-    import autoskillit.core  # noqa: F401
-
-
-def test_core_types_importable():
-    from autoskillit.core.types import (  # noqa: F401
-        CONTEXT_EXHAUSTION_MARKER,
-        PIPELINE_FORBIDDEN_TOOLS,
-        RETRY_RESPONSE_FIELDS,
-        SKILL_TOOLS,
-        LoadReport,
-        LoadResult,
-        MergeFailedStep,
-        MergeState,
-        RecipeSource,
-        RestartScope,
-        RetryReason,
-        Severity,
-        SubprocessResult,
-        SubprocessRunner,
-    )
-
-
 def test_core_logging_importable():
     from autoskillit.core.logging import (  # noqa: F401
         PACKAGE_LOGGER_NAME,
         configure_logging,
         get_logger,
     )
-
-    assert callable(get_logger)
-    assert callable(configure_logging)
 
 
 def test_core_io_importable():
@@ -52,21 +26,6 @@ def test_core_io_importable():
         ensure_project_temp,
         load_yaml,
     )
-
-    assert callable(_atomic_write)
-    assert callable(load_yaml)
-
-
-def test_core_init_reexports_types():
-    from autoskillit.core import MergeFailedStep, SubprocessResult  # noqa: F401
-
-
-def test_core_init_reexports_logging():
-    from autoskillit.core import configure_logging, get_logger  # noqa: F401
-
-
-def test_core_init_reexports_io():
-    from autoskillit.core import YAMLError, _atomic_write, load_yaml  # noqa: F401
 
 
 def test_old_types_module_removed():

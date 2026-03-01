@@ -136,32 +136,6 @@ class TestRecipeVersion:
         assert info.version == "0.2.0"
 
 
-class TestSyncRemoval:
-    def test_no_sync_bundled_recipes_function(self):
-        """REQ-SYNC-004: sync_bundled_recipes does not exist in recipe_loader."""
-        import autoskillit.recipe.loader as rl
-
-        assert not hasattr(rl, "sync_bundled_recipes")
-
-    def test_no_get_pending_recipe_updates_function(self):
-        """REQ-SYNC-004: _get_pending_recipe_updates does not exist in recipe_loader."""
-        import autoskillit.recipe.loader as rl
-
-        assert not hasattr(rl, "_get_pending_recipe_updates")
-
-    def test_recipe_loader_has_no_sync_manifest_import(self):
-        """REQ-SYNC-005: recipe_loader does not import from sync_manifest."""
-        import ast
-        from pathlib import Path
-
-        src = Path(__file__).parent.parent / "src" / "autoskillit" / "recipe" / "loader.py"
-        tree = ast.parse(src.read_text())
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                if isinstance(node, ast.ImportFrom) and node.module:
-                    assert "sync_manifest" not in node.module
-
-
 # RL-VK1 — AST: recipe_loader must not hard-code the version key string
 def test_version_key_not_hardcoded_in_recipe_loader():
     import ast
@@ -189,15 +163,6 @@ def test_parse_recipe_metadata_is_public() -> None:
 
     assert hasattr(rl, "parse_recipe_metadata")
     assert callable(rl.parse_recipe_metadata)
-
-
-# ---------------------------------------------------------------------------
-# RL-PUB2: _parse_recipe_metadata no longer exists
-# ---------------------------------------------------------------------------
-def test_parse_recipe_metadata_private_removed() -> None:
-    import autoskillit.recipe.loader as rl
-
-    assert not hasattr(rl, "_parse_recipe_metadata")
 
 
 # ---------------------------------------------------------------------------

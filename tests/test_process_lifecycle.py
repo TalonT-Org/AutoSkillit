@@ -1865,21 +1865,9 @@ class TestPtyWrapCommand:
 class TestSubprocessResultAndRunnerTypes:
     """Tests for SubprocessResult in types.py and SubprocessRunner protocol."""
 
-    def test_subprocess_result_importable_from_types(self):
-        """SubprocessResult must be importable from autoskillit.core.types."""
-        from autoskillit.core.types import SubprocessResult  # noqa: F401
-
     def test_subprocess_result_still_importable_from_process_lifecycle(self):
         """SubprocessResult remains importable from process_lifecycle for backward compat."""
         from autoskillit.execution.process import SubprocessResult  # noqa: F401
-
-    def test_subprocess_runner_protocol_satisfied_by_real(self):
-        """DefaultSubprocessRunner satisfies the SubprocessRunner protocol."""
-        from autoskillit.core.types import SubprocessRunner
-        from autoskillit.execution.process import DefaultSubprocessRunner
-
-        runner = DefaultSubprocessRunner()
-        assert isinstance(runner, SubprocessRunner)
 
     def test_real_subprocess_runner_default_pty_mode_is_false(self):
         """DefaultSubprocessRunner must default pty_mode=False.

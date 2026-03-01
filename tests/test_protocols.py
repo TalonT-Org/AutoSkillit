@@ -40,18 +40,6 @@ def test_truncate_text_importable_from_core():
 # ── Backward compatibility ─────────────────────────────────────────────────────
 
 
-def test_skillresult_still_importable_from_session():
-    from autoskillit.execution.session import SkillResult
-
-    assert SkillResult is not None
-
-
-def test_cleanupresult_still_importable_from_workspace():
-    from autoskillit.workspace.cleanup import CleanupResult
-
-    assert CleanupResult is not None
-
-
 def test_truncate_private_alias_still_available():
     from autoskillit.execution.session import _truncate
 

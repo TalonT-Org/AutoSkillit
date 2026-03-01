@@ -44,38 +44,6 @@ from autoskillit.recipe.validator import (
 # ---------------------------------------------------------------------------
 
 
-def test_all_symbols_importable() -> None:
-    """All expected symbols are importable from recipe.validator and recipe.contracts."""
-    from autoskillit.core.types import Severity  # noqa: F401
-    from autoskillit.recipe.contracts import (  # noqa: F401
-        DataflowEntry,
-        RecipeCard,
-        SkillContract,
-        SkillInput,
-        SkillOutput,
-        check_contract_staleness,
-        compute_skill_hash,
-        count_positional_args,
-        extract_context_refs,
-        extract_input_refs,
-        generate_recipe_card,
-        load_bundled_manifest,
-        load_recipe_card,
-        resolve_skill_name,
-        validate_recipe_cards,
-    )
-    from autoskillit.recipe.validator import (  # noqa: F401
-        _RULE_REGISTRY,
-        _WORKTREE_CREATING_SKILLS,
-        RuleFinding,
-        RuleSpec,
-        analyze_dataflow,
-        run_semantic_rules,
-        semantic_rule,
-        validate_recipe,
-    )
-
-
 def test_semantic_rules_module_no_longer_exists() -> None:
     """semantic_rules module must be gone — ModuleNotFoundError expected."""
     with pytest.raises(ModuleNotFoundError):
@@ -136,9 +104,6 @@ class TestValidateRecipe:
         wf = _parse_recipe(data)
         errors = validate_recipe(wf)
         assert any("name" in e.lower() for e in errors)
-
-    def test_validate_recipe_is_callable(self) -> None:
-        assert callable(validate_recipe)
 
     # WF2
     def test_recipe_requires_name(self, tmp_path: Path) -> None:

@@ -15,17 +15,6 @@ from autoskillit.execution.db import (
 )
 
 
-class TestDbToolsModuleExists:
-    def test_validate_select_only_importable(self):
-        assert callable(_validate_select_only)
-
-    def test_execute_readonly_query_importable(self):
-        assert callable(_execute_readonly_query)
-
-    def test_row_to_dict_importable(self):
-        assert callable(_row_to_dict)
-
-
 class TestValidateSelectOnly:
     def test_valid_select(self):
         _validate_select_only("SELECT * FROM foo")

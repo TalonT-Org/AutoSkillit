@@ -263,5 +263,7 @@ class DefaultCloneManager:
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]:
         return remove_clone(clone_path, keep)
 
-    def push_to_remote(self, clone_path: str, source_dir: str, branch: str) -> dict[str, str]:
+    def push_to_remote(
+        self, clone_path: str, source_dir: str, branch: str
+    ) -> dict[str, str | bool]:
         return push_to_remote(clone_path, source_dir, branch)

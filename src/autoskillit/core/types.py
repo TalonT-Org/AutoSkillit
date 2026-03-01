@@ -446,7 +446,9 @@ class CloneManager(Protocol):
 
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]: ...
 
-    def push_to_remote(self, clone_path: str, source_dir: str, branch: str) -> dict[str, str]: ...
+    def push_to_remote(
+        self, clone_path: str, source_dir: str, branch: str
+    ) -> dict[str, str | bool]: ...
 
 
 @runtime_checkable

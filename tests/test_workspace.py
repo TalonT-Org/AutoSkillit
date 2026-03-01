@@ -319,8 +319,9 @@ class TestPushToRemote:
         mock_fail.stderr = "no remote"
         with patch("subprocess.run", return_value=mock_fail):
             result = push_to_remote("/clone", "/source", "main")
+        typ = type(result["success"]).__name__
         assert result["success"] is False, (
-            f"Expected boolean False, got {result['success']!r} ({type(result['success']).__name__})"
+            f"Expected boolean False, got {result['success']!r} ({typ})"
         )
 
     def test_t1_success_returns_boolean_true(self) -> None:
@@ -334,8 +335,9 @@ class TestPushToRemote:
         mock_push.stderr = ""
         with patch("subprocess.run", side_effect=[mock_url, mock_push]):
             result = push_to_remote("/clone", "/source", "main")
+        typ = type(result["success"]).__name__
         assert result["success"] is True, (
-            f"Expected boolean True, got {result['success']!r} ({type(result['success']).__name__})"
+            f"Expected boolean True, got {result['success']!r} ({typ})"
         )
 
 

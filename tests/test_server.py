@@ -972,6 +972,262 @@ class TestRecipeTools:
         assert findings, "Expected at least one validation-error finding"
         assert "Invalid recipe structure: injected crash" == findings[0]["message"]
 
+    # SRV-T1: stale-contract suggestions are suppressed when triage returns all cosmetic
+    @pytest.mark.asyncio
+    async def test_load_recipe_suppresses_stale_when_triage_cosmetic(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool_ctx
+    ) -> None:
+        """Stale-contract suggestions are suppressed when all triage results are cosmetic."""
+        from autoskillit.core.types import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        monkeypatch.chdir(tmp_path)
+        recipe_file = tmp_path / "test.yaml"
+        recipe_file.write_text("name: test")
+
+        stale_sugg = {
+            "rule": "stale-contract",
+            "severity": "warning",
+            "step": "make-plan",
+            "skill": "make-plan",
+            "reason": "hash_mismatch",
+            "stored_value": "sha256:" + "a" * 64,
+            "current_value": "sha256:" + "b" * 64,
+            "message": "Contract is stale",
+        }
+        mock_repo = MagicMock()
+        mock_repo.load_and_validate.return_value = {
+            "content": "name: test",
+            "suggestions": [stale_sugg],
+            "valid": True,
+        }
+        mock_repo.find.return_value = RecipeInfo(
+            name="test", description="Test", source=RecipeSource.PROJECT, path=recipe_file
+        )
+        tool_ctx.recipes = mock_repo
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.read_staleness_cache", lambda *a, **kw: None
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.write_staleness_cache", lambda *a, **kw: None
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.compute_recipe_hash",
+            lambda *a: "sha256:" + "b" * 64,
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.load_bundled_manifest",
+            lambda: {"version": "0.2.0"},
+        )
+        monkeypatch.setattr(
+            "autoskillit._llm_triage.triage_staleness",
+            AsyncMock(
+                return_value=[{"skill": "make-plan", "meaningful": False, "summary": "cosmetic"}]
+            ),
+        )
+
+        result = json.loads(await load_recipe(name="test"))
+        stale_items = [
+            s for s in result.get("suggestions", []) if s.get("rule") == "stale-contract"
+        ]
+        assert not stale_items, "Cosmetic stale suggestions must be suppressed"
+
+    # SRV-T2: stale-contract suggestions are preserved when triage returns meaningful
+    @pytest.mark.asyncio
+    async def test_load_recipe_preserves_stale_when_triage_meaningful(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool_ctx
+    ) -> None:
+        """Stale-contract suggestions are preserved when triage returns meaningful."""
+        from autoskillit.core.types import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        monkeypatch.chdir(tmp_path)
+        recipe_file = tmp_path / "test.yaml"
+        recipe_file.write_text("name: test")
+
+        stale_sugg = {
+            "rule": "stale-contract",
+            "severity": "warning",
+            "step": "make-plan",
+            "skill": "make-plan",
+            "reason": "hash_mismatch",
+            "stored_value": "sha256:" + "a" * 64,
+            "current_value": "sha256:" + "b" * 64,
+            "message": "Contract is stale",
+        }
+        mock_repo = MagicMock()
+        mock_repo.load_and_validate.return_value = {
+            "content": "name: test",
+            "suggestions": [stale_sugg],
+            "valid": True,
+        }
+        mock_repo.find.return_value = RecipeInfo(
+            name="test", description="Test", source=RecipeSource.PROJECT, path=recipe_file
+        )
+        tool_ctx.recipes = mock_repo
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.read_staleness_cache", lambda *a, **kw: None
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.write_staleness_cache", lambda *a, **kw: None
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.compute_recipe_hash",
+            lambda *a: "sha256:" + "b" * 64,
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.load_bundled_manifest",
+            lambda: {"version": "0.2.0"},
+        )
+        monkeypatch.setattr(
+            "autoskillit._llm_triage.triage_staleness",
+            AsyncMock(
+                return_value=[{"skill": "make-plan", "meaningful": True, "summary": "meaningful"}]
+            ),
+        )
+
+        result = json.loads(await load_recipe(name="test"))
+        stale_items = [
+            s for s in result.get("suggestions", []) if s.get("rule") == "stale-contract"
+        ]
+        assert len(stale_items) == 1, "Meaningful stale suggestions must be preserved"
+
+    # SRV-T3: triage_staleness is NOT called when triage_result="cosmetic" already cached
+    @pytest.mark.asyncio
+    async def test_load_recipe_uses_cached_cosmetic_without_subprocess(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool_ctx
+    ) -> None:
+        """triage_staleness subprocess is not spawned when cosmetic result is cached."""
+        from autoskillit.core.types import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+        from autoskillit.recipe.staleness_cache import StalenessEntry
+
+        monkeypatch.chdir(tmp_path)
+        recipe_file = tmp_path / "test.yaml"
+        recipe_file.write_text("name: test")
+
+        stale_sugg = {
+            "rule": "stale-contract",
+            "severity": "warning",
+            "step": "make-plan",
+            "skill": "make-plan",
+            "reason": "hash_mismatch",
+            "stored_value": "sha256:" + "a" * 64,
+            "current_value": "sha256:" + "b" * 64,
+            "message": "Contract is stale",
+        }
+        mock_repo = MagicMock()
+        mock_repo.load_and_validate.return_value = {
+            "content": "name: test",
+            "suggestions": [stale_sugg],
+            "valid": True,
+        }
+        mock_repo.find.return_value = RecipeInfo(
+            name="test", description="Test", source=RecipeSource.PROJECT, path=recipe_file
+        )
+        tool_ctx.recipes = mock_repo
+
+        cached_entry = StalenessEntry(
+            recipe_hash="sha256:" + "b" * 64,
+            manifest_version="0.2.0",
+            is_stale=True,
+            triage_result="cosmetic",
+            checked_at="2026-01-01T00:00:00+00:00",
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.read_staleness_cache",
+            lambda *a, **kw: cached_entry,
+        )
+
+        mock_triage = AsyncMock()
+        monkeypatch.setattr("autoskillit._llm_triage.triage_staleness", mock_triage)
+
+        result = json.loads(await load_recipe(name="test"))
+        stale_items = [
+            s for s in result.get("suggestions", []) if s.get("rule") == "stale-contract"
+        ]
+        assert not stale_items, "Cached cosmetic result must suppress stale suggestions"
+        mock_triage.assert_not_called()
+
+    # SRV-T4: version_mismatch stale items are never filtered (always shown as meaningful)
+    @pytest.mark.asyncio
+    async def test_load_recipe_preserves_version_mismatch_suggestions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool_ctx
+    ) -> None:
+        """version_mismatch stale suggestions are preserved even when hash items are cosmetic."""
+        from autoskillit.core.types import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        monkeypatch.chdir(tmp_path)
+        recipe_file = tmp_path / "test.yaml"
+        recipe_file.write_text("name: test")
+
+        # Both a hash_mismatch (cosmetic) and a version_mismatch suggestion
+        hash_sugg = {
+            "rule": "stale-contract",
+            "severity": "warning",
+            "step": "make-plan",
+            "skill": "make-plan",
+            "reason": "hash_mismatch",
+            "stored_value": "sha256:" + "a" * 64,
+            "current_value": "sha256:" + "b" * 64,
+            "message": "Contract is stale: hash",
+        }
+        version_sugg = {
+            "rule": "stale-contract",
+            "severity": "warning",
+            "step": "(manifest)",
+            "skill": "(manifest)",
+            "reason": "version_mismatch",
+            "stored_value": "0.1.0",
+            "current_value": "0.2.0",
+            "message": "Contract is stale: version",
+        }
+        mock_repo = MagicMock()
+        mock_repo.load_and_validate.return_value = {
+            "content": "name: test",
+            "suggestions": [hash_sugg, version_sugg],
+            "valid": True,
+        }
+        mock_repo.find.return_value = RecipeInfo(
+            name="test", description="Test", source=RecipeSource.PROJECT, path=recipe_file
+        )
+        tool_ctx.recipes = mock_repo
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.read_staleness_cache", lambda *a, **kw: None
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.write_staleness_cache", lambda *a, **kw: None
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.compute_recipe_hash",
+            lambda *a: "sha256:" + "b" * 64,
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools_recipe.load_bundled_manifest",
+            lambda: {"version": "0.2.0"},
+        )
+        # Triage says the hash_mismatch item is cosmetic
+        monkeypatch.setattr(
+            "autoskillit._llm_triage.triage_staleness",
+            AsyncMock(
+                return_value=[{"skill": "make-plan", "meaningful": False, "summary": "cosmetic"}]
+            ),
+        )
+
+        result = json.loads(await load_recipe(name="test"))
+        stale_items = [
+            s for s in result.get("suggestions", []) if s.get("rule") == "stale-contract"
+        ]
+        assert len(stale_items) > 0, (
+            "version_mismatch suggestions must be preserved even when hash items are cosmetic"
+        )
+        reasons = {s["reason"] for s in stale_items}
+        assert "version_mismatch" in reasons
+
 
 class TestContractMigrationAdapterValidate:
     """P7-2: ContractMigrationAdapter.validate uses _load_yaml, not yaml.safe_load."""

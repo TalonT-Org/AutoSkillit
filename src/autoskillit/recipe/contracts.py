@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import re
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,12 @@ from autoskillit.core import (
     get_logger,
     load_yaml,
     pkg_root,
+)
+from autoskillit.recipe.staleness_cache import (
+    StalenessEntry,
+    compute_recipe_hash,
+    read_staleness_cache,
+    write_staleness_cache,
 )
 from autoskillit.workspace import bundled_skills_dir
 
@@ -323,16 +330,37 @@ def validate_recipe_cards(recipe: Any, contract: dict[str, Any]) -> list[dict[st
 # ---------------------------------------------------------------------------
 
 
-def check_contract_staleness(contract: dict[str, Any]) -> list[StaleItem]:
+def check_contract_staleness(
+    contract: dict[str, Any],
+    *,
+    recipe_path: Path | None = None,
+    cache_path: Path | None = None,
+) -> list[StaleItem]:
     """Check a pipeline contract for staleness against the current manifest.
+
+    When ``recipe_path`` and ``cache_path`` are both provided, a disk-backed
+    cache keyed by recipe content hash + manifest version is consulted first.
+    A cache hit with ``is_stale=False`` returns [] immediately without reading
+    any SKILL.md files. Stale cache hits fall through to re-compute StaleItem
+    details. The result is written back to the cache on every cache miss.
 
     Returns a list of StaleItem entries indicating what changed.
     """
-    stale: list[StaleItem] = []
     manifest = load_bundled_manifest()
+    current_version = manifest["version"]
+
+    if recipe_path is not None and cache_path is not None:
+        cached = read_staleness_cache(cache_path, recipe_path.stem)
+        if cached is not None:
+            current_hash = compute_recipe_hash(recipe_path)
+            if cached.recipe_hash == current_hash and cached.manifest_version == current_version:
+                if not cached.is_stale:
+                    return []
+                # stale=True cache hit: fall through to re-compute for StaleItem details
+
+    stale: list[StaleItem] = []
 
     stored_version = contract.get("bundled_manifest_version", "")
-    current_version = manifest["version"]
     if stored_version != current_version:
         stale.append(
             StaleItem(
@@ -355,6 +383,20 @@ def check_contract_staleness(contract: dict[str, Any]) -> list[StaleItem]:
                 )
             )
 
+    if recipe_path is not None and cache_path is not None:
+        file_hash = compute_recipe_hash(recipe_path)
+        write_staleness_cache(
+            cache_path,
+            recipe_path.stem,
+            StalenessEntry(
+                recipe_hash=file_hash,
+                manifest_version=current_version,
+                is_stale=bool(stale),
+                triage_result=None,
+                checked_at=datetime.now(UTC).isoformat(),
+            ),
+        )
+
     return stale
 
 
@@ -367,6 +409,10 @@ def stale_to_suggestions(stale: list[StaleItem]) -> list[dict[str, str]]:
                 "rule": "stale-contract",
                 "severity": "warning",
                 "step": item.skill,
+                "skill": item.skill,
+                "reason": item.reason,
+                "stored_value": item.stored_value,
+                "current_value": item.current_value,
                 "message": (
                     f"Contract is stale: {item.reason} for "
                     f"'{item.skill}' (stored={item.stored_value}, "

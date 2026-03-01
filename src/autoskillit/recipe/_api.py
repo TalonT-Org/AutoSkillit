@@ -156,7 +156,10 @@ def load_and_validate(
             if contract:
                 contract_findings = validate_recipe_cards(recipe, contract)
                 suggestions.extend(contract_findings)
-                stale = check_contract_staleness(contract)
+                cache_path = _pdir / ".autoskillit" / "temp" / "recipe_staleness_cache.json"
+                stale = check_contract_staleness(
+                    contract, recipe_path=match.path, cache_path=cache_path
+                )
                 suggestions.extend(stale_to_suggestions(stale))
 
             valid = compute_recipe_validity(errors, semantic_findings, contract_findings)

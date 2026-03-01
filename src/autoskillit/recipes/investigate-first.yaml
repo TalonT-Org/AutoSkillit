@@ -83,9 +83,6 @@ steps:
     on_failure: cleanup_failure
     note: >
       Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically into plan_parts[].
-      REMEDIATION MODE: when routed from remediate, context.remediation_path is available
-      — pass it to the rectify skill for targeted re-planning.
-      Glob plan_dir for *_part_*.md or single plan file.
 
   review:
     tool: run_skill
@@ -180,7 +177,20 @@ steps:
     action: route
     with:
       remediation_path: "${{ context.remediation_path }}"
-    on_success: rectify
+    on_success: make_plan
+
+  make_plan:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:make-plan ${{ context.remediation_path }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "make_plan"
+    capture:
+      plan_path: "${{ result.plan_path }}"
+    capture_list:
+      plan_parts: "${{ result.plan_parts }}"
+    on_success: review
+    on_failure: cleanup_failure
 
   merge:
     tool: merge_worktree

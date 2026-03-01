@@ -2086,10 +2086,23 @@ class TestInvestigateFirstStructure:
         assert step.on_result is not None
         assert step.on_result.field == "verdict"
 
-    def test_if2_remediate_step_exists_with_on_success_rectify(self) -> None:
-        """T_IF2: a step named remediate exists with on_success == 'rectify'."""
+    def test_if2_remediate_step_routes_to_make_plan(self) -> None:
+        """T_IF2: remediate step exists and routes to make_plan (not rectify)."""
         assert "remediate" in self.recipe.steps
-        assert self.recipe.steps["remediate"].on_success == "rectify"
+        assert self.recipe.steps["remediate"].on_success == "make_plan"
+
+    def test_if5_make_plan_step_has_correct_structure(self) -> None:
+        """T_IF5: make_plan step calls make-plan with remediation_path and captures outputs."""
+        assert "make_plan" in self.recipe.steps
+        step = self.recipe.steps["make_plan"]
+        assert step.tool == "run_skill"
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "/autoskillit:make-plan" in skill_cmd
+        assert "context.remediation_path" in skill_cmd
+        assert "plan_path" in step.capture
+        assert "plan_parts" in step.capture_list
+        assert step.on_success == "review"
+        assert step.on_failure == "cleanup_failure"
 
     def test_if3_verify_step_uses_implementation_ref(self) -> None:
         """T_IF3: verify step worktree_path must reference context.implementation_ref."""

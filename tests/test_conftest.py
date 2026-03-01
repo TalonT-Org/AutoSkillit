@@ -117,10 +117,7 @@ def test_structlog_does_not_write_to_stdout_in_tests(capsys):
 
     quota_log.warning("test_sentinel_should_not_reach_stdout", probe=True)
     captured = capsys.readouterr()
-    assert captured.out == "", (
-        f"Structlog wrote to stdout during a test. "
-        f"stdout: {captured.out!r}"
-    )
+    assert captured.out == "", f"Structlog wrote to stdout during a test. stdout: {captured.out!r}"
 
 
 def test_parse_stdout_json_fixture_is_available(parse_stdout_json):

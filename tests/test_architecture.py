@@ -2448,7 +2448,7 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
     # where A is a sub-package, B is a submodule, C is the name.
     pattern = re.compile(
         r'monkeypatch\.setattr\s*\(\s*["\']'
-        r'(autoskillit\.\w+\.\w+\.\w+)'
+        r"(autoskillit\.\w+\.\w+\.\w+)"
         r'["\']'
     )
 
@@ -2478,7 +2478,6 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
                     f"Patch '{parent_pkg}.{name}' instead."
                 )
 
-    assert not violations, (
-        "Monkeypatch paths bypass package re-exports:\n"
-        + "\n".join(f"  {v}" for v in violations)
+    assert not violations, "Monkeypatch paths bypass package re-exports:\n" + "\n".join(
+        f"  {v}" for v in violations
     )

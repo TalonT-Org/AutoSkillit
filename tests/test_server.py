@@ -6789,7 +6789,7 @@ class TestGatedToolObservability:
         assert any(entry.get("tool") == "run_cmd" for entry in logs)
 
     @pytest.mark.asyncio
-    async def test_run_cmd_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
+    async def test_run_cmd_returns_failure_result_on_nonzero_exit(self, tool_ctx, mock_ctx):
         """run_cmd reports failure (success=false) when subprocess exits non-zero."""
         tool_ctx.runner.push(_make_result(1, "", "err"))
         result = json.loads(await run_cmd(cmd="false", cwd="/tmp", ctx=mock_ctx))
@@ -6806,7 +6806,7 @@ class TestGatedToolObservability:
         assert any(entry.get("tool") == "run_python" for entry in logs)
 
     @pytest.mark.asyncio
-    async def test_run_python_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
+    async def test_run_python_returns_failure_result_on_bad_module(self, tool_ctx, mock_ctx):
         """run_python reports failure (success=false) when callable import fails."""
         result = json.loads(await run_python(callable="nonexistent.module.func", ctx=mock_ctx))
         assert result["success"] is False
@@ -6829,7 +6829,7 @@ class TestGatedToolObservability:
         assert any(entry.get("tool") == "run_skill" for entry in logs)
 
     @pytest.mark.asyncio
-    async def test_run_skill_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
+    async def test_run_skill_returns_failure_result_on_error_output(self, tool_ctx, mock_ctx):
         """run_skill reports failure (success=false) when headless session fails."""
         tool_ctx.runner.push(
             _make_result(
@@ -6862,7 +6862,7 @@ class TestGatedToolObservability:
         assert any(entry.get("tool") == "run_skill_retry" for entry in logs)
 
     @pytest.mark.asyncio
-    async def test_run_skill_retry_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
+    async def test_run_skill_retry_returns_failure_result_on_error_output(self, tool_ctx, mock_ctx):
         """run_skill_retry reports failure (success=false) when headless session fails."""
         tool_ctx.runner.push(
             _make_result(

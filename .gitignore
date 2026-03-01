@@ -8,3 +8,7 @@ build/
 temp/
 .mypy_cache/
 .pytest_cache/
+
+# dynaconf secrets files — never commit
+.secrets.*
+.autoskillit/.secrets.*

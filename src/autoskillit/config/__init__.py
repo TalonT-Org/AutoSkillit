@@ -8,6 +8,7 @@ either `from autoskillit.config import AutomationConfig` or the explicit
 from autoskillit.config.settings import (
     AutomationConfig,
     ClassifyFixConfig,
+    GitHubConfig,
     ImplementGateConfig,
     MigrationConfig,
     ModelConfig,
@@ -26,6 +27,7 @@ from autoskillit.config.settings import (
 __all__ = [
     "AutomationConfig",
     "ClassifyFixConfig",
+    "GitHubConfig",
     "ImplementGateConfig",
     "MigrationConfig",
     "ModelConfig",

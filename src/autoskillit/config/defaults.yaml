@@ -1,0 +1,72 @@
+# Default configuration for autoskillit.
+# Resolution order (low → high priority):
+#   1. This file (package defaults, always loaded)
+#   2. ~/.autoskillit/config.yaml (user-level)
+#   3. .autoskillit/config.yaml (project-level)
+#   4. .autoskillit/.secrets.yaml (secrets, never commit)
+#   5. AUTOSKILLIT_SECTION__KEY=value environment variables
+
+test_check:
+  command:
+    - task
+    - test-check
+  timeout: 600
+
+classify_fix:
+  path_prefixes: []
+
+reset_workspace:
+  command: null
+  preserve_dirs: []
+
+implement_gate:
+  marker: "Dry-walkthrough verified = TRUE"
+  skill_names:
+    - "/autoskillit:implement-worktree"
+    - "/autoskillit:implement-worktree-no-merge"
+
+safety:
+  reset_guard_marker: ".autoskillit-workspace"
+  require_dry_walkthrough: true
+  test_gate_on_merge: true
+
+read_db:
+  timeout: 30
+  max_rows: 10000
+
+run_skill:
+  timeout: 3600
+  heartbeat_marker: '"type":"result"'
+  stale_threshold: 1200
+  completion_marker: "%%ORDER_UP%%"
+  completion_drain_timeout: 5.0
+  exit_after_stop_delay_ms: 30000
+
+run_skill_retry:
+  timeout: 7200
+  stale_threshold: 1200
+
+model:
+  default: null
+  override: null
+
+worktree_setup:
+  command: null
+
+migration:
+  suppressed: []
+
+token_usage:
+  verbosity: "summary"
+
+quota_guard:
+  enabled: true
+  threshold: 80.0
+  buffer_seconds: 60
+  cache_max_age: 60
+  credentials_path: "~/.claude/.credentials.json"
+  cache_path: "~/.claude/usage_cache.json"
+
+github:
+  token: null
+  default_repo: null

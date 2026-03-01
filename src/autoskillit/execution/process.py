@@ -20,6 +20,7 @@ import sys
 import tempfile
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
 
@@ -426,6 +427,82 @@ def read_temp_output(stdout_path: Path, stderr_path: Path) -> tuple[str, str]:
     return stdout, stderr
 
 
+@dataclass(frozen=True)
+class RaceSignals:
+    """Accumulated signals from all tasks that completed in asyncio.wait.
+
+    Captures what happened without making any decisions about what it means.
+    All fields are independent: multiple can be True simultaneously when tasks
+    complete in the same event loop tick.
+    """
+
+    process_exited: bool
+    process_returncode: int | None
+    channel_a_confirmed: bool
+    channel_b_status: str | None  # "completion", "stale", or None
+
+
+def scan_done_signals(
+    done: set[asyncio.Task],
+    wait_task: asyncio.Task,
+    heartbeat_task: asyncio.Task | None,
+    session_monitor_task: asyncio.Task | None,
+    proc: asyncio.subprocess.Process,
+) -> RaceSignals:
+    """Extract signals from ALL completed tasks. No signal is discarded.
+
+    Pure function: reads task states without performing any side effects.
+    Multiple tasks may be present in ``done`` when their completion callbacks
+    land in the same event loop tick — this function captures all of them.
+    """
+    process_exited = wait_task in done
+    channel_a_confirmed = heartbeat_task is not None and heartbeat_task in done
+    channel_b_status = None
+    if session_monitor_task is not None and session_monitor_task in done:
+        channel_b_status = session_monitor_task.result()
+    return RaceSignals(
+        process_exited=process_exited,
+        process_returncode=proc.returncode if process_exited else None,
+        channel_a_confirmed=channel_a_confirmed,
+        channel_b_status=channel_b_status,
+    )
+
+
+def resolve_termination(
+    signals: RaceSignals,
+) -> tuple[TerminationReason, ChannelConfirmation]:
+    """Determine termination and channel from accumulated signals.
+
+    Pure function: no side effects. Channel confirmation and termination
+    reason are resolved independently so that simultaneous task completion
+    never discards a channel signal.
+
+    Priority for termination: process exit > stale > channel win.
+    Channel confirmation is independent of termination.
+    """
+    # Channel confirmation: independent of termination reason
+    if signals.channel_a_confirmed:
+        channel = ChannelConfirmation.CHANNEL_A
+    elif signals.channel_b_status == "completion":
+        channel = ChannelConfirmation.CHANNEL_B
+    else:
+        channel = ChannelConfirmation.UNMONITORED
+
+    # Termination reason: priority order
+    if signals.process_exited:
+        termination = TerminationReason.NATURAL_EXIT
+    elif signals.channel_b_status == "stale":
+        termination = TerminationReason.STALE
+    elif signals.channel_a_confirmed:
+        termination = TerminationReason.COMPLETED
+    elif signals.channel_b_status == "completion":
+        termination = TerminationReason.COMPLETED
+    else:
+        termination = TerminationReason.NATURAL_EXIT  # fallback
+
+    return termination, channel
+
+
 async def run_managed_async(
     cmd: list[str],
     *,
@@ -549,25 +626,27 @@ async def run_managed_async(
                     timeout=timeout,
                 )
 
-                # Priority: wait_task > heartbeat/monitor
-                # If the process exited on its own, its result is authoritative
-                # regardless of what the monitor detected.
-                if wait_task in done:
-                    termination = TerminationReason.NATURAL_EXIT
-                elif session_monitor_task in done and session_monitor_task.result() == "stale":
-                    termination = TerminationReason.STALE
+                # Phase A — Signal extraction (pure, no side effects).
+                # Scans ALL tasks in done: multiple may complete simultaneously.
+                signals = scan_done_signals(
+                    done, wait_task, heartbeat_task, session_monitor_task, proc
+                )
+                termination, _channel_confirmation = resolve_termination(signals)
+
+                # Phase B — Side-effect dispatch (kill / drain-wait).
+                # Operates on signals and resolved termination; order matters.
+                if signals.process_exited:
+                    # Process already exited — no kill needed.
+                    pass
+                elif termination == TerminationReason.STALE:
                     logger.warning("Session stale for %ss, killing tree", stale_threshold)
                     await async_kill_process_tree(proc.pid)
-                elif heartbeat_task in done:
-                    # Channel A won: type=result is confirmed in stdout temp file.
-                    # Kill is safe — data availability is guaranteed.
-                    termination = TerminationReason.COMPLETED
-                    _channel_confirmation = ChannelConfirmation.CHANNEL_A
+                elif signals.channel_a_confirmed:
+                    # Channel A confirmed stdout data, process still alive — kill immediately.
                     await async_kill_process_tree(proc.pid)
-                else:
-                    # Channel B won (session_monitor returned "completion") before
-                    # Channel A. Arm a bounded drain wait to give Channel A the
-                    # opportunity to confirm data in stdout before killing.
+                elif signals.channel_b_status == "completion":
+                    # Channel B won, process still alive, Channel A not yet in done.
+                    # Drain wait: give heartbeat a window to confirm stdout data.
                     if heartbeat_task is not None:
                         channel_a_ready = asyncio.Event()
                         heartbeat_task.add_done_callback(lambda _: channel_a_ready.set())
@@ -575,17 +654,12 @@ async def run_managed_async(
                             await asyncio.wait_for(
                                 channel_a_ready.wait(), timeout=completion_drain_timeout
                             )
-                            # Channel A confirmed within drain window.
+                            # Channel A confirmed within drain window — upgrade confirmation.
                             _channel_confirmation = ChannelConfirmation.CHANNEL_A
                         except TimeoutError:
                             # CLI did not flush type=result within drain_timeout.
-                            # stdout data is not guaranteed — Channel B is sole authority.
-                            _channel_confirmation = ChannelConfirmation.CHANNEL_B
-                    else:
-                        # No heartbeat configured: Channel B is the only signal.
-                        # stdout may be empty — downstream must trust JSONL signal.
-                        _channel_confirmation = ChannelConfirmation.CHANNEL_B
-                    termination = TerminationReason.COMPLETED
+                            # _channel_confirmation stays CHANNEL_B from resolve_termination.
+                            pass
                     await async_kill_process_tree(proc.pid)
             except TimeoutError:
                 termination = TerminationReason.TIMED_OUT

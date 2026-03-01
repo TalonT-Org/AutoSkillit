@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
-    ChannelConfirmation,
     FailureRecord,
     RetryReason,
     SkillResult,
@@ -147,16 +146,13 @@ def _build_skill_result(
     """Route SubprocessResult fields into the standard run_skill response."""
     if result.termination == TerminationReason.STALE:
         # Attempt to recover from stdout before declaring stale failure.
-        # Also attempt provenance bypass when channel_confirmation=CHANNEL_B:
-        # Channel B confirmed the session completed via session JSONL, so even
-        # empty stdout is sufficient evidence of completion.
         stale_session = parse_session_result(result.stdout)
         stale_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_stale_recovery = (
             stale_session.subtype == "success"
             and stale_session.result.strip()
             and not stale_session.is_error
-        ) or result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        )
         if can_attempt_stale_recovery:
             success = _compute_success(
                 stale_session,

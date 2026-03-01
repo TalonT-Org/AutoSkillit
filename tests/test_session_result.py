@@ -578,6 +578,34 @@ class TestComputeSuccess:
             is True
         )
 
+    def test_natural_exit_channel_b_empty_result_true(self):
+        """Test 1D part 1: NATURAL_EXIT + CHANNEL_B: provenance bypass fires
+        before termination dispatch → True even with empty result."""
+        s = _make_success_session(result="")
+        assert (
+            _compute_success(
+                s,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            )
+            is True
+        )
+
+    def test_natural_exit_channel_a_valid_result_true(self):
+        """Test 1D part 2: NATURAL_EXIT + CHANNEL_A + valid content → True.
+        Falls through to content check (no bypass for CHANNEL_A); content passes."""
+        s = _make_success_session(result="valid output")
+        assert (
+            _compute_success(
+                s,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                channel_confirmation=ChannelConfirmation.CHANNEL_A,
+            )
+            is True
+        )
+
 
 class TestComputeSuccessRealisticInputs:
     """_compute_success contracts using parse_session_result() as input constructor.
@@ -691,6 +719,46 @@ class TestComputeRetry:
         )
         assert needs_retry is True
         assert reason == RetryReason.RESUME
+
+    def test_natural_exit_channel_b_no_retry(self):
+        """Test 1E part 1: NATURAL_EXIT + CHANNEL_B → no retry.
+        Channel confirmation means session completed; kill-anomaly check is skipped.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="",
+            is_error=False,
+            session_id="abc",
+            errors=[],
+        )
+        needs_retry, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        assert needs_retry is False
+        assert reason == RetryReason.NONE
+
+    def test_natural_exit_channel_a_no_retry(self):
+        """Test 1E part 2: NATURAL_EXIT + CHANNEL_A → no retry.
+        Channel A confirmed session completed; kill-anomaly check is skipped.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="",
+            is_error=False,
+            session_id="abc",
+            errors=[],
+        )
+        needs_retry, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        assert needs_retry is False
+        assert reason == RetryReason.NONE
 
 
 # ---------------------------------------------------------------------------

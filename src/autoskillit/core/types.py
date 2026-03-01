@@ -93,11 +93,14 @@ class ChannelConfirmation(StrEnum):
 #: TestAdjudicationCoverageMatrix.
 #:
 #: NATURAL_EXIT:
-#:   channel_confirmation=UNMONITORED (wait_task won naturally; no kill needed)
+#:   channel_confirmation=UNMONITORED (typical: process exited before channels fired)
+#:   channel_confirmation=CHANNEL_A (simultaneous: process exit + heartbeat in same tick)
+#:   channel_confirmation=CHANNEL_B (simultaneous: process exit + session monitor completion)
 #:   returncode=process's actual exit code (0 = voluntary, nonzero = crash)
 #:   stdout=whatever was flushed to the temp file before exit
-#:   Kill-anomaly possible when returncode==0 and stdout is success+empty,
+#:   Kill-anomaly possible when returncode==0, UNMONITORED, and stdout is success+empty,
 #:   empty_output, or unparseable → _is_kill_anomaly returns True.
+#:   When CHANNEL_A or CHANNEL_B: no kill anomaly; session completed.
 #:
 #: COMPLETED (Channel A):
 #:   channel_confirmation=CHANNEL_A (heartbeat confirmed type=result in stdout)
@@ -111,10 +114,13 @@ class ChannelConfirmation(StrEnum):
 #:   _compute_success provenance bypass applies: return True immediately.
 #:
 #: STALE:
-#:   channel_confirmation=UNMONITORED (never modified; _channel_confirmation starts UNMONITORED)
+#:   channel_confirmation=UNMONITORED (typical: stale monitor fired alone)
+#:   channel_confirmation=CHANNEL_A (simultaneous: stale monitor + heartbeat in same tick)
 #:   returncode=nonzero (SIGTERM/SIGKILL)
 #:   _build_skill_result intercepts before _compute_success: attempts
 #:   stdout recovery; if successful returns subtype="recovered_from_stale".
+#:   STALE+CHANNEL_B is structurally impossible: session_monitor returns either
+#:   "stale" or "completion", never both; stale path sets UNMONITORED.
 #:
 #: TIMED_OUT:
 #:   channel_confirmation=UNMONITORED (never modified)

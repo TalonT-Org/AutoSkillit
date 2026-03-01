@@ -414,6 +414,13 @@ def _compute_retry(
             # CLAUDE_CODE_EXIT_AFTER_STOP_DELAY timer-based self-exits.
             # returncode==0 discriminates: clean exit (possible kill-race artifact)
             # vs genuine crash (nonzero returncode — not a timing artifact).
+            # Channel confirmation means the session completed — any kill-anomaly
+            # appearance is a drain artifact, not a real incomplete flush.
+            if channel_confirmation in (
+                ChannelConfirmation.CHANNEL_A,
+                ChannelConfirmation.CHANNEL_B,
+            ):
+                return False, RetryReason.NONE
             if returncode == 0 and _is_kill_anomaly(session):
                 return True, RetryReason.RESUME
             return False, RetryReason.NONE

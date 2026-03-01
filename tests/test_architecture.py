@@ -2102,7 +2102,7 @@ def test_no_raw_ctx_notification_calls_in_tool_handlers() -> None:
     """
     import ast
 
-    server_dir = Path("src/autoskillit/server")
+    server_dir = SRC_ROOT / "server"
     violations = []
     for path in sorted(server_dir.glob("tools_*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -2130,7 +2130,7 @@ def test_all_tool_extra_keys_are_not_reserved() -> None:
 
     from autoskillit.core.types import RESERVED_LOG_RECORD_KEYS
 
-    server_dir = Path("src/autoskillit/server")
+    server_dir = SRC_ROOT / "server"
     violations = []
     for path in sorted(server_dir.glob("tools_*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))

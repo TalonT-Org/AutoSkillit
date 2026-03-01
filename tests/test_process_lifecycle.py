@@ -1042,33 +1042,24 @@ class TestReadTempOutputLogging:
     """OSError during temp file read should produce a warning log."""
 
     @pytest.fixture(autouse=True)
-    def _reset_structlog(self):
-        """Sync module-level loggers' _processors with the current structlog config.
+    def _sync_process_logger(self):
+        """Sync only process.logger._processors with the current structlog config.
 
-        process_lifecycle.logger is a resolved BoundLoggerFilteringAtNotset created
-        at import time. Its _processors holds a reference to the processor list at
-        that moment. If reset_defaults() was called by a prior test in this xdist
-        worker, a new processor list is created and _processors becomes stale.
-        capture_logs() modifies the current config's list in-place, so _processors
-        must reference that same list for the log capture to succeed.
+        Scoped to this test class only — no cross-module mutation.
         """
         import structlog
-        import structlog._config as _sc
+
+        import autoskillit.execution.process as proc_mod
 
         structlog.reset_defaults()
         current_procs = structlog.get_config()["processors"]
-        for mod_name, mod in list(sys.modules.items()):
-            if not mod_name.startswith("autoskillit"):
-                continue
-            lg = getattr(mod, "logger", None)
-            if lg is None:
-                continue
-            if isinstance(lg, _sc.BoundLoggerLazyProxy):
-                lg.__dict__.pop("bind", None)
-            elif hasattr(lg, "_processors"):
-                lg._processors = current_procs
+        old_procs = getattr(proc_mod.logger, "_processors", None)
+        if old_procs is not None:
+            proc_mod.logger._processors = current_procs
         yield
         structlog.reset_defaults()
+        if old_procs is not None:
+            proc_mod.logger._processors = old_procs
 
     def test_oserror_logs_warning(self):
         """OSError during temp file read should produce a warning log."""

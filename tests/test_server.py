@@ -2692,39 +2692,31 @@ class TestGateTransitionLogs:
         warning_entries = [entry for entry in logs if entry.get("log_level") == "warning"]
         assert any(entry.get("event") == "session_log_dir_missing" for entry in warning_entries)
 
-    def test_session_log_dir_no_warning_when_present(self, tmp_path):
-        import shutil
-
+    def test_session_log_dir_no_warning_when_present(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
         cwd = str(tmp_path)
         project_hash = cwd.replace("/", "-").replace("_", "-")
-        log_dir = Path.home() / ".claude" / "projects" / project_hash
+        log_dir = tmp_path / "home" / ".claude" / "projects" / project_hash
         log_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            with structlog.testing.capture_logs() as logs:
-                _session_log_dir(cwd)
-            assert not any(entry.get("event") == "session_log_dir_missing" for entry in logs)
-        finally:
-            shutil.rmtree(log_dir, ignore_errors=True)
+        with structlog.testing.capture_logs() as logs:
+            _session_log_dir(cwd)
+        assert not any(entry.get("event") == "session_log_dir_missing" for entry in logs)
 
-    def test_session_log_dir_logs_path_when_dir_exists(self, tmp_path):
-        import shutil
-
+    def test_session_log_dir_logs_path_when_dir_exists(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
         cwd = str(tmp_path)
         project_hash = cwd.replace("/", "-").replace("_", "-")
-        log_dir = Path.home() / ".claude" / "projects" / project_hash
+        log_dir = tmp_path / "home" / ".claude" / "projects" / project_hash
         log_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            with structlog.testing.capture_logs() as logs:
-                result = _session_log_dir(cwd)
-            info_entries = [e for e in logs if e.get("log_level") == "info"]
-            assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
-            computed_entry = next(
-                e for e in info_entries if e.get("event") == "session_log_dir_computed"
-            )
-            assert computed_entry.get("path") == str(result)
-            assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
-        finally:
-            shutil.rmtree(log_dir, ignore_errors=True)
+        with structlog.testing.capture_logs() as logs:
+            result = _session_log_dir(cwd)
+        info_entries = [e for e in logs if e.get("log_level") == "info"]
+        assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
+        computed_entry = next(
+            e for e in info_entries if e.get("event") == "session_log_dir_computed"
+        )
+        assert computed_entry.get("path") == str(result)
+        assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
 
     def test_session_log_dir_logs_path_when_dir_missing(self):
         cwd = "/nonexistent/project/unique-test-99999"
@@ -6744,7 +6736,6 @@ class TestServerLazyInit:
 
     def test_server_import_does_not_call_load_config(self, monkeypatch):
         """Importing server.py must not trigger load_config() as a side effect."""
-        import importlib
         import sys
         from unittest.mock import patch
 
@@ -6757,8 +6748,6 @@ class TestServerLazyInit:
 
         with patch("autoskillit.config.load_config") as mock_load:
             import autoskillit.server  # noqa: F401
-
-            importlib.import_module("autoskillit.server")
         assert not mock_load.called
 
     def test_get_ctx_raises_before_initialize(self, monkeypatch):

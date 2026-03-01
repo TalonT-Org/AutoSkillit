@@ -23,7 +23,7 @@ def test_tool_ctx_provides_isolated_token_log(tool_ctx):
     assert tool_ctx.token_log.get_report() == []
 
 
-async def test_mock_subprocess_runner_push_and_pop():
+async def test_mock_subprocess_runner_push_and_pop(tmp_path: Path):
     """MockSubprocessRunner.push() queues results, __call__ pops in order."""
     from tests.conftest import MockSubprocessRunner
 
@@ -33,18 +33,18 @@ async def test_mock_subprocess_runner_push_and_pop():
     runner.push(r1)
     runner.push(r2)
 
-    got1 = await runner(["cmd"], cwd=Path("/tmp"), timeout=30.0)
-    got2 = await runner(["cmd"], cwd=Path("/tmp"), timeout=30.0)
+    got1 = await runner(["cmd"], cwd=tmp_path, timeout=30.0)
+    got2 = await runner(["cmd"], cwd=tmp_path, timeout=30.0)
     assert got1 is r1
     assert got2 is r2
 
 
-async def test_mock_subprocess_runner_default_when_empty():
+async def test_mock_subprocess_runner_default_when_empty(tmp_path: Path):
     """MockSubprocessRunner returns a zero-exit default when queue is empty."""
     from tests.conftest import MockSubprocessRunner
 
     runner = MockSubprocessRunner()
-    result = await runner(["cmd"], cwd=Path("/tmp"), timeout=30.0)
+    result = await runner(["cmd"], cwd=tmp_path, timeout=30.0)
     assert result.returncode == 0
 
 

@@ -42,7 +42,7 @@ class TestCloneRepo:
         # Cleanup
         import shutil
 
-        shutil.rmtree(clone_path.parent, ignore_errors=True)
+        shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_success_returns_expected_keys(self, git_repo: Path) -> None:
         result = clone_repo(str(git_repo), "test")
@@ -52,7 +52,7 @@ class TestCloneRepo:
         assert result["source_dir"] == str(git_repo.resolve())
         import shutil
 
-        shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
+        shutil.rmtree(Path(result["clone_path"]), ignore_errors=True)
 
     def test_clone_path_name_format(self, git_repo: Path) -> None:
         result = clone_repo(str(git_repo), "myrun")
@@ -61,7 +61,7 @@ class TestCloneRepo:
         assert re.match(r"myrun-\d{8}-\d{6}-\d{6}$", clone_path.name), clone_path.name
         import shutil
 
-        shutil.rmtree(clone_path.parent, ignore_errors=True)
+        shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_clone_in_autoskillit_runs_sibling(self, git_repo: Path) -> None:
         result = clone_repo(str(git_repo), "test")
@@ -71,7 +71,7 @@ class TestCloneRepo:
         assert clone_path.parent == expected_parent
         import shutil
 
-        shutil.rmtree(clone_path.parent, ignore_errors=True)
+        shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_invalid_source_dir_raises_value_error(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="source_dir does not exist"):
@@ -105,7 +105,7 @@ class TestCloneRepo:
             check=True,
         ).stdout.strip()
         assert head == "dev"
-        shutil.rmtree(clone_path.parent, ignore_errors=True)
+        shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_cb2_auto_detects_current_branch_when_branch_empty(self, git_repo: Path) -> None:
         """T_CB2: branch="" auto-detects current HEAD branch and clones it."""
@@ -130,7 +130,7 @@ class TestCloneRepo:
             check=True,
         ).stdout.strip()
         assert head == "feature"
-        shutil.rmtree(clone_path.parent, ignore_errors=True)
+        shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_cb3_returns_uncommitted_changes_warning_when_dirty(self, git_repo: Path) -> None:
         """T_CB3: untracked files trigger warning dict; no clone is created."""
@@ -149,7 +149,7 @@ class TestCloneRepo:
         assert "clone_path" in result
         clone_path = Path(result["clone_path"])
         assert not (clone_path / "untracked.txt").exists()
-        shutil.rmtree(clone_path.parent, ignore_errors=True)
+        shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_cb5_strategy_clone_local_includes_uncommitted_changes(self, git_repo: Path) -> None:
         """T_CB5: strategy='clone_local' copytree includes untracked files."""
@@ -160,7 +160,7 @@ class TestCloneRepo:
         assert "clone_path" in result
         clone_path = Path(result["clone_path"])
         assert (clone_path / "untracked.txt").exists()
-        shutil.rmtree(clone_path.parent, ignore_errors=True)
+        shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_cb6_detached_head_falls_back_to_no_branch_flag(self, git_repo: Path) -> None:
         """T_CB6: detached HEAD yields branch=''; git clone succeeds without --branch."""
@@ -181,7 +181,7 @@ class TestCloneRepo:
         assert "clone_path" in result
         clone_path = Path(result["clone_path"])
         assert clone_path.is_dir()
-        shutil.rmtree(clone_path.parent, ignore_errors=True)
+        shutil.rmtree(clone_path, ignore_errors=True)
 
 
 class TestRemoveClone:
@@ -194,7 +194,7 @@ class TestRemoveClone:
         # Cleanup parent runs dir
         import shutil
 
-        shutil.rmtree(Path(clone_path).parent, ignore_errors=True)
+        shutil.rmtree(Path(clone_path), ignore_errors=True)
 
     def test_keep_true_preserves_directory(self, git_repo: Path) -> None:
         result = clone_repo(str(git_repo), "test")
@@ -205,15 +205,11 @@ class TestRemoveClone:
         # Cleanup
         import shutil
 
-        shutil.rmtree(Path(clone_path).parent, ignore_errors=True)
+        shutil.rmtree(Path(clone_path), ignore_errors=True)
 
     def test_missing_path_returns_not_found(self) -> None:
         result = remove_clone("/nonexistent/clone/path", keep="false")
         assert result == {"removed": "false", "reason": "not_found"}
-
-    def test_missing_path_does_not_raise(self) -> None:
-        # Must not raise even for a completely bogus path
-        remove_clone("/no/such/path/anywhere", keep="false")
 
 
 class TestPushToRemote:
@@ -310,7 +306,7 @@ class TestPushToRemote:
 
         import shutil
 
-        shutil.rmtree(Path(clone_path).parent, ignore_errors=True)
+        shutil.rmtree(Path(clone_path), ignore_errors=True)
 
     def test_push_to_remote_fails_when_source_has_no_origin(self, tmp_path: Path) -> None:
         source = tmp_path / "source"
@@ -320,9 +316,3 @@ class TestPushToRemote:
         result = push_to_remote("/nonexistent/clone", str(source), "main")
         assert result["success"] == "false"
         assert len(result["stderr"]) > 0
-
-    def test_push_to_remote_does_not_raise(self, tmp_path: Path) -> None:
-        source = tmp_path / "source"
-        source.mkdir()
-        subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
-        push_to_remote("/no/such/clone", str(source), "main")  # must not raise

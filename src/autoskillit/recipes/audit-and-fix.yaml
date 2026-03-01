@@ -44,6 +44,7 @@ steps:
     capture:
       work_dir: "${{ result.clone_path }}"
       source_dir: "${{ result.source_dir }}"
+      remote_url: "${{ result.remote_url }}"
     on_success: audit
     on_failure: escalate_stop
     note: >
@@ -145,14 +146,13 @@ steps:
     tool: push_to_remote
     with:
       clone_path: "${{ context.work_dir }}"
-      source_dir: "${{ context.source_dir }}"
+      remote_url: "${{ context.remote_url }}"
       branch: "${{ inputs.base_branch }}"
     on_success: cleanup_success
     on_failure: cleanup_failure
     note: >
       Pushes the merged base_branch directly from the clone to the upstream remote.
-      Reads the remote URL from source_dir (read-only) and pushes from clone_path,
-      preserving clone isolation — source_dir is never modified.
+      Uses the pre-resolved remote_url captured at clone time, preserving clone isolation.
       On failure, cleanup_failure still removes the clone.
 
   cleanup_success:

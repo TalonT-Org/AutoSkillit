@@ -61,6 +61,7 @@ steps:
     capture:
       work_dir: "${{ result.clone_path }}"
       source_dir: "${{ result.source_dir }}"
+      remote_url: "${{ result.remote_url }}"
     on_success: capture_base_sha
     on_failure: escalate_stop
     note: >
@@ -242,7 +243,7 @@ steps:
     tool: push_to_remote
     with:
       clone_path: "${{ context.work_dir }}"
-      source_dir: "${{ context.source_dir }}"
+      remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
     on_success: cleanup_success
     on_failure: cleanup_failure
@@ -250,8 +251,7 @@ steps:
       Runs once at the end, after audit_impl passes (and after open_pr_step when applicable).
       Pushes merge_target branch from the clone to the upstream remote.
       In PR mode, this pushes the feature branch; in direct mode, pushes base_branch.
-      Reads the remote URL from source_dir (read-only) and pushes from clone_path,
-      preserving clone isolation — source_dir is never modified.
+      Uses the pre-resolved remote_url captured at clone time, preserving clone isolation.
       On failure, cleanup_failure still removes the clone.
 
   fix:

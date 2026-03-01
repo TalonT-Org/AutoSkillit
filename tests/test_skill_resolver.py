@@ -24,6 +24,7 @@ BUNDLED_SKILLS = [
     "write-recipe",
     "mermaid",
     "migrate-recipes",
+    "open-pr",
     "pipeline-summary",
     "rectify",
     "resolve-failures",

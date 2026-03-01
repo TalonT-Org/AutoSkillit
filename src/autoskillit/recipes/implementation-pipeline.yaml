@@ -1,6 +1,6 @@
 name: implementation-pipeline
 description: Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
-summary: clone > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > (audit-impl?) > merge > push > cleanup (per group, per plan part)
+summary: clone > (create_branch?) > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > (audit-impl?) > (open_pr?) > merge > push > cleanup (per group, per plan part)
 autoskillit_version: "0.2.0"
 
 ingredients:
@@ -34,6 +34,9 @@ ingredients:
   audit:
     description: Run /autoskillit:audit-impl once after all groups/parts have been merged, to check overall implementation quality and optionally trigger a remediation round (true/false)
     default: "true"
+  open_pr:
+    description: Create a feature branch and open a GitHub PR instead of merging directly into base_branch. When true, worktrees are merged into a branch named from run_name, then /autoskillit:open-pr is invoked to create the PR. (true/false)
+    default: "false"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -43,6 +46,7 @@ kitchen_rules:
   - "When make_groups is false, task input is required."
   - "When make_groups is true, source_doc input is required."
   - "Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront."
+  - "When open_pr is true, feature branch is named from inputs.run_name. All worktree merges and pushes target the feature branch (context.merge_target), not base_branch directly. The open_pr_step runs after audit_impl to create the GitHub PR."
 
 steps:
   clone:
@@ -54,12 +58,29 @@ steps:
     capture:
       work_dir: "${{ result.clone_path }}"
       source_dir: "${{ result.source_dir }}"
-    on_success: group
+    on_success: create_branch
     on_failure: escalate_stop
     note: >
       Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
       Captures work_dir context used by all subsequent steps as cwd.
       On failure, escalate_stop is reached immediately (no clone to remove).
+
+  create_branch:
+    tool: run_cmd
+    with:
+      cmd: "git checkout -b ${{ inputs.run_name }} && echo ${{ inputs.run_name }}"
+      cwd: "${{ context.work_dir }}"
+    capture:
+      merge_target: "${{ result.stdout }}"
+    on_success: group
+    on_failure: cleanup_failure
+    optional: true
+    note: >
+      Only execute if open_pr is 'true'.
+      When open_pr='true': runs git checkout -b {run_name} and captures stdout (the branch name)
+      as context.merge_target. All subsequent merge/push steps target this feature branch.
+      When open_pr='false': skip this step and set context.merge_target = inputs.base_branch
+      so that merge_worktree and push_to_remote continue to target base_branch directly.
 
   group:
     tool: run_skill
@@ -170,7 +191,7 @@ steps:
     tool: merge_worktree
     with:
       worktree_path: "${{ context.worktree_path }}"
-      base_branch: "${{ inputs.base_branch }}"
+      base_branch: "${{ context.merge_target }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
     on_success: push
@@ -180,17 +201,20 @@ steps:
       GROUPS MODE: When all plan_parts for the current group are merged, advance to the
       next group (back to plan step with the next group's description). When all groups
       are complete, go to done.
+      In PR mode (open_pr=true), merge_target is the feature branch named from run_name.
+      In direct mode (open_pr=false), merge_target equals base_branch — behavior unchanged.
 
   push:
     tool: push_to_remote
     with:
       clone_path: "${{ context.work_dir }}"
       source_dir: "${{ context.source_dir }}"
-      branch: "${{ inputs.base_branch }}"
+      branch: "${{ context.merge_target }}"
     on_success: next_or_done
     on_failure: cleanup_failure
     note: >
-      Pushes the merged base_branch directly from the clone to the upstream remote.
+      Pushes merge_target branch from the clone to the upstream remote.
+      In PR mode, this pushes the feature branch; in direct mode, pushes base_branch.
       Reads the remote URL from source_dir (read-only) and pushes from clone_path,
       preserving clone isolation — source_dir is never modified.
       On failure, cleanup_failure still removes the clone.
@@ -236,13 +260,13 @@ steps:
     on_result:
       field: verdict
       routes:
-        GO: cleanup_success
+        GO: open_pr_step
         NO GO: remediate
     on_failure: escalate_stop
     optional: true
     note: >
-      Only execute if inputs.audit is 'true'. If false, skip directly to cleanup_success.
-      Captures verdict and remediation_path. Routes GO → cleanup_success, NO GO → remediate
+      Only execute if inputs.audit is 'true'. If false, skip directly to open_pr_step.
+      Captures verdict and remediation_path. Routes GO → open_pr_step, NO GO → remediate
       which re-enters the plan step with the remediation file.
       All groups and parts have been merged at this point — no worktree exists.
       Uses context.branch_name (stable git ref) as implementation_ref so audit-impl
@@ -253,6 +277,23 @@ steps:
     with:
       remediation_path: "${{ context.remediation_path }}"
     on_success: plan
+
+  open_pr_step:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:open-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "open_pr"
+    capture:
+      pr_url: "${{ result.pr_url }}"
+    on_success: cleanup_success
+    on_failure: cleanup_failure
+    optional: true
+    note: >
+      Only execute if open_pr is 'true'. If open_pr is 'false', skip directly to cleanup_success.
+      Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
+      and runs gh pr create. Captures pr_url from the skill's output for final reporting.
+      The skill gracefully degrades if gh is unavailable (outputs empty pr_url, exits 0).
 
   cleanup_success:
     tool: remove_clone

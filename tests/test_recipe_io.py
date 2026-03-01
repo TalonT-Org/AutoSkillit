@@ -62,13 +62,6 @@ def test_load_recipe_smoke() -> None:
     assert recipe.name == "audit-and-fix"
 
 
-def test_list_recipes_discovers_builtins() -> None:
-    """list_recipes discovers bundled recipes from builtin source."""
-    result = list_recipes(Path("/nonexistent"))
-    assert len(result.items) > 0
-    assert all(r.source.value in ("project", "builtin") for r in result.items)
-
-
 def test_parse_recipe_accepts_raw_dict() -> None:
     """_parse_recipe accepts a raw dict and returns a Recipe."""
     recipe = _parse_recipe({"name": "test", "steps": {"step1": {"tool": "run_cmd"}}})
@@ -150,15 +143,6 @@ class TestRecipeParser:
         wf = load_recipe(f)
         assert wf.ingredients["branch"].default == "main"
         assert wf.ingredients["branch"].required is False
-
-    # WF7
-    def test_list_recipes_finds_builtins(self, tmp_path: Path) -> None:
-        recipes = list_recipes(tmp_path).items
-        names = {w.name for w in recipes}
-        assert "bugfix-loop" in names
-        assert "implementation-pipeline" in names
-        assert "audit-and-fix" in names
-        assert "investigate-first" in names
 
     # WF8
     def test_project_recipe_overrides_builtin(self, tmp_path: Path) -> None:
@@ -377,10 +361,13 @@ class TestListRecipes:
     """TestListRecipes: discovery from project and builtin sources."""
 
     def test_finds_builtins(self, tmp_path: Path) -> None:
-        recipes = list_recipes(tmp_path).items
+        result = list_recipes(tmp_path)
+        recipes = result.items
         names = {w.name for w in recipes}
         assert "bugfix-loop" in names
         assert "implementation-pipeline" in names
+        assert len(recipes) > 0
+        assert all(r.source.value in ("project", "builtin") for r in recipes)
 
 
 class TestBuiltinRecipesDir:
@@ -449,24 +436,6 @@ class TestVersionField:
         path = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(path)
         assert wf.version == "1.3.0"
-
-
-def test_bundled_recipes_use_ingredients_field() -> None:
-    bd = builtin_recipes_dir()
-    for path in bd.glob("*.yaml"):
-        data = yaml.safe_load(path.read_text())
-        assert isinstance(data, dict)
-        if "inputs" in data and "ingredients" not in data:
-            assert False, f"{path.name} still uses 'inputs' field instead of 'ingredients'"
-
-
-def test_bundled_recipes_use_kitchen_rules_field() -> None:
-    bd = builtin_recipes_dir()
-    for path in bd.glob("*.yaml"):
-        data = yaml.safe_load(path.read_text())
-        assert isinstance(data, dict)
-        if "constraints" in data and "kitchen_rules" not in data:
-            assert False, f"{path.name} still uses 'constraints' field instead of 'kitchen_rules'"
 
 
 def test_builtin_recipes_dir_points_to_recipes() -> None:

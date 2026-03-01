@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -34,44 +35,29 @@ def git_repo(tmp_path: Path) -> Path:
 
 
 class TestCloneRepo:
-    def test_success_creates_sibling_directory(self, git_repo: Path) -> None:
-        result = clone_repo(str(git_repo), "test")
-        clone_path = Path(result["clone_path"])
-        assert clone_path.is_dir()
-        assert (clone_path / ".git").is_dir()
-        # Cleanup
-        import shutil
-
-        shutil.rmtree(clone_path, ignore_errors=True)
-
-    def test_success_returns_expected_keys(self, git_repo: Path) -> None:
-        result = clone_repo(str(git_repo), "test")
-        assert "clone_path" in result
-        assert "source_dir" in result
-        # source_dir matches resolved git_repo
-        assert result["source_dir"] == str(git_repo.resolve())
-        import shutil
-
-        shutil.rmtree(Path(result["clone_path"]), ignore_errors=True)
-
-    def test_clone_path_name_format(self, git_repo: Path) -> None:
+    def test_success_result_and_directory_layout(self, git_repo: Path) -> None:
+        """Clone creates a sibling directory with expected keys, parent, and git repo."""
         result = clone_repo(str(git_repo), "myrun")
         clone_path = Path(result["clone_path"])
-        # Pattern: myrun-YYYYMMDD-HHMMSS-ffffff
-        assert re.match(r"myrun-\d{8}-\d{6}-\d{6}$", clone_path.name), clone_path.name
-        import shutil
+        try:
+            assert clone_path.is_dir()
+            assert (clone_path / ".git").is_dir()
+            assert "clone_path" in result
+            assert "source_dir" in result
+            assert result["source_dir"] == str(git_repo.resolve())
+            expected_parent = git_repo.parent / "autoskillit-runs"
+            assert clone_path.parent == expected_parent
+        finally:
+            shutil.rmtree(clone_path, ignore_errors=True)
 
-        shutil.rmtree(clone_path, ignore_errors=True)
-
-    def test_clone_in_autoskillit_runs_sibling(self, git_repo: Path) -> None:
-        result = clone_repo(str(git_repo), "test")
+    def test_clone_path_name_format(self, git_repo: Path) -> None:
+        """Clone directory name follows run_name-YYYYMMDD-HHMMSS-ffffff format."""
+        result = clone_repo(str(git_repo), "myrun")
         clone_path = Path(result["clone_path"])
-        # Parent must be ../autoskillit-runs relative to source
-        expected_parent = git_repo.parent / "autoskillit-runs"
-        assert clone_path.parent == expected_parent
-        import shutil
-
-        shutil.rmtree(clone_path, ignore_errors=True)
+        try:
+            assert re.match(r"myrun-\d{8}-\d{6}-\d{6}$", clone_path.name), clone_path.name
+        finally:
+            shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_invalid_source_dir_raises_value_error(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="source_dir does not exist"):

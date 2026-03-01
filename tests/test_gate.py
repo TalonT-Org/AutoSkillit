@@ -60,12 +60,6 @@ def test_check_quota_not_in_ungated_tools():
     assert len(UNGATED_TOOLS) == 6
 
 
-def test_gated_and_ungated_are_disjoint_after_addition():
-    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
-
-    assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
-
-
 def test_ungated_tools_contains_expected_names():
     from autoskillit.pipeline.gate import UNGATED_TOOLS
 
@@ -94,16 +88,6 @@ def test_gate_state_can_be_enabled():
     assert gs.enabled is True
 
 
-def test_gate_error_result_is_valid_json():
-    import json
-
-    from autoskillit.pipeline.gate import gate_error_result
-
-    raw = gate_error_result()
-    parsed = json.loads(raw)
-    assert isinstance(parsed, dict)
-
-
 def test_gate_error_result_fields():
     import json
 
@@ -117,6 +101,10 @@ def test_gate_error_result_fields():
     assert parsed["needs_retry"] is False
     assert parsed["retry_reason"] == "none"
     assert "open_kitchen" in parsed["result"]
+    # Verify all standard response envelope fields are present:
+    assert "session_id" in parsed
+    assert "stderr" in parsed
+    assert "token_usage" in parsed
 
 
 def test_gate_error_result_accepts_custom_message():

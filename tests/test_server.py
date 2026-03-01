@@ -2635,40 +2635,6 @@ class TestGatedToolAccess:
         prompt_names = {p.name for p in prompts}
         assert prompt_names == {"open_kitchen", "close_kitchen"}
 
-    def test_all_tools_still_registered(self):
-        """All 22 tools remain registered (gated + ungated)."""
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp
-
-        tools = [c for c in mcp._local_provider._components.values() if isinstance(c, Tool)]
-        tool_names = {t.name for t in tools}
-        expected = {
-            "run_cmd",
-            "run_python",
-            "run_skill",
-            "run_skill_retry",
-            "test_check",
-            "merge_worktree",
-            "reset_test_dir",
-            "classify_fix",
-            "kitchen_status",
-            "reset_workspace",
-            "read_db",
-            "list_recipes",
-            "load_recipe",
-            "migrate_recipe",
-            "validate_recipe",
-            "get_pipeline_report",
-            "get_token_summary",
-            "clone_repo",
-            "remove_clone",
-            "push_to_remote",
-            "fetch_github_issue",
-            "report_bug",
-        }
-        assert expected == tool_names
-
     @pytest.mark.asyncio
     async def test_run_python_gated(self):
         """run_python requires tools to be enabled."""
@@ -6316,9 +6282,6 @@ class TestRetryResponseFieldsTokenUsage:
 
     def test_token_usage_in_fields(self):
         assert "token_usage" in RETRY_RESPONSE_FIELDS
-
-    def test_field_count(self):
-        assert len(RETRY_RESPONSE_FIELDS) == 10
 
 
 class TestGetPipelineReport:

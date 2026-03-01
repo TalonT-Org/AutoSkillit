@@ -1999,13 +1999,20 @@ class TestImplementationPipelineStructure:
             "stable git ref to audit-impl after merge_worktree deletes the worktree"
         )
 
-    def test_ip_b2_audit_impl_uses_branch_name_as_ref(self) -> None:
-        """T_IP_B2: audit_impl with: must reference context.branch_name as implementation_ref."""
+    def test_ip_audit_impl_uses_base_sha_as_ref(self) -> None:
+        """T_IP_B2: audit_impl must use context.base_sha (not context.branch_name) as implementation_ref.
+
+        branch_name is deleted by git branch -D inside merge_worktree. A commit SHA
+        names a git object and survives unconditionally.
+        """
         step = self.recipe.steps["audit_impl"]
         skill_cmd = step.with_args.get("skill_command", "")
-        assert "context.branch_name" in skill_cmd, (
-            "audit_impl must pass context.branch_name as implementation_ref — not "
-            "context.implementation_ref or context.worktree_path (stale after merge)"
+        assert "context.base_sha" in skill_cmd, (
+            "audit_impl must use context.base_sha as implementation_ref — "
+            "context.branch_name is deleted by merge_worktree before audit_impl runs"
+        )
+        assert "context.branch_name" not in skill_cmd, (
+            "audit_impl must NOT use context.branch_name (deleted by merge_worktree)"
         )
 
     def test_ip_b3_retry_worktree_captures_branch_name(self) -> None:
@@ -2027,6 +2034,89 @@ class TestImplementationPipelineStructure:
         assert step.on_success == "test", (
             "fix step must route back to test — resolve-failures only fixes failures, "
             "it does not merge. The orchestrator must re-validate before merge_worktree."
+        )
+
+    def test_ip_base_sha_captured_before_implement(self) -> None:
+        """A1: base_sha must be captured by a step that precedes the implement loop."""
+        steps = list(self.recipe.steps.items())
+        step_names = [name for name, _ in steps]
+
+        # Find step that captures base_sha
+        sha_step = next(
+            (name for name, step in steps if step.capture and "base_sha" in step.capture),
+            None,
+        )
+        assert sha_step is not None, "No step captures base_sha"
+
+        implement_idx = next(
+            (
+                i
+                for i, (name, step) in enumerate(steps)
+                if step.tool in {"run_skill", "run_skill_retry"}
+                and "implement-worktree" in step.with_args.get("skill_command", "")
+            ),
+            None,
+        )
+        assert implement_idx is not None, "No implement step found"
+        sha_idx = step_names.index(sha_step)
+        assert sha_idx < implement_idx, (
+            f"base_sha capture step '{sha_step}' (idx {sha_idx}) must come before "
+            f"implement step (idx {implement_idx})"
+        )
+
+    def test_ip_audit_impl_uses_base_sha_not_branch_name(self) -> None:
+        """A2: audit_impl must reference context.base_sha, NOT context.branch_name."""
+        audit_step = self.recipe.steps.get("audit_impl")
+        assert audit_step is not None, "audit_impl step not found"
+        skill_cmd = audit_step.with_args.get("skill_command", "")
+        assert "context.base_sha" in skill_cmd, (
+            "audit_impl must use context.base_sha as implementation_ref"
+        )
+        assert "context.branch_name" not in skill_cmd, (
+            "audit_impl must NOT use context.branch_name (deleted by merge_worktree)"
+        )
+
+    def test_ip_merge_target_unconditionally_set(self) -> None:
+        """A3: merge_target must be captured by a non-optional step before merge/push."""
+        steps = list(self.recipe.steps.items())
+        step_names = [name for name, _ in steps]
+
+        merge_idx = step_names.index("merge") if "merge" in step_names else None
+        assert merge_idx is not None, "merge step not found"
+
+        # Find any non-optional step that captures merge_target before merge
+        unconditional_capture = next(
+            (
+                name
+                for name, step in steps[:merge_idx]
+                if step.capture and "merge_target" in step.capture and not step.optional
+            ),
+            None,
+        )
+        assert unconditional_capture is not None, (
+            "merge_target must be captured by a non-optional step before the merge step. "
+            "Currently it is only captured by the optional create_branch step, leaving it "
+            "undefined in direct mode (open_pr=false)."
+        )
+
+    def test_ip_base_sha_capture_uses_work_dir(self) -> None:
+        """A4: The base_sha capture command must reference context.work_dir."""
+        sha_step = next(
+            (step for name, step in self.recipe.steps.items() if step.capture and "base_sha" in step.capture),
+            None,
+        )
+        assert sha_step is not None, "No step captures base_sha"
+        with_args_str = str(sha_step.with_args)
+        assert "context.work_dir" in with_args_str, (
+            "base_sha capture must run inside context.work_dir (the clone directory)"
+        )
+
+    def test_ip_base_sha_used_by_audit_impl(self) -> None:
+        """A5: base_sha captured must be consumed — specifically by audit_impl."""
+        report = analyze_dataflow(self.recipe)
+        dead = {w.field for w in report.warnings if w.code == "DEAD_OUTPUT"}
+        assert "base_sha" not in dead, (
+            "base_sha is captured but never consumed — audit_impl must reference it"
         )
 
 
@@ -2470,6 +2560,30 @@ class TestSmokeTestStructure:
         """merge step with_args references context.feature_branch."""
         base_branch = smoke_yaml["steps"]["merge"]["with"]["base_branch"]
         assert "context.feature_branch" in base_branch
+
+    # A6
+    def test_smoke_feature_branch_unconditionally_set(self, smoke_yaml: dict) -> None:
+        """A6: feature_branch must be set by a non-optional step before merge."""
+        steps = smoke_yaml["steps"]
+        step_names = list(steps.keys())
+        merge_idx = next(
+            (i for i, name in enumerate(step_names) if steps[name].get("tool") == "merge_worktree"),
+            None,
+        )
+        assert merge_idx is not None, "merge step not found"
+        unconditional = next(
+            (
+                name
+                for name in step_names[:merge_idx]
+                if "feature_branch" in steps[name].get("capture", {})
+                and not steps[name].get("optional", False)
+            ),
+            None,
+        )
+        assert unconditional is not None, (
+            "feature_branch is only captured by optional create_branch. "
+            "When collect_on_branch=false, merge step receives undefined context.feature_branch."
+        )
 
 
 # ---------------------------------------------------------------------------

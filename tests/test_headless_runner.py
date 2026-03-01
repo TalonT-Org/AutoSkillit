@@ -130,3 +130,28 @@ class TestBuildSkillResult:
         )
         assert skill.success is False
         assert skill.needs_retry is True
+
+
+class TestRunHeadlessCore:
+    """Integration test for run_headless_core via the injected mock runner."""
+
+    @pytest.mark.asyncio
+    async def test_run_headless_core_returns_success_result(self, tool_ctx):
+        from autoskillit.execution.headless import run_headless_core
+
+        payload = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Task completed.",
+                "session_id": "sess-xyz",
+            }
+        )
+        tool_ctx.runner.push(
+            SubprocessResult(0, payload, "", TerminationReason.NATURAL_EXIT, pid=1)
+        )
+        result = await run_headless_core("/investigate foo", cwd="/tmp", ctx=tool_ctx)
+        assert result.success is True
+        assert result.needs_retry is False
+        assert result.result == "Task completed."

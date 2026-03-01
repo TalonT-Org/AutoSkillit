@@ -5,6 +5,7 @@ from __future__ import annotations
 from autoskillit.core import (
     AUTOSKILLIT_INSTALLED_VERSION,
     PIPELINE_FORBIDDEN_TOOLS,
+    SKILL_COMMAND_PREFIX,
     SKILL_TOOLS,
     Severity,
     get_logger,
@@ -130,6 +131,68 @@ def _check_unsatisfied_skill_input(wf: Recipe) -> list[RuleFinding]:
                                     message=msg,
                                 )
                             )
+
+    return findings
+
+
+@semantic_rule(
+    name="shadowed-required-input",
+    description=(
+        "A skill step uses inline positional text for an argument that the skill's contract "
+        "declares as required, and that argument is already available in the recipe context. "
+        "Replace the prose placeholder with ${{ context.<name> }} or ${{ inputs.<name> }}."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_shadowed_required_inputs(wf: Recipe) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+    ingredient_names = set(wf.ingredients.keys())
+
+    for step_name, step, available_context in iter_steps_with_context(wf):
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "") if step.with_args else ""
+        if not skill_cmd:
+            continue
+        # Only applies when there are positional (non-template) args.
+        # Steps with count == 0 are already handled by missing-ingredient.
+        if count_positional_args(skill_cmd) == 0:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if not skill_name:
+            continue
+        contract = get_skill_contract(skill_name, manifest)
+        if not contract:
+            continue
+
+        used_refs = extract_context_refs(step) | extract_input_refs(step)
+
+        for req_input in contract.inputs:
+            if not req_input.required:
+                continue
+            name = req_input.name
+            if name in used_refs:
+                continue  # Correctly passed as template ref
+            # Only fire when the input IS available — if it's not in context yet,
+            # the missing-ingredient rule (or runtime) will surface that separately.
+            if name not in available_context and name not in ingredient_names:
+                continue
+            findings.append(
+                RuleFinding(
+                    rule="shadowed-required-input",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' invokes /{skill_name} which requires "
+                        f"'{name}' (type: {req_input.type}), and '{name}' is available "
+                        f"in the recipe context, but the skill_command passes prose text "
+                        f"instead of the template reference. "
+                        f"Replace the prose placeholder with "
+                        f"'${{{{ context.{name} }}}}'."
+                    ),
+                )
+            )
 
     return findings
 
@@ -365,10 +428,7 @@ def _check_weak_constraint_text(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="undeclared-capture-key",
-    description=(
-        "Capture references to result.X should match keys declared in the "
-        "skill's outputs contract in skill_contracts.yaml."
-    ),
+    description="result.X captures must match skill output keys in skill_contracts.yaml",
     severity=Severity.WARNING,
 )
 def _check_capture_output_coverage(wf: Recipe) -> list[RuleFinding]:
@@ -622,10 +682,7 @@ def _check_merge_cleanup_captured(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="clone-root-as-worktree",
-    description=(
-        "test_check/merge_worktree worktree_path must not trace back to "
-        "result.clone_path — that is the clone root, not a git worktree."
-    ),
+    description="worktree_path must not trace back to result.clone_path (the clone root)",
     severity=Severity.ERROR,
 )
 def _check_clone_root_as_worktree(wf: Recipe) -> list[RuleFinding]:
@@ -707,14 +764,6 @@ def _check_plan_parts_captured(wf: Recipe) -> list[RuleFinding]:
     severity=Severity.ERROR,
 )
 def _check_unbounded_cycles(recipe: Recipe) -> list[RuleFinding]:
-    """Detect routing cycles and classify by whether they have any exit guarantee.
-
-    Severity rules:
-    - ERROR: no step in the cycle has any exit edge — the cycle is a guaranteed infinite loop.
-    - WARNING: at least one step has an exit edge (on_failure exits the SCC, or
-      retry.max_attempts + on_exhausted exits the SCC) — the cycle can terminate
-      conditionally, but relies on skill-internal discipline rather than schema enforcement.
-    """
     from autoskillit.recipe.validator import _build_step_graph  # deferred — breaks circular import
 
     graph = _build_step_graph(recipe)
@@ -853,4 +902,97 @@ def _check_stale_ref_after_merge(wf: Recipe) -> list[RuleFinding]:
         )
         for w in report.warnings
         if w.code == "REF_INVALIDATED"
+    ]
+
+
+@semantic_rule(
+    name="push-before-audit",
+    description="push_to_remote reachable without passing through audit-impl first",
+    severity=Severity.WARNING,
+)
+def _check_push_before_audit(wf: Recipe) -> list[RuleFinding]:
+    from autoskillit.recipe.validator import _build_step_graph  # deferred — breaks circular import
+
+    push_steps = {name for name, step in wf.steps.items() if step.tool == "push_to_remote"}
+    if not push_steps:
+        return []
+
+    audit_steps = {
+        name
+        for name, step in wf.steps.items()
+        if step.tool in SKILL_TOOLS and "audit-impl" in step.with_args.get("skill_command", "")
+    }
+
+    graph = _build_step_graph(wf)
+    entry = next(iter(wf.steps))
+
+    reachable_without_audit: set[str] = set()
+    queue = [entry]
+    while queue:
+        node = queue.pop()
+        if node in reachable_without_audit:
+            continue
+        reachable_without_audit.add(node)
+        if node in audit_steps:
+            continue  # barrier: do not expand beyond the first audit step on this path
+        for successor in graph.get(node, set()):
+            if successor not in reachable_without_audit:
+                queue.append(successor)
+
+    violations = sorted(push_steps & reachable_without_audit)
+    return [
+        RuleFinding(
+            rule="push-before-audit",
+            severity=Severity.WARNING,
+            step_name=name,
+            message=(
+                f"'{name}' uses push_to_remote but is reachable from the entry "
+                "point without passing through an audit-impl skill step. "
+                "Ensure audit-impl runs before any push_to_remote."
+            ),
+        )
+        for name in violations
+    ]
+
+
+@semantic_rule(
+    "skill-command-missing-prefix",
+    "run_skill/run_skill_retry step has a skill_command that does not start with '/'",
+    severity=Severity.WARNING,
+)
+def _check_skill_command_prefix(wf: Recipe) -> list[RuleFinding]:
+    findings = []
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command")
+        if skill_cmd is None:
+            continue  # absent key — fail-open
+        if not skill_cmd.strip().startswith(SKILL_COMMAND_PREFIX):
+            findings.append(
+                RuleFinding(
+                    rule="skill-command-missing-prefix",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"skill_command {skill_cmd!r} does not start with '/'. "
+                        "run_skill requires a slash-prefix (e.g. /autoskillit:investigate). "
+                        "Prose prompts bypass the skill contract and run with "
+                        "--dangerously-skip-permissions."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    "push-missing-explicit-remote-url",
+    "push_to_remote missing remote_url; implicit lookup fails for non-bare repos",
+    severity=Severity.WARNING,
+)
+def _check_push_missing_explicit_remote_url(recipe: Recipe) -> list[RuleFinding]:
+    return [
+        RuleFinding("push-missing-explicit-remote-url", Severity.WARNING, n, "missing remote_url")
+        for n, step in recipe.steps.items()
+        if step.tool == "push_to_remote" and "remote_url" not in (step.with_args or {})
     ]

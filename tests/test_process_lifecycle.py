@@ -20,7 +20,13 @@ from unittest.mock import Mock, patch
 import psutil
 import pytest
 
-from autoskillit.core.types import RetryReason, TerminationReason
+from autoskillit.core.types import (
+    ChannelConfirmation,
+    RetryReason,
+    SubprocessResult,
+    TerminationReason,
+)
+from autoskillit.execution.headless import _build_skill_result, _recover_from_separate_marker
 from autoskillit.execution.process import (
     _has_active_api_connection,
     _heartbeat,
@@ -28,13 +34,43 @@ from autoskillit.execution.process import (
     _jsonl_has_record_type,
     _marker_is_standalone,
     _session_log_monitor,
+    _wait_process_dead,
     async_kill_process_tree,
     kill_process_tree,
     pty_wrap_command,
     read_temp_output,
+    resolve_termination,
     run_managed_async,
     run_managed_sync,
+    scan_done_signals,
 )
+from autoskillit.execution.session import ClaudeSessionResult
+
+# ---------------------------------------------------------------------------
+# Module-level helpers
+# ---------------------------------------------------------------------------
+
+
+def _result_ndjson(
+    result: str = "done",
+    subtype: str = "success",
+    is_error: bool = False,
+    session_id: str = "s1",
+) -> str:
+    """Build a minimal NDJSON string with a single type=result record."""
+    import json
+
+    return json.dumps(
+        {
+            "type": "result",
+            "subtype": subtype,
+            "is_error": is_error,
+            "result": result,
+            "session_id": session_id,
+            "errors": [],
+        }
+    )
+
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
@@ -331,10 +367,44 @@ class TestProcessTreeKill:
             if ":" in line:
                 pids.append(int(line.split(":")[1]))
 
-        # All PIDs should be dead
-        await asyncio.sleep(0.5)  # Brief wait for kernel cleanup
+        # All PIDs should be dead — use _wait_process_dead to avoid the flaky
+        # asyncio.sleep(0.5) + pid_exists() pattern that races kernel cleanup.
+        # Guard: run_managed_async calls wait_procs() which reaps zombies, so the
+        # PID may already be gone by the time we construct psutil.Process(pid).
         for pid in pids:
-            assert not psutil.pid_exists(pid), f"PID {pid} should be dead"
+            try:
+                proc = psutil.Process(pid)
+            except psutil.NoSuchProcess:
+                continue  # Already reaped — the process is definitely dead
+            dead = await _wait_process_dead(proc, timeout=5.0)
+            assert dead, f"PID {pid} still alive 5s after kill"
+
+    @pytest.mark.asyncio
+    async def test_process_tree_kill_pid_dead_without_timing_assumption(self, tmp_path):
+        """Killing a process must be verifiable without a fixed sleep.
+
+        Uses _wait_process_dead() to wait for PID reaping without relying on
+        wall-clock time. This is the event-driven replacement for the pattern:
+            await asyncio.sleep(0.5)
+            assert not psutil.pid_exists(pid)
+        """
+        script = tmp_path / "hang.py"
+        script.write_text("import time\ntime.sleep(3600)\n")
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=2,
+        )
+        assert result.termination == TerminationReason.TIMED_OUT
+
+        # Guard: run_managed_async calls wait_procs() which may already reap the zombie.
+        try:
+            proc = psutil.Process(result.pid)
+            dead = await _wait_process_dead(proc, timeout=5.0)
+        except psutil.NoSuchProcess:
+            dead = True  # Already reaped — the process is definitely dead
+        assert dead, f"PID {result.pid} still alive 5s after kill"
 
 
 class TestTimeoutKillsHangingProcess:
@@ -357,9 +427,15 @@ class TestTimeoutKillsHangingProcess:
         assert result.termination == TerminationReason.TIMED_OUT
         assert elapsed < 5, f"Should return within ~2s timeout, took {elapsed:.1f}s"
         assert "before hang" in result.stdout  # Partial output captured
-        # Process should be dead
-        await asyncio.sleep(0.5)
-        assert not psutil.pid_exists(result.pid)
+        # Process should be dead — use _wait_process_dead to avoid the flaky
+        # asyncio.sleep(0.5) + pid_exists() pattern that races kernel cleanup.
+        # Guard: run_managed_async calls wait_procs() which may already reap the zombie.
+        try:
+            proc = psutil.Process(result.pid)
+            dead = await _wait_process_dead(proc, timeout=5.0)
+        except psutil.NoSuchProcess:
+            dead = True  # Already reaped — the process is definitely dead
+        assert dead, f"PID {result.pid} still alive 5s after kill"
 
 
 class TestNormalCompletion:
@@ -671,6 +747,15 @@ class TestSessionLogMonitor:
         )
         session_file.write_text(enqueue_record + "\n")
 
+        poll_count = 0
+        polls_done = asyncio.Event()
+
+        def on_poll() -> None:
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 5:
+                polls_done.set()
+
         monitor_task = asyncio.create_task(
             _session_log_monitor(
                 log_dir,
@@ -678,12 +763,14 @@ class TestSessionLogMonitor:
                 stale_threshold=30,
                 spawn_time=spawn_time,
                 _phase1_poll=0.01,
-                _phase2_poll=0.1,
+                _phase2_poll=0.05,
+                _on_poll=on_poll,
             )
         )
 
-        # Monitor should NOT fire on the enqueue record — wait for several poll cycles to confirm
-        await asyncio.sleep(0.5)
+        # Monitor should NOT fire on the enqueue record — wait for 5 confirmed poll cycles
+        # instead of a fixed sleep, which races event loop starvation under xdist -n 4
+        await asyncio.wait_for(polls_done.wait(), timeout=10.0)
         assert not monitor_task.done(), "Monitor fired on non-assistant record — false-fire bug"
 
         # Now append an assistant record with the marker — should fire
@@ -740,6 +827,15 @@ class TestSessionLogMonitor:
         )
         session_file.write_text(records_12)
 
+        poll_count = 0
+        polls_done = asyncio.Event()
+
+        def on_poll() -> None:
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 5:
+                polls_done.set()
+
         monitor_task = asyncio.create_task(
             _session_log_monitor(
                 log_dir,
@@ -747,12 +843,14 @@ class TestSessionLogMonitor:
                 stale_threshold=30,
                 spawn_time=spawn_time,
                 _phase1_poll=0.01,
-                _phase2_poll=0.1,
+                _phase2_poll=0.05,
+                _on_poll=on_poll,
             )
         )
 
-        # Wait for several poll cycles and confirm no early fire
-        await asyncio.sleep(0.5)
+        # Wait for 5 confirmed poll cycles before asserting no early fire — replaces
+        # the fixed asyncio.sleep(0.5) that races event loop starvation under xdist -n 4
+        await asyncio.wait_for(polls_done.wait(), timeout=10.0)
         assert not monitor_task.done(), "Monitor fired on user/enqueue records"
 
         # Write record 3 (assistant with marker as standalone line)
@@ -767,6 +865,72 @@ class TestSessionLogMonitor:
 
         result = await asyncio.wait_for(monitor_task, timeout=2)
         assert result == "completion"
+
+    async def test_phase1_timeout_on_missing_log_dir(self, tmp_path: Path) -> None:
+        """T4: If no JSONL file appears within _phase1_timeout seconds, return 'stale'."""
+        nonexistent_dir = tmp_path / "no_such_subdir"
+        result = await asyncio.wait_for(
+            _session_log_monitor(
+                nonexistent_dir,
+                completion_marker="%%ORDER_UP%%",
+                stale_threshold=60.0,
+                spawn_time=time.time(),
+                _phase1_poll=0.05,
+                _phase1_timeout=0.3,
+            ),
+            timeout=5.0,
+        )
+        assert result == "stale"
+
+    @pytest.mark.asyncio
+    async def test_monitor_no_fire_on_wrong_type_deterministic(self, tmp_path):
+        """Assert monitor does not fire based on confirmed poll count, not wall-clock.
+
+        Uses the _on_poll callback to count confirmed phase-2 poll iterations, then
+        asserts the monitor has not fired. This is deterministically correct regardless
+        of CPU load, replacing the wall-clock asyncio.sleep() pattern.
+        """
+        import json
+
+        log_dir = tmp_path / "session"
+        log_dir.mkdir()
+        spawn_time = time.time() - 1
+
+        marker = "%%AUTOSKILLIT_COMPLETE%%"
+        session_file = log_dir / "session.jsonl"
+        enqueue_record = json.dumps({"type": "user", "content": "hello"})
+        session_file.write_text(enqueue_record + "\n")
+
+        poll_count = 0
+        min_polls_event = asyncio.Event()
+
+        def on_poll() -> None:
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 5:
+                min_polls_event.set()
+
+        monitor_task = asyncio.create_task(
+            _session_log_monitor(
+                log_dir,
+                marker,
+                stale_threshold=30,
+                spawn_time=spawn_time,
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+                _on_poll=on_poll,
+            )
+        )
+
+        # Wait for 5 confirmed polls — regardless of wall-clock time
+        await asyncio.wait_for(min_polls_event.wait(), timeout=10.0)
+        assert not monitor_task.done(), (
+            "Monitor fired on non-assistant record after 5 confirmed polls"
+        )
+
+        monitor_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await monitor_task
 
 
 class TestJsonlContainsMarker:
@@ -846,12 +1010,22 @@ class TestHeartbeatStructuredParsing:
         )
         stdout_path.write_text(assistant_msg + "\n")
 
+        poll_count = 0
+        polls_done = asyncio.Event()
+
+        def on_poll() -> None:
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 5:
+                polls_done.set()
+
         heartbeat_task = asyncio.create_task(
-            _heartbeat(stdout_path, '"type":"result"', _poll_interval=0.05)
+            _heartbeat(stdout_path, '"type":"result"', _poll_interval=0.05, _on_poll=on_poll)
         )
 
-        # Wait for several poll cycles to confirm it doesn't fire on the assistant record
-        await asyncio.sleep(0.5)
+        # Wait for 5 confirmed poll cycles before asserting no early fire — replaces
+        # the fixed asyncio.sleep(0.5) that races event loop starvation under xdist -n 4
+        await asyncio.wait_for(polls_done.wait(), timeout=10.0)
         assert not heartbeat_task.done(), (
             "Heartbeat fired on non-result record containing marker text"
         )
@@ -1037,29 +1211,190 @@ class TestDualWinnerRace:
         assert result.termination != TerminationReason.STALE
         assert result.termination != TerminationReason.TIMED_OUT
 
+    @pytest.mark.asyncio
+    async def test_scan_done_signals_wait_and_channel_b_completion_simultaneous(self):
+        """Test 1A: scan_done_signals captures wait_task + Channel B completion
+        simultaneously in done. resolve_termination preserves CHANNEL_B signal."""
+        loop = asyncio.get_running_loop()
+        wait_future = loop.create_future()
+        wait_future.set_result(0)
+        monitor_future = loop.create_future()
+        monitor_future.set_result("completion")
+
+        proc = Mock()
+        proc.returncode = 0
+
+        done = {wait_future, monitor_future}
+        signals = scan_done_signals(done, wait_future, None, monitor_future, proc)
+
+        assert signals.process_exited is True
+        assert signals.channel_b_status == "completion"
+        assert signals.channel_a_confirmed is False
+
+        termination, channel = resolve_termination(signals)
+        assert termination == TerminationReason.NATURAL_EXIT
+        assert channel == ChannelConfirmation.CHANNEL_B
+
+    @pytest.mark.asyncio
+    async def test_scan_done_signals_wait_and_heartbeat_simultaneous(self):
+        """Test 1B: scan_done_signals captures wait_task + heartbeat_task (Channel A)
+        simultaneously in done. resolve_termination preserves CHANNEL_A signal."""
+        loop = asyncio.get_running_loop()
+        wait_future = loop.create_future()
+        wait_future.set_result(0)
+        heartbeat_future = loop.create_future()
+        heartbeat_future.set_result("completion")
+
+        proc = Mock()
+        proc.returncode = 0
+
+        done = {wait_future, heartbeat_future}
+        signals = scan_done_signals(done, wait_future, heartbeat_future, None, proc)
+
+        assert signals.process_exited is True
+        assert signals.channel_a_confirmed is True
+        assert signals.channel_b_status is None
+
+        termination, channel = resolve_termination(signals)
+        assert termination == TerminationReason.NATURAL_EXIT
+        assert channel == ChannelConfirmation.CHANNEL_A
+
+
+class TestScanDoneSignalsResolveTermination:
+    """Pure-function unit tests for scan_done_signals and resolve_termination.
+
+    Exhaustively exercises all signal combinations without subprocess involvement.
+    Uses asyncio.Future objects with pre-set results as mock tasks.
+    xdist-safe: no shared state, all state local.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "process_exited,channel_a_in_done,channel_b_result,expected_term,expected_chan",
+        [
+            # process_exited=True cases
+            (True, False, None, TerminationReason.NATURAL_EXIT, ChannelConfirmation.UNMONITORED),
+            (True, True, None, TerminationReason.NATURAL_EXIT, ChannelConfirmation.CHANNEL_A),
+            (
+                True,
+                False,
+                "completion",
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.CHANNEL_B,
+            ),
+            (
+                True,
+                True,
+                "completion",
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.CHANNEL_A,
+            ),
+            (
+                True,
+                False,
+                "stale",
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.UNMONITORED,
+            ),
+            (True, True, "stale", TerminationReason.NATURAL_EXIT, ChannelConfirmation.CHANNEL_A),
+            # process_exited=False cases
+            (False, True, None, TerminationReason.COMPLETED, ChannelConfirmation.CHANNEL_A),
+            (
+                False,
+                False,
+                "completion",
+                TerminationReason.COMPLETED,
+                ChannelConfirmation.CHANNEL_B,
+            ),
+            (
+                False,
+                True,
+                "completion",
+                TerminationReason.COMPLETED,
+                ChannelConfirmation.CHANNEL_A,
+            ),
+            (False, False, "stale", TerminationReason.STALE, ChannelConfirmation.UNMONITORED),
+            (False, True, "stale", TerminationReason.STALE, ChannelConfirmation.CHANNEL_A),
+        ],
+    )
+    async def test_resolve_termination_matrix(
+        self,
+        process_exited,
+        channel_a_in_done,
+        channel_b_result,
+        expected_term,
+        expected_chan,
+    ):
+        """Parametrized matrix: all signal combinations → correct termination/channel."""
+        loop = asyncio.get_running_loop()
+
+        wait_future = loop.create_future()
+        wait_future.set_result(0)
+
+        # Always create heartbeat_future; only add to done when channel_a_in_done=True
+        heartbeat_future = loop.create_future()
+        heartbeat_future.set_result("completion")
+
+        monitor_future = None
+        if channel_b_result is not None:
+            monitor_future = loop.create_future()
+            monitor_future.set_result(channel_b_result)
+
+        proc = Mock()
+        proc.returncode = 0 if process_exited else None
+
+        done: set = set()
+        if process_exited:
+            done.add(wait_future)
+        if channel_a_in_done:
+            done.add(heartbeat_future)
+        if channel_b_result is not None and monitor_future is not None:
+            done.add(monitor_future)
+
+        signals = scan_done_signals(done, wait_future, heartbeat_future, monitor_future, proc)
+
+        assert signals.process_exited == process_exited
+        assert signals.channel_a_confirmed == channel_a_in_done
+        assert signals.channel_b_status == channel_b_result
+
+        termination, channel = resolve_termination(signals)
+        assert termination == expected_term
+        assert channel == expected_chan
+
+
+class TestNaturalExitWithChannelConfirmation:
+    """NATURAL_EXIT + channel signals flow correctly through _build_skill_result.
+
+    Test 1C: Validates the downstream adjudication path for the combination
+    produced by the signal-accumulation fix when wait_task and session_monitor
+    both complete in the same event loop tick.
+    """
+
+    def test_natural_exit_channel_b_empty_stdout_is_success(self):
+        """NATURAL_EXIT + CHANNEL_B + empty stdout → success=True, no retry.
+
+        _compute_success: CHANNEL_B provenance bypass fires → True.
+        _compute_retry: NATURAL_EXIT + CHANNEL_B channel guard fires → (False, NONE).
+        """
+        from autoskillit.execution.headless import _build_skill_result
+
+        result = SubprocessResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result, completion_marker="", skill_command="test", audit=None
+        )
+        assert skill_result.success is True
+        assert skill_result.needs_retry is False
+
 
 class TestReadTempOutputLogging:
     """OSError during temp file read should produce a warning log."""
-
-    @pytest.fixture(autouse=True)
-    def _sync_process_logger(self):
-        """Sync only process.logger._processors with the current structlog config.
-
-        Scoped to this test class only — no cross-module mutation.
-        """
-        import structlog
-
-        import autoskillit.execution.process as proc_mod
-
-        structlog.reset_defaults()
-        current_procs = structlog.get_config()["processors"]
-        old_procs = getattr(proc_mod.logger, "_processors", None)
-        if old_procs is not None:
-            proc_mod.logger._processors = current_procs
-        yield
-        structlog.reset_defaults()
-        if old_procs is not None:
-            proc_mod.logger._processors = old_procs
 
     def test_oserror_logs_warning(self):
         """OSError during temp file read should produce a warning log."""
@@ -1628,11 +1963,11 @@ class TestChannelBDrainWait:
         assert result.stdout.strip()  # Channel A confirmed: stdout is non-empty
 
     @pytest.mark.asyncio
-    async def test_data_confirmed_false_set_on_drain_timeout(self, tmp_path):
+    async def test_channel_b_drain_timeout_produces_channel_b_confirmation(self, tmp_path):
         """Channel B wins the race; drain timeout expires without Channel A confirming.
 
-        Verifies that SubprocessResult.data_confirmed is False when the bounded
-        drain wait times out — i.e. Channel A never confirmed stdout data.
+        Verifies that SubprocessResult.channel_confirmation is CHANNEL_B when the
+        bounded drain wait times out — i.e. Channel A never confirmed stdout data.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -1652,14 +1987,14 @@ class TestChannelBDrainWait:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        assert result.data_confirmed is False
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
     @pytest.mark.asyncio
-    async def test_data_confirmed_true_when_channel_a_wins(self, tmp_path):
-        """Channel A (heartbeat) wins; data_confirmed must be True.
+    async def test_channel_a_wins_produces_channel_a_confirmation(self, tmp_path):
+        """Channel A (heartbeat) wins; channel_confirmation must be CHANNEL_A.
 
         When the heartbeat fires before Channel B (or with no Channel B),
-        data availability is guaranteed and data_confirmed must remain True.
+        data availability is guaranteed and channel_confirmation must be CHANNEL_A.
         """
         script = tmp_path / "result_hang.py"
         script.write_text(WRITE_RESULT_THEN_HANG_SCRIPT)
@@ -1674,7 +2009,7 @@ class TestChannelBDrainWait:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        assert result.data_confirmed is True
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A
 
     @pytest.mark.asyncio
     async def test_channel_b_then_a_empty_result_data_confirmed_is_false(self, tmp_path):
@@ -1702,7 +2037,42 @@ class TestChannelBDrainWait:
             _heartbeat_poll=0.05,
         )
         assert result.termination == TerminationReason.COMPLETED
-        assert result.data_confirmed is False  # FAILS before fix: True
+        assert (
+            result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        )  # FAILS before fix: UNMONITORED (was True)
+
+    @pytest.mark.asyncio
+    async def test_channel_b_no_heartbeat_produces_channel_b_confirmation(self, tmp_path):
+        """T3: When heartbeat is disabled and Channel B fires, channel_confirmation=CHANNEL_B.
+
+        Without this fix, _data_confirmed was left True (now: UNMONITORED) and empty
+        stdout caused needs_retry=True on what was a successful completion.
+
+        Sequence:
+          heartbeat_marker=""  → heartbeat disabled (no Channel A task)
+          session_log_dir set  → Channel B active
+          script writes JSONL marker but NO stdout
+          Channel B fires → else branch (heartbeat_task is None) → must set CHANNEL_B
+        """
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        script = tmp_path / "channel_b_no_stdout.py"
+        script.write_text(CHANNEL_B_NO_STDOUT_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script), str(session_dir)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker="",  # heartbeat disabled
+            session_log_dir=session_dir,
+            completion_marker="%%ORDER_UP%%",
+            completion_drain_timeout=0.5,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
+        )
+
+        assert result.termination == TerminationReason.COMPLETED
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
 
 class TestChannelBFullPipelineAdjudication:
@@ -1712,7 +2082,7 @@ class TestChannelBFullPipelineAdjudication:
     async def test_channel_b_then_a_empty_result_produces_success(self, tmp_path):
         """Full end-to-end: Channel B fires, CLI writes type=result with result="".
 
-        With strengthened Channel A, data_confirmed=False, provenance bypass fires.
+        With strengthened Channel A, channel_confirmation=CHANNEL_B, provenance bypass fires.
         Result: success=True, needs_retry=False (no wasteful retry of completed session).
         """
         from autoskillit.execution.headless import _build_skill_result
@@ -1906,15 +2276,15 @@ class TestChannelBDrainRacePipelineAdjudication:
 
     Uses the existing CHANNEL_B_NO_STDOUT_SCRIPT: session monitor fires, drain expires,
     process is killed with empty stdout. _build_skill_result must apply the Channel B
-    provenance bypass (data_confirmed=False → success=True without calling _compute_success).
+    provenance bypass (channel_confirmation=CHANNEL_B → success=True via Gate 0.5).
     """
 
     @pytest.mark.asyncio
     async def test_channel_b_drain_timeout_produces_success_skill_result(self, tmp_path):
-        """COMPLETED + data_confirmed=False + empty stdout → success=True, needs_retry=False.
+        """COMPLETED + channel_confirmation=CHANNEL_B + empty stdout → success=True.
 
         Channel B provenance bypass: when session monitor wins and drain expires,
-        _build_skill_result returns success=True immediately, bypassing _compute_success.
+        _build_skill_result returns success=True via Gate 0.5 in _compute_success.
         """
         from autoskillit.execution.headless import _build_skill_result
 
@@ -1936,7 +2306,7 @@ class TestChannelBDrainRacePipelineAdjudication:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        assert result.data_confirmed is False
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
         skill_result = _build_skill_result(
             result,
@@ -1978,7 +2348,7 @@ class TestSTOPDelayPipelineAdjudication:
 
         assert result.termination == TerminationReason.NATURAL_EXIT
         assert result.returncode == 0
-        assert result.data_confirmed is True
+        assert result.channel_confirmation == ChannelConfirmation.UNMONITORED
 
         skill_result = _build_skill_result(
             result,
@@ -2177,7 +2547,10 @@ class TestAdjudicationCoverageMatrix:
     See core/types.py _TERMINATION_CONTRACT for the per-reason semantic invariants.
     """
 
-    COVERED_BY_INTEGRATION_TESTS: frozenset = frozenset(
+    # Split into two constants for bidirectional coverage checks (T5).
+    # COVERED_TERMINATION_REASONS: TerminationReason → TestXxxPipelineAdjudication mapping
+    # INTEGRATION_TEST_CLASS_NAMES: the actual test class names (backward direction)
+    COVERED_TERMINATION_REASONS: frozenset = frozenset(
         {
             TerminationReason.COMPLETED,  # TestChannelBDrainRacePipelineAdjudication
             TerminationReason.NATURAL_EXIT,  # TestSTOPDelayPipelineAdjudication
@@ -2185,14 +2558,173 @@ class TestAdjudicationCoverageMatrix:
             TerminationReason.TIMED_OUT,  # TestTimedOutPipelineAdjudication
         }
     )
+    INTEGRATION_TEST_CLASS_NAMES: frozenset = frozenset(
+        {
+            "TestChannelBDrainRacePipelineAdjudication",
+            "TestSTOPDelayPipelineAdjudication",
+            "TestStaleRecoveryPipelineAdjudication",
+            "TestTimedOutPipelineAdjudication",
+        }
+    )
 
     def test_all_termination_reasons_have_integration_coverage(self):
         all_reasons = frozenset(TerminationReason)
-        uncovered = all_reasons - self.COVERED_BY_INTEGRATION_TESTS
+        uncovered = all_reasons - self.COVERED_TERMINATION_REASONS
         assert not uncovered, (
             f"TerminationReason values with no subprocess integration test "
             f"crossing run_managed_async → _build_skill_result boundary: "
             f"{uncovered}. "
             f"Add a TestXxxPipelineAdjudication class in test_process_lifecycle.py "
-            f"and add the value to COVERED_BY_INTEGRATION_TESTS."
+            f"and add the value to COVERED_TERMINATION_REASONS."
         )
+
+    def test_coverage_matrix_classes_exist_in_this_module(self):
+        """T5 backward direction: all listed test class names must actually exist.
+
+        Prevents removing a test class while leaving its name in
+        INTEGRATION_TEST_CLASS_NAMES — a silent gap in coverage tracking.
+        """
+        import inspect
+        import sys as _sys
+
+        this_module = _sys.modules[__name__]
+        existing_classes = frozenset(
+            name for name, obj in inspect.getmembers(this_module, inspect.isclass)
+        )
+        orphaned = self.INTEGRATION_TEST_CLASS_NAMES - existing_classes
+        assert not orphaned, (
+            f"Listed in INTEGRATION_TEST_CLASS_NAMES but class not found: {orphaned}. "
+            f"Either restore the class or remove it from the constant."
+        )
+
+
+class TestRecoverFromSeparateMarker:
+    """_recover_from_separate_marker must use standalone-line semantics."""
+
+    def test_t3_does_not_fire_on_marker_in_prose(self) -> None:
+        """T3: marker embedded in prose must not trigger recovery.
+
+        Regression: before fix, substring check caused _recover_from_separate_marker
+        to fire when the model mentioned the marker in a sentence, producing a
+        false-positive success result.
+        """
+        session = ClaudeSessionResult(
+            subtype="stale",
+            is_error=True,
+            result="",
+            session_id="test",
+            assistant_messages=["I will emit %%ORDER_UP%% when done"],
+        )
+        recovered = _recover_from_separate_marker(session, "%%ORDER_UP%%")
+        assert recovered is None, (
+            "Recovery should not fire when marker appears only in prose, not as standalone line"
+        )
+
+    def test_t3_fires_on_standalone_marker(self) -> None:
+        """T3: recovery must fire when the marker appears as a standalone line."""
+        session = ClaudeSessionResult(
+            subtype="stale",
+            is_error=True,
+            result="",
+            session_id="test",
+            assistant_messages=["I have completed the task.\n%%ORDER_UP%%"],
+        )
+        recovered = _recover_from_separate_marker(session, "%%ORDER_UP%%")
+        assert recovered is not None, (
+            "Recovery should fire when marker appears as a standalone line"
+        )
+
+    def test_t3_does_not_fire_when_no_messages(self) -> None:
+        """T3: recovery returns None when there are no assistant messages."""
+        session = ClaudeSessionResult(
+            subtype="stale",
+            is_error=True,
+            result="",
+            session_id="test",
+            assistant_messages=[],
+        )
+        recovered = _recover_from_separate_marker(session, "%%ORDER_UP%%")
+        assert recovered is None
+
+
+# ---------------------------------------------------------------------------
+# Adjudication guards — integration through _build_skill_result
+# ---------------------------------------------------------------------------
+
+
+class TestAdjudicationGuards:
+    """Verify _build_skill_result guards prevent impossible (success, needs_retry) states.
+
+    These integration tests exercise the composition guards added to _build_skill_result.
+    They fail before the guards are implemented and pass after.
+    """
+
+    def test_channel_a_empty_result_not_dead_end(self) -> None:
+        """CHANNEL_A + empty result: dead-end guard escalates to retriable."""
+        result = SubprocessResult(
+            returncode=0,
+            stdout=_result_ndjson(subtype="success", result=""),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="",
+            skill_command="/test",
+            audit=None,
+        )
+        # Must not be a dead end — guard must escalate to retriable
+        assert skill_result.success or skill_result.needs_retry, (
+            f"Dead end: success={skill_result.success}, needs_retry={skill_result.needs_retry}"
+        )
+        assert skill_result.needs_retry is True
+        assert skill_result.retry_reason == RetryReason.RESUME
+
+    def test_channel_b_max_turns_no_contradiction(self) -> None:
+        """CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""
+        result = SubprocessResult(
+            returncode=0,
+            stdout=_result_ndjson(subtype="error_max_turns", result="partial", is_error=True),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="",
+            skill_command="/test",
+            audit=None,
+        )
+        # Must not be contradictory — contradiction guard must set success=False
+        assert not (skill_result.success and skill_result.needs_retry), (
+            f"Contradiction: success={skill_result.success}, "
+            f"needs_retry={skill_result.needs_retry}"
+        )
+        assert skill_result.needs_retry is True
+        assert skill_result.success is False
+
+    def test_completed_channel_b_max_turns_no_contradiction(self) -> None:
+        """COMPLETED + CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""
+        result = SubprocessResult(
+            returncode=-15,
+            stdout=_result_ndjson(subtype="error_max_turns", result="partial", is_error=True),
+            stderr="",
+            termination=TerminationReason.COMPLETED,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="",
+            skill_command="/test",
+            audit=None,
+        )
+        assert not (skill_result.success and skill_result.needs_retry), (
+            f"Contradiction: success={skill_result.success}, "
+            f"needs_retry={skill_result.needs_retry}"
+        )
+        assert skill_result.needs_retry is True
+        assert skill_result.success is False

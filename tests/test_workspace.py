@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.workspace import CleanupResult, _delete_directory_contents
 from autoskillit.workspace.clone import (
+    classify_remote_url,
     clone_repo,
     detect_branch,
     detect_source_dir,
@@ -264,7 +265,7 @@ class TestPushToRemote:
         with patch("subprocess.run", side_effect=[mock_url, mock_push]) as mock_run:
             result = push_to_remote("/clone", "/source", "main")
 
-        assert result == {"success": "true", "stderr": ""}
+        assert result == {"success": True, "stderr": ""}
         # First call: git remote get-url origin from source_dir
         first_call = mock_run.call_args_list[0]
         assert first_call[0][0] == ["git", "remote", "get-url", "origin"]
@@ -284,6 +285,98 @@ class TestPushToRemote:
         with patch("subprocess.run", return_value=mock_fail) as mock_run:
             result = push_to_remote("/clone", "/source", "main")
 
-        assert result["success"] == "false"
+        assert result["success"] is False
         assert "origin" in result["stderr"]
         assert mock_run.call_count == 1  # no push attempted
+
+    def test_t1_failure_returns_boolean_false(self) -> None:
+        """T1: push_to_remote failure must return boolean False, not string 'false'."""
+        mock_fail = MagicMock()
+        mock_fail.returncode = 1
+        mock_fail.stdout = ""
+        mock_fail.stderr = "no remote"
+        with patch("subprocess.run", return_value=mock_fail):
+            result = push_to_remote("/clone", "/source", "main")
+        typ = type(result["success"]).__name__
+        assert result["success"] is False, (
+            f"Expected boolean False, got {result['success']!r} ({typ})"
+        )
+
+    def test_t1_success_returns_boolean_true(self) -> None:
+        """T1: push_to_remote success must return boolean True, not string 'true'."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
+        mock_push = MagicMock()
+        mock_push.returncode = 0
+        mock_push.stderr = ""
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+            result = push_to_remote("/clone", "/source", "main")
+        typ = type(result["success"]).__name__
+        assert result["success"] is True, (
+            f"Expected boolean True, got {result['success']!r} ({typ})"
+        )
+
+
+class TestClassifyRemoteUrl:
+    """classify_remote_url correctly identifies remote URL types."""
+
+    @pytest.mark.parametrize(
+        "url,expected_type",
+        [
+            ("git@github.com:org/repo.git", "network"),
+            ("https://github.com/org/repo.git", "network"),
+            ("ssh://git@github.com/org/repo.git", "network"),
+            ("http://example.com/repo.git", "network"),
+            ("git://github.com/org/repo.git", "network"),
+            ("file:///tmp/repo.git", "network"),
+        ],
+    )
+    def test_network_urls(self, url: str, expected_type: str) -> None:
+        result = classify_remote_url(url)
+        assert result == expected_type
+
+    def test_bare_local_path(self, tmp_path: Path) -> None:
+        import subprocess
+
+        bare = tmp_path / "repo.git"
+        subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+        result = classify_remote_url(str(bare))
+        assert result == "bare_local"
+
+    def test_nonbare_local_path(self, tmp_path: Path) -> None:
+        import subprocess
+
+        repo = tmp_path / "repo"
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        result = classify_remote_url(str(repo))
+        assert result == "nonbare_local"
+
+    def test_empty_string_returns_none_type(self) -> None:
+        result = classify_remote_url("")
+        assert result == "none"
+
+    def test_nonexistent_path_returns_unknown(self, tmp_path: Path) -> None:
+        result = classify_remote_url(str(tmp_path / "nonexistent"))
+        assert result == "unknown"
+
+
+@pytest.mark.parametrize(
+    "fn,args",
+    [
+        (push_to_remote, ("/clone", "/source", "main")),
+    ],
+)
+def test_t2_tool_success_field_is_boolean(fn, args) -> None:
+    """T2: All workspace functions returning {'success': ...} must use bool, not string."""
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_proc.stdout = ""
+    mock_proc.stderr = "simulated failure"
+    with patch("subprocess.run", return_value=mock_proc):
+        result = fn(*args)
+    if "success" in result:
+        assert isinstance(result["success"], bool), (
+            f"{fn.__name__} returned success={result['success']!r}, expected bool"
+        )

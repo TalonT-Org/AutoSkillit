@@ -27,6 +27,7 @@ from autoskillit.core import SkillResult
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     RETRY_RESPONSE_FIELDS,
+    ChannelConfirmation,
     MergeFailedStep,
     MergeState,
     RestartScope,
@@ -63,6 +64,7 @@ from autoskillit.server.prompts import _close_kitchen_handler, _open_kitchen_han
 from autoskillit.server.tools_clone import clone_repo, push_to_remote, remove_clone
 from autoskillit.server.tools_execution import run_cmd, run_python, run_skill, run_skill_retry
 from autoskillit.server.tools_git import classify_fix, merge_worktree
+from autoskillit.server.tools_integrations import fetch_github_issue
 from autoskillit.server.tools_recipe import (
     list_recipes,
     load_recipe,
@@ -86,16 +88,24 @@ def _make_result(
     stdout: str = "",
     stderr: str = "",
     termination_reason: TerminationReason = TerminationReason.NATURAL_EXIT,
-    data_confirmed: bool = True,
+    channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
+    # Legacy: data_confirmed=False → CHANNEL_B, data_confirmed=True → UNMONITORED
+    data_confirmed: bool | None = None,
 ):
     """Create a SubprocessResult for mocking run_managed_async."""
+    if data_confirmed is not None:
+        channel_confirmation = (
+            ChannelConfirmation.CHANNEL_B
+            if not data_confirmed
+            else ChannelConfirmation.UNMONITORED
+        )
     return SubprocessResult(
         returncode=returncode,
         stdout=stdout,
         stderr=stderr,
         termination=termination_reason,
         pid=12345,
-        data_confirmed=data_confirmed,
+        channel_confirmation=channel_confirmation,
     )
 
 
@@ -379,8 +389,29 @@ class TestClassifyFix:
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert "error" in result
-        assert "git diff failed" in result["error"]
+        # New behavior: all git diff failures fall back to FULL_RESTART
+        assert result["restart_scope"] == RestartScope.FULL_RESTART
+        assert "git error" in result["reason"].lower()
+
+    @pytest.mark.asyncio
+    async def test_classify_fix_returns_full_restart_when_ref_missing(
+        self, tool_ctx, tmp_path: Path
+    ) -> None:
+        """classify_fix returns FULL_RESTART when origin/<base_branch> ref is absent."""
+        wt = tmp_path / "wt"
+        wt.mkdir()
+
+        # git diff fails — ref doesn't exist
+        tool_ctx.runner.push(
+            _make_result(128, "", "fatal: ambiguous argument 'origin/feature/local-only'")
+        )
+
+        result = json.loads(await classify_fix(str(wt), "feature/local-only"))
+
+        # Must return restart_scope (not an error dict) — recipe routing depends on this key
+        assert "restart_scope" in result
+        assert result["restart_scope"] == RestartScope.FULL_RESTART
+        assert "feature/local-only" in result["reason"]
 
     @pytest.mark.asyncio
     async def test_critical_path_in_diff_triggers_full_restart(self, tool_ctx):
@@ -590,6 +621,7 @@ class TestMergeWorktree:
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ref check (5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
         tool_ctx.runner.push(
             _make_result(
@@ -619,6 +651,7 @@ class TestMergeWorktree:
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ref check (5.5)
         tool_ctx.runner.push(_make_result(1, "", "CONFLICT (content): ..."))  # git rebase FAILS
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase --abort
         result = json.loads(await merge_worktree(str(wt), "main"))
@@ -708,6 +741,7 @@ class TestToolRegistration:
             validate_recipe,
             get_pipeline_report,
             get_token_summary,
+            fetch_github_issue,
         ]:
             doc = tool_fn.__doc__ or ""
             assert "no MCP" in doc or "no progress notification" in doc.lower(), (
@@ -1004,6 +1038,262 @@ class TestRecipeTools:
         findings = [s for s in result["suggestions"] if s.get("rule") == "validation-error"]
         assert findings, "Expected at least one validation-error finding"
         assert "Invalid recipe structure: injected crash" == findings[0]["message"]
+
+    # SRV-T1: stale-contract suggestions are suppressed when triage returns all cosmetic
+    @pytest.mark.asyncio
+    async def test_load_recipe_suppresses_stale_when_triage_cosmetic(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool_ctx
+    ) -> None:
+        """Stale-contract suggestions are suppressed when all triage results are cosmetic."""
+        from autoskillit.core.types import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        monkeypatch.chdir(tmp_path)
+        recipe_file = tmp_path / "test.yaml"
+        recipe_file.write_text("name: test")
+
+        stale_sugg = {
+            "rule": "stale-contract",
+            "severity": "warning",
+            "step": "make-plan",
+            "skill": "make-plan",
+            "reason": "hash_mismatch",
+            "stored_value": "sha256:" + "a" * 64,
+            "current_value": "sha256:" + "b" * 64,
+            "message": "Contract is stale",
+        }
+        mock_repo = MagicMock()
+        mock_repo.load_and_validate.return_value = {
+            "content": "name: test",
+            "suggestions": [stale_sugg],
+            "valid": True,
+        }
+        mock_repo.find.return_value = RecipeInfo(
+            name="test", description="Test", source=RecipeSource.PROJECT, path=recipe_file
+        )
+        tool_ctx.recipes = mock_repo
+
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.read_staleness_cache", lambda *a, **kw: None
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.write_staleness_cache", lambda *a, **kw: None
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.compute_recipe_hash",
+            lambda *a: "sha256:" + "b" * 64,
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.load_bundled_manifest",
+            lambda: {"version": "0.2.0"},
+        )
+        monkeypatch.setattr(
+            "autoskillit._llm_triage.triage_staleness",
+            AsyncMock(
+                return_value=[{"skill": "make-plan", "meaningful": False, "summary": "cosmetic"}]
+            ),
+        )
+
+        result = json.loads(await load_recipe(name="test"))
+        stale_items = [
+            s for s in result.get("suggestions", []) if s.get("rule") == "stale-contract"
+        ]
+        assert not stale_items, "Cosmetic stale suggestions must be suppressed"
+
+    # SRV-T2: stale-contract suggestions are preserved when triage returns meaningful
+    @pytest.mark.asyncio
+    async def test_load_recipe_preserves_stale_when_triage_meaningful(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool_ctx
+    ) -> None:
+        """Stale-contract suggestions are preserved when triage returns meaningful."""
+        from autoskillit.core.types import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        monkeypatch.chdir(tmp_path)
+        recipe_file = tmp_path / "test.yaml"
+        recipe_file.write_text("name: test")
+
+        stale_sugg = {
+            "rule": "stale-contract",
+            "severity": "warning",
+            "step": "make-plan",
+            "skill": "make-plan",
+            "reason": "hash_mismatch",
+            "stored_value": "sha256:" + "a" * 64,
+            "current_value": "sha256:" + "b" * 64,
+            "message": "Contract is stale",
+        }
+        mock_repo = MagicMock()
+        mock_repo.load_and_validate.return_value = {
+            "content": "name: test",
+            "suggestions": [stale_sugg],
+            "valid": True,
+        }
+        mock_repo.find.return_value = RecipeInfo(
+            name="test", description="Test", source=RecipeSource.PROJECT, path=recipe_file
+        )
+        tool_ctx.recipes = mock_repo
+
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.read_staleness_cache", lambda *a, **kw: None
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.write_staleness_cache", lambda *a, **kw: None
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.compute_recipe_hash",
+            lambda *a: "sha256:" + "b" * 64,
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.load_bundled_manifest",
+            lambda: {"version": "0.2.0"},
+        )
+        monkeypatch.setattr(
+            "autoskillit._llm_triage.triage_staleness",
+            AsyncMock(
+                return_value=[{"skill": "make-plan", "meaningful": True, "summary": "meaningful"}]
+            ),
+        )
+
+        result = json.loads(await load_recipe(name="test"))
+        stale_items = [
+            s for s in result.get("suggestions", []) if s.get("rule") == "stale-contract"
+        ]
+        assert len(stale_items) == 1, "Meaningful stale suggestions must be preserved"
+
+    # SRV-T3: triage_staleness is NOT called when triage_result="cosmetic" already cached
+    @pytest.mark.asyncio
+    async def test_load_recipe_uses_cached_cosmetic_without_subprocess(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool_ctx
+    ) -> None:
+        """triage_staleness subprocess is not spawned when cosmetic result is cached."""
+        from autoskillit.core.types import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+        from autoskillit.recipe.staleness_cache import StalenessEntry
+
+        monkeypatch.chdir(tmp_path)
+        recipe_file = tmp_path / "test.yaml"
+        recipe_file.write_text("name: test")
+
+        stale_sugg = {
+            "rule": "stale-contract",
+            "severity": "warning",
+            "step": "make-plan",
+            "skill": "make-plan",
+            "reason": "hash_mismatch",
+            "stored_value": "sha256:" + "a" * 64,
+            "current_value": "sha256:" + "b" * 64,
+            "message": "Contract is stale",
+        }
+        mock_repo = MagicMock()
+        mock_repo.load_and_validate.return_value = {
+            "content": "name: test",
+            "suggestions": [stale_sugg],
+            "valid": True,
+        }
+        mock_repo.find.return_value = RecipeInfo(
+            name="test", description="Test", source=RecipeSource.PROJECT, path=recipe_file
+        )
+        tool_ctx.recipes = mock_repo
+
+        cached_entry = StalenessEntry(
+            recipe_hash="sha256:" + "b" * 64,
+            manifest_version="0.2.0",
+            is_stale=True,
+            triage_result="cosmetic",
+            checked_at="2026-01-01T00:00:00+00:00",
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.read_staleness_cache",
+            lambda *a, **kw: cached_entry,
+        )
+
+        mock_triage = AsyncMock()
+        monkeypatch.setattr("autoskillit._llm_triage.triage_staleness", mock_triage)
+
+        result = json.loads(await load_recipe(name="test"))
+        stale_items = [
+            s for s in result.get("suggestions", []) if s.get("rule") == "stale-contract"
+        ]
+        assert not stale_items, "Cached cosmetic result must suppress stale suggestions"
+        mock_triage.assert_not_called()
+
+    # SRV-T4: version_mismatch stale items are never filtered (always shown as meaningful)
+    @pytest.mark.asyncio
+    async def test_load_recipe_preserves_version_mismatch_suggestions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool_ctx
+    ) -> None:
+        """version_mismatch stale suggestions are preserved even when hash items are cosmetic."""
+        from autoskillit.core.types import RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        monkeypatch.chdir(tmp_path)
+        recipe_file = tmp_path / "test.yaml"
+        recipe_file.write_text("name: test")
+
+        # Both a hash_mismatch (cosmetic) and a version_mismatch suggestion
+        hash_sugg = {
+            "rule": "stale-contract",
+            "severity": "warning",
+            "step": "make-plan",
+            "skill": "make-plan",
+            "reason": "hash_mismatch",
+            "stored_value": "sha256:" + "a" * 64,
+            "current_value": "sha256:" + "b" * 64,
+            "message": "Contract is stale: hash",
+        }
+        version_sugg = {
+            "rule": "stale-contract",
+            "severity": "warning",
+            "step": "(manifest)",
+            "skill": "(manifest)",
+            "reason": "version_mismatch",
+            "stored_value": "0.1.0",
+            "current_value": "0.2.0",
+            "message": "Contract is stale: version",
+        }
+        mock_repo = MagicMock()
+        mock_repo.load_and_validate.return_value = {
+            "content": "name: test",
+            "suggestions": [hash_sugg, version_sugg],
+            "valid": True,
+        }
+        mock_repo.find.return_value = RecipeInfo(
+            name="test", description="Test", source=RecipeSource.PROJECT, path=recipe_file
+        )
+        tool_ctx.recipes = mock_repo
+
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.read_staleness_cache", lambda *a, **kw: None
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.write_staleness_cache", lambda *a, **kw: None
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.compute_recipe_hash",
+            lambda *a: "sha256:" + "b" * 64,
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.helpers.load_bundled_manifest",
+            lambda: {"version": "0.2.0"},
+        )
+        # Triage says the hash_mismatch item is cosmetic
+        monkeypatch.setattr(
+            "autoskillit._llm_triage.triage_staleness",
+            AsyncMock(
+                return_value=[{"skill": "make-plan", "meaningful": False, "summary": "cosmetic"}]
+            ),
+        )
+
+        result = json.loads(await load_recipe(name="test"))
+        stale_items = [
+            s for s in result.get("suggestions", []) if s.get("rule") == "stale-contract"
+        ]
+        assert len(stale_items) > 0, (
+            "version_mismatch suggestions must be preserved even when hash items are cosmetic"
+        )
+        reasons = {s["reason"] for s in stale_items}
+        assert "version_mismatch" in reasons
 
 
 class TestContractMigrationAdapterValidate:
@@ -2578,18 +2868,22 @@ class TestMergeWorktreeNoBypass:
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
 
     @pytest.mark.asyncio
-    async def test_gate_failure_does_not_expose_summary(self, tool_ctx, tmp_path):
-        """When gate blocks, response contains no test output details."""
+    async def test_gate_failure_exposes_test_output(self, tool_ctx, tmp_path):
+        """When gate blocks, response must include test output for orchestrator diagnosis."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
-        tool_ctx.runner.push(_make_result(1, "= 3 failed, 97 passed =", ""))  # test-check
+        tool_ctx.runner.push(
+            _make_result(1, "FAILED test_x::test_foo\n= 3 failed, 97 passed =", "")
+        )  # test-check
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
-        assert "test_summary" not in result
+        assert "test_output" in result
+        assert "3 failed" in result["test_output"]
+        assert "test_x" in result["test_output"]
 
 
 class TestGatedToolAccess:
@@ -3225,6 +3519,7 @@ class TestSafetyConfigWiring:
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
         # NO test-check call — skipped
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ref check (5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
         tool_ctx.runner.push(
             _make_result(
@@ -3305,6 +3600,7 @@ class TestMergeWorktreeCleanupReporting:
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ref check (5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
         tool_ctx.runner.push(
             _make_result(
@@ -3334,6 +3630,7 @@ class TestMergeWorktreeCleanupReporting:
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ref check (5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
         tool_ctx.runner.push(
             _make_result(
@@ -3382,6 +3679,7 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ref check (5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
@@ -3411,6 +3709,7 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ref check (5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
@@ -3438,6 +3737,7 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ref check (5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
@@ -3457,6 +3757,69 @@ class TestMergeWorktreeCleanupWarnings:
             if entry.get("log_level") == "warning" and "cleanup" in str(entry.get("event", ""))
         ]
         assert cleanup_warnings == []
+
+
+# ---------------------------------------------------------------------------
+# Remote tracking ref guard
+# ---------------------------------------------------------------------------
+
+
+class TestMergeWorktreeRemoteTrackingGuard:
+    """merge_worktree diagnoses unpublished base branch after fetch."""
+
+    @pytest.mark.asyncio
+    async def test_merge_worktree_diagnoses_unpublished_base_branch(
+        self, tool_ctx: object, tmp_path: Path
+    ) -> None:
+        """merge_worktree returns BASE_NOT_PUBLISHED error when ref is absent after fetch."""
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))  # rev-parse
+        tool_ctx.runner.push(_make_result(stdout="impl/task-01"))  # branch --show-current
+        tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))  # test check
+        tool_ctx.runner.push(_make_result())  # git fetch origin
+        # Step 5.5: ref check fails — branch not on remote
+        tool_ctx.runner.push(
+            _make_result(returncode=128, stderr="fatal: Needed a single revision")
+        )
+
+        result = json.loads(await merge_worktree(str(wt), "feature/local-only"))
+
+        assert result["failed_step"] == "rebase"
+        assert result["state"] == "worktree_intact_base_not_published"
+        assert "feature/local-only" in result["error"]
+        assert "push" in result["error"].lower()
+        assert result["worktree_path"] == str(wt)
+
+    @pytest.mark.asyncio
+    async def test_merge_worktree_fatal_invalid_upstream_produces_rebase_aborted(
+        self, tool_ctx: object, tmp_path: Path
+    ) -> None:
+        """Regression: git rebase fatal: invalid upstream is caught as rebase failure."""
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))
+        tool_ctx.runner.push(_make_result(stdout="impl/task-01"))
+        tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))  # test gate
+        tool_ctx.runner.push(_make_result())  # fetch
+        tool_ctx.runner.push(_make_result())  # ref check passes
+        # Rebase fails with fatal: invalid upstream (bypassed guard scenario)
+        tool_ctx.runner.push(
+            _make_result(
+                returncode=128, stderr="fatal: invalid upstream 'origin/feature/local-only'"
+            )
+        )
+        tool_ctx.runner.push(_make_result())  # rebase --abort
+
+        result = json.loads(await merge_worktree(str(wt), "feature/local-only"))
+
+        assert result["failed_step"] == "rebase"
+        assert result["state"] == "worktree_intact_rebase_aborted"
+        assert "invalid upstream" in result["stderr"]
 
 
 # ---------------------------------------------------------------------------
@@ -6647,17 +7010,21 @@ class TestStalePathStdoutCheck:
 class TestBuildSkillResultDataConfirmedPropagation:
     """_build_skill_result propagates data_confirmed for provenance bypass."""
 
-    def test_stale_recovery_propagates_data_confirmed(self):
-        """STALE recovery with data_confirmed=False engages provenance bypass.
+    def test_stale_recovery_channel_a_with_valid_stdout_succeeds(self):
+        """STALE + CHANNEL_A + valid stdout → recovered_from_stale.
 
-        When STALE recovery re-routes through _compute_success with COMPLETED,
-        data_confirmed=False from the SubprocessResult must be propagated so
-        the provenance bypass can engage if stdout is empty.
+        When stale monitor fires simultaneously with heartbeat (CHANNEL_A),
+        the stale recovery path succeeds via the stdout content check.
+        CHANNEL_A guarantees stdout has valid type=result content, so
+        can_attempt_stale_recovery passes and _compute_success returns True.
         """
         result = _make_result(
-            stdout="",
+            stdout=(
+                '{"type":"result","subtype":"success",'
+                '"result":"task done %%ORDER_UP%%","is_error":false,"session_id":"s1"}'
+            ),
             termination_reason=TerminationReason.STALE,
-            data_confirmed=False,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
         )
         skill_result = _build_skill_result(
             result,
@@ -6665,8 +7032,8 @@ class TestBuildSkillResultDataConfirmedPropagation:
             skill_command="cmd",
             audit=None,
         )
-        # Provenance bypass should fire in STALE recovery; success=True
-        assert skill_result.success is True  # FAILS before fix: False
+        assert skill_result.success is True
+        assert skill_result.subtype == "recovered_from_stale"
 
     def test_stale_recovery_data_confirmed_true_preserves_existing_behavior(self):
         """STALE with empty stdout and data_confirmed=True (default) stays False."""
@@ -6727,6 +7094,28 @@ class TestBuildSkillResultDataConfirmedPropagation:
         )
         assert skill_result.success is False
         assert skill_result.needs_retry is True
+
+    # T4: ChannelConfirmation enum version of the provenance bypass test
+    def test_channel_b_no_heartbeat_produces_success(self):
+        """T4 regression: Channel B wins with no heartbeat → success=True, not retry.
+
+        When heartbeat is disabled and Channel B fires, channel_confirmation=CHANNEL_B.
+        _build_skill_result must not demand stdout content — Channel B is authoritative.
+        """
+        result = _make_result(
+            stdout="",
+            returncode=-15,
+            termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="cmd",
+            audit=None,
+        )
+        assert skill_result.success is True
+        assert skill_result.needs_retry is False
 
 
 class TestServerLazyInit:
@@ -7230,11 +7619,110 @@ class TestPushToRemoteTool:
 
     @pytest.mark.asyncio
     async def test_returns_error_key_when_push_fails(self, tool_ctx):
-        mock_mgr = MagicMock()
-        mock_mgr.push_to_remote.return_value = {"success": "false", "stderr": "remote rejected"}
-        tool_ctx.clone_mgr = mock_mgr
-        result = json.loads(
-            await push_to_remote(clone_path="/clone", source_dir="/src", branch="main")
-        )
+        with patch(
+            "autoskillit.workspace.clone.push_to_remote",
+            return_value={"success": False, "stderr": "remote rejected"},
+        ):
+            result = json.loads(
+                await push_to_remote(clone_path="/clone", source_dir="/src", branch="main")
+            )
         assert "error" in result
         assert "remote rejected" in result["stderr"]
+
+
+class TestMergeWorktreeStateGuards:
+    """Explicit pre-condition guards and diagnostic state forwarding in perform_merge."""
+
+    @pytest.mark.asyncio
+    async def test_detects_detached_head_before_operations(self, tool_ctx, tmp_path):
+        """git branch --show-current returning '' must be caught immediately at Stage 3."""
+        fake_wt = tmp_path / "wt"
+        fake_wt.mkdir()
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/impl\n", ""))  # rev-parse
+        tool_ctx.runner.push(
+            _make_result(0, "\n", "")
+        )  # branch --show-current: empty (detached HEAD)
+        # No further calls — gate fires at Stage 3
+
+        result = json.loads(await merge_worktree(str(fake_wt), "main"))
+
+        assert "error" in result
+        assert result["failed_step"] == MergeFailedStep.BRANCH_DETECTION
+        assert result["state"] == MergeState.WORKTREE_INTACT
+        assert "detached" in result["error"].lower()
+        # Verify test-check was NOT invoked: only rev-parse + branch were called
+        assert len(tool_ctx.runner.call_args_list) == 2
+
+    @pytest.mark.asyncio
+    async def test_gate_failure_includes_test_output(self, tool_ctx, tmp_path):
+        """test_stdout discard must be removed — orchestrators need to see which tests failed."""
+        fake_wt = tmp_path / "wt"
+        fake_wt.mkdir()
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/impl\n", ""))
+        tool_ctx.runner.push(_make_result(0, "feat/my-branch\n", ""))
+        tool_ctx.runner.push(
+            _make_result(1, "FAILED test_x::test_foo\n= 3 failed, 97 passed =", "")
+        )  # test-check fails
+
+        result = json.loads(await merge_worktree(str(fake_wt), "main"))
+
+        assert result["failed_step"] == MergeFailedStep.TEST_GATE
+        assert "test_output" in result
+        assert "3 failed" in result["test_output"]
+        assert "test_x" in result["test_output"]
+
+    @pytest.mark.asyncio
+    async def test_rebase_abort_failure_yields_dirty_state(self, tool_ctx, tmp_path):
+        """Claiming WORKTREE_INTACT_REBASE_ABORTED when abort failed is a lie."""
+        fake_wt = tmp_path / "wt"
+        fake_wt.mkdir()
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/impl\n", ""))
+        tool_ctx.runner.push(_make_result(0, "feat/my-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "= 1979 passed =", ""))  # test-check passes
+        tool_ctx.runner.push(_make_result(0, "", ""))  # fetch succeeds
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ref check passes
+        tool_ctx.runner.push(_make_result(1, "", "CONFLICT: file.py"))  # rebase fails
+        tool_ctx.runner.push(_make_result(128, "", "fatal: no rebase in progress"))  # abort FAILS
+
+        result = json.loads(await merge_worktree(str(fake_wt), "main"))
+
+        assert result["failed_step"] == MergeFailedStep.REBASE
+        assert result["state"] == MergeState.WORKTREE_DIRTY_ABORT_FAILED
+        assert result.get("abort_failed") is True
+
+    @pytest.mark.asyncio
+    async def test_rebase_abort_success_yields_intact_state(self, tool_ctx, tmp_path):
+        """Happy path: abort_rc=0 keeps the clean-state claim."""
+        fake_wt = tmp_path / "wt"
+        fake_wt.mkdir()
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/impl\n", ""))
+        tool_ctx.runner.push(_make_result(0, "feat/my-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "= 1979 passed =", ""))  # test passes
+        tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ref check
+        tool_ctx.runner.push(_make_result(1, "", "CONFLICT"))  # rebase fails
+        tool_ctx.runner.push(_make_result(0, "", ""))  # abort succeeds
+
+        result = json.loads(await merge_worktree(str(fake_wt), "main"))
+
+        assert result["failed_step"] == MergeFailedStep.REBASE
+        assert result["state"] == MergeState.WORKTREE_INTACT_REBASE_ABORTED
+        assert result.get("abort_failed") is None
+
+    @pytest.mark.asyncio
+    async def test_detects_rebase_in_progress_via_rebase_merge_dir(self, tool_ctx, tmp_path):
+        """rebase-merge/ directory presence is detected before running tests."""
+        fake_git_dir = tmp_path / ".git" / "worktrees" / "impl"
+        fake_git_dir.mkdir(parents=True)
+        (fake_git_dir / "rebase-merge").mkdir()
+        fake_worktree = tmp_path / "worktree"
+        fake_worktree.mkdir()
+
+        tool_ctx.runner.push(_make_result(0, str(fake_git_dir) + "\n", ""))  # rev-parse
+        tool_ctx.runner.push(_make_result(0, "feat/my-branch\n", ""))  # branch
+
+        result = json.loads(await merge_worktree(str(fake_worktree), "main"))
+
+        assert "error" in result
+        assert result["state"] == MergeState.WORKTREE_DIRTY_MID_OPERATION
+        assert "rebase" in result["error"].lower()

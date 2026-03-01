@@ -195,6 +195,7 @@ def install(*, scope: str = "user"):
     settings_path = _claude_settings_path(scope)
     _register_quota_hook(settings_path)
     _register_remove_clone_guard_hook(settings_path)
+    _register_skill_command_guard_hook(settings_path)
     _print_next_steps()
 
 
@@ -258,6 +259,46 @@ def _register_remove_clone_guard_hook(settings_path: Path) -> None:
             entry.get("hooks", [{}])[0].get("command") == COMMAND
         ):
             return  # already registered
+
+    pretooluse.append(
+        {
+            "matcher": MATCHER,
+            "hooks": [{"type": "command", "command": COMMAND}],
+        }
+    )
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(settings_path, json.dumps(data, indent=2))
+
+
+def _register_skill_command_guard_hook(settings_path: Path) -> None:
+    """Idempotently add the skill_command_guard PreToolUse hook to .claude/settings.json."""
+    from autoskillit.core import _atomic_write
+
+    data: dict = {}
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    hooks = data.setdefault("hooks", {})
+    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
+
+    MATCHER = "mcp__.*autoskillit.*__run_skill.*"
+    COMMAND = "python3 -m autoskillit.hooks.skill_command_guard"
+
+    # Check if COMMAND is already present in any existing hook entry
+    for entry in pretooluse:
+        if any(h.get("command") == COMMAND for h in entry.get("hooks", [])):
+            return  # already registered
+
+    # Add to existing run_skill matcher entry if one exists, else create a new entry
+    for entry in pretooluse:
+        if entry.get("matcher") == MATCHER:
+            entry["hooks"].append({"type": "command", "command": COMMAND})
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write(settings_path, json.dumps(data, indent=2))
+            return
 
     pretooluse.append(
         {

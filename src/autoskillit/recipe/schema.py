@@ -72,6 +72,7 @@ class RecipeInfo:
     path: Path
     summary: str = ""
     version: str | None = None
+    content: str | None = None  # raw YAML text; None when set via parse_recipe_metadata
 
 
 @dataclass

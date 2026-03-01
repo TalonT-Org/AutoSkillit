@@ -445,3 +445,28 @@ class TestSourceIsolationContract:
         assert self._SENTINEL in doc, (
             "autoskillit.workspace.clone module docstring must contain 'SOURCE ISOLATION'"
         )
+
+
+class TestPathArgSkillsContract:
+    """Path-argument skills must document path-detection parsing in their SKILL.md."""
+
+    PATH_ARG_SKILLS = [
+        "implement-worktree-no-merge",
+        "implement-worktree",
+        "retry-worktree",
+        "resolve-failures",
+    ]
+    SENTINEL = "path detection"
+
+    def test_path_arg_skills_have_path_detection_instructions(self):
+        skills_root = _project_root() / "src" / "autoskillit" / "skills"
+        missing = []
+        for skill_name in self.PATH_ARG_SKILLS:
+            skill_md = skills_root / skill_name / "SKILL.md"
+            content = skill_md.read_text().lower()
+            if self.SENTINEL not in content:
+                missing.append(skill_name)
+        assert not missing, (
+            f"These SKILL.md files lack path-detection instructions "
+            f"(missing '{self.SENTINEL}'): {missing}"
+        )

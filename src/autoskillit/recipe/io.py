@@ -159,7 +159,11 @@ def _collect_recipes(
     for f in sorted(directory.iterdir()):
         if f.suffix in (".yaml", ".yml") and f.is_file():
             try:
-                recipe = load_recipe(f)
+                raw = f.read_text(encoding="utf-8")
+                data = load_yaml(raw)
+                if not isinstance(data, dict):
+                    raise ValueError("recipe must be a YAML mapping")
+                recipe = _parse_recipe(data)
                 if recipe.name and recipe.name not in seen:
                     seen.add(recipe.name)
                     result.append(
@@ -170,6 +174,7 @@ def _collect_recipes(
                             path=f,
                             summary=recipe.summary,
                             version=recipe.version,
+                            content=raw,
                         )
                     )
             except Exception as exc:

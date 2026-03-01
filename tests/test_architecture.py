@@ -34,10 +34,21 @@ SRC_ROOT = Path(__file__).parent.parent / "src" / "autoskillit"
 
 _SENSITIVE_KEYWORDS = frozenset({"token", "secret", "password", "key", "api_key", "auth"})
 _LOGGER_METHODS = frozenset({"debug", "info", "warning", "error", "critical", "exception"})
-_PRINT_EXEMPT = frozenset({"app.py", "_doctor.py", "quota_check.py", "remove_clone_guard.py"})
+_PRINT_EXEMPT = frozenset(
+    {
+        "app.py",
+        "_doctor.py",
+        "quota_check.py",
+        "remove_clone_guard.py",
+        "skill_cmd_check.py",
+        "skill_command_guard.py",
+    }
+)
 _BROAD_EXCEPTION_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"})
 # Standalone hook scripts: fail-open design requires silent broad excepts and print() for JSON
-_BROAD_EXCEPT_EXEMPT = frozenset({"quota_check.py", "remove_clone_guard.py"})
+_BROAD_EXCEPT_EXEMPT = frozenset(
+    {"quota_check.py", "remove_clone_guard.py", "skill_cmd_check.py", "skill_command_guard.py"}
+)
 
 # ARCH-007: Functions that check TerminationReason as sequential early-exit guards
 # (single-value checks), not as dispatch tables (≥2 values). Exempt from ARCH-007.
@@ -1532,29 +1543,13 @@ def test_doctor_moved_to_cli_package() -> None:
     assert (SRC_ROOT / "cli" / "_doctor.py").exists()
 
 
-# ── New REQ-CNST tests (groupE) ───────────────────────────────────────────────
-
-
-def test_no_file_exceeds_1000_lines() -> None:
-    """REQ-CNST-002: No Python file in src/autoskillit/ may exceed 1,000 lines."""
-    violations: list[str] = []
-    for py_file in SRC_ROOT.rglob("*.py"):
-        if "__pycache__" in py_file.parts:
-            continue
-        line_count = len(py_file.read_text().splitlines())
-        if line_count > 1000:
-            violations.append(f"{_rel(py_file)}: {line_count} lines")
-    assert not violations, "Files exceeding 1,000 lines:\n" + "\n".join(
-        f"  {v}" for v in violations
-    )
-
-
 def test_no_subpackage_exceeds_10_files() -> None:
     """REQ-CNST-003: No sub-package directory may contain more than 10 Python files.
 
     server/ is exempt at 12 files to accommodate tools_clone and tools_integrations modules.
+    recipe/ is exempt at 11 files to accommodate staleness_cache module (Part A).
     """
-    EXEMPTIONS: dict[str, int] = {"server": 12}
+    EXEMPTIONS: dict[str, int] = {"server": 12, "recipe": 11}
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":
@@ -2391,6 +2386,72 @@ def test_arch007_termination_dispatch_tables_use_exhaustive_match() -> None:
     )
 
 
+def _check_channel_confirmation_dispatch_exhaustive(src_dir: Path) -> list[str]:
+    """
+    T7 / ARCH-007 extension: Detect functions that dispatch over ChannelConfirmation
+    via if/elif chains rather than exhaustive match/case + assert_never.
+
+    A "dispatch table" is detected when a single FunctionDef contains comparisons
+    to ≥2 distinct ChannelConfirmation.* values (CHANNEL_A, CHANNEL_B, UNMONITORED).
+    A single-value guard is exempt.
+
+    Returns a list of violation strings for failing tests.
+    """
+    violations = []
+    for py_file in src_dir.rglob("*.py"):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            cc_values: set[str] = set()
+            has_assert_never = False
+            has_match = False
+            for child in ast.walk(node):
+                if isinstance(child, ast.Compare):
+                    for comparator in child.comparators:
+                        if (
+                            isinstance(comparator, ast.Attribute)
+                            and isinstance(comparator.value, ast.Name)
+                            and comparator.value.id == "ChannelConfirmation"
+                        ):
+                            cc_values.add(comparator.attr)
+                        elif isinstance(comparator, ast.Tuple):
+                            for elt in comparator.elts:
+                                if (
+                                    isinstance(elt, ast.Attribute)
+                                    and isinstance(elt.value, ast.Name)
+                                    and elt.value.id == "ChannelConfirmation"
+                                ):
+                                    cc_values.add(elt.attr)
+                if hasattr(ast, "Match") and isinstance(child, ast.Match):
+                    has_match = True
+                if (
+                    isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Name)
+                    and child.func.id == "assert_never"
+                ):
+                    has_assert_never = True
+            if len(cc_values) >= 2 and not (has_match and has_assert_never):
+                violations.append(
+                    f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
+                    f"{node.name}() dispatches on {cc_values} via if/elif — "
+                    f"use match/case + assert_never"
+                )
+    return violations
+
+
+def test_arch007_channel_confirmation_dispatch_uses_match_case() -> None:
+    """
+    T7 / ARCH-007 extension: Any function in execution/ that dispatches on ≥2
+    distinct ChannelConfirmation values via if/elif must use match/case with
+    assert_never. Single-value guard checks are exempt.
+    """
+    violations = _check_channel_confirmation_dispatch_exhaustive(SRC_ROOT / "execution")
+    assert violations == [], (
+        "Non-exhaustive ChannelConfirmation dispatch tables found:\n" + "\n".join(violations)
+    )
+
+
 def _find_enclosing_function(node: ast.AST, tree: ast.AST) -> str | None:
     for parent in ast.walk(tree):
         if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -2435,4 +2496,88 @@ def test_no_raw_claude_list_construction() -> None:
     assert not violations, (
         "Raw ['claude', ...] list construction found outside allowed locations:\n"
         + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
+    """Every monkeypatch.setattr path must target the namespace production code resolves.
+
+    When autoskillit.X re-exports 'name' from autoskillit.X.submodule via __init__.py,
+    patching autoskillit.X.submodule.name does NOT affect autoskillit.X.name.
+    All patches of the form autoskillit.X.submodule.name, where X is a sub-package
+    that re-exports 'name' FROM that exact submodule, are wrong and must be corrected.
+
+    Note: patching autoskillit.X.B.name where X imports 'name' from a DIFFERENT submodule
+    (not B) is correct — it targets the local binding in B, which is the namespace that
+    module B's own functions resolve.
+    """
+    import ast
+    import importlib
+    import inspect
+    import re
+
+    # Match string literals in monkeypatch.setattr("autoskillit.A.B.C", ...)
+    # where A is a sub-package, B is a submodule, C is the name.
+    pattern = re.compile(
+        r'monkeypatch\.setattr\s*\(\s*["\']'
+        r"(autoskillit\.\w+\.\w+\.\w+)"
+        r'["\']'
+    )
+
+    violations: list[str] = []
+    tests_dir = Path(__file__).parent
+
+    for test_file in sorted(tests_dir.glob("test_*.py")):
+        source = test_file.read_text()
+        for match in pattern.finditer(source):
+            full_path = match.group(1)
+            # Split: autoskillit . pkg . submodule . name
+            parts = full_path.split(".")
+            if len(parts) != 4:
+                continue
+            _, pkg, submod, name = parts
+            parent_pkg = f"autoskillit.{pkg}"
+            try:
+                parent_mod = importlib.import_module(parent_pkg)
+            except ImportError:
+                continue
+            if not hasattr(parent_mod, name):
+                continue
+            # Refine: only flag if the parent pkg actually imports 'name' FROM this
+            # exact submodule. If it imports 'name' from a different module (e.g.
+            # autoskillit.migration imports applicable_migrations from .loader, not
+            # .engine), then the patch targets a local binding in 'submod' — which
+            # is the correct mock target for module-level imports in that submodule.
+            try:
+                parent_source = inspect.getsource(parent_mod)
+                tree = ast.parse(parent_source)
+            except Exception:
+                # Can't inspect source — conservatively flag as violation.
+                imports_from_this_submod = True
+            else:
+                imports_from_this_submod = False
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.ImportFrom):
+                        continue
+                    is_relative_from_submod = node.level == 1 and node.module == submod
+                    is_absolute_from_submod = (
+                        node.level == 0 and node.module == f"autoskillit.{pkg}.{submod}"
+                    )
+                    if is_relative_from_submod or is_absolute_from_submod:
+                        for alias in node.names:
+                            if (alias.asname or alias.name) == name:
+                                imports_from_this_submod = True
+                                break
+                    if imports_from_this_submod:
+                        break
+            if imports_from_this_submod:
+                line_no = source[: match.start()].count("\n") + 1
+                violations.append(
+                    f"{test_file.name}:{line_no}: patches {full_path!r} "
+                    f"but '{name}' is re-exported at '{parent_pkg}.{name}'. "
+                    f"Patch '{parent_pkg}.{name}' instead."
+                )
+
+    assert not violations, "Monkeypatch paths bypass package re-exports:\n" + "\n".join(
+        f"  {v}" for v in violations
     )

@@ -736,6 +736,84 @@ def test_unsatisfied_input_inline_positional_args_skipped() -> None:
     assert not any(f.rule == "missing-ingredient" for f in findings)
 
 
+def test_shadowed_required_input_triggers_for_prose_plan_path() -> None:
+    """ERROR when plan_path is in context but passed as prose to implement-worktree-no-merge."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "plan": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:make-plan the task"},
+                capture={"plan_path": "${{ result.plan_path }}"},
+                on_success="implement",
+            ),
+            "implement": RecipeStep(
+                tool="run_skill_retry",
+                with_args={"skill_command": "/autoskillit:implement-worktree-no-merge the plan"},
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        kitchen_rules=["test"],
+    )
+    findings = run_semantic_rules(wf)
+    errors = [f for f in findings if f.rule == "shadowed-required-input"]
+    assert len(errors) == 1
+    assert errors[0].step_name == "implement"
+    assert "plan_path" in errors[0].message
+
+
+def test_shadowed_required_input_clean_when_template_used() -> None:
+    """No finding when ${{ context.plan_path }} is correctly used."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "plan": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:make-plan the task"},
+                capture={"plan_path": "${{ result.plan_path }}"},
+                on_success="implement",
+            ),
+            "implement": RecipeStep(
+                tool="run_skill_retry",
+                with_args={
+                    "skill_command": (
+                        "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+                    )
+                },
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        kitchen_rules=["test"],
+    )
+    findings = run_semantic_rules(wf)
+    errors = [f for f in findings if f.rule == "shadowed-required-input"]
+    assert errors == []
+
+
+def test_shadowed_required_input_clean_when_not_yet_in_context() -> None:
+    """No finding when plan_path has not been captured yet — not a shadowing error."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "implement": RecipeStep(
+                tool="run_skill_retry",
+                with_args={"skill_command": "/autoskillit:implement-worktree-no-merge the plan"},
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        kitchen_rules=["test"],
+    )
+    findings = run_semantic_rules(wf)
+    errors = [f for f in findings if f.rule == "shadowed-required-input"]
+    assert errors == []  # plan_path not in context → shadowed-required-input does not fire
+
+
 def test_retry_worktree_cwd_inputs_triggers_error() -> None:
     """retry-worktree step with cwd=inputs.* fires retry-worktree-cwd ERROR."""
     wf = _make_workflow(
@@ -953,6 +1031,23 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
         assert undeclared_findings == [], (
             f"Recipe '{wf.name}' has undeclared-capture-key findings: " + repr(undeclared_findings)
         )
+
+
+def test_bundled_recipes_have_no_shadowed_required_inputs() -> None:
+    """All bundled recipe YAML files must pass the shadowed-required-input rule."""
+    wf_dir = builtin_recipes_dir()
+    yaml_files = list(wf_dir.glob("*.yaml"))
+    assert yaml_files
+
+    for path in yaml_files:
+        wf = load_recipe(path)
+        findings = run_semantic_rules(wf)
+        errors = [
+            f
+            for f in findings
+            if f.rule == "shadowed-required-input" and f.severity == Severity.ERROR
+        ]
+        assert errors == [], f"Recipe {path.name} has shadowed-required-input errors: {errors}"
 
 
 class TestOutdatedScriptVersionRule:
@@ -2087,6 +2182,17 @@ class TestImplementationPipelineStructure:
         assert "base_sha" not in dead, (
             "base_sha is captured but never consumed — audit_impl must reference it"
         )
+
+    def test_ip_push_after_audit_no_violation(self) -> None:
+        """T_IP_PBA: fixed implementation-pipeline.yaml must not trigger push-before-audit.
+
+        After the fix, push_to_remote is only reachable via:
+          next_or_done(all_done) → audit_impl → open_pr_step → push
+        so every execution path through push passes through audit_impl first.
+        """
+        findings = run_semantic_rules(self.recipe)
+        violations = [f for f in findings if f.rule == "push-before-audit"]
+        assert violations == []
 
 
 # ---------------------------------------------------------------------------
@@ -3231,3 +3337,250 @@ class TestOnRetryField:
         assert any(
             "cycle" in f.message.lower() or "unbounded" in f.message.lower() for f in errors
         )
+
+
+# ---------------------------------------------------------------------------
+# Semantic rule: push-before-audit (PPB1–PPB3)
+# ---------------------------------------------------------------------------
+
+
+class TestPushBeforeAuditRule:
+    def test_ppb1_audit_before_push_no_finding(self) -> None:
+        """PPB1: audit-impl runs before push_to_remote — no warning emitted."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "audit"},
+                "audit": {
+                    "tool": "run_skill",
+                    "on_success": "push",
+                    "with": {"skill_command": "/autoskillit:audit-impl plan.md", "cwd": "/tmp"},
+                },
+                "push": {
+                    "tool": "push_to_remote",
+                    "on_success": "done",
+                    "with": {
+                        "clone_path": "/tmp/clone",
+                        "source_dir": "/tmp/src",
+                        "branch": "main",
+                    },
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "push-before-audit"]
+        assert findings == []
+
+    def test_ppb2_push_before_audit_fires_warning(self) -> None:
+        """PPB2: push_to_remote is reachable without any audit-impl step → WARNING."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "push"},
+                "push": {
+                    "tool": "push_to_remote",
+                    "on_success": "done",
+                    "with": {
+                        "clone_path": "/tmp/clone",
+                        "source_dir": "/tmp/src",
+                        "branch": "main",
+                    },
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "push-before-audit"]
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.WARNING
+        assert findings[0].step_name == "push"
+
+    def test_ppb3_no_push_step_no_finding(self) -> None:
+        """PPB3: recipe has no push_to_remote step — rule is silent."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "push-before-audit"]
+        assert findings == []
+
+
+# ---------------------------------------------------------------------------
+# skill-command-missing-prefix rule tests
+# ---------------------------------------------------------------------------
+
+
+class TestSkillCommandMissingPrefixRule:
+    """Tests for the skill-command-missing-prefix semantic rule."""
+
+    def test_scp1_prose_run_skill_warns(self) -> None:
+        """SCP1: run_skill with prose skill_command → WARNING finding."""
+        wf = _make_workflow(
+            {
+                "step": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "Fix the auth bug in main.py", "cwd": "/tmp"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert any(
+            f.rule == "skill-command-missing-prefix" and f.severity == Severity.WARNING
+            for f in findings
+        ), "Expected skill-command-missing-prefix WARNING for prose skill_command"
+
+    def test_scp2_prose_run_skill_retry_warns(self) -> None:
+        """SCP2: run_skill_retry with prose skill_command → WARNING finding."""
+        wf = _make_workflow(
+            {
+                "step": {
+                    "tool": "run_skill_retry",
+                    "with": {"skill_command": "Investigate the bug", "cwd": "/tmp"},
+                    "on_success": "done",
+                    "on_failure": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert any(f.rule == "skill-command-missing-prefix" for f in findings)
+
+    def test_scp3_autoskillit_prefix_no_warning(self) -> None:
+        """SCP3: /autoskillit:investigate → no skill-command-missing-prefix warning."""
+        wf = _make_workflow(
+            {
+                "step": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:investigate error", "cwd": "/tmp"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert not any(f.rule == "skill-command-missing-prefix" for f in findings)
+
+    def test_scp4_bare_slash_local_skill_no_warning(self) -> None:
+        """SCP4: /audit-arch (local skill, starts with /) → no warning."""
+        wf = _make_workflow(
+            {
+                "step": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/audit-arch", "cwd": "/tmp"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert not any(f.rule == "skill-command-missing-prefix" for f in findings)
+
+    def test_scp5_dynamic_prefix_no_warning(self) -> None:
+        """SCP5: /audit-${{ inputs.audit_type }} → no warning (starts with /)."""
+        wf = _make_workflow(
+            {
+                "step": {
+                    "tool": "run_skill",
+                    "with": {
+                        "skill_command": "/audit-${{ inputs.audit_type }}",
+                        "cwd": "/tmp",
+                    },
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert not any(f.rule == "skill-command-missing-prefix" for f in findings)
+
+    def test_scp6_non_skill_tool_no_warning(self) -> None:
+        """SCP6: run_cmd step (not run_skill) → rule does not fire."""
+        wf = _make_workflow(
+            {
+                "step": {
+                    "tool": "run_cmd",
+                    "with": {"cmd": "ls -la", "cwd": "/tmp"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert not any(f.rule == "skill-command-missing-prefix" for f in findings)
+
+
+class TestPushMissingExplicitRemoteUrl:
+    """push-missing-explicit-remote-url rule fires when push_to_remote lacks remote_url."""
+
+    def test_warns_when_push_to_remote_has_no_remote_url(self) -> None:
+        """Rule fires when push_to_remote step has source_dir but no remote_url."""
+        recipe = _make_workflow(
+            {
+                "clone": {
+                    "tool": "clone_repo",
+                    "with": {"source_dir": "${{ inputs.source_dir }}", "run_name": "test"},
+                    "capture": {
+                        "work_dir": "${{ result.clone_path }}",
+                        "source_dir": "${{ result.source_dir }}",
+                    },
+                    "on_success": "push",
+                },
+                "push": {
+                    "tool": "push_to_remote",
+                    "with": {
+                        "clone_path": "${{ context.work_dir }}",
+                        "source_dir": "${{ context.source_dir }}",
+                        "branch": "main",
+                    },
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(recipe)
+        rule_names = [f.rule for f in findings]
+        assert "push-missing-explicit-remote-url" in rule_names
+
+    def test_no_warning_when_explicit_remote_url_provided(self) -> None:
+        """Rule is silent when push_to_remote step includes an explicit remote_url."""
+        recipe = _make_workflow(
+            {
+                "clone": {
+                    "tool": "clone_repo",
+                    "with": {"source_dir": "${{ inputs.source_dir }}", "run_name": "test"},
+                    "capture": {
+                        "work_dir": "${{ result.clone_path }}",
+                        "source_dir": "${{ result.source_dir }}",
+                        "remote_url": "${{ result.remote_url }}",
+                    },
+                    "on_success": "push",
+                },
+                "push": {
+                    "tool": "push_to_remote",
+                    "with": {
+                        "clone_path": "${{ context.work_dir }}",
+                        "remote_url": "${{ context.remote_url }}",
+                        "branch": "main",
+                    },
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(recipe)
+        rule_names = [f.rule for f in findings]
+        assert "push-missing-explicit-remote-url" not in rule_names
+
+    def test_no_finding_when_no_push_to_remote_step(self) -> None:
+        """Rule is silent when recipe has no push_to_remote step."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [
+            f for f in run_semantic_rules(recipe) if f.rule == "push-missing-explicit-remote-url"
+        ]
+        assert findings == []

@@ -12,6 +12,7 @@ import structlog
 
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
+    ChannelConfirmation,
     RetryReason,
     TerminationReason,
 )
@@ -536,6 +537,75 @@ class TestComputeSuccess:
         s = _make_success_session("Task complete.")
         assert _compute_success(s, 0, TerminationReason.NATURAL_EXIT) is True
 
+    # T1: ChannelConfirmation-aware tests
+    def test_channel_b_bypasses_content_check(self):
+        """CHANNEL_B: provenance bypass fires even with empty result."""
+        s = _make_success_session(result="")  # empty result
+        assert (
+            _compute_success(
+                s,
+                returncode=-15,
+                termination=TerminationReason.COMPLETED,
+                channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            )
+            is True
+        )
+
+    def test_channel_a_falls_through_to_content_check(self):
+        """CHANNEL_A: no bypass — empty content → failure."""
+        s = _make_success_session(result="")  # empty result
+        assert (
+            _compute_success(
+                s,
+                returncode=-15,
+                termination=TerminationReason.COMPLETED,
+                channel_confirmation=ChannelConfirmation.CHANNEL_A,
+            )
+            is False
+        )
+
+    def test_unmonitored_falls_through_to_content_check(self):
+        """UNMONITORED: no bypass — delegates to normal content gates."""
+        s = _make_success_session(result="done %%ORDER_UP%%")
+        assert (
+            _compute_success(
+                s,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker="%%ORDER_UP%%",
+                channel_confirmation=ChannelConfirmation.UNMONITORED,
+            )
+            is True
+        )
+
+    def test_natural_exit_channel_b_empty_result_true(self):
+        """Test 1D part 1: NATURAL_EXIT + CHANNEL_B: provenance bypass fires
+        before termination dispatch → True even with empty result."""
+        s = _make_success_session(result="")
+        assert (
+            _compute_success(
+                s,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            )
+            is True
+        )
+
+    def test_natural_exit_channel_a_valid_result_true(self):
+        """Test 1D part 2: NATURAL_EXIT + CHANNEL_A + valid content → True.
+        Falls through to content check (no bypass for CHANNEL_A); content passes."""
+        s = _make_success_session(result="valid output")
+        assert (
+            _compute_success(
+                s,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                channel_confirmation=ChannelConfirmation.CHANNEL_A,
+            )
+            is True
+        )
+
 
 class TestComputeSuccessRealisticInputs:
     """_compute_success contracts using parse_session_result() as input constructor.
@@ -606,6 +676,31 @@ class TestComputeRetry:
         assert needs is False
         assert reason == RetryReason.NONE
 
+    # T2: ChannelConfirmation-aware tests
+    def test_channel_b_completed_no_retry(self):
+        """CHANNEL_B + COMPLETED: Channel B is authoritative — no retry."""
+        s = _make_success_session(result="")
+        needs_retry, reason = _compute_retry(
+            s,
+            returncode=-15,
+            termination=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        assert needs_retry is False
+        assert reason == RetryReason.NONE
+
+    def test_channel_a_completed_kill_anomaly_retries(self):
+        """CHANNEL_A + COMPLETED + kill anomaly (empty result) → retry."""
+        s = _make_success_session(result="")  # kill anomaly: kill returncode + empty result
+        needs_retry, reason = _compute_retry(
+            s,
+            returncode=-15,
+            termination=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        assert needs_retry is True
+        assert reason == RetryReason.RESUME
+
     def test_compute_retry_success_empty_natural_exit_zero_rc_is_retriable(self):
         """
         Regression: CLAUDE_CODE_EXIT_AFTER_STOP_DELAY causes NATURAL_EXIT with
@@ -624,6 +719,46 @@ class TestComputeRetry:
         )
         assert needs_retry is True
         assert reason == RetryReason.RESUME
+
+    def test_natural_exit_channel_b_no_retry(self):
+        """Test 1E part 1: NATURAL_EXIT + CHANNEL_B → no retry.
+        Channel confirmation means session completed; kill-anomaly check is skipped.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="",
+            is_error=False,
+            session_id="abc",
+            errors=[],
+        )
+        needs_retry, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        assert needs_retry is False
+        assert reason == RetryReason.NONE
+
+    def test_natural_exit_channel_a_no_retry(self):
+        """Test 1E part 2: NATURAL_EXIT + CHANNEL_A → no retry.
+        Channel A confirmed session completed; kill-anomaly check is skipped.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="",
+            is_error=False,
+            session_id="abc",
+            errors=[],
+        )
+        needs_retry, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        assert needs_retry is False
+        assert reason == RetryReason.NONE
 
 
 # ---------------------------------------------------------------------------
@@ -756,3 +891,230 @@ class TestSkillResult:
         sr = self._make(token_usage=None)
         parsed = json.loads(sr.to_json())
         assert parsed["token_usage"] is None
+
+
+# ---------------------------------------------------------------------------
+# Adjudication consistency — raw function level documentation
+# ---------------------------------------------------------------------------
+
+
+class TestAdjudicationConsistency:
+    """Document what _compute_success and _compute_retry produce at the raw function level.
+
+    These tests assert the actual outputs of the individual functions, including
+    the known impossible states (dead end, contradiction). Composition guards that
+    enforce the valid state space operate at the _build_skill_result boundary
+    (tested in TestAdjudicationGuards in test_process_lifecycle.py).
+
+    These tests pass both before and after the fix because the individual functions
+    are not changed — only the composition boundary in _build_skill_result is patched.
+    """
+
+    @pytest.mark.parametrize(
+        "termination,channel,result_content,returncode,subtype,is_error,expected_success,expected_retry",
+        [
+            # NATURAL_EXIT + CHANNEL_A: dead-end state
+            # (known bug, corrected by guard in _build_skill_result)
+            (
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.CHANNEL_A,
+                "",
+                0,
+                "success",
+                False,
+                False,
+                False,
+            ),
+            # NATURAL_EXIT + CHANNEL_A: valid success with content
+            (
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.CHANNEL_A,
+                "done",
+                0,
+                "success",
+                False,
+                True,
+                False,
+            ),
+            # NATURAL_EXIT + CHANNEL_B: contradiction
+            # (known bug, corrected by guard in _build_skill_result)
+            (
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.CHANNEL_B,
+                "",
+                0,
+                "error_max_turns",
+                True,
+                True,
+                True,
+            ),
+            # NATURAL_EXIT + CHANNEL_B: valid success
+            (
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.CHANNEL_B,
+                "",
+                0,
+                "success",
+                False,
+                True,
+                False,
+            ),
+            (
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.CHANNEL_B,
+                "done",
+                0,
+                "success",
+                False,
+                True,
+                False,
+            ),
+            # COMPLETED + CHANNEL_A: valid retriable (kill anomaly)
+            (
+                TerminationReason.COMPLETED,
+                ChannelConfirmation.CHANNEL_A,
+                "",
+                -15,
+                "success",
+                False,
+                False,
+                True,
+            ),
+            # COMPLETED + CHANNEL_B: valid success
+            (
+                TerminationReason.COMPLETED,
+                ChannelConfirmation.CHANNEL_B,
+                "",
+                -15,
+                "success",
+                False,
+                True,
+                False,
+            ),
+            # COMPLETED + CHANNEL_B: contradiction
+            # (known bug, corrected by guard in _build_skill_result)
+            (
+                TerminationReason.COMPLETED,
+                ChannelConfirmation.CHANNEL_B,
+                "",
+                -15,
+                "error_max_turns",
+                True,
+                True,
+                True,
+            ),
+            # UNMONITORED baselines — all should already be valid states
+            (
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.UNMONITORED,
+                "",
+                0,
+                "success",
+                False,
+                False,
+                True,
+            ),
+            (
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.UNMONITORED,
+                "done",
+                0,
+                "success",
+                False,
+                True,
+                False,
+            ),
+            (
+                TerminationReason.TIMED_OUT,
+                ChannelConfirmation.UNMONITORED,
+                "",
+                -1,
+                "timeout",
+                True,
+                False,
+                False,
+            ),
+            (
+                TerminationReason.STALE,
+                ChannelConfirmation.UNMONITORED,
+                "",
+                0,
+                "success",
+                False,
+                False,
+                False,
+            ),
+        ],
+    )
+    def test_raw_adjudication_pair(
+        self,
+        termination: TerminationReason,
+        channel: ChannelConfirmation,
+        result_content: str,
+        returncode: int,
+        subtype: str,
+        is_error: bool,
+        expected_success: bool,
+        expected_retry: bool,
+    ) -> None:
+        """Document exact raw outputs of the individual adjudication functions.
+
+        Known bad states (dead end, contradiction) are documented as expected values
+        rather than as invariant failures — the guards in _build_skill_result correct
+        those states before they reach the orchestrator.
+        """
+        session = ClaudeSessionResult(
+            subtype=subtype,
+            result=result_content,
+            is_error=is_error,
+            session_id="cross-val",
+            errors=[],
+        )
+        success = _compute_success(
+            session,
+            returncode,
+            termination,
+            channel_confirmation=channel,
+        )
+        needs_retry, _ = _compute_retry(
+            session,
+            returncode,
+            termination,
+            channel_confirmation=channel,
+        )
+        assert success == expected_success
+        assert needs_retry == expected_retry
+
+    def test_channel_a_empty_result_raw_dead_end(self) -> None:
+        """Document: NATURAL_EXIT + CHANNEL_A + empty result is a dead end at raw function level.
+
+        Both _compute_success and _compute_retry return False for this combination:
+        - _compute_success: CHANNEL_A falls through content check, empty result → False
+        - _compute_retry: NATURAL_EXIT + CHANNEL_A confirmation suppresses retry → False
+
+        The composition guard in _build_skill_result escalates this to retriable.
+        See TestAdjudicationGuards.test_channel_a_empty_result_not_dead_end.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="",
+            is_error=False,
+            session_id="regression",
+            errors=[],
+        )
+        success = _compute_success(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        needs_retry, _ = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        # Raw functions produce the dead-end state — this is the known bug at the
+        # individual function level, corrected at the _build_skill_result boundary.
+        assert success is False
+        assert needs_retry is False

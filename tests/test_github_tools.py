@@ -11,7 +11,7 @@ import pytest
 from autoskillit.config import AutomationConfig
 from autoskillit.core import GitHubFetcher
 from autoskillit.execution.github import DefaultGitHubFetcher, _parse_issue_ref
-from autoskillit.pipeline.gate import _DEFAULT_GATE_MESSAGE, GATED_TOOLS
+from autoskillit.pipeline.gate import UNGATED_TOOLS
 from autoskillit.server.tools_integrations import fetch_github_issue
 
 # ---------------------------------------------------------------------------
@@ -144,14 +144,6 @@ async def test_default_github_fetcher_no_token_omits_auth_header(httpx_mock):
 
 
 @pytest.mark.asyncio
-async def test_fetch_github_issue_gate_closed(tool_ctx):
-    tool_ctx.gate.disable()
-    result = json.loads(await fetch_github_issue("owner/repo#1"))
-    assert result["success"] is False
-    assert result["result"] == _DEFAULT_GATE_MESSAGE
-
-
-@pytest.mark.asyncio
 async def test_fetch_github_issue_no_client(tool_ctx):
     tool_ctx.github_client = None
     result = json.loads(await fetch_github_issue("owner/repo#1"))
@@ -219,8 +211,8 @@ async def test_fetch_github_issue_client_error_propagated(tool_ctx):
 # ---------------------------------------------------------------------------
 
 
-def test_fetch_github_issue_in_gated_tools():
-    assert "fetch_github_issue" in GATED_TOOLS
+def test_fetch_github_issue_in_ungated_tools():
+    assert "fetch_github_issue" in UNGATED_TOOLS
 
 
 def test_github_config_defaults():

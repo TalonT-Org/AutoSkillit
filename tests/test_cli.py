@@ -1791,6 +1791,70 @@ class TestGroupFRefactoring:
             f"Expected exactly 1 remove_clone hook entry, got {len(remove_clone_entries)}"
         )
 
+    def test_install_registers_skill_command_guard_hook(self, tmp_path, monkeypatch):
+        """install must register the skill_command_guard PreToolUse hook in settings.json."""
+        import importlib
+
+        settings_path = tmp_path / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True)
+
+        app_module = importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
+        monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
+        monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+
+        _app_mod = importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        cli.install(scope="local")
+
+        data = json.loads(settings_path.read_text())
+        hooks = data.get("hooks", {})
+        pretooluse = hooks.get("PreToolUse", [])
+        # Find the run_skill matcher entry and confirm skill_command_guard is in its hooks list
+        run_skill_entries = [h for h in pretooluse if "run_skill" in h.get("matcher", "")]
+        assert len(run_skill_entries) >= 1, "PreToolUse entry for run_skill not found"
+        commands = [
+            hook.get("command", "")
+            for entry in run_skill_entries
+            for hook in entry.get("hooks", [])
+        ]
+        assert any("skill_command_guard" in cmd for cmd in commands), (
+            f"skill_command_guard command not found in run_skill hooks: {commands}"
+        )
+
+    def test_install_skill_command_guard_hook_idempotent(self, tmp_path, monkeypatch):
+        """Running install twice must not duplicate the skill_command_guard hook entry."""
+        import importlib
+
+        settings_path = tmp_path / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True)
+
+        app_module = importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
+        monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
+        monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+
+        _app_mod = importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        cli.install(scope="local")
+        cli.install(scope="local")
+
+        data = json.loads(settings_path.read_text())
+        pretooluse = data.get("hooks", {}).get("PreToolUse", [])
+        all_commands = [
+            hook.get("command", "") for entry in pretooluse for hook in entry.get("hooks", [])
+        ]
+        guard_commands = [cmd for cmd in all_commands if "skill_command_guard" in cmd]
+        assert len(guard_commands) == 1, (
+            f"Expected exactly 1 skill_command_guard command entry, got {len(guard_commands)}"
+        )
+
 
 class TestWorktreeDetection:
     def test_detects_main_checkout_as_not_worktree(self, tmp_path: Path) -> None:

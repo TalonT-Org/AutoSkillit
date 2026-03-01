@@ -44,10 +44,11 @@ def make_context(
     """Create a fully-wired ToolContext with all 11 service fields populated.
 
     This is the Composition Root — the only location that should instantiate
-    all concrete service implementations simultaneously. Uses a two-step
-    construction pattern for DefaultHeadlessExecutor: the context is created
-    first (with executor=None), then the executor is constructed with the
-    context reference, then assigned back.
+    all concrete service implementations simultaneously. Uses a three-step
+    construction pattern: the context is created first (with executor and
+    migrations as None), then the executor is constructed with the context
+    reference and assigned back, then migrations is constructed with the
+    executor's run method injected via constructor.
 
     Args:
         config: The loaded AutomationConfig (use load_config() to obtain it).
@@ -81,14 +82,13 @@ def make_context(
         runner=runner,
         tester=DefaultTestRunner(config=config, runner=runner) if runner is not None else None,
         recipes=DefaultRecipeRepository(),
-        migrations=DefaultMigrationService(default_migration_engine()),
         db_reader=DefaultDatabaseReader(),
         workspace_mgr=DefaultWorkspaceManager(),
         clone_mgr=DefaultCloneManager(),
         github_client=DefaultGitHubFetcher(token=github_token),
     )
     ctx.executor = DefaultHeadlessExecutor(ctx)
-    # Wire the headless runner into migrations for LLM-driven migration support
-    if isinstance(ctx.migrations, DefaultMigrationService):
-        ctx.migrations.bind_headless(ctx.executor.run)
+    ctx.migrations = DefaultMigrationService(
+        default_migration_engine(), run_headless=ctx.executor.run
+    )
     return ctx

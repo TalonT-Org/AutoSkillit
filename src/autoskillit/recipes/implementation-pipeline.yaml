@@ -229,13 +229,13 @@ steps:
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
       worktree_path: "${{ result.worktree_path }}"
-    on_success: next_or_done
     on_result:
       field: failed_step
       routes:
         post_rebase_test_gate: fix
     on_failure: cleanup_failure
     note: >
+      On success (merge_succeeded=true, failed_step absent), route to next_or_done.
       After merge, route to next_or_done to process remaining parts/groups before pushing.
       GROUPS MODE: When all plan_parts for the current group are merged, advance to the
       next group (back to plan step with the next group's description). When all groups

@@ -7544,7 +7544,7 @@ class TestPushToRemoteTool:
     async def test_returns_error_key_when_push_fails(self, tool_ctx):
         with patch(
             "autoskillit.workspace.clone.push_to_remote",
-            return_value={"success": "false", "stderr": "remote rejected"},
+            return_value={"success": False, "stderr": "remote rejected"},
         ):
             result = json.loads(
                 await push_to_remote(clone_path="/clone", source_dir="/src", branch="main")

@@ -253,6 +253,7 @@ async def _session_log_monitor(
     pid: int | None = None,
     _phase1_poll: float = 1.0,
     _phase2_poll: float = 2.0,
+    _phase1_timeout: float = 30.0,
 ) -> str:
     """Watch Claude Code session log for completion or staleness.
 
@@ -265,11 +266,24 @@ async def _session_log_monitor(
     contain the completion marker.  Defaults to ``{"assistant"}`` so that
     markers appearing in user prompts, queue-operation records, or tool
     results are ignored.
+
+    *_phase1_timeout* caps how long Phase 1 may poll for a JSONL file.
+    When no file appears within this window, returns "stale" immediately
+    rather than spinning until the outer wall-clock timeout fires.
     """
+    import time as _time
+
     # Phase 1: Find the session log file
     session_file = None
     os_error_count = 0
+    phase1_start = _time.monotonic()
     while session_file is None:
+        if _time.monotonic() - phase1_start >= _phase1_timeout:
+            logger.warning(
+                "Session log file not found within phase1_timeout (%.1fs); treating as stale",
+                _phase1_timeout,
+            )
+            return "stale"
         await asyncio.sleep(_phase1_poll)
         try:
             candidates = [
@@ -430,6 +444,7 @@ async def run_managed_async(
     _phase1_poll: float = 1.0,
     _phase2_poll: float = 2.0,
     _heartbeat_poll: float = 0.5,
+    _phase1_timeout: float = 30.0,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -523,6 +538,7 @@ async def run_managed_async(
                         pid=proc.pid,
                         _phase1_poll=_phase1_poll,
                         _phase2_poll=_phase2_poll,
+                        _phase1_timeout=_phase1_timeout,
                     )
                 )
                 tasks.add(session_monitor_task)

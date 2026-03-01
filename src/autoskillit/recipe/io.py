@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -68,20 +68,6 @@ def find_recipe_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
     """
     result = list_recipes(project_dir)
     return next((r for r in result.items if r.name == name), None)
-
-
-def format_recipe_list_response(result: LoadResult[RecipeInfo]) -> dict[str, object]:
-    """Build the MCP response dict for the list_recipes tool."""
-    items = [
-        {"name": r.name, "description": r.description, "summary": r.summary} for r in result.items
-    ]
-    response: dict[str, object] = {
-        "recipes": items,
-        "count": len(items),
-    }
-    if result.errors:
-        response["errors"] = [{"file": e.path.name, "error": e.error} for e in result.errors]
-    return response
 
 
 # --- internal helpers ---
@@ -188,30 +174,3 @@ def _collect_recipes(
             except Exception as exc:
                 logger.warning("Failed to load recipe file", path=str(f), error=str(exc))
                 errors.append(LoadReport(path=f, error=str(exc)))
-
-
-class DefaultRecipeRepository:
-    """Concrete RecipeRepository backed by find_recipe_by_name and list_recipes."""
-
-    def find(self, name: str, project_dir: Path) -> Any:
-        return find_recipe_by_name(name, project_dir)
-
-    def list(self, project_dir: Path) -> Any:
-        return list_recipes(project_dir)
-
-    def load_and_validate(
-        self, name: str, project_dir: Any, *, suppressed: Sequence[str] | None = None
-    ) -> dict[str, Any]:
-        from autoskillit.recipe import load_and_validate as _lv
-
-        return _lv(name, project_dir=project_dir, suppressed=suppressed)
-
-    def validate_from_path(self, script_path: Any) -> dict[str, Any]:
-        from autoskillit.recipe import validate_from_path as _vp
-
-        return _vp(script_path)
-
-    def list_all(self, project_dir: Any | None = None) -> dict[str, Any]:
-        from autoskillit.recipe import list_all as _la
-
-        return _la(project_dir=project_dir)

@@ -209,8 +209,8 @@ class TestRecipeMigrationAdapter:
         recipe_path.write_text("name: valid\n")
 
         mock_recipe = Mock()
-        monkeypatch.setattr("autoskillit.migration.engine._parse_recipe", lambda p: mock_recipe)
-        monkeypatch.setattr("autoskillit.migration.engine.validate_recipe", lambda r: [])
+        monkeypatch.setattr("autoskillit.recipe.load_recipe", lambda p: mock_recipe)
+        monkeypatch.setattr("autoskillit.recipe.validate_recipe", lambda r: [])
 
         adapter = RecipeMigrationAdapter()
         is_valid, error = adapter.validate(recipe_path)
@@ -226,7 +226,7 @@ class TestRecipeMigrationAdapter:
         recipe_path.write_text("name: invalid\n")
 
         monkeypatch.setattr(
-            "autoskillit.migration.engine._parse_recipe",
+            "autoskillit.recipe.load_recipe",
             Mock(side_effect=ValueError("invalid recipe structure")),
         )
 

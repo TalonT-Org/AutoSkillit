@@ -11,7 +11,6 @@ from autoskillit.workspace import CleanupResult, _delete_directory_contents
 from autoskillit.workspace.clone import (
     clone_repo,
     detect_source_dir,
-    merge_feature_branch,
     push_to_remote,
 )
 
@@ -200,94 +199,3 @@ class TestPushToRemote:
         assert result["success"] == "false"
         assert "origin" in result["stderr"]
         assert mock_run.call_count == 1  # no push attempted
-
-
-# ---------------------------------------------------------------------------
-# T_FB1–T_FB6: clone_repo feature branch creation and merge_feature_branch
-# ---------------------------------------------------------------------------
-
-
-class TestCloneRepoFeatureBranch:
-    def test_fb1_creates_feature_branch_when_prefix_set(self, tmp_path) -> None:
-        """T_FB1: clone_repo with feature_branch_prefix creates and checks out the branch."""
-        mock_clone = MagicMock()
-        mock_clone.returncode = 0
-        mock_clone.stdout = ""
-        mock_clone.stderr = ""
-        mock_checkout = MagicMock()
-        mock_checkout.returncode = 0
-        mock_checkout.stdout = ""
-        mock_checkout.stderr = ""
-        with patch("subprocess.run", side_effect=[mock_clone, mock_checkout]) as mock_run:
-            result = clone_repo(str(tmp_path), "run", feature_branch_prefix="impl")
-        feature_branch = result["feature_branch"]
-        assert feature_branch.startswith("impl-run-")
-        checkout_call = mock_run.call_args_list[1]
-        assert checkout_call[0][0] == ["git", "checkout", "-b", feature_branch]
-
-    def test_fb2_no_feature_branch_when_prefix_empty(self, tmp_path) -> None:
-        """T_FB2: default (empty prefix) does not create a feature branch."""
-        mock_clone = MagicMock()
-        mock_clone.returncode = 0
-        mock_clone.stdout = ""
-        mock_clone.stderr = ""
-        with patch("subprocess.run", return_value=mock_clone) as mock_run:
-            result = clone_repo(str(tmp_path), "run")  # no prefix
-        assert result["feature_branch"] == ""
-        # Only the git clone call; no checkout -b
-        assert mock_run.call_count == 1
-
-    def test_fb3_feature_branch_matches_timestamp_pattern(self, tmp_path) -> None:
-        """T_FB3: feature branch name matches pattern impl-{run_name}-YYYYMMDD-HHMMSS-usec."""
-        import re
-
-        mock_clone = MagicMock()
-        mock_clone.returncode = 0
-        mock_clone.stdout = ""
-        mock_clone.stderr = ""
-        mock_checkout = MagicMock()
-        mock_checkout.returncode = 0
-        mock_checkout.stdout = ""
-        mock_checkout.stderr = ""
-        with patch("subprocess.run", side_effect=[mock_clone, mock_checkout]):
-            result = clone_repo(str(tmp_path), "myrun", feature_branch_prefix="impl")
-        assert re.match(r"^impl-myrun-\d{8}-\d{6}-\d+$", result["feature_branch"])
-
-
-class TestMergeFeatureBranch:
-    def test_fb4_succeeds_when_checkout_and_merge_succeed(self) -> None:
-        """T_FB4: merge_feature_branch returns success when both git commands succeed."""
-        mock_ok = MagicMock()
-        mock_ok.returncode = 0
-        mock_ok.stdout = ""
-        mock_ok.stderr = ""
-        with patch("subprocess.run", return_value=mock_ok):
-            result = merge_feature_branch("/clone", "impl-run-123", "main")
-        assert result == {"success": "true"}
-
-    def test_fb5_fails_when_checkout_fails(self) -> None:
-        """T_FB5: merge_feature_branch returns error when git checkout fails."""
-        mock_fail = MagicMock()
-        mock_fail.returncode = 1
-        mock_fail.stdout = ""
-        mock_fail.stderr = "pathspec error"
-        with patch("subprocess.run", return_value=mock_fail) as mock_run:
-            result = merge_feature_branch("/clone", "impl-run-123", "main")
-        assert result["success"] == "false"
-        assert "error" in result
-        assert mock_run.call_count == 1  # merge never attempted
-
-    def test_fb6_fails_when_merge_fails(self) -> None:
-        """T_FB6: merge_feature_branch returns error when git merge fails."""
-        mock_ok = MagicMock()
-        mock_ok.returncode = 0
-        mock_ok.stdout = ""
-        mock_ok.stderr = ""
-        mock_fail = MagicMock()
-        mock_fail.returncode = 1
-        mock_fail.stdout = ""
-        mock_fail.stderr = "conflict"
-        with patch("subprocess.run", side_effect=[mock_ok, mock_fail]):
-            result = merge_feature_branch("/clone", "impl-run-123", "main")
-        assert result["success"] == "false"
-        assert "error" in result

@@ -13,7 +13,6 @@ from autoskillit.workspace.clone import (
     DefaultCloneManager,
     clone_repo,
     detect_source_dir,
-    merge_feature_branch,
     push_to_remote,
     remove_clone,
 )
@@ -31,7 +30,6 @@ __all__ = [
     "bundled_skills_dir",
     "clone_repo",
     "detect_source_dir",
-    "merge_feature_branch",
     "push_to_remote",
     "remove_clone",
 ]

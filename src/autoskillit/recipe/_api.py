@@ -133,12 +133,12 @@ def load_and_validate(
     if match is None:
         return {"error": f"No recipe named '{name}' found"}
 
-    content = match.path.read_text()
+    raw = match.content if match.content is not None else match.path.read_text()
     suggestions: list[dict[str, Any]] = []
     valid = True
 
     try:
-        data = load_yaml(content)
+        data = load_yaml(raw)
         if isinstance(data, dict) and "steps" in data:
             recipe = _parse_recipe(data)
             errors = validate_recipe(recipe)
@@ -197,4 +197,4 @@ def load_and_validate(
         )
         valid = False
 
-    return {"content": content, "suggestions": suggestions, "valid": valid}
+    return {"content": raw, "suggestions": suggestions, "valid": valid}

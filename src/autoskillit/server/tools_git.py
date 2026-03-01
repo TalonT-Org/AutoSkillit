@@ -23,7 +23,7 @@ async def merge_worktree(
 
     Programmatic gate: runs the configured test command in the worktree before allowing merge.
     If tests fail, returns error without merging.
-    On failure, consider using /autoskillit:assess-and-merge via run_skill
+    On failure, consider using /autoskillit:resolve-failures via run_skill
     for automated diagnosis and remediation.
 
     Args:

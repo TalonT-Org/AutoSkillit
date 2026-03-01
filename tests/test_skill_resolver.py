@@ -12,7 +12,6 @@ from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
 
 BUNDLED_SKILLS = [
     "analyze-prs",
-    "assess-and-merge",
     "audit-friction",
     "audit-impl",
     "dry-walkthrough",
@@ -27,6 +26,7 @@ BUNDLED_SKILLS = [
     "migrate-recipes",
     "pipeline-summary",
     "rectify",
+    "resolve-failures",
     "retry-worktree",
     "review-approach",
     "setup-project",

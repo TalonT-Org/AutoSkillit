@@ -214,9 +214,9 @@ Available tools for use in `tool:` fields:
 
 These skills ship with the autoskillit plugin and are invoked as `/autoskillit:<name>`:
 
-analyze-prs, assess-and-merge, audit-friction, audit-impl, dry-walkthrough, implement-worktree, implement-worktree-no-merge,
+analyze-prs, audit-friction, audit-impl, dry-walkthrough, implement-worktree, implement-worktree-no-merge,
 investigate, make-groups, make-plan, merge-pr, write-recipe, mermaid, migrate-recipes,
-pipeline-summary, rectify, retry-worktree, review-approach, setup-project
+pipeline-summary, rectify, resolve-failures, retry-worktree, review-approach, setup-project
 
 ## Skill Reference Disambiguation
 
@@ -321,7 +321,7 @@ steps:
   fix:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:assess-and-merge ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.work_dir }}"
     on_success: done
     on_failure: escalate

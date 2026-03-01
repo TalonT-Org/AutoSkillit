@@ -110,7 +110,7 @@ Bundled skills invoked as `/autoskillit:<name>`:
 | `implement-worktree` | Implement in isolated worktree |
 | `implement-worktree-no-merge` | Implement without auto-merge (for MCP orchestration) |
 | `retry-worktree` | Continue after context exhaustion |
-| `assess-and-merge` | Fix test failures and merge |
+| `resolve-failures` | Fix test failures without merging |
 | `mermaid` | Create mermaid diagrams |
 | `make-script-skill` | Generate YAML pipeline scripts |
 | `setup-project` | Generate tailored pipeline scripts and config for a project |

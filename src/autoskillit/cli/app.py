@@ -624,7 +624,7 @@ ROUTING RULES — MANDATORY:
 - When a tool returns a failure result, you MUST follow the step's on_failure route.
 - When a step fails, route to on_failure — do not use Read, Grep, Glob, Edit,
   Write, Bash, or Explore subagents to investigate. The on_failure step (e.g.,
-  assess-and-merge) has diagnostic access that the orchestrator does not.
+  resolve-failures) has diagnostic access that the orchestrator does not.
 - Your ONLY job is to route to the correct next step and pass the
   required arguments. The downstream skill does the actual work.
 

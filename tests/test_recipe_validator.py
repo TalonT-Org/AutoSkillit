@@ -1845,7 +1845,7 @@ class TestImplicitHandoffRule:
         steps = {
             "assess": {
                 "tool": "run_skill",
-                "with": {"skill_command": "/autoskillit:assess-and-merge worktree plan main"},
+                "with": {"skill_command": "/autoskillit:resolve-failures worktree plan main"},
                 "on_success": "done",
             },
             "done": {"action": "stop", "message": "Done."},
@@ -2158,7 +2158,7 @@ class TestInvestigateFirstStructure:
         """T_IF_C1: implement step must use implement-worktree-no-merge.
 
         implement-worktree merges and deletes the worktree internally; subsequent
-        verify (test_check) and assess (assess-and-merge) steps would run against
+        verify (test_check) and assess (resolve-failures) steps would run against
         a non-existent path. implement-worktree-no-merge leaves the worktree intact
         for the orchestrator's gate-test-merge cycle.
         """
@@ -2212,7 +2212,7 @@ class TestAuditAndFixStructure:
 
     def test_aaf5_fix_step_routes_back_to_test(self) -> None:
         """T_AAF5: fix step must exist and route on_success back to test."""
-        assert "fix" in self.recipe.steps, "fix step must exist for assess-and-merge loop"
+        assert "fix" in self.recipe.steps, "fix step must exist for resolve-failures loop"
         assert self.recipe.steps["fix"].on_success == "test", (
             "fix step must route back to test on success to re-validate the worktree"
         )

@@ -23,7 +23,7 @@ async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str
 
     CRITICAL: This tool is a pipeline gate, not a diagnostic tool. When it
     returns {"passed": false}, follow the pipeline script's on_failure routing
-    (e.g. call assess-and-merge via run_skill). Do NOT:
+    (e.g. call resolve-failures via run_skill). Do NOT:
     - Run tests yourself (pytest, make test, etc.) to investigate
     - Read test output or try to diagnose failures
     - Attempt to fix code directly

@@ -142,15 +142,15 @@ src/autoskillit/
 │   ├── investigate-first.yaml
 │   └── smoke-test.yaml
 └── skills/                  # 19 bundled skills (SKILL.md per skill)
-    ├── analyze-prs/          ├── assess-and-merge/
-    ├── audit-friction/       ├── audit-impl/
-    ├── dry-walkthrough/      ├── implement-worktree/
-    ├── implement-worktree-no-merge/ ├── investigate/
-    ├── make-groups/          ├── make-plan/
-    ├── merge-pr/             ├── mermaid/
-    ├── migrate-recipes/      ├── pipeline-summary/
-    ├── rectify/              ├── retry-worktree/
-    ├── review-approach/      └── setup-project/
+    ├── analyze-prs/          ├── audit-friction/
+    ├── audit-impl/           ├── dry-walkthrough/
+    ├── implement-worktree/   ├── implement-worktree-no-merge/
+    ├── investigate/          ├── make-groups/
+    ├── make-plan/            ├── merge-pr/
+    ├── mermaid/              ├── migrate-recipes/
+    ├── pipeline-summary/     ├── rectify/
+    ├── resolve-failures/     ├── retry-worktree/
+    ├── review-approach/      ├── setup-project/
     └── write-recipe/
 
 tests/

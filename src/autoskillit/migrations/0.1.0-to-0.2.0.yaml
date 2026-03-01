@@ -1,23 +1,23 @@
 from_version: "0.1.0"
 to_version: "0.2.0"
-description: "assess-and-merge steps now require model: sonnet for reliable operation"
+description: "resolve-failures steps now require model: sonnet for reliable operation"
 changes:
-  - id: assess-and-merge-model
-    description: "Steps invoking assess-and-merge should set model: sonnet"
+  - id: resolve-failures-model
+    description: "Steps invoking resolve-failures should set model: sonnet"
     instruction: |
       Find any step whose tool is run_skill or run_skill_retry and whose
-      skill_command (in the with: block) contains "assess-and-merge".
+      skill_command (in the with: block) contains "resolve-failures".
       Add `model: sonnet` as a sibling field to `tool:` on that step.
       If the step already has a model: field, leave it unchanged.
     detect:
       tool: "run_skill"
-      skill_pattern: "assess-and-merge"
+      skill_pattern: "resolve-failures"
       missing_field: "model"
     example_before: |
       fix:
         tool: run_skill
         with:
-          skill_command: "/autoskillit:assess-and-merge ..."
+          skill_command: "/autoskillit:resolve-failures ..."
           cwd: "${{ context.worktree_path }}"
         on_success: done
         on_failure: escalate
@@ -26,7 +26,7 @@ changes:
         tool: run_skill
         model: sonnet
         with:
-          skill_command: "/autoskillit:assess-and-merge ..."
+          skill_command: "/autoskillit:resolve-failures ..."
           cwd: "${{ context.worktree_path }}"
         on_success: done
         on_failure: escalate

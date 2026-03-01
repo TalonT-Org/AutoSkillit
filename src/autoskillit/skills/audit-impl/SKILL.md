@@ -85,6 +85,31 @@ Aggregate into a unified requirements inventory.
 
 ### Step 2 — Load Implementation Diff
 
+**Stale branch guard:**
+Before loading the diff, verify the branch ref is usable:
+
+```bash
+# Step 1: ref must exist at all
+git rev-parse --verify {branch_name} 2>/dev/null
+```
+
+- If this fails (branch ref not found): abort with a clear error —
+  `"branch ref '{branch_name}' not found — it may have been absorbed by a fast-forward
+   merge before audit_impl ran. This is a pipeline routing error."` Output `{"success": false}`
+  with this message. Do not proceed to audit.
+
+```bash
+# Step 2: branch must not already be fully merged into base (fast-forward absorption check)
+git merge-base --is-ancestor {branch_name} {base_branch}
+```
+
+- If this exits 0 (branch is an ancestor of base — already fully merged): log a warning,
+  then treat this as **GO** with note:
+  `"Branch '{branch_name}' is already an ancestor of '{base_branch}' — absorbed by
+   fast-forward merge prior to audit. No delta to evaluate; returning GO."` This is
+  O(1), unambiguous, and distinguishes the stale-fast-forward case from legitimate no-op
+  branches (empty diff is an unreliable guard; `--is-ancestor` is the correct tool).
+
 Launch one Explore subagent to retrieve:
 
 - `git diff {base_branch}...HEAD --stat` — file-level summary

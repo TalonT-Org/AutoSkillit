@@ -208,7 +208,6 @@ steps:
       base_branch: "${{ inputs.base_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-      worktree_path: "${{ result.worktree_path }}"
     on_success: push
     on_failure: cleanup_failure
     note: >

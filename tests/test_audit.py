@@ -25,7 +25,7 @@ class TestFailureRecord:
     def test_has_all_required_fields(self):
         record = _make_record()
         field_names = {f.name for f in fields(record)}
-        assert {
+        assert field_names == {
             "timestamp",
             "skill_command",
             "exit_code",
@@ -33,12 +33,12 @@ class TestFailureRecord:
             "needs_retry",
             "retry_reason",
             "stderr",
-        } <= field_names
+        }
 
     def test_to_dict_is_json_serializable(self):
         record = _make_record()
         d = record.to_dict()
-        json.dumps(d)  # must not raise
+        assert json.loads(json.dumps(d)) == d
 
     def test_to_dict_contains_all_fields(self):
         record = _make_record(skill_command="/test:cmd", exit_code=42)

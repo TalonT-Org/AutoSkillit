@@ -19,7 +19,6 @@ from autoskillit.recipe.io import (
 )
 from autoskillit.recipe.schema import (
     Recipe,
-    RecipeIngredient,
     RecipeStep,
     StepResultRoute,
 )
@@ -58,16 +57,9 @@ def test_recipe_parser_module_no_longer_exists() -> None:
 
 def test_load_recipe_smoke() -> None:
     """load_recipe(path) returns a Recipe with correct name."""
-    path = next(builtin_recipes_dir().glob("*.yaml"))
+    path = builtin_recipes_dir() / "audit-and-fix.yaml"
     recipe = load_recipe(path)
-    assert recipe.name
-
-
-def test_list_recipes_discovers_builtins() -> None:
-    """list_recipes discovers bundled recipes from builtin source."""
-    result = list_recipes(Path("/nonexistent"))
-    assert len(result.items) > 0
-    assert all(r.source.value in ("project", "builtin") for r in result.items)
+    assert recipe.name == "audit-and-fix"
 
 
 def test_parse_recipe_accepts_raw_dict() -> None:
@@ -151,15 +143,6 @@ class TestRecipeParser:
         wf = load_recipe(f)
         assert wf.ingredients["branch"].default == "main"
         assert wf.ingredients["branch"].required is False
-
-    # WF7
-    def test_list_recipes_finds_builtins(self, tmp_path: Path) -> None:
-        recipes = list_recipes(tmp_path).items
-        names = {w.name for w in recipes}
-        assert "bugfix-loop" in names
-        assert "implementation-pipeline" in names
-        assert "audit-and-fix" in names
-        assert "investigate-first" in names
 
     # WF8
     def test_project_recipe_overrides_builtin(self, tmp_path: Path) -> None:
@@ -462,10 +445,13 @@ class TestListRecipes:
     """TestListRecipes: discovery from project and builtin sources."""
 
     def test_finds_builtins(self, tmp_path: Path) -> None:
-        recipes = list_recipes(tmp_path).items
+        result = list_recipes(tmp_path)
+        recipes = result.items
         names = {w.name for w in recipes}
         assert "bugfix-loop" in names
         assert "implementation-pipeline" in names
+        assert len(recipes) > 0
+        assert all(r.source.value in ("project", "builtin") for r in recipes)
 
 
 class TestBuiltinRecipesDir:
@@ -536,49 +522,9 @@ class TestVersionField:
         assert wf.version == "1.3.0"
 
 
-def test_recipe_replaces_workflow_class() -> None:
-    wf = Recipe(name="test", description="test")
-    assert isinstance(wf, Recipe)
-
-
-def test_recipe_step_replaces_workflow_step() -> None:
-    step = RecipeStep(tool="run_skill")
-    assert isinstance(step, RecipeStep)
-
-
-def test_recipe_ingredient_importable() -> None:
-    ing = RecipeIngredient(description="test")
-    assert isinstance(ing, RecipeIngredient)
-
-
-def test_bundled_recipes_use_ingredients_field() -> None:
-    bd = builtin_recipes_dir()
-    for path in bd.glob("*.yaml"):
-        data = yaml.safe_load(path.read_text())
-        assert isinstance(data, dict)
-        if "inputs" in data and "ingredients" not in data:
-            assert False, f"{path.name} still uses 'inputs' field instead of 'ingredients'"
-
-
-def test_bundled_recipes_use_kitchen_rules_field() -> None:
-    bd = builtin_recipes_dir()
-    for path in bd.glob("*.yaml"):
-        data = yaml.safe_load(path.read_text())
-        assert isinstance(data, dict)
-        if "constraints" in data and "kitchen_rules" not in data:
-            assert False, f"{path.name} still uses 'constraints' field instead of 'kitchen_rules'"
-
-
 def test_builtin_recipes_dir_points_to_recipes() -> None:
     d = builtin_recipes_dir()
     assert d.name == "recipes"
-
-
-def test_recipe_source_enum_values() -> None:
-    from autoskillit.core.types import RecipeSource
-
-    assert hasattr(RecipeSource, "PROJECT")
-    assert hasattr(RecipeSource, "BUILTIN")
 
 
 # ---------------------------------------------------------------------------

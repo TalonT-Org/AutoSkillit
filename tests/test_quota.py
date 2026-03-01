@@ -152,6 +152,8 @@ class TestCheckAndSleepIfNeeded:
 
     @pytest.mark.asyncio
     async def test_above_threshold_returns_should_sleep_true(self, monkeypatch, tmp_path):
+        from unittest.mock import AsyncMock
+
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
 
@@ -164,13 +166,14 @@ class TestCheckAndSleepIfNeeded:
             cache_path=str(tmp_path / "cache.json"),
         )
 
-        async def mock_fetch(path):
-            return QuotaStatus(utilization=90.0, resets_at=resets_at)
-
+        first_status = QuotaStatus(utilization=90.0, resets_at=resets_at)
+        second_status = QuotaStatus(utilization=91.0, resets_at=resets_at)
+        mock_fetch = AsyncMock(side_effect=[first_status, second_status])
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
-        assert result["sleep_seconds"] > 0
+        assert mock_fetch.call_count == 2
+        assert result["sleep_seconds"] == pytest.approx(7200, abs=60)
 
     @pytest.mark.asyncio
     async def test_uses_fresh_cache_skips_fetch(self, monkeypatch, tmp_path):

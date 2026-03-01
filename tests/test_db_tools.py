@@ -15,17 +15,6 @@ from autoskillit.execution.db import (
 )
 
 
-class TestDbToolsModuleExists:
-    def test_validate_select_only_importable(self):
-        assert callable(_validate_select_only)
-
-    def test_execute_readonly_query_importable(self):
-        assert callable(_execute_readonly_query)
-
-    def test_row_to_dict_importable(self):
-        assert callable(_row_to_dict)
-
-
 class TestValidateSelectOnly:
     def test_valid_select(self):
         _validate_select_only("SELECT * FROM foo")
@@ -47,15 +36,15 @@ class TestValidateSelectOnly:
             _validate_select_only("")
 
     def test_whitespace_only_raises(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="empty"):
             _validate_select_only("   ")
 
     def test_drop_raises(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="forbidden"):
             _validate_select_only("DROP TABLE foo")
 
     def test_insert_raises(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="forbidden"):
             _validate_select_only("INSERT INTO foo VALUES (1)")
 
     def test_update_raises(self):
@@ -141,7 +130,7 @@ class TestExecuteReadonlyQuery:
 
     def test_write_blocked(self, tmp_path):
         db_path = self._make_db(tmp_path)
-        with pytest.raises(Exception):
+        with pytest.raises(sqlite3.DatabaseError):
             _execute_readonly_query(
                 db_path, "INSERT INTO items VALUES (99, 'evil', NULL)", [], 30, 1000
             )

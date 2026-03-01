@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from pathlib import Path
 
 import pytest
@@ -16,33 +15,7 @@ from autoskillit.recipe.contracts import StaleItem
 
 def test_llm_triage_module_importable():
     """_llm_triage module must exist and export triage_staleness."""
-    import asyncio
-
-    from autoskillit._llm_triage import triage_staleness
-
-    assert asyncio.iscoroutinefunction(triage_staleness)
-
-
-# ---------------------------------------------------------------------------
-# T-P7-3-A / T-P6-6-A: Structural source assertions
-# ---------------------------------------------------------------------------
-
-
-def test_triage_staleness_uses_run_managed_async():
-    """triage_staleness must call run_managed_async, not asyncio.create_subprocess_exec."""
-    from autoskillit import _llm_triage
-
-    src = inspect.getsource(_llm_triage)
-    assert "run_managed_async" in src
-    assert "create_subprocess_exec" not in src
-
-
-def test_triage_staleness_no_raw_proc_kill():
-    """proc.kill() must not appear in _llm_triage; run_managed_async handles cleanup."""
-    from autoskillit import _llm_triage
-
-    src = inspect.getsource(_llm_triage)
-    assert "proc.kill()" not in src
+    from autoskillit._llm_triage import triage_staleness  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

@@ -425,7 +425,7 @@ class TestTimeoutKillsHangingProcess:
         elapsed = time.monotonic() - start
 
         assert result.termination == TerminationReason.TIMED_OUT
-        assert elapsed < 8, f"Should return within ~2s timeout, took {elapsed:.1f}s"
+        assert elapsed < 5, f"Should return within ~2s timeout, took {elapsed:.1f}s"
         assert "before hang" in result.stdout  # Partial output captured
         # Process should be dead — use _wait_process_dead to avoid the flaky
         # asyncio.sleep(0.5) + pid_exists() pattern that races kernel cleanup.
@@ -1730,7 +1730,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     stale_threshold=0.05,
                     spawn_time=spawn_time,
                     pid=99999,
-                    _phase1_poll=0.05,
+                    _phase1_poll=0.01,
                     _phase2_poll=0.05,
                 ),
                 timeout=5.0,
@@ -1753,10 +1753,10 @@ class TestSessionLogMonitorStaleSuppressionGate:
                 stale_threshold=0.05,
                 spawn_time=spawn_time,
                 # pid omitted (defaults to None)
-                _phase1_poll=0.05,
+                _phase1_poll=0.01,
                 _phase2_poll=0.05,
             ),
-            timeout=5.0,
+            timeout=2.0,
         )
         assert result == "stale"
 
@@ -1777,10 +1777,10 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     stale_threshold=0.05,
                     spawn_time=spawn_time,
                     pid=None,
-                    _phase1_poll=0.05,
+                    _phase1_poll=0.01,
                     _phase2_poll=0.05,
                 ),
-                timeout=5.0,
+                timeout=2.0,
             )
         assert result == "stale"
         mock_tcp.assert_not_called()
@@ -1814,7 +1814,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                         stale_threshold=0.05,
                         spawn_time=spawn_time,
                         pid=99999,
-                        _phase1_poll=0.05,
+                        _phase1_poll=0.01,
                         _phase2_poll=0.05,
                     ),
                     timeout=5.0,
@@ -1956,6 +1956,7 @@ class TestChannelBDrainWait:
             timeout=30,
             heartbeat_marker='"type":"result"',
             # No session_log_dir: Channel B cannot fire
+            _heartbeat_poll=0.05,
         )
 
         assert result.termination == TerminationReason.COMPLETED
@@ -2004,6 +2005,7 @@ class TestChannelBDrainWait:
             timeout=30,
             heartbeat_marker='"type":"result"',
             # No session_log_dir: Channel B cannot fire
+            _heartbeat_poll=0.05,
         )
 
         assert result.termination == TerminationReason.COMPLETED
@@ -2235,21 +2237,9 @@ class TestPtyWrapCommand:
 class TestSubprocessResultAndRunnerTypes:
     """Tests for SubprocessResult in types.py and SubprocessRunner protocol."""
 
-    def test_subprocess_result_importable_from_types(self):
-        """SubprocessResult must be importable from autoskillit.core.types."""
-        from autoskillit.core.types import SubprocessResult  # noqa: F401
-
     def test_subprocess_result_still_importable_from_process_lifecycle(self):
         """SubprocessResult remains importable from process_lifecycle for backward compat."""
         from autoskillit.execution.process import SubprocessResult  # noqa: F401
-
-    def test_subprocess_runner_protocol_satisfied_by_real(self):
-        """DefaultSubprocessRunner satisfies the SubprocessRunner protocol."""
-        from autoskillit.core.types import SubprocessRunner
-        from autoskillit.execution.process import DefaultSubprocessRunner
-
-        runner = DefaultSubprocessRunner()
-        assert isinstance(runner, SubprocessRunner)
 
     def test_real_subprocess_runner_default_pty_mode_is_false(self):
         """DefaultSubprocessRunner must default pty_mode=False.

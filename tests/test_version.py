@@ -7,6 +7,14 @@ import pytest
 
 
 class TestVersionInfo:
+    @pytest.fixture(autouse=True)
+    def _clear_version_cache(self):
+        from autoskillit.version import version_info
+
+        version_info.cache_clear()
+        yield
+        version_info.cache_clear()
+
     def test_returns_expected_keys(self, tmp_path):
         from autoskillit.version import version_info
 

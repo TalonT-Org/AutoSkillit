@@ -27,11 +27,6 @@ def default_config():
 
 
 @pytest.fixture
-def mock_runner(conftest_mock_runner):
-    return conftest_mock_runner
-
-
-@pytest.fixture
 def conftest_mock_runner():
     from tests.conftest import MockSubprocessRunner
 

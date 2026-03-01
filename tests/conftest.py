@@ -169,6 +169,7 @@ def parse_stdout_json(capsys):
     return _parse
 
 
+
 @pytest.fixture
 def tool_ctx(monkeypatch, tmp_path):
     """Provide a fully isolated ToolContext for server tests.

@@ -1,5 +1,7 @@
 version: '3'
 
+set: ['pipefail']
+
 vars:
   PYTEST_TMPDIR: '{{if eq OS "linux"}}/dev/shm/pytest-tmp{{else}}/tmp/pytest-tmp{{end}}'
   PYTEST_CACHEDIR: '{{if eq OS "linux"}}/dev/shm/pytest-cache{{else}}/tmp/pytest-cache{{end}}'

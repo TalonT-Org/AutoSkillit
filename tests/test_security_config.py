@@ -34,7 +34,7 @@ def test_gitleaks_hook_registered() -> None:
     assert "gitleaks" in content, "gitleaks hook not found in .pre-commit-config.yaml"
 
 
-def test_claude_md_section5_mentions_gitleaks() -> None:
+def test_claude_md_mentions_gitleaks() -> None:
     """CLAUDE.md Section 5 must document the gitleaks hook."""
     content = (REPO_ROOT / "CLAUDE.md").read_text()
     assert "gitleaks" in content.lower(), "CLAUDE.md does not mention gitleaks — update Section 5"

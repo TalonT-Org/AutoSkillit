@@ -876,7 +876,7 @@ class TestSkillResult:
         parsed = json.loads(sr.to_json())
         assert parsed["retry_reason"] == "resume"
 
-    def test_to_json_is_valid_json(self):
+    def test_to_json_preserves_token_usage_dict(self):
         sr = self._make(token_usage={"input_tokens": 10, "model_breakdown": {}})
         result = sr.to_json()
         parsed = json.loads(result)

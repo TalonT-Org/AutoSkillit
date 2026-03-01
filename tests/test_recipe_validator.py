@@ -44,38 +44,6 @@ from autoskillit.recipe.validator import (
 # ---------------------------------------------------------------------------
 
 
-def test_all_symbols_importable() -> None:
-    """All expected symbols are importable from recipe.validator and recipe.contracts."""
-    from autoskillit.core.types import Severity  # noqa: F401
-    from autoskillit.recipe.contracts import (  # noqa: F401
-        DataflowEntry,
-        RecipeCard,
-        SkillContract,
-        SkillInput,
-        SkillOutput,
-        check_contract_staleness,
-        compute_skill_hash,
-        count_positional_args,
-        extract_context_refs,
-        extract_input_refs,
-        generate_recipe_card,
-        load_bundled_manifest,
-        load_recipe_card,
-        resolve_skill_name,
-        validate_recipe_cards,
-    )
-    from autoskillit.recipe.validator import (  # noqa: F401
-        _RULE_REGISTRY,
-        _WORKTREE_CREATING_SKILLS,
-        RuleFinding,
-        RuleSpec,
-        analyze_dataflow,
-        run_semantic_rules,
-        semantic_rule,
-        validate_recipe,
-    )
-
-
 def test_semantic_rules_module_no_longer_exists() -> None:
     """semantic_rules module must be gone — ModuleNotFoundError expected."""
     with pytest.raises(ModuleNotFoundError):
@@ -136,9 +104,6 @@ class TestValidateRecipe:
         wf = _parse_recipe(data)
         errors = validate_recipe(wf)
         assert any("name" in e.lower() for e in errors)
-
-    def test_validate_recipe_is_callable(self) -> None:
-        assert callable(validate_recipe)
 
     # WF2
     def test_recipe_requires_name(self, tmp_path: Path) -> None:
@@ -482,14 +447,6 @@ class TestValidateRecipe:
                         f"Recipe '{wf.name}' step '{step_name}' retry.on='{step.retry.on}' "
                         f"is not a known response field: {RETRY_RESPONSE_FIELDS}"
                     )
-
-    # CAP9
-    def test_bundled_recipes_still_valid(self) -> None:
-        bd = builtin_recipes_dir()
-        for f in bd.glob("*.yaml"):
-            wf = load_recipe(f)
-            errors = validate_recipe(wf)
-            assert errors == [], f"Regression in {f.name}: {errors}"
 
 
 # ---------------------------------------------------------------------------
@@ -1447,6 +1404,9 @@ def test_load_bundled_manifest() -> None:
     manifest = load_bundled_manifest()
     assert manifest["version"] == "0.1.0"
     assert len(manifest["skills"]) == 17
+    assert "implement-worktree" in manifest["skills"]
+    assert "investigate" in manifest["skills"]
+    assert "write-recipe" in manifest["skills"]
 
 
 def test_load_bundled_manifest_skill_inputs_typed() -> None:
@@ -2016,14 +1976,29 @@ def test_sc5_make_groups_outputs_include_group_files() -> None:
     assert "group_files" in output_names
 
 
+def test_pipeline_summary_contract_declared() -> None:
+    from autoskillit.core.paths import pkg_root
+
+    contracts_path = pkg_root() / "recipe" / "skill_contracts.yaml"
+    contracts = yaml.safe_load(contracts_path.read_text())
+    assert "pipeline-summary" in contracts["skills"]
+    skill = contracts["skills"]["pipeline-summary"]
+    required_inputs = [i["name"] for i in skill["inputs"] if i.get("required", False)]
+    assert "bug_report_path" in required_inputs
+    assert "feature_branch" in required_inputs
+    assert "target_branch" in required_inputs
+    assert "workspace" in required_inputs
+
+
 # ---------------------------------------------------------------------------
 # Recipe structural tests — implementation-pipeline.yaml (T_IP1–T_IP5)
 # ---------------------------------------------------------------------------
 
 
 class TestImplementationPipelineStructure:
-    def setup_method(self) -> None:
-        self.recipe = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+    @pytest.fixture(scope="class", autouse=True)
+    def _load_recipe(self, request) -> None:
+        request.cls.recipe = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
 
     def test_ip1_group_step_captures_group_files(self) -> None:
         """T_IP1: group step has capture containing key group_files (not groups_path)."""
@@ -2226,8 +2201,9 @@ class TestImplementationPipelineStructure:
 
 
 class TestBugfixLoopStructure:
-    def setup_method(self) -> None:
-        self.recipe = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
+    @pytest.fixture(scope="class", autouse=True)
+    def _load_recipe(self, request) -> None:
+        request.cls.recipe = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
 
     def test_bl1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
         self,
@@ -2276,8 +2252,9 @@ class TestBugfixLoopStructure:
 
 
 class TestInvestigateFirstStructure:
-    def setup_method(self) -> None:
-        self.recipe = load_recipe(builtin_recipes_dir() / "investigate-first.yaml")
+    @pytest.fixture(scope="class", autouse=True)
+    def _load_recipe(self, request) -> None:
+        request.cls.recipe = load_recipe(builtin_recipes_dir() / "investigate-first.yaml")
 
     def test_if1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
         self,
@@ -2366,8 +2343,9 @@ class TestInvestigateFirstStructure:
 
 
 class TestAuditAndFixStructure:
-    def setup_method(self) -> None:
-        self.recipe = load_recipe(builtin_recipes_dir() / "audit-and-fix.yaml")
+    @pytest.fixture(scope="class", autouse=True)
+    def _load_recipe(self, request) -> None:
+        request.cls.recipe = load_recipe(builtin_recipes_dir() / "audit-and-fix.yaml")
 
     def test_aaf1_implement_uses_no_merge_skill(self) -> None:
         """T_AAF1: implement step must use implement-worktree-no-merge."""

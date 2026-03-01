@@ -13,7 +13,6 @@ from autoskillit.core import GitHubFetcher
 from autoskillit.execution.github import DefaultGitHubFetcher, _parse_issue_ref
 from autoskillit.pipeline.gate import UNGATED_TOOLS
 from autoskillit.server.tools_integrations import fetch_github_issue
-from autoskillit.server.tools_status import kitchen_status
 
 # ---------------------------------------------------------------------------
 # _parse_issue_ref unit tests
@@ -135,7 +134,7 @@ async def test_default_github_fetcher_no_token_omits_auth_header(httpx_mock):
     fetcher = DefaultGitHubFetcher(token=None)
     await fetcher.fetch_issue("owner/repo#1", include_comments=False)
     requests = httpx_mock.get_requests()
-    assert len(requests) >= 1
+    assert len(requests) == 1
     assert "authorization" not in {k.lower() for k in requests[0].headers}
 
 
@@ -222,20 +221,6 @@ def test_github_config_defaults():
     assert config.github.default_repo is None
 
 
-@pytest.mark.asyncio
-async def test_kitchen_status_includes_github_config(tool_ctx):
-    tool_ctx.config.github.default_repo = "owner/repo"
-    status = json.loads(await kitchen_status())
-    assert "github_default_repo" in status
-    assert status["github_default_repo"] == "owner/repo"
-    assert "github_token_configured" in status
-
-
-def test_github_fetcher_protocol_satisfied():
-    fetcher = DefaultGitHubFetcher(token=None)
-    assert isinstance(fetcher, GitHubFetcher)
-
-
 # ---------------------------------------------------------------------------
 # GitHubFetcher protocol — has_token requirement
 # ---------------------------------------------------------------------------
@@ -318,38 +303,6 @@ async def test_default_github_fetcher_request_error(httpx_mock):
     result = await fetcher.fetch_issue("owner/repo#1", include_comments=False)
     assert result["success"] is False
     assert "request error" in result["error"].lower()
-
-
-# ---------------------------------------------------------------------------
-# kitchen_status — DI-aligned github_token_configured
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_kitchen_status_github_token_configured_true_from_client(tool_ctx):
-    """kitchen_status must read github_token_configured from ctx.github_client.has_token."""
-    tool_ctx.github_client = DefaultGitHubFetcher(token="my-token")
-    status = json.loads(await kitchen_status())
-    assert status["github_token_configured"] is True
-
-
-@pytest.mark.asyncio
-async def test_kitchen_status_github_token_not_configured_from_client(tool_ctx, monkeypatch):
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    tool_ctx.github_client = DefaultGitHubFetcher(token=None)
-    status = json.loads(await kitchen_status())
-    assert status["github_token_configured"] is False
-
-
-@pytest.mark.asyncio
-async def test_kitchen_status_github_token_does_not_reflect_post_construction_env(
-    tool_ctx, monkeypatch
-):
-    """kitchen_status must NOT re-read os.environ — it must reflect ctx.github_client.has_token."""
-    tool_ctx.github_client = DefaultGitHubFetcher(token=None)
-    monkeypatch.setenv("GITHUB_TOKEN", "set-after-construction")
-    status = json.loads(await kitchen_status())
-    assert status["github_token_configured"] is False
 
 
 # ---------------------------------------------------------------------------

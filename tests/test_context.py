@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import get_args, get_type_hints
 
 from autoskillit.config import AutomationConfig
@@ -60,7 +61,7 @@ def test_tool_context_audit_isolation():
 
 
 def test_gate_state_replacement():
-    """DefaultGateState (frozen) can be replaced on a mutable ToolContext."""
+    """DefaultGateState (slots=True) can be replaced on a mutable ToolContext."""
     ctx = ToolContext(
         config=AutomationConfig(),
         audit=DefaultAuditLog(),
@@ -177,11 +178,9 @@ def test_recipe_repository_protocol_has_rich_methods() -> None:
         assert hasattr(RecipeRepository, method), f"RecipeRepository missing {method}"
 
 
-def _make_ctx(tmp_path=None):
+def _make_ctx(tmp_path: Path) -> ToolContext:
     """Helper: minimal ToolContext with no optional fields."""
-    import tempfile
-
-    plugin_dir = str(tmp_path) if tmp_path else tempfile.mkdtemp()
+    plugin_dir = str(tmp_path)
     return ToolContext(
         config=AutomationConfig(),
         audit=DefaultAuditLog(),
@@ -192,15 +191,15 @@ def _make_ctx(tmp_path=None):
     )
 
 
-def test_toolcontext_github_client_defaults_to_none():
+def test_toolcontext_github_client_defaults_to_none(tmp_path):
     """github_client must default to None like the other optional service fields."""
-    ctx = _make_ctx()
+    ctx = _make_ctx(tmp_path)
     assert ctx.github_client is None
 
 
-def test_toolcontext_clone_mgr_defaults_to_none():
+def test_toolcontext_clone_mgr_defaults_to_none(tmp_path):
     """clone_mgr must default to None — same gap as github_client."""
-    ctx = _make_ctx()
+    ctx = _make_ctx(tmp_path)
     assert ctx.clone_mgr is None
 
 

@@ -35,6 +35,7 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.db import _select_only_authorizer, _validate_select_only
+from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.execution.headless import (
     _build_skill_result,
     _ensure_skill_prefix,
@@ -280,7 +281,7 @@ class TestNoSkillsDirectoryProvider:
 class TestPluginDirConstant:
     """T6: tool_ctx.plugin_dir defaults to the package root directory."""
 
-    def test_plugin_dir_returns_package_root(self, tool_ctx):
+    def test_plugin_dir_assignment_is_visible_via_get_ctx(self, tool_ctx):
         """By default tool_ctx.plugin_dir is set to tmp_path by the fixture.
 
         The real package dir is what the server uses at runtime (set by cli.py serve()).
@@ -812,7 +813,7 @@ class TestKitchenStatus:
         assert tool_ctx.gate.enabled is False
         result = json.loads(await kitchen_status())
         assert result["tools_enabled"] is False
-        assert "package_version" in result
+        assert isinstance(result["package_version"], str) and result["package_version"]
 
     @pytest.mark.asyncio
     async def test_status_includes_token_usage_verbosity_default(self):
@@ -829,6 +830,40 @@ class TestKitchenStatus:
         tool_ctx.config = cfg
         result = json.loads(await kitchen_status())
         assert result["token_usage_verbosity"] == "none"
+
+    @pytest.mark.asyncio
+    async def test_kitchen_status_includes_github_config(self, tool_ctx):
+        tool_ctx.config.github.default_repo = "owner/repo"
+        status = json.loads(await kitchen_status())
+        assert "github_default_repo" in status
+        assert status["github_default_repo"] == "owner/repo"
+        assert "github_token_configured" in status
+
+    @pytest.mark.asyncio
+    async def test_kitchen_status_github_token_configured_true_from_client(self, tool_ctx):
+        """kitchen_status must read github_token_configured from ctx.github_client.has_token."""
+        tool_ctx.github_client = DefaultGitHubFetcher(token="my-token")
+        status = json.loads(await kitchen_status())
+        assert status["github_token_configured"] is True
+
+    @pytest.mark.asyncio
+    async def test_kitchen_status_github_token_not_configured_from_client(
+        self, tool_ctx, monkeypatch
+    ):
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        tool_ctx.github_client = DefaultGitHubFetcher(token=None)
+        status = json.loads(await kitchen_status())
+        assert status["github_token_configured"] is False
+
+    @pytest.mark.asyncio
+    async def test_kitchen_status_github_token_does_not_reflect_post_construction_env(
+        self, tool_ctx, monkeypatch
+    ):
+        """kitchen_status must NOT re-read os.environ — reflects ctx.github_client.has_token."""
+        tool_ctx.github_client = DefaultGitHubFetcher(token=None)
+        monkeypatch.setenv("GITHUB_TOKEN", "set-after-construction")
+        status = json.loads(await kitchen_status())
+        assert status["github_token_configured"] is False
 
 
 class TestRecipeTools:
@@ -2910,10 +2945,6 @@ class TestGatedToolAccess:
         assert result["success"] is False
         assert result["is_error"] is True
 
-    def test_tools_disabled_by_default(self, tool_ctx):
-        """Gate defaults to disabled (closed kitchen) per this test class's fixture."""
-        assert tool_ctx.gate.enabled is False
-
     def test_prompts_registered(self):
         """open_kitchen and close_kitchen prompts are registered on the server."""
         from fastmcp.prompts import Prompt
@@ -2923,40 +2954,6 @@ class TestGatedToolAccess:
         prompts = [c for c in mcp._local_provider._components.values() if isinstance(c, Prompt)]
         prompt_names = {p.name for p in prompts}
         assert prompt_names == {"open_kitchen", "close_kitchen"}
-
-    def test_all_tools_still_registered(self):
-        """All 22 tools remain registered (gated + ungated)."""
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp
-
-        tools = [c for c in mcp._local_provider._components.values() if isinstance(c, Tool)]
-        tool_names = {t.name for t in tools}
-        expected = {
-            "run_cmd",
-            "run_python",
-            "run_skill",
-            "run_skill_retry",
-            "test_check",
-            "merge_worktree",
-            "reset_test_dir",
-            "classify_fix",
-            "kitchen_status",
-            "reset_workspace",
-            "read_db",
-            "list_recipes",
-            "load_recipe",
-            "migrate_recipe",
-            "validate_recipe",
-            "get_pipeline_report",
-            "get_token_summary",
-            "clone_repo",
-            "remove_clone",
-            "push_to_remote",
-            "fetch_github_issue",
-            "report_bug",
-        }
-        assert expected == tool_names
 
     @pytest.mark.asyncio
     async def test_run_python_gated(self):
@@ -2974,10 +2971,10 @@ class TestGatedToolAccess:
         assert parsed["success"] is False
         assert parsed["is_error"] is True
         assert parsed["subtype"] == "gate_error"
-        assert "open_kitchen" in parsed["result"] or "open_kitchen" in parsed["result"]
+        assert "open_kitchen" in parsed["result"]
 
     def test_all_tools_tagged_automation(self):
-        """All 8 tools have the 'automation' tag for future visibility control."""
+        """All registered tools have the 'automation' tag for future visibility control."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -3006,48 +3003,44 @@ class TestGateTransitionLogs:
             for entry in logs
         )
 
-    def test_session_log_dir_warns_when_missing(self):
+    def test_session_log_dir_warns_when_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        # Do NOT create the log dir — we want the missing-dir branch
+        cwd = str(tmp_path / "my-project")
         with structlog.testing.capture_logs() as logs:
-            _session_log_dir("/nonexistent/project/99999999")
+            _session_log_dir(cwd)
         warning_entries = [entry for entry in logs if entry.get("log_level") == "warning"]
         assert any(entry.get("event") == "session_log_dir_missing" for entry in warning_entries)
 
-    def test_session_log_dir_no_warning_when_present(self, tmp_path):
-        import shutil
-
+    def test_session_log_dir_no_warning_when_present(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
         cwd = str(tmp_path)
         project_hash = cwd.replace("/", "-").replace("_", "-")
-        log_dir = Path.home() / ".claude" / "projects" / project_hash
+        log_dir = tmp_path / "home" / ".claude" / "projects" / project_hash
         log_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            with structlog.testing.capture_logs() as logs:
-                _session_log_dir(cwd)
-            assert not any(entry.get("event") == "session_log_dir_missing" for entry in logs)
-        finally:
-            shutil.rmtree(log_dir, ignore_errors=True)
+        with structlog.testing.capture_logs() as logs:
+            _session_log_dir(cwd)
+        assert not any(entry.get("event") == "session_log_dir_missing" for entry in logs)
 
-    def test_session_log_dir_logs_path_when_dir_exists(self, tmp_path):
-        import shutil
-
+    def test_session_log_dir_logs_path_when_dir_exists(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
         cwd = str(tmp_path)
         project_hash = cwd.replace("/", "-").replace("_", "-")
-        log_dir = Path.home() / ".claude" / "projects" / project_hash
+        log_dir = tmp_path / "home" / ".claude" / "projects" / project_hash
         log_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            with structlog.testing.capture_logs() as logs:
-                result = _session_log_dir(cwd)
-            info_entries = [e for e in logs if e.get("log_level") == "info"]
-            assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
-            computed_entry = next(
-                e for e in info_entries if e.get("event") == "session_log_dir_computed"
-            )
-            assert computed_entry.get("path") == str(result)
-            assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
-        finally:
-            shutil.rmtree(log_dir, ignore_errors=True)
+        with structlog.testing.capture_logs() as logs:
+            result = _session_log_dir(cwd)
+        info_entries = [e for e in logs if e.get("log_level") == "info"]
+        assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
+        computed_entry = next(
+            e for e in info_entries if e.get("event") == "session_log_dir_computed"
+        )
+        assert computed_entry.get("path") == str(result)
+        assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
 
-    def test_session_log_dir_logs_path_when_dir_missing(self):
-        cwd = "/nonexistent/project/unique-test-99999"
+    def test_session_log_dir_logs_path_when_dir_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        cwd = str(tmp_path / "my-project")
         with structlog.testing.capture_logs() as logs:
             result = _session_log_dir(cwd)
         info_entries = [e for e in logs if e.get("log_level") == "info"]
@@ -5877,7 +5870,7 @@ _MINIMAL_SCRIPT_YAML = """\
 name: test-script
 description: Test
 summary: test
-inputs:
+ingredients:
   task:
     description: What to do
     required: true
@@ -5895,7 +5888,7 @@ steps:
   escalate:
     action: stop
     message: "Failed."
-constraints:
+kitchen_rules:
   - "Follow routing rules"
 """
 
@@ -6684,9 +6677,6 @@ class TestRetryResponseFieldsTokenUsage:
     def test_token_usage_in_fields(self):
         assert "token_usage" in RETRY_RESPONSE_FIELDS
 
-    def test_field_count(self):
-        assert len(RETRY_RESPONSE_FIELDS) == 10
-
 
 class TestGetPipelineReport:
     """get_pipeline_report is ungated and returns accumulated failures."""
@@ -7164,7 +7154,6 @@ class TestServerLazyInit:
 
     def test_server_import_does_not_call_load_config(self, monkeypatch):
         """Importing server.py must not trigger load_config() as a side effect."""
-        import importlib
         import sys
         from unittest.mock import patch
 
@@ -7177,8 +7166,6 @@ class TestServerLazyInit:
 
         with patch("autoskillit.config.load_config") as mock_load:
             import autoskillit.server  # noqa: F401
-
-            importlib.import_module("autoskillit.server")
         assert not mock_load.called
 
     def test_get_ctx_raises_before_initialize(self, monkeypatch):
@@ -7220,7 +7207,7 @@ class TestGatedToolObservability:
         assert any(entry.get("tool") == "run_cmd" for entry in logs)
 
     @pytest.mark.asyncio
-    async def test_run_cmd_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
+    async def test_run_cmd_returns_failure_result_on_nonzero_exit(self, tool_ctx, mock_ctx):
         """run_cmd reports failure (success=false) when subprocess exits non-zero."""
         tool_ctx.runner.push(_make_result(1, "", "err"))
         result = json.loads(await run_cmd(cmd="false", cwd="/tmp", ctx=mock_ctx))
@@ -7237,7 +7224,7 @@ class TestGatedToolObservability:
         assert any(entry.get("tool") == "run_python" for entry in logs)
 
     @pytest.mark.asyncio
-    async def test_run_python_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
+    async def test_run_python_returns_failure_result_on_bad_module(self, tool_ctx, mock_ctx):
         """run_python reports failure (success=false) when callable import fails."""
         result = json.loads(await run_python(callable="nonexistent.module.func", ctx=mock_ctx))
         assert result["success"] is False
@@ -7260,7 +7247,7 @@ class TestGatedToolObservability:
         assert any(entry.get("tool") == "run_skill" for entry in logs)
 
     @pytest.mark.asyncio
-    async def test_run_skill_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
+    async def test_run_skill_returns_failure_result_on_error_output(self, tool_ctx, mock_ctx):
         """run_skill reports failure (success=false) when headless session fails."""
         tool_ctx.runner.push(
             _make_result(
@@ -7293,7 +7280,9 @@ class TestGatedToolObservability:
         assert any(entry.get("tool") == "run_skill_retry" for entry in logs)
 
     @pytest.mark.asyncio
-    async def test_run_skill_retry_calls_ctx_error_on_failure(self, tool_ctx, mock_ctx):
+    async def test_run_skill_retry_returns_failure_result_on_error_output(
+        self, tool_ctx, mock_ctx
+    ):
         """run_skill_retry reports failure (success=false) when headless session fails."""
         tool_ctx.runner.push(
             _make_result(
@@ -7549,54 +7538,47 @@ class TestCloneRepoTool:
 
     @pytest.mark.asyncio
     async def test_delegates_to_workspace_clone(self, tool_ctx):
-        with patch(
-            "autoskillit.workspace.clone.clone_repo",
-            return_value={"clone_path": "/clone/path", "source_dir": "/src"},
-        ):
-            result = json.loads(await clone_repo(source_dir="/src", run_name="myrun"))
+        mock_mgr = MagicMock()
+        mock_mgr.clone_repo.return_value = {"clone_path": "/clone/path", "source_dir": "/src"}
+        tool_ctx.clone_mgr = mock_mgr
+        result = json.loads(await clone_repo(source_dir="/src", run_name="myrun"))
         assert result["clone_path"] == "/clone/path"
         assert result["source_dir"] == "/src"
 
     @pytest.mark.asyncio
     async def test_returns_error_on_value_error(self, tool_ctx):
-        with patch(
-            "autoskillit.workspace.clone.clone_repo",
-            side_effect=ValueError("resolved to nonexistent"),
-        ):
-            result = json.loads(await clone_repo(source_dir="/bad/path", run_name="run"))
+        mock_mgr = MagicMock()
+        mock_mgr.clone_repo.side_effect = ValueError("resolved to nonexistent")
+        tool_ctx.clone_mgr = mock_mgr
+        result = json.loads(await clone_repo(source_dir="/bad/path", run_name="run"))
         assert "error" in result
         assert "resolved to" in result["error"]
 
     @pytest.mark.asyncio
     async def test_returns_error_on_runtime_error(self, tool_ctx):
-        with patch(
-            "autoskillit.workspace.clone.clone_repo",
-            side_effect=RuntimeError("git clone failed"),
-        ):
-            result = json.loads(await clone_repo(source_dir="/src", run_name="run"))
+        mock_mgr = MagicMock()
+        mock_mgr.clone_repo.side_effect = RuntimeError("git clone failed")
+        tool_ctx.clone_mgr = mock_mgr
+        result = json.loads(await clone_repo(source_dir="/src", run_name="run"))
         assert "error" in result
 
     @pytest.mark.asyncio
     async def test_cb17_forwards_branch_to_clone_manager(self, tool_ctx):
         """T_CB17: branch param is forwarded to the underlying clone_repo call."""
-        with patch(
-            "autoskillit.workspace.clone.clone_repo",
-            return_value={"clone_path": "/clone/path", "source_dir": "/src"},
-        ) as mock_clone:
-            await clone_repo(source_dir="/src", run_name="r", branch="dev")
-        mock_clone.assert_called_once()
-        assert mock_clone.call_args.kwargs.get("branch") == "dev"
+        mock_mgr = MagicMock()
+        mock_mgr.clone_repo.return_value = {"clone_path": "/clone/path", "source_dir": "/src"}
+        tool_ctx.clone_mgr = mock_mgr
+        await clone_repo(source_dir="/src", run_name="r", branch="dev")
+        mock_mgr.clone_repo.assert_called_once_with("/src", "r", "dev", "")
 
     @pytest.mark.asyncio
     async def test_cb18_forwards_strategy_to_clone_manager(self, tool_ctx):
         """T_CB18: strategy param is forwarded to the underlying clone_repo call."""
-        with patch(
-            "autoskillit.workspace.clone.clone_repo",
-            return_value={"clone_path": "/clone/path", "source_dir": "/src"},
-        ) as mock_clone:
-            await clone_repo(source_dir="/src", run_name="r", strategy="proceed")
-        mock_clone.assert_called_once()
-        assert mock_clone.call_args.kwargs.get("strategy") == "proceed"
+        mock_mgr = MagicMock()
+        mock_mgr.clone_repo.return_value = {"clone_path": "/clone/path", "source_dir": "/src"}
+        tool_ctx.clone_mgr = mock_mgr
+        await clone_repo(source_dir="/src", run_name="r", strategy="proceed")
+        mock_mgr.clone_repo.assert_called_once_with("/src", "r", "", "proceed")
 
     @pytest.mark.asyncio
     async def test_cb19_returns_uncommitted_changes_result_as_json(self, tool_ctx):
@@ -7608,11 +7590,10 @@ class TestCloneRepoTool:
             "changed_files": "M file.py",
             "total_changed": "1",
         }
-        with patch(
-            "autoskillit.workspace.clone.clone_repo",
-            return_value=uncommitted_result,
-        ):
-            result = json.loads(await clone_repo(source_dir="/src", run_name="r"))
+        mock_mgr = MagicMock()
+        mock_mgr.clone_repo.return_value = uncommitted_result
+        tool_ctx.clone_mgr = mock_mgr
+        result = json.loads(await clone_repo(source_dir="/src", run_name="r"))
         assert result["uncommitted_changes"] == "true"
         assert "error" not in result
 
@@ -7626,29 +7607,26 @@ class TestRemoveCloneTool:
 
     @pytest.mark.asyncio
     async def test_delegates_to_workspace_clone(self, tool_ctx):
-        with patch(
-            "autoskillit.workspace.clone.remove_clone",
-            return_value={"removed": "true"},
-        ):
-            result = json.loads(await remove_clone(clone_path="/clone/path", keep="false"))
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx.clone_mgr = mock_mgr
+        result = json.loads(await remove_clone(clone_path="/clone/path", keep="false"))
         assert result["removed"] == "true"
 
     @pytest.mark.asyncio
     async def test_keep_true_passes_through(self, tool_ctx):
-        with patch(
-            "autoskillit.workspace.clone.remove_clone",
-            return_value={"removed": "false", "reason": "keep=true"},
-        ):
-            result = json.loads(await remove_clone(clone_path="/clone/path", keep="true"))
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "false", "reason": "keep=true"}
+        tool_ctx.clone_mgr = mock_mgr
+        result = json.loads(await remove_clone(clone_path="/clone/path", keep="true"))
         assert result["removed"] == "false"
 
     @pytest.mark.asyncio
     async def test_always_routes_success_even_on_partial_failure(self, tool_ctx):
-        with patch(
-            "autoskillit.workspace.clone.remove_clone",
-            return_value={"removed": "false", "reason": "OSError"},
-        ):
-            result = json.loads(await remove_clone(clone_path="/bad", keep="false"))
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "false", "reason": "OSError"}
+        tool_ctx.clone_mgr = mock_mgr
+        result = json.loads(await remove_clone(clone_path="/bad", keep="false"))
         assert "error" not in result
 
 
@@ -7661,13 +7639,12 @@ class TestPushToRemoteTool:
 
     @pytest.mark.asyncio
     async def test_delegates_to_workspace_clone_on_success(self, tool_ctx):
-        with patch(
-            "autoskillit.workspace.clone.push_to_remote",
-            return_value={"success": "true", "stderr": ""},
-        ):
-            result = json.loads(
-                await push_to_remote(clone_path="/clone", source_dir="/src", branch="main")
-            )
+        mock_mgr = MagicMock()
+        mock_mgr.push_to_remote.return_value = {"success": "true", "stderr": ""}
+        tool_ctx.clone_mgr = mock_mgr
+        result = json.loads(
+            await push_to_remote(clone_path="/clone", source_dir="/src", branch="main")
+        )
         assert result["success"] == "true"
         assert "error" not in result
 

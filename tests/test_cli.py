@@ -1525,9 +1525,7 @@ class TestEnsureProjectTemp:
     """N5: ensure_project_temp moved from config.py to _io.py."""
 
     def test_ensure_project_temp_importable_from_io(self):
-        from autoskillit.core.io import ensure_project_temp
-
-        assert callable(ensure_project_temp)
+        from autoskillit.core.io import ensure_project_temp  # noqa: F401
 
     def test_ensure_project_temp_creates_temp_dir(self, tmp_path):
         from autoskillit.core.io import ensure_project_temp

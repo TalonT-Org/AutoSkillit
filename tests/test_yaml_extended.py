@@ -1,4 +1,4 @@
-"""Extended _yaml.py tests for P14 — YAML consolidation."""
+"""Extended YAML I/O tests for core/io.py consolidation."""
 
 from __future__ import annotations
 
@@ -73,43 +73,27 @@ class TestDumpYamlStr:
 
 
 class TestYamlConsolidationArchitecture:
-    def test_no_io_load_yaml_imported_outside_io(self):
-        """No production module except _io.py may import _load_yaml from _io."""
-        import ast
-        from pathlib import Path
-
-        src_dir = Path(__file__).parent.parent / "src" / "autoskillit"
-        violations = []
-        for py_file in sorted(src_dir.glob("*.py")):
-            if py_file.name == "_io.py":
-                continue
-            tree = ast.parse(py_file.read_text())
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ImportFrom) and node.module:
-                    if "_io" in node.module:
-                        names = [a.name for a in node.names]
-                        if "_load_yaml" in names:
-                            violations.append(py_file.name)
-        assert not violations, f"_load_yaml still imported from _io in: {violations}"
-
     def test_only_yaml_imports_yaml_directly(self):
-        """Only _yaml.py may contain 'import yaml' at any scope."""
+        """Only core/io.py may contain 'import yaml' at any scope."""
         import ast
         from pathlib import Path
 
-        src_dir = Path(__file__).parent.parent / "src" / "autoskillit"
-        allowed = {"_yaml.py"}
+        from autoskillit.core.paths import pkg_root
+
+        src_dir = pkg_root()
+        allowed_rel = str(Path("core") / "io.py")
         violations = []
-        for py_file in sorted(src_dir.glob("*.py")):
-            if py_file.name in allowed:
+        for py_file in sorted(src_dir.rglob("*.py")):
+            rel = str(py_file.relative_to(src_dir))
+            if rel == allowed_rel:
                 continue
             tree = ast.parse(py_file.read_text())
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     for alias in node.names:
                         if alias.name == "yaml" or alias.name.startswith("yaml."):
-                            violations.append(f"{py_file.name}: import {alias.name}")
+                            violations.append(f"{rel}: import {alias.name}")
                 elif isinstance(node, ast.ImportFrom):
                     if (node.module or "").startswith("yaml"):
-                        violations.append(f"{py_file.name}: from {node.module} import ...")
-        assert not violations, f"Direct yaml imports found outside _yaml.py: {violations}"
+                        violations.append(f"{rel}: from {node.module} import ...")
+        assert not violations, f"Direct yaml imports found outside core/io.py: {violations}"

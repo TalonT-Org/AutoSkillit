@@ -18,14 +18,6 @@ from autoskillit.workspace.clone import (
 )
 
 
-class TestWorkspaceModuleExists:
-    def test_cleanup_result_importable(self):
-        assert CleanupResult is not None
-
-    def test_delete_directory_contents_importable(self):
-        assert callable(_delete_directory_contents)
-
-
 class TestCleanupResult:
     def test_success_when_no_failures(self):
         r = CleanupResult(deleted=["a", "b"], failed=[], skipped=[])
@@ -140,17 +132,11 @@ class TestCloneRepoDetectAndExpand:
         with patch(
             "autoskillit.workspace.clone.detect_source_dir", return_value=str(tmp_path)
         ) as mock_detect:
-            # Also mock subprocess.run to avoid actually running git clone
             mock_clone = MagicMock()
             mock_clone.returncode = 0
-            # Use a fake clone path so clone_repo can complete
             with patch("subprocess.run", return_value=mock_clone):
-                # tmp_path is a valid dir; runs_parent.mkdir will work
-                try:
-                    clone_repo("", "test-run")
-                except Exception:
-                    pass  # git clone may fail with mock; we only care detect was called
-            mock_detect.assert_called_once()
+                clone_repo("", "test-run")
+        mock_detect.assert_called_once()
 
     def test_ds4_expands_tilde(self) -> None:
         """T_DS4: clone_repo raises ValueError with 'resolved to' when tilde path doesn't exist."""
@@ -172,10 +158,7 @@ class TestCloneRepoDetectAndExpand:
                 mock_clone = MagicMock()
                 mock_clone.returncode = 0
                 with patch("subprocess.run", return_value=mock_clone):
-                    try:
-                        clone_repo(str(tmp_path), "test-run", branch="")
-                    except Exception:
-                        pass
+                    clone_repo(str(tmp_path), "test-run", branch="")
         mock_detect.assert_called_once_with(str(tmp_path))
 
     def test_cb8_skips_detect_branch_when_branch_provided(self, tmp_path) -> None:
@@ -185,10 +168,7 @@ class TestCloneRepoDetectAndExpand:
                 mock_clone = MagicMock()
                 mock_clone.returncode = 0
                 with patch("subprocess.run", return_value=mock_clone):
-                    try:
-                        clone_repo(str(tmp_path), "test-run", branch="feature")
-                    except Exception:
-                        pass
+                    clone_repo(str(tmp_path), "test-run", branch="feature")
         mock_detect.assert_not_called()
 
     def test_cb9_passes_branch_flag_to_git(self, tmp_path) -> None:
@@ -197,10 +177,7 @@ class TestCloneRepoDetectAndExpand:
             mock_clone = MagicMock()
             mock_clone.returncode = 0
             with patch("subprocess.run", return_value=mock_clone) as mock_run:
-                try:
-                    clone_repo(str(tmp_path), "test-run", branch="dev")
-                except Exception:
-                    pass
+                clone_repo(str(tmp_path), "test-run", branch="dev")
         git_clone_calls = [
             call for call in mock_run.call_args_list if call.args and "clone" in call.args[0]
         ]

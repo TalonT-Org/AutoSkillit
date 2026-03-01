@@ -170,33 +170,47 @@ tests/
 ├── test_audit.py                        # Audit log and FailureRecord tests
 ├── test_ci_dev_config.py
 ├── test_cli.py                          # CLI command tests
+├── test_clone.py
 ├── test_config.py                       # Config loading tests
 ├── test_conftest.py
 ├── test_context.py
+├── test_core.py
 ├── test_db_tools.py
+├── test_factory.py
 ├── test_failure_store.py
 ├── test_gate.py
+├── test_git_operations.py
+├── test_github_tools.py
+├── test_headless_runner.py
+├── test_import_paths.py
 ├── test_instruction_surface_contract.py
-├── test_io.py
+├── test_l1_packages.py
 ├── test_llm_triage.py
 ├── test_logging.py                      # Logging infrastructure tests
 ├── test_migration_engine.py
 ├── test_migration_loader.py
+├── test_package_gateways.py
 ├── test_process_lifecycle.py            # Subprocess integration tests
+├── test_protocols.py
+├── test_quota.py
 ├── test_recipe_io.py
 ├── test_recipe_loader.py                # Recipe loader tests
 ├── test_recipe_schema.py
 ├── test_recipe_validator.py
+├── test_security_config.py
 ├── test_server.py                       # Server unit tests
 ├── test_service_wrappers.py             # REQ-ARCH-006/007: DefaultRecipeRepository and DefaultMigrationService behavior
 ├── test_session_result.py
 ├── test_skill_resolver.py               # Skill resolution tests
 ├── test_smoke_pipeline.py
 ├── test_smoke_utils.py
+├── test_test_runner.py
 ├── test_token_log.py                    # Token usage tracking tests
 ├── test_types.py
+├── test_version.py
 ├── test_version_consistency.py
-└── test_workspace.py
+├── test_workspace.py
+└── test_yaml_extended.py
 
 temp/                        # Temporary/working files (gitignored)
 ```

@@ -184,7 +184,7 @@ RULES: tuple[RuleDescriptor, ...] = (
         ),
         exemptions=frozenset({"process.py"}),
         severity="error",
-        defense_standard="DS-007",
+        defense_standard="DS-002",
     ),
     RuleDescriptor(
         rule_id="ARCH-005",
@@ -954,7 +954,7 @@ def test_singleton_definition_locality(source_file: Path) -> None:
     """Module-level constructor calls are only permitted in SINGLETON_ALLOWED_MODULES."""
     mod_stem = source_file.stem
     if mod_stem in SINGLETON_ALLOWED_MODULES:
-        return  # exempt
+        pytest.skip(f"{mod_stem!r} is in SINGLETON_ALLOWED_MODULES")
 
     tree = ast.parse(source_file.read_text())
     violations: list[str] = []
@@ -1399,9 +1399,6 @@ def test_contracts_module_has_staleitem() -> None:
     """T2: recipe/contracts.py exposes StaleItem and load_bundled_manifest."""
     from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest  # noqa: F401
 
-    assert StaleItem is not None
-    assert load_bundled_manifest is not None
-
 
 def test_validator_module_has_validate() -> None:
     """T3: recipe/validator.py exposes validate_recipe, run_semantic_rules, analyze_dataflow."""
@@ -1410,10 +1407,6 @@ def test_validator_module_has_validate() -> None:
         run_semantic_rules,
         validate_recipe,
     )
-
-    assert validate_recipe is not None
-    assert run_semantic_rules is not None
-    assert analyze_dataflow is not None
 
 
 def test_migration_subpackage_importable() -> None:
@@ -2070,6 +2063,18 @@ def test_violation_str_omits_defense_standard_when_absent(tmp_path: Path) -> Non
     assert "DS-" not in s, f"Unexpected defense_standard in output: {s!r}"
 
 
+def test_arch004_violation_str_includes_ds002(tmp_path: Path) -> None:
+    """Regression guard: ARCH-004 violation str must include DS-002 after the fix."""
+    f = tmp_path / "bad.py"
+    f.write_text("import asyncio\nval = asyncio.PIPE\n")
+    violations = _scan(f)
+    pipe_violations = [v for v in violations if "asyncio.PIPE" in v.message]
+    assert pipe_violations
+    s = str(pipe_violations[0])
+    assert "DS-002" in s
+    assert "[ARCH-004 / process-flow / DS-002]" in s
+
+
 def test_violation_str_no_prefix_without_rule_id() -> None:
     """Violation with empty rule_id uses the legacy str format (no prefix)."""
     v = Violation(file=Path("src/x.py"), line=5, col=0, message="some issue", rule_id="", lens="")
@@ -2085,7 +2090,7 @@ def test_no_raw_ctx_notification_calls_in_tool_handlers() -> None:
     """
     import ast
 
-    server_dir = Path("src/autoskillit/server")
+    server_dir = SRC_ROOT / "server"
     violations = []
     for path in sorted(server_dir.glob("tools_*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -2113,7 +2118,7 @@ def test_all_tool_extra_keys_are_not_reserved() -> None:
 
     from autoskillit.core.types import RESERVED_LOG_RECORD_KEYS
 
-    server_dir = Path("src/autoskillit/server")
+    server_dir = SRC_ROOT / "server"
     violations = []
     for path in sorted(server_dir.glob("tools_*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))

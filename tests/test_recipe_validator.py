@@ -1992,7 +1992,7 @@ class TestImplementationPipelineStructure:
         assert step.on_result.routes.get("all_done") == "audit_impl"
 
     def test_ip_audit_impl_uses_base_sha_as_ref(self) -> None:
-        """T_IP_B2: audit_impl must use context.base_sha (not context.branch_name) as implementation_ref.
+        """T_IP_B2: audit_impl must use context.base_sha (not context.branch_name).
 
         branch_name is deleted by git branch -D inside merge_worktree. A commit SHA
         names a git object and survives unconditionally.
@@ -2086,7 +2086,11 @@ class TestImplementationPipelineStructure:
     def test_ip_base_sha_capture_uses_work_dir(self) -> None:
         """A4: The base_sha capture command must reference context.work_dir."""
         sha_step = next(
-            (step for name, step in self.recipe.steps.items() if step.capture and "base_sha" in step.capture),
+            (
+                step
+                for name, step in self.recipe.steps.items()
+                if step.capture and "base_sha" in step.capture
+            ),
             None,
         )
         assert sha_step is not None, "No step captures base_sha"
@@ -2551,7 +2555,11 @@ class TestSmokeTestStructure:
         steps = smoke_yaml["steps"]
         step_names = list(steps.keys())
         merge_idx = next(
-            (i for i, name in enumerate(step_names) if steps[name].get("tool") == "merge_worktree"),
+            (
+                i
+                for i, name in enumerate(step_names)
+                if steps[name].get("tool") == "merge_worktree"
+            ),
             None,
         )
         assert merge_idx is not None, "merge step not found"

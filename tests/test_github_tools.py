@@ -11,7 +11,7 @@ import pytest
 from autoskillit.config import AutomationConfig
 from autoskillit.core import GitHubFetcher
 from autoskillit.execution.github import DefaultGitHubFetcher, _parse_issue_ref
-from autoskillit.pipeline.gate import GATED_TOOLS
+from autoskillit.pipeline.gate import _DEFAULT_GATE_MESSAGE, GATED_TOOLS
 from autoskillit.server.tools_integrations import fetch_github_issue
 from autoskillit.server.tools_status import kitchen_status
 
@@ -149,7 +149,7 @@ async def test_fetch_github_issue_gate_closed(tool_ctx):
     tool_ctx.gate.disable()
     result = json.loads(await fetch_github_issue("owner/repo#1"))
     assert result["success"] is False
-    assert "gate" in result["result"].lower() or "not enabled" in result["result"].lower()
+    assert result["result"] == _DEFAULT_GATE_MESSAGE
 
 
 @pytest.mark.asyncio

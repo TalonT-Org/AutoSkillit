@@ -610,8 +610,61 @@ def test_tmp_path_is_ram_backed(tmp_path: Path) -> None:
         assert path_str.startswith("/dev/shm"), (
             f"tmp_path ({path_str!r}) is not in /dev/shm. "
             "Run tests via 'task test-all', which passes "
-            "--basetemp=/dev/shm/pytest-tmp."
+            "--basetemp=/dev/shm/pytest-tmp-<hash> (sha256 of .ROOT_DIR, first 8 chars)."
         )
+
+
+def test_tmp_path_has_worktree_hash(tmp_path: Path) -> None:
+    """tmp_path must contain a .ROOT_DIR-derived hash to prevent cross-worktree collision.
+
+    Fails when pytest is invoked with --basetemp=/dev/shm/pytest-tmp (static path).
+    Passes only when Taskfile.yml derives PYTEST_TMPDIR from .ROOT_DIR via the
+    slim-sprig sha256sum template function.
+    """
+    if sys.platform == "linux":
+        import hashlib
+        import os
+
+        cwd_hash = hashlib.sha256(os.getcwd().encode()).hexdigest()[:8]
+        path_str = str(tmp_path)
+        assert f"pytest-tmp-{cwd_hash}" in path_str, (
+            f"tmp_path ({path_str!r}) does not contain the expected worktree hash "
+            f"'{cwd_hash}'. PYTEST_TMPDIR must be derived from .ROOT_DIR. "
+            f"Expected /dev/shm/pytest-tmp-{cwd_hash} as the base. "
+            "Update Taskfile.yml PYTEST_TMPDIR to use a .ROOT_DIR-derived hash suffix "
+            "(use slim-sprig: {{ substr 0 8 (sha256sum .ROOT_DIR) }})."
+        )
+
+
+def test_no_direct_write_text_in_src() -> None:
+    """No src/autoskillit/ file may call .write_text() or .write_bytes() directly.
+
+    All persistent file writes must use _atomic_write() from autoskillit.core.io to
+    ensure crash-safe atomic semantics. This prevents the race condition where two
+    concurrent writers produce corrupted JSON by interleaving a non-atomic write.
+    """
+    import ast as _ast
+
+    src_root = Path(__file__).parent.parent / "src" / "autoskillit"
+    violations: list[str] = []
+    for py_file in sorted(src_root.rglob("*.py")):
+        try:
+            tree = _ast.parse(py_file.read_text())
+        except SyntaxError:
+            continue
+        for node in _ast.walk(tree):
+            if (
+                isinstance(node, _ast.Call)
+                and isinstance(node.func, _ast.Attribute)
+                and node.func.attr in {"write_text", "write_bytes"}
+            ):
+                rel = py_file.relative_to(src_root)
+                violations.append(f"  {rel}:{node.lineno}")
+    assert not violations, (
+        "Direct path.write_text/write_bytes calls found in src/autoskillit/.\n"
+        "Use _atomic_write(path, content) from autoskillit.core.io instead:\n"
+        + "\n".join(violations)
+    )
 
 
 class TestArchitectureEnforcement:

@@ -77,24 +77,30 @@ def local_with_remote(tmp_path: Path, bare_remote: Path) -> Path:
 
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Path:
-    """Create a minimal git repo with one empty commit."""
-    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+    """Create a minimal git repo with one empty commit.
+
+    Returns tmp_path / 'repo' (a subdirectory) so that clone_repo output lands at
+    tmp_path / 'autoskillit-runs' — inside the test's isolated tmp_path boundary.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
     subprocess.run(
-        ["git", "-C", str(tmp_path), "config", "user.email", "test@test.com"],
+        ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
         check=True,
         capture_output=True,
     )
     subprocess.run(
-        ["git", "-C", str(tmp_path), "config", "user.name", "Test"],
+        ["git", "-C", str(repo), "config", "user.name", "Test"],
         check=True,
         capture_output=True,
     )
     subprocess.run(
-        ["git", "-C", str(tmp_path), "commit", "--allow-empty", "-m", "init"],
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
         check=True,
         capture_output=True,
     )
-    return tmp_path
+    return repo
 
 
 class TestCloneRepo:
@@ -262,6 +268,26 @@ class TestCloneRepo:
         assert "unpublished_branch" not in result
         if "clone_path" in result:
             shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
+
+
+def test_clone_path_within_tmp_path(tmp_path: Path, git_repo: Path) -> None:
+    """clone_repo output must be a descendant of tmp_path, never its parent.
+
+    Fails when the git_repo fixture returns tmp_path itself, because clone_repo
+    places autoskillit-runs/ at source.parent = tmp_path.parent (worker-shared).
+    Passes once git_repo returns tmp_path / 'repo' (a subdirectory).
+    """
+    result = clone_repo(str(git_repo), "isolation-check")
+    clone_path = Path(result["clone_path"])
+    assert clone_path.is_relative_to(tmp_path), (
+        f"clone_repo placed output at {clone_path!r}, which is outside "
+        f"the test's tmp_path {tmp_path!r}.\n"
+        "The git_repo fixture must return a SUBDIRECTORY of tmp_path "
+        "(e.g. tmp_path / 'repo'), not tmp_path itself. "
+        "When git_repo is tmp_path, clone destination is tmp_path.parent — "
+        "a directory shared across all tests in the same xdist worker."
+    )
+    shutil.rmtree(clone_path.parent, ignore_errors=True)
 
 
 class TestRemoveClone:

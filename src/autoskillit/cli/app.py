@@ -14,7 +14,7 @@ from typing import Annotated
 
 from cyclopts import App, Parameter
 
-from autoskillit.core import is_git_worktree, pkg_root
+from autoskillit.core import _atomic_write, is_git_worktree, pkg_root
 from autoskillit.execution import build_interactive_cmd
 from autoskillit.recipe import list_recipes
 
@@ -106,7 +106,7 @@ def init(
         else:
             cmd_parts = _prompt_test_command()
 
-        config_path.write_text(_generate_config_yaml(cmd_parts))
+        _atomic_write(config_path, _generate_config_yaml(cmd_parts))
         print(f"Config written to: {config_path}")
 
     ensure_project_temp(project_dir)
@@ -330,7 +330,7 @@ def _clear_plugin_cache() -> None:
             plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
             if plugin_ref in data:
                 del data[plugin_ref]
-                installed_json.write_text(json.dumps(data, indent=2))
+                _atomic_write(installed_json, json.dumps(data, indent=2))
         except (OSError, json.JSONDecodeError):
             pass  # non-fatal — install will proceed regardless
 
@@ -373,7 +373,7 @@ def _ensure_marketplace() -> Path:
             }
         ],
     }
-    (plugin_dir / "marketplace.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    _atomic_write(plugin_dir / "marketplace.json", json.dumps(manifest, indent=2) + "\n")
 
     # Symlink to the live package directory
     link_path = marketplace_dir / "plugins" / "autoskillit"
@@ -577,11 +577,12 @@ def workspace_init(path: str):
 
     target.mkdir(parents=True, exist_ok=True)
     marker = target / marker_name
-    marker.write_text(
+    _atomic_write(
+        marker,
         _MARKER_CONTENT.format(
             timestamp=datetime.now(UTC).isoformat(),
             version=__version__,
-        )
+        ),
     )
     print(f"Prep station initialized: {target}")
     print(f"Reset guard marker created: {marker}")

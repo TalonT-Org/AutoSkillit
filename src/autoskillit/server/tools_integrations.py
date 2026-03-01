@@ -12,7 +12,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import get_logger
+from autoskillit.core import _atomic_write, get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import _notify, _require_enabled
 
@@ -320,7 +320,7 @@ async def _run_report_session(
 
     report_text = skill_result.result or skill_result.stderr or "No report generated."
     try:
-        report_path.write_text(report_text, encoding="utf-8")
+        _atomic_write(report_path, report_text)
     except OSError as exc:
         logger.warning("report_bug write failed", path=str(report_path), error=str(exc))
 

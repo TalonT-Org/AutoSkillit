@@ -7,6 +7,9 @@ All tests run under `-n 4 --dist worksteal`. Every test must be safe for paralle
 - Session-scoped fixtures run once per worker process, not once globally
 - Module-level globals are per-worker (separate processes) — no cross-worker state sharing
 - Use `monkeypatch.setattr()` for all module-level state mutations — never bare assignment
+- Source directories passed to `clone_repo` must be **subdirectories** of `tmp_path`,
+  not `tmp_path` itself. When `source_dir = tmp_path`, `clone_repo` places
+  `autoskillit-runs/` at `tmp_path.parent` (worker-shared). Use `source_dir = tmp_path / "repo"`.
 
 ## Fixture Discipline
 

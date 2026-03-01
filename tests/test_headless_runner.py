@@ -139,12 +139,13 @@ class TestRunHeadlessCore:
     async def test_run_headless_core_returns_success_result(self, tool_ctx):
         from autoskillit.execution.headless import run_headless_core
 
+        marker = tool_ctx.config.run_skill.completion_marker
         payload = json.dumps(
             {
                 "type": "result",
                 "subtype": "success",
                 "is_error": False,
-                "result": "Task completed.",
+                "result": f"Task completed. {marker}",
                 "session_id": "sess-xyz",
             }
         )

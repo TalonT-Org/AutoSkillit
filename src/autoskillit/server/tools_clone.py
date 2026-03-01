@@ -171,7 +171,7 @@ async def push_to_remote(
         tool_ctx.clone_mgr.push_to_remote, clone_path, source_dir, branch
     )
 
-    if result.get("success") == "false":
+    if not result.get("success"):
         await _notify(
             ctx,
             "error",

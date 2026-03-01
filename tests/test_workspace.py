@@ -287,7 +287,7 @@ class TestPushToRemote:
         with patch("subprocess.run", side_effect=[mock_url, mock_push]) as mock_run:
             result = push_to_remote("/clone", "/source", "main")
 
-        assert result == {"success": "true", "stderr": ""}
+        assert result == {"success": True, "stderr": ""}
         # First call: git remote get-url origin from source_dir
         first_call = mock_run.call_args_list[0]
         assert first_call[0][0] == ["git", "remote", "get-url", "origin"]
@@ -307,7 +307,7 @@ class TestPushToRemote:
         with patch("subprocess.run", return_value=mock_fail) as mock_run:
             result = push_to_remote("/clone", "/source", "main")
 
-        assert result["success"] == "false"
+        assert result["success"] is False
         assert "origin" in result["stderr"]
         assert mock_run.call_count == 1  # no push attempted
 

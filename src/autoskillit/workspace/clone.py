@@ -197,7 +197,7 @@ def push_to_remote(
     clone_path: str,
     source_dir: str,
     branch: str,
-) -> dict[str, str]:
+) -> dict[str, str | bool]:
     """Push the merged branch from the clone directly to the upstream remote.
 
     Reads the upstream remote URL from source_dir using
@@ -208,8 +208,8 @@ def push_to_remote(
     modified. Changes flow: clone_path → upstream remote (e.g. GitHub).
 
     Returns:
-        {"success": "true", "stderr": ""} on success,
-        {"success": "false", "stderr": str} on failure (does not raise).
+        {"success": True, "stderr": ""} on success,
+        {"success": False, "stderr": str} on failure (does not raise).
     """
     url_result = subprocess.run(
         ["git", "remote", "get-url", "origin"],
@@ -224,7 +224,7 @@ def push_to_remote(
             branch=branch,
             stderr=url_result.stderr.strip(),
         )
-        return {"success": "false", "stderr": url_result.stderr.strip()}
+        return {"success": False, "stderr": url_result.stderr.strip()}
 
     remote_url = url_result.stdout.strip()
     push_result = subprocess.run(
@@ -241,7 +241,7 @@ def push_to_remote(
             branch=branch,
             stderr=push_result.stderr.strip(),
         )
-        return {"success": "false", "stderr": push_result.stderr.strip()}
+        return {"success": False, "stderr": push_result.stderr.strip()}
 
     logger.info(
         "push_to_remote_succeeded",
@@ -249,7 +249,7 @@ def push_to_remote(
         remote_url=remote_url,
         branch=branch,
     )
-    return {"success": "true", "stderr": ""}
+    return {"success": True, "stderr": ""}
 
 
 class DefaultCloneManager:

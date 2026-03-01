@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.workspace.clone import clone_repo, push_to_remote, remove_clone
+from autoskillit.workspace.clone import classify_remote_url, clone_repo, push_to_remote, remove_clone
 
 
 @pytest.fixture
@@ -326,3 +326,198 @@ class TestPushToRemote:
         source.mkdir()
         subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
         push_to_remote("/no/such/clone", str(source), "main")  # must not raise
+
+
+class TestPushToRemoteNonBare:
+    """push_to_remote fails with error_type when remote is a local non-bare repo."""
+
+    def test_push_fails_with_local_nonbare_remote(self, tmp_path: Path) -> None:
+        """push_to_remote returns error_type=local_non_bare_remote for non-bare local origin."""
+        # upstream is a non-bare local repo with main checked out
+        upstream = tmp_path / "upstream"
+        subprocess.run(["git", "init", str(upstream)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(upstream), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(upstream), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(upstream), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+
+        source = tmp_path / "source"
+        subprocess.run(
+            ["git", "clone", str(upstream), str(source)], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "commit", "--allow-empty", "-m", "src"],
+            check=True,
+            capture_output=True,
+        )
+
+        # upstream has main checked out — push from source will be refused
+        clone_result = clone_repo(str(source), "test-nonbare", strategy="proceed")
+        clone_path = clone_result["clone_path"]
+        subprocess.run(
+            ["git", "-C", clone_path, "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", clone_path, "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", clone_path, "commit", "--allow-empty", "-m", "pipeline"],
+            check=True,
+            capture_output=True,
+        )
+
+        result = push_to_remote(clone_path, str(source), "main")
+
+        assert result["success"] is False
+        assert result.get("error_type") == "local_non_bare_remote"
+
+        import shutil
+
+        shutil.rmtree(Path(clone_path).parent, ignore_errors=True)
+
+    def test_clone_repo_returns_remote_url(self, tmp_path: Path) -> None:
+        """clone_repo result dict includes remote_url field."""
+        remote = tmp_path / "remote.git"
+        subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+        source = tmp_path / "source"
+        subprocess.run(
+            ["git", "clone", str(remote), str(source)], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+
+        result = clone_repo(str(source), "test-remoteurl", strategy="proceed")
+
+        assert "remote_url" in result
+        assert str(remote) in result["remote_url"]
+
+        import shutil
+
+        shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
+
+    def test_clone_repo_returns_empty_remote_url_when_no_origin(
+        self, tmp_path: Path
+    ) -> None:
+        """clone_repo returns remote_url='' when source_dir has no remote configured."""
+        source = tmp_path / "source"
+        subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+
+        result = clone_repo(str(source), "test-noremote", strategy="proceed")
+
+        assert "remote_url" in result
+        assert result["remote_url"] == ""
+
+        import shutil
+
+        shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
+
+    def test_push_to_remote_uses_explicit_remote_url_without_reading_source_dir(
+        self, tmp_path: Path
+    ) -> None:
+        """When remote_url is explicit, source_dir is not accessed for URL lookup."""
+        remote = tmp_path / "remote.git"
+        subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+        source = tmp_path / "source"
+        subprocess.run(
+            ["git", "clone", str(remote), str(source)], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "push", "origin", "main"],
+            check=True,
+            capture_output=True,
+        )
+
+        clone_result = clone_repo(str(source), "test-explicit", strategy="proceed")
+        clone_path = clone_result["clone_path"]
+        subprocess.run(
+            ["git", "-C", clone_path, "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", clone_path, "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", clone_path, "commit", "--allow-empty", "-m", "impl"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Pass explicit remote_url — source_dir is not needed
+        result = push_to_remote(clone_path, remote_url=str(remote), branch="main")
+
+        assert result["success"] is True
+
+        import shutil
+
+        shutil.rmtree(Path(clone_path).parent, ignore_errors=True)

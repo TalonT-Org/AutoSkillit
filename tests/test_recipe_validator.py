@@ -3530,3 +3530,79 @@ class TestSkillCommandMissingPrefixRule:
         )
         findings = run_semantic_rules(wf)
         assert not any(f.rule == "skill-command-missing-prefix" for f in findings)
+
+
+class TestPushMissingExplicitRemoteUrl:
+    """push-missing-explicit-remote-url rule fires when push_to_remote lacks remote_url."""
+
+    def test_warns_when_push_to_remote_has_no_remote_url(self) -> None:
+        """Rule fires when push_to_remote step has source_dir but no remote_url."""
+        recipe = _make_workflow(
+            {
+                "clone": {
+                    "tool": "clone_repo",
+                    "with": {"source_dir": "${{ inputs.source_dir }}", "run_name": "test"},
+                    "capture": {
+                        "work_dir": "${{ result.clone_path }}",
+                        "source_dir": "${{ result.source_dir }}",
+                    },
+                    "on_success": "push",
+                },
+                "push": {
+                    "tool": "push_to_remote",
+                    "with": {
+                        "clone_path": "${{ context.work_dir }}",
+                        "source_dir": "${{ context.source_dir }}",
+                        "branch": "main",
+                    },
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(recipe)
+        rule_names = [f.rule for f in findings]
+        assert "push-missing-explicit-remote-url" in rule_names
+
+    def test_no_warning_when_explicit_remote_url_provided(self) -> None:
+        """Rule is silent when push_to_remote step includes an explicit remote_url."""
+        recipe = _make_workflow(
+            {
+                "clone": {
+                    "tool": "clone_repo",
+                    "with": {"source_dir": "${{ inputs.source_dir }}", "run_name": "test"},
+                    "capture": {
+                        "work_dir": "${{ result.clone_path }}",
+                        "source_dir": "${{ result.source_dir }}",
+                        "remote_url": "${{ result.remote_url }}",
+                    },
+                    "on_success": "push",
+                },
+                "push": {
+                    "tool": "push_to_remote",
+                    "with": {
+                        "clone_path": "${{ context.work_dir }}",
+                        "remote_url": "${{ context.remote_url }}",
+                        "branch": "main",
+                    },
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(recipe)
+        rule_names = [f.rule for f in findings]
+        assert "push-missing-explicit-remote-url" not in rule_names
+
+    def test_no_finding_when_no_push_to_remote_step(self) -> None:
+        """Rule is silent when recipe has no push_to_remote step."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [
+            f for f in run_semantic_rules(recipe) if f.rule == "push-missing-explicit-remote-url"
+        ]
+        assert findings == []

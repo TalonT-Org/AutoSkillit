@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.workspace import CleanupResult, _delete_directory_contents
 from autoskillit.workspace.clone import (
+    classify_remote_url,
     clone_repo,
     detect_branch,
     detect_source_dir,
@@ -339,6 +340,49 @@ class TestPushToRemote:
         assert result["success"] is True, (
             f"Expected boolean True, got {result['success']!r} ({typ})"
         )
+
+
+class TestClassifyRemoteUrl:
+    """classify_remote_url correctly identifies remote URL types."""
+
+    @pytest.mark.parametrize(
+        "url,expected_type",
+        [
+            ("git@github.com:org/repo.git", "network"),
+            ("https://github.com/org/repo.git", "network"),
+            ("ssh://git@github.com/org/repo.git", "network"),
+            ("http://example.com/repo.git", "network"),
+            ("git://github.com/org/repo.git", "network"),
+            ("file:///tmp/repo.git", "network"),
+        ],
+    )
+    def test_network_urls(self, url: str, expected_type: str) -> None:
+        result = classify_remote_url(url)
+        assert result == expected_type
+
+    def test_bare_local_path(self, tmp_path: Path) -> None:
+        import subprocess
+
+        bare = tmp_path / "repo.git"
+        subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+        result = classify_remote_url(str(bare))
+        assert result == "bare_local"
+
+    def test_nonbare_local_path(self, tmp_path: Path) -> None:
+        import subprocess
+
+        repo = tmp_path / "repo"
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        result = classify_remote_url(str(repo))
+        assert result == "nonbare_local"
+
+    def test_empty_string_returns_none_type(self) -> None:
+        result = classify_remote_url("")
+        assert result == "none"
+
+    def test_nonexistent_path_returns_unknown(self, tmp_path: Path) -> None:
+        result = classify_remote_url(str(tmp_path / "nonexistent"))
+        assert result == "unknown"
 
 
 @pytest.mark.parametrize(

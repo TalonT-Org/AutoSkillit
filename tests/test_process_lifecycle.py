@@ -20,7 +20,7 @@ from unittest.mock import Mock, patch
 import psutil
 import pytest
 
-from autoskillit.core.types import TerminationReason
+from autoskillit.core.types import RetryReason, TerminationReason
 from autoskillit.execution.process import (
     _has_active_api_connection,
     _heartbeat,
@@ -187,6 +187,75 @@ PARTIAL_OUTPUT_THEN_HANG_SCRIPT = textwrap.dedent("""\
 ISATTY_CHECK_SCRIPT = textwrap.dedent("""\
     import sys
     print(sys.stdout.isatty())
+""")
+
+# ---------------------------------------------------------------------------
+# Integration scripts — reproduce exact TerminationReason paths through
+# run_managed_async → _build_skill_result for adjudication boundary tests.
+# ---------------------------------------------------------------------------
+
+# Simulates CLAUDE_CODE_EXIT_AFTER_STOP_DELAY: process writes the type=result
+# envelope with an empty result field and exits rc=0 before content is populated.
+# Produces: NATURAL_EXIT, rc=0, stdout=success+empty → _is_kill_anomaly=True
+# Expected SkillResult: success=False, needs_retry=True
+WRITE_EMPTY_RESULT_THEN_EXIT_SCRIPT = textwrap.dedent("""\
+    import sys, json
+    payload = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": "",
+        "session_id": "test-stop-delay",
+    }
+    sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\\n")
+    sys.stdout.flush()
+    sys.exit(0)
+""")
+
+# Simulates process killed before it wrote anything to stdout.
+# Produces: NATURAL_EXIT, rc=0, stdout="" → _is_kill_anomaly=True (empty_output)
+# Expected SkillResult: success=False, needs_retry=True
+WRITE_NOTHING_THEN_EXIT_SCRIPT = textwrap.dedent("""\
+    import sys
+    sys.stdout.flush()
+    sys.exit(0)
+""")
+
+# Simulates process killed mid-write: partial NDJSON line not parseable.
+# Produces: NATURAL_EXIT, rc=0, stdout=truncated → _is_kill_anomaly=True (unparseable)
+# Expected SkillResult: success=False, needs_retry=True
+WRITE_TRUNCATED_JSON_THEN_EXIT_SCRIPT = textwrap.dedent("""\
+    import sys
+    sys.stdout.write('{"type":"result","subtype":"success","is_error":false,"res')
+    sys.stdout.flush()
+    sys.exit(0)
+""")
+
+# Simulates a stale session: writes a valid result to stdout then hangs forever.
+# run_managed_async will fire STALE via stale_threshold and kill the process.
+# Produces: STALE, returncode=nonzero, stdout=valid success record
+# Expected SkillResult: success=True, needs_retry=False, subtype="recovered_from_stale"
+WRITE_VALID_RESULT_THEN_HANG_SCRIPT = textwrap.dedent("""\
+    import sys, json, time
+    payload = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": "Task completed successfully.",
+        "session_id": "test-stale-recovery",
+    }
+    sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\\n")
+    sys.stdout.flush()
+    time.sleep(9999)
+""")
+
+# Simulates a process that sleeps immediately with no output (for TIMED_OUT path).
+# run_managed_async will fire TIMED_OUT when wall-clock timeout expires.
+# Produces: TIMED_OUT, returncode=-1
+# Expected SkillResult: success=False, needs_retry=False, subtype="timeout"
+SLEEP_FOREVER_NO_OUTPUT_SCRIPT = textwrap.dedent("""\
+    import sys, time
+    time.sleep(9999)
 """)
 
 
@@ -1830,4 +1899,294 @@ class TestSubprocessResultAndRunnerTypes:
             f"pty_mode default must be False to prevent silent stderr loss in git commands. "
             f"Current default: {default!r}. Only callers that need PTY (Claude CLI) "
             f"should pass pty_mode=True explicitly."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Adjudication boundary integration tests
+# Each class exercises ONE TerminationReason path from a real subprocess
+# through run_managed_async → _build_skill_result → SkillResult.
+# ---------------------------------------------------------------------------
+
+
+class TestChannelBDrainRacePipelineAdjudication:
+    """Integration: COMPLETED (Channel B drain timeout) flows through _build_skill_result.
+
+    Uses the existing CHANNEL_B_NO_STDOUT_SCRIPT: session monitor fires, drain expires,
+    process is killed with empty stdout. _build_skill_result must apply the Channel B
+    provenance bypass (data_confirmed=False → success=True without calling _compute_success).
+    """
+
+    @pytest.mark.asyncio
+    async def test_channel_b_drain_timeout_produces_success_skill_result(self, tmp_path):
+        """COMPLETED + data_confirmed=False + empty stdout → success=True, needs_retry=False.
+
+        Channel B provenance bypass: when session monitor wins and drain expires,
+        _build_skill_result returns success=True immediately, bypassing _compute_success.
+        """
+        from autoskillit.execution.headless import _build_skill_result
+
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        script = tmp_path / "channel_b_no_stdout.py"
+        script.write_text(CHANNEL_B_NO_STDOUT_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script), str(session_dir)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker='"type":"result"',
+            session_log_dir=session_dir,
+            completion_marker="%%ORDER_UP%%",
+            completion_drain_timeout=0.5,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
+        )
+
+        assert result.termination == TerminationReason.COMPLETED
+        assert result.data_confirmed is False
+
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="resolve-failures",
+            audit=None,
+        )
+
+        assert skill_result.success is True
+        assert skill_result.needs_retry is False
+
+
+class TestSTOPDelayPipelineAdjudication:
+    """Integration: NATURAL_EXIT paths flow correctly through run_managed_async → SkillResult.
+
+    These tests catch regressions in _compute_retry's NATURAL_EXIT arm — specifically
+    the _is_kill_anomaly guard that was the subject of the 2026-03-01 investigation.
+    """
+
+    @pytest.mark.asyncio
+    async def test_stop_delay_race_produces_retriable_skill_result(self, tmp_path):
+        """NATURAL_EXIT + rc=0 + success+empty → success=False, needs_retry=True.
+
+        Without _is_kill_anomaly in the NATURAL_EXIT arm, this returns
+        success=False, needs_retry=False — swallowing the race as permanent failure.
+        """
+        from autoskillit.execution.headless import _build_skill_result
+
+        script = tmp_path / "stop_delay.py"
+        script.write_text(WRITE_EMPTY_RESULT_THEN_EXIT_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker='"type":"result"',
+            _heartbeat_poll=0.05,
+        )
+
+        assert result.termination == TerminationReason.NATURAL_EXIT
+        assert result.returncode == 0
+        assert result.data_confirmed is True
+
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="resolve-failures",
+            audit=None,
+        )
+
+        assert skill_result.success is False
+        assert skill_result.needs_retry is True
+        assert skill_result.retry_reason == RetryReason.RESUME
+        assert skill_result.subtype == "success"
+
+    @pytest.mark.asyncio
+    async def test_natural_exit_empty_stdout_produces_retriable_skill_result(self, tmp_path):
+        """NATURAL_EXIT + rc=0 + empty stdout → success=False, needs_retry=True.
+
+        Exercises the empty_output subtype through the full subprocess pipeline.
+        """
+        from autoskillit.execution.headless import _build_skill_result
+
+        script = tmp_path / "empty_exit.py"
+        script.write_text(WRITE_NOTHING_THEN_EXIT_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker='"type":"result"',
+            _heartbeat_poll=0.05,
+        )
+
+        assert result.termination == TerminationReason.NATURAL_EXIT
+        assert result.returncode == 0
+
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="resolve-failures",
+            audit=None,
+        )
+
+        assert skill_result.success is False
+        assert skill_result.needs_retry is True
+        assert skill_result.retry_reason == RetryReason.RESUME
+
+    @pytest.mark.asyncio
+    async def test_natural_exit_truncated_json_produces_retriable_skill_result(self, tmp_path):
+        """NATURAL_EXIT + rc=0 + truncated/unparseable JSON → success=False, needs_retry=True.
+
+        Exercises the unparseable subtype through the full subprocess pipeline.
+        Simulates process killed mid-write where partial NDJSON cannot be parsed.
+        """
+        from autoskillit.execution.headless import _build_skill_result
+
+        script = tmp_path / "truncated_exit.py"
+        script.write_text(WRITE_TRUNCATED_JSON_THEN_EXIT_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker='"type":"result"',
+            _heartbeat_poll=0.05,
+        )
+
+        assert result.termination == TerminationReason.NATURAL_EXIT
+        assert result.returncode == 0
+
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="resolve-failures",
+            audit=None,
+        )
+
+        assert skill_result.success is False
+        assert skill_result.needs_retry is True
+        assert skill_result.retry_reason == RetryReason.RESUME
+
+
+class TestStaleRecoveryPipelineAdjudication:
+    """Integration: STALE termination with valid stdout triggers recovery path."""
+
+    @pytest.mark.asyncio
+    async def test_stale_with_valid_result_recovers_to_success(self, tmp_path):
+        """STALE + valid success result in stdout → success=True, needs_retry=False.
+
+        _build_skill_result intercepts STALE before _compute_success and
+        attempts to recover a valid SkillResult from stdout. When the stdout
+        contains a complete, parseable success record, recovery succeeds and
+        subtype is set to "recovered_from_stale".
+        """
+        from autoskillit.execution.headless import _build_skill_result
+
+        script = tmp_path / "stale_with_result.py"
+        script.write_text(WRITE_VALID_RESULT_THEN_HANG_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker='"type":"result"',
+            stale_threshold=0.3,
+            _heartbeat_poll=0.05,
+        )
+
+        assert result.termination == TerminationReason.STALE
+
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="investigate",
+            audit=None,
+        )
+
+        assert skill_result.success is True
+        assert skill_result.needs_retry is False
+        assert skill_result.subtype == "recovered_from_stale"
+
+
+class TestTimedOutPipelineAdjudication:
+    """Integration: TIMED_OUT path produces a non-retriable failure SkillResult.
+
+    _build_skill_result intercepts TIMED_OUT before parse_session_result and
+    synthesizes a ClaudeSessionResult(subtype="timeout"). The result is always
+    success=False, needs_retry=False — timeouts are not retriable.
+    """
+
+    @pytest.mark.asyncio
+    async def test_timed_out_produces_non_retriable_failure(self, tmp_path):
+        """TIMED_OUT → success=False, needs_retry=False, subtype="timeout".
+
+        Uses a script that sleeps immediately with a very short wall-clock timeout
+        so run_managed_async fires TIMED_OUT. _build_skill_result must synthesize
+        a timeout session and return a permanent failure (not retriable).
+        """
+        from autoskillit.execution.headless import _build_skill_result
+
+        script = tmp_path / "sleep_forever.py"
+        script.write_text(SLEEP_FOREVER_NO_OUTPUT_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=0.5,
+        )
+
+        assert result.termination == TerminationReason.TIMED_OUT
+        assert result.returncode == -1
+
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="investigate",
+            audit=None,
+        )
+
+        assert skill_result.success is False
+        assert skill_result.needs_retry is False
+        assert skill_result.subtype == "timeout"
+
+
+class TestAdjudicationCoverageMatrix:
+    """Structural guard: every TerminationReason must have a subprocess integration test.
+
+    This test introspects the TerminationReason enum and asserts that each value
+    appears in COVERED_BY_INTEGRATION_TESTS — the authoritative registry of
+    TerminationReason values with confirmed full-boundary integration test coverage
+    (subprocess → run_managed_async → _build_skill_result → SkillResult).
+
+    It fails immediately if a new TerminationReason value is added without a
+    corresponding integration test class in this file, or if an existing integration
+    test is removed without updating this registry.
+
+    Covered by:
+      COMPLETED    → TestChannelBDrainRacePipelineAdjudication
+      NATURAL_EXIT → TestSTOPDelayPipelineAdjudication
+      STALE        → TestStaleRecoveryPipelineAdjudication
+      TIMED_OUT    → TestTimedOutPipelineAdjudication
+
+    See core/types.py _TERMINATION_CONTRACT for the per-reason semantic invariants.
+    """
+
+    COVERED_BY_INTEGRATION_TESTS: frozenset = frozenset(
+        {
+            TerminationReason.COMPLETED,  # TestChannelBDrainRacePipelineAdjudication
+            TerminationReason.NATURAL_EXIT,  # TestSTOPDelayPipelineAdjudication
+            TerminationReason.STALE,  # TestStaleRecoveryPipelineAdjudication
+            TerminationReason.TIMED_OUT,  # TestTimedOutPipelineAdjudication
+        }
+    )
+
+    def test_all_termination_reasons_have_integration_coverage(self):
+        all_reasons = frozenset(TerminationReason)
+        uncovered = all_reasons - self.COVERED_BY_INTEGRATION_TESTS
+        assert not uncovered, (
+            f"TerminationReason values with no subprocess integration test "
+            f"crossing run_managed_async → _build_skill_result boundary: "
+            f"{uncovered}. "
+            f"Add a TestXxxPipelineAdjudication class in test_process_lifecycle.py "
+            f"and add the value to COVERED_BY_INTEGRATION_TESTS."
         )

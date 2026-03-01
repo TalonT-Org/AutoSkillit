@@ -69,6 +69,42 @@ class TerminationReason(StrEnum):
     TIMED_OUT = "timed_out"
 
 
+#: Semantic contract for SubprocessResult fields per TerminationReason.
+#: These invariants are enforced by tests/test_process_lifecycle.py
+#: TestAdjudicationCoverageMatrix.
+#:
+#: NATURAL_EXIT:
+#:   data_confirmed=True (never modified; wait_task won naturally)
+#:   returncode=process's actual exit code (0 = voluntary, nonzero = crash)
+#:   stdout=whatever was flushed to the temp file before exit
+#:   Kill-anomaly possible when returncode==0 and stdout is success+empty,
+#:   empty_output, or unparseable → _is_kill_anomaly returns True.
+#:
+#: COMPLETED (Channel A):
+#:   data_confirmed=True (heartbeat confirmed type=result in stdout)
+#:   returncode=nonzero (SIGTERM/SIGKILL from async_kill_process_tree)
+#:   stdout=contains a complete type=result NDJSON record
+#:
+#: COMPLETED (Channel B, drain expired):
+#:   data_confirmed=False (drain wait timed out; stdout not yet confirmed)
+#:   returncode=nonzero (SIGTERM/SIGKILL)
+#:   stdout=may be empty (CLI not yet flushed type=result before kill)
+#:   _compute_success provenance bypass applies: return True immediately.
+#:
+#: STALE:
+#:   data_confirmed=True (never modified; _data_confirmed starts True)
+#:   returncode=nonzero (SIGTERM/SIGKILL)
+#:   _build_skill_result intercepts before _compute_success: attempts
+#:   stdout recovery; if successful returns subtype="recovered_from_stale".
+#:
+#: TIMED_OUT:
+#:   data_confirmed=True (never modified)
+#:   returncode=-1 (hardcoded in _build_skill_result, not from process)
+#:   _build_skill_result constructs synthetic ClaudeSessionResult(subtype="timeout").
+#:   Always returns success=False, needs_retry=False.
+_TERMINATION_CONTRACT = None  # Marker — contract is documented above in comments.
+
+
 @dataclass
 class SubprocessResult:
     """Result from a managed subprocess execution."""

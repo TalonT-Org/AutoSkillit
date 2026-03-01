@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: block automatic remove_clone calls.
+"""PreToolUse hook: guard automatic remove_clone calls.
 
-Denies any remove_clone call where keep != "true".
-Clones are never removed automatically — the user removes them
-manually when the pipeline is fully complete.
+Prompts the user for permission on any remove_clone call where keep != "true".
+Clones are never removed automatically — the user must approve each removal.
 """
 
 import json
@@ -26,12 +25,11 @@ def main() -> None:
                 {
                     "hookSpecificOutput": {
                         "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
+                        "permissionDecision": "askPermission",
                         "permissionDecisionReason": (
-                            f"remove_clone is blocked by the AutoSkillit guard. "
-                            f"Clones are never removed automatically. "
-                            f"The clone at {clone_path} is preserved — "
-                            f"remove it manually when done: rm -rf {clone_path}"
+                            f"remove_clone wants to delete the clone at {clone_path}. "
+                            f"Approve only if the pipeline is fully complete and you "
+                            f"no longer need this clone."
                         ),
                     }
                 }

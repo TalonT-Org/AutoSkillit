@@ -20,25 +20,25 @@ def _run_hook(event: dict) -> str:
         return buf.getvalue()
 
 
-def test_deny_when_keep_false():
+def test_ask_permission_when_keep_false():
     out = _run_hook({"tool_input": {"keep": "false", "clone_path": "/tmp/my-clone"}})
     data = json.loads(out)
-    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert data["hookSpecificOutput"]["permissionDecision"] == "askPermission"
     assert "/tmp/my-clone" in data["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "rm -rf" in data["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "rm -rf" not in data["hookSpecificOutput"]["permissionDecisionReason"]
 
 
-def test_deny_when_keep_missing():
-    """No keep param defaults to blocked."""
+def test_ask_permission_when_keep_missing():
+    """No keep param defaults to prompting the user."""
     out = _run_hook({"tool_input": {"clone_path": "/tmp/clone"}})
     data = json.loads(out)
-    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert data["hookSpecificOutput"]["permissionDecision"] == "askPermission"
 
 
-def test_deny_when_keep_is_garbage():
+def test_ask_permission_when_keep_is_garbage():
     out = _run_hook({"tool_input": {"keep": "yes", "clone_path": "/tmp/clone"}})
     data = json.loads(out)
-    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert data["hookSpecificOutput"]["permissionDecision"] == "askPermission"
 
 
 def test_approve_silently_when_keep_true():

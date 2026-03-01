@@ -132,6 +132,7 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
     conftest_mock_runner.push(_make_result(0, f"{str(tmp_path)}/.git/worktrees/feature", ""))
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch ok
+    conftest_mock_runner.push(_make_result(0, "", ""))  # ref check (5.5)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase ok
 
     result = await perform_merge(
@@ -158,6 +159,7 @@ async def test_perform_merge_both_gates_run_on_full_success(
     conftest_mock_runner.push(_make_result(0, f"{str(tmp_path)}/.git/worktrees/feat", ""))
     conftest_mock_runner.push(_make_result(0, "feat\n", ""))
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # ref check (5.5)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, f"worktree {str(tmp_path)}\n", ""))  # wt-list
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge

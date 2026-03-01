@@ -107,7 +107,7 @@ class TestExtractFrontmatter:
     def test_frontmatter_missing_close_raises(self) -> None:
         """Missing closing --- raises ValueError."""
         text = "---\nname: foo\nno closing delimiter\n"
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="not found"):
             _extract_frontmatter(text)
 
 

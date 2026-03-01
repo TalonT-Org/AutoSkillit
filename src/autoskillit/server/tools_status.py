@@ -239,7 +239,7 @@ async def read_db(
 
 
 @mcp.tool(tags={"automation"})
-async def check_quota(ctx: Context = CurrentContext()) -> str:
+async def check_quota() -> str:
     """Check 5-hour quota utilization and return whether a sleep is needed.
 
     When quota_guard.enabled=True (on by default) and utilization
@@ -270,17 +270,5 @@ async def check_quota(ctx: Context = CurrentContext()) -> str:
     from autoskillit.server.helpers import check_and_sleep_if_needed
 
     quota_result = await check_and_sleep_if_needed(config.quota_guard)
-
-    if quota_result.get("should_sleep"):
-        await _notify(
-            ctx,
-            "info",
-            "quota above threshold — caller should sleep",
-            "autoskillit.check_quota",
-            extra={
-                "sleep_seconds": quota_result["sleep_seconds"],
-                "utilization": quota_result["utilization"],
-            },
-        )
 
     return json.dumps({"success": True, **quota_result})

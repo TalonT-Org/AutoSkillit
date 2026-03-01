@@ -40,7 +40,44 @@ def detect_source_dir(cwd: str) -> str:
     return _cwd
 
 
-def clone_repo(source_dir: str, run_name: str) -> dict[str, str]:
+def detect_branch(source_dir: str) -> str:
+    """Detect the current HEAD branch in source_dir.
+
+    Returns the branch name on success. Returns "" on git failure.
+    Returns the literal "HEAD" when the repo is in detached HEAD state;
+    callers must treat "HEAD" as no usable branch name.
+    """
+    result = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=source_dir,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return result.stdout.strip()
+    return ""
+
+
+def detect_uncommitted_changes(source_dir: str) -> list[str]:
+    """Return porcelain status lines when uncommitted changes exist.
+
+    Returns empty list when the working tree is clean or when git is
+    unavailable. Never raises.
+    """
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=source_dir,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return [line for line in result.stdout.splitlines() if line.strip()]
+    return []
+
+
+def clone_repo(
+    source_dir: str, run_name: str, branch: str = "", strategy: str = ""
+) -> dict[str, str]:
     """Clone source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
 
     Used as a run_python entry point in pipeline recipes. Raises ValueError if
@@ -49,8 +86,24 @@ def clone_repo(source_dir: str, run_name: str) -> dict[str, str]:
     When source_dir is empty, auto-detects from git rev-parse --show-toplevel.
     Tilde and relative paths are expanded before validation.
 
+    When branch is empty, the current HEAD branch of source_dir is auto-detected
+    and used as the clone branch. If the repo is in detached HEAD state, no
+    --branch flag is passed (git clones the default branch).
+
+    When strategy is "" (default), checks for uncommitted changes before cloning.
+    If changes are found, returns a warning dict instead of cloning. The caller
+    may re-invoke with strategy="proceed" (clone remote committed state only) or
+    strategy="clone_local" (copytree — includes working-tree changes).
+
     Returns:
-        {"clone_path": str, "source_dir": str}
+        On success: {"clone_path": str, "source_dir": str}
+        On uncommitted changes (strategy=""): {
+            "uncommitted_changes": "true",
+            "source_dir": str,
+            "branch": str,
+            "changed_files": str,
+            "total_changed": str,
+        }
     """
     if not source_dir:
         source_dir = detect_source_dir(str(Path.cwd()))
@@ -62,20 +115,47 @@ def clone_repo(source_dir: str, run_name: str) -> dict[str, str]:
             f"Provide an absolute path, a path starting with '~', or leave empty "
             f"to auto-detect from git rev-parse --show-toplevel."
         )
+
+    # Branch resolution
+    if not branch:
+        detected = detect_branch(str(source))
+        branch = detected if detected and detected != "HEAD" else ""
+
+    # Uncommitted-changes gate (only when strategy is not explicitly set)
+    if strategy == "":
+        changed = detect_uncommitted_changes(str(source))
+        if changed:
+            logger.warning("clone_uncommitted_changes", source=str(source), count=len(changed))
+            return {
+                "uncommitted_changes": "true",
+                "source_dir": str(source),
+                "branch": branch,
+                "changed_files": "\n".join(changed[:20]),
+                "total_changed": str(len(changed)),
+            }
+
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     runs_parent = source.parent / _RUNS_DIR
     clone_path = runs_parent / f"{run_name}-{timestamp}"
     runs_parent.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run(
-        ["git", "clone", str(source), str(clone_path)],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"git clone failed:\nstderr: {result.stderr.strip()}\nstdout: {result.stdout.strip()}"
-        )
-    logger.info("clone_created", clone_path=str(clone_path), source=str(source))
+
+    if strategy == "clone_local":
+        shutil.copytree(str(source), str(clone_path))
+        logger.info("clone_created_local_copy", clone_path=str(clone_path), source=str(source))
+    else:
+        cmd = ["git", "clone"]
+        if branch:
+            cmd += ["--branch", branch]
+        cmd += [str(source), str(clone_path)]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(
+                "git clone failed:"
+                f"\nstderr: {result.stderr.strip()}"
+                f"\nstdout: {result.stdout.strip()}"
+            )
+        logger.info("clone_created", clone_path=str(clone_path), source=str(source), branch=branch)
+
     return {"clone_path": str(clone_path), "source_dir": str(source)}
 
 
@@ -167,8 +247,10 @@ def push_to_remote(
 class DefaultCloneManager:
     """Concrete CloneManager that delegates to module-level clone functions."""
 
-    def clone_repo(self, source_dir: str, run_name: str) -> dict[str, str]:
-        return clone_repo(source_dir, run_name)
+    def clone_repo(
+        self, source_dir: str, run_name: str, branch: str = "", strategy: str = ""
+    ) -> dict[str, str]:
+        return clone_repo(source_dir, run_name, branch=branch, strategy=strategy)
 
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]:
         return remove_clone(clone_path, keep)

@@ -17,7 +17,13 @@ logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"automation"})
-async def clone_repo(source_dir: str, run_name: str, ctx: Context = CurrentContext()) -> str:
+async def clone_repo(
+    source_dir: str,
+    run_name: str,
+    branch: str = "",
+    strategy: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
     """Clone a source repository for isolated pipeline execution.
 
     Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
@@ -26,21 +32,33 @@ async def clone_repo(source_dir: str, run_name: str, ctx: Context = CurrentConte
     Returns {"clone_path": str, "source_dir": str} on success,
     or {"error": str} on failure.
 
+    When uncommitted changes are detected and strategy is "" (default), returns
+    {"uncommitted_changes": "true", "changed_files": str, ...} without cloning.
+
     Args:
         source_dir: Path to the source repository. Empty string auto-detects via git.
         run_name: Name prefix for the clone directory (e.g. "impl", "audit-fix").
+        branch: Branch to check out in the clone. Empty = auto-detect from HEAD.
+        strategy: On uncommitted changes: "" = return warning (default),
+                  "proceed" = clone remote committed state only,
+                  "clone_local" = copytree (includes working-tree changes).
     """
     if (gate := _require_enabled()) is not None:
         return gate
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="clone_repo", source_dir=source_dir)
-    logger.info("clone_repo", source_dir=source_dir, run_name=run_name)
+    logger.info("clone_repo", source_dir=source_dir, run_name=run_name, branch=branch)
     await _notify(
         ctx,
         "info",
-        f"clone_repo: {source_dir!r} run_name={run_name!r}",
+        f"clone_repo: {source_dir!r} run_name={run_name!r} branch={branch!r}",
         "autoskillit.clone_repo",
-        extra={"source_dir": source_dir, "run_name": run_name},
+        extra={
+            "source_dir": source_dir,
+            "run_name": run_name,
+            "branch": branch,
+            "strategy": strategy,
+        },
     )
 
     from autoskillit.server import _get_ctx
@@ -50,7 +68,9 @@ async def clone_repo(source_dir: str, run_name: str, ctx: Context = CurrentConte
         return json.dumps({"error": "Clone manager not configured"})
 
     try:
-        result = await asyncio.to_thread(tool_ctx.clone_mgr.clone_repo, source_dir, run_name)
+        result = await asyncio.to_thread(
+            tool_ctx.clone_mgr.clone_repo, source_dir, run_name, branch, strategy
+        )
     except (ValueError, RuntimeError) as exc:
         await _notify(
             ctx,

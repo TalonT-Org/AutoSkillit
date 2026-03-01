@@ -49,6 +49,7 @@ steps:
     with:
       source_dir: "${{ inputs.source_dir }}"
       run_name: "${{ inputs.run_name }}"
+      branch: "${{ inputs.base_branch }}"
     capture:
       work_dir: "${{ result.clone_path }}"
       source_dir: "${{ result.source_dir }}"

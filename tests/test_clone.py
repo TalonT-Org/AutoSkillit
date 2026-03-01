@@ -82,6 +82,107 @@ class TestCloneRepo:
         with pytest.raises(RuntimeError, match="git clone failed"):
             clone_repo(str(tmp_path), "name")
 
+    def test_cb1_explicit_branch_is_checked_out_in_clone(self, git_repo: Path) -> None:
+        """T_CB1: explicit branch is checked out in the clone."""
+        import shutil
+
+        subprocess.run(
+            ["git", "-C", str(git_repo), "checkout", "-b", "dev"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "--allow-empty", "-m", "dev-commit"],
+            check=True,
+            capture_output=True,
+        )
+        result = clone_repo(str(git_repo), "test", branch="dev")
+        clone_path = Path(result["clone_path"])
+        head = subprocess.run(
+            ["git", "-C", str(clone_path), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert head == "dev"
+        shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    def test_cb2_auto_detects_current_branch_when_branch_empty(self, git_repo: Path) -> None:
+        """T_CB2: branch="" auto-detects current HEAD branch and clones it."""
+        import shutil
+
+        subprocess.run(
+            ["git", "-C", str(git_repo), "checkout", "-b", "feature"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(git_repo), "commit", "--allow-empty", "-m", "feature-commit"],
+            check=True,
+            capture_output=True,
+        )
+        result = clone_repo(str(git_repo), "test", branch="")
+        clone_path = Path(result["clone_path"])
+        head = subprocess.run(
+            ["git", "-C", str(clone_path), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert head == "feature"
+        shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    def test_cb3_returns_uncommitted_changes_warning_when_dirty(self, git_repo: Path) -> None:
+        """T_CB3: untracked files trigger warning dict; no clone is created."""
+        (git_repo / "untracked.txt").write_text("dirty")
+        result = clone_repo(str(git_repo), "test")
+        assert result["uncommitted_changes"] == "true"
+        assert "changed_files" in result
+        assert "clone_path" not in result
+
+    def test_cb4_strategy_proceed_skips_uncommitted_check(self, git_repo: Path) -> None:
+        """T_CB4: strategy='proceed' clones without uncommitted changes check."""
+        import shutil
+
+        (git_repo / "untracked.txt").write_text("dirty")
+        result = clone_repo(str(git_repo), "test", strategy="proceed")
+        assert "clone_path" in result
+        clone_path = Path(result["clone_path"])
+        assert not (clone_path / "untracked.txt").exists()
+        shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    def test_cb5_strategy_clone_local_includes_uncommitted_changes(self, git_repo: Path) -> None:
+        """T_CB5: strategy='clone_local' copytree includes untracked files."""
+        import shutil
+
+        (git_repo / "untracked.txt").write_text("dirty")
+        result = clone_repo(str(git_repo), "test", strategy="clone_local")
+        assert "clone_path" in result
+        clone_path = Path(result["clone_path"])
+        assert (clone_path / "untracked.txt").exists()
+        shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    def test_cb6_detached_head_falls_back_to_no_branch_flag(self, git_repo: Path) -> None:
+        """T_CB6: detached HEAD yields branch=''; git clone succeeds without --branch."""
+        import shutil
+
+        sha = subprocess.run(
+            ["git", "-C", str(git_repo), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(git_repo), "checkout", sha],
+            check=True,
+            capture_output=True,
+        )
+        result = clone_repo(str(git_repo), "test", branch="")
+        assert "clone_path" in result
+        clone_path = Path(result["clone_path"])
+        assert clone_path.is_dir()
+        shutil.rmtree(clone_path.parent, ignore_errors=True)
+
 
 class TestRemoveClone:
     def test_keep_false_removes_directory(self, git_repo: Path) -> None:

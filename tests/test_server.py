@@ -7109,6 +7109,46 @@ class TestCloneRepoTool:
             result = json.loads(await clone_repo(source_dir="/src", run_name="run"))
         assert "error" in result
 
+    @pytest.mark.asyncio
+    async def test_cb17_forwards_branch_to_clone_manager(self, tool_ctx):
+        """T_CB17: branch param is forwarded to the underlying clone_repo call."""
+        with patch(
+            "autoskillit.workspace.clone.clone_repo",
+            return_value={"clone_path": "/clone/path", "source_dir": "/src"},
+        ) as mock_clone:
+            await clone_repo(source_dir="/src", run_name="r", branch="dev")
+        mock_clone.assert_called_once()
+        assert mock_clone.call_args.kwargs.get("branch") == "dev"
+
+    @pytest.mark.asyncio
+    async def test_cb18_forwards_strategy_to_clone_manager(self, tool_ctx):
+        """T_CB18: strategy param is forwarded to the underlying clone_repo call."""
+        with patch(
+            "autoskillit.workspace.clone.clone_repo",
+            return_value={"clone_path": "/clone/path", "source_dir": "/src"},
+        ) as mock_clone:
+            await clone_repo(source_dir="/src", run_name="r", strategy="proceed")
+        mock_clone.assert_called_once()
+        assert mock_clone.call_args.kwargs.get("strategy") == "proceed"
+
+    @pytest.mark.asyncio
+    async def test_cb19_returns_uncommitted_changes_result_as_json(self, tool_ctx):
+        """T_CB19: uncommitted_changes warning dict passes through without 'error' key."""
+        uncommitted_result = {
+            "uncommitted_changes": "true",
+            "source_dir": "/src",
+            "branch": "main",
+            "changed_files": "M file.py",
+            "total_changed": "1",
+        }
+        with patch(
+            "autoskillit.workspace.clone.clone_repo",
+            return_value=uncommitted_result,
+        ):
+            result = json.loads(await clone_repo(source_dir="/src", run_name="r"))
+        assert result["uncommitted_changes"] == "true"
+        assert "error" not in result
+
 
 class TestRemoveCloneTool:
     @pytest.mark.asyncio

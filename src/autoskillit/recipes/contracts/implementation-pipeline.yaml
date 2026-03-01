@@ -1,13 +1,14 @@
-generated_at: '2026-02-25T06:23:01.751744+00:00'
+generated_at: '2026-02-28T23:45:30.622607+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes:
-  make-groups: sha256:00dc521b0212c5898d1a725833e1abaf4dc79bd4da008aadd9d686ead09b0b6d
-  make-plan: sha256:cc9e641a02465ddd7fff9dfd680363535c9838e5af13da8d9270858db99b3b10
-  review-approach: sha256:1c4f635817ec35b2428e9486126a448027f14e5e3cd8e1c06609cc6a1d5a0bc6
-  dry-walkthrough: sha256:dface9e671dc81e2ca0ed2eea6eb274ac62d6b563efde23a02e0f904500c370f
-  implement-worktree-no-merge: sha256:fdb7dc3d525aeb7021b49d6ca4656ba0775c349d25c807d80d2fa875d5d82613
-  retry-worktree: sha256:f5bb33d213e0d1070453d11882152c3e7c285499eb82ed22bdd8048ba65f19fe
+  make-groups: sha256:f92caf72b4fbe044b3af7ad9f5a51fd07563f7faec2d6362750b9aeecb9ab94e
+  make-plan: sha256:4d33f1e86f9ffb91d29924a65b968d056887c271a73249f4472b874126291e0c
+  review-approach: sha256:44f8aaf2fdb9ad79c65150e470695573535bde5eb56a43d771ab9cfb1203f46c
+  dry-walkthrough: sha256:3f09b86c70373860d34c03f6fabf6145f2f2a2569a5b96c4dc55086f1856df51
+  implement-worktree-no-merge: sha256:19c6c56038c8aa7df221f21ff1cfbdf098807b776a8ec3f42f2c281acfd7bf83
+  retry-worktree: sha256:68cbe64f2819874d753bfbecdfddfb735211b79939d6d366f04f29f9b98fe1f2
   assess-and-merge: sha256:e04a2d6b4f986db492698c00b324426576e0a065ba060b984f70f3eca5f831ae
+  audit-impl: sha256:2f3a050798b54281364bc23c8a40a34d0c3d859ded26be952e3755930ed62899
 skills:
   make-groups:
     inputs:
@@ -19,6 +20,8 @@ skills:
       type: file_path
     - name: manifest_path
       type: file_path
+    - name: group_files
+      type: file_path_list
   make-plan:
     inputs:
     - name: task
@@ -27,6 +30,8 @@ skills:
     outputs:
     - name: plan_path
       type: file_path
+    - name: plan_parts
+      type: file_path_list
   review-approach:
     inputs:
     - name: plan_path
@@ -40,9 +45,7 @@ skills:
     - name: plan_path
       type: file_path
       required: true
-    outputs:
-    - name: verified_plan_path
-      type: file_path
+    outputs: []
   implement-worktree-no-merge:
     inputs:
     - name: plan_path
@@ -51,6 +54,8 @@ skills:
     outputs:
     - name: worktree_path
       type: directory_path
+    - name: branch_name
+      type: string
   retry-worktree:
     inputs:
     - name: plan_path
@@ -62,6 +67,8 @@ skills:
     outputs:
     - name: worktree_path
       type: directory_path
+    - name: branch_name
+      type: string
   assess-and-merge:
     inputs:
     - name: worktree_path
@@ -73,29 +80,64 @@ skills:
     - name: base_branch
       type: string
       required: true
-    outputs:
-    - name: merged_branch
+    outputs: []
+  audit-impl:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: branch_name
       type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: false
+    outputs:
+    - name: verdict
+      type: string
+    - name: remediation_path
+      type: file_path
 dataflow:
+- step: clone
+  available:
+  - audit
+  - base_branch
+  - keep_clone_on_failure
+  - make_groups
+  - review_approach
+  - run_name
+  - source_dir
+  - source_doc
+  - task
+  required: []
+  produced:
+  - work_dir
+  - source_dir
 - step: group
   available:
+  - audit
   - base_branch
+  - keep_clone_on_failure
   - make_groups
-  - project_dir
   - review_approach
+  - run_name
+  - source_dir
   - source_doc
   - task
   - work_dir
   required: []
   produced:
-  - groups_path
+  - group_files
 - step: plan
   available:
+  - audit
   - base_branch
-  - groups_path
+  - group_files
+  - keep_clone_on_failure
   - make_groups
-  - project_dir
   - review_approach
+  - run_name
+  - source_dir
   - source_doc
   - task
   - work_dir
@@ -104,25 +146,33 @@ dataflow:
   - plan_path
 - step: review
   available:
+  - audit
   - base_branch
-  - groups_path
+  - group_files
+  - keep_clone_on_failure
   - make_groups
   - plan_path
-  - project_dir
   - review_approach
+  - run_name
+  - source_dir
   - source_doc
   - task
   - work_dir
   required: []
-  produced: []
+  produced:
+  - review_path
 - step: verify
   available:
+  - audit
   - base_branch
-  - groups_path
+  - group_files
+  - keep_clone_on_failure
   - make_groups
   - plan_path
-  - project_dir
   - review_approach
+  - review_path
+  - run_name
+  - source_dir
   - source_doc
   - task
   - work_dir
@@ -130,40 +180,57 @@ dataflow:
   produced: []
 - step: implement
   available:
+  - audit
   - base_branch
-  - groups_path
+  - group_files
+  - keep_clone_on_failure
   - make_groups
   - plan_path
-  - project_dir
   - review_approach
+  - review_path
+  - run_name
+  - source_dir
   - source_doc
   - task
   - work_dir
   required: []
   produced:
   - worktree_path
+  - branch_name
 - step: retry_worktree
   available:
+  - audit
   - base_branch
-  - groups_path
+  - branch_name
+  - group_files
+  - keep_clone_on_failure
   - make_groups
   - plan_path
-  - project_dir
   - review_approach
+  - review_path
+  - run_name
+  - source_dir
   - source_doc
   - task
   - work_dir
   - worktree_path
   required: []
-  produced: []
+  produced:
+  - worktree_path
+  - branch_name
 - step: test
   available:
+  - audit
   - base_branch
-  - groups_path
+  - branch_name
+  - group_files
+  - keep_clone_on_failure
   - make_groups
   - plan_path
-  - project_dir
   - review_approach
+  - review_path
+  - run_name
+  - source_dir
   - source_doc
   - task
   - work_dir
@@ -172,12 +239,38 @@ dataflow:
   produced: []
 - step: merge
   available:
+  - audit
   - base_branch
-  - groups_path
+  - branch_name
+  - group_files
+  - keep_clone_on_failure
   - make_groups
   - plan_path
-  - project_dir
   - review_approach
+  - review_path
+  - run_name
+  - source_dir
+  - source_doc
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - cleanup_succeeded
+- step: push
+  available:
+  - audit
+  - base_branch
+  - branch_name
+  - cleanup_succeeded
+  - group_files
+  - keep_clone_on_failure
+  - make_groups
+  - plan_path
+  - review_approach
+  - review_path
+  - run_name
+  - source_dir
   - source_doc
   - task
   - work_dir
@@ -186,12 +279,18 @@ dataflow:
   produced: []
 - step: fix
   available:
+  - audit
   - base_branch
-  - groups_path
+  - branch_name
+  - cleanup_succeeded
+  - group_files
+  - keep_clone_on_failure
   - make_groups
   - plan_path
-  - project_dir
   - review_approach
+  - review_path
+  - run_name
+  - source_dir
   - source_doc
   - task
   - work_dir
@@ -200,42 +299,152 @@ dataflow:
   produced: []
 - step: next_or_done
   available:
+  - audit
   - base_branch
-  - groups_path
+  - branch_name
+  - cleanup_succeeded
+  - group_files
+  - keep_clone_on_failure
   - make_groups
   - plan_path
-  - project_dir
   - review_approach
+  - review_path
+  - run_name
+  - source_dir
   - source_doc
   - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: audit_impl
+  available:
+  - audit
+  - base_branch
+  - branch_name
+  - cleanup_succeeded
+  - group_files
+  - keep_clone_on_failure
+  - make_groups
+  - plan_path
+  - review_approach
+  - review_path
+  - run_name
+  - source_dir
+  - source_doc
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - verdict
+  - remediation_path
+- step: remediate
+  available:
+  - audit
+  - base_branch
+  - branch_name
+  - cleanup_succeeded
+  - group_files
+  - keep_clone_on_failure
+  - make_groups
+  - plan_path
+  - remediation_path
+  - review_approach
+  - review_path
+  - run_name
+  - source_dir
+  - source_doc
+  - task
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: cleanup_success
+  available:
+  - audit
+  - base_branch
+  - branch_name
+  - cleanup_succeeded
+  - group_files
+  - keep_clone_on_failure
+  - make_groups
+  - plan_path
+  - remediation_path
+  - review_approach
+  - review_path
+  - run_name
+  - source_dir
+  - source_doc
+  - task
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: cleanup_failure
+  available:
+  - audit
+  - base_branch
+  - branch_name
+  - cleanup_succeeded
+  - group_files
+  - keep_clone_on_failure
+  - make_groups
+  - plan_path
+  - remediation_path
+  - review_approach
+  - review_path
+  - run_name
+  - source_dir
+  - source_doc
+  - task
+  - verdict
   - work_dir
   - worktree_path
   required: []
   produced: []
 - step: done
   available:
+  - audit
   - base_branch
-  - groups_path
+  - branch_name
+  - cleanup_succeeded
+  - group_files
+  - keep_clone_on_failure
   - make_groups
   - plan_path
-  - project_dir
+  - remediation_path
   - review_approach
+  - review_path
+  - run_name
+  - source_dir
   - source_doc
   - task
+  - verdict
   - work_dir
   - worktree_path
   required: []
   produced: []
-- step: escalate
+- step: escalate_stop
   available:
+  - audit
   - base_branch
-  - groups_path
+  - branch_name
+  - cleanup_succeeded
+  - group_files
+  - keep_clone_on_failure
   - make_groups
   - plan_path
-  - project_dir
+  - remediation_path
   - review_approach
+  - review_path
+  - run_name
+  - source_dir
   - source_doc
   - task
+  - verdict
   - work_dir
   - worktree_path
   required: []

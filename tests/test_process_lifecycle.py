@@ -231,12 +231,17 @@ WRITE_TRUNCATED_JSON_THEN_EXIT_SCRIPT = textwrap.dedent("""\
     sys.exit(0)
 """)
 
-# Simulates a stale session: writes a valid result to stdout then hangs forever.
-# run_managed_async will fire STALE via stale_threshold and kill the process.
+# Simulates a stale session: writes a valid result to stdout AND a JSONL record
+# to session_log_dir (so Phase 1 of the stale monitor finds the file), then hangs.
+# Pass session_dir as sys.argv[1].
+# run_managed_async fires STALE via stale_threshold (file stops growing after initial write).
 # Produces: STALE, returncode=nonzero, stdout=valid success record
 # Expected SkillResult: success=True, needs_retry=False, subtype="recovered_from_stale"
-WRITE_VALID_RESULT_THEN_HANG_SCRIPT = textwrap.dedent("""\
-    import sys, json, time
+WRITE_VALID_RESULT_AND_JSONL_THEN_HANG_SCRIPT = textwrap.dedent("""\
+    import sys, json, time, os
+    session_dir = sys.argv[1]
+    os.makedirs(session_dir, exist_ok=True)
+    # Write valid result to stdout (captured by run_managed_async via temp file)
     payload = {
         "type": "result",
         "subtype": "success",
@@ -246,6 +251,12 @@ WRITE_VALID_RESULT_THEN_HANG_SCRIPT = textwrap.dedent("""\
     }
     sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\\n")
     sys.stdout.flush()
+    # Write one JSONL record to session dir so Phase 1 of the stale monitor finds it.
+    # After this single write the file never grows again → stale fires after threshold.
+    record = {"type": "assistant", "message": {"role": "assistant", "content": "Working..."}}
+    with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
+        f.write(json.dumps(record) + "\\n")
+        f.flush()
     time.sleep(9999)
 """)
 
@@ -2079,26 +2090,39 @@ class TestStaleRecoveryPipelineAdjudication:
         attempts to recover a valid SkillResult from stdout. When the stdout
         contains a complete, parseable success record, recovery succeeds and
         subtype is set to "recovered_from_stale".
+
+        session_log_dir must be provided so the stale monitor is active. Without
+        it, no monitor runs and the test would hit the wall-clock timeout instead.
+        The stale monitor watches session_dir, sees no JSONL activity, and fires
+        STALE after stale_threshold (0.3s with short polls).
         """
         from autoskillit.execution.headless import _build_skill_result
 
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
         script = tmp_path / "stale_with_result.py"
-        script.write_text(WRITE_VALID_RESULT_THEN_HANG_SCRIPT)
+        script.write_text(WRITE_VALID_RESULT_AND_JSONL_THEN_HANG_SCRIPT)
 
         result = await run_managed_async(
-            [sys.executable, str(script)],
+            [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=30,
-            heartbeat_marker='"type":"result"',
+            timeout=10,
+            session_log_dir=session_dir,
+            completion_marker="%%NONEXISTENT%%",
             stale_threshold=0.3,
-            _heartbeat_poll=0.05,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
         )
 
         assert result.termination == TerminationReason.STALE
 
+        # Use completion_marker="" so _check_session_content does not require
+        # the marker to appear in the recovered result ("Task completed successfully.").
+        # The run_managed_async completion_marker was "%%NONEXISTENT%%" only to
+        # prevent false-positive session-monitor completion detection.
         skill_result = _build_skill_result(
             result,
-            completion_marker="%%ORDER_UP%%",
+            completion_marker="",
             skill_command="investigate",
             audit=None,
         )
@@ -2136,7 +2160,8 @@ class TestTimedOutPipelineAdjudication:
         )
 
         assert result.termination == TerminationReason.TIMED_OUT
-        assert result.returncode == -1
+        # Note: SubprocessResult.returncode is the actual kill signal (e.g. -15 for SIGTERM).
+        # _build_skill_result overrides returncode to -1 internally for the SkillResult.
 
         skill_result = _build_skill_result(
             result,

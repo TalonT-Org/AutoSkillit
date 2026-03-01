@@ -1404,7 +1404,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     stale_threshold=0.05,
                     spawn_time=spawn_time,
                     pid=99999,
-                    _phase1_poll=0.05,
+                    _phase1_poll=0.01,
                     _phase2_poll=0.05,
                 ),
                 timeout=5.0,
@@ -1427,10 +1427,10 @@ class TestSessionLogMonitorStaleSuppressionGate:
                 stale_threshold=0.05,
                 spawn_time=spawn_time,
                 # pid omitted (defaults to None)
-                _phase1_poll=0.05,
+                _phase1_poll=0.01,
                 _phase2_poll=0.05,
             ),
-            timeout=5.0,
+            timeout=2.0,
         )
         assert result == "stale"
 
@@ -1451,10 +1451,10 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     stale_threshold=0.05,
                     spawn_time=spawn_time,
                     pid=None,
-                    _phase1_poll=0.05,
+                    _phase1_poll=0.01,
                     _phase2_poll=0.05,
                 ),
-                timeout=5.0,
+                timeout=2.0,
             )
         assert result == "stale"
         mock_tcp.assert_not_called()
@@ -1488,7 +1488,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                         stale_threshold=0.05,
                         spawn_time=spawn_time,
                         pid=99999,
-                        _phase1_poll=0.05,
+                        _phase1_poll=0.01,
                         _phase2_poll=0.05,
                     ),
                     timeout=5.0,

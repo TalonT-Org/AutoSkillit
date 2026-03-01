@@ -55,7 +55,13 @@ Correct orchestration on `needs_retry=true`:
 
 ### Step 0: Validate Prerequisites
 
-1. Verify plan exists (file path or pasted content)
+1. Extract and verify the plan path using **path detection**: scan the tokens
+   after the skill name for the first one that starts with `/`, `./`, `temp/`,
+   or `.autoskillit/` — that token is the plan path. Ignore any non-path words
+   that appear before it. If no path-like token is found, treat the entire
+   argument string as pasted plan content. Verify the resolved file exists before
+   proceeding; if it does not, abort with:
+   `"Plan file not found: {path}. Correct format: /autoskillit:implement-worktree <plan_path>"`
 2. **Check for dry-walkthrough verification:** Read the first line of the plan file. If it does not contain exactly `Dry-walkthrough verified = TRUE`:
    - Display warning: "⚠️ WARNING: This plan has NOT been validated with a dry-walkthrough. Implementation may encounter issues that could have been caught beforehand."
    - Use `AskUserQuestion` to prompt: "Do you want to continue without dry-walkthrough validation?"

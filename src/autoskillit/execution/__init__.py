@@ -6,6 +6,12 @@ execution/headless.py has TYPE_CHECKING-only references to pipeline/.
 """
 
 from autoskillit.core import SkillResult
+from autoskillit.execution.commands import (
+    ClaudeHeadlessCmd,
+    ClaudeInteractiveCmd,
+    build_headless_cmd,
+    build_interactive_cmd,
+)
 from autoskillit.execution.db import DefaultDatabaseReader, _execute_readonly_query
 from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.execution.headless import DefaultHeadlessExecutor, run_headless_core
@@ -29,6 +35,11 @@ from autoskillit.execution.testing import (
 execute_readonly_query = _execute_readonly_query
 
 __all__ = [
+    # commands
+    "ClaudeInteractiveCmd",
+    "ClaudeHeadlessCmd",
+    "build_interactive_cmd",
+    "build_headless_cmd",
     # process
     "DefaultSubprocessRunner",
     "run_managed_async",

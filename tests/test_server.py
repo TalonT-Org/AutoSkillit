@@ -4697,7 +4697,7 @@ class TestComputeRetrySuccessEmptyResult:
         assert retriable is False
 
     def test_success_empty_result_natural_exit_zero_rc_is_retriable(self) -> None:
-        """success + "" + NATURAL_EXIT + rc=0 must be retriable (CLAUDE_CODE_EXIT_AFTER_STOP_DELAY race).
+        """success + "" + NATURAL_EXIT + rc=0 must be retriable (stop-delay race).
 
         CLAUDE_CODE_EXIT_AFTER_STOP_DELAY causes a timer-based self-exit that produces
         NATURAL_EXIT with subtype='success' and an empty result field. The CLI writes a

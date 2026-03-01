@@ -33,8 +33,9 @@ def test_inject_completion_directive_appends_marker():
     from autoskillit.execution.headless import _inject_completion_directive
 
     result = _inject_completion_directive("/investigate foo", "%%DONE%%")
-    assert result.endswith("%%DONE%%")
+    assert "%%DONE%%" in result
     assert "/investigate foo" in result
+    assert "ORCHESTRATION DIRECTIVE" in result
 
 
 def test_resolve_model_prefers_override(make_config):

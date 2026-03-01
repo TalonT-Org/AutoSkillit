@@ -10,6 +10,7 @@ Public API:
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -43,7 +44,9 @@ def _inject_completion_directive(skill_command: str, marker: str) -> str:
     """Append an orchestration directive to make the session write a completion marker."""
     directive = (
         f"\n\nORCHESTRATION DIRECTIVE: When your task is complete, "
-        f"your final text output MUST end with: {marker}"
+        f"your final text output MUST end with: {marker}\n"
+        f"CRITICAL: Append {marker} at the very end of your substantive response, "
+        f"in the SAME message. Do NOT output {marker} as a separate standalone message."
     )
     return skill_command + directive
 
@@ -81,6 +84,32 @@ def _capture_failure(
             stderr=stderr,
         )
     )
+
+
+def _recover_from_separate_marker(
+    session: ClaudeSessionResult,
+    completion_marker: str,
+) -> ClaudeSessionResult | None:
+    """Attempt recovery when the model emitted the completion marker as a standalone
+    final message rather than inline with its substantive output.
+
+    Returns a reconstructed ClaudeSessionResult whose result field contains the
+    combined assistant message content (including the marker), or None if recovery
+    is not possible (no assistant content, or no substantive content beyond the marker).
+    """
+    if not session.assistant_messages:
+        return None
+    if not any(completion_marker in msg for msg in session.assistant_messages):
+        return None
+    combined = "\n\n".join(session.assistant_messages)
+    stripped = combined.replace(completion_marker, "").strip()
+    if not stripped:
+        return None  # only the marker exists — genuine failure, do not recover
+    logger.warning(
+        "completion_marker_in_separate_message",
+        recovery="rebuilding result from assistant_messages",
+    )
+    return dataclasses.replace(session, result=combined)
 
 
 def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
@@ -173,6 +202,18 @@ def _build_skill_result(
 
     success = _compute_success(session, returncode, result.termination, completion_marker)
     needs_retry, retry_reason = _compute_retry(session, returncode, result.termination)
+
+    if not success and completion_marker:
+        recovered = _recover_from_separate_marker(session, completion_marker)
+        if recovered is not None:
+            recovered_success = _compute_success(
+                recovered, returncode, result.termination, completion_marker
+            )
+            if recovered_success:
+                session = recovered
+                success = True
+                needs_retry = False
+                retry_reason = RetryReason.NONE
 
     if not success or needs_retry:
         _capture_failure(

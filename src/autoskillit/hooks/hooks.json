@@ -5,6 +5,10 @@
       "hooks": [
         {
           "type": "command",
+          "command": "python3 -m autoskillit.hooks.skill_cmd_check"
+        },
+        {
+          "type": "command",
           "command": "python3 -m autoskillit.hooks.quota_check"
         },
         {

@@ -70,3 +70,12 @@ quota_guard:
 github:
   token: null
   default_repo: null
+
+report_bug:
+  timeout: 600
+  model: null
+  report_dir: null          # null = {cwd}/.autoskillit/temp/bug-reports/
+  github_filing: true
+  github_labels:
+    - "autoreported"
+    - "bug"

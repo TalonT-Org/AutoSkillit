@@ -358,3 +358,167 @@ async def test_kitchen_status_github_token_does_not_reflect_post_construction_en
     monkeypatch.setenv("GITHUB_TOKEN", "set-after-construction")
     status = json.loads(await kitchen_status())
     assert status["github_token_configured"] is False
+
+
+# ---------------------------------------------------------------------------
+# DefaultGitHubFetcher — search_issues
+# ---------------------------------------------------------------------------
+
+_SEARCH_JSON = {
+    "total_count": 1,
+    "items": [
+        {
+            "number": 7,
+            "title": "KeyError in recipe/validator.py",
+            "html_url": "https://github.com/owner/repo/issues/7",
+            "body": "Existing issue body.",
+            "state": "open",
+        }
+    ],
+}
+
+
+@pytest.mark.asyncio
+async def test_search_issues_success(httpx_mock):
+    # URL omitted: search endpoint URL includes query params; match any request.
+    httpx_mock.add_response(json=_SEARCH_JSON)
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.search_issues("KeyError in recipe/validator", "owner", "repo")
+    assert result["success"] is True
+    assert result["total_count"] == 1
+    assert result["items"][0]["number"] == 7
+
+
+@pytest.mark.asyncio
+async def test_search_issues_empty_result(httpx_mock):
+    httpx_mock.add_response(json={"total_count": 0, "items": []})
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.search_issues("no match fingerprint", "owner", "repo")
+    assert result["success"] is True
+    assert result["total_count"] == 0
+    assert result["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_search_issues_http_error(httpx_mock):
+    httpx_mock.add_response(status_code=422, json={"message": "Validation Failed"})
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.search_issues("bad query", "owner", "repo")
+    assert result["success"] is False
+    assert "422" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_search_issues_request_error(httpx_mock):
+    httpx_mock.add_exception(httpx.ConnectError("down"))
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.search_issues("fp", "owner", "repo")
+    assert result["success"] is False
+    assert "request error" in result["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# DefaultGitHubFetcher — create_issue
+# ---------------------------------------------------------------------------
+
+_CREATE_ISSUE_JSON = {
+    "number": 42,
+    "html_url": "https://github.com/owner/repo/issues/42",
+}
+
+
+@pytest.mark.asyncio
+async def test_create_issue_success(httpx_mock):
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues",
+        method="POST",
+        json=_CREATE_ISSUE_JSON,
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.create_issue(
+        "owner", "repo", "Bug title", "## Report\n...", labels=["bug"]
+    )
+    assert result["success"] is True
+    assert result["issue_number"] == 42
+    assert result["url"] == "https://github.com/owner/repo/issues/42"
+
+
+@pytest.mark.asyncio
+async def test_create_issue_http_error(httpx_mock):
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues",
+        method="POST",
+        status_code=403,
+        json={"message": "Forbidden"},
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.create_issue("owner", "repo", "Title", "body")
+    assert result["success"] is False
+    assert "403" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_create_issue_request_error(httpx_mock):
+    httpx_mock.add_exception(httpx.ConnectError("down"))
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.create_issue("owner", "repo", "Title", "body")
+    assert result["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# DefaultGitHubFetcher — add_comment
+# ---------------------------------------------------------------------------
+
+_COMMENT_JSON = {
+    "id": 99,
+    "html_url": "https://github.com/owner/repo/issues/7#issuecomment-99",
+}
+
+
+@pytest.mark.asyncio
+async def test_add_comment_success(httpx_mock):
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/7/comments",
+        method="POST",
+        json=_COMMENT_JSON,
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.add_comment("owner", "repo", 7, "New occurrence details")
+    assert result["success"] is True
+    assert result["comment_id"] == 99
+
+
+@pytest.mark.asyncio
+async def test_add_comment_http_error(httpx_mock):
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/7/comments",
+        method="POST",
+        status_code=404,
+        json={"message": "Not Found"},
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.add_comment("owner", "repo", 7, "body")
+    assert result["success"] is False
+    assert "404" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_add_comment_request_error(httpx_mock):
+    httpx_mock.add_exception(httpx.ConnectError("down"))
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.add_comment("owner", "repo", 7, "body")
+    assert result["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# Protocol conformance — new methods included
+# ---------------------------------------------------------------------------
+
+
+def test_github_fetcher_protocol_includes_write_methods():
+    """DefaultGitHubFetcher must satisfy the extended GitHubFetcher protocol."""
+    fetcher = DefaultGitHubFetcher(token=None)
+    assert isinstance(fetcher, GitHubFetcher)
+    assert hasattr(fetcher, "search_issues")
+    assert hasattr(fetcher, "create_issue")
+    assert hasattr(fetcher, "add_comment")

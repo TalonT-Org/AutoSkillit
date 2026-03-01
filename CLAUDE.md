@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 21 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, fetch_github_issue + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 15 gated behind MCP prompts for user-only activation, and 20 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 22 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, fetch_github_issue, report_bug + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 16 gated behind MCP prompts for user-only activation, and 21 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -212,7 +212,7 @@ temp/                        # Temporary/working files (gitignored)
   * **server/tools_clone.py**: MCP tool handlers for `clone_repo`, `remove_clone`, and `push_to_remote`. Accesses clone functionality via `tool_ctx.clone_mgr` (DI pattern — no direct workspace imports).
   * **server/tools_execution.py**: MCP tool handlers for `run_cmd`, `run_python`, `run_skill`, and `run_skill_retry`.
   * **server/tools_git.py**: MCP tool handlers for `merge_worktree` and `classify_fix`.
-  * **server/tools_integrations.py**: MCP tool handlers for `fetch_github_issue`. Resolves bare issue numbers using `config.github.default_repo`, delegates HTTP calls to `ctx.github_client`, emits MCP progress notifications.
+  * **server/tools_integrations.py**: MCP tool handlers for `fetch_github_issue` and `report_bug`. `fetch_github_issue` resolves bare issue numbers using `config.github.default_repo` and delegates HTTP calls to `ctx.github_client`. `report_bug` runs a headless `/autoskillit:report-bug` session (blocking or fire-and-forget), writes the report to `.autoskillit/temp/bug-reports/`, parses a deduplication fingerprint from the skill output, and either creates a new GitHub issue or comments on the existing one via `ctx.github_client`.
   * **server/tools_recipe.py**: MCP tool handlers for `migrate_recipe`, `load_recipe`, `list_recipes`, and `validate_recipe`.
   * **server/tools_status.py**: MCP tool handlers for `kitchen_status`, `get_pipeline_report`, and `get_token_summary`.
   * **server/tools_workspace.py**: MCP tool handlers for `test_check`, `reset_test_dir`, `reset_workspace`, and `read_db`.
@@ -290,6 +290,7 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 | `remove_clone` | Remove a pipeline clone directory (best-effort). Auto-removal (keep="false") requires user approval via a PreToolUse guard hook — clones are never removed without explicit permission. |
 | `push_to_remote` | Push merged branch from clone to upstream remote |
 | `fetch_github_issue` | Retrieve a GitHub issue as formatted Markdown (auto-call on any GitHub issue reference) |
+| `report_bug` | Run a headless bug investigation, write a report, and file or comment on a GitHub issue (deduplicates by fingerprint) |
 | `kitchen_status` | Return version health and config status (ungated) |
 | `list_recipes` | List pipeline recipes from .autoskillit/recipes/ (ungated) |
 | `load_recipe` | Load a recipe by name as raw YAML — read-only, no migration (ungated) |

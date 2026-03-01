@@ -191,3 +191,129 @@ class DefaultGitHubFetcher:
             "is_pull_request": is_pull_request,
             "content": content,
         }
+
+    async def search_issues(
+        self,
+        query: str,
+        owner: str,
+        repo: str,
+        *,
+        state: str = "open",
+    ) -> dict[str, Any]:
+        """Search for issues in a repo matching query text.
+
+        Returns {success, total_count, items: [{number, title, html_url, body, state}]}.
+        Never raises.
+        """
+        search_query = f'repo:{owner}/{repo} is:issue state:{state} "{query}"'
+        headers = self._headers()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+                resp = await client.get(
+                    "https://api.github.com/search/issues",
+                    headers=headers,
+                    params={"q": search_query, "per_page": 5},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPStatusError as exc:
+            _log.warning("github search http error", status=exc.response.status_code, query=query)
+            return {"success": False, "error": f"HTTP {exc.response.status_code}"}
+        except httpx.RequestError as exc:
+            _log.warning("github search request error", query=query, error=str(exc))
+            return {"success": False, "error": f"Request error: {exc}"}
+
+        items = [
+            {
+                "number": item["number"],
+                "title": item.get("title", ""),
+                "html_url": item.get("html_url", ""),
+                "body": item.get("body") or "",
+                "state": item.get("state", ""),
+            }
+            for item in data.get("items", [])
+        ]
+        return {"success": True, "total_count": data.get("total_count", 0), "items": items}
+
+    async def create_issue(
+        self,
+        owner: str,
+        repo: str,
+        title: str,
+        body: str,
+        *,
+        labels: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Create a new issue in the repo.
+
+        Returns {success, issue_number, url}. Never raises.
+        """
+        headers = self._headers()
+        payload: dict[str, Any] = {"title": title, "body": body}
+        if labels:
+            payload["labels"] = labels
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+                resp = await client.post(
+                    f"https://api.github.com/repos/{owner}/{repo}/issues",
+                    headers=headers,
+                    json=payload,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPStatusError as exc:
+            _log.warning("github create_issue http error", status=exc.response.status_code)
+            return {
+                "success": False,
+                "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+            }
+        except httpx.RequestError as exc:
+            _log.warning("github create_issue request error", error=str(exc))
+            return {"success": False, "error": f"Request error: {exc}"}
+
+        return {
+            "success": True,
+            "issue_number": data["number"],
+            "url": data.get("html_url", ""),
+        }
+
+    async def add_comment(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        body: str,
+    ) -> dict[str, Any]:
+        """Post a comment on an existing issue.
+
+        Returns {success, comment_id, url}. Never raises.
+        """
+        headers = self._headers()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+                resp = await client.post(
+                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/comments",
+                    headers=headers,
+                    json={"body": body},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPStatusError as exc:
+            _log.warning(
+                "github add_comment http error",
+                status=exc.response.status_code,
+                issue=issue_number,
+            )
+            return {
+                "success": False,
+                "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+            }
+        except httpx.RequestError as exc:
+            _log.warning("github add_comment request error", issue=issue_number, error=str(exc))
+            return {"success": False, "error": f"Request error: {exc}"}
+
+        return {
+            "success": True,
+            "comment_id": data.get("id"),
+            "url": data.get("html_url", ""),
+        }

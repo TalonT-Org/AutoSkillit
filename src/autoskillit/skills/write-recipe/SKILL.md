@@ -216,7 +216,7 @@ These skills ship with the autoskillit plugin and are invoked as `/autoskillit:<
 
 analyze-prs, audit-friction, audit-impl, dry-walkthrough, implement-worktree, implement-worktree-no-merge,
 investigate, make-groups, make-plan, merge-pr, write-recipe, mermaid, migrate-recipes, open-pr,
-pipeline-summary, rectify, resolve-failures, retry-worktree, review-approach, setup-project
+pipeline-summary, rectify, report-bug, resolve-failures, retry-worktree, review-approach, setup-project
 
 ## Skill Reference Disambiguation
 

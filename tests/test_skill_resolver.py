@@ -27,6 +27,7 @@ BUNDLED_SKILLS = [
     "open-pr",
     "pipeline-summary",
     "rectify",
+    "report-bug",
     "resolve-failures",
     "retry-worktree",
     "review-approach",

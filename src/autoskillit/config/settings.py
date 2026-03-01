@@ -116,6 +116,15 @@ class GitHubConfig:
 
 
 @dataclass
+class ReportBugConfig:
+    timeout: int = 600
+    model: str | None = None
+    report_dir: str | None = None  # None = {cwd}/.autoskillit/temp/bug-reports/
+    github_filing: bool = True
+    github_labels: list[str] = field(default_factory=lambda: ["autoreported", "bug"])
+
+
+@dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
@@ -131,6 +140,7 @@ class AutomationConfig:
     token_usage: TokenUsageConfig = field(default_factory=TokenUsageConfig)
     quota_guard: QuotaGuardConfig = field(default_factory=QuotaGuardConfig)
     github: GitHubConfig = field(default_factory=GitHubConfig)
+    report_bug: ReportBugConfig = field(default_factory=ReportBugConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -161,6 +171,7 @@ class AutomationConfig:
         tu = sec("token_usage")
         qg = sec("quota_guard")
         gh = sec("github")
+        rb = sec("report_bug")
 
         return cls(
             test_check=TestCheckConfig(
@@ -232,6 +243,13 @@ class AutomationConfig:
             github=GitHubConfig(
                 token=val(gh, "token", None) or None,
                 default_repo=val(gh, "default_repo", None) or None,
+            ),
+            report_bug=ReportBugConfig(
+                timeout=int(val(rb, "timeout", 600)),
+                model=val(rb, "model", None) or None,
+                report_dir=val(rb, "report_dir", None) or None,
+                github_filing=bool(val(rb, "github_filing", True)),
+                github_labels=list(val(rb, "github_labels", ["autoreported", "bug"])),
             ),
         )
 

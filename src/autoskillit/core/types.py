@@ -407,7 +407,7 @@ class CloneManager(Protocol):
 
 @runtime_checkable
 class GitHubFetcher(Protocol):
-    """Protocol for fetching GitHub issue content as structured data.
+    """Protocol for fetching and filing GitHub issue content.
 
     Implementations must never raise — all errors must be captured and
     returned in the result dict with success=False.
@@ -423,4 +423,31 @@ class GitHubFetcher(Protocol):
         issue_ref: str,
         *,
         include_comments: bool = True,
+    ) -> dict[str, Any]: ...
+
+    async def search_issues(
+        self,
+        query: str,
+        owner: str,
+        repo: str,
+        *,
+        state: str = "open",
+    ) -> dict[str, Any]: ...
+
+    async def create_issue(
+        self,
+        owner: str,
+        repo: str,
+        title: str,
+        body: str,
+        *,
+        labels: list[str] | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def add_comment(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        body: str,
     ) -> dict[str, Any]: ...

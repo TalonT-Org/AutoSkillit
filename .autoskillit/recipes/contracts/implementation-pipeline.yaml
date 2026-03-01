@@ -8,6 +8,7 @@ skill_hashes:
   implement-worktree-no-merge: sha256:fdb7dc3d525aeb7021b49d6ca4656ba0775c349d25c807d80d2fa875d5d82613
   retry-worktree: sha256:f5bb33d213e0d1070453d11882152c3e7c285499eb82ed22bdd8048ba65f19fe
   assess-and-merge: sha256:e04a2d6b4f986db492698c00b324426576e0a065ba060b984f70f3eca5f831ae
+  open-pr: sha256:3f3afc8c41fd1c3c97160ee58fcaee19832c33163a71e1857b8951364128509c
 skills:
   make-groups:
     inputs:

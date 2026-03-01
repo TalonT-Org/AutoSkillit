@@ -116,3 +116,25 @@ def test_step_result_route_is_predicate_when_conditions_non_empty() -> None:
     assert len(route.conditions) == 2
     assert route.field == ""
     assert route.routes == {}
+
+
+def test_skip_when_false_field_exists_on_recipe_step() -> None:
+    """RecipeStep must have a skip_when_false field defaulting to None."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep(tool="run_skill")
+    assert hasattr(step, "skip_when_false")
+    assert step.skip_when_false is None
+
+
+def test_skip_when_false_field_is_parsed_from_yaml() -> None:
+    """skip_when_false must be deserialized from YAML recipe data."""
+    from autoskillit.recipe.io import _parse_step
+
+    raw = {
+        "tool": "run_skill",
+        "skip_when_false": "inputs.open_pr",
+        "on_success": "next_step",
+    }
+    step = _parse_step(raw)
+    assert step.skip_when_false == "inputs.open_pr"

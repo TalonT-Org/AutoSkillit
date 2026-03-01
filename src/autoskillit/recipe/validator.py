@@ -210,6 +210,29 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
         if step.retry and step.retry.on_exhausted in step_names:
             graph[name].add(step.retry.on_exhausted)
 
+    # Build predecessor map for bypass edge injection below.
+    predecessors: dict[str, set[str]] = {name: set() for name in step_names}
+    for name, successors in graph.items():
+        for s in successors:
+            predecessors[s].add(name)
+
+    # For each step with skip_when_false, add bypass edges from all predecessors
+    # directly to the step's routing targets (the steps to route to when skipped).
+    # This makes optional-step bypass paths visible to graph-based rules.
+    for name, step in recipe.steps.items():
+        if not step.skip_when_false:
+            continue
+        # on_success bypass: predecessor → step.on_success
+        if step.on_success and step.on_success in step_names:
+            for pred in predecessors[name]:
+                graph[pred].add(step.on_success)
+        # on_result bypass: predecessor → each on_result route target
+        if step.on_result:
+            for target in step.on_result.routes.values():
+                if target in step_names:
+                    for pred in predecessors[name]:
+                        graph[pred].add(target)
+
     return graph
 
 
@@ -457,8 +480,9 @@ def analyze_dataflow(recipe: Recipe) -> DataFlowReport:
 # Semantic rules
 # ---------------------------------------------------------------------------
 
-# Import rules module to trigger @semantic_rule registration and re-expose symbols.
+# Import rules modules to trigger @semantic_rule registration and re-expose symbols.
 from autoskillit.recipe import rules as _rules_module  # noqa: E402 F401
+from autoskillit.recipe import rules_bypass as _rules_bypass_module  # noqa: E402 F401
 from autoskillit.recipe.rules import (  # noqa: E402
     _WORKTREE_CREATING_SKILLS,  # noqa: F401 — test access
     _check_outdated_version,  # noqa: F401 — test access

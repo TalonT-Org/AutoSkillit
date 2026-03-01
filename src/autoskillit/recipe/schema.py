@@ -73,6 +73,7 @@ class RecipeStep:
     capture: dict[str, str] = field(default_factory=dict)
     capture_list: dict[str, str] = field(default_factory=dict)
     optional: bool = False
+    skip_when_false: str | None = None
     model: str | None = None
 
 

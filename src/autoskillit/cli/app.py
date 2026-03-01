@@ -15,6 +15,8 @@ from typing import Annotated
 from cyclopts import App, Parameter
 
 from autoskillit.core import is_git_worktree, pkg_root
+from autoskillit.execution.commands import build_interactive_cmd
+from autoskillit.recipe import list_recipes
 
 app = App(
     name="autoskillit",
@@ -594,14 +596,6 @@ def _build_orchestrator_prompt(script_yaml: str) -> str:
     return f"""\
 You are a pipeline orchestrator. Execute the recipe below step-by-step.
 
-FIRST: Type the open_kitchen prompt to activate AutoSkillit MCP tools before \
-executing any pipeline steps. The exact prompt name depends on how the server \
-was loaded — for example, plugin installs use \
-/mcp__plugin_autoskillit_autoskillit__open_kitchen while --plugin-dir loading \
-uses a different prefix. Check the available MCP prompts to find the correct \
-open_kitchen prompt name.
-
-After opening the kitchen:
 1. Present the recipe to the user using the preview format below
 2. Prompt for input values using AskUserQuestion
 3. Execute the pipeline steps by calling MCP tools directly
@@ -675,7 +669,7 @@ FAILURE PREDICATES — when to follow on_failure:
 
 
 @app.command
-def cook(recipe: str):
+def cook(recipe: str | None = None):
     """Launch an interactive Claude Code session to execute a recipe.
 
     Starts Claude Code with hard tool restrictions: only AskUserQuestion
@@ -686,20 +680,22 @@ def cook(recipe: str):
     Parameters
     ----------
     recipe
-        Name of the recipe (from .autoskillit/recipes/).
+        Name of the recipe (from .autoskillit/recipes/). Prompts if omitted.
     """
     if os.environ.get("CLAUDECODE"):
         print("ERROR: 'cook' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
+    if recipe is None:
+        recipe = _prompt_recipe_choice()
+
     from autoskillit.core import YAMLError
     from autoskillit.recipe import find_recipe_by_name, validate_recipe
-    from autoskillit.recipe import list_recipes as _list_all_recipes_for_cook
 
     _match = find_recipe_by_name(recipe, Path.cwd())
     if _match is None:
-        available = _list_all_recipes_for_cook(Path.cwd()).items
+        available = list_recipes(Path.cwd()).items
         print(f"Recipe not found: '{recipe}'")
         if available:
             print("Available recipes:")
@@ -737,8 +733,8 @@ def cook(recipe: str):
     plugin_dir = pkg_root()
     system_prompt = _build_orchestrator_prompt(recipe_yaml)
 
-    cmd = [
-        "claude",
+    spec = build_interactive_cmd()
+    cmd = spec.cmd + [
         "--plugin-dir",
         str(plugin_dir),
         "--tools",
@@ -747,7 +743,7 @@ def cook(recipe: str):
         system_prompt,
     ]
 
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, env={**os.environ, **spec.env})
     if result.returncode != 0:
         sys.exit(result.returncode)
 
@@ -761,6 +757,17 @@ def _print_next_steps() -> None:
 
 
 # --- Init helpers ---
+
+
+def _prompt_recipe_choice() -> str:
+    available = list_recipes(Path.cwd()).items
+    if not available:
+        print("No recipes found. Run 'autoskillit recipes list' to check.")
+        raise SystemExit(1)
+    print("Available recipes:")
+    for i, r in enumerate(available, 1):
+        print(f"  {i}. {r.name}")
+    return input("Recipe name: ").strip()
 
 
 def _prompt_test_command() -> list[str]:

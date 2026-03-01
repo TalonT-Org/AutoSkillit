@@ -1316,11 +1316,10 @@ class TestCaptureOutputCoverageRule:
 def test_load_bundled_manifest() -> None:
     manifest = load_bundled_manifest()
     assert manifest["version"] == "0.1.0"
-    assert len(manifest["skills"]) >= 21
-    skill_names = {s["name"] for s in manifest["skills"]}
-    assert "implement-worktree" in skill_names
-    assert "investigate" in skill_names
-    assert "report-bug" in skill_names
+    assert len(manifest["skills"]) == 17
+    assert "implement-worktree" in manifest["skills"]
+    assert "investigate" in manifest["skills"]
+    assert "write-recipe" in manifest["skills"]
 
 
 def test_load_bundled_manifest_skill_inputs_typed() -> None:

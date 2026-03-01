@@ -626,7 +626,6 @@ class TestComputeRetry:
         assert reason == RetryReason.RESUME
 
 
-
 # ---------------------------------------------------------------------------
 # _compute_retry exhaustiveness guards
 # ---------------------------------------------------------------------------

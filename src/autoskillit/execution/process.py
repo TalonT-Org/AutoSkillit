@@ -18,7 +18,7 @@ import signal
 import subprocess
 import sys
 import tempfile
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,6 +79,31 @@ def kill_process_tree(pid: int, timeout: float = 2.0) -> None:
 async def async_kill_process_tree(pid: int, timeout: float = 2.0) -> None:
     """Non-blocking wrapper around kill_process_tree for asyncio callers."""
     await asyncio.to_thread(kill_process_tree, pid, timeout)
+
+
+async def _wait_process_dead(proc: psutil.Process, timeout: float = 5.0) -> bool:
+    """Wait until proc is dead and its zombie is reaped. Returns True if dead within timeout.
+
+    Uses psutil.Process.wait() rather than polling pid_exists():
+    - For child processes: calls os.waitpid(), reaping the zombie. Only then is the PID
+      truly gone from the process table.
+    - For non-child processes (grandchildren adopted by init): psutil polls internally,
+      which is equivalent to pid_exists() but still handles the NoSuchProcess case correctly.
+
+    Replaces the pattern::
+
+        await asyncio.sleep(0.5)
+        assert not psutil.pid_exists(pid)
+
+    which is flaky because pid_exists() returns True for zombies (killed but not reaped).
+    """
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, proc.wait, timeout)
+        return True
+    except psutil.TimeoutExpired:
+        return False
+    except psutil.NoSuchProcess:
+        return True
 
 
 def pty_wrap_command(cmd: list[str]) -> list[str]:
@@ -194,6 +219,7 @@ async def _heartbeat(
     marker: str,
     record_types: frozenset[str] = frozenset({"result"}),
     _poll_interval: float = 0.5,
+    _on_poll: Callable[[], None] | None = None,
 ) -> str:
     """Poll session NDJSON output for a result-type record with non-empty content.
 
@@ -202,11 +228,16 @@ async def _heartbeat(
     This guards against confirming on empty-result envelopes flushed before content
     is populated (drain-race false negative). The *marker* parameter is accepted
     for API compatibility but is not used.
+
+    *_on_poll* is a test-only callback invoked after each sleep iteration. Pass
+    ``None`` (the default) in production — zero overhead.
     """
     scan_pos = 0  # byte offset into the file
     os_error_count = 0
     while True:
         await asyncio.sleep(_poll_interval)
+        if _on_poll is not None:
+            _on_poll()
         try:
             raw = stdout_path.read_bytes()
             os_error_count = 0
@@ -255,6 +286,7 @@ async def _session_log_monitor(
     _phase1_poll: float = 1.0,
     _phase2_poll: float = 2.0,
     _phase1_timeout: float = 30.0,
+    _on_poll: Callable[[], None] | None = None,
 ) -> str:
     """Watch Claude Code session log for completion or staleness.
 
@@ -271,6 +303,9 @@ async def _session_log_monitor(
     *_phase1_timeout* caps how long Phase 1 may poll for a JSONL file.
     When no file appears within this window, returns "stale" immediately
     rather than spinning until the outer wall-clock timeout fires.
+
+    *_on_poll* is a test-only callback invoked after each Phase 2 sleep iteration.
+    Pass ``None`` (the default) in production — zero overhead.
     """
     import time as _time
 
@@ -311,6 +346,8 @@ async def _session_log_monitor(
 
     while True:
         await asyncio.sleep(_phase2_poll)
+        if _on_poll is not None:
+            _on_poll()
         try:
             current_size = session_file.stat().st_size
             os_error_count = 0

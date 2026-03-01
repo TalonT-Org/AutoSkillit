@@ -108,7 +108,9 @@ def _recover_from_separate_marker(
     """
     if not session.assistant_messages:
         return None
-    if not any(_marker_is_standalone(msg, completion_marker) for msg in session.assistant_messages):
+    if not any(
+        _marker_is_standalone(msg, completion_marker) for msg in session.assistant_messages
+    ):
         return None
     combined = "\n\n".join(session.assistant_messages)
     stripped = combined.replace(completion_marker, "").strip()

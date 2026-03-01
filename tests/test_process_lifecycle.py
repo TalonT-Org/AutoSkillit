@@ -22,7 +22,6 @@ import pytest
 
 from autoskillit.core.types import ChannelConfirmation, RetryReason, TerminationReason
 from autoskillit.execution.headless import _recover_from_separate_marker
-from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.process import (
     _has_active_api_connection,
     _heartbeat,
@@ -37,6 +36,7 @@ from autoskillit.execution.process import (
     run_managed_async,
     run_managed_sync,
 )
+from autoskillit.execution.session import ClaudeSessionResult
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios

@@ -1641,6 +1641,52 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     )
 
 
+def test_make_context_wires_all_optional_toolcontext_fields() -> None:
+    """REQ-ARCH-002: make_context() must assign every optional ToolContext field.
+
+    Self-closing: parses server/_factory.py via AST to discover all field assignments
+    inside make_context(), then cross-checks against all ToolContext fields that have
+    field(default=None). Fails if any optional field exists in ToolContext but is
+    neither assigned in the ToolContext() constructor call nor in a post-construction
+    assignment within make_context().
+    """
+    from autoskillit.pipeline.context import ToolContext
+
+    # All optional service fields (field(default=None))
+    optional_field_names = {
+        name for name, f in ToolContext.__dataclass_fields__.items() if f.default is None
+    }
+
+    # Parse server/_factory.py via AST
+    factory_path = SRC_ROOT / "server" / "_factory.py"
+    tree = ast.parse(factory_path.read_text())
+
+    # Find make_context() function body
+    assigned_fields: set[str] = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.FunctionDef) and node.name == "make_context"):
+            continue
+        for stmt in ast.walk(ast.Module(body=node.body, type_ignores=[])):
+            # Capture keyword args in ToolContext(...) constructor call
+            if isinstance(stmt, ast.Call):
+                func_str = ast.unparse(stmt.func)
+                if "ToolContext" in func_str:
+                    for kw in stmt.keywords:
+                        if kw.arg:
+                            assigned_fields.add(kw.arg)
+            # Capture post-construction assignments: ctx.field_name = ...
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
+                        assigned_fields.add(target.attr)
+
+    unwired = optional_field_names - assigned_fields
+    assert not unwired, (
+        f"make_context() does not assign these optional ToolContext fields: {unwired}. "
+        "Add wiring in server/_factory.py make_context()."
+    )
+
+
 # ── REQ-ARCH-003: server/tools_*.py import only allowed packages ──────────────
 
 

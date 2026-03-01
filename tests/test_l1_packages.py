@@ -36,7 +36,11 @@ def test_execution_package_exports() -> None:
 
 
 def test_workspace_package_exports() -> None:
-    from autoskillit.workspace import CleanupResult, SkillResolver, bundled_skills_dir  # noqa: F401
+    from autoskillit.workspace import (  # noqa: F401
+        CleanupResult,
+        SkillResolver,
+        bundled_skills_dir,
+    )
 
 
 def test_failure_record_in_core_types() -> None:

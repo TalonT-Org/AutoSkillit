@@ -81,13 +81,15 @@ class TestBuildSkillResult:
         """COMPLETED + valid type=result success JSON → success=True, needs_retry=False."""
         from autoskillit.execution.headless import _build_skill_result
 
-        payload = json.dumps({
-            "type": "result",
-            "subtype": "success",
-            "is_error": False,
-            "result": "Task completed.",
-            "session_id": "sess-abc",
-        })
+        payload = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Task completed.",
+                "session_id": "sess-abc",
+            }
+        )
         skill = _build_skill_result(_sr(stdout=payload))
         assert skill.success is True
         assert skill.needs_retry is False
@@ -96,9 +98,7 @@ class TestBuildSkillResult:
         """TIMED_OUT termination → success=False, needs_retry=False (timeout is non-retriable)."""
         from autoskillit.execution.headless import _build_skill_result
 
-        skill = _build_skill_result(
-            _sr(returncode=-1, termination=TerminationReason.TIMED_OUT)
-        )
+        skill = _build_skill_result(_sr(returncode=-1, termination=TerminationReason.TIMED_OUT))
         assert skill.success is False
         assert skill.needs_retry is False
 
@@ -106,13 +106,15 @@ class TestBuildSkillResult:
         """STALE termination + valid result JSON in stdout → recovered_from_stale."""
         from autoskillit.execution.headless import _build_skill_result
 
-        payload = json.dumps({
-            "type": "result",
-            "subtype": "success",
-            "is_error": False,
-            "result": "Recovered output.",
-            "session_id": "sess-stale",
-        })
+        payload = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Recovered output.",
+                "session_id": "sess-stale",
+            }
+        )
         skill = _build_skill_result(
             _sr(returncode=-15, stdout=payload, termination=TerminationReason.STALE)
         )

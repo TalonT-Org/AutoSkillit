@@ -20,6 +20,10 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - MCP orchestrator calls this via `run_skill_retry`
 - Orchestrator wants to control test/merge gates independently
 
+## Arguments
+
+`{plan_path}`   — Absolute path to the implementation plan file (required)
+
 ## Critical Constraints
 
 **NEVER:**

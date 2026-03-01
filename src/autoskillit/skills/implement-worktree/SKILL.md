@@ -19,6 +19,10 @@ Implement a provided plan in an isolated git worktree branched from the current 
 - User says "implement in worktree", "worktree implement", "isolated implementation"
 - User provides a plan and wants it executed in a fresh worktree
 
+## Arguments
+
+`{plan_path}`   — Absolute path to the implementation plan file (required)
+
 ## Critical Constraints
 
 **NEVER:**

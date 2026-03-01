@@ -384,13 +384,15 @@ steps:
     with:
       skill_command: "/autoskillit:rectify the investigation findings"
       cwd: "${{ inputs.helper_dir }}"
+    capture:
+      plan_path: "${{ result.plan_path }}"
     on_success: implement
     on_failure: escalate
 
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:implement-worktree-no-merge the plan"
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
       cwd: "${{ inputs.helper_dir }}"
     retry:
       max_attempts: 3

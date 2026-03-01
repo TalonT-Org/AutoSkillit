@@ -27,6 +27,10 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - User says "before implementing" and wants verification
 - After creating a plan, before implementation
 
+## Arguments
+
+`{plan_path}`   — Absolute path to the plan file to validate (optional: falls back to most recent temp/ artifact if omitted)
+
 ## Critical Constraints
 
 **NEVER:**

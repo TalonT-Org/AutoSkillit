@@ -2113,6 +2113,17 @@ class TestImplementationPipelineStructure:
             "base_sha is captured but never consumed — audit_impl must reference it"
         )
 
+    def test_ip_push_after_audit_no_violation(self) -> None:
+        """T_IP_PBA: fixed implementation-pipeline.yaml must not trigger push-before-audit.
+
+        After the fix, push_to_remote is only reachable via:
+          next_or_done(all_done) → audit_impl → open_pr_step → push
+        so every execution path through push passes through audit_impl first.
+        """
+        findings = run_semantic_rules(self.recipe)
+        violations = [f for f in findings if f.rule == "push-before-audit"]
+        assert violations == []
+
 
 # ---------------------------------------------------------------------------
 # Recipe structural tests — bugfix-loop.yaml (T_BL1–T_BL2)
@@ -3253,3 +3264,68 @@ class TestOnRetryField:
         assert any(
             "cycle" in f.message.lower() or "unbounded" in f.message.lower() for f in errors
         )
+
+
+# ---------------------------------------------------------------------------
+# Semantic rule: push-before-audit (PPB1–PPB3)
+# ---------------------------------------------------------------------------
+
+
+class TestPushBeforeAuditRule:
+    def test_ppb1_audit_before_push_no_finding(self) -> None:
+        """PPB1: audit-impl runs before push_to_remote — no warning emitted."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "audit"},
+                "audit": {
+                    "tool": "run_skill",
+                    "on_success": "push",
+                    "with": {"skill_command": "/autoskillit:audit-impl plan.md", "cwd": "/tmp"},
+                },
+                "push": {
+                    "tool": "push_to_remote",
+                    "on_success": "done",
+                    "with": {
+                        "clone_path": "/tmp/clone",
+                        "source_dir": "/tmp/src",
+                        "branch": "main",
+                    },
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "push-before-audit"]
+        assert findings == []
+
+    def test_ppb2_push_before_audit_fires_warning(self) -> None:
+        """PPB2: push_to_remote is reachable without any audit-impl step → WARNING."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "push"},
+                "push": {
+                    "tool": "push_to_remote",
+                    "on_success": "done",
+                    "with": {
+                        "clone_path": "/tmp/clone",
+                        "source_dir": "/tmp/src",
+                        "branch": "main",
+                    },
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "push-before-audit"]
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.WARNING
+        assert findings[0].step_name == "push"
+
+    def test_ppb3_no_push_step_no_finding(self) -> None:
+        """PPB3: recipe has no push_to_remote step — rule is silent."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "push-before-audit"]
+        assert findings == []

@@ -854,3 +854,71 @@ def _check_stale_ref_after_merge(wf: Recipe) -> list[RuleFinding]:
         for w in report.warnings
         if w.code == "REF_INVALIDATED"
     ]
+
+
+@semantic_rule(
+    name="push-before-audit",
+    description=(
+        "A push_to_remote step is reachable from the entry point without "
+        "passing through an audit-impl skill step first"
+    ),
+    severity=Severity.WARNING,
+)
+def _check_push_before_audit(wf: Recipe) -> list[RuleFinding]:
+    """Detect recipes where push_to_remote can fire before audit-impl evaluates quality.
+
+    Algorithm:
+    1. Locate all steps whose tool is push_to_remote (push_steps).
+       If none exist, return early — the rule is silent.
+    2. Locate all run_skill / run_skill_retry steps whose skill_command contains
+       "audit-impl" (audit_steps).
+    3. Build the full routing graph via _build_step_graph.
+    4. BFS from the entry point.  When the frontier visits an audit_step, it is
+       added to reachable_without_audit but NOT expanded — treating audit_steps as
+       one-way barriers.  All steps reachable before crossing audit land in
+       reachable_without_audit.
+    5. Any push_step found in reachable_without_audit is a violation: there exists
+       at least one execution path that reaches the push without passing through audit.
+    """
+    from autoskillit.recipe.validator import _build_step_graph  # deferred — breaks circular import
+
+    push_steps = {name for name, step in wf.steps.items() if step.tool == "push_to_remote"}
+    if not push_steps:
+        return []
+
+    audit_steps = {
+        name
+        for name, step in wf.steps.items()
+        if step.tool in SKILL_TOOLS and "audit-impl" in step.with_args.get("skill_command", "")
+    }
+
+    graph = _build_step_graph(wf)
+    entry = next(iter(wf.steps))
+
+    reachable_without_audit: set[str] = set()
+    queue = [entry]
+    while queue:
+        node = queue.pop()
+        if node in reachable_without_audit:
+            continue
+        reachable_without_audit.add(node)
+        if node in audit_steps:
+            continue  # barrier: do not expand beyond the first audit step on this path
+        for successor in graph.get(node, set()):
+            if successor not in reachable_without_audit:
+                queue.append(successor)
+
+    violations = sorted(push_steps & reachable_without_audit)
+    return [
+        RuleFinding(
+            rule="push-before-audit",
+            severity=Severity.WARNING,
+            step_name=name,
+            message=(
+                f"'{name}' uses push_to_remote but is reachable from the entry "
+                "point without passing through an audit-impl skill step. "
+                "Ensure audit-impl runs before any push_to_remote."
+            ),
+        )
+        for name in violations
+    ]

@@ -34,6 +34,7 @@ from autoskillit.execution.process import (
     _jsonl_has_record_type,
     _marker_is_standalone,
     _session_log_monitor,
+    _wait_process_dead,
     async_kill_process_tree,
     kill_process_tree,
     pty_wrap_command,
@@ -366,10 +367,33 @@ class TestProcessTreeKill:
             if ":" in line:
                 pids.append(int(line.split(":")[1]))
 
-        # All PIDs should be dead
-        await asyncio.sleep(0.5)  # Brief wait for kernel cleanup
+        # All PIDs should be dead — use _wait_process_dead to avoid the flaky
+        # asyncio.sleep(0.5) + pid_exists() pattern that races kernel cleanup
         for pid in pids:
-            assert not psutil.pid_exists(pid), f"PID {pid} should be dead"
+            dead = await _wait_process_dead(psutil.Process(pid), timeout=5.0)
+            assert dead, f"PID {pid} still alive 5s after kill"
+
+    @pytest.mark.asyncio
+    async def test_process_tree_kill_pid_dead_without_timing_assumption(self, tmp_path):
+        """Killing a process must be verifiable without a fixed sleep.
+
+        Uses _wait_process_dead() to wait for PID reaping without relying on
+        wall-clock time. This is the event-driven replacement for the pattern:
+            await asyncio.sleep(0.5)
+            assert not psutil.pid_exists(pid)
+        """
+        script = tmp_path / "hang.py"
+        script.write_text("import time\ntime.sleep(3600)\n")
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=2,
+        )
+        assert result.termination == TerminationReason.TIMED_OUT
+
+        dead = await _wait_process_dead(psutil.Process(result.pid), timeout=5.0)
+        assert dead, f"PID {result.pid} still alive 5s after kill"
 
 
 class TestTimeoutKillsHangingProcess:
@@ -392,9 +416,10 @@ class TestTimeoutKillsHangingProcess:
         assert result.termination == TerminationReason.TIMED_OUT
         assert elapsed < 8, f"Should return within ~2s timeout, took {elapsed:.1f}s"
         assert "before hang" in result.stdout  # Partial output captured
-        # Process should be dead
-        await asyncio.sleep(0.5)
-        assert not psutil.pid_exists(result.pid)
+        # Process should be dead — use _wait_process_dead to avoid the flaky
+        # asyncio.sleep(0.5) + pid_exists() pattern that races kernel cleanup
+        dead = await _wait_process_dead(psutil.Process(result.pid), timeout=5.0)
+        assert dead, f"PID {result.pid} still alive 5s after kill"
 
 
 class TestNormalCompletion:
@@ -706,6 +731,15 @@ class TestSessionLogMonitor:
         )
         session_file.write_text(enqueue_record + "\n")
 
+        poll_count = 0
+        polls_done = asyncio.Event()
+
+        def on_poll() -> None:
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 5:
+                polls_done.set()
+
         monitor_task = asyncio.create_task(
             _session_log_monitor(
                 log_dir,
@@ -713,12 +747,14 @@ class TestSessionLogMonitor:
                 stale_threshold=30,
                 spawn_time=spawn_time,
                 _phase1_poll=0.01,
-                _phase2_poll=0.1,
+                _phase2_poll=0.05,
+                _on_poll=on_poll,
             )
         )
 
-        # Monitor should NOT fire on the enqueue record — wait for several poll cycles to confirm
-        await asyncio.sleep(0.5)
+        # Monitor should NOT fire on the enqueue record — wait for 5 confirmed poll cycles
+        # instead of a fixed sleep, which races event loop starvation under xdist -n 4
+        await asyncio.wait_for(polls_done.wait(), timeout=10.0)
         assert not monitor_task.done(), "Monitor fired on non-assistant record — false-fire bug"
 
         # Now append an assistant record with the marker — should fire
@@ -775,6 +811,15 @@ class TestSessionLogMonitor:
         )
         session_file.write_text(records_12)
 
+        poll_count = 0
+        polls_done = asyncio.Event()
+
+        def on_poll() -> None:
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 5:
+                polls_done.set()
+
         monitor_task = asyncio.create_task(
             _session_log_monitor(
                 log_dir,
@@ -782,12 +827,14 @@ class TestSessionLogMonitor:
                 stale_threshold=30,
                 spawn_time=spawn_time,
                 _phase1_poll=0.01,
-                _phase2_poll=0.1,
+                _phase2_poll=0.05,
+                _on_poll=on_poll,
             )
         )
 
-        # Wait for several poll cycles and confirm no early fire
-        await asyncio.sleep(0.5)
+        # Wait for 5 confirmed poll cycles before asserting no early fire — replaces
+        # the fixed asyncio.sleep(0.5) that races event loop starvation under xdist -n 4
+        await asyncio.wait_for(polls_done.wait(), timeout=10.0)
         assert not monitor_task.done(), "Monitor fired on user/enqueue records"
 
         # Write record 3 (assistant with marker as standalone line)
@@ -818,6 +865,56 @@ class TestSessionLogMonitor:
             timeout=5.0,
         )
         assert result == "stale"
+
+    @pytest.mark.asyncio
+    async def test_monitor_no_fire_on_wrong_type_deterministic(self, tmp_path):
+        """Assert monitor does not fire based on confirmed poll count, not wall-clock.
+
+        Uses the _on_poll callback to count confirmed phase-2 poll iterations, then
+        asserts the monitor has not fired. This is deterministically correct regardless
+        of CPU load, replacing the wall-clock asyncio.sleep() pattern.
+        """
+        import json
+
+        log_dir = tmp_path / "session"
+        log_dir.mkdir()
+        spawn_time = time.time() - 1
+
+        marker = "%%AUTOSKILLIT_COMPLETE%%"
+        session_file = log_dir / "session.jsonl"
+        enqueue_record = json.dumps({"type": "user", "content": "hello"})
+        session_file.write_text(enqueue_record + "\n")
+
+        poll_count = 0
+        min_polls_event = asyncio.Event()
+
+        def on_poll() -> None:
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 5:
+                min_polls_event.set()
+
+        monitor_task = asyncio.create_task(
+            _session_log_monitor(
+                log_dir,
+                marker,
+                stale_threshold=30,
+                spawn_time=spawn_time,
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+                _on_poll=on_poll,
+            )
+        )
+
+        # Wait for 5 confirmed polls — regardless of wall-clock time
+        await asyncio.wait_for(min_polls_event.wait(), timeout=10.0)
+        assert not monitor_task.done(), (
+            "Monitor fired on non-assistant record after 5 confirmed polls"
+        )
+
+        monitor_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await monitor_task
 
 
 class TestJsonlContainsMarker:
@@ -897,12 +994,22 @@ class TestHeartbeatStructuredParsing:
         )
         stdout_path.write_text(assistant_msg + "\n")
 
+        poll_count = 0
+        polls_done = asyncio.Event()
+
+        def on_poll() -> None:
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 5:
+                polls_done.set()
+
         heartbeat_task = asyncio.create_task(
-            _heartbeat(stdout_path, '"type":"result"', _poll_interval=0.05)
+            _heartbeat(stdout_path, '"type":"result"', _poll_interval=0.05, _on_poll=on_poll)
         )
 
-        # Wait for several poll cycles to confirm it doesn't fire on the assistant record
-        await asyncio.sleep(0.5)
+        # Wait for 5 confirmed poll cycles before asserting no early fire — replaces
+        # the fixed asyncio.sleep(0.5) that races event loop starvation under xdist -n 4
+        await asyncio.wait_for(polls_done.wait(), timeout=10.0)
         assert not heartbeat_task.done(), (
             "Heartbeat fired on non-result record containing marker text"
         )
@@ -1272,35 +1379,6 @@ class TestNaturalExitWithChannelConfirmation:
 
 class TestReadTempOutputLogging:
     """OSError during temp file read should produce a warning log."""
-
-    @pytest.fixture(autouse=True)
-    def _reset_structlog(self):
-        """Sync module-level loggers' _processors with the current structlog config.
-
-        process_lifecycle.logger is a resolved BoundLoggerFilteringAtNotset created
-        at import time. Its _processors holds a reference to the processor list at
-        that moment. If reset_defaults() was called by a prior test in this xdist
-        worker, a new processor list is created and _processors becomes stale.
-        capture_logs() modifies the current config's list in-place, so _processors
-        must reference that same list for the log capture to succeed.
-        """
-        import structlog
-        import structlog._config as _sc
-
-        structlog.reset_defaults()
-        current_procs = structlog.get_config()["processors"]
-        for mod_name, mod in list(sys.modules.items()):
-            if not mod_name.startswith("autoskillit"):
-                continue
-            lg = getattr(mod, "logger", None)
-            if lg is None:
-                continue
-            if isinstance(lg, _sc.BoundLoggerLazyProxy):
-                lg.__dict__.pop("bind", None)
-            elif hasattr(lg, "_processors"):
-                lg._processors = current_procs
-        yield
-        structlog.reset_defaults()
 
     def test_oserror_logs_warning(self):
         """OSError during temp file read should produce a warning log."""

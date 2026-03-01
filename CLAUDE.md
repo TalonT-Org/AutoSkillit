@@ -79,8 +79,9 @@ src/autoskillit/
 │   ├── paths.py             #   pkg_root(), is_git_worktree() — canonical package root resolver
 │   └── types.py             #   StrEnums, protocols, constants (SubprocessRunner, LoadResult, etc.)
 ├── config/                  # L1 configuration sub-package
-│   ├── __init__.py          #   Re-exports AutomationConfig
-│   └── settings.py          #   Dataclass config + YAML loading (layered resolution)
+│   ├── __init__.py          #   Re-exports AutomationConfig + GitHubConfig
+│   ├── defaults.yaml        #   Bundled package defaults (always loaded as first layer)
+│   └── settings.py          #   Dataclass config + dynaconf-backed layered resolution
 ├── pipeline/                # L1 pipeline state sub-package
 │   ├── __init__.py          #   Re-exports ToolContext, GateState, AuditLog, TokenLog
 │   ├── audit.py             #   FailureRecord, AuditLog, _audit_log singleton
@@ -194,7 +195,7 @@ temp/                        # Temporary/working files (gitignored)
 
 ### **Key Components**
 
-  * **config/settings.py**: Dataclass hierarchy (`AutomationConfig`) with layered YAML resolution: defaults → user (`~/.autoskillit/config.yaml`) → project (`.autoskillit/config.yaml`). No config file = current hardcoded defaults.
+  * **config/settings.py**: Dataclass hierarchy (`AutomationConfig`) with dynaconf-backed layered resolution: package `defaults.yaml` → user → project → secrets → env vars. `_make_dynaconf(project_dir)` pre-merges YAML layers (dict deep-merge + list-replace) then uses Dynaconf for env var prefix support (`AUTOSKILLIT_SECTION__KEY`). `AutomationConfig.from_dynaconf(d)` maps the Dynaconf dict to typed dataclasses. No config file = package defaults from `config/defaults.yaml`.
   * **cli/app.py**: CLI entry point. `autoskillit` (no args) starts the MCP server. Also provides `init` (prints plugin-dir path), `config show`, `quota-status`, `skills list`, `recipes list/show`, `workspace init`, `install`, `upgrade`, `migrate`, `cook`, and `doctor`.
   * **cli/_doctor.py**: CLI support layer: project health checks. `run_doctor()` runs 7 checks: stale MCP servers, duplicate autoskillit registrations, plugin metadata presence, PATH availability, project config existence, version consistency (package vs plugin.json), and recipe migration health (via migration/store.py). Depends on `version.py`, `migration/store.py`, `recipe/io.py`, `core/types.py`. Imported by `cli/app.py`.
   * **server/__init__.py**: FastMCP server. 15 gated tools require user activation via MCP prompts. 7 ungated tools (`check_quota`, `kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`) are always available. Uses ToolContext DI (`pipeline/context.py`) — single module-level `_ctx: ToolContext | None`. `_initialize(ctx)` wires everything at startup. Gate policy in `pipeline/gate.py`. `version_info()` is public. Registers `recipe://` resource handler. **Ungated vs gated notifications:** Ungated tools accept no `ctx: Context` parameter and emit no MCP progress notifications. This is intentional — they are fast, lightweight reads. MCP notifications are reserved for long-running gated operations. This asymmetry is documented in each ungated tool's docstring.
@@ -300,9 +301,23 @@ and survives `--dangerously-skip-permissions`.
 
 ### **Configuration**
 
-All tool behavior is configurable via `.autoskillit/config.yaml`. No config file = hardcoded defaults (backward compatible). Run `autoskillit init` to generate a template.
+All tool behavior is configurable via `.autoskillit/config.yaml`. No config file = package defaults. Run `autoskillit init` to generate a template.
 
-**Resolution order:** defaults → `~/.autoskillit/config.yaml` (user) → `.autoskillit/config.yaml` (project). Project overrides user, user overrides defaults. Partial configs are fine — unset fields keep their defaults.
+**Resolution order (low → high priority):**
+1. `src/autoskillit/config/defaults.yaml` — bundled package defaults (always loaded)
+2. `~/.autoskillit/config.yaml` — user-level overrides
+3. `.autoskillit/config.yaml` — project-level overrides
+4. `.autoskillit/.secrets.yaml` — secrets (gitignored; never commit)
+5. `AUTOSKILLIT_SECTION__KEY=value` — environment variable overrides (highest priority)
+
+Partial configs are fine — unset fields keep their defaults.
+
+**Example env vars:**
+- `AUTOSKILLIT_GITHUB__TOKEN=ghp_xxx` — set GitHub token without editing any file
+- `AUTOSKILLIT_TEST_CHECK__TIMEOUT=300` — override test timeout
+- `AUTOSKILLIT_MODEL__DEFAULT=claude-sonnet-4-6` — set default model
+
+**Implementation:** `config/settings.py` uses [dynaconf](https://www.dynaconf.com) internally via `_make_dynaconf(project_dir)`. File layers are pre-merged with dict deep-merge + list-replace semantics before dynaconf handles env var overrides. The public surface remains `AutomationConfig` and `load_config(project_dir)` — unchanged.
 
 **Available settings:**
 

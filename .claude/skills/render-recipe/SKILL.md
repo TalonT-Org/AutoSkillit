@@ -23,7 +23,7 @@ Produce a compact, structured overview of an AutoSkillit recipe. Reads the recip
 
 **ALWAYS:**
 - Read the recipe YAML carefully and render exactly what exists
-- Write output to `temp/render-recipe/{recipe-name}.md`
+- Write output to `temp/render-recipe/{recipe-name}_{YYYY-MM-DD_HHMMSS}.md`
 - Print the rendered content to terminal after writing the file
 
 ---
@@ -164,7 +164,7 @@ Construct the table following the rules in Section 3.
 
 ### Step 5: Assemble and Write
 
-Combine all three sections. Write to `temp/render-recipe/{recipe-name}.md`. Print the full content to terminal.
+Combine all three sections. Write to `temp/render-recipe/{recipe-name}_{YYYY-MM-DD_HHMMSS}.md` (timestamp ensures no overwrites). Print the full content to terminal.
 
 ---
 
@@ -172,5 +172,5 @@ Combine all three sections. Write to `temp/render-recipe/{recipe-name}.md`. Prin
 
 | Content | Destination |
 |---------|-------------|
-| Rendered recipe overview | `temp/render-recipe/{recipe-name}.md` AND terminal |
+| Rendered recipe overview | `temp/render-recipe/{recipe-name}_{YYYY-MM-DD_HHMMSS}.md` AND terminal |
 | Validation warnings (if any) | Terminal only, as a brief note after the render |

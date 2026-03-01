@@ -49,6 +49,7 @@ class ClaudeSessionResult:
     session_id: str
     errors: list[str] = field(default_factory=list)
     token_usage: dict[str, Any] | None = None
+    assistant_messages: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
@@ -214,14 +215,31 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         )
 
     result_obj = None
+    assistant_messages: list[str] = []
     for line in stdout.strip().splitlines():
         line = line.strip()
         if not line:
             continue
         try:
             obj = json.loads(line)
-            if isinstance(obj, dict) and obj.get("type") == "result":
+            if not isinstance(obj, dict):
+                continue
+            record_type = obj.get("type")
+            if record_type == "result":
                 result_obj = obj
+            elif record_type == "assistant":
+                msg = obj.get("message")
+                if not isinstance(msg, dict):
+                    continue
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    text = " ".join(
+                        block.get("text", "") for block in content if isinstance(block, dict)
+                    ).strip()
+                else:
+                    text = str(content).strip()
+                if text:
+                    assistant_messages.append(text)
         except json.JSONDecodeError:
             continue
 
@@ -260,6 +278,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         session_id=result_obj.get("session_id", ""),
         errors=result_obj.get("errors", []),
         token_usage=token_usage,
+        assistant_messages=assistant_messages,
     )
 
 

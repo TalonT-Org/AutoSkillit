@@ -2852,3 +2852,219 @@ class TestOnResultMissingFailureRoute:
         findings = run_semantic_rules(wf)
         errors = [f for f in findings if f.severity == Severity.ERROR]
         assert any(f.rule == "on-result-missing-failure-route" for f in errors)
+
+
+# ============================================================
+# Part B: Stale-ref-after-merge lifecycle validation
+# ============================================================
+
+
+def _make_stale_worktree_path_recipe() -> Recipe:
+    """Return the stale-worktree-path recipe used by tests B1 and B6."""
+    return Recipe(
+        name="test-stale-path",
+        description="test",
+        steps={
+            "implement": RecipeStep(
+                tool="run_skill_retry",
+                with_args={
+                    "skill_command": "/autoskillit:implement-worktree-no-merge plan.md",
+                },
+                capture={"worktree_path": "${{ result.worktree_path }}"},
+                on_success="test",
+            ),
+            "test": RecipeStep(
+                tool="test_check",
+                with_args={"worktree_path": "${{ context.worktree_path }}"},
+                on_success="merge",
+            ),
+            "merge": RecipeStep(
+                tool="merge_worktree",
+                with_args={
+                    "worktree_path": "${{ context.worktree_path }}",
+                    "base_branch": "main",
+                },
+                capture={"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+                on_success="audit",
+            ),
+            "audit": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": (
+                        "/autoskillit:audit-impl plan.md ${{ context.worktree_path }} main"
+                    ),
+                },
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+    )
+
+
+@pytest.fixture
+def all_bundled_recipes() -> list[tuple[str, Recipe]]:
+    """Load all bundled recipe YAML files and return as (name, Recipe) pairs."""
+    result = []
+    for yaml_file in builtin_recipes_dir().glob("*.yaml"):
+        result.append((yaml_file.stem, load_recipe(yaml_file)))
+    return result
+
+
+class TestStaleRefAfterMerge:
+    """Part B: stale-ref-after-merge semantic rule and _detect_ref_invalidations()."""
+
+    def test_B1_stale_ref_after_merge_fires_for_worktree_path(self) -> None:
+        """B1: Rule fires when a worktree_path capture is consumed after merge_worktree."""
+        recipe = _make_stale_worktree_path_recipe()
+        findings = run_semantic_rules(recipe)
+        stale_findings = [f for f in findings if f.rule == "stale-ref-after-merge"]
+        assert stale_findings, (
+            "Expected stale-ref-after-merge finding for worktree_path used after merge"
+        )
+        assert any(f.step_name == "audit" for f in stale_findings)
+
+    def test_B2_stale_ref_after_merge_fires_for_branch_name(self) -> None:
+        """B2: Rule fires when a branch_name capture is consumed after merge_worktree."""
+        recipe = Recipe(
+            name="test-stale-branch",
+            description="test",
+            steps={
+                "implement": RecipeStep(
+                    tool="run_skill_retry",
+                    with_args={
+                        "skill_command": "/autoskillit:implement-worktree-no-merge plan.md",
+                    },
+                    capture={"branch_name": "${{ result.branch_name }}"},
+                    on_success="merge",
+                ),
+                "merge": RecipeStep(
+                    tool="merge_worktree",
+                    with_args={"worktree_path": "../worktrees/wt", "base_branch": "main"},
+                    capture={"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+                    on_success="audit",
+                ),
+                "audit": RecipeStep(
+                    tool="run_skill",
+                    with_args={
+                        "skill_command": (
+                            "/autoskillit:audit-impl plan.md ${{ context.branch_name }} main"
+                        ),
+                    },
+                    on_success="done",
+                ),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        findings = run_semantic_rules(recipe)
+        stale = [f for f in findings if f.rule == "stale-ref-after-merge"]
+        assert stale, "Expected stale-ref-after-merge finding for branch_name used after merge"
+        assert any(f.step_name == "audit" for f in stale)
+
+    def test_B3_stale_ref_after_merge_clean_when_sha_used(self) -> None:
+        """B3: Rule does NOT fire when audit_impl uses a stable SHA, not a branch ref."""
+        recipe = Recipe(
+            name="test-clean-sha",
+            description="test",
+            steps={
+                "capture_sha": RecipeStep(
+                    tool="run_cmd",
+                    with_args={"cmd": "git rev-parse main", "cwd": "/work"},
+                    capture={"base_sha": "${{ result.stdout }}"},
+                    on_success="implement",
+                ),
+                "implement": RecipeStep(
+                    tool="run_skill_retry",
+                    with_args={
+                        "skill_command": "/autoskillit:implement-worktree-no-merge plan.md",
+                    },
+                    capture={
+                        "worktree_path": "${{ result.worktree_path }}",
+                        "branch_name": "${{ result.branch_name }}",
+                    },
+                    on_success="merge",
+                ),
+                "merge": RecipeStep(
+                    tool="merge_worktree",
+                    with_args={
+                        "worktree_path": "${{ context.worktree_path }}",
+                        "base_branch": "main",
+                    },
+                    capture={"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+                    on_success="audit",
+                ),
+                "audit": RecipeStep(
+                    tool="run_skill",
+                    with_args={
+                        "skill_command": (
+                            "/autoskillit:audit-impl plan.md ${{ context.base_sha }} main"
+                        ),
+                    },
+                    on_success="done",
+                ),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        findings = run_semantic_rules(recipe)
+        stale = [f for f in findings if f.rule == "stale-ref-after-merge"]
+        assert not stale, f"Expected no stale-ref findings when base_sha is used: {stale}"
+
+    def test_B4_stale_ref_after_merge_clean_before_merge(self) -> None:
+        """B4: Rule does NOT fire when worktree_path is only consumed before merge_worktree."""
+        recipe = Recipe(
+            name="test-before-merge",
+            description="test",
+            steps={
+                "implement": RecipeStep(
+                    tool="run_skill_retry",
+                    with_args={
+                        "skill_command": "/autoskillit:implement-worktree-no-merge plan.md",
+                    },
+                    capture={"worktree_path": "${{ result.worktree_path }}"},
+                    on_success="audit",
+                ),
+                "audit": RecipeStep(
+                    tool="run_skill",
+                    with_args={
+                        "skill_command": (
+                            "/autoskillit:audit-impl plan.md ${{ context.worktree_path }} main"
+                        ),
+                    },
+                    on_success="merge",
+                ),
+                "merge": RecipeStep(
+                    tool="merge_worktree",
+                    with_args={
+                        "worktree_path": "${{ context.worktree_path }}",
+                        "base_branch": "main",
+                    },
+                    capture={"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+                    on_success="done",
+                ),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        findings = run_semantic_rules(recipe)
+        stale = [f for f in findings if f.rule == "stale-ref-after-merge"]
+        assert not stale, (
+            "Expected no stale-ref findings when worktree_path is consumed BEFORE merge: "
+            + str(stale)
+        )
+
+    def test_B5_bundled_recipes_pass_stale_ref_rule_after_part_a(
+        self, all_bundled_recipes: list[tuple[str, Recipe]]
+    ) -> None:
+        """B5: All bundled recipes must pass the stale-ref-after-merge rule after Part A fixes."""
+        for recipe_name, recipe in all_bundled_recipes:
+            findings = run_semantic_rules(recipe)
+            stale = [f for f in findings if f.rule == "stale-ref-after-merge"]
+            assert not stale, (
+                f"Bundled recipe '{recipe_name}' has stale-ref-after-merge violations: {stale}"
+            )
+
+    def test_B6_detect_ref_invalidations_in_dataflow_report(self) -> None:
+        """B6: analyze_dataflow() emits REF_INVALIDATED warnings for stale-ref patterns."""
+        recipe = _make_stale_worktree_path_recipe()
+        report = analyze_dataflow(recipe)
+        ref_warnings = [w for w in report.warnings if w.code == "REF_INVALIDATED"]
+        assert ref_warnings, "Expected REF_INVALIDATED warnings in DataFlowReport"
+        assert any(w.step_name == "audit" for w in ref_warnings)

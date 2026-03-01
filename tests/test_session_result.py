@@ -350,6 +350,37 @@ class TestParseSessionResult:
             parse_session_result(record)
         assert not any(e.get("event") == "unknown_result_keys" for e in logs)
 
+    def test_parse_session_result_captures_assistant_messages(self):
+        """parse_session_result populates assistant_messages from assistant-type NDJSON records."""
+        ndjson = (
+            '{"type":"assistant","message":{"role":"assistant","content":"Full report here."}}\n'
+            '{"type":"result","subtype":"success","result":"%%ORDER_UP%%",'
+            '"session_id":"s1","is_error":false}\n'
+        )
+        result = parse_session_result(ndjson)
+        assert result.result == "%%ORDER_UP%%"
+        assert result.assistant_messages == ["Full report here."]
+
+    def test_parse_session_result_collects_multiple_assistant_messages(self):
+        """All assistant records are collected, including the marker-only final one."""
+        ndjson = (
+            '{"type":"assistant","message":{"role":"assistant","content":"GO verdict."}}\n'
+            '{"type":"assistant","message":{"role":"assistant","content":"%%ORDER_UP%%"}}\n'
+            '{"type":"result","subtype":"success","result":"%%ORDER_UP%%",'
+            '"session_id":"s1","is_error":false}\n'
+        )
+        result = parse_session_result(ndjson)
+        assert result.assistant_messages == ["GO verdict.", "%%ORDER_UP%%"]
+
+    def test_parse_session_result_assistant_messages_empty_when_no_assistant_records(self):
+        """Baseline: no assistant records → assistant_messages is empty list."""
+        ndjson = (
+            '{"type":"result","subtype":"success","result":"Done.\\n\\n%%ORDER_UP%%",'
+            '"session_id":"s1","is_error":false}\n'
+        )
+        result = parse_session_result(ndjson)
+        assert result.assistant_messages == []
+
 
 # ---------------------------------------------------------------------------
 # extract_token_usage

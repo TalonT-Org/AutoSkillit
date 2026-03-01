@@ -587,3 +587,44 @@ def test_implementation_pipeline_captures_plan_parts_as_list() -> None:
     assert "plan_parts" in step.capture_list, (
         "implementation-pipeline plan step must capture plan_parts via capture_list"
     )
+
+
+# IO-1: RecipeInfo dataclass accepts content kwarg; defaults to None
+def test_recipe_info_has_content_field_defaulting_to_none() -> None:
+    """RecipeInfo.content defaults to None when not provided."""
+    from autoskillit.recipe.schema import RecipeInfo
+
+    info = RecipeInfo(
+        name="x",
+        description="y",
+        source=RecipeSource.BUILTIN,
+        path=Path("/x.yaml"),
+    )
+    assert info.content is None
+
+
+# IO-2: list_recipes populates content field with raw YAML text
+def test_list_recipes_populates_content(tmp_path: Path) -> None:
+    """list_recipes() populates the content field with raw YAML text."""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    raw = "name: my-recipe\ndescription: test\nsteps: {}\n"
+    (recipes_dir / "my-recipe.yaml").write_text(raw)
+    result = list_recipes(tmp_path)
+    assert result.items, "expected at least one recipe"
+    item = next(r for r in result.items if r.name == "my-recipe")
+    assert item.content == raw
+
+
+# IO-3: content field preserved through find_recipe_by_name
+def test_find_recipe_by_name_returns_info_with_content(tmp_path: Path) -> None:
+    """find_recipe_by_name() returns a RecipeInfo with content populated."""
+    from autoskillit.recipe.io import find_recipe_by_name
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    raw = "name: my-recipe\ndescription: test\nsteps: {}\n"
+    (recipes_dir / "my-recipe.yaml").write_text(raw)
+    info = find_recipe_by_name("my-recipe", tmp_path)
+    assert info is not None
+    assert info.content == raw

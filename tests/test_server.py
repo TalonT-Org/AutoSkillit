@@ -752,7 +752,7 @@ class TestKitchenStatus:
         assert tool_ctx.gate.enabled is False
         result = json.loads(await kitchen_status())
         assert result["tools_enabled"] is False
-        assert "package_version" in result
+        assert isinstance(result["package_version"], str) and result["package_version"]
 
     @pytest.mark.asyncio
     async def test_status_includes_token_usage_verbosity_default(self):

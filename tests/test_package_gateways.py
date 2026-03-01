@@ -161,15 +161,17 @@ async def test_migration_check_and_migrate_up_to_date(tmp_path):
 
 def test_factory_make_context_returns_toolcontext():
     from autoskillit.config import AutomationConfig
+    from autoskillit.core.paths import pkg_root
+    from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.server._factory import make_context
 
     ctx = make_context(AutomationConfig())
     assert isinstance(ctx, ToolContext)
     assert ctx.gate.enabled is False  # starts closed
-    assert ctx.audit is not None
+    assert isinstance(ctx.audit, DefaultAuditLog)
     assert ctx.token_log is not None
-    assert ctx.plugin_dir != ""
+    assert ctx.plugin_dir == str(pkg_root())
 
 
 def test_factory_make_context_accepts_runner():

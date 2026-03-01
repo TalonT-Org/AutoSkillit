@@ -398,3 +398,58 @@ class TestQuotaGuardStructuralEnforcement:
             "QUOTA GUARD instructions must not appear in load_recipe docstring; "
             "quota enforcement is now handled by the PreToolUse hook."
         )
+
+
+class TestSourceIsolationContract:
+    """Every instruction surface that introduces the clone/source_dir pattern
+    must carry an explicit SOURCE ISOLATION prohibition covering git checkout."""
+
+    _SENTINEL = "SOURCE ISOLATION"
+
+    def test_clone_using_recipes_have_source_isolation_rule(self):
+        """All bundled clone-using recipes must have SOURCE ISOLATION in kitchen_rules."""
+        from autoskillit.recipe.io import list_recipes, load_recipe
+
+        workflows = list_recipes(Path("/nonexistent"))
+        bundled = [w for w in workflows.items if w.source.value == "builtin"]
+        clone_recipes = []
+        for wf_info in bundled:
+            raw = wf_info.path.read_text()
+            if "clone_repo" not in raw:
+                continue
+            clone_recipes.append(wf_info.name)
+            wf = load_recipe(wf_info.path)
+            assert wf.kitchen_rules, f"{wf_info.name} has no kitchen_rules"
+            all_rules = " ".join(wf.kitchen_rules)
+            assert self._SENTINEL in all_rules, (
+                f"{wf_info.name} uses clone_repo but kitchen_rules lack "
+                f"'{self._SENTINEL}'"
+            )
+            assert "checkout" in all_rules.lower(), (
+                f"{wf_info.name} SOURCE ISOLATION rule must explicitly mention 'checkout'"
+            )
+
+        assert len(clone_recipes) >= 3, (
+            f"Expected >=3 bundled clone-using recipes, found: {clone_recipes}"
+        )
+
+    def test_clone_repo_tool_docstring_has_source_isolation(self):
+        """clone_repo MCP tool docstring must include SOURCE ISOLATION prohibition."""
+        from autoskillit.server.tools_clone import clone_repo
+
+        doc = clone_repo.__doc__ or ""
+        assert self._SENTINEL in doc, (
+            "clone_repo docstring must contain 'SOURCE ISOLATION'"
+        )
+        assert "checkout" in doc.lower(), (
+            "clone_repo docstring must explicitly mention 'checkout' as prohibited"
+        )
+
+    def test_workspace_clone_module_has_source_isolation(self):
+        """workspace/clone.py module docstring must carry the SOURCE ISOLATION note."""
+        import autoskillit.workspace.clone as clone_mod
+
+        doc = clone_mod.__doc__ or ""
+        assert self._SENTINEL in doc, (
+            "autoskillit.workspace.clone module docstring must contain 'SOURCE ISOLATION'"
+        )

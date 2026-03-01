@@ -42,6 +42,12 @@ async def clone_repo(
         strategy: On uncommitted changes: "" = return warning (default),
                   "proceed" = clone remote committed state only,
                   "clone_local" = copytree (includes working-tree changes).
+
+    SOURCE ISOLATION: Once this tool returns, source_dir must not be touched for
+    any purpose except reading its remote URL in push_to_remote. Never run git
+    operations (including checkout, fetch, reset, pull), run_cmd, or any other
+    command in source_dir. All pipeline work — skill invocations, git operations,
+    file reads — runs exclusively in clone_path (captured as work_dir in recipes).
     """
     if (gate := _require_enabled()) is not None:
         return gate

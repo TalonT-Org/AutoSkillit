@@ -44,6 +44,12 @@ kitchen_rules:
   - "When make_groups is true, source_doc input is required."
   - "Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront."
   - "When open_pr is true, feature branch is named from inputs.run_name. All worktree merges and pushes target the feature branch (context.merge_target), not base_branch directly. The open_pr_step runs after audit_impl to create the GitHub PR."
+  - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
+    off-limits. Never run any command in source_dir — no git checkout, git
+    fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
+    All work — skill invocations, git operations, file reads — happens
+    exclusively in the clone (work_dir). source_dir is used ONLY to read
+    the remote URL inside push_to_remote."
 
 steps:
   clone:

@@ -13,6 +13,12 @@ kitchen_rules:
   - "SEQUENTIAL EXECUTION: complete full cycle per part before advancing.
     For each plan_part, run the full cycle (dry_walkthrough → implement →
     verify → merge) before starting the next part."
+  - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
+    off-limits. Never run any command in source_dir — no git checkout, git
+    fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
+    All work — skill invocations, git operations, file reads — happens
+    exclusively in the clone (work_dir). source_dir is used ONLY to read
+    the remote URL inside push_to_remote."
 
 ingredients:
   topic:

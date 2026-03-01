@@ -1,5 +1,10 @@
 """Clone-based run isolation for pipeline recipes.
 
+SOURCE ISOLATION: After clone_repo returns clone_path, the source_dir must
+not be touched for any purpose except reading its remote URL in push_to_remote.
+This prohibits git checkout, git fetch, git reset, git pull, run_cmd, run_skill,
+and every other command in source_dir. All pipeline work runs in clone_path.
+
 L1 module: depends only on stdlib and autoskillit.core.logging.
 Three callables are registered as run_python entry points in bundled recipes.
 
@@ -94,6 +99,9 @@ def clone_repo(
     If changes are found, returns a warning dict instead of cloning. The caller
     may re-invoke with strategy="proceed" (clone remote committed state only) or
     strategy="clone_local" (copytree — includes working-tree changes).
+
+    After this function returns, source_dir is off-limits except for push_to_remote
+    reading its remote URL. See module docstring for the full SOURCE ISOLATION contract.
 
     Returns:
         On success: {"clone_path": str, "source_dir": str}

@@ -41,6 +41,12 @@ kitchen_rules:
     the conflict_report_path. Pass context.task to make-plan. The plan+implement
     cycle creates a worktree from the integration branch and merges it back via
     merge_to_integration."
+  - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
+    off-limits. Never run any command in source_dir — no git checkout, git
+    fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
+    All work — skill invocations, git operations, file reads — happens
+    exclusively in the clone (work_dir). source_dir is used ONLY to read
+    the remote URL inside push_to_remote."
 
 steps:
   clone:

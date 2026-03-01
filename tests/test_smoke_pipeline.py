@@ -19,6 +19,7 @@ import json
 import os
 import re
 import subprocess
+import textwrap
 from pathlib import Path
 from unittest.mock import patch
 
@@ -35,8 +36,33 @@ from autoskillit.server.tools_workspace import test_check
 
 test_check.__test__ = False  # type: ignore[attr-defined]
 
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SMOKE_SCRIPT = builtin_recipes_dir() / "smoke-test.yaml"
+
+_BYPASS_RECIPE_YAML = textwrap.dedent("""\
+    name: test-bypass
+    autoskillit_version: "0.2.0"
+    kitchen_rules: ["test"]
+    ingredients:
+      flag: {required: false, default: "true"}
+    steps:
+      entry:
+        tool: run_cmd
+        with: {cmd: "echo start", cwd: "/tmp"}
+        on_success: conditional_step
+        on_failure: done
+      conditional_step:
+        tool: run_cmd
+        with: {cmd: "echo conditional", cwd: "/tmp"}
+        skip_when_false: "inputs.flag"
+        optional: true
+        on_success: done
+        on_failure: done
+      done:
+        action: stop
+        message: "done"
+""")
 
 _TOOL_MAP = {
     "run_cmd": run_cmd,
@@ -67,8 +93,18 @@ class SmokeExecutor:
         for _ in range(max_steps):
             if current is None:
                 return None, "Routing returned None — pipeline stalled."
-            self.visited.append(current)
             step_def = self.steps[current]
+
+            skip_when_false = step_def.get("skip_when_false")
+            if skip_when_false and skip_when_false.startswith("inputs."):
+                ingredient_key = skip_when_false[len("inputs.") :]
+                ingredient_value = self.inputs.get(ingredient_key, "true")
+                if ingredient_value == "false":
+                    # Step is bypassed: route to on_success without executing
+                    current = step_def.get("on_success")
+                    continue
+
+            self.visited.append(current)
 
             if step_def.get("action") == "stop":
                 return current, step_def.get("message", "")
@@ -289,8 +325,44 @@ class TestSmokeScriptValidation:
 
     async def test_script_validates(self, smoke_script_path: Path) -> None:
         result = json.loads(await validate_recipe(script_path=str(smoke_script_path)))
-        assert result["valid"] is True
         assert result["errors"] == []
+        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
+        assert errors == []
+
+    async def test_smoke_create_branch_has_skip_when_false(self) -> None:
+        result = json.loads(await load_recipe(name="smoke-test"))
+        pipeline = yaml.safe_load(result["content"])
+        step = pipeline["steps"]["create_branch"]
+        assert step.get("skip_when_false") == "inputs.collect_on_branch"
+
+    async def test_smoke_create_summary_has_skip_when_false(self) -> None:
+        result = json.loads(await load_recipe(name="smoke-test"))
+        pipeline = yaml.safe_load(result["content"])
+        step = pipeline["steps"]["create_summary"]
+        assert step.get("skip_when_false") == "inputs.collect_on_branch"
+
+    async def test_smoke_executor_skips_step_when_skip_when_false_is_false(self) -> None:
+        """When a step has skip_when_false and the ingredient is 'false',
+        SmokeExecutor must bypass the step by routing to its on_success without executing."""
+        import yaml as _yaml
+
+        steps = _yaml.safe_load(_BYPASS_RECIPE_YAML)["steps"]
+        executor = SmokeExecutor(steps=steps, inputs={"flag": "false"})
+        terminal_step, _message = await executor.run(start="entry")
+        assert terminal_step == "done"
+        assert "conditional_step" not in executor.visited, (
+            "conditional_step should have been bypassed when flag='false'"
+        )
+
+    async def test_smoke_executor_executes_step_when_skip_when_false_is_true(self) -> None:
+        """When skip_when_false ingredient is 'true', the step executes normally."""
+        import yaml as _yaml
+
+        steps = _yaml.safe_load(_BYPASS_RECIPE_YAML)["steps"]
+        executor = SmokeExecutor(steps=steps, inputs={"flag": "true"})
+        terminal_step, _message = await executor.run(start="entry")
+        assert terminal_step == "done"
+        assert "conditional_step" in executor.visited
 
     async def test_script_discoverable(self, smoke_project: Path) -> None:
         result = json.loads(await list_recipes())

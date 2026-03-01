@@ -447,6 +447,25 @@ class TestSourceIsolationContract:
         )
 
 
+def test_open_pr_skill_does_not_contain_git_push():
+    """The open-pr SKILL.md must not contain 'git push -u origin' as a workflow step.
+    The recipe manages all push operations via push_to_remote. The skill is a pure
+    PR creation operation."""
+    import re
+
+    from autoskillit.core.paths import pkg_root
+
+    skill_path = pkg_root() / "skills" / "open-pr" / "SKILL.md"
+    content = skill_path.read_text()
+    # Match lines that start with a step number and contain 'git push -u origin'
+    push_step_pattern = re.compile(r"^\s*\d+\.\s.*git push\s+-u origin", re.MULTILINE)
+    matches = push_step_pattern.findall(content)
+    assert not matches, (
+        "open-pr SKILL.md must not contain 'git push -u origin' as a workflow step. "
+        "The recipe's push_to_remote step manages publishing the branch."
+    )
+
+
 class TestPathArgSkillsContract:
     """Path-argument skills must document path-detection parsing in their SKILL.md."""
 

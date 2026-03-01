@@ -287,6 +287,7 @@ steps:
         GO: create_review_pr
         NO GO: remediate
     optional: true
+    skip_when_false: "inputs.audit"
     note: >
       Only execute if inputs.audit is 'true'. If false, skip directly to
       create_review_pr. Passes temp/pr-merge-pipeline/ as plans_input — audit-impl

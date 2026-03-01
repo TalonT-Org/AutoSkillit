@@ -156,6 +156,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         capture=data.get("capture", {}),
         capture_list=data.get("capture_list", {}),
         optional=bool(data.get("optional", False)),
+        skip_when_false=data.get("skip_when_false"),
         model=data.get("model"),
     )
 

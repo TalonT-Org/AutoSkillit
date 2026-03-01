@@ -2183,16 +2183,270 @@ class TestImplementationPipelineStructure:
             "base_sha is captured but never consumed — audit_impl must reference it"
         )
 
-    def test_ip_push_after_audit_no_violation(self) -> None:
-        """T_IP_PBA: fixed implementation-pipeline.yaml must not trigger push-before-audit.
-
-        After the fix, push_to_remote is only reachable via:
-          next_or_done(all_done) → audit_impl → open_pr_step → push
-        so every execution path through push passes through audit_impl first.
+    def test_ip_push_after_audit_warning_fires(self) -> None:
+        """T_IP_PBA: after Part B, audit_impl has skip_when_false so push-before-audit
+        fires as a WARNING. This is correct and expected — the user can opt out of audit
+        (audit=false), and the rule signals that push is reachable without audit on that path.
         """
+        from autoskillit.core.types import Severity
+
         findings = run_semantic_rules(self.recipe)
         violations = [f for f in findings if f.rule == "push-before-audit"]
-        assert violations == []
+        assert len(violations) >= 1, (
+            "push-before-audit must fire: audit_impl has skip_when_false so push is "
+            "reachable via the audit=false bypass path"
+        )
+        assert all(v.severity == Severity.WARNING for v in violations)
+
+    def test_ip_open_pr_step_routes_to_cleanup_not_push(self) -> None:
+        """open_pr_step.on_success must be cleanup_success, never push.
+        The push step already ran before open_pr_step; routing back to push is a double-push."""
+        open_pr_step = self.recipe.steps["open_pr_step"]
+        assert open_pr_step.on_success != "push", (
+            "open_pr_step.on_success must not be 'push' — that would trigger a double-push"
+        )
+        assert open_pr_step.on_success == "cleanup_success"
+
+    def test_ip_open_pr_step_has_skip_when_false(self) -> None:
+        """open_pr_step must declare skip_when_false: inputs.open_pr."""
+        open_pr_step = self.recipe.steps["open_pr_step"]
+        assert open_pr_step.skip_when_false == "inputs.open_pr"
+
+    def test_ip_audit_impl_has_skip_when_false(self) -> None:
+        """audit_impl must declare skip_when_false: inputs.audit."""
+        audit_step = self.recipe.steps["audit_impl"]
+        assert audit_step.skip_when_false == "inputs.audit"
+
+    def test_ip_create_branch_has_skip_when_false(self) -> None:
+        """create_branch must declare skip_when_false: inputs.open_pr."""
+        create_branch = self.recipe.steps["create_branch"]
+        assert create_branch.skip_when_false == "inputs.open_pr"
+
+    def test_ip_no_push_to_remote_step_after_open_pr_in_routing_chain(self) -> None:
+        """No push_to_remote step must be reachable from open_pr_step's on_success chain.
+        After open_pr_step, we must be in the cleanup/done path only."""
+        from autoskillit.recipe.validator import _build_step_graph
+
+        graph = _build_step_graph(self.recipe)
+        # BFS from open_pr_step.on_success (cleanup_success)
+        visited: set[str] = set()
+        queue = [self.recipe.steps["open_pr_step"].on_success]
+        while queue:
+            current = queue.pop(0)
+            if current in visited or current not in self.recipe.steps:
+                continue
+            visited.add(current)
+            queue.extend(graph.get(current, []))
+        push_to_remote_steps = {
+            name for name, step in self.recipe.steps.items() if step.tool == "push_to_remote"
+        }
+        reachable_push = push_to_remote_steps & visited
+        assert not reachable_push, (
+            f"push_to_remote step(s) {reachable_push} are reachable "
+            "after open_pr_step — double-push risk"
+        )
+
+    def test_ip_open_pr_false_path_reaches_push_then_cleanup(self) -> None:
+        """When open_pr_step is bypassed (open_pr=false), execution must go:
+        audit_impl (GO) → push → [open_pr_step bypassed] → cleanup_success → done.
+        After the fix, audit_impl's GO route points directly to push, so push is
+        always reachable from audit_impl's successors."""
+        from autoskillit.recipe.validator import _build_step_graph
+
+        graph = _build_step_graph(self.recipe)
+        # After the fix: audit_impl.on_result.GO → push (directly).
+        # Verify push is reachable from audit_impl's successors.
+        reachable: set[str] = set()
+        queue = list(graph.get("audit_impl", []))
+        while queue:
+            node = queue.pop(0)
+            if node in reachable or node not in self.recipe.steps:
+                continue
+            reachable.add(node)
+            queue.extend(graph.get(node, []))
+        assert "push" in reachable
+
+
+# ---------------------------------------------------------------------------
+# skip_when_false bypass edge tests
+# ---------------------------------------------------------------------------
+
+
+def test_build_step_graph_adds_bypass_edges_for_skip_when_false() -> None:
+    """When a step has skip_when_false, predecessors get a direct edge to its on_success."""
+    from autoskillit.recipe.schema import RecipeIngredient
+    from autoskillit.recipe.validator import _build_step_graph
+
+    # Recipe: entry → optional_step (skip_when_false) → final_step
+    # Expected bypass edge: entry → final_step
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="optional_step"),
+            "optional_step": RecipeStep(
+                tool="run_skill",
+                on_success="final_step",
+                skip_when_false="inputs.flag",
+            ),
+            "final_step": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={"flag": RecipeIngredient(description="", required=False, default="true")},
+        kitchen_rules=["test"],
+    )
+    graph = _build_step_graph(recipe)
+    # Bypass edge: entry can reach final_step directly (skip of optional_step)
+    assert "final_step" in graph["entry"]
+
+
+def test_build_step_graph_bypass_does_not_remove_normal_edge() -> None:
+    """The bypass edge is additional, not a replacement for the normal edge."""
+    from autoskillit.recipe.schema import RecipeIngredient
+    from autoskillit.recipe.validator import _build_step_graph
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="optional_step"),
+            "optional_step": RecipeStep(
+                tool="run_skill",
+                on_success="final_step",
+                skip_when_false="inputs.flag",
+            ),
+            "final_step": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={"flag": RecipeIngredient(description="", required=False, default="true")},
+        kitchen_rules=["test"],
+    )
+    graph = _build_step_graph(recipe)
+    # Normal edge still present
+    assert "optional_step" in graph["entry"]
+    # Bypass edge also present
+    assert "final_step" in graph["entry"]
+
+
+def test_push_before_audit_catches_audit_with_skip_when_false() -> None:
+    """When audit_impl has skip_when_false, push is reachable without audit — rule must fire."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="audit_step"),
+            "audit_step": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:audit-impl plan.md impl main",
+                    "cwd": "/tmp",
+                },
+                on_result=StepResultRoute(field="verdict", routes={"GO": "push_step"}),
+                on_failure="stop",
+                skip_when_false="inputs.audit",
+            ),
+            "push_step": RecipeStep(
+                tool="push_to_remote",
+                with_args={
+                    "branch": "${{ context.branch }}",
+                    "clone_path": "${{ context.work_dir }}",
+                    "source_dir": "${{ context.source_dir }}",
+                },
+                on_success="stop",
+                on_failure="stop",
+            ),
+            "stop": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={"audit": RecipeIngredient(description="", required=False, default="true")},
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    push_before_audit_violations = [v for v in violations if v.rule == "push-before-audit"]
+    assert len(push_before_audit_violations) == 1
+
+
+# ---------------------------------------------------------------------------
+# optional-without-skip-when and skip-when-false-undeclared rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_optional_without_skip_when_fires_error() -> None:
+    """optional: true without skip_when_false must be an ERROR."""
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="opt_step"),
+            "opt_step": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                on_success="done",
+                on_failure="done",
+                with_args={"skill_command": "/autoskillit:investigate plan.md", "cwd": "/tmp"},
+                note="Optional step.",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    rule_findings = [v for v in violations if v.rule == "optional-without-skip-when"]
+    assert len(rule_findings) == 1
+    assert rule_findings[0].severity == Severity.ERROR
+
+
+def test_optional_with_skip_when_does_not_fire() -> None:
+    """optional: true WITH skip_when_false must not fire the optional-without-skip-when rule."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="opt_step"),
+            "opt_step": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                skip_when_false="inputs.run_audit",
+                on_success="done",
+                on_failure="done",
+                with_args={"skill_command": "/autoskillit:investigate plan.md", "cwd": "/tmp"},
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={
+            "run_audit": RecipeIngredient(description="", required=False, default="true")
+        },
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    rule_findings = [v for v in violations if v.rule == "optional-without-skip-when"]
+    assert rule_findings == []
+
+
+def test_skip_when_false_referencing_undeclared_ingredient_fires() -> None:
+    """skip_when_false must reference a declared ingredient; undeclared must fire ERROR."""
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="opt_step"),
+            "opt_step": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                skip_when_false="inputs.nonexistent_ingredient",
+                on_success="done",
+                on_failure="done",
+                with_args={"skill_command": "/autoskillit:investigate plan.md", "cwd": "/tmp"},
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        # "nonexistent_ingredient" is NOT in ingredients
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    rule_findings = [v for v in violations if v.rule == "skip-when-false-undeclared"]
+    assert len(rule_findings) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -3402,6 +3656,57 @@ class TestPushBeforeAuditRule:
         )
         findings = [f for f in run_semantic_rules(recipe) if f.rule == "push-before-audit"]
         assert findings == []
+
+    def test_ip_push_after_audit_now_correctly_has_violation(self) -> None:
+        """T_IP_PBA: bypass path via skip_when_false makes push-before-audit fire.
+
+        Uses a synthetic recipe mirroring implementation-pipeline topology:
+          start → audit_impl (optional, skip_when_false) → open_pr_step → push
+        The skip_when_false bypass allows push to be reached without audit.
+
+        The real recipe YAML will have skip_when_false added in Part B, at which
+        point the TestImplementationPipelineStructure fixture will also trigger this rule.
+        """
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "audit_impl"},
+                "audit_impl": {
+                    "tool": "run_skill",
+                    "optional": True,
+                    "skip_when_false": "inputs.audit",
+                    "with": {
+                        "skill_command": "/autoskillit:audit-impl plan.md",
+                        "cwd": "/tmp",
+                    },
+                    "on_success": "open_pr_step",
+                    "on_failure": "done",
+                },
+                "open_pr_step": {
+                    "tool": "run_skill",
+                    "optional": True,
+                    "skip_when_false": "inputs.open_pr",
+                    "with": {
+                        "skill_command": "/autoskillit:open-pr",
+                        "cwd": "/tmp",
+                    },
+                    "on_success": "push",
+                },
+                "push": {
+                    "tool": "push_to_remote",
+                    "on_success": "done",
+                    "with": {
+                        "clone_path": "/tmp/clone",
+                        "source_dir": "/tmp/src",
+                        "branch": "main",
+                    },
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(recipe)
+        violations = [f for f in findings if f.rule == "push-before-audit"]
+        assert len(violations) >= 1
+        assert violations[0].severity == Severity.WARNING
 
 
 # ===========================================================================

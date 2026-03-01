@@ -70,6 +70,7 @@ steps:
     on_success: investigate
     on_failure: escalate
     optional: true
+    skip_when_false: "inputs.collect_on_branch"
     note: >
       Only execute if inputs.collect_on_branch is 'true'. Otherwise skip to investigate.
       Creates the feature branch, initialises bug_report.json, and overrides
@@ -178,6 +179,7 @@ steps:
     on_success: done
     on_failure: escalate
     optional: true
+    skip_when_false: "inputs.collect_on_branch"
     note: >
       Skipped when collect_on_branch is 'false' or no bugs were encountered.
       Terminal reporting step — outputs (summary file, issue URL, PR URL) are written to

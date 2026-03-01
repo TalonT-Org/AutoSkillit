@@ -627,6 +627,7 @@ def test_find_recipe_by_name_returns_info_with_content(tmp_path: Path) -> None:
     (recipes_dir / "my-recipe.yaml").write_text(raw)
     info = find_recipe_by_name("my-recipe", tmp_path)
     assert info is not None
+    assert info.content == raw
 
 
 # ---------------------------------------------------------------------------
@@ -648,4 +649,3 @@ def test_bundled_recipes_all_skill_commands_start_with_slash() -> None:
                 if not sc.strip().startswith(SKILL_COMMAND_PREFIX):
                     violations.append(f"{yaml_path.name}:{step_name}: {sc!r}")
     assert not violations, f"Bundled recipe steps with prose skill_command: {violations}"
-    assert info.content == raw

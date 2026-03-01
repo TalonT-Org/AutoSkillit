@@ -22,14 +22,14 @@ class TestTokenEntry:
     def test_fields_exist(self):
         entry = TokenEntry(step_name="plan")
         field_names = {f.name for f in fields(entry)}
-        assert {
+        assert field_names == {
             "step_name",
             "input_tokens",
             "output_tokens",
             "cache_creation_input_tokens",
             "cache_read_input_tokens",
             "invocation_count",
-        } <= field_names
+        }
 
     def test_default_counts_are_zero(self):
         entry = TokenEntry(step_name="plan")

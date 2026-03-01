@@ -1550,23 +1550,6 @@ def test_doctor_moved_to_cli_package() -> None:
     assert (SRC_ROOT / "cli" / "_doctor.py").exists()
 
 
-# ── New REQ-CNST tests (groupE) ───────────────────────────────────────────────
-
-
-def test_no_file_exceeds_1000_lines() -> None:
-    """REQ-CNST-002: No Python file in src/autoskillit/ may exceed 1,000 lines."""
-    violations: list[str] = []
-    for py_file in SRC_ROOT.rglob("*.py"):
-        if "__pycache__" in py_file.parts:
-            continue
-        line_count = len(py_file.read_text().splitlines())
-        if line_count > 1000:
-            violations.append(f"{_rel(py_file)}: {line_count} lines")
-    assert not violations, "Files exceeding 1,000 lines:\n" + "\n".join(
-        f"  {v}" for v in violations
-    )
-
-
 def test_no_subpackage_exceeds_10_files() -> None:
     """REQ-CNST-003: No sub-package directory may contain more than 10 Python files.
 

@@ -38,6 +38,7 @@ from autoskillit.execution.db import _select_only_authorizer, _validate_select_o
 from autoskillit.execution.headless import (
     _build_skill_result,
     _ensure_skill_prefix,
+    _inject_completion_directive,
     _resolve_model,
     _session_log_dir,
 )
@@ -4085,6 +4086,20 @@ class TestRunSkillInjectsCompletionDirective:
         assert "%%ORDER_UP%%" in skill_arg
         assert "ORCHESTRATION DIRECTIVE" in skill_arg
 
+    def test_inject_completion_directive_prohibits_standalone_marker(self):
+        """
+        The directive wording must explicitly instruct the model to emit the marker
+        in the SAME message as its substantive output, not as a standalone message.
+        This prevents the model from interpreting the directive as a post-task acknowledgment.
+        """
+        result = _inject_completion_directive("/audit-impl", "%%ORDER_UP%%")
+        lowered = result.lower()
+        assert (
+            "same message" in lowered
+            or "not as a separate" in lowered
+            or ("standalone" in lowered and "not" in lowered)
+        ), f"Directive must prohibit standalone marker emission. Got: {result!r}"
+
 
 _SUCCESS_JSON = (
     '{"type": "result", "subtype": "success", "is_error": false,'
@@ -5294,6 +5309,63 @@ class TestMarkerCrossValidation:
             )
             is expected
         )
+
+    def test_build_skill_result_recovers_when_marker_in_separate_assistant_message(self):
+        """
+        If the model emits substantive content in an assistant record and %%ORDER_UP%%
+        as a separate final message, _build_skill_result must return success=True with
+        the substantive content — not success=False with empty result.
+        This is the exact bug pattern from audit-impl.
+        """
+        marker = self.MARKER
+        ndjson = (
+            '{"type":"assistant","message":{"role":"assistant",'
+            '"content":"Detailed audit report.\\nGO verdict."}}\n'
+            '{"type":"assistant","message":{"role":"assistant","content":"%%ORDER_UP%%"}}\n'
+            '{"type":"result","subtype":"success","result":"%%ORDER_UP%%",'
+            '"session_id":"s1","is_error":false}\n'
+        )
+        result = _build_skill_result(
+            SubprocessResult(
+                returncode=0,
+                stdout=ndjson,
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=1,
+            ),
+            completion_marker=marker,
+            skill_command="audit-impl",
+            audit=None,
+        )
+        assert result.success is True
+        assert "Detailed audit report." in result.result
+        assert marker not in result.result
+        assert result.needs_retry is False
+
+    def test_build_skill_result_does_not_recover_when_only_marker_in_assistant(self):
+        """
+        If ALL assistant records contain only the marker and result is also marker-only,
+        recovery must not produce a false positive — there is no substantive content.
+        """
+        marker = self.MARKER
+        ndjson = (
+            '{"type":"assistant","message":{"role":"assistant","content":"%%ORDER_UP%%"}}\n'
+            '{"type":"result","subtype":"success","result":"%%ORDER_UP%%",'
+            '"session_id":"s1","is_error":false}\n'
+        )
+        result = _build_skill_result(
+            SubprocessResult(
+                returncode=0,
+                stdout=ndjson,
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=1,
+            ),
+            completion_marker=marker,
+            skill_command="",
+            audit=None,
+        )
+        assert result.success is False
 
 
 class TestClaudeSessionResultTypeEnforcement:

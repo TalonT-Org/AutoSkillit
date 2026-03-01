@@ -20,7 +20,7 @@ from unittest.mock import Mock, patch
 import psutil
 import pytest
 
-from autoskillit.core.types import RetryReason, TerminationReason
+from autoskillit.core.types import ChannelConfirmation, RetryReason, TerminationReason
 from autoskillit.execution.process import (
     _has_active_api_connection,
     _heartbeat,
@@ -1709,7 +1709,40 @@ class TestChannelBDrainWait:
             _heartbeat_poll=0.05,
         )
         assert result.termination == TerminationReason.COMPLETED
-        assert result.data_confirmed is False  # FAILS before fix: True
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B  # FAILS before fix: UNMONITORED (was True)
+
+    @pytest.mark.asyncio
+    async def test_channel_b_no_heartbeat_produces_channel_b_confirmation(self, tmp_path):
+        """T3: When heartbeat is disabled and Channel B fires, channel_confirmation=CHANNEL_B.
+
+        Without this fix, _data_confirmed was left True (now: UNMONITORED) and empty
+        stdout caused needs_retry=True on what was a successful completion.
+
+        Sequence:
+          heartbeat_marker=""  → heartbeat disabled (no Channel A task)
+          session_log_dir set  → Channel B active
+          script writes JSONL marker but NO stdout
+          Channel B fires → else branch (heartbeat_task is None) → must set CHANNEL_B
+        """
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        script = tmp_path / "channel_b_no_stdout.py"
+        script.write_text(CHANNEL_B_NO_STDOUT_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script), str(session_dir)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker="",  # heartbeat disabled
+            session_log_dir=session_dir,
+            completion_marker="%%ORDER_UP%%",
+            completion_drain_timeout=0.5,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
+        )
+
+        assert result.termination == TerminationReason.COMPLETED
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
 
 class TestChannelBFullPipelineAdjudication:
@@ -2196,7 +2229,10 @@ class TestAdjudicationCoverageMatrix:
     See core/types.py _TERMINATION_CONTRACT for the per-reason semantic invariants.
     """
 
-    COVERED_BY_INTEGRATION_TESTS: frozenset = frozenset(
+    # Split into two constants for bidirectional coverage checks (T5).
+    # COVERED_TERMINATION_REASONS: TerminationReason → TestXxxPipelineAdjudication mapping
+    # INTEGRATION_TEST_CLASS_NAMES: the actual test class names (backward direction)
+    COVERED_TERMINATION_REASONS: frozenset = frozenset(
         {
             TerminationReason.COMPLETED,  # TestChannelBDrainRacePipelineAdjudication
             TerminationReason.NATURAL_EXIT,  # TestSTOPDelayPipelineAdjudication
@@ -2204,14 +2240,41 @@ class TestAdjudicationCoverageMatrix:
             TerminationReason.TIMED_OUT,  # TestTimedOutPipelineAdjudication
         }
     )
+    INTEGRATION_TEST_CLASS_NAMES: frozenset = frozenset(
+        {
+            "TestChannelBDrainRacePipelineAdjudication",
+            "TestSTOPDelayPipelineAdjudication",
+            "TestStaleRecoveryPipelineAdjudication",
+            "TestTimedOutPipelineAdjudication",
+        }
+    )
 
     def test_all_termination_reasons_have_integration_coverage(self):
         all_reasons = frozenset(TerminationReason)
-        uncovered = all_reasons - self.COVERED_BY_INTEGRATION_TESTS
+        uncovered = all_reasons - self.COVERED_TERMINATION_REASONS
         assert not uncovered, (
             f"TerminationReason values with no subprocess integration test "
             f"crossing run_managed_async → _build_skill_result boundary: "
             f"{uncovered}. "
             f"Add a TestXxxPipelineAdjudication class in test_process_lifecycle.py "
-            f"and add the value to COVERED_BY_INTEGRATION_TESTS."
+            f"and add the value to COVERED_TERMINATION_REASONS."
+        )
+
+    def test_coverage_matrix_classes_exist_in_this_module(self):
+        """T5 backward direction: all listed test class names must actually exist.
+
+        Prevents removing a test class while leaving its name in
+        INTEGRATION_TEST_CLASS_NAMES — a silent gap in coverage tracking.
+        """
+        import inspect
+        import sys as _sys
+
+        this_module = _sys.modules[__name__]
+        existing_classes = frozenset(
+            name for name, obj in inspect.getmembers(this_module, inspect.isclass)
+        )
+        orphaned = self.INTEGRATION_TEST_CLASS_NAMES - existing_classes
+        assert not orphaned, (
+            f"Listed in INTEGRATION_TEST_CLASS_NAMES but class not found: {orphaned}. "
+            f"Either restore the class or remove it from the constant."
         )

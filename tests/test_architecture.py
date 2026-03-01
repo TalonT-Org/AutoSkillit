@@ -2387,6 +2387,72 @@ def test_arch007_termination_dispatch_tables_use_exhaustive_match() -> None:
     )
 
 
+def _check_channel_confirmation_dispatch_exhaustive(src_dir: Path) -> list[str]:
+    """
+    T7 / ARCH-007 extension: Detect functions that dispatch over ChannelConfirmation
+    via if/elif chains rather than exhaustive match/case + assert_never.
+
+    A "dispatch table" is detected when a single FunctionDef contains comparisons
+    to ≥2 distinct ChannelConfirmation.* values (CHANNEL_A, CHANNEL_B, UNMONITORED).
+    A single-value guard is exempt.
+
+    Returns a list of violation strings for failing tests.
+    """
+    violations = []
+    for py_file in src_dir.rglob("*.py"):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            cc_values: set[str] = set()
+            has_assert_never = False
+            has_match = False
+            for child in ast.walk(node):
+                if isinstance(child, ast.Compare):
+                    for comparator in child.comparators:
+                        if (
+                            isinstance(comparator, ast.Attribute)
+                            and isinstance(comparator.value, ast.Name)
+                            and comparator.value.id == "ChannelConfirmation"
+                        ):
+                            cc_values.add(comparator.attr)
+                        elif isinstance(comparator, ast.Tuple):
+                            for elt in comparator.elts:
+                                if (
+                                    isinstance(elt, ast.Attribute)
+                                    and isinstance(elt.value, ast.Name)
+                                    and elt.value.id == "ChannelConfirmation"
+                                ):
+                                    cc_values.add(elt.attr)
+                if hasattr(ast, "Match") and isinstance(child, ast.Match):
+                    has_match = True
+                if (
+                    isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Name)
+                    and child.func.id == "assert_never"
+                ):
+                    has_assert_never = True
+            if len(cc_values) >= 2 and not (has_match and has_assert_never):
+                violations.append(
+                    f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
+                    f"{node.name}() dispatches on {cc_values} via if/elif — "
+                    f"use match/case + assert_never"
+                )
+    return violations
+
+
+def test_arch007_channel_confirmation_dispatch_uses_match_case() -> None:
+    """
+    T7 / ARCH-007 extension: Any function in execution/ that dispatches on ≥2
+    distinct ChannelConfirmation values via if/elif must use match/case with
+    assert_never. Single-value guard checks are exempt.
+    """
+    violations = _check_channel_confirmation_dispatch_exhaustive(SRC_ROOT / "execution")
+    assert violations == [], (
+        "Non-exhaustive ChannelConfirmation dispatch tables found:\n" + "\n".join(violations)
+    )
+
+
 def _find_enclosing_function(node: ast.AST, tree: ast.AST) -> str | None:
     for parent in ast.walk(tree):
         if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):

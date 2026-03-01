@@ -1,6 +1,17 @@
 """Tests for shared type contracts — enum exhaustiveness."""
 
-from autoskillit.core.types import MergeFailedStep, MergeState, RestartScope, RetryReason
+import json
+from dataclasses import fields
+
+from autoskillit.core.types import (
+    RETRY_RESPONSE_FIELDS,
+    ChannelConfirmation,
+    MergeFailedStep,
+    MergeState,
+    RestartScope,
+    RetryReason,
+    SkillResult,
+)
 
 
 def test_retry_reason_values():
@@ -34,3 +45,56 @@ def test_restart_scope_values():
         RestartScope.FULL_RESTART,
         RestartScope.PARTIAL_RESTART,
     }
+
+
+def test_channel_confirmation_values():
+    """ChannelConfirmation enum has exactly the expected members."""
+    assert set(ChannelConfirmation) == {
+        ChannelConfirmation.CHANNEL_A,
+        ChannelConfirmation.CHANNEL_B,
+        ChannelConfirmation.UNMONITORED,
+    }
+    assert ChannelConfirmation.CHANNEL_A.value == "channel_a"
+    assert ChannelConfirmation.CHANNEL_B.value == "channel_b"
+    assert ChannelConfirmation.UNMONITORED.value == "unmonitored"
+
+
+# T6: RETRY_RESPONSE_FIELDS structural guard
+def test_retry_response_fields_matches_to_json_output():
+    """RETRY_RESPONSE_FIELDS must match the keys emitted by SkillResult.to_json().
+
+    Structural guard: if a field is added to SkillResult without updating
+    RETRY_RESPONSE_FIELDS, this test fails immediately, preventing silent
+    drift in recipe step `retry.on` validation.
+    """
+    sr = SkillResult(
+        success=True,
+        result="",
+        session_id="",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+    )
+    json_keys = frozenset(json.loads(sr.to_json()).keys())
+    assert RETRY_RESPONSE_FIELDS == json_keys, (
+        f"RETRY_RESPONSE_FIELDS out of sync with SkillResult.to_json().\n"
+        f"Missing: {json_keys - RETRY_RESPONSE_FIELDS}\n"
+        f"Extra: {RETRY_RESPONSE_FIELDS - json_keys}"
+    )
+
+
+def test_retry_response_fields_derived_from_skillresult_fields():
+    """RETRY_RESPONSE_FIELDS must equal the field names of SkillResult dataclass.
+
+    After I9, this is structurally enforced — but this test makes the
+    derivation contract explicit and catches any divergence.
+    """
+    dataclass_fields = frozenset(f.name for f in fields(SkillResult))
+    assert RETRY_RESPONSE_FIELDS == dataclass_fields, (
+        f"RETRY_RESPONSE_FIELDS not derived from SkillResult fields.\n"
+        f"Missing: {dataclass_fields - RETRY_RESPONSE_FIELDS}\n"
+        f"Extra: {RETRY_RESPONSE_FIELDS - dataclass_fields}"
+    )

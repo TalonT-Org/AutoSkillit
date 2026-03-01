@@ -27,6 +27,7 @@ from autoskillit.core import SkillResult
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     RETRY_RESPONSE_FIELDS,
+    ChannelConfirmation,
     MergeFailedStep,
     MergeState,
     RestartScope,
@@ -6995,6 +6996,28 @@ class TestBuildSkillResultDataConfirmedPropagation:
         )
         assert skill_result.success is False
         assert skill_result.needs_retry is True
+
+    # T4: ChannelConfirmation enum version of the provenance bypass test
+    def test_channel_b_no_heartbeat_produces_success(self):
+        """T4 regression: Channel B wins with no heartbeat → success=True, not retry.
+
+        When heartbeat is disabled and Channel B fires, channel_confirmation=CHANNEL_B.
+        _build_skill_result must not demand stdout content — Channel B is authoritative.
+        """
+        result = _make_result(
+            stdout="",
+            returncode=-15,
+            termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="cmd",
+            audit=None,
+        )
+        assert skill_result.success is True
+        assert skill_result.needs_retry is False
 
 
 class TestServerLazyInit:

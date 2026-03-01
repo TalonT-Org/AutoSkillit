@@ -12,6 +12,7 @@ import structlog
 
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
+    ChannelConfirmation,
     RetryReason,
     TerminationReason,
 )
@@ -536,6 +537,47 @@ class TestComputeSuccess:
         s = _make_success_session("Task complete.")
         assert _compute_success(s, 0, TerminationReason.NATURAL_EXIT) is True
 
+    # T1: ChannelConfirmation-aware tests
+    def test_channel_b_bypasses_content_check(self):
+        """CHANNEL_B: provenance bypass fires even with empty result."""
+        s = _make_success_session(result="")  # empty result
+        assert (
+            _compute_success(
+                s,
+                returncode=-15,
+                termination=TerminationReason.COMPLETED,
+                channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            )
+            is True
+        )
+
+    def test_channel_a_falls_through_to_content_check(self):
+        """CHANNEL_A: no bypass — empty content → failure."""
+        s = _make_success_session(result="")  # empty result
+        assert (
+            _compute_success(
+                s,
+                returncode=-15,
+                termination=TerminationReason.COMPLETED,
+                channel_confirmation=ChannelConfirmation.CHANNEL_A,
+            )
+            is False
+        )
+
+    def test_unmonitored_falls_through_to_content_check(self):
+        """UNMONITORED: no bypass — delegates to normal content gates."""
+        s = _make_success_session(result="done %%ORDER_UP%%")
+        assert (
+            _compute_success(
+                s,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker="%%ORDER_UP%%",
+                channel_confirmation=ChannelConfirmation.UNMONITORED,
+            )
+            is True
+        )
+
 
 class TestComputeSuccessRealisticInputs:
     """_compute_success contracts using parse_session_result() as input constructor.
@@ -605,6 +647,31 @@ class TestComputeRetry:
         needs, reason = _compute_retry(s, 0, TerminationReason.NATURAL_EXIT)
         assert needs is False
         assert reason == RetryReason.NONE
+
+    # T2: ChannelConfirmation-aware tests
+    def test_channel_b_completed_no_retry(self):
+        """CHANNEL_B + COMPLETED: Channel B is authoritative — no retry."""
+        s = _make_success_session(result="")
+        needs_retry, reason = _compute_retry(
+            s,
+            returncode=-15,
+            termination=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        assert needs_retry is False
+        assert reason == RetryReason.NONE
+
+    def test_channel_a_completed_kill_anomaly_retries(self):
+        """CHANNEL_A + COMPLETED + kill anomaly (empty result) → retry."""
+        s = _make_success_session(result="")  # kill anomaly: kill returncode + empty result
+        needs_retry, reason = _compute_retry(
+            s,
+            returncode=-15,
+            termination=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        assert needs_retry is True
+        assert reason == RetryReason.RESUME
 
     def test_compute_retry_success_empty_natural_exit_zero_rc_is_retriable(self):
         """

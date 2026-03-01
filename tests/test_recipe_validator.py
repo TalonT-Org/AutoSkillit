@@ -1910,8 +1910,8 @@ def test_pipeline_summary_contract_declared() -> None:
 
 class TestImplementationPipelineStructure:
     @pytest.fixture(scope="class", autouse=True)
-    def _load_recipe(self) -> None:
-        self.recipe = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+    def _load_recipe(self, request) -> None:
+        request.cls.recipe = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
 
     def test_ip1_group_step_captures_group_files(self) -> None:
         """T_IP1: group step has capture containing key group_files (not groups_path)."""
@@ -2104,8 +2104,8 @@ class TestImplementationPipelineStructure:
 
 class TestBugfixLoopStructure:
     @pytest.fixture(scope="class", autouse=True)
-    def _load_recipe(self) -> None:
-        self.recipe = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
+    def _load_recipe(self, request) -> None:
+        request.cls.recipe = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
 
     def test_bl1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
         self,
@@ -2155,8 +2155,8 @@ class TestBugfixLoopStructure:
 
 class TestInvestigateFirstStructure:
     @pytest.fixture(scope="class", autouse=True)
-    def _load_recipe(self) -> None:
-        self.recipe = load_recipe(builtin_recipes_dir() / "investigate-first.yaml")
+    def _load_recipe(self, request) -> None:
+        request.cls.recipe = load_recipe(builtin_recipes_dir() / "investigate-first.yaml")
 
     def test_if1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
         self,
@@ -2246,8 +2246,8 @@ class TestInvestigateFirstStructure:
 
 class TestAuditAndFixStructure:
     @pytest.fixture(scope="class", autouse=True)
-    def _load_recipe(self) -> None:
-        self.recipe = load_recipe(builtin_recipes_dir() / "audit-and-fix.yaml")
+    def _load_recipe(self, request) -> None:
+        request.cls.recipe = load_recipe(builtin_recipes_dir() / "audit-and-fix.yaml")
 
     def test_aaf1_implement_uses_no_merge_skill(self) -> None:
         """T_AAF1: implement step must use implement-worktree-no-merge."""

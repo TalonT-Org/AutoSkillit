@@ -403,6 +403,11 @@ class GitHubFetcher(Protocol):
     returned in the result dict with success=False.
     """
 
+    @property
+    def has_token(self) -> bool:
+        """True if this fetcher was constructed with an authentication token."""
+        ...
+
     async def fetch_issue(
         self,
         issue_ref: str,

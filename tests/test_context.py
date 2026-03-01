@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import get_args, get_type_hints
+
 from autoskillit.config import AutomationConfig
+from autoskillit.core import GitHubFetcher
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.gate import DefaultGateState
@@ -87,6 +90,8 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
     assert ctx.migrations is None
     assert ctx.db_reader is None
     assert ctx.workspace_mgr is None
+    assert ctx.clone_mgr is None
+    assert ctx.github_client is None
 
 
 def test_toolcontext_service_fields_annotated_with_protocols():
@@ -101,6 +106,7 @@ def test_toolcontext_service_fields_annotated_with_protocols():
     assert "MigrationService" in str(fields["migrations"].type)
     assert "DatabaseReader" in str(fields["db_reader"].type)
     assert "WorkspaceManager" in str(fields["workspace_mgr"].type)
+    assert "GitHubFetcher" in str(fields["github_client"].type)
     # Verify concrete class names are NOT used for service fields
     assert "DefaultAuditLog" not in str(fields["audit"].type)
     assert "DefaultGateState" not in str(fields["gate"].type)
@@ -128,3 +134,36 @@ def test_recipe_repository_protocol_has_rich_methods() -> None:
 
     for method in ("load_and_validate", "validate_from_path", "list_all"):
         assert hasattr(RecipeRepository, method), f"RecipeRepository missing {method}"
+
+
+def _make_ctx(tmp_path=None):
+    """Helper: minimal ToolContext with no optional fields."""
+    import tempfile
+
+    plugin_dir = str(tmp_path) if tmp_path else tempfile.mkdtemp()
+    return ToolContext(
+        config=AutomationConfig(),
+        audit=DefaultAuditLog(),
+        token_log=DefaultTokenLog(),
+        gate=DefaultGateState(enabled=True),
+        plugin_dir=plugin_dir,
+        runner=None,
+    )
+
+
+def test_toolcontext_github_client_defaults_to_none():
+    """github_client must default to None like the other optional service fields."""
+    ctx = _make_ctx()
+    assert ctx.github_client is None
+
+
+def test_toolcontext_clone_mgr_defaults_to_none():
+    """clone_mgr must default to None — same gap as github_client."""
+    ctx = _make_ctx()
+    assert ctx.clone_mgr is None
+
+
+def test_toolcontext_github_client_annotated_with_protocol():
+    """github_client annotation must reference GitHubFetcher protocol."""
+    hints = get_type_hints(ToolContext)
+    assert GitHubFetcher in get_args(hints["github_client"])

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from pathlib import Path
 
 import structlog
@@ -48,8 +47,9 @@ async def kitchen_status() -> str:
         )
     status["token_usage_verbosity"] = _get_config().token_usage.verbosity
     status["quota_guard_enabled"] = _get_config().quota_guard.enabled
-    status["github_token_configured"] = _get_config().github.token is not None or bool(
-        os.environ.get("GITHUB_TOKEN")
+    github_client = _get_ctx().github_client
+    status["github_token_configured"] = (
+        github_client.has_token if github_client is not None else False
     )
     status["github_default_repo"] = _get_config().github.default_repo
     return json.dumps(status)
@@ -239,7 +239,7 @@ async def read_db(
 
 
 @mcp.tool(tags={"automation"})
-async def check_quota(ctx: Context = CurrentContext()) -> str:
+async def check_quota() -> str:
     """Check 5-hour quota utilization and return whether a sleep is needed.
 
     When quota_guard.enabled=True (on by default) and utilization
@@ -270,17 +270,5 @@ async def check_quota(ctx: Context = CurrentContext()) -> str:
     from autoskillit.server.helpers import check_and_sleep_if_needed
 
     quota_result = await check_and_sleep_if_needed(config.quota_guard)
-
-    if quota_result.get("should_sleep"):
-        await _notify(
-            ctx,
-            "info",
-            "quota above threshold — caller should sleep",
-            "autoskillit.check_quota",
-            extra={
-                "sleep_seconds": quota_result["sleep_seconds"],
-                "utilization": quota_result["utilization"],
-            },
-        )
 
     return json.dumps({"success": True, **quota_result})

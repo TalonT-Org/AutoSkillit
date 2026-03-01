@@ -1851,7 +1851,6 @@ class TestProcessRunnerResult:
         assert "5" in stderr
 
 
-
 def test_server_init_has_no_shim_reexports():
     """server/__init__.py must not re-export tool symbols (shim removed)."""
     import autoskillit.server as srv
@@ -7028,16 +7027,8 @@ class TestCheckQuota:
 
     @pytest.mark.asyncio
     async def test_no_notification_when_quota_below_threshold(self, tool_ctx, monkeypatch):
-        """_notify must NOT be called when should_sleep is False."""
-        import autoskillit.server.tools_status as ts
+        """check_quota is ungated and emits no MCP notifications (no ctx parameter)."""
         from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
-
-        notify_calls = []
-
-        async def fake_notify(ctx, level, message, logger_name, extra=None):
-            notify_calls.append((level, message))
-
-        monkeypatch.setattr(ts, "_notify", fake_notify)
 
         tool_ctx.config = AutomationConfig(
             quota_guard=QuotaGuardConfig(enabled=True, threshold=80.0)
@@ -7053,24 +7044,14 @@ class TestCheckQuota:
 
         monkeypatch.setattr("autoskillit.server.helpers.check_and_sleep_if_needed", mock_check)
 
-        await check_quota()
-
-        assert notify_calls == [], (
-            f"Expected no notifications when should_sleep=False, got {notify_calls}"
-        )
+        result = json.loads(await check_quota())
+        assert result["success"] is True
+        assert result["should_sleep"] is False
 
     @pytest.mark.asyncio
-    async def test_notification_emitted_when_quota_above_threshold(self, tool_ctx, monkeypatch):
-        """_notify must be called exactly once when should_sleep is True."""
-        import autoskillit.server.tools_status as ts
+    async def test_above_threshold_returns_should_sleep_in_result(self, tool_ctx, monkeypatch):
+        """check_quota returns should_sleep=True in JSON when quota is above threshold."""
         from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
-
-        notify_calls = []
-
-        async def fake_notify(ctx, level, message, logger_name, extra=None):
-            notify_calls.append((level, message))
-
-        monkeypatch.setattr(ts, "_notify", fake_notify)
 
         tool_ctx.config = AutomationConfig(
             quota_guard=QuotaGuardConfig(enabled=True, threshold=80.0)
@@ -7086,13 +7067,10 @@ class TestCheckQuota:
 
         monkeypatch.setattr("autoskillit.server.helpers.check_and_sleep_if_needed", mock_check)
 
-        await check_quota()
-
-        assert len(notify_calls) == 1, (
-            f"Expected exactly 1 notification when should_sleep=True, got {notify_calls}"
-        )
-        assert notify_calls[0][0] == "info"
-        assert "threshold" in notify_calls[0][1] or "sleep" in notify_calls[0][1]
+        result = json.loads(await check_quota())
+        assert result["success"] is True
+        assert result["should_sleep"] is True
+        assert result["sleep_seconds"] == 3600
 
 
 class TestCloneRepoTool:

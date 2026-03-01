@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import importlib.resources as ir
 import json
 from pathlib import Path
 
@@ -15,10 +16,10 @@ def version_info(plugin_dir: Path | str | None = None) -> dict:
 
     Args:
         plugin_dir: Root of the plugin directory (must contain .claude-plugin/).
-            When None, defaults to Path(__file__).parent (the autoskillit package dir).
+            When None, defaults to the autoskillit package directory.
     """
     if plugin_dir is None:
-        plugin_dir = Path(__file__).parent
+        plugin_dir = Path(str(ir.files("autoskillit")))
     plugin_json_path = Path(plugin_dir) / ".claude-plugin" / "plugin.json"
     plugin_version = None
     if plugin_json_path.is_file():

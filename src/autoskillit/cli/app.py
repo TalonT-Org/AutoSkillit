@@ -14,6 +14,8 @@ from typing import Annotated
 
 from cyclopts import App, Parameter
 
+from autoskillit.core import is_git_worktree, pkg_root
+
 app = App(
     name="autoskillit",
     help="MCP server for executing recipes with Claude Code.",
@@ -45,8 +47,6 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         stream=sys.stderr,
     )
 
-    import autoskillit.server as _server
-
     project_dir = Path.cwd()
     cfg = load_config(project_dir)
     project_path = project_dir / ".autoskillit" / "config.yaml"
@@ -64,9 +64,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         test_check_command=cfg.test_check.command,
     )
 
-    # server/__init__.py is the package __init__; its parent is server/, so
-    # parent.parent is the autoskillit package root where .claude-plugin/ lives.
-    plugin_dir = str(Path(_server.__file__).parent.parent)
+    plugin_dir = str(pkg_root())
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)
     mcp.run()
@@ -238,8 +236,22 @@ def _ensure_marketplace() -> Path:
     """Create or update the local marketplace directory."""
     from autoskillit import __version__
 
-    # cli/app.py is in cli/ subdirectory; package root is one level up
-    pkg_dir = Path(__file__).parent.parent
+    pkg_dir = pkg_root()
+
+    # Guard: refuse to create the symlink when the package is installed
+    # from a git worktree. The symlink target must outlive the Python
+    # process that creates it — transient worktree paths will break it.
+    if is_git_worktree(pkg_dir):
+        raise SystemExit(
+            "ERROR: 'autoskillit install' cannot be run when the package\n"
+            "is installed from a git worktree.\n\n"
+            f"  Detected worktree path: {pkg_dir}\n\n"
+            "The marketplace symlink would point to this transient path and\n"
+            "break when the worktree is deleted.\n\n"
+            "Fix: run 'autoskillit install' from the main project checkout:\n"
+            "  cd /path/to/main/repo && autoskillit install"
+        )
+
     marketplace_dir = Path.home() / ".autoskillit" / "marketplace"
     plugin_dir = marketplace_dir / ".claude-plugin"
     plugin_dir.mkdir(parents=True, exist_ok=True)
@@ -689,8 +701,7 @@ def cook(recipe: str):
         print("Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code")
         sys.exit(1)
 
-    # cli/app.py is in cli/ subdirectory; package root is one level up
-    plugin_dir = Path(__file__).parent.parent
+    plugin_dir = pkg_root()
     system_prompt = _build_orchestrator_prompt(recipe_yaml)
 
     cmd = [

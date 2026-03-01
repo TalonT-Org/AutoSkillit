@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from autoskillit.core import Severity
+from autoskillit.core import Severity, is_git_worktree, pkg_root
 
 
 @dataclass
@@ -94,8 +94,7 @@ def run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> N
         )
 
     # Check 2: Plugin metadata exists in package
-    # cli/doctor.py is in cli/ subdirectory; package root is one level up
-    pkg_dir = Path(__file__).parent.parent
+    pkg_dir = pkg_root()
     if not (pkg_dir / ".claude-plugin" / "plugin.json").is_file():
         results.append(
             DoctorResult(
@@ -177,6 +176,16 @@ def run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> N
                     "marketplace_freshness",
                     f"Marketplace symlink points to missing directory: {target}. "
                     f"Re-run: autoskillit install",
+                )
+            )
+        elif is_git_worktree(target):
+            results.append(
+                DoctorResult(
+                    Severity.ERROR,
+                    "marketplace_freshness",
+                    f"Marketplace symlink target is inside a git worktree: {target}\n"
+                    "The symlink will break when the worktree is deleted.\n"
+                    "Run 'autoskillit install' from the main project checkout to fix.",
                 )
             )
         else:

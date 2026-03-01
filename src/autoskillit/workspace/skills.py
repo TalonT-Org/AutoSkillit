@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from autoskillit.core import SkillSource
+from autoskillit.core import SkillSource, pkg_root
 
 
 @dataclass
@@ -34,11 +34,8 @@ class SkillResolver:
 
 
 def bundled_skills_dir() -> Path:
-    """Return the path to the bundled skills directory.
-
-    skills/ is at the autoskillit package root, one level above workspace/.
-    """
-    return Path(__file__).parent.parent / "skills"
+    """Return the path to the bundled skills directory."""
+    return pkg_root() / "skills"
 
 
 def _scan_directory(source: SkillSource, directory: Path) -> list[SkillInfo]:

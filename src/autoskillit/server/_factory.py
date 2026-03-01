@@ -10,11 +10,10 @@ construction scattered across callers.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import SubprocessRunner
+from autoskillit.core import SubprocessRunner, pkg_root
 from autoskillit.execution import (
     DefaultDatabaseReader,
     DefaultGitHubFetcher,
@@ -31,8 +30,8 @@ _UNSET: Any = object()
 
 
 def _default_plugin_dir() -> str:
-    """Resolve the autoskillit package root (parent of server/)."""
-    return str(Path(__file__).parent.parent)
+    """Resolve the autoskillit package root."""
+    return str(pkg_root())
 
 
 def make_context(

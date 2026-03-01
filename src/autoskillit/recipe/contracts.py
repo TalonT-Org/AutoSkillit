@@ -16,6 +16,7 @@ from autoskillit.core import (
     dump_yaml_str,
     get_logger,
     load_yaml,
+    pkg_root,
 )
 from autoskillit.workspace import bundled_skills_dir
 
@@ -90,7 +91,7 @@ _RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
 @lru_cache(maxsize=1)
 def load_bundled_manifest() -> dict[str, Any]:
     """Load the bundled skill_contracts.yaml from the package directory."""
-    manifest_path = Path(__file__).parent / "skill_contracts.yaml"
+    manifest_path = pkg_root() / "recipe" / "skill_contracts.yaml"
     return load_yaml(manifest_path)
 
 

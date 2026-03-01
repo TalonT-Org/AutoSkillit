@@ -53,7 +53,12 @@ class TestVersionConsistency:
         version_info.cache_clear()
 
     def test_marketplace_json_version_field(self, tmp_path, monkeypatch):
+        import importlib as _importlib
+
+        _app_mod = _importlib.import_module("autoskillit.cli.app")
+
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         from autoskillit.cli import _ensure_marketplace
 
         _ensure_marketplace()

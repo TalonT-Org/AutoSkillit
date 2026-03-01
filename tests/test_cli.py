@@ -418,7 +418,10 @@ class TestCLI:
         link_dir = mkt_dir / "plugins"
         link_dir.mkdir(parents=True)
         link = link_dir / "autoskillit"
-        link.symlink_to(Path(cli.__file__).parent)
+        # Use tmp_path subdirectory as target — no .git ancestor, so not a worktree.
+        fake_pkg = tmp_path / "fake_pkg"
+        fake_pkg.mkdir()
+        link.symlink_to(fake_pkg)
 
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
@@ -426,6 +429,44 @@ class TestCLI:
         mkt_checks = [r for r in data["results"] if r["check"] == "marketplace_freshness"]
         assert len(mkt_checks) == 1
         assert mkt_checks[0]["severity"] == "warning"
+
+    def test_doctor_marketplace_freshness_fails_for_worktree_target(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """marketplace_freshness check detects and reports a worktree symlink target."""
+        from autoskillit import __version__
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        marketplace_dir = tmp_path / ".autoskillit" / "marketplace"
+        link = marketplace_dir / "plugins" / "autoskillit"
+        link.parent.mkdir(parents=True)
+
+        # Create a fake worktree target: a package dir with a .git FILE ancestor.
+        fake_worktree_pkg = tmp_path / "worktrees" / "some-wt" / "src" / "autoskillit"
+        fake_worktree_pkg.mkdir(parents=True)
+        (fake_worktree_pkg.parent.parent.parent / ".git").write_text(
+            "gitdir: /main/.git/worktrees/some-wt\n"
+        )
+        link.symlink_to(fake_worktree_pkg)
+
+        # Write a valid marketplace.json with the current version so version check passes
+        plugin_dir = marketplace_dir / ".claude-plugin"
+        plugin_dir.mkdir(parents=True)
+        (plugin_dir / "marketplace.json").write_text(
+            json.dumps(
+                {"plugins": [{"name": "autoskillit", "version": __version__, "source": "."}]}
+            )
+        )
+
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        mkt_checks = [r for r in data["results"] if r["check"] == "marketplace_freshness"]
+        assert len(mkt_checks) == 1
+        assert mkt_checks[0]["severity"] == "error"
+        assert "worktree" in mkt_checks[0]["message"].lower()
 
     def test_doctor_json_output_includes_all_checks(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -531,6 +572,10 @@ class TestCLI:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
+        import importlib as _importlib
+
+        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         with pytest.raises(SystemExit) as exc_info:
             cli.install()
         assert exc_info.value.code == 1
@@ -542,25 +587,39 @@ class TestCLI:
     ) -> None:
         """install creates the marketplace directory structure."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        import importlib as _importlib
+
+        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         marketplace_dir = cli._ensure_marketplace()
         assert (marketplace_dir / ".claude-plugin" / "marketplace.json").is_file()
         assert (marketplace_dir / "plugins" / "autoskillit").is_symlink()
 
-    def test_install_symlink_points_to_package(
+    def test_install_symlink_target_is_independent_of_test_file_location(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Marketplace symlink resolves to the autoskillit package directory."""
+        """Symlink target verified using importlib.resources, not __file__ depth-counting."""
+        import importlib.resources as ir
+
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        import importlib as _importlib
+
+        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         marketplace_dir = cli._ensure_marketplace()
         link = marketplace_dir / "plugins" / "autoskillit"
-        # cli.__file__ is now cli/__init__.py; .parent = cli/, .parent.parent = autoskillit/
-        assert link.resolve() == Path(cli.__file__).parent.parent.resolve()
+        expected = Path(ir.files("autoskillit"))
+        assert link.resolve() == expected.resolve()
 
     def test_install_marketplace_json_content(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Marketplace manifest has correct structure and plugin name."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        import importlib as _importlib
+
+        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         marketplace_dir = cli._ensure_marketplace()
         data = json.loads((marketplace_dir / ".claude-plugin" / "marketplace.json").read_text())
         assert data["name"] == "autoskillit-local"
@@ -576,6 +635,10 @@ class TestCLI:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
+        import importlib as _importlib
+
+        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
@@ -597,9 +660,14 @@ class TestCLI:
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """install forwards the scope argument to claude plugin install."""
+        import importlib as _importlib
+
+        _app_mod = _importlib.import_module("autoskillit.cli.app")
+
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
@@ -615,9 +683,14 @@ class TestCLI:
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Running install twice recreates the symlink without error."""
+        import importlib as _importlib
+
+        _app_mod = _importlib.import_module("autoskillit.cli.app")
+
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
@@ -1434,6 +1507,11 @@ class TestGroupFRefactoring:
         monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
         # Clear CLAUDECODE env var so install doesn't short-circuit with the early-return path
         monkeypatch.delenv("CLAUDECODE", raising=False)
+        import importlib as _importlib
+
+        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         cli.install(scope="local")
 
@@ -1443,4 +1521,110 @@ class TestGroupFRefactoring:
         matchers = [h.get("matcher", "") for h in pretooluse]
         assert any("run_skill" in m for m in matchers), (
             "PreToolUse hook for run_skill not found in settings.json"
+        )
+
+
+class TestWorktreeDetection:
+    def test_detects_main_checkout_as_not_worktree(self, tmp_path: Path) -> None:
+        """A directory with a .git DIRECTORY is the main checkout, not a worktree."""
+        from autoskillit.core.paths import is_git_worktree
+
+        (tmp_path / ".git").mkdir()
+        assert is_git_worktree(tmp_path) is False
+
+    def test_detects_linked_worktree_via_git_file(self, tmp_path: Path) -> None:
+        """A directory with a .git FILE is a linked worktree."""
+        from autoskillit.core.paths import is_git_worktree
+
+        (tmp_path / ".git").write_text("gitdir: /path/to/main/.git/worktrees/foo\n")
+        assert is_git_worktree(tmp_path) is True
+
+    def test_detects_worktree_from_subdirectory(self, tmp_path: Path) -> None:
+        """Detection works when called from a subdirectory of the worktree root."""
+        from autoskillit.core.paths import is_git_worktree
+
+        (tmp_path / ".git").write_text("gitdir: /path/to/main/.git/worktrees/foo\n")
+        subdir = tmp_path / "src" / "autoskillit"
+        subdir.mkdir(parents=True)
+        assert is_git_worktree(subdir) is True
+
+    def test_not_in_git_repo_returns_false(self, tmp_path: Path) -> None:
+        """Directories with no .git ancestor return False (not a worktree)."""
+        from autoskillit.core.paths import is_git_worktree
+
+        assert is_git_worktree(tmp_path) is False
+
+
+class TestPkgRoot:
+    def test_pkg_root_matches_importlib_resources(self) -> None:
+        """pkg_root() must return the same path as importlib.resources.files('autoskillit')."""
+        import importlib.resources as ir
+
+        from autoskillit.core.paths import pkg_root
+
+        assert pkg_root() == Path(ir.files("autoskillit"))
+
+    def test_pkg_root_is_package_directory(self) -> None:
+        """pkg_root() must return the autoskillit package root directory."""
+        from autoskillit.core.paths import pkg_root
+
+        result = pkg_root()
+        assert (result / "__init__.py").is_file(), (
+            "pkg_root() must return the autoskillit package root"
+        )
+        assert result.name == "autoskillit", (
+            "pkg_root() must return the autoskillit package directory"
+        )
+
+
+class TestInstallCommand:
+    def test_ensure_marketplace_raises_in_worktree(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_ensure_marketplace() raises SystemExit when is_git_worktree() returns True."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        import importlib as _importlib
+
+        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: True)
+
+        with pytest.raises(SystemExit, match="worktree"):
+            cli._ensure_marketplace()
+
+    def test_ensure_marketplace_succeeds_in_main_checkout(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_ensure_marketplace() succeeds when is_git_worktree() returns False."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        import importlib as _importlib
+
+        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+
+        result = cli._ensure_marketplace()
+        assert result == tmp_path / ".autoskillit" / "marketplace"
+
+    def test_install_symlink_target_is_not_inside_git_worktree(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """After install, the symlink target must not be inside a git worktree.
+
+        This is the regression test for the broken-symlink-after-cleanup bug.
+        Skipped when running from a worktree install (which is the expected
+        dev environment during worktree-based implementation).
+        """
+        from autoskillit.core.paths import is_git_worktree, pkg_root
+
+        if is_git_worktree(pkg_root()):
+            pytest.skip("Cannot verify non-worktree install from a worktree environment")
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        marketplace_dir = cli._ensure_marketplace()
+        link = marketplace_dir / "plugins" / "autoskillit"
+
+        target = link.resolve()
+        assert target.is_dir(), "Symlink target must exist and be a directory"
+        assert not is_git_worktree(target), (
+            f"Symlink target {target} is inside a git worktree — "
+            "it will break when the worktree is deleted."
         )

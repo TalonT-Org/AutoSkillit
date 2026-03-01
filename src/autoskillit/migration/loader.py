@@ -11,7 +11,7 @@ from pathlib import Path
 
 from packaging.version import Version
 
-from autoskillit.core import load_yaml
+from autoskillit.core import load_yaml, pkg_root
 
 
 @dataclass
@@ -39,7 +39,7 @@ class MigrationNote:
 
 def _migrations_dir() -> Path:
     """Return path to bundled migrations directory."""
-    return Path(__file__).parent.parent / "migrations"
+    return pkg_root() / "migrations"
 
 
 def list_migrations() -> list[MigrationNote]:

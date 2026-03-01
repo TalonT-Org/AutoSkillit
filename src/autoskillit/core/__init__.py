@@ -16,6 +16,10 @@ from .logging import (
     configure_logging,
     get_logger,
 )
+from .paths import (
+    is_git_worktree,
+    pkg_root,
+)
 from .types import (
     AUTOSKILLIT_INSTALLED_VERSION,
     CONTEXT_EXHAUSTION_MARKER,
@@ -62,6 +66,9 @@ __all__ = [
     # logging
     "configure_logging",
     "get_logger",
+    # paths
+    "is_git_worktree",
+    "pkg_root",
     # types
     "AUTOSKILLIT_INSTALLED_VERSION",
     "CONTEXT_EXHAUSTION_MARKER",

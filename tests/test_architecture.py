@@ -2097,6 +2097,47 @@ def test_migration_engine_no_module_level_recipe_imports() -> None:
     assert not recipe_violations, f"module-level recipe imports remain: {recipe_violations}"
 
 
+def test_no_file_based_path_resolution_outside_paths_module() -> None:
+    """All __file__-based path construction must go through core/paths.py.
+
+    No module other than core/paths.py may use Path(__file__).parent for
+    resource or directory resolution. This rule is automatically enforced
+    so future developers receive an immediate CI failure with a clear message.
+    """
+    import ast
+
+    violations = []
+    src_root = Path(__file__).parent.parent / "src" / "autoskillit"
+    allowed_file = src_root / "core" / "paths.py"
+
+    for py_file in src_root.rglob("*.py"):
+        if py_file == allowed_file:
+            continue
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            # Detect: Path(__file__).parent or Path(__file__).parent.parent
+            if (
+                isinstance(node, ast.Attribute)
+                and node.attr == "parent"
+                and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id == "Path"
+                and len(node.value.args) == 1
+                and isinstance(node.value.args[0], ast.Name)
+                and node.value.args[0].id == "__file__"
+            ):
+                violations.append(
+                    f"{py_file.relative_to(src_root)}:{node.lineno} — "
+                    "Path(__file__).parent used for path resolution. "
+                    "Use core.paths.pkg_root() instead."
+                )
+
+    assert not violations, (
+        "Forbidden __file__-based path resolution found outside core/paths.py:\n"
+        + "\n".join(violations)
+    )
+
+
 def test_make_context_no_isinstance_against_concrete_migration() -> None:
     """REQ-P12-001: _factory.py must not isinstance-check DefaultMigrationService."""
     import ast

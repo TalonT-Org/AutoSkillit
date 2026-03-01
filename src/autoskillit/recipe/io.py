@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import LoadReport, LoadResult, RecipeSource, get_logger, load_yaml
+from autoskillit.core import LoadReport, LoadResult, RecipeSource, get_logger, load_yaml, pkg_root
 from autoskillit.recipe.schema import (
     AUTOSKILLIT_VERSION_KEY,
     Recipe,
@@ -37,7 +37,7 @@ def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
     project_recipe_dir = project_dir / ".autoskillit" / "recipes"
     _collect_recipes(RecipeSource.PROJECT, project_recipe_dir, seen, items, errors)
 
-    builtin_dir = Path(__file__).parent.parent / "recipes"
+    builtin_dir = pkg_root() / "recipes"
     _collect_recipes(RecipeSource.BUILTIN, builtin_dir, seen, items, errors)
 
     return LoadResult(items=sorted(items, key=lambda r: r.name), errors=errors)
@@ -45,7 +45,7 @@ def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
 
 def builtin_recipes_dir() -> Path:
     """Return the path to the built-in recipes directory."""
-    return Path(__file__).parent.parent / "recipes"
+    return pkg_root() / "recipes"
 
 
 def iter_steps_with_context(

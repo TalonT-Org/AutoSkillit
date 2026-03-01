@@ -1,5 +1,6 @@
 """Shared test fixtures for autoskillit."""
 
+import sys
 from pathlib import Path as _Path
 
 import pytest
@@ -47,6 +48,30 @@ class MockSubprocessRunner(SubprocessRunner):
         return self._default
 
 
+def _flush_structlog_proxy_caches() -> None:
+    """Repair any autoskillit loggers cached before this fixture ran.
+
+    Secondary defense only — the primary mechanism is cache_logger_on_first_use=False
+    set at fixture entry, which prevents new caching during the test. This flush
+    handles the edge case of module-level loggers cached at import time.
+    """
+    import structlog
+    import structlog._config as _sc
+
+    current_procs = structlog.get_config()["processors"]
+    for mod_name, mod in list(sys.modules.items()):
+        if not mod_name.startswith("autoskillit"):
+            continue
+        for attr_name in ("logger", "_logger"):
+            lg = getattr(mod, attr_name, None)
+            if lg is None:
+                continue
+            if isinstance(lg, _sc.BoundLoggerLazyProxy):
+                lg.__dict__.pop("bind", None)
+            elif hasattr(lg, "_processors"):
+                lg._processors = current_procs
+
+
 @pytest.fixture(autouse=True)
 def _structlog_to_null():
     """Prevent structlog from writing to stdout in any test.
@@ -56,25 +81,32 @@ def _structlog_to_null():
     capsys to inspect stdout are silently corrupted when a mock bypass causes
     a real production function to log.
 
-    This autouse fixture wraps every test in structlog.testing.capture_logs(),
-    which prepends a CapturingProcessor to the current processor chain. Log
-    events are captured as dicts and a DropEvent is raised before the message
-    reaches the underlying PrintLogger. No log call can reach stdout.
+    Two-layer isolation strategy:
 
-    Works in the default state because module-level loggers share the same
-    processor list reference as structlog.get_config()["processors"] until
-    configure_logging() is called.
+    1. Primary: ``structlog.configure(cache_logger_on_first_use=False)`` — the
+       official structlog recommendation for test environments. Prevents proxy
+       caches from being populated during tests, so ``reset_defaults()`` is
+       sufficient after each test without manual cache surgery.
+
+    2. Secondary: ``_flush_structlog_proxy_caches()`` — repairs loggers that
+       were cached before this fixture ran (e.g., module-level loggers cached
+       at import time before the fixture had a chance to set
+       cache_logger_on_first_use=False).
+
+    Then wraps the test in ``capture_logs()`` to drop all log output.
 
     Note: TestConfigureLogging in test_logging.py has its own class-scoped
-    _reset_structlog autouse fixture that calls structlog.reset_defaults().
-    This resets the processor list, which would break the capture_logs()
-    context still active from this fixture. A class-level no-op override
-    is added to TestConfigureLogging to prevent this conflict.
+    ``_structlog_to_null`` no-op override and ``_reset_structlog`` fixture that
+    owns structlog state management for those tests.
     """
+    import structlog
     import structlog.testing
 
+    structlog.configure(cache_logger_on_first_use=False)
+    _flush_structlog_proxy_caches()
     with structlog.testing.capture_logs():
         yield
+    structlog.reset_defaults()
 
 
 @pytest.fixture

@@ -123,3 +123,12 @@ def test_structlog_does_not_write_to_stdout_in_tests(capsys):
 def test_parse_stdout_json_fixture_is_available(parse_stdout_json):
     """The parse_stdout_json fixture must exist and be importable from conftest."""
     assert callable(parse_stdout_json)
+
+
+def test_pytest_timeout_is_configured(pytestconfig):
+    """pytest-timeout must be installed with a finite timeout ceiling."""
+    timeout = pytestconfig.getini("timeout")
+    assert timeout is not None and int(timeout) > 0, (
+        "pytest-timeout is not configured. "
+        "Install pytest-timeout and add timeout = 60 to [tool.pytest.ini_options]."
+    )

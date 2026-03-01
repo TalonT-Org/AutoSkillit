@@ -85,6 +85,7 @@ def _make_result(
     stdout: str = "",
     stderr: str = "",
     termination_reason: TerminationReason = TerminationReason.NATURAL_EXIT,
+    data_confirmed: bool = True,
 ):
     """Create a SubprocessResult for mocking run_managed_async."""
     return SubprocessResult(
@@ -93,6 +94,7 @@ def _make_result(
         stderr=stderr,
         termination=termination_reason,
         pid=12345,
+        data_confirmed=data_confirmed,
     )
 
 
@@ -6650,6 +6652,91 @@ class TestStalePathStdoutCheck:
         parsed = json.loads(_build_skill_result(result_obj).to_json())
         assert parsed["success"] is False
         assert parsed["subtype"] == "stale"
+
+
+class TestBuildSkillResultDataConfirmedPropagation:
+    """_build_skill_result propagates data_confirmed for provenance bypass."""
+
+    def test_stale_recovery_propagates_data_confirmed(self):
+        """STALE recovery with data_confirmed=False engages provenance bypass.
+
+        When STALE recovery re-routes through _compute_success with COMPLETED,
+        data_confirmed=False from the SubprocessResult must be propagated so
+        the provenance bypass can engage if stdout is empty.
+        """
+        result = _make_result(
+            stdout="",
+            termination_reason=TerminationReason.STALE,
+            data_confirmed=False,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="cmd",
+            audit=None,
+        )
+        # Provenance bypass should fire in STALE recovery; success=True
+        assert skill_result.success is True  # FAILS before fix: False
+
+    def test_stale_recovery_data_confirmed_true_preserves_existing_behavior(self):
+        """STALE with empty stdout and data_confirmed=True (default) stays False."""
+        result = _make_result(
+            stdout="",
+            termination_reason=TerminationReason.STALE,
+            data_confirmed=True,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="cmd",
+            audit=None,
+        )
+        assert skill_result.success is False
+        assert skill_result.subtype == "stale"
+
+    def test_completed_empty_result_data_confirmed_false_produces_success(self):
+        """COMPLETED with empty stdout and data_confirmed=False uses provenance bypass.
+
+        This is the core drain-race fix: when Channel B confirmed but Channel A
+        did not (data_confirmed=False), adjudication must succeed without stdout content.
+        """
+        result = _make_result(
+            stdout='{"type":"result","subtype":"success","result":"","is_error":false,'
+            '"session_id":"s1"}',
+            returncode=-15,
+            termination_reason=TerminationReason.COMPLETED,
+            data_confirmed=False,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="cmd",
+            audit=None,
+        )
+        assert skill_result.success is True  # FAILS before fix: False
+        assert skill_result.needs_retry is False  # FAILS before fix: True
+
+    def test_completed_empty_result_data_confirmed_true_is_still_retriable(self):
+        """COMPLETED with empty result and data_confirmed=True remains a retriable anomaly.
+
+        When Channel A confirmed (data_confirmed=True) but result is empty, the
+        kill-anomaly path still applies (process was killed mid-flush). Existing behavior.
+        """
+        result = _make_result(
+            stdout='{"type":"result","subtype":"success","result":"","is_error":false,'
+            '"session_id":"s1"}',
+            returncode=-15,
+            termination_reason=TerminationReason.COMPLETED,
+            data_confirmed=True,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="cmd",
+            audit=None,
+        )
+        assert skill_result.success is False
+        assert skill_result.needs_retry is True
 
 
 class TestServerLazyInit:

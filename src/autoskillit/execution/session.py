@@ -308,12 +308,22 @@ def _compute_success(
     returncode: int,
     termination: TerminationReason,
     completion_marker: str = "",
+    data_confirmed: bool = True,
 ) -> bool:
     """Cross-validate all signals to determine unambiguous success/failure.
 
     Exhaustive match dispatch over TerminationReason ensures mypy flags any
     unhandled value when the enum is extended (ARCH-007).
+
+    Gate 0.5 (provenance bypass): when ``data_confirmed=False`` and the process
+    was killed by our infrastructure (``COMPLETED``), Channel B's session-JSONL
+    marker is the authoritative signal that the session completed successfully.
+    Stdout content is not required — the marker is sufficient proof.
     """
+    # Gate 0.5: provenance bypass — Channel B confirmed; stdout content not required.
+    if not data_confirmed and termination == TerminationReason.COMPLETED:
+        return True
+
     match termination:
         case TerminationReason.TIMED_OUT:
             return False
@@ -375,12 +385,18 @@ def _compute_retry(
     session: ClaudeSessionResult,
     returncode: int,
     termination: TerminationReason,
+    data_confirmed: bool = True,
 ) -> tuple[bool, RetryReason]:
     """Compute whether the session result warrants a retry.
 
     Phase 1: API-level signals are termination-agnostic.
     Phase 2: Exhaustive match dispatch over TerminationReason ensures mypy
              flags any unhandled value when the enum is extended.
+
+    When ``data_confirmed=False`` and ``termination=COMPLETED``, the provenance
+    bypass applies: Channel B's session-JSONL signal is authoritative, so what
+    appears to be a kill anomaly (empty stdout) is actually correct completion.
+    No retry is needed.
     """
     # Phase 1: API-level retry signals (context exhaustion, max_turns)
     if session.needs_retry:
@@ -400,6 +416,10 @@ def _compute_retry(
         case TerminationReason.COMPLETED:
             # Infrastructure killed the process. SIGTERM/SIGKILL produce nonzero
             # returncode by design — do not gate on returncode here.
+            # Provenance bypass: if data_confirmed=False, Channel B is authoritative
+            # and kill-anomaly appearance is a drain-race artifact, not a real anomaly.
+            if not data_confirmed:
+                return False, RetryReason.NONE
             if _is_kill_anomaly(session):
                 return True, RetryReason.RESUME
             return False, RetryReason.NONE

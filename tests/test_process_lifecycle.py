@@ -25,6 +25,7 @@ from autoskillit.execution.process import (
     _has_active_api_connection,
     _heartbeat,
     _jsonl_contains_marker,
+    _jsonl_has_record_type,
     _marker_is_standalone,
     _session_log_monitor,
     async_kill_process_tree,
@@ -144,6 +145,33 @@ CHANNEL_B_NO_STDOUT_SCRIPT = textwrap.dedent("""\
                   "content": "%%ORDER_UP%%"}}
         f.write(json.dumps(record) + "\\n")
         f.flush()
+    time.sleep(3600)
+""")
+
+# Script that:
+#   (1) writes %%ORDER_UP%% to a JSONL session file (Channel B fires)
+#   (2) writes type=result with EMPTY result field to stdout (Channel A must NOT confirm this)
+#   (3) hangs until killed
+# This simulates the drain-race false negative: CLI flushes the result record envelope
+# before populating its content.
+# Pass session_dir as sys.argv[1].
+CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT = textwrap.dedent("""\
+    import sys, time, json, os
+    session_dir = sys.argv[1]
+    os.makedirs(session_dir, exist_ok=True)
+    # Small delay to ensure file ctime > spawn_time recorded in run_managed_async
+    time.sleep(0.1)
+    with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
+        record = {"type": "assistant", "message": {"role": "assistant",
+                  "content": "%%ORDER_UP%%"}}
+        f.write(json.dumps(record) + "\\n")
+        f.flush()
+    # Short delay then write an empty-result type=result record
+    time.sleep(0.15)
+    result = {"type": "result", "subtype": "success", "is_error": False,
+              "result": "", "session_id": "s1"}
+    sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\\n")
+    sys.stdout.flush()
     time.sleep(3600)
 """)
 
@@ -1574,6 +1602,107 @@ class TestChannelBDrainWait:
 
         assert result.termination == TerminationReason.COMPLETED
         assert result.data_confirmed is True
+
+    @pytest.mark.asyncio
+    async def test_channel_b_then_a_empty_result_data_confirmed_is_false(self, tmp_path):
+        """Channel B fires (%%ORDER_UP%% in JSONL).
+
+        Within the drain window, Claude CLI writes a type=result record with
+        result="". Channel A must NOT confirm on this — data_confirmed must
+        remain False so the provenance bypass can fire.
+        """
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        script = tmp_path / "channel_b_empty.py"
+        script.write_text(CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script), str(session_dir)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker='"type":"result"',
+            session_log_dir=session_dir,
+            completion_marker="%%ORDER_UP%%",
+            completion_drain_timeout=2.0,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
+            _heartbeat_poll=0.05,
+        )
+        assert result.termination == TerminationReason.COMPLETED
+        assert result.data_confirmed is False  # FAILS before fix: True
+
+
+class TestChannelBFullPipelineAdjudication:
+    """Full end-to-end adjudication for Channel B drain-race scenarios."""
+
+    @pytest.mark.asyncio
+    async def test_channel_b_then_a_empty_result_produces_success(self, tmp_path):
+        """Full end-to-end: Channel B fires, CLI writes type=result with result="".
+
+        With strengthened Channel A, data_confirmed=False, provenance bypass fires.
+        Result: success=True, needs_retry=False (no wasteful retry of completed session).
+        """
+        from autoskillit.execution.headless import _build_skill_result
+
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        script = tmp_path / "channel_b_empty.py"
+        script.write_text(CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script), str(session_dir)],
+            cwd=tmp_path,
+            timeout=30,
+            heartbeat_marker='"type":"result"',
+            session_log_dir=session_dir,
+            completion_marker="%%ORDER_UP%%",
+            completion_drain_timeout=2.0,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
+            _heartbeat_poll=0.05,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="test-command",
+            audit=None,
+        )
+        assert skill_result.success is True  # FAILS before fix: False
+        assert skill_result.needs_retry is False  # FAILS before fix: True
+
+
+class TestJsonlHasRecordTypeResultContent:
+    """_jsonl_has_record_type requires non-empty result field for type=result records."""
+
+    def test_rejects_empty_result_field(self):
+        """A type=result record with result="" must NOT satisfy _jsonl_has_record_type.
+
+        Confirming on empty content is the source of the drain-race false negative.
+        """
+        empty_result_line = '{"type":"result","subtype":"success","result":"","is_error":false}\n'
+        assert not _jsonl_has_record_type(empty_result_line, frozenset({"result"}))
+
+    def test_accepts_nonempty_result_field(self):
+        """Non-empty result still satisfies the predicate."""
+        nonempty_line = '{"type":"result","subtype":"success","result":"done","is_error":false}\n'
+        assert _jsonl_has_record_type(nonempty_line, frozenset({"result"}))
+
+    def test_non_result_types_unaffected(self):
+        """Non-result record types (e.g. assistant, system) are unaffected by the change."""
+        assistant_line = (
+            '{"type":"assistant","message":{"content":[{"type":"text","text":"hi"}]}}\n'
+        )
+        assert _jsonl_has_record_type(assistant_line, frozenset({"assistant"}))
+
+    def test_result_field_none_rejected(self):
+        """A type=result record with result=null must NOT satisfy the predicate."""
+        null_result_line = '{"type":"result","subtype":"success","result":null,"is_error":false}\n'
+        assert not _jsonl_has_record_type(null_result_line, frozenset({"result"}))
+
+    def test_result_field_whitespace_only_rejected(self):
+        """A type=result record with result='   ' (whitespace only) must NOT satisfy."""
+        whitespace_line = '{"type":"result","subtype":"success","result":"   ","is_error":false}\n'
+        assert not _jsonl_has_record_type(whitespace_line, frozenset({"result"}))
 
 
 class TestHeartbeatScanPosition:

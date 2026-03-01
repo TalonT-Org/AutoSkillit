@@ -161,8 +161,9 @@ def _jsonl_has_record_type(content: str, record_types: frozenset[str]) -> bool:
     """Check if any JSONL record of an allowed type exists in content.
 
     Used by the heartbeat to detect when Claude CLI emits a result record
-    to stdout. No content matching — presence of a record of the right type
-    is sufficient.
+    to stdout. For ``type=result`` records, additionally requires the ``result``
+    field to be a non-empty string — confirming on an empty-result envelope
+    is the source of the drain-race false negative.
     """
     import json as _json
 
@@ -174,8 +175,16 @@ def _jsonl_has_record_type(content: str, record_types: frozenset[str]) -> bool:
             obj = _json.loads(line)
         except (ValueError, _json.JSONDecodeError):
             continue
-        if isinstance(obj, dict) and obj.get("type") in record_types:
-            return True
+        if not isinstance(obj, dict):
+            continue
+        record_type = obj.get("type")
+        if record_type not in record_types:
+            continue
+        if record_type == "result":
+            result_field = obj.get("result", "")
+            if not (isinstance(result_field, str) and result_field.strip()):
+                continue  # result absent, null, or empty — do not confirm
+        return True
     return False
 
 
@@ -185,11 +194,13 @@ async def _heartbeat(
     record_types: frozenset[str] = frozenset({"result"}),
     _poll_interval: float = 0.5,
 ) -> str:
-    """Poll session NDJSON output for a result-type record.
+    """Poll session NDJSON output for a result-type record with non-empty content.
 
-    Fires when any JSONL record whose ``"type"`` field is in *record_types*
-    appears in stdout. The *marker* parameter is accepted for API compatibility
-    but is not used — the heartbeat detects record type presence, not content.
+    Fires when a JSONL record whose ``"type"`` field is in *record_types* appears
+    in stdout AND, for ``type=result`` records, the ``result`` field is non-empty.
+    This guards against confirming on empty-result envelopes flushed before content
+    is populated (drain-race false negative). The *marker* parameter is accepted
+    for API compatibility but is not used.
     """
     scan_pos = 0  # byte offset into the file
     os_error_count = 0

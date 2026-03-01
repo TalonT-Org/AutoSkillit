@@ -133,18 +133,23 @@ def _build_skill_result(
     """Route SubprocessResult fields into the standard run_skill response."""
     if result.termination == TerminationReason.STALE:
         # Attempt to recover from stdout before declaring stale failure.
+        # Also attempt provenance bypass when data_confirmed=False (Change 2b):
+        # Channel B confirmed the session completed via session JSONL, so even
+        # empty stdout is sufficient evidence of completion.
         stale_session = parse_session_result(result.stdout)
-        if (
+        stale_returncode = result.returncode if result.returncode is not None else -1
+        can_attempt_stale_recovery = (
             stale_session.subtype == "success"
             and stale_session.result.strip()
             and not stale_session.is_error
-        ):
-            stale_returncode = result.returncode if result.returncode is not None else -1
+        ) or not result.data_confirmed
+        if can_attempt_stale_recovery:
             success = _compute_success(
                 stale_session,
                 stale_returncode,
                 TerminationReason.COMPLETED,
                 completion_marker=completion_marker,
+                data_confirmed=result.data_confirmed,
             )
             if success:
                 logger.warning(
@@ -201,14 +206,29 @@ def _build_skill_result(
         returncode = result.returncode if result.returncode is not None else -1
         session = parse_session_result(result.stdout)
 
-    success = _compute_success(session, returncode, result.termination, completion_marker)
-    needs_retry, retry_reason = _compute_retry(session, returncode, result.termination)
+    success = _compute_success(
+        session,
+        returncode,
+        result.termination,
+        completion_marker,
+        data_confirmed=result.data_confirmed,
+    )
+    needs_retry, retry_reason = _compute_retry(
+        session,
+        returncode,
+        result.termination,
+        data_confirmed=result.data_confirmed,
+    )
 
     if not success and completion_marker:
         recovered = _recover_from_separate_marker(session, completion_marker)
         if recovered is not None:
             recovered_success = _compute_success(
-                recovered, returncode, result.termination, completion_marker
+                recovered,
+                returncode,
+                result.termination,
+                completion_marker,
+                data_confirmed=result.data_confirmed,
             )
             if recovered_success:
                 session = recovered

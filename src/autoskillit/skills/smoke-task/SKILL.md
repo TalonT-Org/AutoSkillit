@@ -1,3 +1,8 @@
+---
+name: smoke-task
+description: Execute an arbitrary prose task as a headless Claude session. For smoke-test pipeline use only.
+---
+
 # Smoke Task Skill
 
 Execute an arbitrary prose task as a headless Claude session. For smoke-test pipeline use only.
@@ -10,6 +15,16 @@ Execute an arbitrary prose task as a headless Claude session. For smoke-test pip
 
 Used exclusively by `recipes/smoke-test.yaml` to test that the headless runner can execute
 arbitrary tasks and produce capturable outputs. Not for production pipeline use.
+
+## Critical Constraints
+
+**NEVER:**
+- Use this skill outside of smoke-test pipeline execution
+- Ignore explicit output-line instructions (e.g. `key=value`) — they must be emitted exactly
+
+**ALWAYS:**
+- Execute the prose task exactly as specified in the argument
+- Output any requested key=value lines on their own lines for recipe capture
 
 ## Instructions
 

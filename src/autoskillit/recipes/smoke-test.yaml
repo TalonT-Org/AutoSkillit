@@ -1,7 +1,7 @@
 name: smoke-test
 autoskillit_version: "0.2.0"
 description: End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
-summary: setup > seed_task > set_feature_branch > create_branch? > investigate > rectify > implement > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
+summary: setup > seed_task > set_feature_branch > create_branch? > investigate > rectify > implement > set_worktree_path > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
 
 ingredients:
   workspace:
@@ -95,16 +95,24 @@ steps:
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:smoke-task In the git repo at ${{ inputs.workspace }}, run: git worktree add ${{ inputs.workspace }}/.claude/worktrees/smoke-impl -b smoke-impl. Then in that worktree directory, write ok.txt with content OK. Run git add ok.txt && git commit -m 'smoke: add ok.txt'. Then output exactly this line on its own: worktree_path=${{ inputs.workspace }}/.claude/worktrees/smoke-impl"
+      skill_command: "/autoskillit:smoke-task In the git repo at ${{ inputs.workspace }}, run: git worktree add ${{ inputs.workspace }}/.claude/worktrees/smoke-impl -b smoke-impl. Then in that worktree directory, write ok.txt with content OK. Run git add ok.txt && git commit -m 'smoke: add ok.txt'."
       cwd: "${{ inputs.workspace }}"
-    capture:
-      worktree_path: "${{ result.worktree_path }}"
-    on_success: test
+    on_success: set_worktree_path
     on_failure: escalate
     retry:
       max_attempts: 2
       on: needs_retry
       on_exhausted: escalate
+
+  set_worktree_path:
+    tool: run_cmd
+    with:
+      cmd: "printf '%s' '${{ inputs.workspace }}/.claude/worktrees/smoke-impl'"
+      cwd: "${{ inputs.workspace }}"
+    capture:
+      worktree_path: "${{ result.stdout }}"
+    on_success: test
+    on_failure: escalate
 
   test:
     tool: test_check

@@ -677,9 +677,7 @@ class TestMergeWorktree:
         assert "error" in result
 
     @pytest.mark.asyncio
-    async def test_merge_worktree_blocks_on_post_rebase_test_failure(
-        self, tool_ctx, tmp_path
-    ):
+    async def test_merge_worktree_blocks_on_post_rebase_test_failure(self, tool_ctx, tmp_path):
         """merge_worktree MCP tool returns error when post-rebase tests fail."""
         from tests.conftest import StatefulMockTester
 

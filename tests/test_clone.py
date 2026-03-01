@@ -52,7 +52,12 @@ def local_with_remote(tmp_path: Path, bare_remote: Path) -> Path:
         capture_output=True,
     )
     subprocess.run(
-        ["git", "-C", str(local), "push", "-u", "origin", "HEAD:main"],
+        ["git", "-C", str(local), "branch", "-M", "main"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(local), "push", "-u", "origin", "main"],
         check=True,
         capture_output=True,
     )
@@ -551,6 +556,11 @@ class TestPushToRemoteNonBare:
         )
         subprocess.run(
             ["git", "-C", str(source), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "branch", "-M", "main"],
             check=True,
             capture_output=True,
         )

@@ -182,7 +182,7 @@ steps:
   make_plan:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:make-plan ${{ context.remediation_path }}"
+      skill_command: "/autoskillit:make-plan the remediation plan ${{ context.remediation_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "make_plan"
     capture:

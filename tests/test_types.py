@@ -98,3 +98,17 @@ def test_retry_response_fields_derived_from_skillresult_fields():
         f"Missing: {dataclass_fields - RETRY_RESPONSE_FIELDS}\n"
         f"Extra: {RETRY_RESPONSE_FIELDS - dataclass_fields}"
     )
+
+
+def test_skill_command_prefix_constant_exists():
+    """SKILL_COMMAND_PREFIX is the canonical slash prefix for skill invocations."""
+    from autoskillit.core.types import SKILL_COMMAND_PREFIX
+
+    assert SKILL_COMMAND_PREFIX == "/"
+
+
+def test_autoskillit_skill_prefix_constant_exists():
+    """AUTOSKILLIT_SKILL_PREFIX is the canonical prefix for bundled autoskillit skills."""
+    from autoskillit.core.types import AUTOSKILLIT_SKILL_PREFIX
+
+    assert AUTOSKILLIT_SKILL_PREFIX == "/autoskillit:"

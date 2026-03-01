@@ -239,6 +239,12 @@ PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
 # recipe_validator.py.
 SKILL_TOOLS: frozenset[str] = frozenset({"run_skill", "run_skill_retry"})
 
+# Canonical prefix required for all skill_command values passed to run_skill / run_skill_retry.
+# Enforced at the Claude Code hook boundary by skill_command_guard.py.
+SKILL_COMMAND_PREFIX: str = "/"
+
+# Canonical prefix for bundled autoskillit slash commands.
+AUTOSKILLIT_SKILL_PREFIX: str = "/autoskillit:"
 
 @dataclass
 class FailureRecord:

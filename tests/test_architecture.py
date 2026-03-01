@@ -34,10 +34,14 @@ SRC_ROOT = Path(__file__).parent.parent / "src" / "autoskillit"
 
 _SENSITIVE_KEYWORDS = frozenset({"token", "secret", "password", "key", "api_key", "auth"})
 _LOGGER_METHODS = frozenset({"debug", "info", "warning", "error", "critical", "exception"})
-_PRINT_EXEMPT = frozenset({"app.py", "_doctor.py", "quota_check.py", "remove_clone_guard.py"})
+_PRINT_EXEMPT = frozenset(
+    {"app.py", "_doctor.py", "quota_check.py", "remove_clone_guard.py", "skill_command_guard.py"}
+)
 _BROAD_EXCEPTION_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"})
 # Standalone hook scripts: fail-open design requires silent broad excepts and print() for JSON
-_BROAD_EXCEPT_EXEMPT = frozenset({"quota_check.py", "remove_clone_guard.py"})
+_BROAD_EXCEPT_EXEMPT = frozenset(
+    {"quota_check.py", "remove_clone_guard.py", "skill_command_guard.py"}
+)
 
 # ARCH-007: Functions that check TerminationReason as sequential early-exit guards
 # (single-value checks), not as dispatch tables (≥2 values). Exempt from ARCH-007.

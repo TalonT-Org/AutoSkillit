@@ -42,7 +42,11 @@ logger = get_logger(__name__)
 
 
 def _ensure_skill_prefix(skill_command: str) -> str:
-    """Ensure skill commands start with 'Use' for headless session loading."""
+    """Prompt-formatting helper: prepend 'Use ' to slash-commands for headless session loading.
+
+    This is NOT a validator. Non-slash input passes through unchanged by design —
+    runtime validation is enforced by the skill_command_guard PreToolUse hook.
+    """
     stripped = skill_command.strip()
     if stripped.startswith("/"):
         return f"Use {stripped}"

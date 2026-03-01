@@ -310,3 +310,50 @@ class TestPushToRemote:
         assert result["success"] == "false"
         assert "origin" in result["stderr"]
         assert mock_run.call_count == 1  # no push attempted
+
+    def test_t1_failure_returns_boolean_false(self) -> None:
+        """T1: push_to_remote failure must return boolean False, not string 'false'."""
+        mock_fail = MagicMock()
+        mock_fail.returncode = 1
+        mock_fail.stdout = ""
+        mock_fail.stderr = "no remote"
+        with patch("subprocess.run", return_value=mock_fail):
+            result = push_to_remote("/clone", "/source", "main")
+        assert result["success"] is False, (
+            f"Expected boolean False, got {result['success']!r} ({type(result['success']).__name__})"
+        )
+
+    def test_t1_success_returns_boolean_true(self) -> None:
+        """T1: push_to_remote success must return boolean True, not string 'true'."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
+        mock_push = MagicMock()
+        mock_push.returncode = 0
+        mock_push.stderr = ""
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+            result = push_to_remote("/clone", "/source", "main")
+        assert result["success"] is True, (
+            f"Expected boolean True, got {result['success']!r} ({type(result['success']).__name__})"
+        )
+
+
+@pytest.mark.parametrize(
+    "fn,args",
+    [
+        (push_to_remote, ("/clone", "/source", "main")),
+    ],
+)
+def test_t2_tool_success_field_is_boolean(fn, args) -> None:
+    """T2: All workspace functions returning {'success': ...} must use bool, not string."""
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_proc.stdout = ""
+    mock_proc.stderr = "simulated failure"
+    with patch("subprocess.run", return_value=mock_proc):
+        result = fn(*args)
+    if "success" in result:
+        assert isinstance(result["success"], bool), (
+            f"{fn.__name__} returned success={result['success']!r}, expected bool"
+        )

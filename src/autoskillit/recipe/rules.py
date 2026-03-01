@@ -729,3 +729,28 @@ def _check_on_result_missing_failure_route(wf: Recipe) -> list[RuleFinding]:
                 )
             )
     return findings
+
+
+@semantic_rule(
+    name="stale-ref-after-merge",
+    description=(
+        "A context variable sourced from a worktree path or branch name is consumed "
+        "by a step that executes after merge_worktree (or remove_clone), which deletes "
+        "the resource the variable refers to."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_stale_ref_after_merge(wf: Recipe) -> list[RuleFinding]:
+    from autoskillit.recipe.validator import analyze_dataflow  # deferred — breaks circular import
+
+    report = analyze_dataflow(wf)
+    return [
+        RuleFinding(
+            rule="stale-ref-after-merge",
+            severity=Severity.WARNING,
+            step_name=w.step_name,
+            message=w.message,
+        )
+        for w in report.warnings
+        if w.code == "REF_INVALIDATED"
+    ]

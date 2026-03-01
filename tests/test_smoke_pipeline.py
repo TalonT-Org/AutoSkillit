@@ -362,6 +362,49 @@ class TestSmokeScriptValidation:
         assert executor._route(step, {"restart_scope": "full_restart"}) == "investigate"
         assert executor._route(step, {"restart_scope": "partial_restart"}) == "implement"
 
+    def test_executor_handles_predicate_on_result_routing(self) -> None:
+        """Predicate-format on_result is evaluated in order; first match wins."""
+        executor = SmokeExecutor(steps={}, inputs={})
+
+        step = {
+            "tool": "merge_worktree",
+            "on_result": [
+                {"when": "result.failed_step == 'test_gate'", "route": "assess"},
+                {"when": "result.error", "route": "cleanup"},
+                {"route": "push"},
+            ],
+        }
+
+        # First condition matches: test_gate failure
+        result = executor._route(step, {"failed_step": "test_gate", "error": None})
+        assert result == "assess"
+
+        # Second condition matches: other error
+        result = executor._route(step, {"failed_step": None, "error": "something went wrong"})
+        assert result == "cleanup"
+
+        # Default condition (no when): success path
+        result = executor._route(step, {"failed_step": None, "error": None})
+        assert result == "push"
+
+    def test_executor_evaluate_predicate_equality(self) -> None:
+        """_evaluate_predicate handles equality check correctly."""
+        executor = SmokeExecutor(steps={}, inputs={})
+        assert executor._evaluate_predicate(
+            "result.failed_step == 'test_gate'", {"failed_step": "test_gate"}
+        )
+        assert not executor._evaluate_predicate(
+            "result.failed_step == 'test_gate'", {"failed_step": "other"}
+        )
+        assert not executor._evaluate_predicate("result.failed_step == 'test_gate'", {})
+
+    def test_executor_evaluate_predicate_truthiness(self) -> None:
+        """_evaluate_predicate handles truthiness check correctly."""
+        executor = SmokeExecutor(steps={}, inputs={})
+        assert executor._evaluate_predicate("result.error", {"error": "some error"})
+        assert not executor._evaluate_predicate("result.error", {"error": None})
+        assert not executor._evaluate_predicate("result.error", {})
+
     def test_executor_capture(self) -> None:
         executor = SmokeExecutor(steps={}, inputs={})
         step = {"capture": {"plan_path": "${{ result.plan_path }}"}}

@@ -43,7 +43,6 @@ steps:
       branch: "${{ inputs.base_branch }}"
     capture:
       work_dir: "${{ result.clone_path }}"
-      source_dir: "${{ result.source_dir }}"
       remote_url: "${{ result.remote_url }}"
     on_success: audit
     on_failure: escalate_stop

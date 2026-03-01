@@ -1,6 +1,6 @@
 ---
 name: render-recipe
-description: Render a recipe YAML as a compact visual overview with ASCII flow diagram and input table. Use when presenting a loaded recipe to the user.
+description: Render a recipe YAML as a compact visual overview with ASCII flow diagram and input table. Only invoke when the user explicitly says "render recipe" or "/render-recipe".
 ---
 
 # Render Recipe
@@ -9,9 +9,8 @@ Produce a compact, structured overview of an AutoSkillit recipe. Reads the recip
 
 ## When to Use
 
-- After loading a recipe via `load_recipe`
-- User says "render recipe", "show recipe", "recipe overview"
-- Presenting a recipe to a user before collecting inputs
+- User explicitly says "render recipe", "show recipe overview", or invokes `/render-recipe`
+- Do NOT auto-invoke when a recipe is loaded — only on explicit user request
 
 ## Critical Constraints
 

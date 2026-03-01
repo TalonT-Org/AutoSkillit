@@ -779,6 +779,82 @@ def test_unsatisfied_input_inline_positional_args_skipped() -> None:
     assert not any(f.rule == "missing-ingredient" for f in findings)
 
 
+def test_shadowed_required_input_triggers_for_prose_plan_path() -> None:
+    """ERROR when plan_path is in context but passed as prose to implement-worktree-no-merge."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "plan": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:make-plan the task"},
+                capture={"plan_path": "${{ result.plan_path }}"},
+                on_success="implement",
+            ),
+            "implement": RecipeStep(
+                tool="run_skill_retry",
+                with_args={"skill_command": "/autoskillit:implement-worktree-no-merge the plan"},
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        kitchen_rules=["test"],
+    )
+    findings = run_semantic_rules(wf)
+    errors = [f for f in findings if f.rule == "shadowed-required-input"]
+    assert len(errors) == 1
+    assert errors[0].step_name == "implement"
+    assert "plan_path" in errors[0].message
+
+
+def test_shadowed_required_input_clean_when_template_used() -> None:
+    """No finding when ${{ context.plan_path }} is correctly used."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "plan": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:make-plan the task"},
+                capture={"plan_path": "${{ result.plan_path }}"},
+                on_success="implement",
+            ),
+            "implement": RecipeStep(
+                tool="run_skill_retry",
+                with_args={
+                    "skill_command": "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+                },
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        kitchen_rules=["test"],
+    )
+    findings = run_semantic_rules(wf)
+    errors = [f for f in findings if f.rule == "shadowed-required-input"]
+    assert errors == []
+
+
+def test_shadowed_required_input_clean_when_not_yet_in_context() -> None:
+    """No finding when plan_path has not been captured yet — not a shadowing error."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "implement": RecipeStep(
+                tool="run_skill_retry",
+                with_args={"skill_command": "/autoskillit:implement-worktree-no-merge the plan"},
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        kitchen_rules=["test"],
+    )
+    findings = run_semantic_rules(wf)
+    errors = [f for f in findings if f.rule == "shadowed-required-input"]
+    assert errors == []  # plan_path not in context → shadowed-required-input does not fire
+
+
 def test_retry_worktree_cwd_inputs_triggers_error() -> None:
     """retry-worktree step with cwd=inputs.* fires retry-worktree-cwd ERROR."""
     wf = _make_workflow(
@@ -996,6 +1072,23 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
         assert undeclared_findings == [], (
             f"Recipe '{wf.name}' has undeclared-capture-key findings: " + repr(undeclared_findings)
         )
+
+
+def test_bundled_recipes_have_no_shadowed_required_inputs() -> None:
+    """All bundled recipe YAML files must pass the shadowed-required-input rule."""
+    wf_dir = builtin_recipes_dir()
+    yaml_files = list(wf_dir.glob("*.yaml"))
+    assert yaml_files
+
+    for path in yaml_files:
+        wf = load_recipe(path)
+        findings = run_semantic_rules(wf)
+        errors = [
+            f
+            for f in findings
+            if f.rule == "shadowed-required-input" and f.severity == Severity.ERROR
+        ]
+        assert errors == [], f"Recipe {path.name} has shadowed-required-input errors: {errors}"
 
 
 class TestOutdatedScriptVersionRule:

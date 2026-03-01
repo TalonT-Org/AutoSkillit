@@ -13,7 +13,7 @@ tasks:
 
   test-all:
     desc: Run all tests with parallel workers
-    deps: [_tmpdir-setup]
+    deps: [install-worktree, _tmpdir-setup]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
@@ -44,7 +44,7 @@ tasks:
 
   test-check:
     desc: Run all tests and return unambiguous PASS/FAIL (for automation)
-    deps: [_tmpdir-setup]
+    deps: [install-worktree, _tmpdir-setup]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
@@ -111,6 +111,9 @@ tasks:
 
   install-worktree:
     desc: Set up development environment (isolated venv in worktrees, direct install in main)
+    status:
+      - test -x .venv/bin/python
+      - uv sync --check --all-extras 2>/dev/null
     cmds:
       - |
         # Detect if we're in a git worktree (worktrees have .git as a file, not a directory)

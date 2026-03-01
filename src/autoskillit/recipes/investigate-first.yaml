@@ -117,6 +117,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "implement"
     capture:
+      implementation_ref: "${{ result.worktree_path }}"
       worktree_path: "${{ result.worktree_path }}"
       branch_name: "${{ result.branch_name }}"
     retry:
@@ -133,6 +134,7 @@ steps:
       cwd: "${{ context.worktree_path }}"
       step_name: "retry_worktree"
     capture:
+      implementation_ref: "${{ result.worktree_path }}"
       worktree_path: "${{ result.worktree_path }}"
       branch_name: "${{ result.branch_name }}"
     retry:
@@ -145,7 +147,7 @@ steps:
   verify:
     tool: test_check
     with:
-      worktree_path: "${{ context.worktree_path }}"
+      worktree_path: "${{ context.implementation_ref }}"
     on_success: audit_impl
     on_failure: assess
 
@@ -202,7 +204,7 @@ steps:
   merge:
     tool: merge_worktree
     with:
-      worktree_path: "${{ context.worktree_path }}"
+      worktree_path: "${{ context.implementation_ref }}"
       base_branch: "${{ inputs.base_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"

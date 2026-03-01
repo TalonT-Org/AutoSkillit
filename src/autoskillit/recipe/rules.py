@@ -770,14 +770,6 @@ def _check_plan_parts_captured(wf: Recipe) -> list[RuleFinding]:
     severity=Severity.ERROR,
 )
 def _check_unbounded_cycles(recipe: Recipe) -> list[RuleFinding]:
-    """Detect routing cycles and classify by whether they have any exit guarantee.
-
-    Severity rules:
-    - ERROR: no step in the cycle has any exit edge — the cycle is a guaranteed infinite loop.
-    - WARNING: at least one step has an exit edge (on_failure exits the SCC, or
-      retry.max_attempts + on_exhausted exits the SCC) — the cycle can terminate
-      conditionally, but relies on skill-internal discipline rather than schema enforcement.
-    """
     from autoskillit.recipe.validator import _build_step_graph  # deferred — breaks circular import
 
     graph = _build_step_graph(recipe)
@@ -928,21 +920,6 @@ def _check_stale_ref_after_merge(wf: Recipe) -> list[RuleFinding]:
     severity=Severity.WARNING,
 )
 def _check_push_before_audit(wf: Recipe) -> list[RuleFinding]:
-    """Detect recipes where push_to_remote can fire before audit-impl evaluates quality.
-
-    Algorithm:
-    1. Locate all steps whose tool is push_to_remote (push_steps).
-       If none exist, return early — the rule is silent.
-    2. Locate all run_skill / run_skill_retry steps whose skill_command contains
-       "audit-impl" (audit_steps).
-    3. Build the full routing graph via _build_step_graph.
-    4. BFS from the entry point.  When the frontier visits an audit_step, it is
-       added to reachable_without_audit but NOT expanded — treating audit_steps as
-       one-way barriers.  All steps reachable before crossing audit land in
-       reachable_without_audit.
-    5. Any push_step found in reachable_without_audit is a violation: there exists
-       at least one execution path that reaches the push without passing through audit.
-    """
     from autoskillit.recipe.validator import _build_step_graph  # deferred — breaks circular import
 
     push_steps = {name for name, step in wf.steps.items() if step.tool == "push_to_remote"}
@@ -993,17 +970,6 @@ def _check_push_before_audit(wf: Recipe) -> list[RuleFinding]:
     severity=Severity.WARNING,
 )
 def _check_skill_command_prefix(wf: Recipe) -> list[RuleFinding]:
-    """Warn when skill_command does not start with '/'.
-
-    All valid skill invocations use a slash prefix: /autoskillit:<name>,
-    /local-project-skill, or /other-plugin:<name>. Free-form prose passed
-    to run_skill spawns a --dangerously-skip-permissions headless session
-    without any skill contract — this is almost always an orchestrator error.
-
-    Does NOT fire for non-run_skill tools (run_cmd, run_python, etc.).
-    Does NOT fire when skill_command is absent from with_args (step may use
-    a different argument shape — fail-open to avoid false positives).
-    """
     findings = []
     for step_name, step in wf.steps.items():
         if step.tool not in SKILL_TOOLS:

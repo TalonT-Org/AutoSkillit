@@ -275,6 +275,7 @@ class TestSmokeScriptValidation:
             "investigate",
             "rectify",
             "implement",
+            "set_worktree_path",
             "test",
             "assess",
             "classify",

@@ -1292,11 +1292,13 @@ class TestSessionLogMonitorStaleSuppressionGate:
                 _session_log_monitor(
                     tmp_path,
                     "DONE",
-                    stale_threshold=0.5,
+                    stale_threshold=0.05,
                     spawn_time=spawn_time,
                     pid=99999,
+                    _phase1_poll=0.05,
+                    _phase2_poll=0.05,
                 ),
-                timeout=12.0,
+                timeout=5.0,
             )
         assert result == "stale"
         assert call_count["n"] == 2
@@ -1313,9 +1315,11 @@ class TestSessionLogMonitorStaleSuppressionGate:
             _session_log_monitor(
                 tmp_path,
                 "DONE",
-                stale_threshold=0.5,
+                stale_threshold=0.05,
                 spawn_time=spawn_time,
                 # pid omitted (defaults to None)
+                _phase1_poll=0.05,
+                _phase2_poll=0.05,
             ),
             timeout=5.0,
         )
@@ -1335,9 +1339,11 @@ class TestSessionLogMonitorStaleSuppressionGate:
                 _session_log_monitor(
                     tmp_path,
                     "DONE",
-                    stale_threshold=0.5,
+                    stale_threshold=0.05,
                     spawn_time=spawn_time,
                     pid=None,
+                    _phase1_poll=0.05,
+                    _phase2_poll=0.05,
                 ),
                 timeout=5.0,
             )
@@ -1370,11 +1376,13 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     _session_log_monitor(
                         tmp_path,
                         "DONE",
-                        stale_threshold=0.5,
+                        stale_threshold=0.05,
                         spawn_time=spawn_time,
                         pid=99999,
+                        _phase1_poll=0.05,
+                        _phase2_poll=0.05,
                     ),
-                    timeout=12.0,
+                    timeout=5.0,
                 )
         # capture_logs() intercepts when structlog is in default state.
         # In a parallel worker where configure_logging() ran in a prior test,

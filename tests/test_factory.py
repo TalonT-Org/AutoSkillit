@@ -5,6 +5,7 @@ from __future__ import annotations
 from autoskillit.config import AutomationConfig
 from autoskillit.core.types import SkillResult, SubprocessResult, TerminationReason
 from autoskillit.execution.db import DefaultDatabaseReader
+from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.execution.testing import DefaultTestRunner
 from autoskillit.migration.engine import DefaultMigrationService
@@ -49,8 +50,8 @@ def test_make_context_tester_is_default_test_runner():
     assert isinstance(ctx.tester, DefaultTestRunner)
 
 
-def test_make_context_all_service_fields_populated_with_runner():
-    """All 10 service contracts are populated when a runner is provided."""
+def test_make_context_all_service_fields_populated_includes_github_client():
+    """Composite assertion: ALL optional service fields must be populated, including github_client."""
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert ctx.executor is not None
     assert ctx.tester is not None
@@ -58,10 +59,53 @@ def test_make_context_all_service_fields_populated_with_runner():
     assert ctx.migrations is not None
     assert ctx.db_reader is not None
     assert ctx.workspace_mgr is not None
+    assert ctx.clone_mgr is not None
+    assert ctx.github_client is not None
     assert isinstance(ctx.recipes, DefaultRecipeRepository)
     assert isinstance(ctx.migrations, DefaultMigrationService)
     assert isinstance(ctx.db_reader, DefaultDatabaseReader)
     assert isinstance(ctx.workspace_mgr, DefaultWorkspaceManager)
+
+
+def test_make_context_github_client_is_populated():
+    """make_context must always wire github_client — never leave it None."""
+    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".")
+    assert ctx.github_client is not None
+
+
+def test_make_context_github_client_is_default_fetcher():
+    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".")
+    assert isinstance(ctx.github_client, DefaultGitHubFetcher)
+
+
+def test_make_context_github_client_uses_config_token(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    config = AutomationConfig()
+    config.github.token = "config-token"
+    ctx = make_context(config, runner=None, plugin_dir=".")
+    assert ctx.github_client.has_token is True
+
+
+def test_make_context_github_client_uses_env_token(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "env-token")
+    config = AutomationConfig()
+    ctx = make_context(config, runner=None, plugin_dir=".")
+    assert ctx.github_client.has_token is True
+
+
+def test_make_context_github_client_no_token(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".")
+    assert ctx.github_client.has_token is False
+
+
+def test_make_context_github_client_token_snapshot_is_immutable(monkeypatch):
+    """Token is snapshotted at construction. Changing env after does not affect the fetcher."""
+    monkeypatch.setenv("GITHUB_TOKEN", "startup-token")
+    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".")
+    assert ctx.github_client.has_token is True
+    monkeypatch.delenv("GITHUB_TOKEN")
+    assert ctx.github_client.has_token is True
 
 
 def test_make_context_tester_none_when_no_runner():

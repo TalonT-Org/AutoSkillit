@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from autoskillit.config import AutomationConfig
@@ -108,7 +109,7 @@ async def test_default_github_fetcher_404(httpx_mock):
         url="https://api.github.com/repos/owner/repo/issues/999",
         status_code=404,
     )
-    fetcher = DefaultGitHubFetcher(token=None)
+    fetcher = DefaultGitHubFetcher(token="some-token")
     result = await fetcher.fetch_issue("owner/repo#999", include_comments=False)
     assert result["success"] is False
     assert "error" in result
@@ -241,3 +242,119 @@ async def test_kitchen_status_includes_github_config(tool_ctx):
 def test_github_fetcher_protocol_satisfied():
     fetcher = DefaultGitHubFetcher(token=None)
     assert isinstance(fetcher, GitHubFetcher)
+
+
+# ---------------------------------------------------------------------------
+# GitHubFetcher protocol — has_token requirement
+# ---------------------------------------------------------------------------
+
+
+def test_github_fetcher_protocol_requires_has_token():
+    """GitHubFetcher protocol must require has_token — without it the impl is incomplete."""
+
+    class NoTokenFetcher:
+        async def fetch_issue(self, issue_ref, *, include_comments=True):
+            return {}
+
+    assert not isinstance(NoTokenFetcher(), GitHubFetcher)
+
+
+def test_default_github_fetcher_has_token_true():
+    assert DefaultGitHubFetcher(token="abc").has_token is True
+
+
+def test_default_github_fetcher_has_token_false():
+    assert DefaultGitHubFetcher(token=None).has_token is False
+
+
+# ---------------------------------------------------------------------------
+# 404 error message — token-aware auth guidance
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_default_github_fetcher_404_no_token_hints_auth(httpx_mock):
+    """404 with no token should include guidance about private repos / missing auth."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/1",
+        status_code=404,
+    )
+    fetcher = DefaultGitHubFetcher(token=None)
+    result = await fetcher.fetch_issue("owner/repo#1", include_comments=False)
+    assert result["success"] is False
+    error = result["error"].lower()
+    assert "private" in error or "token" in error or "auth" in error
+
+
+@pytest.mark.asyncio
+async def test_default_github_fetcher_404_with_token_is_plain_not_found(httpx_mock):
+    """404 with a token in place is a genuine not-found, not an auth issue."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/1",
+        status_code=404,
+    )
+    fetcher = DefaultGitHubFetcher(token="real-token")
+    result = await fetcher.fetch_issue("owner/repo#1", include_comments=False)
+    assert result["success"] is False
+    assert "token" not in result["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# 403 and network error coverage
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_default_github_fetcher_403_returns_structured_error(httpx_mock):
+    """HTTP 403 (rate limit / forbidden) must return success=False with a useful message."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/1",
+        status_code=403,
+        json={"message": "API rate limit exceeded"},
+    )
+    fetcher = DefaultGitHubFetcher(token=None)
+    result = await fetcher.fetch_issue("owner/repo#1", include_comments=False)
+    assert result["success"] is False
+    assert "403" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_default_github_fetcher_request_error(httpx_mock):
+    """Network errors must be caught and returned as success=False."""
+    httpx_mock.add_exception(httpx.ConnectError("connection refused"))
+    fetcher = DefaultGitHubFetcher(token=None)
+    result = await fetcher.fetch_issue("owner/repo#1", include_comments=False)
+    assert result["success"] is False
+    assert "request error" in result["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# kitchen_status — DI-aligned github_token_configured
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_kitchen_status_github_token_configured_true_from_client(tool_ctx):
+    """kitchen_status must read github_token_configured from ctx.github_client.has_token."""
+    tool_ctx.github_client = DefaultGitHubFetcher(token="my-token")
+    status = json.loads(await kitchen_status())
+    assert status["github_token_configured"] is True
+
+
+@pytest.mark.asyncio
+async def test_kitchen_status_github_token_not_configured_from_client(tool_ctx, monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    tool_ctx.github_client = DefaultGitHubFetcher(token=None)
+    status = json.loads(await kitchen_status())
+    assert status["github_token_configured"] is False
+
+
+@pytest.mark.asyncio
+async def test_kitchen_status_github_token_does_not_reflect_post_construction_env(
+    tool_ctx, monkeypatch
+):
+    """kitchen_status must NOT re-read os.environ — it must reflect ctx.github_client.has_token."""
+    tool_ctx.github_client = DefaultGitHubFetcher(token=None)
+    monkeypatch.setenv("GITHUB_TOKEN", "set-after-construction")
+    status = json.loads(await kitchen_status())
+    assert status["github_token_configured"] is False

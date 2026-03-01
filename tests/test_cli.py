@@ -1672,7 +1672,7 @@ class TestGroupFRefactoring:
         async def _mock_check(config):
             return {"should_sleep": False, "sleep_seconds": 0, "utilization": 45.0}
 
-        monkeypatch.setattr("autoskillit.execution.quota.check_and_sleep_if_needed", _mock_check)
+        monkeypatch.setattr("autoskillit.execution.check_and_sleep_if_needed", _mock_check)
         monkeypatch.chdir(tmp_path)
         cli.quota_status()
         captured = capsys.readouterr()

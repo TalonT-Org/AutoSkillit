@@ -15,7 +15,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import FailureRecord, RetryReason, SkillResult, TerminationReason, get_logger
+from autoskillit.core import (
+    ChannelConfirmation,
+    FailureRecord,
+    RetryReason,
+    SkillResult,
+    TerminationReason,
+    get_logger,
+)
 from autoskillit.execution.commands import build_headless_cmd
 from autoskillit.execution.session import (
     ClaudeSessionResult,
@@ -133,7 +140,7 @@ def _build_skill_result(
     """Route SubprocessResult fields into the standard run_skill response."""
     if result.termination == TerminationReason.STALE:
         # Attempt to recover from stdout before declaring stale failure.
-        # Also attempt provenance bypass when data_confirmed=False (Change 2b):
+        # Also attempt provenance bypass when channel_confirmation=CHANNEL_B:
         # Channel B confirmed the session completed via session JSONL, so even
         # empty stdout is sufficient evidence of completion.
         stale_session = parse_session_result(result.stdout)
@@ -142,14 +149,14 @@ def _build_skill_result(
             stale_session.subtype == "success"
             and stale_session.result.strip()
             and not stale_session.is_error
-        ) or not result.data_confirmed
+        ) or result.channel_confirmation == ChannelConfirmation.CHANNEL_B
         if can_attempt_stale_recovery:
             success = _compute_success(
                 stale_session,
                 stale_returncode,
                 TerminationReason.COMPLETED,
                 completion_marker=completion_marker,
-                data_confirmed=result.data_confirmed,
+                channel_confirmation=result.channel_confirmation,
             )
             if success:
                 logger.warning(
@@ -211,13 +218,13 @@ def _build_skill_result(
         returncode,
         result.termination,
         completion_marker,
-        data_confirmed=result.data_confirmed,
+        channel_confirmation=result.channel_confirmation,
     )
     needs_retry, retry_reason = _compute_retry(
         session,
         returncode,
         result.termination,
-        data_confirmed=result.data_confirmed,
+        channel_confirmation=result.channel_confirmation,
     )
 
     if not success and completion_marker:
@@ -228,7 +235,7 @@ def _build_skill_result(
                 returncode,
                 result.termination,
                 completion_marker,
-                data_confirmed=result.data_confirmed,
+                channel_confirmation=result.channel_confirmation,
             )
             if recovered_success:
                 session = recovered

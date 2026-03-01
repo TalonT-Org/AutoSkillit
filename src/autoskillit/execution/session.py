@@ -13,6 +13,7 @@ from typing import Any, assert_never
 
 from autoskillit.core import (
     CONTEXT_EXHAUSTION_MARKER,
+    ChannelConfirmation,
     RetryReason,
     SkillResult,
     TerminationReason,
@@ -308,21 +309,25 @@ def _compute_success(
     returncode: int,
     termination: TerminationReason,
     completion_marker: str = "",
-    data_confirmed: bool = True,
+    channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
 ) -> bool:
     """Cross-validate all signals to determine unambiguous success/failure.
 
     Exhaustive match dispatch over TerminationReason ensures mypy flags any
     unhandled value when the enum is extended (ARCH-007).
 
-    Gate 0.5 (provenance bypass): when ``data_confirmed=False`` and the process
-    was killed by our infrastructure (``COMPLETED``), Channel B's session-JSONL
-    marker is the authoritative signal that the session completed successfully.
-    Stdout content is not required — the marker is sufficient proof.
+    Gate 0.5 (provenance bypass): when ``channel_confirmation=CHANNEL_B``,
+    Channel B's session-JSONL marker is the authoritative signal that the
+    session completed successfully. Stdout content is not required.
     """
-    # Gate 0.5: provenance bypass — Channel B confirmed; stdout content not required.
-    if not data_confirmed and termination == TerminationReason.COMPLETED:
-        return True
+    # Gate 0.5: Channel B provenance bypass — session JSONL is authoritative.
+    match channel_confirmation:
+        case ChannelConfirmation.CHANNEL_B:
+            return True
+        case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
+            pass  # fall through to termination dispatch
+        case _ as unreachable:
+            assert_never(unreachable)
 
     match termination:
         case TerminationReason.TIMED_OUT:
@@ -385,7 +390,7 @@ def _compute_retry(
     session: ClaudeSessionResult,
     returncode: int,
     termination: TerminationReason,
-    data_confirmed: bool = True,
+    channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
 ) -> tuple[bool, RetryReason]:
     """Compute whether the session result warrants a retry.
 
@@ -393,9 +398,9 @@ def _compute_retry(
     Phase 2: Exhaustive match dispatch over TerminationReason ensures mypy
              flags any unhandled value when the enum is extended.
 
-    When ``data_confirmed=False`` and ``termination=COMPLETED``, the provenance
-    bypass applies: Channel B's session-JSONL signal is authoritative, so what
-    appears to be a kill anomaly (empty stdout) is actually correct completion.
+    When ``channel_confirmation=CHANNEL_B`` and ``termination=COMPLETED``,
+    the provenance bypass applies: Channel B's session-JSONL signal is
+    authoritative, so kill-anomaly appearance is a drain-race artifact.
     No retry is needed.
     """
     # Phase 1: API-level retry signals (context exhaustion, max_turns)
@@ -416,13 +421,18 @@ def _compute_retry(
         case TerminationReason.COMPLETED:
             # Infrastructure killed the process. SIGTERM/SIGKILL produce nonzero
             # returncode by design — do not gate on returncode here.
-            # Provenance bypass: if data_confirmed=False, Channel B is authoritative
-            # and kill-anomaly appearance is a drain-race artifact, not a real anomaly.
-            if not data_confirmed:
-                return False, RetryReason.NONE
-            if _is_kill_anomaly(session):
-                return True, RetryReason.RESUME
-            return False, RetryReason.NONE
+            # Exhaustive ChannelConfirmation dispatch (ARCH-007 extension):
+            match channel_confirmation:
+                case ChannelConfirmation.CHANNEL_B:
+                    # Channel B is authoritative — kill-anomaly appearance is
+                    # a drain-race artifact, not a real incomplete flush.
+                    return False, RetryReason.NONE
+                case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
+                    if _is_kill_anomaly(session):
+                        return True, RetryReason.RESUME
+                    return False, RetryReason.NONE
+                case _ as unreachable:
+                    assert_never(unreachable)
 
         case TerminationReason.STALE:
             # _build_skill_result intercepts STALE before calling _compute_retry.

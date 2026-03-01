@@ -25,7 +25,7 @@ from typing import IO
 
 import psutil
 
-from autoskillit.core import SubprocessResult, TerminationReason, get_logger
+from autoskillit.core import ChannelConfirmation, SubprocessResult, TerminationReason, get_logger
 
 logger = get_logger(__name__)
 
@@ -491,7 +491,7 @@ async def run_managed_async(
             )
 
             termination = TerminationReason.NATURAL_EXIT
-            _data_confirmed = True
+            _channel_confirmation = ChannelConfirmation.UNMONITORED
 
             # Build the race participants
             wait_task = asyncio.create_task(proc.wait())
@@ -546,6 +546,7 @@ async def run_managed_async(
                     # Channel A won: type=result is confirmed in stdout temp file.
                     # Kill is safe — data availability is guaranteed.
                     termination = TerminationReason.COMPLETED
+                    _channel_confirmation = ChannelConfirmation.CHANNEL_A
                     await async_kill_process_tree(proc.pid)
                 else:
                     # Channel B won (session_monitor returned "completion") before
@@ -558,12 +559,16 @@ async def run_managed_async(
                             await asyncio.wait_for(
                                 channel_a_ready.wait(), timeout=completion_drain_timeout
                             )
+                            # Channel A confirmed within drain window.
+                            _channel_confirmation = ChannelConfirmation.CHANNEL_A
                         except TimeoutError:
                             # CLI did not flush type=result within drain_timeout.
-                            # stdout data is not guaranteed — record that Channel A
-                            # did not confirm so downstream adjudication can trust
-                            # Channel B's session-JSONL signal instead.
-                            _data_confirmed = False
+                            # stdout data is not guaranteed — Channel B is sole authority.
+                            _channel_confirmation = ChannelConfirmation.CHANNEL_B
+                    else:
+                        # No heartbeat configured: Channel B is the only signal.
+                        # stdout may be empty — downstream must trust JSONL signal.
+                        _channel_confirmation = ChannelConfirmation.CHANNEL_B
                     termination = TerminationReason.COMPLETED
                     await async_kill_process_tree(proc.pid)
             except TimeoutError:
@@ -587,7 +592,7 @@ async def run_managed_async(
                 stderr=stderr,
                 termination=termination,
                 pid=proc.pid,
-                data_confirmed=_data_confirmed,
+                channel_confirmation=_channel_confirmation,
             )
         except BaseException:
             # Ensure cleanup on unexpected errors (including CancelledError)
@@ -668,6 +673,7 @@ def run_managed_sync(
                 stderr=stderr,
                 termination=termination,
                 pid=process.pid,
+                channel_confirmation=ChannelConfirmation.UNMONITORED,
             )
         except Exception:
             if process is not None and process.returncode is None:

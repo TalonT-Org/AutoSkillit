@@ -87,16 +87,22 @@ def _make_result(
     stdout: str = "",
     stderr: str = "",
     termination_reason: TerminationReason = TerminationReason.NATURAL_EXIT,
-    data_confirmed: bool = True,
+    channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
+    # Legacy: data_confirmed=False → CHANNEL_B, data_confirmed=True → UNMONITORED
+    data_confirmed: bool | None = None,
 ):
     """Create a SubprocessResult for mocking run_managed_async."""
+    if data_confirmed is not None:
+        channel_confirmation = (
+            ChannelConfirmation.CHANNEL_B if not data_confirmed else ChannelConfirmation.UNMONITORED
+        )
     return SubprocessResult(
         returncode=returncode,
         stdout=stdout,
         stderr=stderr,
         termination=termination_reason,
         pid=12345,
-        data_confirmed=data_confirmed,
+        channel_confirmation=channel_confirmation,
     )
 
 

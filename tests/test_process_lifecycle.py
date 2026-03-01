@@ -1636,11 +1636,11 @@ class TestChannelBDrainWait:
         assert result.stdout.strip()  # Channel A confirmed: stdout is non-empty
 
     @pytest.mark.asyncio
-    async def test_data_confirmed_false_set_on_drain_timeout(self, tmp_path):
+    async def test_channel_b_drain_timeout_produces_channel_b_confirmation(self, tmp_path):
         """Channel B wins the race; drain timeout expires without Channel A confirming.
 
-        Verifies that SubprocessResult.data_confirmed is False when the bounded
-        drain wait times out — i.e. Channel A never confirmed stdout data.
+        Verifies that SubprocessResult.channel_confirmation is CHANNEL_B when the
+        bounded drain wait times out — i.e. Channel A never confirmed stdout data.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -1660,14 +1660,14 @@ class TestChannelBDrainWait:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        assert result.data_confirmed is False
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
     @pytest.mark.asyncio
-    async def test_data_confirmed_true_when_channel_a_wins(self, tmp_path):
-        """Channel A (heartbeat) wins; data_confirmed must be True.
+    async def test_channel_a_wins_produces_channel_a_confirmation(self, tmp_path):
+        """Channel A (heartbeat) wins; channel_confirmation must be CHANNEL_A.
 
         When the heartbeat fires before Channel B (or with no Channel B),
-        data availability is guaranteed and data_confirmed must remain True.
+        data availability is guaranteed and channel_confirmation must be CHANNEL_A.
         """
         script = tmp_path / "result_hang.py"
         script.write_text(WRITE_RESULT_THEN_HANG_SCRIPT)
@@ -1681,7 +1681,7 @@ class TestChannelBDrainWait:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        assert result.data_confirmed is True
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A
 
     @pytest.mark.asyncio
     async def test_channel_b_then_a_empty_result_data_confirmed_is_false(self, tmp_path):
@@ -1752,7 +1752,7 @@ class TestChannelBFullPipelineAdjudication:
     async def test_channel_b_then_a_empty_result_produces_success(self, tmp_path):
         """Full end-to-end: Channel B fires, CLI writes type=result with result="".
 
-        With strengthened Channel A, data_confirmed=False, provenance bypass fires.
+        With strengthened Channel A, channel_confirmation=CHANNEL_B, provenance bypass fires.
         Result: success=True, needs_retry=False (no wasteful retry of completed session).
         """
         from autoskillit.execution.headless import _build_skill_result
@@ -1958,15 +1958,15 @@ class TestChannelBDrainRacePipelineAdjudication:
 
     Uses the existing CHANNEL_B_NO_STDOUT_SCRIPT: session monitor fires, drain expires,
     process is killed with empty stdout. _build_skill_result must apply the Channel B
-    provenance bypass (data_confirmed=False → success=True without calling _compute_success).
+    provenance bypass (channel_confirmation=CHANNEL_B → success=True via Gate 0.5).
     """
 
     @pytest.mark.asyncio
     async def test_channel_b_drain_timeout_produces_success_skill_result(self, tmp_path):
-        """COMPLETED + data_confirmed=False + empty stdout → success=True, needs_retry=False.
+        """COMPLETED + channel_confirmation=CHANNEL_B + empty stdout → success=True.
 
         Channel B provenance bypass: when session monitor wins and drain expires,
-        _build_skill_result returns success=True immediately, bypassing _compute_success.
+        _build_skill_result returns success=True via Gate 0.5 in _compute_success.
         """
         from autoskillit.execution.headless import _build_skill_result
 
@@ -1988,7 +1988,7 @@ class TestChannelBDrainRacePipelineAdjudication:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        assert result.data_confirmed is False
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
         skill_result = _build_skill_result(
             result,
@@ -2030,7 +2030,7 @@ class TestSTOPDelayPipelineAdjudication:
 
         assert result.termination == TerminationReason.NATURAL_EXIT
         assert result.returncode == 0
-        assert result.data_confirmed is True
+        assert result.channel_confirmation == ChannelConfirmation.UNMONITORED
 
         skill_result = _build_skill_result(
             result,

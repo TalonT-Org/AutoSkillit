@@ -22,7 +22,9 @@ def _run_hook(event: dict) -> str:
 
 def test_deny_when_no_slash():
     """skill_command is free-form prose → deny."""
-    out = _run_hook({"tool_input": {"skill_command": "Fix the authentication bug in main.py", "cwd": "/tmp"}})
+    out = _run_hook(
+        {"tool_input": {"skill_command": "Fix the authentication bug in main.py", "cwd": "/tmp"}}
+    )
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
 
@@ -52,7 +54,9 @@ def test_deny_reason_instructs_slash():
 
 def test_approve_autoskillit_command():
     """/autoskillit:investigate → approve (empty stdout)."""
-    out = _run_hook({"tool_input": {"skill_command": "/autoskillit:investigate the bug", "cwd": "/tmp"}})
+    out = _run_hook(
+        {"tool_input": {"skill_command": "/autoskillit:investigate the bug", "cwd": "/tmp"}}
+    )
     assert out.strip() == ""
 
 
@@ -71,7 +75,12 @@ def test_approve_slash_with_leading_whitespace():
 def test_approve_multiline_slash_command():
     """/autoskillit:report-bug with multiline error context → approve."""
     out = _run_hook(
-        {"tool_input": {"skill_command": "/autoskillit:report-bug\n\nerror context here", "cwd": "/tmp"}}
+        {
+            "tool_input": {
+                "skill_command": "/autoskillit:report-bug\n\nerror context here",
+                "cwd": "/tmp",
+            }
+        }
     )
     assert out.strip() == ""
 
@@ -94,3 +103,14 @@ def test_approve_when_skill_command_key_missing():
     """tool_input has no skill_command key → fail-open."""
     out = _run_hook({"tool_input": {"cwd": "/tmp"}})
     assert out.strip() == ""
+
+
+def test_hook_uses_skill_command_prefix_constant():
+    """Hook must import SKILL_COMMAND_PREFIX from core.types, not hardcode '/'."""
+    import inspect
+
+    import autoskillit.hooks.skill_command_guard as mod
+
+    src = inspect.getsource(mod)
+    assert "from autoskillit.core.types import" in src
+    assert "SKILL_COMMAND_PREFIX" in src

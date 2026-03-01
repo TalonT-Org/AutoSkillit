@@ -428,10 +428,7 @@ def _check_weak_constraint_text(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="undeclared-capture-key",
-    description=(
-        "Capture references to result.X should match keys declared in the "
-        "skill's outputs contract in skill_contracts.yaml."
-    ),
+    description="result.X captures must match skill output keys in skill_contracts.yaml",
     severity=Severity.WARNING,
 )
 def _check_capture_output_coverage(wf: Recipe) -> list[RuleFinding]:
@@ -685,10 +682,7 @@ def _check_merge_cleanup_captured(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="clone-root-as-worktree",
-    description=(
-        "test_check/merge_worktree worktree_path must not trace back to "
-        "result.clone_path — that is the clone root, not a git worktree."
-    ),
+    description="worktree_path must not trace back to result.clone_path (the clone root)",
     severity=Severity.ERROR,
 )
 def _check_clone_root_as_worktree(wf: Recipe) -> list[RuleFinding]:
@@ -913,10 +907,7 @@ def _check_stale_ref_after_merge(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     name="push-before-audit",
-    description=(
-        "A push_to_remote step is reachable from the entry point without "
-        "passing through an audit-impl skill step first"
-    ),
+    description="push_to_remote reachable without passing through audit-impl first",
     severity=Severity.WARNING,
 )
 def _check_push_before_audit(wf: Recipe) -> list[RuleFinding]:
@@ -995,13 +986,13 @@ def _check_skill_command_prefix(wf: Recipe) -> list[RuleFinding]:
 
 
 @semantic_rule(
-    name="push-missing-explicit-remote-url",
-    description="push_to_remote step missing remote_url; implicit lookup fails for non-bare repos",
+    "push-missing-explicit-remote-url",
+    "push_to_remote missing remote_url; implicit lookup fails for non-bare repos",
     severity=Severity.WARNING,
 )
 def _check_push_missing_explicit_remote_url(recipe: Recipe) -> list[RuleFinding]:
-    return [RuleFinding(rule="push-missing-explicit-remote-url", severity=Severity.WARNING,
-            step_name=n, message=f"'{n}' uses push_to_remote without explicit remote_url. "
-            "Capture remote_url from clone step; implicit source_dir lookup fails for non-bare repos.")
-            for n, step in recipe.steps.items()
-            if step.tool == "push_to_remote" and "remote_url" not in (step.with_args or {})]
+    return [
+        RuleFinding("push-missing-explicit-remote-url", Severity.WARNING, n, "missing remote_url")
+        for n, step in recipe.steps.items()
+        if step.tool == "push_to_remote" and "remote_url" not in (step.with_args or {})
+    ]

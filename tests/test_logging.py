@@ -27,6 +27,7 @@ class TestGetLogger:
 
         with structlog.testing.capture_logs() as logs:
             get_logger("autoskillit.server").info("probe")
+        assert logs, "Expected at least one log record"
         assert logs[0]["logger"] == "autoskillit.server"
 
     def test_no_output_before_configure(self, capsys: pytest.CaptureFixture[str]):
@@ -152,4 +153,5 @@ class TestContextVarBinding:
             processors=[structlog.contextvars.merge_contextvars]
         ) as logs:
             structlog.get_logger().info("after_clear")
+        assert logs, "Expected at least one log record"
         assert "tool" not in logs[0]

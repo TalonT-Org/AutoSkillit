@@ -57,9 +57,9 @@ def test_recipe_parser_module_no_longer_exists() -> None:
 
 def test_load_recipe_smoke() -> None:
     """load_recipe(path) returns a Recipe with correct name."""
-    path = next(builtin_recipes_dir().glob("*.yaml"))
+    path = builtin_recipes_dir() / "audit-and-fix.yaml"
     recipe = load_recipe(path)
-    assert recipe.name
+    assert recipe.name == "audit-and-fix"
 
 
 def test_list_recipes_discovers_builtins() -> None:

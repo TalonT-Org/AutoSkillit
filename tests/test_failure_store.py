@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -49,7 +50,7 @@ def test_record_and_load_roundtrip(tmp_path: Path) -> None:
     assert f.file_type == "recipe"
     assert f.error == "bad schema"
     assert f.retries_attempted == 2
-    assert f.timestamp  # non-empty ISO timestamp
+    assert datetime.fromisoformat(f.timestamp)  # verifies ISO 8601 format
 
 
 # ---------------------------------------------------------------------------

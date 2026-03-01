@@ -36,7 +36,9 @@ class TestClaudeMdPipelineContract:
             claude_md,
             re.DOTALL,
         )
-        assert match, "CLAUDE.md must have a Pipeline sub-section (e.g. '### **3.4. Pipeline Execution**')"
+        assert match, (
+            "CLAUDE.md must have a Pipeline sub-section (e.g. '### **3.4. Pipeline Execution**')"
+        )
         section = match.group(1)
 
         missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in section]

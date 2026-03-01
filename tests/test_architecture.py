@@ -173,7 +173,7 @@ RULES: tuple[RuleDescriptor, ...] = (
         ),
         exemptions=frozenset({"process.py"}),
         severity="error",
-        defense_standard="DS-007",
+        defense_standard="DS-002",
     ),
     RuleDescriptor(
         rule_id="ARCH-005",
@@ -2073,6 +2073,18 @@ def test_violation_str_omits_defense_standard_when_absent(tmp_path: Path) -> Non
         f"Expected '[ARCH-UNKNOWN / process-flow]' prefix, got: {s!r}"
     )
     assert "DS-" not in s, f"Unexpected defense_standard in output: {s!r}"
+
+
+def test_arch004_violation_str_includes_ds002(tmp_path: Path) -> None:
+    """Regression guard: ARCH-004 violation str must include DS-002 after the fix."""
+    f = tmp_path / "bad.py"
+    f.write_text("import asyncio\nval = asyncio.PIPE\n")
+    violations = _scan(f)
+    pipe_violations = [v for v in violations if "asyncio.PIPE" in v.message]
+    assert pipe_violations
+    s = str(pipe_violations[0])
+    assert "DS-002" in s
+    assert "[ARCH-004 / process-flow / DS-002]" in s
 
 
 def test_violation_str_no_prefix_without_rule_id() -> None:

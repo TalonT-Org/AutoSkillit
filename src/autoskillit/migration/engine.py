@@ -312,21 +312,18 @@ def default_migration_engine() -> MigrationEngine:
 class DefaultMigrationService:
     """Concrete MigrationService wrapping MigrationEngine.migrate_file.
 
-    Call bind_headless() after construction (in the composition root) to enable
-    LLM-driven recipe migration. Without a headless runner, migrate() returns an
-    error for recipes that require LLM-assisted migration.
+    Pass run_headless at construction time to enable LLM-driven recipe migration.
+    Without a headless runner, migrate() returns an error for recipes that require
+    LLM-assisted migration.
     """
 
-    def __init__(self, engine: MigrationEngine) -> None:
+    def __init__(
+        self,
+        engine: MigrationEngine,
+        *,
+        run_headless: Callable[..., Awaitable[SkillResult]] | None = None,
+    ) -> None:
         self._engine = engine
-        self._run_headless: Callable[..., Awaitable[SkillResult]] | None = None
-
-    def bind_headless(self, run_headless: Callable[..., Awaitable[SkillResult]]) -> None:
-        """Wire in a headless runner for LLM-driven migrations.
-
-        Called by the composition root (_factory.py) after ctx.executor is created.
-        The callable must accept keyword arguments skill_command= and cwd=.
-        """
         self._run_headless = run_headless
 
     async def migrate(self, recipe_path: Path) -> dict[str, Any]:

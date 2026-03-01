@@ -72,11 +72,14 @@ def make_context(
     github_token = config.github.token or os.environ.get("GITHUB_TOKEN")
 
     resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
+    gate = DefaultGateState(enabled=False)
+    if os.environ.get("AUTOSKILLIT_KITCHEN_OPEN") == "1":
+        gate.enable()
     ctx = ToolContext(
         config=config,
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
-        gate=DefaultGateState(enabled=False),
+        gate=gate,
         plugin_dir=resolved_dir,
         runner=runner,
         tester=DefaultTestRunner(config=config, runner=runner) if runner is not None else None,

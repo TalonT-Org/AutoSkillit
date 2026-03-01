@@ -165,7 +165,7 @@ RULES: tuple[RuleDescriptor, ...] = (
         ),
         exemptions=frozenset({"process.py"}),
         severity="error",
-        defense_standard=None,
+        defense_standard="DS-007",
     ),
     RuleDescriptor(
         rule_id="ARCH-005",
@@ -2006,16 +2006,23 @@ def test_violation_str_includes_defense_standard_when_present(tmp_path: Path) ->
 
 
 def test_violation_str_omits_defense_standard_when_absent(tmp_path: Path) -> None:
-    """REQ-SYMB-005: defense_standard is absent from str(Violation) when rule has none."""
+    """REQ-SYMB-005: defense_standard is absent from str(Violation) when rule has none.
+
+    Uses a Violation with a rule_id not present in RULES so that the rule lookup
+    returns None and ds_part evaluates to "".
+    """
     f = tmp_path / "bad.py"
-    f.write_text("import asyncio\nval = asyncio.PIPE\n")
-    violations = _scan(f)
-    pipe_violations = [v for v in violations if "asyncio.PIPE" in v.message]
-    assert pipe_violations
-    s = str(pipe_violations[0])
-    # ARCH-004 has no defense_standard
-    assert "[ARCH-004 / process-flow]" in s, (
-        f"Expected '[ARCH-004 / process-flow]' prefix, got: {s!r}"
+    v = Violation(
+        file=f,
+        line=1,
+        col=0,
+        message="asyncio.PIPE used directly",
+        rule_id="ARCH-UNKNOWN",
+        lens="process-flow",
+    )
+    s = str(v)
+    assert "[ARCH-UNKNOWN / process-flow]" in s, (
+        f"Expected '[ARCH-UNKNOWN / process-flow]' prefix, got: {s!r}"
     )
     assert "DS-" not in s, f"Unexpected defense_standard in output: {s!r}"
 

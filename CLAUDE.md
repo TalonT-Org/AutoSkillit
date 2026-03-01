@@ -35,17 +35,17 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **Do Not Add Root Files**: Never create new root files unless explicitly required.
   * **Never commit unless told to do so**
 
-### **3.3. CLAUDE.md Modifications**
-
-  * **Correcting existing content is permitted**: If you discover that CLAUDE.md contains inaccurate information (wrong file paths, stale names, incorrect tool attributions), you may correct it without being asked.
-  * **Adding new content requires explicit instruction**: Never add new sections, bullet points, entries, or any new information to CLAUDE.md unless the user has explicitly asked you to update or extend it. Corrections to existing facts ≠ permission to expand scope.
-
-### **3.4. Pipeline Execution**
+### **3.3. Pipeline Execution**
 
   * **Orchestrator Discipline**: When executing a pipeline script (loaded via `load_recipe`), NEVER use native Claude Code tools directly. The following tools are prohibited for the orchestrator: Read, Grep, Glob, Edit, Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit.
   * **Delegate Through Headless Sessions**: All code reading, searching, editing, and investigation MUST go through `run_skill` or `run_skill_retry`, which launch headless sessions with full tool access.
   * **Route Failures, Do Not Investigate**: When a pipeline step fails, follow the step's `on_failure` route. Do NOT use native tools to diagnose failures — the downstream skill has diagnostic access that the orchestrator does not.
   * **Use `run_cmd` for Shell Access**: If shell commands are needed during a pipeline, use the `run_cmd` MCP tool, not the native Bash tool.
+
+### **3.4. CLAUDE.md Modifications**
+
+  * **Correcting existing content is permitted**: If you discover that CLAUDE.md contains inaccurate information (wrong file paths, stale names, incorrect tool attributions), you may correct it without being asked.
+  * **Adding new content requires explicit instruction**: Never add new sections, bullet points, entries, or any new information to CLAUDE.md unless the user has explicitly asked you to update or extend it. Corrections to existing facts ≠ permission to expand scope.
 
 ## **4. Testing Guidelines**
 
@@ -266,3 +266,46 @@ The Python package directory (`src/autoskillit/`) is the plugin root:
 Skills are discovered by Claude Code via the plugin structure. Headless sessions receive `--plugin-dir` automatically via `run_skill` and `run_skill_retry`. Project-specific pipeline recipes go in `.autoskillit/recipes/` as YAML files, discovered via `list_recipes` and loaded via `load_recipe`.
 
 **CRITICAL**: When using subagents, invoke with "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=30000" to ensure subagents exit when finished.
+
+### **MCP Tools**
+
+| Tool | Purpose |
+|------|---------|
+| `run_cmd` | Execute shell commands with timeout |
+| `run_python` | Call a Python function by dotted module path (in-process) |
+| `run_skill` | Run Claude Code headless with a skill command (passes `--plugin-dir`, optional `model` param) |
+| `run_skill_retry` | Run Claude Code headless with API call limit (passes `--plugin-dir`, optional `model` param) |
+| `test_check` | Run test suite in a worktree, returns PASS/FAIL |
+| `merge_worktree` | Merge worktree branch after test gate passes |
+| `reset_test_dir` | Clear test directory (reset guard marker) |
+| `classify_fix` | Analyze worktree diff to determine restart scope (full vs partial) |
+| `reset_workspace` | Reset workspace, preserving configured directories |
+| `read_db` | Run read-only SQL query against SQLite database |
+| `migrate_recipe` | Apply pending migration notes to a recipe file (gated) |
+| `clone_repo` | Clone a source repository into an isolated run directory |
+| `remove_clone` | Remove a pipeline clone directory (best-effort) |
+| `push_to_remote` | Push merged branch from clone to upstream remote |
+| `fetch_github_issue` | Retrieve a GitHub issue as formatted Markdown (auto-call on any GitHub issue reference) |
+| `check_quota` | Passive diagnostic — check 5-hour quota utilization and return whether quota guard would block. Always available. |
+| `kitchen_status` | Return version health and config status (ungated) |
+| `list_recipes` | List pipeline recipes from .autoskillit/recipes/ (ungated) |
+| `load_recipe` | Load a recipe by name as raw YAML — read-only, no migration (ungated) |
+| `validate_recipe` | Validate a pipeline recipe against the recipe schema (ungated) |
+| `get_pipeline_report` | Return accumulated run_skill/run_skill_retry failure report (ungated) |
+| `get_token_summary` | Return accumulated token usage grouped by step name (ungated) |
+| `open_kitchen` (prompt) | User-only activation — type the open_kitchen prompt from the MCP prompt list |
+| `close_kitchen` (prompt) | User-only deactivation — type the close_kitchen prompt from the MCP prompt list |
+
+### **Configuration**
+
+All tool behavior is configurable via `.autoskillit/config.yaml`. No config file = package defaults.
+
+**Available settings:**
+
+| Section | Key | Default | Description |
+|---------|-----|---------|-------------|
+| `test_check` | `command` | `["task", "test-check"]` | Test command for `test_check` and `merge_worktree` |
+| `test_check` | `timeout` | `600` | Test command timeout in seconds |
+| `model` | `default` | `null` | Default model for run_skill/run_skill_retry when step has no model field |
+| `model` | `override` | `null` | Force all run_skill/run_skill_retry to use this model (overrides step YAML) |
+| `token_usage` | `verbosity` | `"summary"` | Token table behavior: `"summary"` = render once at pipeline end; `"none"` = suppress entirely |

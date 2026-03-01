@@ -284,8 +284,6 @@ steps:
       skill_command: "/autoskillit:open-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "open_pr"
-    capture:
-      pr_url: "${{ result.pr_url }}"
     on_success: cleanup_success
     on_failure: cleanup_failure
     optional: true

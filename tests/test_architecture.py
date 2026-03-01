@@ -2049,3 +2049,36 @@ def test_migration_engine_no_module_level_recipe_imports() -> None:
         if stem == "recipe"
     ]
     assert not recipe_violations, f"module-level recipe imports remain: {recipe_violations}"
+
+
+def test_make_context_no_isinstance_against_concrete_migration() -> None:
+    """REQ-P12-001: _factory.py must contain no isinstance check against DefaultMigrationService."""
+    import ast
+    from pathlib import Path
+
+    factory_src = (
+        Path(__file__).parent.parent
+        / "src/autoskillit/server/_factory.py"
+    ).read_text()
+    tree = ast.parse(factory_src)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id == "isinstance":
+                args = node.args
+                if len(args) == 2:
+                    second = args[1]
+                    name = (
+                        second.id
+                        if isinstance(second, ast.Name)
+                        else (
+                            second.attr
+                            if isinstance(second, ast.Attribute)
+                            else None
+                        )
+                    )
+                    assert name != "DefaultMigrationService", (
+                        "_factory.py must not downcast to DefaultMigrationService via isinstance. "
+                        "Wire using Protocol only."
+                    )

@@ -289,3 +289,25 @@ class TestDefaultMigrationService:
 
         assert "contracts_regenerated" in result
         assert result["contracts_regenerated"] == ["test-recipe"]
+
+
+def test_default_migration_service_accepts_run_headless_at_construction() -> None:
+    """REQ-P12-001: DefaultMigrationService.__init__ accepts run_headless kwarg."""
+    from unittest.mock import AsyncMock
+
+    from autoskillit.migration import DefaultMigrationService, default_migration_engine
+
+    sentinel = AsyncMock()
+    service = DefaultMigrationService(default_migration_engine(), run_headless=sentinel)
+    assert service._run_headless is sentinel
+
+
+def test_default_migration_service_has_no_bind_headless() -> None:
+    """REQ-P12-001: bind_headless is removed — constructor injection is the only wiring path."""
+    from autoskillit.migration import DefaultMigrationService, default_migration_engine
+
+    service = DefaultMigrationService(default_migration_engine())
+    assert not hasattr(service, "bind_headless"), (
+        "bind_headless must be removed from DefaultMigrationService. "
+        "Pass run_headless at construction time instead."
+    )

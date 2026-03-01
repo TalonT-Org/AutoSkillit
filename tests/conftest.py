@@ -8,6 +8,30 @@ import pytest
 from autoskillit.core.types import SubprocessResult, SubprocessRunner, TerminationReason
 
 
+class StatefulMockTester:
+    """Test double for TestRunner returning pre-configured results on successive calls.
+
+    Enables the scenario: pre-rebase tests pass, post-rebase tests fail.
+    Falls back to (True, "") for any call beyond the configured list.
+    """
+
+    def __init__(self, results: list[tuple[bool, str]]) -> None:
+        self._results = list(results)
+        self._index = 0
+
+    async def run(self, cwd: _Path) -> tuple[bool, str]:
+        if self._index < len(self._results):
+            result = self._results[self._index]
+        else:
+            result = (True, "")
+        self._index += 1
+        return result
+
+    @property
+    def call_count(self) -> int:
+        return self._index
+
+
 class MockSubprocessRunner(SubprocessRunner):
     """Test double for SubprocessRunner. Queues predetermined results.
 

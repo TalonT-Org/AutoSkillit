@@ -675,6 +675,33 @@ class TestMergeWorktree:
         result = json.loads(await merge_worktree(str(tmp_path), "main"))
         assert "error" in result
 
+    @pytest.mark.asyncio
+    async def test_merge_worktree_blocks_on_post_rebase_test_failure(
+        self, tool_ctx, tmp_path
+    ):
+        """merge_worktree MCP tool returns error when post-rebase tests fail."""
+        from tests.conftest import StatefulMockTester
+
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/feat")
+
+        tester = StatefulMockTester(results=[(True, "= 5 passed ="), (False, "= 1 failed =")])
+        tool_ctx.tester = tester
+        # Queue: rev-parse, branch, fetch, rebase (no merge queued — gate blocks)
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/feat\n", ""))
+        tool_ctx.runner.push(_make_result(0, "feat\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
+
+        result_json = await merge_worktree(str(wt), "main")
+        result = json.loads(result_json)
+
+        assert "error" in result
+        assert result["failed_step"] == "post_rebase_test_gate"
+        assert result["state"] == "worktree_intact"
+        assert "worktree_path" in result
+
 
 class TestRunSkillRetryGate:
     """run_skill_retry applies dry-walkthrough gate to implement skills."""

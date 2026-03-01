@@ -47,6 +47,69 @@ class MockSubprocessRunner(SubprocessRunner):
         return self._default
 
 
+@pytest.fixture(autouse=True)
+def _structlog_to_null():
+    """Prevent structlog from writing to stdout in any test.
+
+    In the default state (before configure_logging() is called), structlog's
+    PrintLoggerFactory routes all log output to sys.stdout. Tests that use
+    capsys to inspect stdout are silently corrupted when a mock bypass causes
+    a real production function to log.
+
+    This autouse fixture wraps every test in structlog.testing.capture_logs(),
+    which prepends a CapturingProcessor to the current processor chain. Log
+    events are captured as dicts and a DropEvent is raised before the message
+    reaches the underlying PrintLogger. No log call can reach stdout.
+
+    Works in the default state because module-level loggers share the same
+    processor list reference as structlog.get_config()["processors"] until
+    configure_logging() is called.
+
+    Note: TestConfigureLogging in test_logging.py has its own class-scoped
+    _reset_structlog autouse fixture that calls structlog.reset_defaults().
+    This resets the processor list, which would break the capture_logs()
+    context still active from this fixture. A class-level no-op override
+    is added to TestConfigureLogging to prevent this conflict.
+    """
+    import structlog.testing
+
+    with structlog.testing.capture_logs():
+        yield
+
+
+@pytest.fixture
+def parse_stdout_json(capsys):
+    """Parse capsys-captured stdout as JSON with diagnostic context on failure.
+
+    Replaces bare ``json.loads(capsys.readouterr().out)`` calls. When parsing
+    fails, raises AssertionError showing the full raw stdout and stderr content,
+    so the developer immediately sees what was captured rather than getting an
+    opaque JSONDecodeError with no context.
+
+    Usage::
+
+        def test_quota_status_outputs_json(self, monkeypatch, parse_stdout_json, tmp_path):
+            cli.quota_status()
+            data = parse_stdout_json()
+            assert "should_sleep" in data
+    """
+    import json
+
+    def _parse() -> dict:
+        captured = capsys.readouterr()
+        try:
+            return json.loads(captured.out)
+        except json.JSONDecodeError as exc:
+            raise AssertionError(
+                f"stdout is not valid JSON.\n"
+                f"  parse error : {exc}\n"
+                f"  stdout      : {captured.out!r}\n"
+                f"  stderr      : {captured.err!r}"
+            ) from exc
+
+    return _parse
+
+
 @pytest.fixture
 def tool_ctx(monkeypatch, tmp_path):
     """Provide a fully isolated ToolContext for server tests.

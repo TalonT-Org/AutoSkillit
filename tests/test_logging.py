@@ -84,6 +84,11 @@ def _flush_logger_proxy_caches() -> None:
 
 class TestConfigureLogging:
     @pytest.fixture(autouse=True)
+    def _structlog_to_null(self):
+        """Override the conftest autouse — _reset_structlog manages structlog state here."""
+        yield  # no-op: _reset_structlog handles reset before and after each test
+
+    @pytest.fixture(autouse=True)
     def _reset_structlog(self):
         structlog.reset_defaults()
         _flush_logger_proxy_caches()

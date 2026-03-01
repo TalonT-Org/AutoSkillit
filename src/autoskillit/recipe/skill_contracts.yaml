@@ -1,6 +1,6 @@
 version: "0.1.0"
 skills:
-  assess-and-merge:
+  resolve-failures:
     inputs:
       - name: worktree_path
         type: directory_path

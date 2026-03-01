@@ -8,7 +8,7 @@ kitchen_rules:
     orchestrator. All code changes and investigation happen through
     headless sessions via run_skill/run_skill_retry."
   - "Route to on_failure when a step fails — the downstream skill (e.g.,
-    assess-and-merge) has diagnostic access that the orchestrator does not.
+    resolve-failures) has diagnostic access that the orchestrator does not.
     Do not investigate or attempt to fix failures directly."
 
 ingredients:
@@ -109,7 +109,7 @@ steps:
     tool: run_skill
     model: sonnet
     with:
-      skill_command: "/autoskillit:assess-and-merge fix test failures"
+      skill_command: "/autoskillit:resolve-failures fix test failures"
       cwd: "${{ context.worktree_path }}"
       step_name: "assess"
     on_success: verify

@@ -210,20 +210,21 @@ steps:
     tool: run_skill
     model: sonnet
     with:
-      skill_command: "/autoskillit:assess-and-merge ${{ context.worktree_path }} ${{ context.plan_path }} ${{ context.integration_branch }}"
+      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ context.integration_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: "fix"
       base_branch: "${{ inputs.base_branch }}"
-    on_success: next_part_or_next_pr
+    on_success: test
     on_failure: cleanup_failure
     retry:
       max_attempts: 3
       on: needs_retry
       on_exhausted: cleanup_failure
     note: >
-      Fixes test failures and merges the worktree into context.integration_branch
-      (not inputs.base_branch — the base_branch with: key is present for contract
-      compatibility only; the merge target is always the integration branch).
+      Fixes test failures without merging. Routes back to test for
+      re-validation before merge_to_integration. The base_branch with: key is
+      present for contract compatibility only; the merge target is always the
+      integration branch.
 
   next_part_or_next_pr:
     action: route

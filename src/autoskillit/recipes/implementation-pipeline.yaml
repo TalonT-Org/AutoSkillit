@@ -199,16 +199,16 @@ steps:
     tool: run_skill
     model: sonnet
     with:
-      skill_command: "/autoskillit:assess-and-merge ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: "fix"
-    on_success: next_or_done
+    on_success: test
     on_failure: cleanup_failure
     retry:
       max_attempts: 3
       on: needs_retry
       on_exhausted: cleanup_failure
-    note: "Attempts to fix test failures and merge. After 3 failed attempts, routes to cleanup_failure."
+    note: "Fixes test failures without merging. Routes back to test for re-validation before merge_worktree."
 
   next_or_done:
     action: route

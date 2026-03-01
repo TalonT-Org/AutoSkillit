@@ -388,8 +388,29 @@ class TestClassifyFix:
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert "error" in result
-        assert "git diff failed" in result["error"]
+        # New behavior: all git diff failures fall back to FULL_RESTART
+        assert result["restart_scope"] == RestartScope.FULL_RESTART
+        assert "git error" in result["reason"].lower()
+
+    @pytest.mark.asyncio
+    async def test_classify_fix_returns_full_restart_when_ref_missing(
+        self, tool_ctx, tmp_path: Path
+    ) -> None:
+        """classify_fix returns FULL_RESTART when origin/<base_branch> ref is absent."""
+        wt = tmp_path / "wt"
+        wt.mkdir()
+
+        # git diff fails — ref doesn't exist
+        tool_ctx.runner.push(
+            _make_result(128, "", "fatal: ambiguous argument 'origin/feature/local-only'")
+        )
+
+        result = json.loads(await classify_fix(str(wt), "feature/local-only"))
+
+        # Must return restart_scope (not an error dict) — recipe routing depends on this key
+        assert "restart_scope" in result
+        assert result["restart_scope"] == RestartScope.FULL_RESTART
+        assert "feature/local-only" in result["reason"]
 
     @pytest.mark.asyncio
     async def test_critical_path_in_diff_triggers_full_restart(self, tool_ctx):

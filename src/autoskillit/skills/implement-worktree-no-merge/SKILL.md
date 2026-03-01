@@ -97,8 +97,14 @@ git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
 mkdir -p ".autoskillit/temp/worktrees/${WORKTREE_NAME}"
 echo "${CURRENT_BRANCH}" > ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch"
 # 2) Set git upstream tracking (requires remote tracking ref in local fetch cache)
-git fetch origin "${CURRENT_BRANCH}" 2>/dev/null || true
-git -C "${WORKTREE_PATH}" branch --set-upstream-to="origin/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null || true
+if ! git fetch origin "${CURRENT_BRANCH}" 2>/dev/null; then
+    echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on origin."
+    echo "      merge_worktree will fail unless you push first: git push -u origin ${CURRENT_BRANCH}"
+    echo "      Continuing — implementation will proceed, but the merge step will be blocked."
+fi
+if ! git -C "${WORKTREE_PATH}" branch --set-upstream-to="origin/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null; then
+    echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → 'origin/${CURRENT_BRANCH}'."
+fi
 ```
 
 ### Step 1.5: Initialize Code Index for Original Project

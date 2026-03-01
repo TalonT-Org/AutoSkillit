@@ -116,11 +116,25 @@ async def classify_fix(
         await _notify(
             ctx,
             "error",
-            "classify_fix: git diff failed",
+            "classify_fix: git diff failed (falling back to full_restart)",
             "autoskillit.classify_fix",
             extra={"worktree": worktree_path},
         )
-        return json.dumps({"error": f"git diff failed: {stderr}"})
+        # A missing origin/<base_branch> ref (rc=128, "ambiguous argument" or "unknown revision")
+        # is treated as FULL_RESTART — conservative safe default.
+        # Any other git error also falls back to FULL_RESTART for the same reason:
+        # if we can't determine what changed, assume the worst.
+        return json.dumps(
+            {
+                "restart_scope": RestartScope.FULL_RESTART,
+                "reason": (
+                    f"Cannot diff against origin/{base_branch} — ref may not exist locally. "
+                    f"git error: {stderr.strip()[:200]}"
+                ),
+                "critical_files": [],
+                "all_changed_files": [],
+            }
+        )
 
     prefixes = _get_config().classify_fix.path_prefixes
     changed_files, critical_files = _filter_changed_files(stdout, prefixes)

@@ -84,6 +84,11 @@ class DefaultGitHubFetcher:
     def __init__(self, *, token: str | None = None) -> None:
         self._token = token
 
+    @property
+    def has_token(self) -> bool:
+        """True if this fetcher was constructed with an authentication token."""
+        return bool(self._token)
+
     def _headers(self) -> dict[str, str]:
         h = {
             "Accept": "application/vnd.github+json",
@@ -116,6 +121,16 @@ class DefaultGitHubFetcher:
             async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
                 resp = await client.get(base, headers=headers)
                 if resp.status_code == 404:
+                    if not self.has_token:
+                        return {
+                            "success": False,
+                            "error": (
+                                f"Issue not found (HTTP 404): {issue_ref}. "
+                                "The repository may be private or restricted. "
+                                "Configure github.token in .autoskillit/config.yaml "
+                                "or set GITHUB_TOKEN before starting the server."
+                            ),
+                        }
                     return {"success": False, "error": f"Issue not found: {issue_ref}"}
                 if resp.status_code == 401:
                     return {"success": False, "error": "GitHub authentication failed (401)"}

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 import structlog
 
 from autoskillit.core.types import (
@@ -572,6 +573,76 @@ class TestComputeRetry:
         needs, reason = _compute_retry(s, 0, TerminationReason.NATURAL_EXIT)
         assert needs is False
         assert reason == RetryReason.NONE
+
+    def test_compute_retry_success_empty_natural_exit_zero_rc_is_retriable(self):
+        """
+        Regression: CLAUDE_CODE_EXIT_AFTER_STOP_DELAY causes NATURAL_EXIT with
+        subtype='success' and an empty result field. The CLI writes a valid result
+        envelope header before the timer fires, leaving result=''. This must retry.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="",
+            is_error=False,
+            session_id="abc",
+            errors=[],
+        )
+        needs_retry, reason = _compute_retry(
+            session, returncode=0, termination=TerminationReason.NATURAL_EXIT
+        )
+        assert needs_retry is True
+        assert reason == RetryReason.RESUME
+
+
+# ---------------------------------------------------------------------------
+# _compute_retry exhaustiveness guards
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("termination", list(TerminationReason))
+def test_compute_retry_handles_all_termination_reasons_without_raising(
+    termination: TerminationReason,
+) -> None:
+    """
+    Exhaustiveness guard: _compute_retry must return a valid (bool, RetryReason)
+    for every current and future TerminationReason value. If assert_never fires
+    for an unhandled value, this parametrize test catches it at collect-time.
+    """
+    session = ClaudeSessionResult(
+        subtype="success",
+        result="done. %%ORDER_UP%%",
+        is_error=False,
+        session_id="abc",
+        errors=[],
+    )
+    result = _compute_retry(session, returncode=0, termination=termination)
+    assert isinstance(result, tuple) and len(result) == 2
+    assert isinstance(result[0], bool)
+    assert isinstance(result[1], RetryReason)
+
+
+@pytest.mark.parametrize("termination", list(TerminationReason))
+def test_compute_success_handles_all_termination_reasons_without_raising(
+    termination: TerminationReason,
+) -> None:
+    """
+    Exhaustiveness guard for _compute_success: must return a defined bool
+    for every TerminationReason without raising.
+    """
+    session = ClaudeSessionResult(
+        subtype="success",
+        result="done. %%ORDER_UP%%",
+        is_error=False,
+        session_id="abc",
+        errors=[],
+    )
+    result = _compute_success(
+        session,
+        returncode=0,
+        termination=termination,
+        completion_marker="%%ORDER_UP%%",
+    )
+    assert isinstance(result, bool)
 
 
 # ---------------------------------------------------------------------------

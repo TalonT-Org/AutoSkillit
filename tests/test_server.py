@@ -46,7 +46,7 @@ from autoskillit.execution.session import (
     ClaudeSessionResult,
     _compute_retry,
     _compute_success,
-    _is_completion_kill_anomaly,
+    _is_kill_anomaly,
     extract_token_usage,
     parse_session_result,
 )
@@ -4620,8 +4620,8 @@ class TestComputeRetryUnparseable:
         assert reason == RetryReason.NONE
 
 
-class TestIsCompletionKillAnomaly:
-    """_is_completion_kill_anomaly covers exactly the subtypes that represent kill artifacts."""
+class TestIsKillAnomaly:
+    """_is_kill_anomaly covers exactly the subtypes that represent kill artifacts."""
 
     @pytest.mark.parametrize(
         "subtype,result,expected",
@@ -4643,7 +4643,7 @@ class TestIsCompletionKillAnomaly:
             errors=[],
             token_usage=None,
         )
-        assert _is_completion_kill_anomaly(session) is expected
+        assert _is_kill_anomaly(session) is expected
 
 
 class TestComputeRetrySuccessEmptyResult:
@@ -4696,8 +4696,14 @@ class TestComputeRetrySuccessEmptyResult:
         )
         assert retriable is False
 
-    def test_success_empty_result_natural_exit_is_not_retriable(self) -> None:
-        """success + "" + NATURAL_EXIT must NOT be retriable (CLI chose to exit clean)."""
+    def test_success_empty_result_natural_exit_zero_rc_is_retriable(self) -> None:
+        """success + "" + NATURAL_EXIT + rc=0 must be retriable (CLAUDE_CODE_EXIT_AFTER_STOP_DELAY race).
+
+        CLAUDE_CODE_EXIT_AFTER_STOP_DELAY causes a timer-based self-exit that produces
+        NATURAL_EXIT with subtype='success' and an empty result field. The CLI writes a
+        valid result envelope header before the timer fires, leaving result=''. This
+        is a kill-race artifact and must retry, not silently succeed-as-failure.
+        """
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
@@ -4706,10 +4712,11 @@ class TestComputeRetrySuccessEmptyResult:
             errors=[],
             token_usage=None,
         )
-        retriable, _ = _compute_retry(
+        retriable, reason = _compute_retry(
             session, returncode=0, termination=TerminationReason.NATURAL_EXIT
         )
-        assert retriable is False
+        assert retriable is True
+        assert reason == RetryReason.RESUME
 
     def test_empty_output_completed_negative_rc_is_retriable(self) -> None:
         """empty_output + COMPLETED + rc=-15 must be retriable.
@@ -4997,7 +5004,7 @@ class TestBuildSkillResultCompleted:
 
         Process was killed by infrastructure before writing any stdout.
         The COMPLETED + empty_output path is a kill artifact covered by
-        _is_completion_kill_anomaly.
+        _is_kill_anomaly.
         """
         result = _make_result(
             returncode=-15,

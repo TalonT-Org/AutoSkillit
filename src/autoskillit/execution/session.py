@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, assert_never
 
 from autoskillit.core import (
     CONTEXT_EXHAUSTION_MARKER,
@@ -316,18 +316,19 @@ _KILL_ANOMALY_SUBTYPES: frozenset[str] = frozenset(
 )
 
 
-def _is_completion_kill_anomaly(session: ClaudeSessionResult) -> bool:
+def _is_kill_anomaly(session: ClaudeSessionResult) -> bool:
     """True if the session result looks like a kill-induced incomplete flush.
 
-    When termination == COMPLETED, the process was killed by our infrastructure
-    (Channel B session monitor or Channel A heartbeat). Any result that is NOT
-    a genuine success is therefore our infrastructure's fault, not the task's.
+    Covers anomalies from both infrastructure kills (COMPLETED) and voluntary
+    self-exits (NATURAL_EXIT with returncode==0). Callers must apply their own
+    termination-specific discriminators before calling this function.
 
     Covers:
     - unparseable: process killed mid-write, stdout is partial NDJSON
     - empty_output: process killed before any stdout was written
     - success with empty result: kill occurred after result record was written
-      but with empty content (Channel B / Channel A drain-race)
+      but with empty content (Channel B / Channel A drain-race, or
+      CLAUDE_CODE_EXIT_AFTER_STOP_DELAY timer-based self-exit)
     """
     if session.subtype in _KILL_ANOMALY_SUBTYPES:
         return True
@@ -341,20 +342,42 @@ def _compute_retry(
     returncode: int,
     termination: TerminationReason,
 ) -> tuple[bool, RetryReason]:
-    """Cross-validate all signals to determine retry eligibility."""
-    # API-level retry: Claude API told us to retry (context exhaustion, max turns)
+    """Compute whether the session result warrants a retry.
+
+    Phase 1: API-level signals are termination-agnostic.
+    Phase 2: Exhaustive match dispatch over TerminationReason ensures mypy
+             flags any unhandled value when the enum is extended.
+    """
+    # Phase 1: API-level retry signals (context exhaustion, max_turns)
     if session.needs_retry:
         return True, RetryReason.RESUME
 
-    # Infrastructure anomaly: CLI launched, wrote nothing, exited cleanly.
-    # Covers: claude binary not found, immediate crash before any output.
-    # Uses returncode == 0 to distinguish from kill-induced empty output (COMPLETED path below).
-    if session.subtype == "empty_output" and returncode == 0:
-        return True, RetryReason.RESUME
+    # Phase 2: Exhaustive termination dispatch
+    match termination:
+        case TerminationReason.NATURAL_EXIT:
+            # NATURAL_EXIT covers both deliberate CLI exits AND
+            # CLAUDE_CODE_EXIT_AFTER_STOP_DELAY timer-based self-exits.
+            # returncode==0 discriminates: clean exit (possible kill-race artifact)
+            # vs genuine crash (nonzero returncode — not a timing artifact).
+            if returncode == 0 and _is_kill_anomaly(session):
+                return True, RetryReason.RESUME
+            return False, RetryReason.NONE
 
-    # Infrastructure anomaly: process was killed by our infrastructure (Channel B/A race).
-    # COMPLETED means we killed the process; any non-genuine-success result is our fault.
-    if termination == TerminationReason.COMPLETED and _is_completion_kill_anomaly(session):
-        return True, RetryReason.RESUME
+        case TerminationReason.COMPLETED:
+            # Infrastructure killed the process. SIGTERM/SIGKILL produce nonzero
+            # returncode by design — do not gate on returncode here.
+            if _is_kill_anomaly(session):
+                return True, RetryReason.RESUME
+            return False, RetryReason.NONE
 
-    return False, RetryReason.NONE
+        case TerminationReason.STALE:
+            # _build_skill_result intercepts STALE before calling _compute_retry.
+            # Explicit arm exists for exhaustiveness; unreachable in production.
+            return False, RetryReason.NONE
+
+        case TerminationReason.TIMED_OUT:
+            # Wall-clock timeout: non-retriable (permanent infrastructure limit).
+            return False, RetryReason.NONE
+
+        case _ as unreachable:
+            assert_never(unreachable)

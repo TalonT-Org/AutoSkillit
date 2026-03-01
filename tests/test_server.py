@@ -4754,10 +4754,10 @@ class TestComputeRetrySuccessEmptyResult:
 
 
 class TestComputeSuccessCompletedBypassEmptyResult:
-    """COMPLETED bypass requires non-empty result; empty result bypasses are rejected."""
+    """COMPLETED bypass and provenance bypass for empty-result scenarios."""
 
     def test_completed_success_empty_result_nonzero_rc_is_failure(self) -> None:
-        """COMPLETED bypass does NOT engage when result is empty, even for success subtype."""
+        """When data_confirmed=False (Channel B killed, drain timeout), empty result IS success."""
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
@@ -4766,14 +4766,27 @@ class TestComputeSuccessCompletedBypassEmptyResult:
             errors=[],
             token_usage=None,
         )
+        # data_confirmed=True (default) keeps the strict behavior
         assert (
             _compute_success(
                 session,
                 returncode=-15,
                 termination=TerminationReason.COMPLETED,
                 completion_marker="",
+                data_confirmed=True,
             )
             is False
+        )
+        # data_confirmed=False (Channel B drain-race) trusts Channel B's signal
+        assert (
+            _compute_success(
+                session,
+                returncode=-15,
+                termination=TerminationReason.COMPLETED,
+                completion_marker="",
+                data_confirmed=False,
+            )
+            is True
         )
 
 

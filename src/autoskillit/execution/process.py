@@ -480,6 +480,7 @@ async def run_managed_async(
             )
 
             termination = TerminationReason.NATURAL_EXIT
+            _data_confirmed = True
 
             # Build the race participants
             wait_task = asyncio.create_task(proc.wait())
@@ -540,18 +541,18 @@ async def run_managed_async(
                     # Channel A. Arm a bounded drain wait to give Channel A the
                     # opportunity to confirm data in stdout before killing.
                     if heartbeat_task is not None:
-                        data_confirmed = asyncio.Event()
-                        heartbeat_task.add_done_callback(lambda _: data_confirmed.set())
+                        channel_a_ready = asyncio.Event()
+                        heartbeat_task.add_done_callback(lambda _: channel_a_ready.set())
                         try:
                             await asyncio.wait_for(
-                                data_confirmed.wait(), timeout=completion_drain_timeout
+                                channel_a_ready.wait(), timeout=completion_drain_timeout
                             )
                         except TimeoutError:
                             # CLI did not flush type=result within drain_timeout.
-                            # Rare: indicates CLI hung after generating the
-                            # completion marker. Kill anyway — this is a genuine
-                            # CLI issue, not a race condition.
-                            pass
+                            # stdout data is not guaranteed — record that Channel A
+                            # did not confirm so downstream adjudication can trust
+                            # Channel B's session-JSONL signal instead.
+                            _data_confirmed = False
                     termination = TerminationReason.COMPLETED
                     await async_kill_process_tree(proc.pid)
             except TimeoutError:
@@ -575,6 +576,7 @@ async def run_managed_async(
                 stderr=stderr,
                 termination=termination,
                 pid=proc.pid,
+                data_confirmed=_data_confirmed,
             )
         except BaseException:
             # Ensure cleanup on unexpected errors (including CancelledError)

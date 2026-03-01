@@ -78,6 +78,14 @@ class SubprocessResult:
     stderr: str
     termination: TerminationReason
     pid: int
+    data_confirmed: bool = True
+    """True when Channel A (heartbeat) confirmed stdout data before the kill.
+
+    False only when Channel B (session_monitor) won the completion race and the
+    bounded drain wait expired before Channel A confirmed.  When False, stdout
+    may be empty even though the session completed successfully — callers must
+    trust Channel B's session-JSONL signal rather than demanding stdout content.
+    """
 
 
 @runtime_checkable

@@ -200,8 +200,19 @@ def _build_skill_result(
         returncode = result.returncode if result.returncode is not None else -1
         session = parse_session_result(result.stdout)
 
-    success = _compute_success(session, returncode, result.termination, completion_marker)
-    needs_retry, retry_reason = _compute_retry(session, returncode, result.termination)
+    success = _compute_success(
+        session,
+        returncode,
+        result.termination,
+        completion_marker,
+        data_confirmed=result.data_confirmed,
+    )
+    needs_retry, retry_reason = _compute_retry(
+        session,
+        returncode,
+        result.termination,
+        data_confirmed=result.data_confirmed,
+    )
 
     if not success and completion_marker:
         recovered = _recover_from_separate_marker(session, completion_marker)

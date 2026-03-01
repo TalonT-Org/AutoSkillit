@@ -287,10 +287,24 @@ def _compute_success(
     returncode: int,
     termination: TerminationReason,
     completion_marker: str = "",
+    data_confirmed: bool = True,
 ) -> bool:
     """Cross-validate all signals to determine unambiguous success/failure."""
     if termination in (TerminationReason.TIMED_OUT, TerminationReason.STALE):
         return False
+
+    # Provenance bypass: Channel B confirmed completion via session JSONL but the
+    # bounded drain wait expired before Channel A confirmed stdout data.  Trust
+    # Channel B's independent, authoritative signal and declare success without
+    # demanding stdout content that was not flushed before the kill.
+    # Placed before the returncode gate because a killed process has nonzero
+    # returncode, which Gate 2 would otherwise reject.
+    # Note: when stdout is empty, parse_session_result produces subtype="empty_output"
+    # with is_error=True — do not gate on subtype or is_error here; those fields
+    # reflect the absence of stdout data, not an actual session error.
+    if not data_confirmed and termination == TerminationReason.COMPLETED:
+        return True
+
     if returncode != 0:
         # COMPLETED path: the process was killed by our own async_kill_process_tree
         # (signal -15 or -9), so a non-zero returncode is expected and trustworthy
@@ -360,6 +374,7 @@ def _compute_retry(
     session: ClaudeSessionResult,
     returncode: int,
     termination: TerminationReason,
+    data_confirmed: bool = True,
 ) -> tuple[bool, RetryReason]:
     """Compute whether the session result warrants a retry.
 
@@ -385,6 +400,13 @@ def _compute_retry(
         case TerminationReason.COMPLETED:
             # Infrastructure killed the process. SIGTERM/SIGKILL produce nonzero
             # returncode by design — do not gate on returncode here.
+            # Provenance check: when Channel B confirmed completion and stdout was
+            # not flushed, _compute_success already declared success. A retry
+            # would re-run a completed session — suppress it.
+            # Note: parse_session_result("") produces empty_output, not success;
+            # do not gate on subtype here.
+            if not data_confirmed:
+                return False, RetryReason.NONE
             if _is_kill_anomaly(session):
                 return True, RetryReason.RESUME
             return False, RetryReason.NONE

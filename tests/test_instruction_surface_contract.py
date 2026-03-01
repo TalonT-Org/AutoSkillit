@@ -422,8 +422,7 @@ class TestSourceIsolationContract:
             assert wf.kitchen_rules, f"{wf_info.name} has no kitchen_rules"
             all_rules = " ".join(wf.kitchen_rules)
             assert self._SENTINEL in all_rules, (
-                f"{wf_info.name} uses clone_repo but kitchen_rules lack "
-                f"'{self._SENTINEL}'"
+                f"{wf_info.name} uses clone_repo but kitchen_rules lack '{self._SENTINEL}'"
             )
             assert "checkout" in all_rules.lower(), (
                 f"{wf_info.name} SOURCE ISOLATION rule must explicitly mention 'checkout'"
@@ -438,9 +437,7 @@ class TestSourceIsolationContract:
         from autoskillit.server.tools_clone import clone_repo
 
         doc = clone_repo.__doc__ or ""
-        assert self._SENTINEL in doc, (
-            "clone_repo docstring must contain 'SOURCE ISOLATION'"
-        )
+        assert self._SENTINEL in doc, "clone_repo docstring must contain 'SOURCE ISOLATION'"
         assert "checkout" in doc.lower(), (
             "clone_repo docstring must explicitly mention 'checkout' as prohibited"
         )

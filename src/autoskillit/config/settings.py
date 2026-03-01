@@ -106,7 +106,7 @@ class QuotaGuardConfig:
     buffer_seconds: int = 60
     cache_max_age: int = 60
     credentials_path: str = "~/.claude/.credentials.json"
-    cache_path: str = "~/.claude/usage_cache.json"
+    cache_path: str = "~/.claude/autoskillit_quota_cache.json"
 
 
 @dataclass
@@ -238,7 +238,7 @@ class AutomationConfig:
                 buffer_seconds=int(val(qg, "buffer_seconds", 60)),
                 cache_max_age=int(val(qg, "cache_max_age", 60)),
                 credentials_path=str(val(qg, "credentials_path", "~/.claude/.credentials.json")),
-                cache_path=str(val(qg, "cache_path", "~/.claude/usage_cache.json")),
+                cache_path=str(val(qg, "cache_path", "~/.claude/autoskillit_quota_cache.json")),
             ),
             github=GitHubConfig(
                 token=val(gh, "token", None) or None,

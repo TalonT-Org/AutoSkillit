@@ -65,7 +65,7 @@ quota_guard:
   buffer_seconds: 60
   cache_max_age: 60
   credentials_path: "~/.claude/.credentials.json"
-  cache_path: "~/.claude/usage_cache.json"
+  cache_path: "~/.claude/autoskillit_quota_cache.json"
 
 github:
   token: null

@@ -5,6 +5,7 @@ from __future__ import annotations
 from autoskillit.core import (
     AUTOSKILLIT_INSTALLED_VERSION,
     PIPELINE_FORBIDDEN_TOOLS,
+    SKILL_COMMAND_PREFIX,
     SKILL_TOOLS,
     Severity,
     get_logger,
@@ -984,3 +985,44 @@ def _check_push_before_audit(wf: Recipe) -> list[RuleFinding]:
         )
         for name in violations
     ]
+
+
+@semantic_rule(
+    "skill-command-missing-prefix",
+    "run_skill/run_skill_retry step has a skill_command that does not start with '/'",
+    severity=Severity.WARNING,
+)
+def _check_skill_command_prefix(wf: Recipe) -> list[RuleFinding]:
+    """Warn when skill_command does not start with '/'.
+
+    All valid skill invocations use a slash prefix: /autoskillit:<name>,
+    /local-project-skill, or /other-plugin:<name>. Free-form prose passed
+    to run_skill spawns a --dangerously-skip-permissions headless session
+    without any skill contract — this is almost always an orchestrator error.
+
+    Does NOT fire for non-run_skill tools (run_cmd, run_python, etc.).
+    Does NOT fire when skill_command is absent from with_args (step may use
+    a different argument shape — fail-open to avoid false positives).
+    """
+    findings = []
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command")
+        if skill_cmd is None:
+            continue  # absent key — fail-open
+        if not skill_cmd.strip().startswith(SKILL_COMMAND_PREFIX):
+            findings.append(
+                RuleFinding(
+                    rule="skill-command-missing-prefix",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"skill_command {skill_cmd!r} does not start with '/'. "
+                        "run_skill requires a slash-prefix (e.g. /autoskillit:investigate). "
+                        "Prose prompts bypass the skill contract and run with "
+                        "--dangerously-skip-permissions."
+                    ),
+                )
+            )
+    return findings

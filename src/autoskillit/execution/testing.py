@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _OUTCOME_PATTERN = re.compile(
-    r"(\d+)\s+(passed|failed|error|xfailed|xpassed|skipped|warnings?|deselected)"
+    r"(\d+)\s+(passed|failed|errors?|xfailed|xpassed|skipped|warnings?|deselected)"
 )
 _BARE_TIME_ANCHOR = re.compile(r"\bin\s+\d+(?:\.\d+)?s\b")
 
@@ -28,7 +28,7 @@ _BARE_TIME_ANCHOR = re.compile(r"\bin\s+\d+(?:\.\d+)?s\b")
 def _matches_to_counts(matches: list[tuple[str, str]]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for count_str, outcome in matches:
-        key = outcome.rstrip("s") if outcome == "warnings" else outcome
+        key = outcome.rstrip("s") if outcome in ("warnings", "errors") else outcome
         counts[key] = int(count_str)
     return counts
 

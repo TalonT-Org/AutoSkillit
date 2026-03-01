@@ -627,4 +627,25 @@ def test_find_recipe_by_name_returns_info_with_content(tmp_path: Path) -> None:
     (recipes_dir / "my-recipe.yaml").write_text(raw)
     info = find_recipe_by_name("my-recipe", tmp_path)
     assert info is not None
+
+
+# ---------------------------------------------------------------------------
+# Bundled recipe skill_command prefix contract
+# ---------------------------------------------------------------------------
+
+
+def test_bundled_recipes_all_skill_commands_start_with_slash() -> None:
+    """All run_skill/run_skill_retry steps in bundled recipes must have
+    skill_command starting with '/' after smoke-task migration."""
+    from autoskillit.core.types import SKILL_COMMAND_PREFIX, SKILL_TOOLS
+
+    violations: list[str] = []
+    for yaml_path in builtin_recipes_dir().glob("*.yaml"):
+        recipe = load_recipe(yaml_path)
+        for step_name, step in recipe.steps.items():
+            if step.tool in SKILL_TOOLS:
+                sc = step.with_args.get("skill_command", SKILL_COMMAND_PREFIX)
+                if not sc.strip().startswith(SKILL_COMMAND_PREFIX):
+                    violations.append(f"{yaml_path.name}:{step_name}: {sc!r}")
+    assert not violations, f"Bundled recipe steps with prose skill_command: {violations}"
     assert info.content == raw

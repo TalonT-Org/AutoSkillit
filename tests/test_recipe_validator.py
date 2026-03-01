@@ -822,7 +822,9 @@ def test_shadowed_required_input_clean_when_template_used() -> None:
             "implement": RecipeStep(
                 tool="run_skill_retry",
                 with_args={
-                    "skill_command": "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+                    "skill_command": (
+                        "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+                    )
                 },
                 on_success="done",
             ),

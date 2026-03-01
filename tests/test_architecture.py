@@ -796,6 +796,7 @@ def test_ungated_tools_do_not_call_require_enabled() -> None:
         tools_clone,
         tools_execution,
         tools_git,
+        tools_integrations,
         tools_recipe,
         tools_status,
         tools_workspace,
@@ -808,6 +809,7 @@ def test_ungated_tools_do_not_call_require_enabled() -> None:
         tools_clone,
         tools_recipe,
         tools_status,
+        tools_integrations,
     ]
 
     violations: list[str] = []

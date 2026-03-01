@@ -6862,7 +6862,9 @@ class TestGatedToolObservability:
         assert any(entry.get("tool") == "run_skill_retry" for entry in logs)
 
     @pytest.mark.asyncio
-    async def test_run_skill_retry_returns_failure_result_on_error_output(self, tool_ctx, mock_ctx):
+    async def test_run_skill_retry_returns_failure_result_on_error_output(
+        self, tool_ctx, mock_ctx
+    ):
         """run_skill_retry reports failure (success=false) when headless session fails."""
         tool_ctx.runner.push(
             _make_result(

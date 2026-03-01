@@ -10,9 +10,14 @@ All tests run under `-n 4 --dist worksteal`. Every test must be safe for paralle
 
 ## Fixture Discipline
 
-- The conftest.py autouse fixtures use `monkeypatch` for both `_tools_enabled` and `_config`
-- Class-level autouse fixtures that override these must also use `monkeypatch`
-- Never use `try/finally` for state restoration — use fixtures with `monkeypatch`
+- The `tool_ctx` fixture (conftest.py) provides a fully isolated `ToolContext` with gate open
+  by default (`DefaultGateState(enabled=True)`). It monkeypatches `server._ctx` so all server
+  tool handler calls use the test context without global state leakage.
+- To test with the kitchen closed, set `tool_ctx.gate = DefaultGateState(enabled=False)` at
+  the start of the test or in a class-level autouse fixture (see `_close_kitchen` in
+  `test_instruction_surface_contract.py` for an example).
+- Never use bare assignment or `try/finally` to restore server state — use `monkeypatch` or
+  rely on `tool_ctx`'s fixture teardown.
 
 ## Performance
 

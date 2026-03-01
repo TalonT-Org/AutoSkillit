@@ -1,10 +1,8 @@
 """Unit tests for the skill_cmd_check PreToolUse hook."""
+
 import json
-import sys
 from io import StringIO
 from unittest.mock import patch
-
-import pytest
 
 from autoskillit.hooks.skill_cmd_check import _looks_like_path, main
 
@@ -65,11 +63,15 @@ class TestLooksLikePath:
 
 class TestSkillCmdCheckAllow:
     def test_valid_path_slash_prefix(self):
-        result = _run_hook({"skill_command": "/autoskillit:implement-worktree-no-merge /path/to/plan.md"})
+        result = _run_hook(
+            {"skill_command": "/autoskillit:implement-worktree-no-merge /path/to/plan.md"}
+        )
         assert _decision(result) == "allow"
 
     def test_valid_path_temp_prefix(self):
-        result = _run_hook({"skill_command": "/autoskillit:implement-worktree-no-merge temp/make-plan/plan.md"})
+        result = _run_hook(
+            {"skill_command": "/autoskillit:implement-worktree-no-merge temp/make-plan/plan.md"}
+        )
         assert _decision(result) == "allow"
 
     def test_valid_path_dotslash(self):
@@ -81,20 +83,28 @@ class TestSkillCmdCheckAllow:
         assert _decision(result) == "allow"
 
     def test_retry_worktree_valid(self):
-        result = _run_hook({"skill_command": "/autoskillit:retry-worktree /path/plan.md /path/worktree"})
+        result = _run_hook(
+            {"skill_command": "/autoskillit:retry-worktree /path/plan.md /path/worktree"}
+        )
         assert _decision(result) == "allow"
 
     def test_resolve_failures_valid(self):
-        result = _run_hook({"skill_command": "/autoskillit:resolve-failures /path/worktree /path/plan.md main"})
+        result = _run_hook(
+            {"skill_command": "/autoskillit:resolve-failures /path/worktree /path/plan.md main"}
+        )
         assert _decision(result) == "allow"
 
     def test_non_path_skill_is_allowed_regardless(self):
         """Skills not in PATH_ARG_SKILLS are always allowed — free-form args."""
-        result = _run_hook({"skill_command": "/autoskillit:investigate describe the error in logging"})
+        result = _run_hook(
+            {"skill_command": "/autoskillit:investigate describe the error in logging"}
+        )
         assert _decision(result) == "allow"
 
     def test_make_plan_allowed_free_form(self):
-        result = _run_hook({"skill_command": "/autoskillit:make-plan add feature X to the Y system"})
+        result = _run_hook(
+            {"skill_command": "/autoskillit:make-plan add feature X to the Y system"}
+        )
         assert _decision(result) == "allow"
 
     def test_no_skill_command_key_allows(self):
@@ -107,7 +117,9 @@ class TestSkillCmdCheckAllow:
 
     def test_no_path_like_tokens_allows(self):
         """Path-arg skill with no path-like tokens at all — could be pasted content."""
-        result = _run_hook({"skill_command": "/autoskillit:implement-worktree-no-merge some random free text"})
+        result = _run_hook(
+            {"skill_command": "/autoskillit:implement-worktree-no-merge some random free text"}
+        )
         assert _decision(result) == "allow"
 
     def test_malformed_json_stdin_allows(self):
@@ -126,61 +138,52 @@ class TestSkillCmdCheckAllow:
 # Deny cases
 # ---------------------------------------------------------------------------
 
+# Canonical bug: extra words before path token (matches the bug report exactly)
+_CANONICAL_BUG = "/autoskillit:implement-worktree-no-merge the verified plan temp/rectify/plan.md"
+_WORKTREE_ABSOLUTE = "/autoskillit:implement-worktree the latest approved /home/user/plans/plan.md"
+_RETRY_EXTRA = "/autoskillit:retry-worktree use this plan temp/plan.md /path/worktree"
+_RESOLVE_EXTRA = "/autoskillit:resolve-failures the worktree /path/worktree /path/plan.md main"
+
 
 class TestSkillCmdCheckDeny:
     def test_canonical_bug_extra_words_before_temp_path(self):
         """The exact failing pattern from the bug report."""
-        result = _run_hook({
-            "skill_command": "/autoskillit:implement-worktree-no-merge the verified plan temp/rectify/plan.md"
-        })
+        result = _run_hook({"skill_command": _CANONICAL_BUG})
         assert _decision(result) == "deny"
 
     def test_deny_message_contains_found_path(self):
-        result = _run_hook({
-            "skill_command": "/autoskillit:implement-worktree-no-merge the verified plan temp/rectify/plan.md"
-        })
+        result = _run_hook({"skill_command": _CANONICAL_BUG})
         reason = result["hookSpecificOutput"]["permissionDecisionReason"]
         assert "temp/rectify/plan.md" in reason
 
     def test_deny_message_contains_skill_name(self):
-        result = _run_hook({
-            "skill_command": "/autoskillit:implement-worktree-no-merge the verified plan temp/rectify/plan.md"
-        })
+        result = _run_hook({"skill_command": _CANONICAL_BUG})
         reason = result["hookSpecificOutput"]["permissionDecisionReason"]
         assert "implement-worktree-no-merge" in reason
 
     def test_deny_message_suggests_correct_format(self):
         """Denial reason should show the correct skill_command to use."""
-        result = _run_hook({
-            "skill_command": "/autoskillit:implement-worktree-no-merge the verified plan temp/rectify/plan.md"
-        })
+        result = _run_hook({"skill_command": _CANONICAL_BUG})
         reason = result["hookSpecificOutput"]["permissionDecisionReason"]
         # Should show the extracted path in the corrected format
         assert "/autoskillit:implement-worktree-no-merge temp/rectify/plan.md" in reason
 
     def test_extra_words_before_absolute_path(self):
-        result = _run_hook({
-            "skill_command": "/autoskillit:implement-worktree the latest approved /home/user/plans/plan.md"
-        })
+        result = _run_hook({"skill_command": _WORKTREE_ABSOLUTE})
         assert _decision(result) == "deny"
 
     def test_retry_worktree_extra_words(self):
-        result = _run_hook({
-            "skill_command": "/autoskillit:retry-worktree use this plan temp/plan.md /path/worktree"
-        })
+        result = _run_hook({"skill_command": _RETRY_EXTRA})
         assert _decision(result) == "deny"
 
     def test_resolve_failures_extra_words(self):
-        result = _run_hook({
-            "skill_command": "/autoskillit:resolve-failures the worktree /path/worktree /path/plan.md main"
-        })
+        result = _run_hook({"skill_command": _RESOLVE_EXTRA})
         assert _decision(result) == "deny"
 
     def test_hookSpecificOutput_structure(self):
         """Verify the deny response has the correct JSON structure."""
-        result = _run_hook({
-            "skill_command": "/autoskillit:implement-worktree-no-merge extra temp/plan.md"
-        })
+        cmd = "/autoskillit:implement-worktree-no-merge extra temp/plan.md"
+        result = _run_hook({"skill_command": cmd})
         assert "hookSpecificOutput" in result
         hso = result["hookSpecificOutput"]
         assert hso["hookEventName"] == "PreToolUse"

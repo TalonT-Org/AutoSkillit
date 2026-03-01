@@ -25,6 +25,7 @@ message. The two-pronged design (hook + SKILL.md path-detection instructions)
 provides defence in depth: even if the hook deny is occasionally ignored,
 the headless Claude session's Step 0 catches the case internally.
 """
+
 from __future__ import annotations
 
 import json
@@ -118,7 +119,7 @@ def main() -> None:
         f"found extra descriptive text '{first}...' before the path argument "
         f"'{path_token}'. Path-argument skills require the path as the first "
         f"argument after the skill name. "
-        f"Fix: set skill_command to \"{correct_cmd}\" "
+        f'Fix: set skill_command to "{correct_cmd}" '
         f"(append any remaining positional args after the path if needed)."
     )
     sys.exit(0)

@@ -270,6 +270,7 @@ class TestSmokeScriptValidation:
         expected_steps = {
             "setup",
             "seed_task",
+            "set_feature_branch",
             "create_branch",
             "investigate",
             "rectify",

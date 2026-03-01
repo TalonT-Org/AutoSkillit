@@ -1991,14 +1991,6 @@ class TestImplementationPipelineStructure:
         assert step.on_result is not None
         assert step.on_result.routes.get("all_done") == "audit_impl"
 
-    def test_ip_b1_implement_captures_branch_name(self) -> None:
-        """T_IP_B1: implement step must capture branch_name from result."""
-        step = self.recipe.steps["implement"]
-        assert "branch_name" in step.capture, (
-            "implement step must capture branch_name so audit_impl can pass a "
-            "stable git ref to audit-impl after merge_worktree deletes the worktree"
-        )
-
     def test_ip_audit_impl_uses_base_sha_as_ref(self) -> None:
         """T_IP_B2: audit_impl must use context.base_sha (not context.branch_name) as implementation_ref.
 
@@ -2013,14 +2005,6 @@ class TestImplementationPipelineStructure:
         )
         assert "context.branch_name" not in skill_cmd, (
             "audit_impl must NOT use context.branch_name (deleted by merge_worktree)"
-        )
-
-    def test_ip_b3_retry_worktree_captures_branch_name(self) -> None:
-        """T_IP_B3: retry_worktree step must also capture branch_name."""
-        step = self.recipe.steps["retry_worktree"]
-        assert "branch_name" in step.capture, (
-            "retry_worktree also updates the active worktree reference; "
-            "it must capture branch_name for downstream audit_impl use"
         )
 
     def test_ip_c1_fix_step_routes_on_success_to_test(self) -> None:

@@ -155,7 +155,7 @@ skills:
         required: true
       - name: branch_name
         type: string
-        required: true
+        required: false
       - name: base_branch
         type: string
         required: false

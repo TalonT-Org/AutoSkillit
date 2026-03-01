@@ -1,7 +1,7 @@
 name: smoke-test
 autoskillit_version: "0.2.0"
 description: End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
-summary: setup > seed_task > create_branch? > investigate > rectify > implement > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
+summary: setup > seed_task > set_feature_branch > create_branch? > investigate > rectify > implement > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
 
 ingredients:
   workspace:
@@ -37,8 +37,24 @@ steps:
     with:
       cmd: "echo 'Create ok.txt with content OK' > task.txt"
       cwd: "${{ inputs.workspace }}"
+    on_success: set_feature_branch
+    on_failure: escalate
+
+  set_feature_branch:
+    tool: run_cmd
+    with:
+      cmd: "printf '%s' '${{ inputs.base_branch }}'"
+      cwd: "${{ inputs.workspace }}"
+    capture:
+      feature_branch: "${{ result.stdout }}"
     on_success: create_branch
     on_failure: escalate
+    note: >
+      Unconditionally sets feature_branch to inputs.base_branch as the default.
+      When collect_on_branch=true, the subsequent create_branch step overrides
+      feature_branch by capturing the newly-created branch name. When
+      collect_on_branch=false, create_branch is skipped and this default stands.
+      This eliminates the undefined-context-variable gap in the merge step.
 
   create_branch:
     tool: run_cmd
@@ -56,8 +72,9 @@ steps:
     optional: true
     note: >
       Only execute if inputs.collect_on_branch is 'true'. Otherwise skip to investigate.
-      Creates the feature branch, initialises bug_report.json, and captures the branch
-      name into context.feature_branch for use by the merge step.
+      Creates the feature branch, initialises bug_report.json, and overrides
+      context.feature_branch (set to inputs.base_branch by set_feature_branch) with
+      the newly-created branch name for use by the merge step.
 
   investigate:
     tool: run_skill

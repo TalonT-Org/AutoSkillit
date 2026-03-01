@@ -1,6 +1,6 @@
 name: implementation-pipeline
 description: Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
-summary: clone > (create_branch?) > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > (audit-impl?) > (open_pr?) > merge > push > cleanup (per group, per plan part)
+summary: clone > capture_base_sha > set_merge_target > (create_branch?) > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > (audit-impl?) > (open_pr?) > merge > push > cleanup (per group, per plan part)
 autoskillit_version: "0.2.0"
 
 ingredients:
@@ -55,12 +55,43 @@ steps:
     capture:
       work_dir: "${{ result.clone_path }}"
       source_dir: "${{ result.source_dir }}"
-    on_success: create_branch
+    on_success: capture_base_sha
     on_failure: escalate_stop
     note: >
       Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
       Captures work_dir context used by all subsequent steps as cwd.
       On failure, escalate_stop is reached immediately (no clone to remove).
+
+  capture_base_sha:
+    tool: run_cmd
+    with:
+      cmd: "git -C ${{ context.work_dir }} rev-parse ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+    capture:
+      base_sha: "${{ result.stdout | trim }}"
+    on_success: set_merge_target
+    on_failure: escalate_stop
+    note: >
+      Capture the SHA of base_branch before any merge begins. A commit SHA names
+      a git object (not a ref), so it survives git branch -D unconditionally. This
+      SHA is passed to audit_impl as implementation_ref to diff the full
+      multi-group implementation against the pre-implementation state.
+
+  set_merge_target:
+    tool: run_cmd
+    with:
+      cmd: "printf '%s' '${{ inputs.base_branch }}'"
+      cwd: "${{ context.work_dir }}"
+    capture:
+      merge_target: "${{ result.stdout }}"
+    on_success: create_branch
+    on_failure: escalate_stop
+    note: >
+      Unconditionally sets merge_target to inputs.base_branch as the default.
+      When open_pr=true, the subsequent create_branch step overrides merge_target
+      by capturing the newly-created feature branch name. When open_pr=false,
+      create_branch is skipped and this default stands. This eliminates the
+      undefined-context-variable gap that existed when create_branch was optional.
 
   create_branch:
     tool: run_cmd
@@ -75,9 +106,11 @@ steps:
     note: >
       Only execute if open_pr is 'true'.
       When open_pr='true': runs git checkout -b {run_name} and captures stdout (the branch name)
-      as context.merge_target. All subsequent merge/push steps target this feature branch.
-      When open_pr='false': skip this step and set context.merge_target = inputs.base_branch
-      so that merge_worktree and push_to_remote continue to target base_branch directly.
+      as context.merge_target, overriding the default set by set_merge_target.
+      All subsequent merge/push steps target this feature branch.
+      When open_pr='false': skip this step; context.merge_target retains the value set by
+      set_merge_target (inputs.base_branch), so merge_worktree and push_to_remote continue
+      to target base_branch directly.
 
   group:
     tool: run_skill
@@ -152,14 +185,13 @@ steps:
       step_name: "implement"
     capture:
       worktree_path: "${{ result.worktree_path }}"
-      branch_name: "${{ result.branch_name }}"
     on_success: test
     on_failure: cleanup_failure
     retry:
       max_attempts: 0
       on: needs_retry
       on_exhausted: retry_worktree
-    note: "Extracts worktree_path and branch_name from result for use in subsequent steps."
+    note: "Extracts worktree_path from result for use in subsequent steps."
 
   retry_worktree:
     tool: run_skill_retry
@@ -169,7 +201,6 @@ steps:
       step_name: "retry_worktree"
     capture:
       worktree_path: "${{ result.worktree_path }}"
-      branch_name: "${{ result.branch_name }}"
     on_success: test
     on_failure: cleanup_failure
     retry:
@@ -248,7 +279,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.branch_name }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.base_sha }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:
@@ -266,8 +297,10 @@ steps:
       Captures verdict and remediation_path. Routes GO → open_pr_step, NO GO → remediate
       which re-enters the plan step with the remediation file.
       All groups and parts have been merged at this point — no worktree exists.
-      Uses context.branch_name (stable git ref) as implementation_ref so audit-impl
-      can diff even after merge_worktree has deleted the worktree directory.
+      Uses context.base_sha (a stable commit SHA captured before any merge began)
+      as implementation_ref. A SHA names a git object and survives git branch -D
+      unconditionally. The diff git diff base_sha..base_branch (two-dot, SHA on the
+      left) covers the full implementation across all plan groups.
 
   remediate:
     action: route

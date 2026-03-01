@@ -72,22 +72,64 @@ async def perform_merge(
     """
     # 1. Path existence check
     if not os.path.isdir(worktree_path):
-        return {"error": f"Path does not exist: {worktree_path}"}
+        return {
+            "error": f"Path does not exist: {worktree_path}",
+            "failed_step": MergeFailedStep.PATH_VALIDATION,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": worktree_path,
+        }
 
     # 2. Verify it is a git worktree (not a plain repo)
     rc, git_dir, stderr = await _run_git(
         ["git", "rev-parse", "--git-dir"], worktree_path, 10, runner
     )
     if rc != 0 or "/worktrees/" not in git_dir:
-        return {"error": f"Not a git worktree: {worktree_path}", "stderr": stderr}
+        return {
+            "error": f"Not a git worktree: {worktree_path}",
+            "failed_step": MergeFailedStep.PATH_VALIDATION,
+            "state": MergeState.WORKTREE_INTACT,
+            "stderr": stderr,
+            "worktree_path": worktree_path,
+        }
 
     # 3. Get branch name
     rc, branch_out, stderr = await _run_git(
         ["git", "branch", "--show-current"], worktree_path, 10, runner
     )
     if rc != 0:
-        return {"error": f"Could not determine branch: {stderr}"}
+        return {
+            "error": f"Could not determine branch: {stderr}",
+            "failed_step": MergeFailedStep.BRANCH_DETECTION,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": worktree_path,
+        }
     worktree_branch = branch_out.strip()
+    if not worktree_branch:
+        return {
+            "error": (
+                "Worktree is in detached HEAD state — "
+                "possibly mid-rebase from a prior failed attempt. "
+                "Run 'git rebase --abort' in the worktree before retrying."
+            ),
+            "failed_step": MergeFailedStep.BRANCH_DETECTION,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": worktree_path,
+        }
+
+    # Pre-condition: check for active rebase using git directory state files.
+    # Uses directory presence (not REBASE_HEAD file) to avoid false positives
+    # from stale files left by third-party git tools after a completed rebase.
+    git_dir_path = Path(git_dir.strip())
+    if (git_dir_path / "rebase-merge").is_dir() or (git_dir_path / "rebase-apply").is_dir():
+        return {
+            "error": (
+                "Worktree has a rebase in progress from a prior attempt. "
+                "Run 'git rebase --abort' in the worktree and retry."
+            ),
+            "failed_step": MergeFailedStep.REBASE,
+            "state": MergeState.WORKTREE_DIRTY_MID_OPERATION,
+            "worktree_path": worktree_path,
+        }
 
     # 4. Test gate
     if config.safety.test_gate_on_merge:
@@ -98,13 +140,14 @@ async def perform_merge(
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
             }
-        passed, _ = await tester.run(Path(worktree_path))
+        passed, test_stdout = await tester.run(Path(worktree_path))
         if not passed:
             return {
                 "error": "Tests failed in worktree — merge blocked",
                 "failed_step": MergeFailedStep.TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
+                "test_output": test_stdout,
             }
 
     # 5. Fetch
@@ -145,13 +188,25 @@ async def perform_merge(
         ["git", "rebase", f"origin/{base_branch}"], worktree_path, 120, runner
     )
     if rc != 0:
-        await _run_git(["git", "rebase", "--abort"], worktree_path, 30, runner)
+        abort_rc, _, abort_stderr = await _run_git(
+            ["git", "rebase", "--abort"], worktree_path, 30, runner
+        )
+        abort_failed = abort_rc != 0
         return {
-            "error": "Rebase failed — aborted to clean state",
+            "error": (
+                "Rebase failed — worktree may still be dirty (abort also failed)"
+                if abort_failed
+                else "Rebase failed — aborted to clean state"
+            ),
             "failed_step": MergeFailedStep.REBASE,
-            "state": MergeState.WORKTREE_INTACT_REBASE_ABORTED,
+            "state": (
+                MergeState.WORKTREE_DIRTY_ABORT_FAILED
+                if abort_failed
+                else MergeState.WORKTREE_INTACT_REBASE_ABORTED
+            ),
             "stderr": rebase_stderr,
             "worktree_path": worktree_path,
+            **({"abort_failed": True, "abort_stderr": abort_stderr} if abort_failed else {}),
         }
 
     # 7. Discover main repo path
@@ -164,18 +219,35 @@ async def perform_merge(
             main_repo = line.split(" ", 1)[1].strip()
             break  # First entry is always the main working tree
     if not main_repo:
-        return {"error": "Could not determine main repo path from worktree list"}
+        return {
+            "error": "Could not locate main repository from worktree list",
+            "failed_step": MergeFailedStep.MERGE,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": worktree_path,
+        }
 
     # 8. Merge
     rc, _, merge_stderr = await _run_git(["git", "merge", worktree_branch], main_repo, 60, runner)
     if rc != 0:
-        await _run_git(["git", "merge", "--abort"], main_repo, 30, runner)
+        abort_rc, _, abort_stderr = await _run_git(
+            ["git", "merge", "--abort"], main_repo, 30, runner
+        )
+        abort_failed = abort_rc != 0
         return {
-            "error": "Merge failed — aborted to clean state",
+            "error": (
+                "Merge failed — main repo may still be dirty (abort also failed)"
+                if abort_failed
+                else "Merge failed — aborted to clean state"
+            ),
             "failed_step": MergeFailedStep.MERGE,
-            "state": MergeState.MAIN_REPO_MERGE_ABORTED,
+            "state": (
+                MergeState.MAIN_REPO_DIRTY_ABORT_FAILED
+                if abort_failed
+                else MergeState.MAIN_REPO_MERGE_ABORTED
+            ),
             "stderr": merge_stderr,
             "worktree_path": worktree_path,
+            **({"abort_failed": True, "abort_stderr": abort_stderr} if abort_failed else {}),
         }
 
     # 9. Cleanup

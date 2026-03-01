@@ -23,6 +23,8 @@ def test_retry_reason_values():
 def test_merge_failed_step_values():
     """MergeFailedStep enum covers all failure points."""
     assert set(MergeFailedStep) == {
+        MergeFailedStep.PATH_VALIDATION,
+        MergeFailedStep.BRANCH_DETECTION,
         MergeFailedStep.TEST_GATE,
         MergeFailedStep.FETCH,
         MergeFailedStep.REBASE,
@@ -36,7 +38,10 @@ def test_merge_state_values():
         MergeState.WORKTREE_INTACT,
         MergeState.WORKTREE_INTACT_REBASE_ABORTED,
         MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED,
+        MergeState.WORKTREE_DIRTY_ABORT_FAILED,
+        MergeState.WORKTREE_DIRTY_MID_OPERATION,
         MergeState.MAIN_REPO_MERGE_ABORTED,
+        MergeState.MAIN_REPO_DIRTY_ABORT_FAILED,
     }
 
 

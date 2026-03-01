@@ -2833,18 +2833,22 @@ class TestMergeWorktreeNoBypass:
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
 
     @pytest.mark.asyncio
-    async def test_gate_failure_does_not_expose_summary(self, tool_ctx, tmp_path):
-        """When gate blocks, response contains no test output details."""
+    async def test_gate_failure_exposes_test_output(self, tool_ctx, tmp_path):
+        """When gate blocks, response must include test output for orchestrator diagnosis."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
-        tool_ctx.runner.push(_make_result(1, "= 3 failed, 97 passed =", ""))  # test-check
+        tool_ctx.runner.push(
+            _make_result(1, "FAILED test_x::test_foo\n= 3 failed, 97 passed =", "")
+        )  # test-check
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
-        assert "test_summary" not in result
+        assert "test_output" in result
+        assert "3 failed" in result["test_output"]
+        assert "test_x" in result["test_output"]
 
 
 class TestGatedToolAccess:
@@ -7647,3 +7651,101 @@ class TestPushToRemoteTool:
             )
         assert "error" in result
         assert "remote rejected" in result["stderr"]
+
+
+class TestMergeWorktreeStateGuards:
+    """Explicit pre-condition guards and diagnostic state forwarding in perform_merge."""
+
+    @pytest.mark.asyncio
+    async def test_detects_detached_head_before_operations(self, tool_ctx, tmp_path):
+        """git branch --show-current returning '' must be caught immediately at Stage 3."""
+        fake_wt = tmp_path / "wt"
+        fake_wt.mkdir()
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/impl\n", ""))  # rev-parse
+        tool_ctx.runner.push(
+            _make_result(0, "\n", "")
+        )  # branch --show-current: empty (detached HEAD)
+        # No further calls — gate fires at Stage 3
+
+        result = json.loads(await merge_worktree(str(fake_wt), "main"))
+
+        assert "error" in result
+        assert result["failed_step"] == MergeFailedStep.BRANCH_DETECTION
+        assert result["state"] == MergeState.WORKTREE_INTACT
+        assert "detached" in result["error"].lower()
+        # Verify test-check was NOT invoked: only rev-parse + branch were called
+        assert len(tool_ctx.runner.call_args_list) == 2
+
+    @pytest.mark.asyncio
+    async def test_gate_failure_includes_test_output(self, tool_ctx, tmp_path):
+        """test_stdout discard must be removed — orchestrators need to see which tests failed."""
+        fake_wt = tmp_path / "wt"
+        fake_wt.mkdir()
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/impl\n", ""))
+        tool_ctx.runner.push(_make_result(0, "feat/my-branch\n", ""))
+        tool_ctx.runner.push(
+            _make_result(1, "FAILED test_x::test_foo\n= 3 failed, 97 passed =", "")
+        )  # test-check fails
+
+        result = json.loads(await merge_worktree(str(fake_wt), "main"))
+
+        assert result["failed_step"] == MergeFailedStep.TEST_GATE
+        assert "test_output" in result
+        assert "3 failed" in result["test_output"]
+        assert "test_x" in result["test_output"]
+
+    @pytest.mark.asyncio
+    async def test_rebase_abort_failure_yields_dirty_state(self, tool_ctx, tmp_path):
+        """Claiming WORKTREE_INTACT_REBASE_ABORTED when abort failed is a lie."""
+        fake_wt = tmp_path / "wt"
+        fake_wt.mkdir()
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/impl\n", ""))
+        tool_ctx.runner.push(_make_result(0, "feat/my-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "= 1979 passed =", ""))  # test-check passes
+        tool_ctx.runner.push(_make_result(0, "", ""))  # fetch succeeds
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ref check passes
+        tool_ctx.runner.push(_make_result(1, "", "CONFLICT: file.py"))  # rebase fails
+        tool_ctx.runner.push(_make_result(128, "", "fatal: no rebase in progress"))  # abort FAILS
+
+        result = json.loads(await merge_worktree(str(fake_wt), "main"))
+
+        assert result["failed_step"] == MergeFailedStep.REBASE
+        assert result["state"] == MergeState.WORKTREE_DIRTY_ABORT_FAILED
+        assert result.get("abort_failed") is True
+
+    @pytest.mark.asyncio
+    async def test_rebase_abort_success_yields_intact_state(self, tool_ctx, tmp_path):
+        """Happy path: abort_rc=0 keeps the clean-state claim."""
+        fake_wt = tmp_path / "wt"
+        fake_wt.mkdir()
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/impl\n", ""))
+        tool_ctx.runner.push(_make_result(0, "feat/my-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "= 1979 passed =", ""))  # test passes
+        tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ref check
+        tool_ctx.runner.push(_make_result(1, "", "CONFLICT"))  # rebase fails
+        tool_ctx.runner.push(_make_result(0, "", ""))  # abort succeeds
+
+        result = json.loads(await merge_worktree(str(fake_wt), "main"))
+
+        assert result["failed_step"] == MergeFailedStep.REBASE
+        assert result["state"] == MergeState.WORKTREE_INTACT_REBASE_ABORTED
+        assert result.get("abort_failed") is None
+
+    @pytest.mark.asyncio
+    async def test_detects_rebase_in_progress_via_rebase_merge_dir(self, tool_ctx, tmp_path):
+        """rebase-merge/ directory presence is detected before running tests."""
+        fake_git_dir = tmp_path / ".git" / "worktrees" / "impl"
+        fake_git_dir.mkdir(parents=True)
+        (fake_git_dir / "rebase-merge").mkdir()
+        fake_worktree = tmp_path / "worktree"
+        fake_worktree.mkdir()
+
+        tool_ctx.runner.push(_make_result(0, str(fake_git_dir) + "\n", ""))  # rev-parse
+        tool_ctx.runner.push(_make_result(0, "feat/my-branch\n", ""))  # branch
+
+        result = json.loads(await merge_worktree(str(fake_worktree), "main"))
+
+        assert "error" in result
+        assert result["state"] == MergeState.WORKTREE_DIRTY_MID_OPERATION
+        assert "rebase" in result["error"].lower()

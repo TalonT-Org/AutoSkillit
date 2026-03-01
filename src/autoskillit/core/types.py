@@ -24,6 +24,8 @@ class RetryReason(StrEnum):
 
 
 class MergeFailedStep(StrEnum):
+    PATH_VALIDATION = "path_validation"
+    BRANCH_DETECTION = "branch_detection"
     TEST_GATE = "test_gate"
     FETCH = "fetch"
     REBASE = "rebase"
@@ -34,7 +36,10 @@ class MergeState(StrEnum):
     WORKTREE_INTACT = "worktree_intact"
     WORKTREE_INTACT_REBASE_ABORTED = "worktree_intact_rebase_aborted"
     WORKTREE_INTACT_BASE_NOT_PUBLISHED = "worktree_intact_base_not_published"
+    WORKTREE_DIRTY_ABORT_FAILED = "worktree_dirty_abort_failed"
+    WORKTREE_DIRTY_MID_OPERATION = "worktree_dirty_mid_operation"
     MAIN_REPO_MERGE_ABORTED = "main_repo_merge_aborted"
+    MAIN_REPO_DIRTY_ABORT_FAILED = "main_repo_dirty_abort_failed"
 
 
 class RestartScope(StrEnum):

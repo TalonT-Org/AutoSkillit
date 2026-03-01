@@ -82,7 +82,7 @@ steps:
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:implement-worktree ${{ context.plan_path }}"
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "implement"
     capture:
@@ -113,6 +113,30 @@ steps:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
+    on_success: merge
+    on_failure: fix
+
+  fix:
+    tool: run_skill
+    model: sonnet
+    with:
+      skill_command: "/autoskillit:assess-and-merge ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: "fix"
+    on_success: test
+    on_failure: cleanup_failure
+    retry:
+      max_attempts: 3
+      on: needs_retry
+      on_exhausted: cleanup_failure
+
+  merge:
+    tool: merge_worktree
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+      base_branch: "${{ inputs.base_branch }}"
+    capture:
+      cleanup_succeeded: "${{ result.cleanup_succeeded }}"
     on_success: push
     on_failure: cleanup_failure
 

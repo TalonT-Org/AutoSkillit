@@ -2128,6 +2128,76 @@ class TestInvestigateFirstStructure:
             "it must capture branch_name for downstream audit_impl use"
         )
 
+    def test_if_c1_implement_uses_no_merge_skill(self) -> None:
+        """T_IF_C1: implement step must use implement-worktree-no-merge.
+
+        implement-worktree merges and deletes the worktree internally; subsequent
+        verify (test_check) and assess (assess-and-merge) steps would run against
+        a non-existent path. implement-worktree-no-merge leaves the worktree intact
+        for the orchestrator's gate-test-merge cycle.
+        """
+        step = self.recipe.steps["implement"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "implement-worktree-no-merge" in skill_cmd, (
+            "implement step must use implement-worktree-no-merge; "
+            "implement-worktree merges immediately, making verify and assess unreachable"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Structural tests — audit-and-fix (T_AAF1–T_AAF6)
+# ---------------------------------------------------------------------------
+
+
+class TestAuditAndFixStructure:
+    def setup_method(self) -> None:
+        self.recipe = load_recipe(builtin_recipes_dir() / "audit-and-fix.yaml")
+
+    def test_aaf1_implement_uses_no_merge_skill(self) -> None:
+        """T_AAF1: implement step must use implement-worktree-no-merge."""
+        step = self.recipe.steps["implement"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "implement-worktree-no-merge" in skill_cmd, (
+            "implement step must use implement-worktree-no-merge; "
+            "implement-worktree merges immediately so test_check runs on a deleted worktree"
+        )
+
+    def test_aaf2_has_merge_step(self) -> None:
+        """T_AAF2: recipe must have a merge step (merge_worktree) after test passes."""
+        assert "merge" in self.recipe.steps, (
+            "audit-and-fix must have a merge step; "
+            "without it the worktree is never merged after passing tests"
+        )
+
+    def test_aaf3_test_success_routes_to_merge(self) -> None:
+        """T_AAF3: test step must route to merge (not push) on success."""
+        assert self.recipe.steps["test"].on_success == "merge", (
+            "test must route to merge on success — push comes after merge, "
+            "not directly after test_check"
+        )
+
+    def test_aaf4_has_fix_step_for_test_failures(self) -> None:
+        """T_AAF4: test on_failure must route to a fix/assess step, not cleanup_failure."""
+        step = self.recipe.steps["test"]
+        assert step.on_failure not in ("cleanup_failure", "escalate_stop"), (
+            "test on_failure must route to a fix/assess step; "
+            "going directly to cleanup_failure discards fixable failures"
+        )
+
+    def test_aaf5_fix_step_routes_back_to_test(self) -> None:
+        """T_AAF5: fix step must exist and route on_success back to test."""
+        assert "fix" in self.recipe.steps, "fix step must exist for assess-and-merge loop"
+        assert self.recipe.steps["fix"].on_success == "test", (
+            "fix step must route back to test on success to re-validate the worktree"
+        )
+
+    def test_aaf6_merge_step_routes_to_push(self) -> None:
+        """T_AAF6: merge step must route to push on success."""
+        assert self.recipe.steps["merge"].on_success == "push", (
+            "merge step must route to push — the push step propagates the merged branch "
+            "from the clone back to the upstream remote"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Semantic rule tests — clone-root-as-worktree (T_CRW1–T_CRW5)

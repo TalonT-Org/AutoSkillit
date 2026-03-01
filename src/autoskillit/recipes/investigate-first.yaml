@@ -112,7 +112,7 @@ steps:
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:implement-worktree the verified plan"
+      skill_command: "/autoskillit:implement-worktree-no-merge the verified plan"
       cwd: "${{ context.work_dir }}"
       step_name: "implement"
     capture:

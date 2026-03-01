@@ -208,8 +208,17 @@ steps:
       base_branch: "${{ inputs.base_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
+      worktree_path: "${{ result.worktree_path }}"
     on_success: push
+    on_result:
+      field: failed_step
+      routes:
+        post_rebase_test_gate: assess
     on_failure: cleanup_failure
+    note: >
+      post_rebase_test_gate failures leave the worktree intact and route to
+      assess (resolve-failures) for remediation. All other failures route to
+      cleanup_failure.
 
   push:
     tool: push_to_remote

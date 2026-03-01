@@ -228,7 +228,12 @@ steps:
       base_branch: "${{ context.merge_target }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
+      worktree_path: "${{ result.worktree_path }}"
     on_success: next_or_done
+    on_result:
+      field: failed_step
+      routes:
+        post_rebase_test_gate: fix
     on_failure: cleanup_failure
     note: >
       After merge, route to next_or_done to process remaining parts/groups before pushing.
@@ -237,6 +242,8 @@ steps:
       are complete, go to audit_impl (via next_or_done).
       In PR mode (open_pr=true), merge_target is the feature branch named from run_name.
       In direct mode (open_pr=false), merge_target equals base_branch — behavior unchanged.
+      post_rebase_test_gate failures leave the worktree intact and route to fix
+      (resolve-failures) for remediation. All other failures route to cleanup_failure.
 
   push:
     tool: push_to_remote

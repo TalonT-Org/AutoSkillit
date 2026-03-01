@@ -93,7 +93,6 @@ Both tools are ungated — available without calling `open_kitchen`.
 | `remove_clone` | Yes | Tear down a clone directory (never raises) |
 | `push_to_remote` | Yes | Push from clone to remote without touching source |
 | `fetch_github_issue` | Yes | Fetch a GitHub issue as Markdown |
-| `check_quota` | No | Check 5-hour API quota utilization |
 | `kitchen_status` | No | Return version health and gate status |
 | `list_recipes` | No | List available recipes from project and bundled sources |
 | `load_recipe` | No | Load a recipe by name as raw YAML |

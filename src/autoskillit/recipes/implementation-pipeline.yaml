@@ -19,9 +19,6 @@ ingredients:
   run_name:
     description: Name prefix for this pipeline run (used in clone directory name)
     default: "impl"
-  keep_clone_on_failure:
-    description: Keep the clone directory when the pipeline fails (true/false)
-    default: "false"
   base_branch:
     description: Branch to merge into (defaults to current branch)
     default: main
@@ -297,24 +294,24 @@ steps:
     tool: remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
-      keep: "false"
+      keep: "true"
     on_success: done
     on_failure: done
     note: >
-      Removes the clone directory after a successful pipeline run.
-      Routes to done regardless of whether removal succeeds — a cleanup
-      failure should not mask a successful pipeline.
+      Clone preservation step — keep=true means the clone is never
+      auto-removed. Remove manually when done: rm -rf {clone_path}.
+      Routes to done regardless — this step is intentionally a no-op.
 
   cleanup_failure:
     tool: remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
-      keep: "${{ inputs.keep_clone_on_failure }}"
+      keep: "true"
     on_success: escalate_stop
     on_failure: escalate_stop
     note: >
-      Called on any pipeline failure where the clone was created.
-      Respects keep_clone_on_failure ingredient for debugging.
+      Clone preservation step — keep=true means the clone is never
+      auto-removed on failure. Remove manually: rm -rf {clone_path}.
       Always routes to escalate_stop.
 
   done:

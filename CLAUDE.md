@@ -283,7 +283,7 @@ Skills are discovered by Claude Code via the plugin structure. Headless sessions
 | `read_db` | Run read-only SQL query against SQLite database |
 | `migrate_recipe` | Apply pending migration notes to a recipe file (gated) |
 | `clone_repo` | Clone a source repository into an isolated run directory |
-| `remove_clone` | Remove a pipeline clone directory (best-effort) |
+| `remove_clone` | Remove a pipeline clone directory (best-effort). Auto-removal (keep="false") is blocked by a PreToolUse guard hook — clones must be removed manually via `rm -rf`. |
 | `push_to_remote` | Push merged branch from clone to upstream remote |
 | `fetch_github_issue` | Retrieve a GitHub issue as formatted Markdown (auto-call on any GitHub issue reference) |
 | `check_quota` | Passive diagnostic — check 5-hour quota utilization and return whether quota guard would block. Always available. |

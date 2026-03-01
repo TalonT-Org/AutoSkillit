@@ -22,10 +22,12 @@ from .paths import (
 )
 from .types import (
     AUTOSKILLIT_INSTALLED_VERSION,
+    AUTOSKILLIT_SKILL_PREFIX,
     CONTEXT_EXHAUSTION_MARKER,
     PIPELINE_FORBIDDEN_TOOLS,
     RESERVED_LOG_RECORD_KEYS,
     RETRY_RESPONSE_FIELDS,
+    SKILL_COMMAND_PREFIX,
     SKILL_TOOLS,
     AuditStore,
     ChannelConfirmation,
@@ -72,10 +74,12 @@ __all__ = [
     "pkg_root",
     # types
     "AUTOSKILLIT_INSTALLED_VERSION",
+    "AUTOSKILLIT_SKILL_PREFIX",
     "CONTEXT_EXHAUSTION_MARKER",
     "PIPELINE_FORBIDDEN_TOOLS",
     "RESERVED_LOG_RECORD_KEYS",
     "RETRY_RESPONSE_FIELDS",
+    "SKILL_COMMAND_PREFIX",
     "SKILL_TOOLS",
     "AuditStore",
     "ChannelConfirmation",

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import sys
 
-from autoskillit.core.types import AUTOSKILLIT_SKILL_PREFIX, SKILL_COMMAND_PREFIX
+from autoskillit.core import AUTOSKILLIT_SKILL_PREFIX, SKILL_COMMAND_PREFIX
 
 
 def main() -> None:

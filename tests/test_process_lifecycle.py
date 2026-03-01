@@ -21,6 +21,8 @@ import psutil
 import pytest
 
 from autoskillit.core.types import ChannelConfirmation, RetryReason, TerminationReason
+from autoskillit.execution.headless import _recover_from_separate_marker
+from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.process import (
     _has_active_api_connection,
     _heartbeat,
@@ -767,6 +769,22 @@ class TestSessionLogMonitor:
 
         result = await asyncio.wait_for(monitor_task, timeout=2)
         assert result == "completion"
+
+    async def test_phase1_timeout_on_missing_log_dir(self, tmp_path: Path) -> None:
+        """T4: If no JSONL file appears within _phase1_timeout seconds, return 'stale'."""
+        nonexistent_dir = tmp_path / "no_such_subdir"
+        result = await asyncio.wait_for(
+            _session_log_monitor(
+                nonexistent_dir,
+                completion_marker="%%ORDER_UP%%",
+                stale_threshold=60.0,
+                spawn_time=time.time(),
+                _phase1_poll=0.05,
+                _phase1_timeout=0.3,
+            ),
+            timeout=5.0,
+        )
+        assert result == "stale"
 
 
 class TestJsonlContainsMarker:
@@ -2280,3 +2298,52 @@ class TestAdjudicationCoverageMatrix:
             f"Listed in INTEGRATION_TEST_CLASS_NAMES but class not found: {orphaned}. "
             f"Either restore the class or remove it from the constant."
         )
+
+
+class TestRecoverFromSeparateMarker:
+    """_recover_from_separate_marker must use standalone-line semantics."""
+
+    def test_t3_does_not_fire_on_marker_in_prose(self) -> None:
+        """T3: marker embedded in prose must not trigger recovery.
+
+        Regression: before fix, substring check caused _recover_from_separate_marker
+        to fire when the model mentioned the marker in a sentence, producing a
+        false-positive success result.
+        """
+        session = ClaudeSessionResult(
+            subtype="stale",
+            is_error=True,
+            result="",
+            session_id="test",
+            assistant_messages=["I will emit %%ORDER_UP%% when done"],
+        )
+        recovered = _recover_from_separate_marker(session, "%%ORDER_UP%%")
+        assert recovered is None, (
+            "Recovery should not fire when marker appears only in prose, not as standalone line"
+        )
+
+    def test_t3_fires_on_standalone_marker(self) -> None:
+        """T3: recovery must fire when the marker appears as a standalone line."""
+        session = ClaudeSessionResult(
+            subtype="stale",
+            is_error=True,
+            result="",
+            session_id="test",
+            assistant_messages=["I have completed the task.\n%%ORDER_UP%%"],
+        )
+        recovered = _recover_from_separate_marker(session, "%%ORDER_UP%%")
+        assert recovered is not None, (
+            "Recovery should fire when marker appears as a standalone line"
+        )
+
+    def test_t3_does_not_fire_when_no_messages(self) -> None:
+        """T3: recovery returns None when there are no assistant messages."""
+        session = ClaudeSessionResult(
+            subtype="stale",
+            is_error=True,
+            result="",
+            session_id="test",
+            assistant_messages=[],
+        )
+        recovered = _recover_from_separate_marker(session, "%%ORDER_UP%%")
+        assert recovered is None

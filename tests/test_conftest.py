@@ -104,3 +104,25 @@ def test_flush_logger_proxy_caches_removed_from_conftest():
         "_flush_logger_proxy_caches must be removed from conftest.py; "
         "it was only used by the removed _reset_structlog fixture"
     )
+
+
+def test_structlog_does_not_write_to_stdout_in_tests(capsys):
+    """Structlog log calls must never pollute stdout, even in default state.
+
+    Before configure_logging() is called, structlog's default PrintLogger
+    writes to sys.stdout. The autouse _structlog_to_null fixture must intercept
+    all log output before it reaches stdout.
+    """
+    from autoskillit.execution.quota import _log as quota_log
+
+    quota_log.warning("test_sentinel_should_not_reach_stdout", probe=True)
+    captured = capsys.readouterr()
+    assert captured.out == "", (
+        f"Structlog wrote to stdout during a test. "
+        f"stdout: {captured.out!r}"
+    )
+
+
+def test_parse_stdout_json_fixture_is_available(parse_stdout_json):
+    """The parse_stdout_json fixture must exist and be importable from conftest."""
+    assert callable(parse_stdout_json)

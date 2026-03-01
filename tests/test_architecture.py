@@ -2431,3 +2431,54 @@ def test_no_raw_claude_list_construction() -> None:
         "Raw ['claude', ...] list construction found outside allowed locations:\n"
         + "\n".join(f"  {v}" for v in violations)
     )
+
+
+def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
+    """Every monkeypatch.setattr path must target the namespace production code resolves.
+
+    When autoskillit.X re-exports 'name' from autoskillit.X.submodule via __init__.py,
+    patching autoskillit.X.submodule.name does NOT affect autoskillit.X.name.
+    All patches of the form autoskillit.X.submodule.name, where X is a sub-package
+    that re-exports 'name', are wrong and must be corrected.
+    """
+    import importlib
+    import re
+
+    # Match string literals in monkeypatch.setattr("autoskillit.A.B.C", ...)
+    # where A is a sub-package, B is a submodule, C is the name.
+    pattern = re.compile(
+        r'monkeypatch\.setattr\s*\(\s*["\']'
+        r'(autoskillit\.\w+\.\w+\.\w+)'
+        r'["\']'
+    )
+
+    violations: list[str] = []
+    tests_dir = Path(__file__).parent
+
+    for test_file in sorted(tests_dir.glob("test_*.py")):
+        source = test_file.read_text()
+        for match in pattern.finditer(source):
+            full_path = match.group(1)
+            # Split: autoskillit . pkg . submodule . name
+            parts = full_path.split(".")
+            if len(parts) != 4:
+                continue
+            _, pkg, _submod, name = parts
+            parent_pkg = f"autoskillit.{pkg}"
+            try:
+                parent_mod = importlib.import_module(parent_pkg)
+            except ImportError:
+                continue
+            # If the package re-exports 'name', patching via the submodule is wrong.
+            if hasattr(parent_mod, name):
+                line_no = source[: match.start()].count("\n") + 1
+                violations.append(
+                    f"{test_file.name}:{line_no}: patches {full_path!r} "
+                    f"but '{name}' is re-exported at '{parent_pkg}.{name}'. "
+                    f"Patch '{parent_pkg}.{name}' instead."
+                )
+
+    assert not violations, (
+        "Monkeypatch paths bypass package re-exports:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )

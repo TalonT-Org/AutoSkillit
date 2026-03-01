@@ -786,6 +786,44 @@ def test_gated_tools_call_require_enabled_first() -> None:
     )
 
 
+def test_ungated_tools_do_not_call_require_enabled() -> None:
+    """No function named in UNGATED_TOOLS may call _require_enabled()."""
+    import inspect
+    import textwrap
+
+    from autoskillit.pipeline.gate import UNGATED_TOOLS
+    from autoskillit.server import (
+        tools_clone,
+        tools_execution,
+        tools_git,
+        tools_recipe,
+        tools_status,
+        tools_workspace,
+    )
+
+    _all_tool_modules = [
+        tools_execution,
+        tools_git,
+        tools_workspace,
+        tools_clone,
+        tools_recipe,
+        tools_status,
+    ]
+
+    violations: list[str] = []
+    for module in _all_tool_modules:
+        for name, fn in inspect.getmembers(module, inspect.isfunction):
+            if name not in UNGATED_TOOLS:
+                continue
+            source = textwrap.dedent(inspect.getsource(fn))
+            if "_require_enabled" in source:
+                violations.append(f"{module.__name__}.{name}")
+    assert not violations, (
+        f"Ungated tools that call _require_enabled(): {violations}. "
+        f"Ungated tools must be available without open_kitchen."
+    )
+
+
 def test_server_imports_gate_registry() -> None:
     """server/ package must import GATED_TOOLS and UNGATED_TOOLS from autoskillit.pipeline(.gate).
 

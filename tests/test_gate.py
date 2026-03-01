@@ -59,6 +59,16 @@ def test_check_quota_is_ungated():
     assert "check_quota" not in GATED_TOOLS
 
 
+def test_check_quota_not_in_ungated_tools():
+    """check_quota must not be in UNGATED_TOOLS.
+    UNGATED_TOOLS contains tools agents legitimately call.
+    check_quota enforcement is structural (hook), not agent-invoked."""
+    from autoskillit.pipeline.gate import UNGATED_TOOLS
+
+    assert "check_quota" not in UNGATED_TOOLS
+    assert len(UNGATED_TOOLS) == 6
+
+
 def test_gated_and_ungated_are_disjoint_after_addition():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 

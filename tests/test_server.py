@@ -7059,6 +7059,20 @@ async def test_tools_status_routes_through_db_reader(tool_ctx, monkeypatch, tmp_
     assert calls == ["SELECT 1"]
 
 
+def test_check_quota_absent_from_mcp_registry(tool_ctx):
+    """check_quota must not appear in the agent-visible tool list.
+    Quota enforcement is the PreToolUse hook's responsibility, not an MCP tool."""
+    import asyncio
+
+    from autoskillit.server import mcp
+
+    tools = asyncio.run(mcp.list_tools())
+    assert "check_quota" not in {t.name for t in tools}, (
+        "check_quota must be removed from the MCP registry. "
+        "Agents should not call it — the PreToolUse hook enforces quota automatically."
+    )
+
+
 class TestCheckQuota:
     @pytest.mark.asyncio
     async def test_check_quota_executes_without_open_kitchen(self, tool_ctx):

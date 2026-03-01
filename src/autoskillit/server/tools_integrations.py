@@ -33,7 +33,6 @@ _pending_report_tasks: set[asyncio.Task[Any]] = set()
 async def fetch_github_issue(
     issue_url: str,
     include_comments: bool = True,
-    ctx: Context = CurrentContext(),
 ) -> str:
     """Retrieve a GitHub issue as a formatted Markdown string.
 
@@ -54,22 +53,14 @@ async def fetch_github_issue(
                    shorthand (owner/repo#42), or bare issue number when
                    github.default_repo is configured in .autoskillit/config.yaml.
         include_comments: Include the ## Comments section in content (default: true).
+
+    This tool is always available (not gated by open_kitchen).
+    This tool sends no MCP progress notifications by design (ungated tools are
+    notification-free — see CLAUDE.md).
     """
-    if (gate := _require_enabled()) is not None:
-        return gate
-
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="fetch_github_issue", issue_url=issue_url)
-    logger.info("fetch_github_issue", issue_url=issue_url, include_comments=include_comments)
-    await _notify(
-        ctx,
-        "info",
-        f"fetch_github_issue: {issue_url}",
-        "autoskillit.fetch_github_issue",
-        extra={"issue_url": issue_url},
-    )
-
     from autoskillit.server import _get_config, _get_ctx
+
+    logger.info("fetch_github_issue", issue_url=issue_url, include_comments=include_comments)
 
     tool_ctx = _get_ctx()
     if tool_ctx.github_client is None:
@@ -97,16 +88,6 @@ async def fetch_github_issue(
         resolved_ref,
         include_comments=include_comments,
     )
-
-    if not result.get("success"):
-        await _notify(
-            ctx,
-            "error",
-            "fetch_github_issue failed",
-            "autoskillit.fetch_github_issue",
-            extra={"error": result.get("error", "unknown")},
-        )
-
     return json.dumps(result)
 
 

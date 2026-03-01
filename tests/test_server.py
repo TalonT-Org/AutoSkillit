@@ -62,6 +62,7 @@ from autoskillit.server.prompts import _close_kitchen_handler, _open_kitchen_han
 from autoskillit.server.tools_clone import clone_repo, push_to_remote, remove_clone
 from autoskillit.server.tools_execution import run_cmd, run_python, run_skill, run_skill_retry
 from autoskillit.server.tools_git import classify_fix, merge_worktree
+from autoskillit.server.tools_integrations import fetch_github_issue
 from autoskillit.server.tools_recipe import (
     list_recipes,
     load_recipe,
@@ -707,6 +708,7 @@ class TestToolRegistration:
             validate_recipe,
             get_pipeline_report,
             get_token_summary,
+            fetch_github_issue,
         ]:
             doc = tool_fn.__doc__ or ""
             assert "no MCP" in doc or "no progress notification" in doc.lower(), (

@@ -59,6 +59,15 @@ Parse two positional arguments from the prompt:
 1. **Plan path** — verify the plan file exists and read it
 2. **Worktree path** — verify the directory exists and is a git worktree. Check that the development environment is set up (e.g. `.venv` exists for Python projects)
 
+**Path Detection:** Use path detection to locate both arguments. Scan all
+tokens after the skill name for those starting with `/`, `./`, `temp/`, or
+`.autoskillit/`. The first such token is `plan_path`; the second is
+`worktree_path`. Ignore any non-path tokens that appear before them (e.g.,
+extra descriptive text like "use this plan" or "from worktree"). If fewer than
+two path-like tokens are found, abort with a clear error listing what was
+missing and the correct format:
+`/autoskillit:retry-worktree <plan_path> <worktree_path>`
+
 If the worktree path does not exist:
 - Abort with error: "Worktree path does not exist. Use /autoskillit:implement-worktree to create a new worktree."
 

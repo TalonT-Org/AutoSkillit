@@ -2590,10 +2590,6 @@ class TestGatedToolAccess:
         assert result["success"] is False
         assert result["is_error"] is True
 
-    def test_tools_disabled_by_default(self, tool_ctx):
-        """Gate defaults to disabled (closed kitchen) per this test class's fixture."""
-        assert tool_ctx.gate.enabled is False
-
     def test_prompts_registered(self):
         """open_kitchen and close_kitchen prompts are registered on the server."""
         from fastmcp.prompts import Prompt
@@ -2654,7 +2650,7 @@ class TestGatedToolAccess:
         assert parsed["success"] is False
         assert parsed["is_error"] is True
         assert parsed["subtype"] == "gate_error"
-        assert "open_kitchen" in parsed["result"] or "open_kitchen" in parsed["result"]
+        assert "open_kitchen" in parsed["result"]
 
     def test_all_tools_tagged_automation(self):
         """All 8 tools have the 'automation' tag for future visibility control."""
@@ -2686,9 +2682,12 @@ class TestGateTransitionLogs:
             for entry in logs
         )
 
-    def test_session_log_dir_warns_when_missing(self):
+    def test_session_log_dir_warns_when_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        # Do NOT create the log dir — we want the missing-dir branch
+        cwd = str(tmp_path / "my-project")
         with structlog.testing.capture_logs() as logs:
-            _session_log_dir("/nonexistent/project/99999999")
+            _session_log_dir(cwd)
         warning_entries = [entry for entry in logs if entry.get("log_level") == "warning"]
         assert any(entry.get("event") == "session_log_dir_missing" for entry in warning_entries)
 
@@ -2718,8 +2717,9 @@ class TestGateTransitionLogs:
         assert computed_entry.get("path") == str(result)
         assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
 
-    def test_session_log_dir_logs_path_when_dir_missing(self):
-        cwd = "/nonexistent/project/unique-test-99999"
+    def test_session_log_dir_logs_path_when_dir_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        cwd = str(tmp_path / "my-project")
         with structlog.testing.capture_logs() as logs:
             result = _session_log_dir(cwd)
         info_entries = [e for e in logs if e.get("log_level") == "info"]

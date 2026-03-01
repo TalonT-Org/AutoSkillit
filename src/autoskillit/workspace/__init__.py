@@ -16,6 +16,7 @@ from autoskillit.workspace.clone import (
     detect_branch,
     detect_source_dir,
     detect_uncommitted_changes,
+    detect_unpublished_branch,
     push_to_remote,
     remove_clone,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "detect_branch",
     "detect_source_dir",
     "detect_uncommitted_changes",
+    "detect_unpublished_branch",
     "push_to_remote",
     "remove_clone",
 ]

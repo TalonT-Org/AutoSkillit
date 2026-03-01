@@ -16,6 +16,60 @@ from autoskillit.workspace.clone import (
 
 
 @pytest.fixture
+def bare_remote(tmp_path: Path) -> Path:
+    """Create a bare git remote (simulates GitHub/origin)."""
+    remote = tmp_path / "remote.git"
+    remote.mkdir()
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+    return remote
+
+
+@pytest.fixture
+def local_with_remote(tmp_path: Path, bare_remote: Path) -> Path:
+    """Local repo with origin configured, main pushed, feature/local-only unpublished."""
+    local = tmp_path / "local"
+    local.mkdir()
+    subprocess.run(["git", "init", str(local)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(local), "config", "user.email", "t@t.com"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(local), "config", "user.name", "T"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(local), "remote", "add", "origin", str(bare_remote)],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(local), "commit", "--allow-empty", "-m", "init"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(local), "push", "-u", "origin", "HEAD:main"],
+        check=True,
+        capture_output=True,
+    )
+    # Create local-only branch (never pushed to origin)
+    subprocess.run(
+        ["git", "-C", str(local), "checkout", "-b", "feature/local-only"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(local), "commit", "--allow-empty", "-m", "local"],
+        check=True,
+        capture_output=True,
+    )
+    return local
+
+
+@pytest.fixture
 def git_repo(tmp_path: Path) -> Path:
     """Create a minimal git repo with one empty commit."""
     subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
@@ -186,6 +240,37 @@ class TestCloneRepo:
         clone_path = Path(result["clone_path"])
         assert clone_path.is_dir()
         shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    def test_returns_unpublished_branch_warning_when_not_on_remote(
+        self, local_with_remote: Path
+    ) -> None:
+        """clone_repo returns unpublished_branch warning dict when branch has no origin ref."""
+        result = clone_repo(str(local_with_remote), "test-run", branch="feature/local-only")
+        assert result.get("unpublished_branch") == "true"
+        assert result.get("branch") == "feature/local-only"
+        assert result.get("source_dir") == str(local_with_remote)
+        assert "clone_path" not in result  # sentinel: no clone was created
+
+    def test_published_branch_proceeds_to_clone(self, local_with_remote: Path) -> None:
+        """clone_repo clones normally when branch is on origin."""
+        import shutil
+
+        result = clone_repo(str(local_with_remote), "test-run", branch="main")
+        assert "clone_path" in result
+        assert "unpublished_branch" not in result
+        shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
+
+    def test_strategy_proceed_bypasses_unpublished_guard(self, local_with_remote: Path) -> None:
+        """strategy='proceed' bypasses the unpublished_branch guard."""
+        import shutil
+
+        result = clone_repo(
+            str(local_with_remote), "test-run", branch="feature/local-only", strategy="proceed"
+        )
+        # Guard bypassed — clone proceeds (NOT an unpublished warning)
+        assert "unpublished_branch" not in result
+        if "clone_path" in result:
+            shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
 
 
 class TestRemoveClone:

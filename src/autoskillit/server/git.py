@@ -120,6 +120,26 @@ async def perform_merge(
             "worktree_path": worktree_path,
         }
 
+    # 5.5. Verify base branch remote tracking ref exists
+    ref_rc, _, _ = await _run_git(
+        ["git", "rev-parse", "--verify", f"refs/remotes/origin/{base_branch}"],
+        worktree_path,
+        10,
+        runner,
+    )
+    if ref_rc != 0:
+        return {
+            "error": (
+                f"Base branch '{base_branch}' has no remote tracking ref — "
+                f"push it to origin before running this pipeline: "
+                f"git push -u origin {base_branch}"
+            ),
+            "failed_step": MergeFailedStep.REBASE,
+            "state": MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED,
+            "base_branch": base_branch,
+            "worktree_path": worktree_path,
+        }
+
     # 6. Rebase
     rc, _, rebase_stderr = await _run_git(
         ["git", "rebase", f"origin/{base_branch}"], worktree_path, 120, runner

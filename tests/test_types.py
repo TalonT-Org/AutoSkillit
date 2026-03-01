@@ -35,8 +35,14 @@ def test_merge_state_values():
     assert set(MergeState) == {
         MergeState.WORKTREE_INTACT,
         MergeState.WORKTREE_INTACT_REBASE_ABORTED,
+        MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED,
         MergeState.MAIN_REPO_MERGE_ABORTED,
     }
+
+
+def test_merge_state_has_base_branch_not_published() -> None:
+    """MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED exists with correct value."""
+    assert MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED == "worktree_intact_base_not_published"
 
 
 def test_restart_scope_values():

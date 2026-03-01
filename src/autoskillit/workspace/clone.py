@@ -110,6 +110,38 @@ def detect_uncommitted_changes(source_dir: str) -> list[str]:
     return []
 
 
+def detect_unpublished_branch(source_dir: str, branch: str) -> bool:
+    """Return True if `branch` has no ref on `origin` in `source_dir`.
+
+    Fail-open: returns False (do not block) when:
+    - No 'origin' remote is configured
+    - Any git command errors (network issue, non-git dir, etc.)
+    - Network probe times out (firewalled remote, unreachable SSH host, etc.)
+    Returns True only when origin is reachable and explicitly has no matching ref.
+    """
+    remote_check = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=source_dir,
+        capture_output=True,
+        text=True,
+    )
+    if remote_check.returncode != 0:
+        return False  # No remote configured — can't confirm, don't block
+
+    try:
+        ls_remote = subprocess.run(
+            ["git", "ls-remote", "--exit-code", "origin", f"refs/heads/{branch}"],
+            cwd=source_dir,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except subprocess.TimeoutExpired:
+        return False  # Network hung — fail-open, don't block the pipeline
+    # exit code 2 from --exit-code means "no matching refs found"
+    return ls_remote.returncode == 2
+
+
 def clone_repo(
     source_dir: str, run_name: str, branch: str = "", strategy: str = ""
 ) -> dict[str, str]:
@@ -125,10 +157,11 @@ def clone_repo(
     and used as the clone branch. If the repo is in detached HEAD state, no
     --branch flag is passed (git clones the default branch).
 
-    When strategy is "" (default), checks for uncommitted changes before cloning.
-    If changes are found, returns a warning dict instead of cloning. The caller
-    may re-invoke with strategy="proceed" (clone remote committed state only) or
-    strategy="clone_local" (copytree — includes working-tree changes).
+    When strategy is "" (default), checks for uncommitted changes and unpublished
+    branches before cloning. If either guard fires, returns a warning dict instead
+    of cloning. The caller may re-invoke with strategy="proceed" (clone remote
+    committed state only) or strategy="clone_local" (copytree — includes working-tree
+    changes).
 
     After this function returns, source_dir is off-limits except for push_to_remote
     reading its remote URL. See module docstring for the full SOURCE ISOLATION contract.
@@ -141,6 +174,11 @@ def clone_repo(
             "branch": str,
             "changed_files": str,
             "total_changed": str,
+        }
+        On unpublished branch (strategy=""): {
+            "unpublished_branch": "true",
+            "branch": str,
+            "source_dir": str,
         }
     """
     if not source_dir:
@@ -170,6 +208,14 @@ def clone_repo(
                 "branch": branch,
                 "changed_files": "\n".join(changed[:20]),
                 "total_changed": str(len(changed)),
+            }
+        # Unpublished branch guard
+        if branch and detect_unpublished_branch(str(source), branch):
+            logger.warning("clone_unpublished_branch", source=str(source), branch=branch)
+            return {
+                "unpublished_branch": "true",
+                "branch": branch,
+                "source_dir": str(source),
             }
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")

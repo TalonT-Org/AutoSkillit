@@ -33,6 +33,7 @@ class MergeFailedStep(StrEnum):
 class MergeState(StrEnum):
     WORKTREE_INTACT = "worktree_intact"
     WORKTREE_INTACT_REBASE_ABORTED = "worktree_intact_rebase_aborted"
+    WORKTREE_INTACT_BASE_NOT_PUBLISHED = "worktree_intact_base_not_published"
     MAIN_REPO_MERGE_ABORTED = "main_repo_merge_aborted"
 
 

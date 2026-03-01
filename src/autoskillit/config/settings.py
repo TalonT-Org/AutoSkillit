@@ -10,11 +10,12 @@ Resolution order (low → high priority):
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import pkg_root
+from autoskillit.core import dump_yaml_str, load_yaml, pkg_root
 
 if TYPE_CHECKING:
     from dynaconf import Dynaconf
@@ -246,8 +247,41 @@ def _to_optional_list(value: Any) -> list[str] | None:
     return list(value)
 
 
+def _apply_layer(base: dict[str, Any], override: dict[str, Any]) -> None:
+    """Apply override into base with dict deep-merge and list-replace semantics.
+
+    Dicts are recursively merged so that a partial section in a later layer
+    (e.g. project config with only github.default_repo) does not wipe sibling
+    keys set by an earlier layer (e.g. user config with github.token).
+    All other value types — including lists — are replaced outright, preserving
+    the intuitive expectation that setting test_check.command in a config file
+    gives exactly that command (not the defaults appended to it).
+    """
+    for key, value in override.items():
+        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+            _apply_layer(base[key], value)
+        else:
+            base[key] = value
+
+
+def _merge_yaml_layers(*paths: Path) -> dict[str, Any]:
+    """Load and merge YAML files in order, applying _apply_layer for each."""
+    result: dict[str, Any] = {}
+    for path in paths:
+        if path.is_file():
+            data = load_yaml(path)
+            if isinstance(data, dict):
+                _apply_layer(result, data)
+    return result
+
+
 def _make_dynaconf(project_dir: Path | None = None) -> "Dynaconf":
-    """Create a fully-layered Dynaconf instance.
+    """Create a Dynaconf instance for env-var overrides over pre-merged file layers.
+
+    File layers (defaults, user, project, secrets) are merged in advance using
+    _merge_yaml_layers(), which applies dict deep-merge + list-replace semantics.
+    The merged result is written to a temp YAML file so that Dynaconf can apply
+    env var overrides (AUTOSKILLIT_SECTION__KEY) on top.
 
     Deferred import keeps dynaconf off the module-level import chain.
     """
@@ -256,18 +290,36 @@ def _make_dynaconf(project_dir: Path | None = None) -> "Dynaconf":
     defaults_path = pkg_root() / "config" / "defaults.yaml"
     root = project_dir or Path.cwd()
 
-    return Dynaconf(
-        envvar_prefix="AUTOSKILLIT",
-        preload=[str(defaults_path)],
-        settings_files=[
-            str(Path.home() / ".autoskillit" / "config.yaml"),
-            str(root / ".autoskillit" / "config.yaml"),
-        ],
-        secrets=str(root / ".autoskillit" / ".secrets.yaml"),
-        load_dotenv=False,
-        environments=False,
-        merge_enabled=True,
+    merged = _merge_yaml_layers(
+        defaults_path,
+        Path.home() / ".autoskillit" / "config.yaml",
+        root / ".autoskillit" / "config.yaml",
+        root / ".autoskillit" / ".secrets.yaml",
     )
+
+    # Write to a temp file so Dynaconf can load it and apply env var overrides.
+    # Dynaconf reads files lazily; we trigger eager loading before the file is
+    # deleted so the in-memory cache remains valid.
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".yaml", delete=False
+    ) as tmp:
+        tmp.write(dump_yaml_str(merged))
+        tmp_path = Path(tmp.name)
+
+    try:
+        d = Dynaconf(
+            envvar_prefix="AUTOSKILLIT",
+            preload=[str(tmp_path)],
+            settings_files=[],
+            merge_enabled=False,
+            load_dotenv=False,
+            environments=False,
+        )
+        d.as_dict()  # trigger eager load so the temp file can be safely deleted
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    return d
 
 
 def load_config(project_dir: Path | None = None) -> AutomationConfig:

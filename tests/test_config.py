@@ -378,3 +378,83 @@ class TestQuotaGuardConfig:
         assert config.quota_guard.threshold == pytest.approx(90.0)
         # Unspecified fields keep defaults
         assert config.quota_guard.buffer_seconds == 60
+
+
+class TestDynaconfIntegration:
+    def test_env_var_overrides_nested_github_token(self, tmp_path, monkeypatch):
+        """ENV-1: AUTOSKILLIT_GITHUB__TOKEN env var sets config.github.token."""
+        monkeypatch.setenv("AUTOSKILLIT_GITHUB__TOKEN", "ghp_test_token_123")
+        cfg = load_config(tmp_path)
+        assert cfg.github.token == "ghp_test_token_123"
+
+    def test_env_var_overrides_integer_field(self, tmp_path, monkeypatch):
+        """ENV-2: AUTOSKILLIT_TEST_CHECK__TIMEOUT=999 sets config.test_check.timeout."""
+        monkeypatch.setenv("AUTOSKILLIT_TEST_CHECK__TIMEOUT", "999")
+        cfg = load_config(tmp_path)
+        assert cfg.test_check.timeout == 999
+
+    def test_env_var_takes_priority_over_project_yaml(self, tmp_path, monkeypatch):
+        """ENV-3: Env var overrides value set in project config.yaml."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump({"test_check": {"timeout": 300}})
+        )
+        monkeypatch.setenv("AUTOSKILLIT_TEST_CHECK__TIMEOUT", "42")
+        cfg = load_config(tmp_path)
+        assert cfg.test_check.timeout == 42
+
+    def test_secrets_file_is_loaded(self, tmp_path, monkeypatch):
+        """SEC-1: .autoskillit/.secrets.yaml provides config values."""
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / ".secrets.yaml").write_text(
+            yaml.dump({"github": {"token": "secret_ghp_xxx"}})
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.github.token == "secret_ghp_xxx"
+
+    def test_secrets_file_overrides_config_yaml(self, tmp_path, monkeypatch):
+        """SEC-2: .secrets.yaml wins over config.yaml for the same key."""
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump({"github": {"token": "from_config"}})
+        )
+        (config_dir / ".secrets.yaml").write_text(
+            yaml.dump({"github": {"token": "from_secrets"}})
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.github.token == "from_secrets"
+
+    def test_partial_section_deep_merges_across_layers(self, tmp_path, monkeypatch):
+        """MERGE-1: A project config with a partial nested section does not wipe sibling
+        keys from the user config.
+
+        Without merge_enabled=True, a project-level github.default_repo would wipe
+        the user-level github.token.
+        """
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+        user_dir = tmp_path / "home" / ".autoskillit"
+        user_dir.mkdir(parents=True)
+        (user_dir / "config.yaml").write_text(
+            yaml.dump({"github": {"token": "ghp_user_token"}})
+        )
+        project_dir = tmp_path / ".autoskillit"
+        project_dir.mkdir()
+        (project_dir / "config.yaml").write_text(
+            yaml.dump({"github": {"default_repo": "owner/repo"}})
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.github.token == "ghp_user_token"
+        assert cfg.github.default_repo == "owner/repo"
+
+    def test_bundled_defaults_yaml_exists(self):
+        """DFLT-1: The bundled defaults.yaml file is present in the package."""
+        from autoskillit.core import pkg_root
+
+        defaults_path = pkg_root() / "config" / "defaults.yaml"
+        assert defaults_path.exists(), f"defaults.yaml missing at {defaults_path}"
+        assert defaults_path.is_file()

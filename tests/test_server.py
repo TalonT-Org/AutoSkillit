@@ -6,7 +6,6 @@ import json
 import re
 import shutil
 import sqlite3
-from datetime import UTC
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -70,7 +69,6 @@ from autoskillit.server.tools_recipe import (
     validate_recipe,
 )
 from autoskillit.server.tools_status import (
-    check_quota,
     get_pipeline_report,
     get_token_summary,
     kitchen_status,
@@ -662,7 +660,7 @@ class TestRunSkillRetryGate:
 
 
 class TestToolRegistration:
-    """All 22 tools are registered on the MCP server."""
+    """All 21 tools are registered on the MCP server."""
 
     def test_all_tools_exist(self):
         from fastmcp.tools import Tool
@@ -690,7 +688,6 @@ class TestToolRegistration:
             "validate_recipe",
             "get_pipeline_report",
             "get_token_summary",
-            "check_quota",
             "clone_repo",
             "remove_clone",
             "push_to_remote",
@@ -1880,7 +1877,6 @@ def test_server_init_has_no_shim_reexports():
         "load_recipe",
         "migrate_recipe",
         "validate_recipe",
-        "check_quota",
         "get_pipeline_report",
         "get_token_summary",
         "kitchen_status",
@@ -2606,7 +2602,7 @@ class TestGatedToolAccess:
         assert prompt_names == {"open_kitchen", "close_kitchen"}
 
     def test_all_tools_still_registered(self):
-        """All 22 tools remain registered (gated + ungated)."""
+        """All 21 tools remain registered (gated + ungated)."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
@@ -2631,7 +2627,6 @@ class TestGatedToolAccess:
             "validate_recipe",
             "get_pipeline_report",
             "get_token_summary",
-            "check_quota",
             "clone_repo",
             "remove_clone",
             "push_to_remote",
@@ -7071,112 +7066,6 @@ def test_check_quota_absent_from_mcp_registry(tool_ctx):
         "check_quota must be removed from the MCP registry. "
         "Agents should not call it — the PreToolUse hook enforces quota automatically."
     )
-
-
-class TestCheckQuota:
-    @pytest.mark.asyncio
-    async def test_check_quota_executes_without_open_kitchen(self, tool_ctx):
-        """check_quota must work even when the gate is closed."""
-        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        # quota_guard.enabled=False avoids real network/credential reads
-        tool_ctx.config = AutomationConfig(quota_guard=QuotaGuardConfig(enabled=False))
-        result = json.loads(await check_quota())
-        # Should return a result (not a gate error)
-        assert result.get("subtype") != "gate_error"
-        assert "should_sleep" in result or result.get("success") is True
-
-    @pytest.mark.asyncio
-    async def test_disabled_quota_guard_returns_success_no_sleep(self, tool_ctx):
-        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
-
-        tool_ctx.config = AutomationConfig(quota_guard=QuotaGuardConfig(enabled=False))
-        result = json.loads(await check_quota())
-        assert result["success"] is True
-        assert result["should_sleep"] is False
-
-    @pytest.mark.asyncio
-    async def test_above_threshold_returns_should_sleep(self, tool_ctx, monkeypatch, tmp_path):
-        from datetime import datetime, timedelta
-
-        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
-        from autoskillit.execution.quota import QuotaStatus
-
-        resets_at = datetime.now(UTC) + timedelta(hours=1)
-        tool_ctx.config = AutomationConfig(
-            quota_guard=QuotaGuardConfig(
-                enabled=True,
-                threshold=80.0,
-                buffer_seconds=0,
-                credentials_path=str(tmp_path / ".credentials.json"),
-                cache_path=str(tmp_path / "cache.json"),
-            )
-        )
-
-        async def mock_fetch(path):
-            return QuotaStatus(utilization=95.0, resets_at=resets_at)
-
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
-        result = json.loads(await check_quota())
-        assert result["success"] is True
-        assert result["should_sleep"] is True
-        assert result["sleep_seconds"] > 0
-
-    def test_check_quota_in_tool_registry(self):
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp as server
-
-        tools = [c for c in server._local_provider._components.values() if isinstance(c, Tool)]
-        assert "check_quota" in {t.name for t in tools}
-
-    @pytest.mark.asyncio
-    async def test_no_notification_when_quota_below_threshold(self, tool_ctx, monkeypatch):
-        """check_quota is ungated and emits no MCP notifications (no ctx parameter)."""
-        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
-
-        tool_ctx.config = AutomationConfig(
-            quota_guard=QuotaGuardConfig(enabled=True, threshold=80.0)
-        )
-
-        async def mock_check(config):
-            return {
-                "should_sleep": False,
-                "sleep_seconds": 0,
-                "utilization": 50.0,
-                "resets_at": None,
-            }
-
-        monkeypatch.setattr("autoskillit.server.helpers.check_and_sleep_if_needed", mock_check)
-
-        result = json.loads(await check_quota())
-        assert result["success"] is True
-        assert result["should_sleep"] is False
-
-    @pytest.mark.asyncio
-    async def test_above_threshold_returns_should_sleep_in_result(self, tool_ctx, monkeypatch):
-        """check_quota returns should_sleep=True in JSON when quota is above threshold."""
-        from autoskillit.config.settings import AutomationConfig, QuotaGuardConfig
-
-        tool_ctx.config = AutomationConfig(
-            quota_guard=QuotaGuardConfig(enabled=True, threshold=80.0)
-        )
-
-        async def mock_check(config):
-            return {
-                "should_sleep": True,
-                "sleep_seconds": 3600,
-                "utilization": 95.0,
-                "resets_at": "2026-02-28T13:00:00+00:00",
-            }
-
-        monkeypatch.setattr("autoskillit.server.helpers.check_and_sleep_if_needed", mock_check)
-
-        result = json.loads(await check_quota())
-        assert result["success"] is True
-        assert result["should_sleep"] is True
-        assert result["sleep_seconds"] == 3600
 
 
 class TestCloneRepoTool:

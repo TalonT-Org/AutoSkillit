@@ -2496,8 +2496,7 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
                         continue
                     is_relative_from_submod = node.level == 1 and node.module == submod
                     is_absolute_from_submod = (
-                        node.level == 0
-                        and node.module == f"autoskillit.{pkg}.{submod}"
+                        node.level == 0 and node.module == f"autoskillit.{pkg}.{submod}"
                     )
                     if is_relative_from_submod or is_absolute_from_submod:
                         for alias in node.names:

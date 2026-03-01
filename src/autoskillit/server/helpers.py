@@ -131,8 +131,9 @@ async def _apply_triage_gate(result: dict[str, Any], name: str) -> dict[str, Any
             if s.get("reason") == "hash_mismatch"
         ]
         if hash_items:
-            from autoskillit._llm_triage import triage_staleness
             from datetime import UTC, datetime
+
+            from autoskillit._llm_triage import triage_staleness
 
             triage = await triage_staleness(hash_items)
             all_cosmetic = all(not r.get("meaningful", True) for r in triage)

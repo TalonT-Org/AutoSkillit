@@ -1075,6 +1075,78 @@ kitchen_rules:
         captured = capsys.readouterr()
         assert "totally-unknown-recipe-xyz" in captured.out
 
+    def test_cook_malformed_yaml_exits(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """cook exits 1 with YAML parse error message when load_recipe raises YAMLError."""
+        from autoskillit.core import YAMLError
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            patch("autoskillit.recipe.find_recipe_by_name", return_value=MagicMock()),
+            patch("autoskillit.recipe.load_recipe", side_effect=YAMLError("bad yaml")),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            cli.cook("bad-recipe")
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "YAML parse error" in captured.out
+
+    def test_cook_structure_error_exits(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """cook exits 1 with structure error message when load_recipe raises ValueError."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            patch("autoskillit.recipe.find_recipe_by_name", return_value=MagicMock()),
+            patch("autoskillit.recipe.load_recipe", side_effect=ValueError("bad structure")),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            cli.cook("bad-recipe")
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "structure error" in captured.out
+
+    def test_cook_picker_empty_input_exits(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """cook exits 1 when picker receives empty input (empty name → not found)."""
+        import importlib
+        import sys
+
+        _app_mod = sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        fake_recipe = MagicMock()
+        fake_recipe.name = "some-recipe"
+        mock_result = MagicMock()
+        mock_result.items = [fake_recipe]
+        monkeypatch.setattr(_app_mod, "list_recipes", lambda _: mock_result)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.cook()
+
+        assert exc_info.value.code == 1
+
 
 # ---------------------------------------------------------------------------
 # TestDoctorScriptHealth: doctor check for script version staleness
@@ -1826,3 +1898,46 @@ class TestInstallCommand:
             f"Symlink target {target} is inside a git worktree — "
             "it will break when the worktree is deleted."
         )
+
+
+# ---------------------------------------------------------------------------
+# TestRecipesCLI: recipes list / show commands
+# ---------------------------------------------------------------------------
+
+
+class TestRecipesCLI:
+    def test_recipes_list_outputs_names(self, capsys: pytest.CaptureFixture) -> None:
+        """recipes list prints at least one recipe name to stdout."""
+        import importlib
+        import sys
+
+        _app_mod = sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        _app_mod.recipes_list()
+        captured = capsys.readouterr()
+        assert captured.out.strip(), "Expected at least one recipe in output"
+
+    def test_recipes_show_prints_content(self, capsys: pytest.CaptureFixture) -> None:
+        """recipes show prints the YAML content of a known bundled recipe."""
+        import importlib
+        import sys
+
+        _app_mod = sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        _app_mod.recipes_show("smoke-test")
+        captured = capsys.readouterr()
+        assert captured.out.strip(), "Expected YAML content in output"
+
+    def test_recipes_show_unknown_exits(self, capsys: pytest.CaptureFixture) -> None:
+        """recipes show exits 1 for an unknown recipe name."""
+        import importlib
+        import sys
+
+        _app_mod = sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            _app_mod.recipes_show("nonexistent-recipe-xyz")
+        assert exc_info.value.code == 1

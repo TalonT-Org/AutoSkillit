@@ -2384,3 +2384,50 @@ def test_arch007_termination_dispatch_tables_use_exhaustive_match() -> None:
     assert violations == [], (
         "Non-exhaustive TerminationReason dispatch tables found:\n" + "\n".join(violations)
     )
+
+
+def _find_enclosing_function(node: ast.AST, tree: ast.AST) -> str | None:
+    for parent in ast.walk(tree):
+        if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for child in ast.walk(parent):
+                if child is node:
+                    return parent.name
+    return None
+
+
+def test_no_raw_claude_list_construction() -> None:
+    """No list literal starting with 'claude' may be constructed outside the ALLOWED set.
+
+    Enforces that all claude command construction goes through the canonical
+    builders in execution/commands.py, preventing ad-hoc command assembly
+    that bypasses established safety flags.
+    """
+    ALLOWED = {
+        ("app.py", "install"),
+        ("_llm_triage.py", "triage_staleness"),
+        ("commands.py", "build_interactive_cmd"),
+        ("commands.py", "build_headless_cmd"),
+    }
+    violations: list[str] = []
+    for path in SRC_ROOT.rglob("*.py"):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.List)
+                and node.elts
+                and isinstance(node.elts[0], ast.Constant)
+                and node.elts[0].value == "claude"
+            ):
+                fn_name = _find_enclosing_function(node, tree)
+                if (path.name, fn_name) not in ALLOWED:
+                    violations.append(
+                        f"{path.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                        f"raw ['claude', ...] list in {path.name}:{fn_name or '<module>'}"
+                    )
+    assert not violations, (
+        "Raw ['claude', ...] list construction found outside allowed locations:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )

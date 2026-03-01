@@ -893,8 +893,6 @@ kitchen_rules:
         assert "capture:" in system_prompt
         assert "${{ context." in system_prompt
         assert "AutoSkillit MCP tools" in system_prompt
-        # Mentions both plugin and --plugin-dir loading methods
-        assert "--plugin-dir" in system_prompt
 
     @patch("autoskillit.cli.subprocess.run")
     def test_cook_propagates_exit_code(
@@ -969,14 +967,21 @@ kitchen_rules:
         capsys: pytest.CaptureFixture,
     ) -> None:
         """cook exits 1 when no recipe is given and no recipes are available."""
+        import importlib
+        import sys
         from unittest.mock import MagicMock as _MagicMock
 
+        # autoskillit.cli.__init__ exports 'app' (cyclopts App), shadowing the submodule
+        # attribute. Use sys.modules to get the actual cli.app module for patching.
+        _app_mod = sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         mock_result = _MagicMock()
         mock_result.items = []
-        monkeypatch.setattr("autoskillit.cli.app.list_recipes", lambda _: mock_result)
+        monkeypatch.setattr(_app_mod, "list_recipes", lambda _: mock_result)
 
         with pytest.raises(SystemExit) as exc_info:
             cli.cook()

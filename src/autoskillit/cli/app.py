@@ -15,7 +15,7 @@ from typing import Annotated
 from cyclopts import App, Parameter
 
 from autoskillit.core import is_git_worktree, pkg_root
-from autoskillit.execution.commands import build_interactive_cmd
+from autoskillit.execution import build_interactive_cmd
 from autoskillit.recipe import list_recipes
 
 app = App(

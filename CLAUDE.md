@@ -95,6 +95,7 @@ src/autoskillit/
 │   └── tokens.py            #   TokenEntry, TokenLog, _token_log singleton
 ├── execution/               # L1 execution sub-package
 │   ├── __init__.py          #   Re-exports public surface
+│   ├── commands.py          #   ClaudeInteractiveCmd/ClaudeHeadlessCmd builders
 │   ├── db.py                #   Read-only SQLite execution with defence-in-depth
 │   ├── headless.py          #   Headless Claude session orchestration (L3 service)
 │   ├── process.py           #   Subprocess management (kill trees, temp I/O, timeouts)
@@ -220,6 +221,7 @@ temp/                        # Temporary/working files (gitignored)
   * **pipeline/context.py**: ToolContext DI container. Holds `config`, `audit`, `token_log`, `gate`, `plugin_dir`, `runner`. Passed to `server._initialize(ctx)` at startup. All gated tools access config and gate state through the context instead of module-level singletons.
   * **pipeline/gate.py**: Gate policy layer. `GateState` dataclass with `enabled` flag. `GATED_TOOLS` and `UNGATED_TOOLS` frozensets (the source of truth for the MCP tool registry). `gate_error_result()` builds standard disabled-gate error JSON.
   * **pipeline/tokens.py**: Pipeline token usage tracking. `TokenLog` accumulates token counts keyed by YAML step name. `_token_log` is the module-level singleton used by `server/__init__.py`. `get_token_summary` retrieves the accumulated per-step totals.
+  * **execution/commands.py**: Claude CLI command builders. `ClaudeInteractiveCmd` and `ClaudeHeadlessCmd` frozen dataclasses. `build_interactive_cmd(*, model)` builds an interactive session command with `--allow-dangerous-permissions` and `AUTOSKILLIT_KITCHEN_OPEN=1` env. `build_headless_cmd(prompt, *, model)` builds a headless session command with `-p` and `--dangerously-skip-permissions`. Zero autoskillit imports.
   * **execution/headless.py**: L3 service module for headless Claude Code session orchestration. `run_headless_core(skill_command, cwd, ctx, *, model, step_name, add_dir, timeout, stale_threshold)` is the single public entry point shared by `run_skill` and `run_skill_retry`. Contains `_build_skill_result`, `_resolve_model`, `_ensure_skill_prefix`, `_inject_completion_directive`, `_session_log_dir`, and `_capture_failure`.
   * **execution/session.py**: Data extraction layer for Claude CLI output. `ClaudeSessionResult` dataclass. `SkillResult` typed result. `_compute_success`, `_compute_retry` policy functions. `extract_token_usage(stdout)` prefers `type=result` record totals. Depends on `core/types.py`, `core/logging.py`.
   * **execution/process.py**: Subprocess utilities for process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts. Uses `get_logger()` from `core/logging.py`.

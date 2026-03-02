@@ -658,7 +658,7 @@ async def run_managed_async(
                 tasks.add(session_monitor_task)
 
             try:
-                # TODO(groupC): replace asyncio.wait with anyio task group to eliminate asyncio/anyio mixing
+                # TODO(groupC): replace asyncio.wait with anyio task group
                 with anyio.fail_after(timeout):
                     done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 

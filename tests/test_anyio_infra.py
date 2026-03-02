@@ -3,6 +3,7 @@ Tests for REQ-DEP-001 through REQ-DEP-004.
 Verifies anyio is declared as a direct dependency and the test
 infrastructure supports anyio's asyncio backend.
 """
+
 import importlib
 import importlib.metadata
 
@@ -20,9 +21,7 @@ def test_anyio_version_meets_minimum():
     from packaging.version import Version
 
     dist_version = importlib.metadata.version("anyio")
-    assert Version(dist_version) >= Version("4.0"), (
-        f"anyio {dist_version} does not satisfy >=4.0"
-    )
+    assert Version(dist_version) >= Version("4.0"), f"anyio {dist_version} does not satisfy >=4.0"
 
 
 # REQ-DEP-002: anyio pytest plugin is active and asyncio backend is configured

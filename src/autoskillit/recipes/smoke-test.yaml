@@ -29,8 +29,27 @@ steps:
     with:
       cmd: "git init -b main && git commit --allow-empty -m 'initial' && touch .autoskillit-workspace"
       cwd: "${{ inputs.workspace }}"
+    on_success: setup_remote
+    on_failure: escalate
+
+  setup_remote:
+    tool: run_cmd
+    with:
+      cmd: >-
+        BARE="$(pwd)/bare_remote.git" &&
+        git init --bare "$BARE" &&
+        git remote add origin "$BARE" &&
+        git push -u origin main &&
+        printf '%s' "$BARE"
+      cwd: "${{ inputs.workspace }}"
+    capture:
+      remote_url: "${{ result.stdout }}"
     on_success: seed_task
     on_failure: escalate
+    note: >
+      Creates a bare local repository as the remote so push_to_remote and
+      merge_worktree (git fetch origin, git rev-parse refs/remotes/origin/*)
+      work correctly in the local smoke test workspace.
 
   seed_task:
     tool: run_cmd
@@ -67,7 +86,7 @@ steps:
       cwd: ${{ inputs.workspace }}
     capture:
       feature_branch: "${{ result.stdout }}"
-    on_success: investigate
+    on_success: push_feature_branch
     on_failure: escalate
     optional: true
     skip_when_false: "inputs.collect_on_branch"
@@ -76,6 +95,22 @@ steps:
       Creates the feature branch, initialises bug_report.json, and overrides
       context.feature_branch (set to inputs.base_branch by set_feature_branch) with
       the newly-created branch name for use by the merge step.
+
+  push_feature_branch:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ inputs.workspace }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.feature_branch }}"
+    on_success: investigate
+    on_failure: escalate
+    optional: true
+    skip_when_false: "inputs.collect_on_branch"
+    note: >
+      Only execute if inputs.collect_on_branch is 'true'. Otherwise skip to investigate.
+      Publishes the feature branch to origin before any merge_worktree call.
+      merge_worktree requires refs/remotes/origin/{branch} to exist after fetch (step 5.5).
+      Without this step, merge_worktree fails with WORKTREE_INTACT_BASE_NOT_PUBLISHED.
 
   investigate:
     tool: run_skill

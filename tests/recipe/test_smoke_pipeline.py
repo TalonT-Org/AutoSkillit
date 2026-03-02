@@ -274,9 +274,11 @@ class TestSmokeScriptValidation:
         assert "kitchen_rules" in pipeline
         expected_steps = {
             "setup",
+            "setup_remote",
             "seed_task",
             "set_feature_branch",
             "create_branch",
+            "push_feature_branch",
             "investigate",
             "rectify",
             "implement",

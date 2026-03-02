@@ -151,7 +151,7 @@ async def check_and_sleep_if_needed(config: Any) -> dict:
         if status.resets_at is None:
             fallback_seconds = max(config.buffer_seconds, 60)
             _log.warning(
-                "quota above threshold but resets_at is None after re-fetch — blocking with fallback",
+                "quota above threshold but resets_at is None after re-fetch — blocking",
                 utilization=status.utilization,
                 fallback_sleep_seconds=fallback_seconds,
             )

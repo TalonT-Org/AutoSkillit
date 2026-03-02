@@ -316,7 +316,11 @@ class TestCheckAndSleepResetAtNoneBlocks:
     @pytest.mark.anyio
     async def test_cache_hit_resets_at_none_above_threshold_blocks(self, monkeypatch, tmp_path):
         from autoskillit.config.settings import QuotaGuardConfig
-        from autoskillit.execution.quota import QuotaStatus, _write_cache, check_and_sleep_if_needed
+        from autoskillit.execution.quota import (
+            QuotaStatus,
+            _write_cache,
+            check_and_sleep_if_needed,
+        )
 
         cache_path = tmp_path / "cache.json"
         # Write a cache entry with resets_at=None and above-threshold utilization

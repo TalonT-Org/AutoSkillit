@@ -21,15 +21,8 @@ def test_all_dataclasses_importable() -> None:
         StepRetry,
     )
 
-    assert Recipe is not None
-    assert RecipeStep is not None
-    assert RecipeIngredient is not None
-    assert RecipeInfo is not None
-    assert DataFlowWarning is not None
-    assert DataFlowReport is not None
-    assert StepRetry is not None
-    assert StepResultRoute is not None
-    assert StepResultCondition is not None
+    assert dataclasses.is_dataclass(Recipe)
+    assert dataclasses.is_dataclass(RecipeStep)
 
 
 def test_recipe_schema_has_zero_non_stdlib_logic_imports() -> None:
@@ -46,11 +39,23 @@ def test_recipe_schema_has_zero_non_stdlib_logic_imports() -> None:
             ), f"recipe/schema.py imports non-types autoskillit module: {node.module}"
 
 
-def test_autoskillit_version_key_constant_exists() -> None:
-    """AUTOSKILLIT_VERSION_KEY constant is exported from recipe.schema."""
+def test_autoskillit_version_key_parsed_by_recipe(tmp_path) -> None:
+    """AUTOSKILLIT_VERSION_KEY is read by load_recipe and stored in Recipe.version."""
+    import yaml
+
+    from autoskillit.recipe.io import load_recipe
     from autoskillit.recipe.schema import AUTOSKILLIT_VERSION_KEY
 
-    assert AUTOSKILLIT_VERSION_KEY == "autoskillit_version"
+    data = {
+        "name": "v-test",
+        "description": "d",
+        "steps": {"done": {"action": "stop", "message": "Done."}},
+        AUTOSKILLIT_VERSION_KEY: "1.0.0",
+    }
+    p = tmp_path / "r.yaml"
+    p.write_text(yaml.dump(data))
+    recipe = load_recipe(p)
+    assert recipe.version == "1.0.0"
 
 
 def test_recipe_step_has_expected_fields() -> None:

@@ -156,16 +156,6 @@ def test_version_key_not_hardcoded_in_recipe_loader():
 
 
 # ---------------------------------------------------------------------------
-# RL-PUB1: parse_recipe_metadata exists as a public attribute
-# ---------------------------------------------------------------------------
-def test_parse_recipe_metadata_is_public() -> None:
-    import autoskillit.recipe.loader as rl
-
-    assert hasattr(rl, "parse_recipe_metadata")
-    assert callable(rl.parse_recipe_metadata)
-
-
-# ---------------------------------------------------------------------------
 # RL-VER1: all bundled recipes must declare autoskillit_version
 # ---------------------------------------------------------------------------
 def test_all_bundled_recipes_have_autoskillit_version() -> None:

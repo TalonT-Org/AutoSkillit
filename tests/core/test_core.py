@@ -14,6 +14,9 @@ def test_core_logging_importable():
         get_logger,
     )
 
+    assert callable(get_logger)
+    assert callable(configure_logging)
+
 
 def test_core_io_importable():
     from autoskillit.core.io import (  # noqa: F401
@@ -24,6 +27,9 @@ def test_core_io_importable():
         ensure_project_temp,
         load_yaml,
     )
+
+    assert callable(load_yaml)
+    assert callable(dump_yaml)
 
 
 def test_old_types_module_removed():

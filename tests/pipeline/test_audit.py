@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import fields
 
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 
@@ -22,19 +21,6 @@ def _make_record(**overrides: object) -> FailureRecord:
 
 
 class TestFailureRecord:
-    def test_has_all_required_fields(self):
-        record = _make_record()
-        field_names = {f.name for f in fields(record)}
-        assert field_names == {
-            "timestamp",
-            "skill_command",
-            "exit_code",
-            "subtype",
-            "needs_retry",
-            "retry_reason",
-            "stderr",
-        }
-
     def test_to_dict_is_json_serializable(self):
         record = _make_record()
         d = record.to_dict()

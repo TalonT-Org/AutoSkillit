@@ -56,7 +56,6 @@ def test_check_quota_not_in_ungated_tools():
     from autoskillit.pipeline.gate import UNGATED_TOOLS
 
     assert "check_quota" not in UNGATED_TOOLS
-    assert len(UNGATED_TOOLS) == 7
 
 
 def test_ungated_tools_contains_expected_names():
@@ -74,18 +73,15 @@ def test_ungated_tools_contains_expected_names():
     assert UNGATED_TOOLS == expected
 
 
-def test_gate_state_default_disabled():
+def test_gate_state_enable_disable_transitions():
     from autoskillit.pipeline.gate import DefaultGateState
 
     gs = DefaultGateState()
     assert gs.enabled is False
-
-
-def test_gate_state_can_be_enabled():
-    from autoskillit.pipeline.gate import DefaultGateState
-
-    gs = DefaultGateState(enabled=True)
+    gs.enable()
     assert gs.enabled is True
+    gs.disable()
+    assert gs.enabled is False
 
 
 def test_gate_error_result_fields():

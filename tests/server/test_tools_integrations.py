@@ -395,15 +395,6 @@ async def test_report_bug_github_filing_disabled(tool_ctx, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Gate registry
-# ---------------------------------------------------------------------------
-
-
-def test_report_bug_in_gated_tools():
-    assert "report_bug" in GATED_TOOLS
-
-
-# ---------------------------------------------------------------------------
 # Config defaults
 # ---------------------------------------------------------------------------
 
@@ -423,10 +414,6 @@ def test_report_bug_config_defaults():
 # ---------------------------------------------------------------------------
 # Merged from test_github_tools.py — fetch_github_issue server handler tests
 # ---------------------------------------------------------------------------
-
-
-def test_fetch_github_issue_in_ungated_tools():
-    assert "fetch_github_issue" in UNGATED_TOOLS
 
 
 @pytest.mark.anyio

@@ -13,7 +13,7 @@ from autoskillit.execution.commands import (
     build_interactive_cmd,
 )
 from autoskillit.execution.db import DefaultDatabaseReader, _execute_readonly_query
-from autoskillit.execution.github import DefaultGitHubFetcher
+from autoskillit.execution.github import DefaultGitHubFetcher, save_bug_report
 from autoskillit.execution.headless import DefaultHeadlessExecutor, run_headless_core
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
@@ -64,4 +64,5 @@ __all__ = [
     "DefaultDatabaseReader",
     # github
     "DefaultGitHubFetcher",
+    "save_bug_report",
 ]

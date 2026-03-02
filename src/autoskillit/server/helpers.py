@@ -161,6 +161,17 @@ async def _apply_triage_gate(result: dict[str, Any], name: str) -> dict[str, Any
     return result
 
 
+def _save_bug_report(path: "Path", text: str) -> None:
+    """Persist a bug report via the execution layer (L1 delegation).
+
+    Indirection so L3 tools_integrations.py does not directly import
+    from autoskillit.execution.github (cross-package sub-module import).
+    """
+    from autoskillit.execution import save_bug_report
+
+    save_bug_report(path, text)
+
+
 def _process_runner_result(
     result: SubprocessResult,
     timeout: float,

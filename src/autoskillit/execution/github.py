@@ -25,7 +25,7 @@ def save_bug_report(path: Path, text: str) -> None:
     Separated from the MCP handler layer so that L3 does not directly
     invoke L0 I/O primitives.
     """
-    from autoskillit.core.io import _atomic_write
+    from autoskillit.core import _atomic_write
 
     _atomic_write(path, text)
 

@@ -550,7 +550,7 @@ async def test_tools_status_routes_through_db_reader(tool_ctx, monkeypatch, tmp_
             return {"rows": [], "count": 0}
 
     tool_ctx.db_reader = MockDbReader()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    monkeypatch.setattr("autoskillit.server._state._ctx", tool_ctx)
 
     from autoskillit.server.tools_status import read_db
 

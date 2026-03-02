@@ -18,16 +18,31 @@ from autoskillit.core import (
     MergeFailedStep,
     MergeState,
     SubprocessRunner,
+    TerminationReason,
     get_logger,
     truncate_text,
 )
-from autoskillit.server.helpers import _process_runner_result
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
     from autoskillit.core import TestRunner
+    from autoskillit.execution.process import SubprocessResult
 
 logger = get_logger(__name__)
+
+
+def _process_runner_result(
+    result: "SubprocessResult",
+    timeout: float,
+) -> tuple[int, str, str]:
+    """Convert a SubprocessResult to (returncode, stdout, stderr).
+
+    Translates TIMED_OUT termination into (-1, stdout, "Process timed out after {timeout}s").
+    Defined here so git.py only imports autoskillit.core at runtime (REQ-IMP-005).
+    """
+    if result.termination == TerminationReason.TIMED_OUT:
+        return -1, result.stdout, f"Process timed out after {timeout}s"
+    return result.returncode, result.stdout, result.stderr
 
 
 def _filter_changed_files(stdout: str, prefixes: list[str]) -> tuple[list[str], list[str]]:

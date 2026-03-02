@@ -35,6 +35,7 @@ _PRINT_EXEMPT = frozenset(
     {
         "app.py",
         "_doctor.py",
+        "_marketplace.py",
         "quota_check.py",
         "remove_clone_guard.py",
         "skill_cmd_check.py",
@@ -697,7 +698,7 @@ def test_no_raw_claude_list_construction() -> None:
     that bypasses established safety flags.
     """
     ALLOWED = {
-        ("app.py", "install"),
+        ("_marketplace.py", "install"),
         ("_llm_triage.py", "triage_staleness"),
         ("commands.py", "build_interactive_cmd"),
         ("commands.py", "build_headless_cmd"),

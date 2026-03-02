@@ -23,9 +23,10 @@ def test_build_orchestrator_prompt_contains_recipe_yaml():
 
 # PR4
 def test_build_orchestrator_prompt_not_in_app_module():
+    import importlib
     import inspect
 
-    import autoskillit.cli.app as app_mod
+    app_mod = importlib.import_module("autoskillit.cli.app")
 
     src = inspect.getsource(app_mod)
     assert "def _build_orchestrator_prompt(" not in src, (

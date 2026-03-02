@@ -329,6 +329,7 @@ class TestGroupFInstall:
     def test_upgrade_uses_atomic_write(self, tmp_path, monkeypatch):
         """upgrade() must call _atomic_write, not yaml_file.write_text."""
         import autoskillit.core as _core
+        import autoskillit.cli._marketplace as _marketplace_mod
 
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "scripts"
@@ -342,7 +343,7 @@ class TestGroupFInstall:
             atomic_calls.append((path, content))
             return original(path, content)
 
-        monkeypatch.setattr(_core, "_atomic_write", capture)
+        monkeypatch.setattr(_marketplace_mod, "_atomic_write", capture)
         cli.upgrade()
 
         assert len(atomic_calls) == 1, "Expected exactly one _atomic_write call"

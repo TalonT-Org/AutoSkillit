@@ -31,9 +31,10 @@ def test_clear_plugin_cache_importable_from_marketplace():
 # MK6
 def test_install_not_defined_in_app_module():
     """install must have moved — not defined in cli/app.py."""
+    import importlib
     import inspect
 
-    import autoskillit.cli.app as app_mod
+    app_mod = importlib.import_module("autoskillit.cli.app")
 
     src = inspect.getsource(app_mod)
     # The @app.command install definition should NOT be in app.py

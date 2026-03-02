@@ -6,7 +6,6 @@ Does NOT sleep. Returns metadata; the orchestrator sleeps via run_cmd.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 from dataclasses import dataclass
@@ -178,12 +177,12 @@ async def check_and_sleep_if_needed(config: Any) -> dict:
         }
 
     except (
+        TimeoutError,
         OSError,
         KeyError,
         ValueError,
         json.JSONDecodeError,
         httpx.HTTPError,
-        asyncio.TimeoutError,
     ) as exc:
         _log.warning("quota check failed — continuing without sleep", error=str(exc))
         return {

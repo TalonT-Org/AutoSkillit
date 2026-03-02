@@ -46,6 +46,32 @@ from autoskillit.execution._process_race import (
 
 logger = get_logger(__name__)
 
+# Re-export all public symbols so callers using `from autoskillit.execution.process import X`
+# continue to work without modification (P8-2: backward-compatible public surface).
+__all__ = [
+    "DefaultSubprocessRunner",
+    "RaceAccumulator",
+    "RaceSignals",
+    "_has_active_api_connection",
+    "_heartbeat",
+    "_jsonl_contains_marker",
+    "_jsonl_has_record_type",
+    "_marker_is_standalone",
+    "_session_log_monitor",
+    "_wait_process_dead",
+    "_watch_heartbeat",
+    "_watch_process",
+    "_watch_session_log",
+    "async_kill_process_tree",
+    "create_temp_io",
+    "kill_process_tree",
+    "pty_wrap_command",
+    "read_temp_output",
+    "resolve_termination",
+    "run_managed_async",
+    "run_managed_sync",
+]
+
 
 async def run_managed_async(
     cmd: list[str],

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 import structlog.testing
@@ -376,3 +377,61 @@ class TestMergeWorktreeCleanupWarnings:
             if entry.get("log_level") == "warning" and "cleanup" in str(entry.get("event", ""))
         ]
         assert cleanup_warnings == []
+
+
+class TestMergeWorktreeRemoteTrackingGuard:
+    """merge_worktree diagnoses unpublished base branch after fetch."""
+
+    @pytest.mark.anyio
+    async def test_merge_worktree_diagnoses_unpublished_base_branch(
+        self, tool_ctx: object, tmp_path: Path
+    ) -> None:
+        """merge_worktree returns BASE_NOT_PUBLISHED error when ref is absent after fetch."""
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))  # rev-parse
+        tool_ctx.runner.push(_make_result(stdout="impl/task-01"))  # branch --show-current
+        tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))  # test check
+        tool_ctx.runner.push(_make_result())  # git fetch origin
+        # Step 5.5: ref check fails — branch not on remote
+        tool_ctx.runner.push(
+            _make_result(returncode=128, stderr="fatal: Needed a single revision")
+        )
+
+        result = json.loads(await merge_worktree(str(wt), "feature/local-only"))
+
+        assert result["failed_step"] == "rebase"
+        assert result["state"] == "worktree_intact_base_not_published"
+        assert "feature/local-only" in result["error"]
+        assert "push" in result["error"].lower()
+        assert result["worktree_path"] == str(wt)
+
+    @pytest.mark.anyio
+    async def test_merge_worktree_fatal_invalid_upstream_produces_rebase_aborted(
+        self, tool_ctx: object, tmp_path: Path
+    ) -> None:
+        """Regression: git rebase fatal: invalid upstream is caught as rebase failure."""
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))
+        tool_ctx.runner.push(_make_result(stdout="impl/task-01"))
+        tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))  # test gate
+        tool_ctx.runner.push(_make_result())  # fetch
+        tool_ctx.runner.push(_make_result())  # ref check passes
+        # Rebase fails with fatal: invalid upstream (bypassed guard scenario)
+        tool_ctx.runner.push(
+            _make_result(
+                returncode=128, stderr="fatal: invalid upstream 'origin/feature/local-only'"
+            )
+        )
+        tool_ctx.runner.push(_make_result())  # rebase --abort
+
+        result = json.loads(await merge_worktree(str(wt), "feature/local-only"))
+
+        assert result["failed_step"] == "rebase"
+        assert result["state"] == "worktree_intact_rebase_aborted"
+        assert "invalid upstream" in result["stderr"]

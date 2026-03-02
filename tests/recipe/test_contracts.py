@@ -23,9 +23,10 @@ from autoskillit.recipe.contracts import (
 def test_load_bundled_manifest() -> None:
     manifest = load_bundled_manifest()
     assert manifest["version"] == "0.1.0"
-    assert len(manifest["skills"]) == 17
+    assert len(manifest["skills"]) >= 21
     assert "implement-worktree" in manifest["skills"]
     assert "investigate" in manifest["skills"]
+    assert "report-bug" in manifest["skills"]
     assert "write-recipe" in manifest["skills"]
 
 

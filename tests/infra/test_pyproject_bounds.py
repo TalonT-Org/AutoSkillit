@@ -6,8 +6,10 @@ ROOT = Path(__file__).parents[2]
 
 def _get_deps() -> dict:
     data = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    dev = {d.split(">=")[0].split("<")[0].split(",")[0].strip(): d
-           for d in data["project"]["optional-dependencies"]["dev"]}
+    dev = {
+        d.split(">=")[0].split("<")[0].split(",")[0].strip(): d
+        for d in data["project"]["optional-dependencies"]["dev"]
+    }
     return dev
 
 

@@ -25,8 +25,9 @@ def test_headless_has_l1_label():
 
 def test_smoke_utils_documents_file_path_coupling():
     text = (SRC / "smoke_utils.py").read_text().lower()
-    assert "limitation" in text or "known" in text, \
+    assert "limitation" in text or "known" in text, (
         "smoke_utils.py must document the file-path coupling limitation"
+    )
 
 
 def test_claudemd_headless_label():

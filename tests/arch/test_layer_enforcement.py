@@ -16,7 +16,14 @@ from pathlib import Path
 
 import pytest
 
-SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
+from tests.arch._helpers import (
+    SRC_ROOT,
+    _SOURCE_FILES,
+    _extract_module_level_internal_imports,
+    _is_mcp_tool_decorator,
+    _rel,
+    _runtime_import_froms,
+)
 
 # ── Sub-package layer registry ────────────────────────────────────────────────
 SUBPACKAGE_LAYERS: dict[str, int] = {
@@ -40,37 +47,6 @@ _LAYER_EXEMPT_STEMS: frozenset[str] = frozenset(
     {"version", "smoke_utils", "_llm_triage", "__init__", "__main__"}
 )
 
-_SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
-
-
-def _rel(path: Path) -> str:
-    try:
-        return str(path.relative_to(Path(__file__).parent.parent.parent))
-    except ValueError:
-        return str(path)
-
-
-def _extract_module_level_internal_imports(path: Path) -> list[tuple[str, int]]:
-    """Return (imported_module_stem, lineno) for all autoskillit imports at module level.
-
-    Only iterates tree.body (module-level statements). Import nodes inside
-    function or class bodies are intentionally excluded.
-    """
-    source = path.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(path))
-    results: list[tuple[str, int]] = []
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and node.module:
-            parts = node.module.split(".")
-            if parts[0] == "autoskillit" and len(parts) > 1:
-                results.append((parts[1], node.lineno))
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                parts = alias.name.split(".")
-                if parts[0] == "autoskillit" and len(parts) > 1:
-                    results.append((parts[1], node.lineno))
-    return results
-
 
 def _collect_deferred_imports(tree: ast.Module) -> list[ast.Import | ast.ImportFrom]:
     """Return Import/ImportFrom nodes not at module level (inside function or class bodies).
@@ -93,38 +69,6 @@ def _collect_deferred_imports(tree: ast.Module) -> list[ast.Import | ast.ImportF
     return deferred
 
 
-def _runtime_import_froms(path: Path) -> list[ast.ImportFrom]:
-    """Return ImportFrom nodes not inside a TYPE_CHECKING guard."""
-    tree = ast.parse(path.read_text())
-    result: list[ast.ImportFrom] = []
-
-    def _walk(stmts: list) -> None:
-        for stmt in stmts:
-            if isinstance(stmt, ast.ImportFrom):
-                result.append(stmt)
-            elif isinstance(stmt, ast.If):
-                test = stmt.test
-                is_tc = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
-                    isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
-                )
-                if not is_tc:
-                    _walk(stmt.body)
-                    _walk(stmt.orelse)
-            elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                _walk(stmt.body)
-            elif isinstance(stmt, ast.ClassDef):
-                _walk(stmt.body)
-            elif isinstance(stmt, ast.Try):
-                _walk(stmt.body)
-                for handler in stmt.handlers:
-                    _walk(handler.body)
-                _walk(stmt.orelse)
-                _walk(getattr(stmt, "finalbody", []))
-
-    _walk(tree.body)
-    return result
-
-
 def _type_checking_lines(tree: ast.AST) -> set[int]:
     """Return line numbers of all imports inside ``if TYPE_CHECKING:`` blocks."""
     lines: set[int] = set()
@@ -138,19 +82,6 @@ def _type_checking_lines(tree: ast.AST) -> set[int]:
                 if isinstance(child, ast.Import | ast.ImportFrom):
                     lines.add(child.lineno)
     return lines
-
-
-def _is_mcp_tool_decorator(node: ast.expr) -> bool:
-    """Return True if node represents @mcp.tool or @mcp.tool(...)."""
-    if isinstance(node, ast.Attribute) and node.attr == "tool":
-        return True
-    if (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "tool"
-    ):
-        return True
-    return False
 
 
 def _has_call_to(stmt: ast.stmt, func_name: str) -> bool:

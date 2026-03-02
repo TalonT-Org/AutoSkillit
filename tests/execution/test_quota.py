@@ -242,3 +242,121 @@ class TestCheckAndSleepIfNeeded:
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is False
         assert "error" in result
+
+    @pytest.mark.anyio
+    async def test_above_threshold_with_buffer_seconds_default(self, monkeypatch, tmp_path):
+        from unittest.mock import AsyncMock
+
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+
+        resets_at = datetime.now(UTC) + timedelta(hours=2)
+        # Do NOT override buffer_seconds — exercises the real default (60)
+        config = QuotaGuardConfig(
+            enabled=True,
+            threshold=80.0,
+            credentials_path=str(tmp_path / ".credentials.json"),
+            cache_path=str(tmp_path / "cache.json"),
+        )
+        first_status = QuotaStatus(utilization=90.0, resets_at=resets_at)
+        second_status = QuotaStatus(utilization=90.0, resets_at=resets_at)
+        mock_fetch = AsyncMock(side_effect=[first_status, second_status])
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is True
+        assert result["sleep_seconds"] > 0
+
+
+class TestCheckAndSleepResetAtNoneBlocks:
+    @pytest.mark.anyio
+    async def test_above_threshold_resets_at_none_first_fetch_blocks(self, monkeypatch, tmp_path):
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+
+        config = QuotaGuardConfig(
+            enabled=True,
+            threshold=80.0,
+            buffer_seconds=60,
+            credentials_path=str(tmp_path / ".credentials.json"),
+            cache_path=str(tmp_path / "cache.json"),
+        )
+
+        async def mock_fetch(path):
+            return QuotaStatus(utilization=90.0, resets_at=None)
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is True
+        assert result["sleep_seconds"] > 0
+
+    @pytest.mark.anyio
+    async def test_above_threshold_resets_at_none_second_fetch_blocks(self, monkeypatch, tmp_path):
+        from unittest.mock import AsyncMock
+
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+
+        resets_at = datetime.now(UTC) + timedelta(hours=2)
+        config = QuotaGuardConfig(
+            enabled=True,
+            threshold=80.0,
+            buffer_seconds=60,
+            credentials_path=str(tmp_path / ".credentials.json"),
+            cache_path=str(tmp_path / "cache.json"),
+        )
+        # First fetch has resets_at (passes first None guard), second fetch has None
+        first_status = QuotaStatus(utilization=90.0, resets_at=resets_at)
+        second_status = QuotaStatus(utilization=90.0, resets_at=None)
+        mock_fetch = AsyncMock(side_effect=[first_status, second_status])
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is True
+        assert result["sleep_seconds"] > 0
+
+    @pytest.mark.anyio
+    async def test_cache_hit_resets_at_none_above_threshold_blocks(self, monkeypatch, tmp_path):
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import QuotaStatus, _write_cache, check_and_sleep_if_needed
+
+        cache_path = tmp_path / "cache.json"
+        # Write a cache entry with resets_at=None and above-threshold utilization
+        _write_cache(str(cache_path), QuotaStatus(utilization=90.0, resets_at=None))
+        config = QuotaGuardConfig(
+            enabled=True,
+            threshold=80.0,
+            buffer_seconds=60,
+            cache_max_age=120,
+            credentials_path=str(tmp_path / ".credentials.json"),
+            cache_path=str(cache_path),
+        )
+        fetch_called = []
+
+        async def mock_fetch(path):
+            fetch_called.append(1)
+            raise AssertionError("should not reach re-fetch when first branch blocks")
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is True
+        assert fetch_called == []
+
+    @pytest.mark.anyio
+    async def test_fallback_sleep_uses_at_least_buffer_seconds(self, monkeypatch, tmp_path):
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+
+        config = QuotaGuardConfig(
+            enabled=True,
+            threshold=80.0,
+            buffer_seconds=120,
+            credentials_path=str(tmp_path / ".credentials.json"),
+            cache_path=str(tmp_path / "cache.json"),
+        )
+
+        async def mock_fetch(path):
+            return QuotaStatus(utilization=90.0, resets_at=None)
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is True
+        assert result["sleep_seconds"] >= 120

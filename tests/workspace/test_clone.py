@@ -532,9 +532,7 @@ class TestPushToRemote:
         assert len(result["stderr"]) > 0
 
 
-# ---------------------------------------------------------------------------
-# Merged from test_workspace.py — detect_source_dir and detect_branch tests
-# ---------------------------------------------------------------------------
+
 
 
 class TestDetectSourceDir:

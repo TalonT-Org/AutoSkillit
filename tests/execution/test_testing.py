@@ -85,9 +85,6 @@ class TestParsePytestSummaryAnchored:
         assert "error" not in counts
 
 
-# ---------------------------------------------------------------------------
-# Merged from test_test_runner.py — format variants parametrize table
-# ---------------------------------------------------------------------------
 
 _REALISTIC_VERBOSE = (
     "============================= test session starts ==============================\n"
@@ -153,9 +150,6 @@ def test_parse_pytest_summary_only_matches_equals_delimited_lines():
     assert _parse_pytest_summary("3 failed connections\n= 5 passed =") == {"passed": 5}
 
 
-# ---------------------------------------------------------------------------
-# Merged from test_test_runner.py — check_test_passed tests
-# ---------------------------------------------------------------------------
 
 
 def test_check_test_passed_true_on_zero_rc_clean_output():

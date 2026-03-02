@@ -411,9 +411,7 @@ def test_report_bug_config_defaults():
     assert "bug" in cfg.report_bug.github_labels
 
 
-# ---------------------------------------------------------------------------
-# Merged from test_github_tools.py — fetch_github_issue server handler tests
-# ---------------------------------------------------------------------------
+
 
 
 @pytest.mark.anyio

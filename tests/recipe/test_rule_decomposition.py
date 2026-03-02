@@ -26,7 +26,6 @@ def test_no_deferred_validator_imports_in_rule_modules() -> None:
 def test_all_rules_registered_across_submodules() -> None:
     """T2: All 25 rules registered, distributed across sub-modules."""
     import autoskillit.recipe  # noqa: F401 — triggers rule registration
-
     from autoskillit.recipe.registry import _RULE_REGISTRY
 
     rule_names = {spec.name for spec in _RULE_REGISTRY}
@@ -62,7 +61,7 @@ def test_all_rules_registered_across_submodules() -> None:
 
 def test_analysis_module_importable() -> None:
     """T3a: _analysis.py is importable at module level with no side effects."""
-    from autoskillit.recipe._analysis import analyze_dataflow, _build_step_graph
+    from autoskillit.recipe._analysis import _build_step_graph, analyze_dataflow
 
     assert callable(analyze_dataflow)
     assert callable(_build_step_graph)

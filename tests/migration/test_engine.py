@@ -19,6 +19,7 @@ from autoskillit.migration.engine import (
     MigrationAdapter,
     MigrationFile,
     RecipeMigrationAdapter,
+    _no_headless_result,
     default_migration_engine,
 )
 from autoskillit.migration.loader import MigrationChange, MigrationNote
@@ -244,6 +245,121 @@ class TestRecipeMigrationAdapter:
 
         assert is_valid is False
         assert len(error) > 0
+
+    # ME6b
+    @pytest.mark.anyio
+    async def test_recipe_adapter_migrate_uses_session_result_no_tempfile(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recipe_path = tmp_path / ".autoskillit" / "recipes" / "myrecipe.yaml"
+        recipe_path.parent.mkdir(parents=True)
+        recipe_path.write_text("name: myrecipe\n")
+        monkeypatch.setattr(
+            "autoskillit.migration.engine.applicable_migrations",
+            lambda *a, **kw: [_make_migration_note()],
+        )
+        migrated_yaml = "name: myrecipe\n# migrated via session\n"
+        mock_headless = AsyncMock(return_value=_make_skill_result(True, result=migrated_yaml))
+
+        adapter = RecipeMigrationAdapter()
+        file = MigrationFile(
+            name="myrecipe", path=recipe_path, file_type="recipe", current_version="0.0.1"
+        )
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        # Intentionally no temp output file exists
+
+        result = await adapter.migrate(file, run_headless=mock_headless, temp_dir=temp_dir)
+
+        assert result.success is True
+        assert result.migrated_content == migrated_yaml
+
+    # ME6c
+    @pytest.mark.anyio
+    async def test_recipe_adapter_migrate_falls_back_to_tempfile(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recipe_path = tmp_path / ".autoskillit" / "recipes" / "myrecipe.yaml"
+        recipe_path.parent.mkdir(parents=True)
+        recipe_path.write_text("name: myrecipe\n")
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_out = temp_dir / "migrations" / "myrecipe.yaml"
+        temp_out.parent.mkdir(parents=True)
+        fallback_yaml = "name: myrecipe\n# from tempfile\n"
+        temp_out.write_text(fallback_yaml)
+        monkeypatch.setattr(
+            "autoskillit.migration.engine.applicable_migrations",
+            lambda *a, **kw: [_make_migration_note()],
+        )
+        mock_headless = AsyncMock(return_value=_make_skill_result(True, result=""))
+
+        adapter = RecipeMigrationAdapter()
+        file = MigrationFile(
+            name="myrecipe", path=recipe_path, file_type="recipe", current_version="0.0.1"
+        )
+        result = await adapter.migrate(file, run_headless=mock_headless, temp_dir=temp_dir)
+
+        assert result.success is True
+        assert result.migrated_content == fallback_yaml
+
+    # ME6d
+    @pytest.mark.anyio
+    async def test_recipe_adapter_migrate_fails_when_no_output_source(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recipe_path = tmp_path / ".autoskillit" / "recipes" / "myrecipe.yaml"
+        recipe_path.parent.mkdir(parents=True)
+        recipe_path.write_text("name: myrecipe\n")
+        monkeypatch.setattr(
+            "autoskillit.migration.engine.applicable_migrations",
+            lambda *a, **kw: [_make_migration_note()],
+        )
+        mock_headless = AsyncMock(return_value=_make_skill_result(True, result=""))
+
+        adapter = RecipeMigrationAdapter()
+        file = MigrationFile(
+            name="myrecipe", path=recipe_path, file_type="recipe", current_version="0.0.1"
+        )
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+
+        result = await adapter.migrate(file, run_headless=mock_headless, temp_dir=temp_dir)
+
+        assert result.success is False
+        assert "did not produce output" in (result.error or "")
+
+    # ME-PC1
+    @pytest.mark.anyio
+    async def test_recipe_adapter_applicable_migrations_called_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recipe_path = tmp_path / ".autoskillit" / "recipes" / "myrecipe.yaml"
+        recipe_path.parent.mkdir(parents=True)
+        recipe_path.write_text("name: myrecipe\n")
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+
+        call_count = 0
+
+        def counting_applicable(*a, **kw):
+            nonlocal call_count
+            call_count += 1
+            return [_make_migration_note()]
+
+        monkeypatch.setattr(
+            "autoskillit.migration.engine.applicable_migrations", counting_applicable
+        )
+        migrated_yaml = "name: myrecipe\n# migrated\n"
+        mock_headless = AsyncMock(return_value=_make_skill_result(True, result=migrated_yaml))
+
+        adapter = RecipeMigrationAdapter()
+        file = MigrationFile(
+            name="myrecipe", path=recipe_path, file_type="recipe", current_version="0.0.1"
+        )
+        assert adapter.needs_migration(file) is True
+        await adapter.migrate(file, run_headless=mock_headless, temp_dir=temp_dir)
+
+        assert call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -550,3 +666,19 @@ class TestMigrateRecipesConstant:
         result = await adapter.migrate(file, run_headless=mock_rh, temp_dir=tmp_path)
         assert not result.success
         assert result.retries_attempted == MIGRATE_RECIPES_MAX_RETRIES
+
+
+# ---------------------------------------------------------------------------
+# TestNoHeadlessFactory (ME-NH1)
+# ---------------------------------------------------------------------------
+
+
+class TestNoHeadlessFactory:
+    # ME-NH1
+    def test_no_headless_result_is_canonical(self) -> None:
+        r = _no_headless_result()
+        assert r.success is False
+        assert r.subtype == "no_runner"
+        assert "migrate_recipe" in r.result
+        assert r.needs_retry is False
+        assert r.exit_code == 1

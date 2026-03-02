@@ -219,3 +219,27 @@ def test_req_imp_006_prompts_no_gate_state_import() -> None:
             if node.module == "autoskillit.pipeline.gate":
                 violations.append(f"sub-module import: {node.module}")
     assert not violations, "REQ-IMP-006 violations:\n" + "\n".join(violations)
+
+
+# ---------------------------------------------------------------------------
+# REQ-IMP-007: migration/_api.py has no module-level autoskillit.recipe imports
+# ---------------------------------------------------------------------------
+
+
+def test_req_imp_007_migration_api_no_toplevel_recipe_import() -> None:
+    """migration/_api.py must not import from autoskillit.recipe at module level.
+
+    Recipe imports must be deferred to function bodies (P4-1).
+    """
+    path = SRC / "migration" / "_api.py"
+    tree = ast.parse(path.read_text(), filename=str(path))
+    # Only top-level statements (direct children of Module) are module-level imports.
+    violations = []
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module and node.module.startswith("autoskillit.recipe"):
+                violations.append(node.module)
+    assert not violations, (
+        "REQ-IMP-007: migration/_api.py has module-level recipe imports "
+        "(must be deferred to function bodies):\n" + "\n".join(violations)
+    )

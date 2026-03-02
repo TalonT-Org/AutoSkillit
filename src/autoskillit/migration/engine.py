@@ -18,11 +18,45 @@ from autoskillit.core import (
     load_yaml,
 )
 from autoskillit.migration.loader import applicable_migrations
+from autoskillit.migration.store import FailureStore, default_store_path
+from autoskillit.recipe import (
+    check_contract_staleness,
+    generate_recipe_card,
+    load_recipe_card,
+    parse_recipe_metadata,
+    validate_recipe,
+)
+from autoskillit.recipe import (
+    load_recipe as _parse_recipe,
+)
+from autoskillit.workspace import bundled_skills_dir
 
 logger = get_logger(__name__)
 
 MIGRATE_RECIPES_MAX_RETRIES: int = 3
 """Max validation-retry attempts for LLM-driven recipe migration (matches SKILL.md)."""
+
+
+def _no_headless_result() -> SkillResult:
+    """Return the canonical SkillResult for contexts without a headless runner.
+
+    Used by DefaultMigrationService when no run_headless callable is provided,
+    and by check_and_migrate in migration/_api.py.
+    """
+    return SkillResult(
+        success=False,
+        result=(
+            "LLM-driven migration requires a headless runner. Use the migrate_recipe MCP tool."
+        ),
+        session_id="",
+        subtype="no_runner",
+        is_error=True,
+        exit_code=1,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+        token_usage=None,
+    )
 
 
 @dataclass
@@ -134,9 +168,10 @@ class MigrationEngine:
 class RecipeMigrationAdapter(HeadlessMigrationAdapter):
     file_type = "recipe"
 
-    def discover(self, project_dir: Path) -> list[MigrationFile]:
-        from autoskillit.recipe import parse_recipe_metadata
+    def __init__(self) -> None:
+        self._migration_cache: dict[str, list] = {}
 
+    def discover(self, project_dir: Path) -> list[MigrationFile]:
         recipes_dir = project_dir / ".autoskillit" / "recipes"
         if not recipes_dir.exists():
             return []
@@ -154,7 +189,9 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
         return files
 
     def needs_migration(self, file: MigrationFile) -> bool:
-        return bool(applicable_migrations(file.current_version, __version__))
+        migs = applicable_migrations(file.current_version, __version__)
+        self._migration_cache[file.name] = migs
+        return bool(migs)
 
     async def migrate(
         self,
@@ -163,7 +200,9 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
         run_headless: Callable[..., Awaitable[SkillResult]],
         temp_dir: Path,
     ) -> MigrationResult:
-        migrations = applicable_migrations(file.current_version, __version__)
+        migrations = self._migration_cache.pop(file.name, None)
+        if migrations is None:
+            migrations = applicable_migrations(file.current_version, __version__)
         if not migrations:
             return MigrationResult(success=True, name=file.name)
 
@@ -210,27 +249,23 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
                 retries_attempted=MIGRATE_RECIPES_MAX_RETRIES,
             )
 
-        temp_out = self.get_temp_output_path(file, temp_dir)
-        if not temp_out.exists():
-            return MigrationResult(
-                success=False,
-                name=file.name,
-                error="migrate-recipes did not produce output",
-            )
+        content = raw.result or ""
+        if not content:
+            temp_out = self.get_temp_output_path(file, temp_dir)
+            if not temp_out.exists():
+                return MigrationResult(
+                    success=False,
+                    name=file.name,
+                    error="migrate-recipes did not produce output",
+                )
+            content = temp_out.read_text()
 
-        return MigrationResult(
-            success=True,
-            name=file.name,
-            migrated_content=temp_out.read_text(),
-        )
+        return MigrationResult(success=True, name=file.name, migrated_content=content)
 
     def get_temp_output_path(self, file: MigrationFile, temp_dir: Path) -> Path:
         return temp_dir / "migrations" / f"{file.path.stem}.yaml"
 
     def validate(self, path: Path) -> tuple[bool, str]:
-        from autoskillit.recipe import load_recipe as _parse_recipe
-        from autoskillit.recipe import validate_recipe
-
         try:
             recipe = _parse_recipe(path)
             errors = validate_recipe(recipe)
@@ -262,8 +297,6 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         return files
 
     def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.recipe import check_contract_staleness, load_recipe_card
-
         recipes_dir = file.path.parent.parent
         contract = load_recipe_card(file.name, recipes_dir)
         if contract is None:
@@ -276,8 +309,6 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         *,
         temp_dir: Path,
     ) -> MigrationResult:
-        from autoskillit.recipe import generate_recipe_card
-
         recipes_dir = file.path.parent.parent
         recipe_path = recipes_dir / f"{file.name}.yaml"
         if not recipe_path.exists():
@@ -287,8 +318,6 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
                 error=f"Source recipe '{file.name}.yaml' not found",
             )
         try:
-            from autoskillit.workspace import bundled_skills_dir
-
             _ = generate_recipe_card(recipe_path, recipes_dir, skills_dir=bundled_skills_dir())
             return MigrationResult(success=True, name=file.name)
         except Exception as exc:
@@ -341,13 +370,9 @@ class DefaultMigrationService:
               — version migration applied and/or stale contracts regenerated
           {"error": str, "name": name}             — migration failed
         """
-        from autoskillit.migration.loader import applicable_migrations as _applicable
-        from autoskillit.migration.store import FailureStore, default_store_path
-        from autoskillit.recipe import parse_recipe_metadata
-
         meta = parse_recipe_metadata(recipe_path)
         name = meta.name
-        migrations = _applicable(meta.version, __version__)
+        migrations = applicable_migrations(meta.version, __version__)
 
         # Derive project_dir: recipe_path → recipes_dir → .autoskillit/ → project_dir
         recipes_dir = recipe_path.parent
@@ -359,21 +384,7 @@ class DefaultMigrationService:
         else:
 
             async def run_headless(*args: Any, **kwargs: Any) -> SkillResult:  # type: ignore[misc]
-                return SkillResult(
-                    success=False,
-                    result=(
-                        "LLM-driven migration requires a headless runner. "
-                        "Use the migrate_recipe MCP tool directly."
-                    ),
-                    session_id="",
-                    subtype="no_runner",
-                    is_error=True,
-                    exit_code=1,
-                    needs_retry=False,
-                    retry_reason=RetryReason.NONE,
-                    stderr="",
-                    token_usage=None,
-                )
+                return _no_headless_result()
 
         did_version_migrate = False
         if migrations:

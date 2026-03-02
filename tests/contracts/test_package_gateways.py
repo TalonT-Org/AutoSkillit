@@ -131,16 +131,14 @@ async def test_migration_check_and_migrate_in_all():
 
 @pytest.mark.anyio
 async def test_migration_check_and_migrate_not_found(tmp_path):
-    from autoskillit import __version__
     from autoskillit.migration import check_and_migrate
 
-    result = await check_and_migrate("__nonexistent__", tmp_path, __version__)
+    result = await check_and_migrate("__nonexistent__", tmp_path)
     assert "error" in result
 
 
 @pytest.mark.anyio
 async def test_migration_check_and_migrate_up_to_date(tmp_path):
-    from autoskillit import __version__
     from autoskillit.migration import check_and_migrate
     from autoskillit.recipe.io import list_recipes
 
@@ -150,7 +148,7 @@ async def test_migration_check_and_migrate_up_to_date(tmp_path):
         pytest.skip("No bundled recipes available")
     # Bundled recipes are current — should report up_to_date
     # Use tmp_path so project recipes dir doesn't interfere
-    result = await check_and_migrate(bundled[0].name, tmp_path, __version__)
+    result = await check_and_migrate(bundled[0].name, tmp_path)
     assert result.get("status") == "up_to_date"
 
 

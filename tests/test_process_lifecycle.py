@@ -10,7 +10,6 @@ NO MOCKS — that's the whole point.
 from __future__ import annotations
 
 import ast
-import anyio
 import dataclasses
 import inspect
 import re
@@ -21,6 +20,7 @@ import time
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import anyio
 import psutil
 import pytest
 
@@ -716,6 +716,7 @@ class TestSessionLogMonitor:
         monitor_result: list[str] = []
 
         async with anyio.create_task_group() as tg:
+
             async def _run_monitor() -> None:
                 monitor_result.append(
                     await _session_log_monitor(
@@ -774,6 +775,7 @@ class TestSessionLogMonitor:
         monitor_result: list[str] = []
 
         async with anyio.create_task_group() as tg:
+
             async def _run_monitor() -> None:
                 monitor_result.append(
                     await _session_log_monitor(
@@ -859,6 +861,7 @@ class TestSessionLogMonitor:
         monitor_result: list[str] = []
 
         async with anyio.create_task_group() as tg:
+
             async def _run_monitor() -> None:
                 monitor_result.append(
                     await _session_log_monitor(
@@ -938,6 +941,7 @@ class TestSessionLogMonitor:
         monitor_result: list[str] = []
 
         async with anyio.create_task_group() as tg:
+
             async def _run_monitor() -> None:
                 monitor_result.append(
                     await _session_log_monitor(
@@ -1049,6 +1053,7 @@ class TestHeartbeatStructuredParsing:
         heartbeat_result: list[str] = []
 
         async with anyio.create_task_group() as tg:
+
             async def _run_heartbeat() -> None:
                 heartbeat_result.append(
                     await _heartbeat(
@@ -1160,6 +1165,7 @@ class TestCancellationKillsProcess:
         script.write_text("import time; time.sleep(3600)")
 
         async with anyio.create_task_group() as tg:
+
             async def _run() -> None:
                 await run_managed_async(
                     [sys.executable, str(script)],

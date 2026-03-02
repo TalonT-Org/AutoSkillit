@@ -102,7 +102,7 @@ class TokenUsageConfig:
 @dataclass
 class QuotaGuardConfig:
     enabled: bool = True
-    threshold: float = 80.0
+    threshold: float = 90.0
     buffer_seconds: int = 60
     cache_max_age: int = 60
     credentials_path: str = "~/.claude/.credentials.json"
@@ -234,7 +234,7 @@ class AutomationConfig:
             ),
             quota_guard=QuotaGuardConfig(
                 enabled=bool(val(qg, "enabled", True)),
-                threshold=float(val(qg, "threshold", 80.0)),
+                threshold=float(val(qg, "threshold", 90.0)),
                 buffer_seconds=int(val(qg, "buffer_seconds", 60)),
                 cache_max_age=int(val(qg, "cache_max_age", 60)),
                 credentials_path=str(val(qg, "credentials_path", "~/.claude/.credentials.json")),

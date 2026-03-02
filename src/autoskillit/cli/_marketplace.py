@@ -10,13 +10,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from autoskillit.cli.app import app
 from autoskillit.cli._hooks import (
     _claude_settings_path,
     _register_quota_hook,
     _register_remove_clone_guard_hook,
     _register_skill_command_guard_hook,
 )
+from autoskillit.cli.app import app
 from autoskillit.core import _atomic_write, is_git_worktree, pkg_root
 
 _VALID_SCOPES = {"user", "project", "local"}

@@ -24,17 +24,19 @@ def main() -> None:
         # Unexpected error (bug, import issue, etc.) — deny rather than silently approve.
         # A security validator that silently passes on unknown errors is not a validator.
         print(
-            json.dumps({
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        f"skill_command_guard encountered an unexpected error "
-                        f"({type(e).__name__}: {e}). "
-                        "Denying as a safety measure — check hook configuration."
-                    ),
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            f"skill_command_guard encountered an unexpected error "
+                            f"({type(e).__name__}: {e}). "
+                            "Denying as a safety measure — check hook configuration."
+                        ),
+                    }
                 }
-            })
+            )
         )
         sys.exit(0)
 

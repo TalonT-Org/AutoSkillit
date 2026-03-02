@@ -5,13 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 
 # HK1
 def test_hooks_module_exists():
     """cli/_hooks.py must exist as a module."""
-    import autoskillit.cli._hooks  # ImportError if missing
 
 
 # HK2

@@ -86,6 +86,5 @@ def test_quota_check_no_silent_broad_except():
             if _is_bare_except_exception(node) and _body_is_only_sys_exit(node):
                 violations.append(node.lineno)
     assert not violations, (
-        f"quota_check.py has silent broad except at lines {violations} — "
-        "CC-2 fix required"
+        f"quota_check.py has silent broad except at lines {violations} — CC-2 fix required"
     )

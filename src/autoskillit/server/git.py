@@ -32,7 +32,7 @@ logger = get_logger(__name__)
 
 
 def _process_runner_result(
-    result: "SubprocessResult",
+    result: SubprocessResult,
     timeout: float,
 ) -> tuple[int, str, str]:
     """Convert a SubprocessResult to (returncode, stdout, stderr).

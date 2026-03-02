@@ -74,5 +74,3 @@ def test_t_typevar_not_in_core_all():
     import autoskillit.core as core
 
     assert "T" not in core.__all__
-
-

@@ -32,7 +32,12 @@ BUNDLED_SKILLS = [
     "review-approach",
     "setup-project",
     "smoke-task",
+    "sous-chef",
 ]
+
+# Internal-only skill documents: injected programmatically, never invocable as slash commands.
+# They have no YAML frontmatter and do not follow the user-facing SKILL.md structural contract.
+INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
 
 BUNDLED_SKILL_NAMES = set(BUNDLED_SKILLS)
 
@@ -130,11 +135,13 @@ class TestSkillResolver:
                 )
 
     def test_skill_md_has_critical_constraints(self) -> None:
-        """Every SKILL.md must have Critical Constraints with NEVER and ALWAYS blocks."""
+        """Every user-invocable SKILL.md must have Critical Constraints (NEVER/ALWAYS blocks)."""
         bd = bundled_skills_dir()
         failures: list[str] = []
         for skill_md in bd.rglob("SKILL.md"):
             skill_name = skill_md.parent.name
+            if skill_name in INTERNAL_SKILLS:
+                continue
             content = skill_md.read_text()
             missing: list[str] = []
             if not re.search(r"^##\s+.*Critical Constraints", content, re.MULTILINE):
@@ -182,6 +189,8 @@ class TestSkillResolver:
         failures: list[str] = []
         for skill_md in bd.rglob("SKILL.md"):
             skill_name = skill_md.parent.name
+            if skill_name in INTERNAL_SKILLS:
+                continue
             content = skill_md.read_text()
             # Parse YAML frontmatter between --- delimiters
             fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)

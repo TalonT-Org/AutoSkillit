@@ -11,6 +11,7 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
+from autoskillit.pipeline.gate import UNGATED_TOOLS
 from autoskillit.server.tools_integrations import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
@@ -476,3 +477,15 @@ async def test_fetch_github_issue_client_error_propagated(tool_ctx):
     tool_ctx.github_client = mock_client
     result = json.loads(await fetch_github_issue("owner/repo#404"))
     assert result["success"] is False
+
+
+def test_fetch_github_issue_in_ungated_tools():
+    assert "fetch_github_issue" in UNGATED_TOOLS
+
+
+def test_github_config_defaults():
+    from autoskillit.config import AutomationConfig
+
+    config = AutomationConfig()
+    assert config.github.token is None
+    assert config.github.default_repo is None

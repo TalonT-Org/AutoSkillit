@@ -1764,3 +1764,697 @@ def test_validator_passes_when_plan_parts_captured(
     warnings = run_semantic_rules(compliant_multipart_recipe_with_list)
     rule_names = [w.rule for w in warnings]
     assert "multipart-plan-parts-not-captured" not in rule_names
+
+
+# ---------------------------------------------------------------------------
+# optional / skip_when_false standalone tests
+# ---------------------------------------------------------------------------
+
+
+def test_optional_without_skip_when_fires_error() -> None:
+    """optional: true without skip_when_false must be an ERROR."""
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="opt_step"),
+            "opt_step": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                on_success="done",
+                on_failure="done",
+                with_args={"skill_command": "/autoskillit:investigate plan.md", "cwd": "/tmp"},
+                note="Optional step.",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    rule_findings = [v for v in violations if v.rule == "optional-without-skip-when"]
+    assert len(rule_findings) == 1
+    assert rule_findings[0].severity == Severity.ERROR
+
+
+def test_optional_with_skip_when_does_not_fire() -> None:
+    """optional: true WITH skip_when_false must not fire the optional-without-skip-when rule."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="opt_step"),
+            "opt_step": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                skip_when_false="inputs.run_audit",
+                on_success="done",
+                on_failure="done",
+                with_args={"skill_command": "/autoskillit:investigate plan.md", "cwd": "/tmp"},
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={
+            "run_audit": RecipeIngredient(description="", required=False, default="true")
+        },
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    rule_findings = [v for v in violations if v.rule == "optional-without-skip-when"]
+    assert rule_findings == []
+
+
+def test_skip_when_false_referencing_undeclared_ingredient_fires() -> None:
+    """skip_when_false must reference a declared ingredient; undeclared must fire ERROR."""
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="opt_step"),
+            "opt_step": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                skip_when_false="inputs.nonexistent_ingredient",
+                on_success="done",
+                on_failure="done",
+                with_args={"skill_command": "/autoskillit:investigate plan.md", "cwd": "/tmp"},
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        # "nonexistent_ingredient" is NOT in ingredients
+        kitchen_rules=["test"],
+    )
+    violations = run_semantic_rules(recipe)
+    rule_findings = [v for v in violations if v.rule == "skip-when-false-undeclared"]
+    assert len(rule_findings) == 1
+
+
+class TestPushBeforeAuditRule:
+    def test_ppb1_audit_before_push_no_finding(self) -> None:
+        """PPB1: audit-impl runs before push_to_remote — no warning emitted."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "audit"},
+                "audit": {
+                    "tool": "run_skill",
+                    "on_success": "push",
+                    "with": {"skill_command": "/autoskillit:audit-impl plan.md", "cwd": "/tmp"},
+                },
+                "push": {
+                    "tool": "push_to_remote",
+                    "on_success": "done",
+                    "with": {
+                        "clone_path": "/tmp/clone",
+                        "source_dir": "/tmp/src",
+                        "branch": "main",
+                    },
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "push-before-audit"]
+        assert findings == []
+
+    def test_ppb2_push_before_audit_fires_warning(self) -> None:
+        """PPB2: push_to_remote is reachable without any audit-impl step → WARNING."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "push"},
+                "push": {
+                    "tool": "push_to_remote",
+                    "on_success": "done",
+                    "with": {
+                        "clone_path": "/tmp/clone",
+                        "source_dir": "/tmp/src",
+                        "branch": "main",
+                    },
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "push-before-audit"]
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.WARNING
+        assert findings[0].step_name == "push"
+
+    def test_ppb3_no_push_step_no_finding(self) -> None:
+        """PPB3: recipe has no push_to_remote step — rule is silent."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "push-before-audit"]
+        assert findings == []
+
+    def test_ip_push_after_audit_now_correctly_has_violation(self) -> None:
+        """T_IP_PBA: bypass path via skip_when_false makes push-before-audit fire.
+
+        Uses a synthetic recipe mirroring implementation-pipeline topology:
+          start → audit_impl (optional, skip_when_false) → open_pr_step → push
+        The skip_when_false bypass allows push to be reached without audit.
+
+        The real recipe YAML will have skip_when_false added in Part B, at which
+        point the TestImplementationPipelineStructure fixture will also trigger this rule.
+        """
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "audit_impl"},
+                "audit_impl": {
+                    "tool": "run_skill",
+                    "optional": True,
+                    "skip_when_false": "inputs.audit",
+                    "with": {
+                        "skill_command": "/autoskillit:audit-impl plan.md",
+                        "cwd": "/tmp",
+                    },
+                    "on_success": "open_pr_step",
+                    "on_failure": "done",
+                },
+                "open_pr_step": {
+                    "tool": "run_skill",
+                    "optional": True,
+                    "skip_when_false": "inputs.open_pr",
+                    "with": {
+                        "skill_command": "/autoskillit:open-pr",
+                        "cwd": "/tmp",
+                    },
+                    "on_success": "push",
+                },
+                "push": {
+                    "tool": "push_to_remote",
+                    "on_success": "done",
+                    "with": {
+                        "clone_path": "/tmp/clone",
+                        "source_dir": "/tmp/src",
+                        "branch": "main",
+                    },
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(recipe)
+        violations = [f for f in findings if f.rule == "push-before-audit"]
+        assert len(violations) >= 1
+        assert violations[0].severity == Severity.WARNING
+
+
+# ===========================================================================
+# Predicate-based on_result routing — structural validation, semantic rules,
+# dataflow, and recipe integration tests
+# ===========================================================================
+
+
+class TestPredicateOnResultValidation:
+    """Structural validation for predicate-format on_result (conditions list)."""
+
+    def _make_merge_recipe(self, merge_step: dict, extra_steps: dict | None = None) -> Recipe:
+        steps: dict = {
+            "merge": merge_step,
+            "assess": {"action": "stop", "message": "Assess."},
+            "cleanup_failure": {"action": "stop", "message": "Cleanup."},
+            "push": {"action": "stop", "message": "Push."},
+        }
+        if extra_steps:
+            steps.update(extra_steps)
+        return _make_workflow(steps)
+
+    def test_predicate_on_result_on_success_mutually_exclusive(self) -> None:
+        """Step with predicate on_result (list) + on_success → validation error."""
+        from autoskillit.recipe.validator import validate_recipe
+
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                "on_success": "push",  # mutually exclusive
+            }
+        )
+        errors = validate_recipe(wf)
+        assert any("on_result" in e and "on_success" in e for e in errors)
+
+    def test_predicate_on_result_on_failure_mutually_exclusive(self) -> None:
+        """Step with predicate on_result (list) + on_failure → validation error."""
+        from autoskillit.recipe.validator import validate_recipe
+
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                "on_failure": "cleanup_failure",  # mutually exclusive with predicate format
+            }
+        )
+        errors = validate_recipe(wf)
+        assert any("on_failure" in e and "predicate" in e.lower() for e in errors)
+
+    def test_predicate_condition_invalid_route_target_rejected(self) -> None:
+        """A condition referencing an unknown step name is a validation error."""
+        from autoskillit.recipe.validator import validate_recipe
+
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "nonexistent_step"},
+                    {"route": "push"},
+                ],
+            }
+        )
+        errors = validate_recipe(wf)
+        assert any("nonexistent_step" in e for e in errors)
+
+    def test_predicate_condition_route_valid_step_accepted(self) -> None:
+        """All condition routes pointing to valid step names pass validation."""
+        from autoskillit.recipe.validator import validate_recipe
+
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+            }
+        )
+        errors = validate_recipe(wf)
+        assert errors == []
+
+    def test_predicate_format_no_on_failure_required(self) -> None:
+        """merge_worktree step with predicate on_result and no on_failure passes validation."""
+        from autoskillit.recipe.validator import validate_recipe
+
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.failed_step == 'test_gate'", "route": "assess"},
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+            }
+        )
+        errors = validate_recipe(wf)
+        assert errors == []
+
+    def test_predicate_on_result_empty_conditions_rejected(self) -> None:
+        """on_result with conditions=[] bypasses predicate path; emits field error.
+
+        When StepResultRoute(conditions=[]) is constructed directly (bypassing _parse_step,
+        which collapses empty conditions to on_result=None), the validator falls through to
+        legacy format validation and emits an explicit error for the missing field.
+        """
+        from autoskillit.recipe.validator import validate_recipe
+
+        recipe = Recipe(
+            name="test-predicate-empty",
+            description="test",
+            steps={
+                "start": RecipeStep(
+                    tool="run_skill",
+                    with_args={"skill_command": "x", "cwd": "y"},
+                    on_result=StepResultRoute(conditions=[]),
+                ),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        errors = validate_recipe(recipe)
+        assert any("on_result.field must be non-empty" in e for e in errors)
+
+
+class TestPredicateBuildStepGraph:
+    """_build_step_graph includes condition.route edges."""
+
+    def test_build_step_graph_includes_condition_routes(self) -> None:
+        """_build_step_graph produces edges for condition.route targets."""
+        from autoskillit.recipe.validator import _build_step_graph
+
+        wf = _make_workflow(
+            {
+                "merge": {
+                    "tool": "merge_worktree",
+                    "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                    "on_result": [
+                        {"when": "result.failed_step == 'test_gate'", "route": "assess"},
+                        {"when": "result.error", "route": "cleanup"},
+                        {"route": "push"},
+                    ],
+                    "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+                },
+                "assess": {"action": "stop", "message": "Assess."},
+                "cleanup": {"action": "stop", "message": "Cleanup."},
+                "push": {"action": "stop", "message": "Push."},
+            }
+        )
+        graph = _build_step_graph(wf)
+        assert "assess" in graph["merge"]
+        assert "cleanup" in graph["merge"]
+        assert "push" in graph["merge"]
+
+
+class TestPredicateSemanticRules:
+    """Semantic rules behave correctly for predicate-format on_result."""
+
+    def test_unreachable_step_includes_condition_routes(self) -> None:
+        """A step reachable only via condition route is NOT flagged as unreachable."""
+        wf = _make_workflow(
+            {
+                "merge": {
+                    "tool": "merge_worktree",
+                    "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                    "on_result": [
+                        {"when": "result.failed_step == 'test_gate'", "route": "assess"},
+                        {"when": "result.error", "route": "cleanup"},
+                        {"route": "push"},
+                    ],
+                    "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+                },
+                "assess": {"action": "stop", "message": "Assess."},
+                "cleanup": {"action": "stop", "message": "Cleanup."},
+                "push": {"action": "stop", "message": "Push."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        unreachable = [f for f in findings if f.rule == "unreachable-step"]
+        step_names = {f.step_name for f in unreachable}
+        assert "assess" not in step_names
+        assert "cleanup" not in step_names
+        assert "push" not in step_names
+
+    def test_on_result_missing_failure_route_does_not_fire_for_predicate_format(
+        self,
+    ) -> None:
+        """RCA rule does NOT fire for predicate-format on_result (no on_failure needed)."""
+        wf = _make_workflow(
+            {
+                "merge": {
+                    "tool": "merge_worktree",
+                    "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                    "on_result": [
+                        {"when": "result.error", "route": "cleanup"},
+                        {"route": "push"},
+                    ],
+                    "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+                },
+                "cleanup": {"action": "stop", "message": "Cleanup."},
+                "push": {"action": "stop", "message": "Push."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert not any(f.rule == "on-result-missing-failure-route" for f in findings)
+
+    def test_on_result_missing_failure_route_still_fires_for_legacy_format(
+        self,
+    ) -> None:
+        """RCA1 rule continues to fire for legacy format with no on_failure (no regression)."""
+        wf = _make_workflow(
+            {
+                "audit": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:audit-impl plan.md impl main"},
+                    "capture": {"verdict": "${{ result.verdict }}"},
+                    "on_result": {"field": "verdict", "routes": {"GO": "done", "NO GO": "fix"}},
+                    # no on_failure — the gap
+                },
+                "fix": {"action": "stop", "message": "Fix."},
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert any(f.rule == "on-result-missing-failure-route" for f in findings)
+
+
+class TestRecipeIntegrationPredicateRouting:
+    """Integration tests: bundled recipes with predicate on_result validate correctly."""
+
+    def setup_method(self) -> None:
+        self.if_recipe = load_recipe(builtin_recipes_dir() / "investigate-first.yaml")
+        self.ip_recipe = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+
+    def test_investigate_first_merge_step_has_predicate_on_result(self) -> None:
+        """The merge step in investigate-first.yaml has predicate on_result."""
+        step = self.if_recipe.steps["merge"]
+        assert step.on_result is not None
+        assert step.on_result.conditions, "merge step must have predicate conditions"
+        assert len(step.on_result.conditions) == 3
+
+        cond0 = step.on_result.conditions[0]
+        assert cond0.when == "result.failed_step == 'test_gate'"
+        assert cond0.route == "assess"
+
+        cond1 = step.on_result.conditions[1]
+        assert cond1.when == "result.error"
+        assert cond1.route == "cleanup_failure"
+
+        cond2 = step.on_result.conditions[2]
+        assert cond2.when is None
+        assert cond2.route == "push"
+
+    def test_investigate_first_merge_step_captures_worktree_path(self) -> None:
+        """The merge step captures worktree_path from result.worktree_path."""
+        step = self.if_recipe.steps["merge"]
+        assert "worktree_path" in step.capture
+        assert "result.worktree_path" in step.capture["worktree_path"]
+
+    def test_implementation_pipeline_merge_step_has_predicate_on_result(self) -> None:
+        """The merge step in implementation-pipeline.yaml has predicate on_result."""
+        step = self.ip_recipe.steps["merge"]
+        assert step.on_result is not None
+        assert step.on_result.conditions, "merge step must have predicate conditions"
+        assert len(step.on_result.conditions) == 3
+
+        cond0 = step.on_result.conditions[0]
+        assert cond0.when == "result.failed_step == 'test_gate'"
+        assert cond0.route == "fix"
+
+        cond1 = step.on_result.conditions[1]
+        assert cond1.when == "result.error"
+        assert cond1.route == "cleanup_failure"
+
+        cond2 = step.on_result.conditions[2]
+        assert cond2.when is None
+        assert cond2.route == "next_or_done"
+
+    def test_implementation_pipeline_merge_step_captures_worktree_path(self) -> None:
+        """The merge step in implementation-pipeline.yaml captures worktree_path."""
+        step = self.ip_recipe.steps["merge"]
+        assert "worktree_path" in step.capture
+        assert "result.worktree_path" in step.capture["worktree_path"]
+
+    def test_both_recipes_validate_cleanly(self) -> None:
+        """Both recipes have no structural errors after predicate routing changes."""
+        from autoskillit.recipe.validator import validate_recipe
+
+        if_errors = validate_recipe(self.if_recipe)
+        assert if_errors == [], f"investigate-first.yaml has validation errors: {if_errors}"
+
+        ip_errors = validate_recipe(self.ip_recipe)
+        assert ip_errors == [], f"implementation-pipeline.yaml has validation errors: {ip_errors}"
+
+    def test_both_recipes_no_error_semantic_findings(self) -> None:
+        """Both recipes pass semantic rules with no ERROR-severity findings."""
+        for recipe, name in [
+            (self.if_recipe, "investigate-first"),
+            (self.ip_recipe, "implementation-pipeline"),
+        ]:
+            findings = run_semantic_rules(recipe)
+            errors = [f for f in findings if f.severity == Severity.ERROR]
+            assert errors == [], f"{name} has ERROR-severity semantic findings: " + str(
+                [(f.rule, f.step_name, f.message) for f in errors]
+            )
+
+
+# ---------------------------------------------------------------------------
+# skill-command-missing-prefix rule tests
+# ---------------------------------------------------------------------------
+
+
+class TestSkillCommandMissingPrefixRule:
+    """Tests for the skill-command-missing-prefix semantic rule."""
+
+    def test_scp1_prose_run_skill_warns(self) -> None:
+        """SCP1: run_skill with prose skill_command → WARNING finding."""
+        wf = _make_workflow(
+            {
+                "step": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "Fix the auth bug in main.py", "cwd": "/tmp"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert any(
+            f.rule == "skill-command-missing-prefix" and f.severity == Severity.WARNING
+            for f in findings
+        ), "Expected skill-command-missing-prefix WARNING for prose skill_command"
+
+    def test_scp2_prose_run_skill_retry_warns(self) -> None:
+        """SCP2: run_skill_retry with prose skill_command → WARNING finding."""
+        wf = _make_workflow(
+            {
+                "step": {
+                    "tool": "run_skill_retry",
+                    "with": {"skill_command": "Investigate the bug", "cwd": "/tmp"},
+                    "on_success": "done",
+                    "on_failure": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert any(f.rule == "skill-command-missing-prefix" for f in findings)
+
+    def test_scp3_autoskillit_prefix_no_warning(self) -> None:
+        """SCP3: /autoskillit:investigate → no skill-command-missing-prefix warning."""
+        wf = _make_workflow(
+            {
+                "step": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:investigate error", "cwd": "/tmp"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert not any(f.rule == "skill-command-missing-prefix" for f in findings)
+
+    def test_scp4_bare_slash_local_skill_no_warning(self) -> None:
+        """SCP4: /audit-arch (local skill, starts with /) → no warning."""
+        wf = _make_workflow(
+            {
+                "step": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/audit-arch", "cwd": "/tmp"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert not any(f.rule == "skill-command-missing-prefix" for f in findings)
+
+    def test_scp5_dynamic_prefix_no_warning(self) -> None:
+        """SCP5: /audit-${{ inputs.audit_type }} → no warning (starts with /)."""
+        wf = _make_workflow(
+            {
+                "step": {
+                    "tool": "run_skill",
+                    "with": {
+                        "skill_command": "/audit-${{ inputs.audit_type }}",
+                        "cwd": "/tmp",
+                    },
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert not any(f.rule == "skill-command-missing-prefix" for f in findings)
+
+    def test_scp6_non_skill_tool_no_warning(self) -> None:
+        """SCP6: run_cmd step (not run_skill) → rule does not fire."""
+        wf = _make_workflow(
+            {
+                "step": {
+                    "tool": "run_cmd",
+                    "with": {"cmd": "ls -la", "cwd": "/tmp"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(wf)
+        assert not any(f.rule == "skill-command-missing-prefix" for f in findings)
+
+
+class TestPushMissingExplicitRemoteUrl:
+    """push-missing-explicit-remote-url rule fires when push_to_remote lacks remote_url."""
+
+    def test_warns_when_push_to_remote_has_no_remote_url(self) -> None:
+        """Rule fires when push_to_remote step has source_dir but no remote_url."""
+        recipe = _make_workflow(
+            {
+                "clone": {
+                    "tool": "clone_repo",
+                    "with": {"source_dir": "${{ inputs.source_dir }}", "run_name": "test"},
+                    "capture": {
+                        "work_dir": "${{ result.clone_path }}",
+                        "source_dir": "${{ result.source_dir }}",
+                    },
+                    "on_success": "push",
+                },
+                "push": {
+                    "tool": "push_to_remote",
+                    "with": {
+                        "clone_path": "${{ context.work_dir }}",
+                        "source_dir": "${{ context.source_dir }}",
+                        "branch": "main",
+                    },
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(recipe)
+        rule_names = [f.rule for f in findings]
+        assert "push-missing-explicit-remote-url" in rule_names
+
+    def test_no_warning_when_explicit_remote_url_provided(self) -> None:
+        """Rule is silent when push_to_remote step includes an explicit remote_url."""
+        recipe = _make_workflow(
+            {
+                "clone": {
+                    "tool": "clone_repo",
+                    "with": {"source_dir": "${{ inputs.source_dir }}", "run_name": "test"},
+                    "capture": {
+                        "work_dir": "${{ result.clone_path }}",
+                        "source_dir": "${{ result.source_dir }}",
+                        "remote_url": "${{ result.remote_url }}",
+                    },
+                    "on_success": "push",
+                },
+                "push": {
+                    "tool": "push_to_remote",
+                    "with": {
+                        "clone_path": "${{ context.work_dir }}",
+                        "remote_url": "${{ context.remote_url }}",
+                        "branch": "main",
+                    },
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(recipe)
+        rule_names = [f.rule for f in findings]
+        assert "push-missing-explicit-remote-url" not in rule_names
+
+    def test_no_finding_when_no_push_to_remote_step(self) -> None:
+        """Rule is silent when recipe has no push_to_remote step."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [
+            f for f in run_semantic_rules(recipe) if f.rule == "push-missing-explicit-remote-url"
+        ]
+        assert findings == []

@@ -745,6 +745,7 @@ class TestSafetyConfigWiring:
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
         # NO test-check call — skipped
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
         tool_ctx.runner.push(
             _make_result(

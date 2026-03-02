@@ -58,8 +58,8 @@ class TestClassifyFix:
 
         result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
-        assert "error" in result
-        assert "git diff failed" in result["error"]
+        assert "restart_scope" in result
+        assert "Cannot diff" in result["reason"]
 
     @pytest.mark.asyncio
     async def test_critical_path_in_diff_triggers_full_restart(self, tool_ctx):
@@ -101,9 +101,11 @@ class TestMergeWorktree:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
-        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(
                 0,
@@ -132,6 +134,7 @@ class TestMergeWorktree:
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
         tool_ctx.runner.push(_make_result(1, "", "CONFLICT (content): ..."))  # git rebase FAILS
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase --abort
         result = json.loads(await merge_worktree(str(wt), "main"))
@@ -209,9 +212,11 @@ class TestMergeWorktreeCleanupReporting:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
-        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(
                 0,
@@ -238,9 +243,11 @@ class TestMergeWorktreeCleanupReporting:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
-        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(
                 0,
@@ -286,9 +293,11 @@ class TestMergeWorktreeCleanupWarnings:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
-        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
+        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
         )
@@ -315,9 +324,11 @@ class TestMergeWorktreeCleanupWarnings:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
-        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
+        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
         )
@@ -342,9 +353,11 @@ class TestMergeWorktreeCleanupWarnings:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
-        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
+        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
         )

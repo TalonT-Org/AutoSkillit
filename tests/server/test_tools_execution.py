@@ -19,6 +19,7 @@ from autoskillit.core import SkillResult
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     RETRY_RESPONSE_FIELDS,
+    ChannelConfirmation,
     RetryReason,
     TerminationReason,
 )
@@ -1103,6 +1104,7 @@ class TestBuildSkillResultCompleted:
             returncode=-15,
             stdout="",
             termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         parsed = json.loads(_build_skill_result(result).to_json())
         assert parsed["success"] is False
@@ -1142,6 +1144,7 @@ class TestBuildSkillResultCompleted:
             returncode=0,
             stdout=stdout,
             termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         parsed = json.loads(
             _build_skill_result(result, completion_marker="", skill_command="/test").to_json()
@@ -1166,6 +1169,7 @@ class TestBuildSkillResultCompleted:
             returncode=0,
             stdout=stdout,
             termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         _build_skill_result(
             result, completion_marker="", skill_command="/test", audit=tool_ctx.audit
@@ -1649,7 +1653,9 @@ class TestRunSkillFailurePaths:
     @pytest.mark.asyncio
     async def test_handles_empty_stdout(self, tool_ctx):
         """run_skill returns error result when stdout is empty."""
-        tool_ctx.runner.push(_make_result(1, "", "segfault"))
+        tool_ctx.runner.push(
+            _make_result(1, "", "segfault", channel_confirmation=ChannelConfirmation.UNMONITORED)
+        )
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["exit_code"] == 1
         assert result["is_error"] is True
@@ -1659,7 +1665,11 @@ class TestRunSkillFailurePaths:
     @pytest.mark.asyncio
     async def test_empty_stdout_exit_zero_is_retriable(self, tool_ctx):
         """Infrastructure failure (empty stdout, exit 0) is retriable with stderr."""
-        tool_ctx.runner.push(_make_result(0, "", "session dropped"))
+        tool_ctx.runner.push(
+            _make_result(
+                0, "", "session dropped", channel_confirmation=ChannelConfirmation.UNMONITORED
+            )
+        )
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["subtype"] == "empty_output"
         assert result["success"] is False
@@ -1832,7 +1842,11 @@ class TestFailureCaptureInBuildSkillResult:
     """_build_skill_result() must capture failures into tool_ctx.audit."""
 
     def test_captures_non_zero_exit_code(self, tool_ctx):
-        result = _make_result(returncode=1, stdout=_failed_session_json())
+        result = _make_result(
+            returncode=1,
+            stdout=_failed_session_json(),
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
         _build_skill_result(result, skill_command="/test:cmd", audit=tool_ctx.audit)
         assert len(tool_ctx.audit.get_report()) == 1
 
@@ -1842,7 +1856,11 @@ class TestFailureCaptureInBuildSkillResult:
         assert tool_ctx.audit.get_report() == []
 
     def test_captured_record_has_correct_skill_command(self, tool_ctx):
-        result = _make_result(returncode=1, stdout=_failed_session_json())
+        result = _make_result(
+            returncode=1,
+            stdout=_failed_session_json(),
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
         _build_skill_result(
             result, skill_command="/autoskillit:implement-worktree", audit=tool_ctx.audit
         )
@@ -1851,7 +1869,11 @@ class TestFailureCaptureInBuildSkillResult:
     def test_captured_record_has_timestamp(self, tool_ctx):
         from datetime import datetime
 
-        result = _make_result(returncode=1, stdout=_failed_session_json())
+        result = _make_result(
+            returncode=1,
+            stdout=_failed_session_json(),
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
         _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
         record = tool_ctx.audit.get_report()[0]
         assert record.timestamp  # non-empty ISO timestamp
@@ -1873,7 +1895,12 @@ class TestFailureCaptureInBuildSkillResult:
 
     def test_stderr_truncated_to_500_chars(self, tool_ctx):
         long_stderr = "e" * 2000
-        result = _make_result(returncode=1, stderr=long_stderr, stdout=_failed_session_json())
+        result = _make_result(
+            returncode=1,
+            stderr=long_stderr,
+            stdout=_failed_session_json(),
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
         _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
         assert len(tool_ctx.audit.get_report()[0].stderr) <= 500
 
@@ -2018,6 +2045,7 @@ class TestGatedToolObservability:
                 '{"type": "result", "subtype": "error", "is_error": true,'
                 ' "result": "failed", "session_id": "s1"}',
                 "",
+                channel_confirmation=ChannelConfirmation.UNMONITORED,
             )
         )
         result = json.loads(await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx))
@@ -2053,6 +2081,7 @@ class TestGatedToolObservability:
                 '{"type": "result", "subtype": "error", "is_error": true,'
                 ' "result": "failed", "session_id": "s1"}',
                 "",
+                channel_confirmation=ChannelConfirmation.UNMONITORED,
             )
         )
         result = json.loads(
@@ -2234,12 +2263,21 @@ class TestStalePathStdoutCheck:
 class TestBuildSkillResultDataConfirmedPropagation:
     """_build_skill_result propagates data_confirmed for provenance bypass."""
 
-    def test_stale_recovery_propagates_data_confirmed(self):
-        """STALE recovery with data_confirmed=False engages provenance bypass."""
+    def test_stale_recovery_channel_a_with_valid_stdout_succeeds(self):
+        """STALE + CHANNEL_A + valid stdout → recovered_from_stale.
+
+        When stale monitor fires simultaneously with heartbeat (CHANNEL_A),
+        the stale recovery path succeeds via the stdout content check.
+        CHANNEL_A guarantees stdout has valid type=result content, so
+        can_attempt_stale_recovery passes and _compute_success returns True.
+        """
         result = _make_result(
-            stdout="",
+            stdout=(
+                '{"type":"result","subtype":"success",'
+                '"result":"task done %%ORDER_UP%%","is_error":false,"session_id":"s1"}'
+            ),
             termination_reason=TerminationReason.STALE,
-            data_confirmed=False,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
         )
         skill_result = _build_skill_result(
             result,
@@ -2247,15 +2285,15 @@ class TestBuildSkillResultDataConfirmedPropagation:
             skill_command="cmd",
             audit=None,
         )
-        # Provenance bypass should fire in STALE recovery; success=True
-        assert skill_result.success is True  # FAILS before fix: False
+        assert skill_result.success is True
+        assert skill_result.subtype == "recovered_from_stale"
 
     def test_stale_recovery_data_confirmed_true_preserves_existing_behavior(self):
         """STALE with empty stdout and data_confirmed=True (default) stays False."""
         result = _make_result(
             stdout="",
             termination_reason=TerminationReason.STALE,
-            data_confirmed=True,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
         )
         skill_result = _build_skill_result(
             result,
@@ -2273,7 +2311,7 @@ class TestBuildSkillResultDataConfirmedPropagation:
             '"session_id":"s1"}',
             returncode=-15,
             termination_reason=TerminationReason.COMPLETED,
-            data_confirmed=False,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
         )
         skill_result = _build_skill_result(
             result,
@@ -2291,7 +2329,7 @@ class TestBuildSkillResultDataConfirmedPropagation:
             '"session_id":"s1"}',
             returncode=-15,
             termination_reason=TerminationReason.COMPLETED,
-            data_confirmed=True,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
         )
         skill_result = _build_skill_result(
             result,

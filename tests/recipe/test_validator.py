@@ -20,6 +20,7 @@ from autoskillit.recipe.io import (
 )
 from autoskillit.recipe.schema import (
     Recipe,
+    RecipeStep,
 )
 from autoskillit.recipe.validator import (
     analyze_dataflow,
@@ -693,3 +694,97 @@ class TestOnResultConsumption:
         report = analyze_dataflow(recipe)
         dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT" and w.field == "verdict"]
         assert len(dead) == 1
+
+
+# ---------------------------------------------------------------------------
+# skip_when_false bypass edge tests
+# ---------------------------------------------------------------------------
+
+
+def test_build_step_graph_adds_bypass_edges_for_skip_when_false() -> None:
+    """When a step has skip_when_false, predecessors get a direct edge to its on_success."""
+    from autoskillit.recipe.schema import RecipeIngredient
+    from autoskillit.recipe.validator import _build_step_graph
+
+    # Recipe: entry → optional_step (skip_when_false) → final_step
+    # Expected bypass edge: entry → final_step
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="optional_step"),
+            "optional_step": RecipeStep(
+                tool="run_skill",
+                on_success="final_step",
+                skip_when_false="inputs.flag",
+            ),
+            "final_step": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={"flag": RecipeIngredient(description="", required=False, default="true")},
+        kitchen_rules=["test"],
+    )
+    graph = _build_step_graph(recipe)
+    # Bypass edge: entry can reach final_step directly (skip of optional_step)
+    assert "final_step" in graph["entry"]
+
+
+def test_build_step_graph_bypass_does_not_remove_normal_edge() -> None:
+    """The bypass edge is additional, not a replacement for the normal edge."""
+    from autoskillit.recipe.schema import RecipeIngredient
+    from autoskillit.recipe.validator import _build_step_graph
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="optional_step"),
+            "optional_step": RecipeStep(
+                tool="run_skill",
+                on_success="final_step",
+                skip_when_false="inputs.flag",
+            ),
+            "final_step": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={"flag": RecipeIngredient(description="", required=False, default="true")},
+        kitchen_rules=["test"],
+    )
+    graph = _build_step_graph(recipe)
+    # Normal edge still present
+    assert "optional_step" in graph["entry"]
+    # Bypass edge also present
+    assert "final_step" in graph["entry"]
+
+
+# ---------------------------------------------------------------------------
+# _build_step_graph predicate on_result tests
+# ---------------------------------------------------------------------------
+
+
+class TestPredicateBuildStepGraph:
+    """_build_step_graph includes condition.route edges."""
+
+    def test_build_step_graph_includes_condition_routes(self) -> None:
+        """_build_step_graph produces edges for condition.route targets."""
+        from autoskillit.recipe.validator import _build_step_graph
+
+        wf = _make_workflow(
+            {
+                "merge": {
+                    "tool": "merge_worktree",
+                    "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                    "on_result": [
+                        {"when": "result.failed_step == 'test_gate'", "route": "assess"},
+                        {"when": "result.error", "route": "cleanup"},
+                        {"route": "push"},
+                    ],
+                    "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+                },
+                "assess": {"action": "stop", "message": "Assess."},
+                "cleanup": {"action": "stop", "message": "Cleanup."},
+                "push": {"action": "stop", "message": "Push."},
+            }
+        )
+        graph = _build_step_graph(wf)
+        assert "assess" in graph["merge"]
+        assert "cleanup" in graph["merge"]
+        assert "push" in graph["merge"]

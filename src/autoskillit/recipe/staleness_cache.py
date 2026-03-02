@@ -47,7 +47,14 @@ def read_staleness_cache(cache_path: Path, recipe_name: str) -> StalenessEntry |
 
 
 def write_staleness_cache(cache_path: Path, recipe_name: str, entry: StalenessEntry) -> None:
-    """Atomically update entry using _atomic_write. Swallows OSError (best-effort)."""
+    """Write a staleness entry for ``recipe_name`` to the cache at ``cache_path``.
+
+    This is a best-effort cache. The read-modify-write pattern is not protected by a
+    file lock, so concurrent callers (e.g., pytest-xdist workers) may lose each other's
+    updates. The loss is acceptable: the worst outcome is a redundant LLM triage call
+    on the next invocation. Upgrading to advisory file locking is the correct fix if
+    concurrent writes become a real problem.
+    """
     try:
         existing: dict = {}
         if cache_path.is_file():

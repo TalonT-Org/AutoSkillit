@@ -522,7 +522,7 @@ class TestValidateRecipeTool:
     # T_OR10
     @pytest.mark.anyio
     async def test_validate_recipe_with_on_result(self, tmp_path):
-        """validate_recipe correctly validates on_result blocks."""
+        """validate_recipe correctly validates on_result predicate blocks."""
         script = tmp_path / "good.yaml"
         script.write_text(
             "name: result-recipe\n"
@@ -533,11 +533,11 @@ class TestValidateRecipeTool:
             "  classify:\n"
             "    tool: classify_fix\n"
             "    on_result:\n"
-            "      field: restart_scope\n"
-            "      routes:\n"
-            "        full_restart: done\n"
-            "        partial_restart: done\n"
-            "    on_failure: done\n"
+            '      - when: "${{ result.restart_scope }} == full_restart"\n'
+            "        route: done\n"
+            '      - when: "result.error"\n'
+            "        route: done\n"
+            "      - route: done\n"
             "  done:\n"
             "    action: stop\n"
             '    message: "Done."\n'

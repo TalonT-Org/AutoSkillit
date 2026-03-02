@@ -38,9 +38,6 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
             if target and target in step_names:
                 graph[name].add(target)
         if step.on_result:
-            for target in step.on_result.routes.values():
-                if target in step_names:
-                    graph[name].add(target)
             for condition in step.on_result.conditions:
                 if condition.route in step_names:
                     graph[name].add(condition.route)
@@ -63,12 +60,12 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
         if step.on_success and step.on_success in step_names:
             for pred in predecessors[name]:
                 graph[pred].add(step.on_success)
-        # on_result bypass: predecessor → each on_result route target
+        # on_result bypass: predecessor → each on_result condition route target
         if step.on_result:
-            for target in step.on_result.routes.values():
-                if target in step_names:
+            for condition in step.on_result.conditions:
+                if condition.route in step_names:
                     for pred in predecessors[name]:
-                        graph[pred].add(target)
+                        graph[pred].add(condition.route)
 
     return graph
 
@@ -250,9 +247,8 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                     continue
                 consumed.update(_CONTEXT_REF_RE.findall(arg_val))
 
-        # on_result routing on a captured key is structural consumption
-        if step.on_result and step.on_result.field in step.capture:
-            consumed.add(step.on_result.field)
+        # on_result routing: if any condition routes to a step that consumes the var,
+        # that is implicit structural consumption — already covered by BFS above.
 
         # Flag captured vars not consumed on any path
         for cap_key in step.capture:

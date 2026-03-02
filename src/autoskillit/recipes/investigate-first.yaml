@@ -1,6 +1,6 @@
 name: investigate-first
 description: Investigate a problem deeply, plan architectural fix, implement and merge.
-autoskillit_version: "0.2.0"
+autoskillit_version: "0.3.0"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -172,14 +172,13 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:
-      verdict: "${{ result.verdict }}"
       remediation_path: "${{ result.remediation_path }}"
     on_result:
-      field: verdict
-      routes:
-        GO: merge
-        NO GO: remediate
-    on_failure: escalate_stop
+      - when: "${{ result.verdict }} == GO"
+        route: merge
+      - when: "result.error"
+        route: escalate_stop
+      - route: remediate
     note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
 
   remediate:

@@ -28,6 +28,7 @@ from autoskillit.recipe.validator import (
     run_semantic_rules,
     validate_recipe,
 )
+from autoskillit.workspace import bundled_skills_dir
 
 _logger = get_logger(__name__)
 
@@ -85,7 +86,16 @@ def validate_from_path(path: Path) -> dict[str, Any]:
             "findings": [{"error": "File must contain a YAML mapping"}],
         }
 
-    recipe = _parse_recipe(data)
+    try:
+        recipe = _parse_recipe(data)
+    except ValueError as exc:
+        return {
+            "valid": False,
+            "errors": [str(exc)],
+            "quality": {},
+            "findings": [],
+            "contracts": [],
+        }
     errors = validate_recipe(recipe)
     report = analyze_dataflow(recipe)
     semantic_findings = run_semantic_rules(recipe)
@@ -139,30 +149,32 @@ def load_and_validate(
 
     try:
         data = load_yaml(raw)
-        if isinstance(data, dict) and "steps" in data:
-            recipe = _parse_recipe(data)
-            errors = validate_recipe(recipe)
-            semantic_findings = run_semantic_rules(recipe)
-            semantic_suggestions = findings_to_dicts(semantic_findings)
+        recipe = _parse_recipe(data)
+        errors = validate_recipe(recipe)
+        semantic_findings = run_semantic_rules(recipe)
+        semantic_suggestions = findings_to_dicts(semantic_findings)
 
-            _suppressed = suppressed or []
-            if name in _suppressed:
-                semantic_suggestions = filter_version_rule(semantic_suggestions)
-            suggestions.extend(semantic_suggestions)
+        _suppressed = suppressed or []
+        if name in _suppressed:
+            semantic_suggestions = filter_version_rule(semantic_suggestions)
+        suggestions.extend(semantic_suggestions)
 
-            recipes_dir = _pdir / ".autoskillit" / "recipes"
-            contract = load_recipe_card(name, recipes_dir)
-            contract_findings: list[dict[str, Any]] = []
-            if contract:
-                contract_findings = validate_recipe_cards(recipe, contract)
-                suggestions.extend(contract_findings)
-                cache_path = _pdir / ".autoskillit" / "temp" / "recipe_staleness_cache.json"
-                stale = check_contract_staleness(
-                    contract, recipe_path=match.path, cache_path=cache_path
-                )
-                suggestions.extend(stale_to_suggestions(stale))
+        recipes_dir = _pdir / ".autoskillit" / "recipes"
+        contract = load_recipe_card(name, recipes_dir)
+        contract_findings: list[dict[str, Any]] = []
+        if contract:
+            contract_findings = validate_recipe_cards(recipe, contract)
+            suggestions.extend(contract_findings)
+            cache_path = _pdir / ".autoskillit" / "temp" / "recipe_staleness_cache.json"
+            stale = check_contract_staleness(
+                contract,
+                recipe_path=match.path,
+                cache_path=cache_path,
+                skills_dir=bundled_skills_dir(),
+            )
+            suggestions.extend(stale_to_suggestions(stale))
 
-            valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
+        valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
     except YAMLError as exc:
         _logger.warning("Recipe YAML parse error", name=name, exc_info=True)
         suggestions.append(

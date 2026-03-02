@@ -15,15 +15,8 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.recipe._analysis import (
-    analyze_dataflow,
     _build_step_graph,
-    _bfs_reachable,
-    _bfs_capped,
-    _build_capture_origin_map,
-    _detect_dead_outputs,
-    _detect_implicit_handoffs,
-    _detect_ref_invalidations,
-    _INVALIDATING_TOOLS,
+    analyze_dataflow,
 )
 from autoskillit.recipe.contracts import (
     _CONTEXT_REF_RE,
@@ -42,7 +35,7 @@ from autoskillit.recipe.registry import (
     run_semantic_rules,
     semantic_rule,
 )
-from autoskillit.recipe.schema import DataFlowReport, DataFlowWarning, Recipe
+from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
 
@@ -125,36 +118,21 @@ def validate_recipe(recipe: Recipe) -> list[str]:
                     f"Step '{step_name}' has both 'on_result' and 'on_success'; "
                     f"they are mutually exclusive."
                 )
-            if step.on_result.conditions:
-                # Predicate format validation
-                if step.on_failure is not None:
+            # Predicate format validation
+            if step.on_failure is not None:
+                errors.append(
+                    f"Step '{step_name}' has both 'on_result' (predicate format) and "
+                    f"'on_failure'; they are mutually exclusive. Predicate conditions "
+                    f"handle all routing paths including failures."
+                )
+            for i, cond in enumerate(step.on_result.conditions):
+                if not cond.route:
+                    errors.append(f"Step '{step_name}'.on_result[{i}].route must be non-empty.")
+                elif cond.route not in step_names and cond.route != "done":
                     errors.append(
-                        f"Step '{step_name}' has both 'on_result' (predicate format) and "
-                        f"'on_failure'; they are mutually exclusive. Predicate conditions "
-                        f"handle all routing paths including failures."
+                        f"Step '{step_name}'.on_result[{i}].route references "
+                        f"unknown step '{cond.route}'."
                     )
-                for i, cond in enumerate(step.on_result.conditions):
-                    if not cond.route:
-                        errors.append(
-                            f"Step '{step_name}'.on_result[{i}].route must be non-empty."
-                        )
-                    elif cond.route not in step_names and cond.route != "done":
-                        errors.append(
-                            f"Step '{step_name}'.on_result[{i}].route references "
-                            f"unknown step '{cond.route}'."
-                        )
-            else:
-                # Legacy format validation
-                if not step.on_result.field:
-                    errors.append(f"Step '{step_name}'.on_result.field must be non-empty.")
-                if not step.on_result.routes:
-                    errors.append(f"Step '{step_name}'.on_result.routes must be non-empty.")
-                for value, target in step.on_result.routes.items():
-                    if target not in step_names and target != "done":
-                        errors.append(
-                            f"Step '{step_name}'.on_result.routes.{value} references "
-                            f"unknown step '{target}'."
-                        )
 
     # Validate capture values: must contain ${{ result.* }} expressions
     for step_name, step in recipe.steps.items():

@@ -254,11 +254,15 @@ def test_load_recipe_card_missing() -> None:
 
 
 def test_check_staleness_clean() -> None:
+    from autoskillit.workspace.skills import bundled_skills_dir
+
     contract = {
         "bundled_manifest_version": "0.1.0",
-        "skill_hashes": {"investigate": compute_skill_hash("investigate")},
+        "skill_hashes": {
+            "investigate": compute_skill_hash("investigate", skills_dir=bundled_skills_dir())
+        },
     }
-    stale = check_contract_staleness(contract)
+    stale = check_contract_staleness(contract, skills_dir=bundled_skills_dir())
     assert len(stale) == 0
 
 
@@ -269,11 +273,13 @@ def test_check_staleness_version_mismatch() -> None:
 
 
 def test_check_staleness_hash_mismatch() -> None:
+    from autoskillit.workspace.skills import bundled_skills_dir
+
     contract = {
         "bundled_manifest_version": "0.1.0",
         "skill_hashes": {"investigate": "sha256:0000000000"},
     }
-    stale = check_contract_staleness(contract)
+    stale = check_contract_staleness(contract, skills_dir=bundled_skills_dir())
     assert any(s.skill == "investigate" and s.reason == "hash_mismatch" for s in stale)
 
 

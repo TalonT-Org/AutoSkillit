@@ -1,5 +1,5 @@
 name: smoke-test
-autoskillit_version: "0.2.0"
+autoskillit_version: "0.3.0"
 description: End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
 summary: setup > seed_task > set_feature_branch > create_branch? > investigate > rectify > implement > set_worktree_path > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
 
@@ -140,11 +140,11 @@ steps:
       worktree_path: "${{ context.worktree_path }}"
       base_branch: "${{ inputs.base_branch }}"
     on_result:
-      field: restart_scope
-      routes:
-        full_restart: investigate
-        partial_restart: implement
-    on_failure: escalate
+      - when: "${{ result.restart_scope }} == full_restart"
+        route: investigate
+      - when: "result.error"
+        route: escalate
+      - route: implement
 
   merge:
     tool: merge_worktree
@@ -161,11 +161,9 @@ steps:
     with:
       workspace: ${{ inputs.workspace }}
     on_result:
-      field: non_empty
-      routes:
-        "true": create_summary
-        "false": done
-    on_failure: done
+      - when: "${{ result.non_empty }} == true"
+        route: create_summary
+      - route: done
     note: >
       Only execute if inputs.collect_on_branch is 'true'. Otherwise skip to done.
       Reads bug_report.json from the workspace. Routes to create_summary when bugs

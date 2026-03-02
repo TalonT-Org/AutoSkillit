@@ -202,7 +202,6 @@ def _check_unreachable_steps(wf: Recipe) -> list[RuleFinding]:
             if target:
                 referenced.add(target)
         if step.on_result:
-            referenced.update(step.on_result.routes.values())
             for cond in step.on_result.conditions:
                 referenced.add(cond.route)
         if step.retry and step.retry.on_exhausted:

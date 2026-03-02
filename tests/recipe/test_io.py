@@ -279,29 +279,28 @@ class TestRecipeParser:
             "steps": {
                 "classify": {
                     "tool": "classify_fix",
-                    "on_result": {
-                        "field": "restart_scope",
-                        "routes": {
-                            "full_restart": "investigate",
-                            "partial_restart": "implement",
+                    "on_result": [
+                        {
+                            "when": "${{ result.restart_scope }} == full_restart",
+                            "route": "investigate",
                         },
-                    },
-                    "on_failure": "escalate",
+                        {"route": "implement"},
+                    ],
                 },
                 "investigate": {"action": "stop", "message": "Investigating."},
                 "implement": {"action": "stop", "message": "Implementing."},
-                "escalate": {"action": "stop", "message": "Escalating."},
             },
         }
         f = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(f)
         assert wf.steps["classify"].on_result is not None
         assert isinstance(wf.steps["classify"].on_result, StepResultRoute)
-        assert wf.steps["classify"].on_result.field == "restart_scope"
-        assert wf.steps["classify"].on_result.routes == {
-            "full_restart": "investigate",
-            "partial_restart": "implement",
-        }
+        conds = wf.steps["classify"].on_result.conditions
+        assert len(conds) == 2
+        assert conds[0].when is not None and "full_restart" in conds[0].when
+        assert conds[0].route == "investigate"
+        assert conds[1].when is None  # default/catch-all
+        assert conds[1].route == "implement"
 
     # T_OR9
     def test_on_result_defaults_to_none(self, tmp_path: Path) -> None:
@@ -367,11 +366,11 @@ class TestRecipeParser:
         assert step.on_result.conditions[0].when is None
         assert step.on_result.conditions[0].route == "push"
 
-    def test_on_result_list_format_field_and_routes_empty(self, tmp_path: Path) -> None:
-        """When list-format is used, field == '' and routes == {}."""
+    def test_on_result_list_format_has_conditions(self, tmp_path: Path) -> None:
+        """When list-format is used, conditions list contains the parsed entries."""
         data = {
-            "name": "list-empty-legacy-recipe",
-            "description": "List format clears legacy fields",
+            "name": "list-conditions-recipe",
+            "description": "List format populates conditions",
             "kitchen_rules": ["test"],
             "steps": {
                 "merge": {
@@ -390,8 +389,11 @@ class TestRecipeParser:
         wf = load_recipe(f)
         step = wf.steps["merge"]
         assert step.on_result is not None
-        assert step.on_result.field == ""
-        assert step.on_result.routes == {}
+        assert len(step.on_result.conditions) == 2
+        assert step.on_result.conditions[0].when == "result.error"
+        assert step.on_result.conditions[0].route == "cleanup"
+        assert step.on_result.conditions[1].when is None
+        assert step.on_result.conditions[1].route == "push"
 
     # CON2
     def test_parse_recipe_extracts_kitchen_rules(self, tmp_path: Path) -> None:

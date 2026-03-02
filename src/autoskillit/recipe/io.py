@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,16 @@ from autoskillit.recipe.schema import (
 
 logger = get_logger(__name__)
 
+# Module-level mtime cache for list_recipes
+_list_cache: dict[tuple, Any] = {}
+
+
+def _dir_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
 
 def load_recipe(path: Path) -> Recipe:
     """Parse a YAML recipe file into a Recipe dataclass."""
@@ -29,8 +40,8 @@ def load_recipe(path: Path) -> Recipe:
     return _parse_recipe(data)
 
 
-def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
-    """Find available recipes from project and built-in sources."""
+def _load_from_disk(project_dir: Path) -> LoadResult[RecipeInfo]:
+    """Load recipes from disk without any caching."""
     seen: set[str] = set()
     items: list[RecipeInfo] = []
     errors: list[LoadReport] = []
@@ -42,6 +53,21 @@ def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
     _collect_recipes(RecipeSource.BUILTIN, builtin_dir, seen, items, errors)
 
     return LoadResult(items=sorted(items, key=lambda r: r.name), errors=errors)
+
+
+def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
+    """Find available recipes from project and built-in sources.
+
+    Results are cached by directory mtime to avoid redundant disk reads.
+    """
+    pm = _dir_mtime(project_dir / ".autoskillit" / "recipes")
+    bm = _dir_mtime(pkg_root() / "recipes")
+    cache_key = (project_dir, pm, bm)
+    if cache_key in _list_cache:
+        return _list_cache[cache_key]
+    result = _load_from_disk(project_dir)
+    _list_cache[cache_key] = result
+    return result
 
 
 def builtin_recipes_dir() -> Path:
@@ -108,28 +134,28 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
     )
 
 
-def _parse_step(data: dict[str, Any]) -> RecipeStep:
-    retry = None
-    retry_data = data.get("retry")
-    if isinstance(retry_data, dict):
-        # YAML 1.1 parsers (yaml.safe_load) interpret bare 'on' as boolean True.
-        # Normalise: prefer string key "on", fall back to boolean True key.
-        on_value = retry_data.get("on") if "on" in retry_data else retry_data.get(True)
-        retry = StepRetry(
-            max_attempts=retry_data.get("max_attempts", 3),
-            on=on_value,
-            on_exhausted=retry_data.get("on_exhausted", "escalate"),
-        )
+def _parse_retry(retry_data: dict[str, Any]) -> StepRetry:
+    """Parse a retry block dict into a StepRetry instance."""
+    # YAML 1.1 parsers (yaml.safe_load) interpret bare 'on' as boolean True.
+    # Normalise: prefer string key "on", fall back to boolean True key.
+    on_value = retry_data.get("on") if "on" in retry_data else retry_data.get(True)  # type: ignore[call-overload]
+    return StepRetry(
+        max_attempts=retry_data.get("max_attempts", 3),
+        on=on_value,
+        on_exhausted=retry_data.get("on_exhausted", "escalate"),
+    )
 
-    on_result = None
-    on_result_data = data.get("on_result")
+
+def _parse_on_result(on_result_data: Any) -> StepResultRoute:
+    """Parse an on_result list into a StepResultRoute instance."""
     if isinstance(on_result_data, dict):
-        on_result = StepResultRoute(
-            field=on_result_data.get("field", ""),
-            routes=on_result_data.get("routes", {}),
+        raise ValueError(
+            "legacy on_result field+routes format removed in v0.3.0; "
+            "use predicate conditions format (a YAML list). "
+            "Run 'autoskillit migrate' to upgrade your recipe."
         )
-    elif isinstance(on_result_data, list):
-        conditions = []
+    conditions = []
+    if isinstance(on_result_data, list):
         for item in on_result_data:
             if isinstance(item, dict):
                 conditions.append(
@@ -138,27 +164,30 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
                         route=item.get("route", ""),
                     )
                 )
-        if conditions:
-            on_result = StepResultRoute(conditions=conditions)
+    return StepResultRoute(conditions=conditions)
 
-    return RecipeStep(
-        tool=data.get("tool"),
-        action=data.get("action"),
-        python=data.get("python"),
-        with_args=data.get("with", {}),
-        on_success=data.get("on_success"),
-        on_failure=data.get("on_failure"),
-        on_retry=data.get("on_retry"),
-        on_result=on_result,
-        retry=retry,
-        message=data.get("message"),
-        note=data.get("note"),
-        capture=data.get("capture", {}),
-        capture_list=data.get("capture_list", {}),
-        optional=bool(data.get("optional", False)),
-        skip_when_false=data.get("skip_when_false"),
-        model=data.get("model"),
-    )
+
+def _parse_step(data: dict[str, Any]) -> RecipeStep:
+    kwargs: dict[str, Any] = {}
+    valid_fields = {f.name for f in dataclasses.fields(RecipeStep)}
+
+    for key, value in data.items():
+        field_name = "with_args" if key == "with" else key
+        if field_name not in valid_fields:
+            continue  # unknown YAML key — silently skip
+        kwargs[field_name] = value
+
+    # Special cases that need transformation:
+    if "on_result" in kwargs:
+        kwargs["on_result"] = _parse_on_result(kwargs["on_result"])
+        if not kwargs["on_result"].conditions:
+            kwargs["on_result"] = None
+    if "retry" in kwargs and isinstance(kwargs["retry"], dict):
+        kwargs["retry"] = _parse_retry(kwargs["retry"])
+    if "optional" in kwargs:
+        kwargs["optional"] = bool(kwargs["optional"])
+
+    return RecipeStep(**kwargs)  # dataclass defaults apply for absent fields
 
 
 def _collect_recipes(

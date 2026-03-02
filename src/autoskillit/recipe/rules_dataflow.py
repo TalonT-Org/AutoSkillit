@@ -253,7 +253,11 @@ def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
 
     next_or_done = wf.steps.get("next_or_done")
     if next_or_done is not None and next_or_done.on_result is not None:
-        if next_or_done.on_result.routes.get("more_parts") != "verify":
+        has_more_parts_to_verify = any(
+            cond.route == "verify" and cond.when is not None and "more_parts" in cond.when
+            for cond in next_or_done.on_result.conditions
+        )
+        if not has_more_parts_to_verify:
             findings.append(
                 RuleFinding(
                     rule="multipart-route-back",

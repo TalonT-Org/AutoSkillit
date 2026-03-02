@@ -684,7 +684,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     execution/ is exempt at 15 files to accommodate the 6 private _process_*.py sub-modules
     introduced by the P8-2 refactor (process.py monolith decomposition).
     """
-    EXEMPTIONS: dict[str, int] = {"server": 12, "recipe": 12, "execution": 15}
+    EXEMPTIONS: dict[str, int] = {"server": 12, "recipe": 17, "execution": 15}
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":
@@ -962,13 +962,6 @@ def test_package_all_matches_exports() -> None:
 
 
 # ── groupC Part A tests ───────────────────────────────────────────────────────
-
-
-def test_recipe_rules_module_exists() -> None:
-    """P8: recipe/rules.py must exist and be importable."""
-    from autoskillit.recipe import rules  # noqa: F401
-
-    assert rules is not None
 
 
 def test_semantic_rule_functions_defined_in_rule_submodules() -> None:

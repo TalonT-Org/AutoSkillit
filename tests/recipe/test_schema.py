@@ -101,7 +101,7 @@ def test_step_result_route_has_conditions_field() -> None:
     """StepResultRoute has a conditions field that defaults to an empty list."""
     from autoskillit.recipe.schema import StepResultRoute
 
-    route = StepResultRoute(field="verdict", routes={"GO": "done"})
+    route = StepResultRoute()
     assert route.conditions == []
 
 
@@ -116,8 +116,6 @@ def test_step_result_route_is_predicate_when_conditions_non_empty() -> None:
         ]
     )
     assert len(route.conditions) == 2
-    assert route.field == ""
-    assert route.routes == {}
 
 
 def test_skip_when_false_field_exists_on_recipe_step() -> None:

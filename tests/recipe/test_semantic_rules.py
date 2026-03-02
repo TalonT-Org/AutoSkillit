@@ -18,6 +18,7 @@ from autoskillit.recipe.schema import (
     Recipe,
     RecipeIngredient,
     RecipeStep,
+    StepResultCondition,
     StepResultRoute,
     StepRetry,
 )
@@ -437,6 +438,9 @@ class TestOutdatedScriptVersionRule:
         import autoskillit
 
         monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
+        monkeypatch.setattr(
+            "autoskillit.recipe.rules_inputs.AUTOSKILLIT_INSTALLED_VERSION", "0.2.0"
+        )
         wf = _make_workflow(
             {
                 "do_thing": {"tool": "run_cmd", "on_success": "done"},
@@ -820,8 +824,8 @@ class TestDeadOutputRule:
         assert len(dead) >= 1
         assert any(f.severity == Severity.ERROR and f.step_name == "plan" for f in dead)
 
-    def test_do3_does_not_fire_for_on_result_self_consumption(self) -> None:
-        """T_DO3: dead-output does NOT fire when on_result.field equals the captured key."""
+    def test_do3_does_not_fire_for_captured_key_consumed_downstream(self) -> None:
+        """T_DO3: dead-output does NOT fire when a captured key is consumed downstream."""
         steps = {
             "audit_impl": {
                 "tool": "run_skill",
@@ -829,10 +833,23 @@ class TestDeadOutputRule:
                     "skill_command": "/autoskillit:audit-impl plan.md myref main",
                 },
                 "capture": {"verdict": "${{ result.verdict }}"},
-                "on_result": {
-                    "field": "verdict",
-                    "routes": {"GO": "done", "NO GO": "done"},
+                "on_result": [
+                    {
+                        "when": "${{ result.verdict }} == GO",
+                        "route": "report",
+                    },
+                    {"route": "done"},
+                ],
+            },
+            "report": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:pipeline-summary",
+                    "cwd": "/tmp",
+                    "verdict": "${{ context.verdict }}",
                 },
+                "on_success": "done",
+                "on_failure": "done",
             },
             "done": {"action": "stop", "message": "Done."},
         }
@@ -1111,7 +1128,12 @@ class TestMultipartIterationRule:
                 "next_or_done": RecipeStep(
                     action="route",
                     on_result=StepResultRoute(
-                        field="next", routes={"more_parts": "verify", "all_done": "done"}
+                        conditions=[
+                            StepResultCondition(
+                                when="${{ result.next }} == more_parts", route="verify"
+                            ),
+                            StepResultCondition(route="done"),
+                        ]
                     ),
                 ),
                 "done": RecipeStep(action="stop", message="Done"),
@@ -1195,22 +1217,37 @@ def test_bundled_recipes_capture_cleanup_succeeded() -> None:
 
 
 class TestOnResultMissingFailureRoute:
-    """RCA: on-result-missing-failure-route semantic rule."""
+    """RCA: on-result-missing-failure-route semantic rule.
+
+    The rule fires only when on_result.conditions is empty (legacy/empty path).
+    Predicate-format steps (non-empty conditions) are exempt because predicate
+    on_result is mutually exclusive with on_failure in the schema.
+    Tests use StepResultRoute(conditions=[]) directly to exercise the legacy path.
+    """
+
+    def _make_direct_recipe(
+        self,
+        step: RecipeStep,
+        extra_steps: dict[str, RecipeStep] | None = None,
+    ) -> Recipe:
+        """Build a Recipe directly (bypassing _parse_step) to test legacy on_result path."""
+        steps: dict[str, RecipeStep] = {"audit": step}
+        if extra_steps:
+            steps.update(extra_steps)
+        steps.setdefault("fix", RecipeStep(action="stop", message="Fix needed."))
+        steps.setdefault("done", RecipeStep(action="stop", message="Done."))
+        return Recipe(name="test", description="test", steps=steps, kitchen_rules=["test"])
 
     def test_RCA1_tool_step_on_result_no_on_failure_fires_error(self) -> None:
-        """RCA1: run_skill step with on_result but no on_failure → Severity.ERROR finding."""
-        wf = _make_workflow(
-            {
-                "audit": {
-                    "tool": "run_skill",
-                    "with": {"skill_command": "/autoskillit:audit-impl plan.md impl main"},
-                    "capture": {"verdict": "${{ result.verdict }}"},
-                    "on_result": {"field": "verdict", "routes": {"GO": "done", "NO GO": "fix"}},
-                    # no on_failure — the gap
-                },
-                "fix": {"action": "stop", "message": "Fix needed."},
-                "done": {"action": "stop", "message": "Done."},
-            }
+        """RCA1: run_skill step with empty-conditions on_result and no on_failure → ERROR."""
+        wf = self._make_direct_recipe(
+            RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:audit-impl plan.md impl main"},
+                capture={"verdict": "${{ result.verdict }}"},
+                on_result=StepResultRoute(conditions=[]),
+                # no on_failure — the gap
+            )
         )
         findings = run_semantic_rules(wf)
         errors = [f for f in findings if f.severity == Severity.ERROR]
@@ -1220,36 +1257,35 @@ class TestOnResultMissingFailureRoute:
         ), f"Expected on-result-missing-failure-route ERROR on 'audit'. Got: {rule_names}"
 
     def test_RCA2_python_step_on_result_no_on_failure_fires_error(self) -> None:
-        """RCA2: python step with on_result but no on_failure → Severity.ERROR."""
-        wf = _make_workflow(
-            {
-                "check": {
-                    "python": "mymod.check_result",
-                    "on_result": {"field": "status", "routes": {"ok": "done", "fail": "fix"}},
+        """RCA2: python step with empty-conditions on_result but no on_failure → ERROR."""
+        wf = Recipe(
+            name="test",
+            description="test",
+            steps={
+                "check": RecipeStep(
+                    python="mymod.check_result",
+                    on_result=StepResultRoute(conditions=[]),
                     # no on_failure
-                },
-                "fix": {"action": "stop", "message": "Fix."},
-                "done": {"action": "stop", "message": "Done."},
-            }
+                ),
+                "fix": RecipeStep(action="stop", message="Fix."),
+                "done": RecipeStep(action="stop", message="Done."),
+            },
+            kitchen_rules=["test"],
         )
         findings = run_semantic_rules(wf)
         errors = [f for f in findings if f.severity == Severity.ERROR]
         assert any(f.rule == "on-result-missing-failure-route" for f in errors)
 
     def test_RCA3_on_result_with_on_failure_no_finding(self) -> None:
-        """RCA3: on_result + on_failure present → rule does not fire."""
-        wf = _make_workflow(
-            {
-                "audit": {
-                    "tool": "run_skill",
-                    "with": {"skill_command": "/autoskillit:audit-impl plan.md impl main"},
-                    "capture": {"verdict": "${{ result.verdict }}"},
-                    "on_result": {"field": "verdict", "routes": {"GO": "done", "NO GO": "fix"}},
-                    "on_failure": "done",
-                },
-                "fix": {"action": "stop", "message": "Fix needed."},
-                "done": {"action": "stop", "message": "Done."},
-            }
+        """RCA3: on_result (empty conditions) + on_failure present → rule does not fire."""
+        wf = self._make_direct_recipe(
+            RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:audit-impl plan.md impl main"},
+                capture={"verdict": "${{ result.verdict }}"},
+                on_result=StepResultRoute(conditions=[]),
+                on_failure="done",
+            )
         )
         findings = run_semantic_rules(wf)
         assert not any(f.rule == "on-result-missing-failure-route" for f in findings)
@@ -1259,38 +1295,41 @@ class TestOnResultMissingFailureRoute:
         Agent routing decisions are not MCP tool invocations; they cannot fail
         the same way and are exempt from this rule.
         """
-        wf = _make_workflow(
-            {
-                "decide": {
-                    "action": "route",
-                    "on_result": {
-                        "field": "parts",
-                        "routes": {"more": "implement", "done": "finish"},
-                    },
+        wf = Recipe(
+            name="test",
+            description="test",
+            steps={
+                "decide": RecipeStep(
+                    action="route",
+                    on_result=StepResultRoute(
+                        conditions=[
+                            StepResultCondition(
+                                when="${{ result.parts }} == more", route="implement"
+                            ),
+                            StepResultCondition(route="finish"),
+                        ]
+                    ),
                     # no on_failure — intentional for action:route
-                },
-                "implement": {"action": "stop", "message": "Implement."},
-                "finish": {"action": "stop", "message": "Finish."},
-            }
+                ),
+                "implement": RecipeStep(action="stop", message="Implement."),
+                "finish": RecipeStep(action="stop", message="Finish."),
+            },
+            kitchen_rules=["test"],
         )
         findings = run_semantic_rules(wf)
         assert not any(f.rule == "on-result-missing-failure-route" for f in findings)
 
     def test_RCA5_optional_true_plus_on_result_no_on_failure_fires(self) -> None:
         """RCA5: optional:true does not exempt a step from needing on_failure."""
-        wf = _make_workflow(
-            {
-                "audit": {
-                    "tool": "run_skill",
-                    "with": {"skill_command": "/autoskillit:audit-impl plan.md impl main"},
-                    "capture": {"verdict": "${{ result.verdict }}"},
-                    "on_result": {"field": "verdict", "routes": {"GO": "done", "NO GO": "fix"}},
-                    "optional": True,
-                    # no on_failure
-                },
-                "fix": {"action": "stop", "message": "Fix needed."},
-                "done": {"action": "stop", "message": "Done."},
-            }
+        wf = self._make_direct_recipe(
+            RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:audit-impl plan.md impl main"},
+                capture={"verdict": "${{ result.verdict }}"},
+                on_result=StepResultRoute(conditions=[]),
+                optional=True,
+                # no on_failure
+            )
         )
         findings = run_semantic_rules(wf)
         errors = [f for f in findings if f.severity == Severity.ERROR]
@@ -2071,12 +2110,13 @@ class TestPredicateOnResultValidation:
         errors = validate_recipe(wf)
         assert errors == []
 
-    def test_predicate_on_result_empty_conditions_rejected(self) -> None:
-        """on_result with conditions=[] bypasses predicate path; emits field error.
+    def test_predicate_on_result_empty_conditions_is_valid(self) -> None:
+        """on_result with conditions=[] produces no validation errors.
 
         When StepResultRoute(conditions=[]) is constructed directly (bypassing _parse_step,
-        which collapses empty conditions to on_result=None), the validator falls through to
-        legacy format validation and emits an explicit error for the missing field.
+        which collapses empty conditions to on_result=None), the validator iterates an empty
+        conditions list and emits no errors. The step has no routing, but that is not a
+        structural error.
         """
         from autoskillit.recipe.validator import validate_recipe
 
@@ -2093,7 +2133,7 @@ class TestPredicateOnResultValidation:
             },
         )
         errors = validate_recipe(recipe)
-        assert any("on_result.field must be non-empty" in e for e in errors)
+        assert not any("on_result" in e for e in errors)
 
 
 class TestPredicateBuildStepGraph:
@@ -2177,22 +2217,25 @@ class TestPredicateSemanticRules:
         findings = run_semantic_rules(wf)
         assert not any(f.rule == "on-result-missing-failure-route" for f in findings)
 
-    def test_on_result_missing_failure_route_still_fires_for_legacy_format(
+    def test_on_result_missing_failure_route_still_fires_for_empty_conditions(
         self,
     ) -> None:
-        """RCA1 rule continues to fire for legacy format with no on_failure (no regression)."""
-        wf = _make_workflow(
-            {
-                "audit": {
-                    "tool": "run_skill",
-                    "with": {"skill_command": "/autoskillit:audit-impl plan.md impl main"},
-                    "capture": {"verdict": "${{ result.verdict }}"},
-                    "on_result": {"field": "verdict", "routes": {"GO": "done", "NO GO": "fix"}},
+        """RCA1: rule fires for StepResultRoute(conditions=[]) with no on_failure."""
+        wf = Recipe(
+            name="test",
+            description="test",
+            steps={
+                "audit": RecipeStep(
+                    tool="run_skill",
+                    with_args={"skill_command": "/autoskillit:audit-impl plan.md impl main"},
+                    capture={"verdict": "${{ result.verdict }}"},
+                    on_result=StepResultRoute(conditions=[]),
                     # no on_failure — the gap
-                },
-                "fix": {"action": "stop", "message": "Fix."},
-                "done": {"action": "stop", "message": "Done."},
-            }
+                ),
+                "fix": RecipeStep(action="stop", message="Fix."),
+                "done": RecipeStep(action="stop", message="Done."),
+            },
+            kitchen_rules=["test"],
         )
         findings = run_semantic_rules(wf)
         assert any(f.rule == "on-result-missing-failure-route" for f in findings)

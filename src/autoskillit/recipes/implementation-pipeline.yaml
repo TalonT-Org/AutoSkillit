@@ -1,7 +1,7 @@
 name: implementation-pipeline
 description: Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
 summary: clone > capture_base_sha > set_merge_target > (create_branch?) > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part) > (audit-impl?) > (open_pr?) > push > cleanup
-autoskillit_version: "0.2.0"
+autoskillit_version: "0.3.0"
 
 ingredients:
   task:
@@ -277,11 +277,11 @@ steps:
   next_or_done:
     action: route
     on_result:
-      field: next
-      routes:
-        more_parts: verify
-        more_groups: plan
-        all_done: audit_impl
+      - when: "${{ result.next }} == more_parts"
+        route: verify
+      - when: "${{ result.next }} == more_groups"
+        route: plan
+      - route: audit_impl
     note: >
       Routing step — no tool call. The agent evaluates what comes next:
       1. If more plan_parts remain for the current group → go to verify with next part.
@@ -295,14 +295,13 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:
-      verdict: "${{ result.verdict }}"
       remediation_path: "${{ result.remediation_path }}"
     on_result:
-      field: verdict
-      routes:
-        GO: push
-        NO GO: remediate
-    on_failure: escalate_stop
+      - when: "${{ result.verdict }} == GO"
+        route: push
+      - when: "result.error"
+        route: escalate_stop
+      - route: remediate
     optional: true
     skip_when_false: "inputs.audit"
     note: >

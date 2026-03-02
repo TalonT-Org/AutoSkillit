@@ -287,7 +287,9 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
                 error=f"Source recipe '{file.name}.yaml' not found",
             )
         try:
-            _ = generate_recipe_card(recipe_path, recipes_dir)
+            from autoskillit.workspace import bundled_skills_dir
+
+            _ = generate_recipe_card(recipe_path, recipes_dir, skills_dir=bundled_skills_dir())
             return MigrationResult(success=True, name=file.name)
         except Exception as exc:
             logger.warning("Contract card generation failed", name=file.name, error=str(exc))

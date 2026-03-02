@@ -365,12 +365,11 @@ class TestValidateRecipe:
             "steps": {
                 "classify": {
                     "tool": "classify_fix",
-                    "on_result": {
-                        "field": "restart_scope",
-                        "routes": {"full_restart": "done"},
-                    },
+                    "on_result": [
+                        {"when": "${{ result.restart_scope }} == full_restart", "route": "done"},
+                        {"route": "done"},
+                    ],
                     "on_success": "done",
-                    "on_failure": "escalate",
                 },
                 "done": {"action": "stop", "message": "Done."},
                 "escalate": {"action": "stop", "message": "Escalating."},
@@ -390,11 +389,13 @@ class TestValidateRecipe:
             "steps": {
                 "classify": {
                     "tool": "classify_fix",
-                    "on_result": {
-                        "field": "restart_scope",
-                        "routes": {"full_restart": "done", "partial_restart": "done"},
-                    },
-                    "on_failure": "escalate",
+                    "on_result": [
+                        {
+                            "when": "${{ result.restart_scope }} == full_restart",
+                            "route": "done",
+                        },
+                        {"route": "done"},
+                    ],
                 },
                 "escalate": {"action": "stop", "message": "Escalating."},
             },
@@ -654,7 +655,7 @@ def _make_workflow(steps: dict[str, dict]) -> Recipe:
 
 class TestOnResultConsumption:
     def test_or1_on_result_field_is_not_dead_output(self) -> None:
-        """T_OR1: verdict captured and used as on_result.field is NOT flagged DEAD_OUTPUT."""
+        """T_OR1: verdict captured and referenced in downstream step is NOT flagged DEAD_OUTPUT."""
         steps = {
             "audit_impl": {
                 "tool": "run_skill",
@@ -662,10 +663,23 @@ class TestOnResultConsumption:
                     "skill_command": "/autoskillit:audit-impl plan.md myref main",
                 },
                 "capture": {"verdict": "${{ result.verdict }}"},
-                "on_result": {
-                    "field": "verdict",
-                    "routes": {"GO": "done", "NO GO": "done"},
+                "on_result": [
+                    {
+                        "when": "${{ result.verdict }} == GO",
+                        "route": "report",
+                    },
+                    {"route": "done"},
+                ],
+            },
+            "report": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:pipeline-summary",
+                    "cwd": "/tmp",
+                    "verdict": "${{ context.verdict }}",
                 },
+                "on_success": "done",
+                "on_failure": "done",
             },
             "done": {"action": "stop", "message": "Done."},
         }
@@ -675,7 +689,7 @@ class TestOnResultConsumption:
         assert dead == []
 
     def test_or2_different_on_result_field_flags_dead_output(self) -> None:
-        """T_OR2: verdict is flagged DEAD_OUTPUT when on_result.field is a different key."""
+        """T_OR2: verdict is flagged DEAD_OUTPUT when no downstream step uses context.verdict."""
         steps = {
             "audit_impl": {
                 "tool": "run_skill",
@@ -683,10 +697,13 @@ class TestOnResultConsumption:
                     "skill_command": "/autoskillit:audit-impl plan.md myref main",
                 },
                 "capture": {"verdict": "${{ result.verdict }}"},
-                "on_result": {
-                    "field": "restart_scope",
-                    "routes": {"full_restart": "done", "partial_restart": "done"},
-                },
+                "on_result": [
+                    {
+                        "when": "${{ result.restart_scope }} == full_restart",
+                        "route": "done",
+                    },
+                    {"route": "done"},
+                ],
             },
             "done": {"action": "stop", "message": "Done."},
         }

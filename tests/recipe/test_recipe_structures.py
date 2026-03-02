@@ -28,32 +28,38 @@ class TestImplementationPipelineStructure:
         """T_IP2: review step has capture containing key review_path."""
         assert "review_path" in self.recipe.steps["review"].capture
 
-    def test_ip3_audit_impl_has_verdict_and_remediation_capture_and_on_result(
+    def test_ip3_audit_impl_has_remediation_capture_and_on_result(
         self,
     ) -> None:
-        """T_IP3: audit_impl captures verdict+remediation_path and routes via on_result."""
+        """T_IP3: audit_impl captures remediation_path and routes via on_result."""
         step = self.recipe.steps["audit_impl"]
-        assert "verdict" in step.capture
         assert "remediation_path" in step.capture
         assert step.on_result is not None
-        assert step.on_result.field == "verdict"
+        assert len(step.on_result.conditions) > 0
 
     def test_ip4_verify_step_references_context_review_path(self) -> None:
         """T_IP4: verify step with_args contains a reference to context.review_path."""
         verify_with = self.recipe.steps["verify"].with_args
         assert any("context.review_path" in str(v) for v in verify_with.values())
 
-    def test_ip5_audit_impl_has_on_failure(self) -> None:
-        """T_IP5: audit_impl must declare on_failure for tool-failure routing.
-        The old assertion (on_failure is None) was wrong: on_result only fires
-        when run_skill succeeds and returns a verdict. Tool-level failures
-        require on_failure as a separate escape hatch.
+    def test_ip5_audit_impl_error_routed_via_on_result(self) -> None:
+        """T_IP5: audit_impl must not declare on_failure; error routing is encoded in on_result.
+        on_result with 'when: result.error' handles tool-level failures.
         """
         step = self.recipe.steps["audit_impl"]
         assert step.on_success is None  # on_result is used; on_success remains absent
-        assert step.on_failure is not None, (
-            "audit_impl must declare on_failure. "
-            "on_result routing does not handle run_skill tool failures."
+        assert step.on_failure is None, (
+            "audit_impl must not declare on_failure; "
+            "error routing belongs in on_result conditions using 'when: result.error'."
+        )
+        assert step.on_result is not None
+        error_cond = next(
+            (c for c in step.on_result.conditions if c.when and "result.error" in c.when),
+            None,
+        )
+        assert error_cond is not None, (
+            "audit_impl on_result must include a 'when: result.error' condition "
+            "to route tool failures."
         )
 
     def test_ip6_plan_step_note_contains_glob_pattern(self) -> None:
@@ -76,15 +82,23 @@ class TestImplementationPipelineStructure:
         """T_IP8: next_or_done routes more_parts back to verify for sequential processing."""
         step = self.recipe.steps["next_or_done"]
         assert step.on_result is not None
-        assert step.on_result.routes.get("more_parts") == "verify", (
+        more_parts_cond = next(
+            (c for c in step.on_result.conditions if c.when and "more_parts" in c.when),
+            None,
+        )
+        assert more_parts_cond is not None and more_parts_cond.route == "verify", (
             "next_or_done must route more_parts back to verify for sequential part processing"
         )
 
     def test_ip9_next_or_done_routes_all_done_to_audit_impl(self) -> None:
-        """T_IP9: next_or_done must route all_done to audit_impl."""
+        """T_IP9: next_or_done must route all_done (default/catch-all) to audit_impl."""
         step = self.recipe.steps["next_or_done"]
         assert step.on_result is not None
-        assert step.on_result.routes.get("all_done") == "audit_impl"
+        default_cond = next(
+            (c for c in step.on_result.conditions if c.when is None),
+            None,
+        )
+        assert default_cond is not None and default_cond.route == "audit_impl"
 
     def test_ip_audit_impl_uses_base_sha_as_ref(self) -> None:
         """T_IP_B2: audit_impl must use context.base_sha (not context.branch_name).
@@ -297,15 +311,14 @@ class TestBugfixLoopStructure:
     def _load_recipe(self, request) -> None:
         request.cls.recipe = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
 
-    def test_bl1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
+    def test_bl1_audit_impl_has_remediation_capture_and_on_result(
         self,
     ) -> None:
-        """T_BL1: audit_impl captures verdict+remediation_path and routes via on_result."""
+        """T_BL1: audit_impl captures remediation_path and routes via on_result."""
         step = self.recipe.steps["audit_impl"]
-        assert "verdict" in step.capture
         assert "remediation_path" in step.capture
         assert step.on_result is not None
-        assert step.on_result.field == "verdict"
+        assert len(step.on_result.conditions) > 0
 
     def test_bl2_remediate_step_exists_with_on_success_plan(self) -> None:
         """T_BL2: a step named remediate exists with on_success == 'plan'."""
@@ -348,15 +361,14 @@ class TestInvestigateFirstStructure:
     def _load_recipe(self, request) -> None:
         request.cls.recipe = load_recipe(builtin_recipes_dir() / "investigate-first.yaml")
 
-    def test_if1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
+    def test_if1_audit_impl_has_remediation_capture_and_on_result(
         self,
     ) -> None:
-        """T_IF1: audit_impl captures verdict+remediation_path and routes via on_result."""
+        """T_IF1: audit_impl captures remediation_path and routes via on_result."""
         step = self.recipe.steps["audit_impl"]
-        assert "verdict" in step.capture
         assert "remediation_path" in step.capture
         assert step.on_result is not None
-        assert step.on_result.field == "verdict"
+        assert len(step.on_result.conditions) > 0
 
     def test_if2_remediate_step_routes_to_make_plan(self) -> None:
         """T_IF2: remediate step exists and routes to make_plan (not rectify)."""
@@ -518,11 +530,12 @@ class TestSmokeTestStructure:
 
     # T_ST4
     def test_check_summary_on_result_routes(self, smoke_yaml: dict) -> None:
-        """check_summary step has on_result with field non_empty and routes true/false."""
+        """check_summary step has on_result with conditions routing non_empty true/false."""
         on_result = smoke_yaml["steps"]["check_summary"]["on_result"]
-        assert on_result["field"] == "non_empty"
-        assert "true" in on_result["routes"]
-        assert "false" in on_result["routes"]
+        assert isinstance(on_result, list), "on_result must be predicate list format"
+        routes = [c.get("route") for c in on_result]
+        assert "create_summary" in routes
+        assert "done" in routes
 
     # T_ST5
     def test_merge_references_context_feature_branch(self, smoke_yaml: dict) -> None:

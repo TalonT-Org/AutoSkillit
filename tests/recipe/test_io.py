@@ -114,11 +114,11 @@ def test_iter_steps_with_context_accumulates_captures() -> None:
     assert steps[1][2] == frozenset({"worktree_path"})
 
 
-def test_find_recipe_by_name_returns_none_for_unknown() -> None:
+def test_find_recipe_by_name_returns_none_for_unknown(tmp_path: Path) -> None:
     """find_recipe_by_name returns None when the recipe name does not exist."""
     from autoskillit.recipe.io import find_recipe_by_name
 
-    result = find_recipe_by_name("nonexistent_xyz_recipe_abc", Path("/tmp"))
+    result = find_recipe_by_name("nonexistent_xyz_recipe_abc", tmp_path)
     assert result is None
 
 

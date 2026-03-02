@@ -243,8 +243,8 @@ def test_load_recipe_card(tmp_path: Path) -> None:
     assert contract["bundled_manifest_version"] == "0.1.0"
 
 
-def test_load_recipe_card_missing() -> None:
-    contract = load_recipe_card("nonexistent", Path("/tmp/no-scripts"))
+def test_load_recipe_card_missing(tmp_path: Path) -> None:
+    contract = load_recipe_card("nonexistent", tmp_path / "no-scripts")
     assert contract is None
 
 

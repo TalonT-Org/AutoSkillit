@@ -9,10 +9,10 @@ NO MOCKS — that's the whole point.
 
 from __future__ import annotations
 
-import anyio
 import sys
 import textwrap
 
+import anyio
 import psutil
 import pytest
 

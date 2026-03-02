@@ -9,12 +9,12 @@ NO MOCKS — that's the whole point.
 
 from __future__ import annotations
 
-import anyio
 import sys
 import textwrap
 import time
 from unittest.mock import patch
 
+import anyio
 import pytest
 
 from autoskillit.core.types import ChannelConfirmation, TerminationReason

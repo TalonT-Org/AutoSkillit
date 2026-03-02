@@ -164,52 +164,100 @@ src/autoskillit/
 tests/
 ├── CLAUDE.md                            # xdist compatibility guidelines
 ├── __init__.py
-├── conftest.py                          # Shared fixtures (tools enabled + default config)
-├── test_architecture.py                 # AST enforcement + sub-package layer contracts
-├── test_audit.py                        # Audit log and FailureRecord tests
-├── test_ci_dev_config.py
-├── test_cli.py                          # CLI command tests
-├── test_clone.py
-├── test_config.py                       # Config loading tests
-├── test_conftest.py
-├── test_context.py
-├── test_core.py
-├── test_db_tools.py
-├── test_factory.py
-├── test_failure_store.py
-├── test_gate.py
-├── test_git_operations.py
-├── test_github_tools.py
-├── test_headless_runner.py
-├── test_import_paths.py
-├── test_instruction_surface_contract.py
-├── test_l1_packages.py
-├── test_llm_triage.py
-├── test_logging.py                      # Logging infrastructure tests
-├── test_migration_engine.py
-├── test_migration_loader.py
-├── test_package_gateways.py
-├── test_process_lifecycle.py            # Subprocess integration tests
-├── test_protocols.py
-├── test_quota.py
-├── test_recipe_io.py
-├── test_recipe_loader.py                # Recipe loader tests
-├── test_recipe_schema.py
-├── test_recipe_validator.py
-├── test_security_config.py
-├── test_server.py                       # Server unit tests
-├── test_service_wrappers.py             # REQ-ARCH-006/007: DefaultRecipeRepository and DefaultMigrationService behavior
-├── test_session_result.py
-├── test_skill_resolver.py               # Skill resolution tests
-├── test_smoke_pipeline.py
-├── test_smoke_utils.py
-├── test_test_runner.py
-├── test_token_log.py                    # Token usage tracking tests
-├── test_types.py
-├── test_version.py
-├── test_version_consistency.py
-├── test_workspace.py
-└── test_yaml_extended.py
+├── conftest.py                          # Shared fixtures: MockSubprocessRunner, _make_result, _make_timeout_result
+├── test_conftest.py                     # Tests for conftest fixtures
+├── test_llm_triage.py                   # LLM triage tests
+├── test_smoke_utils.py                  # Smoke utility tests
+├── arch/                                # AST enforcement + sub-package layer contracts
+│   ├── __init__.py
+│   ├── test_ast_rules.py
+│   ├── test_import_paths.py
+│   ├── test_layer_enforcement.py
+│   ├── test_registry.py
+│   └── test_subpackage_isolation.py
+├── cli/                                 # CLI command tests
+│   ├── __init__.py
+│   ├── test_cli_cook.py
+│   ├── test_cli_doctor.py
+│   ├── test_cli_init.py
+│   └── test_cli_install.py
+├── config/                              # Config loading tests
+│   ├── __init__.py
+│   └── test_config.py
+├── contracts/                           # Protocol satisfaction + package gateway contracts
+│   ├── __init__.py
+│   ├── test_instruction_surface.py
+│   ├── test_l1_packages.py
+│   ├── test_package_gateways.py
+│   ├── test_protocol_satisfaction.py
+│   └── test_version_consistency.py
+├── core/                                # Core layer tests
+│   ├── __init__.py
+│   ├── test_core.py
+│   ├── test_io.py
+│   ├── test_logging.py
+│   ├── test_types.py
+│   └── test_version.py
+├── execution/                           # Subprocess integration + session tests
+│   ├── __init__.py
+│   ├── test_commands.py
+│   ├── test_db.py
+│   ├── test_github.py
+│   ├── test_headless.py
+│   ├── test_process_channel_b.py
+│   ├── test_process_jsonl.py
+│   ├── test_process_kill.py
+│   ├── test_process_pty.py
+│   ├── test_process_run.py
+│   ├── test_quota.py
+│   ├── test_session.py
+│   └── test_testing.py
+├── infra/                               # CI/CD and security configuration tests
+│   ├── __init__.py
+│   ├── test_ci_dev_config.py
+│   ├── test_remove_clone_guard.py
+│   ├── test_security_config.py
+│   └── test_taskfile.py
+├── migration/                           # Migration engine and store tests
+│   ├── __init__.py
+│   ├── test_engine.py
+│   ├── test_loader.py
+│   └── test_store.py
+├── pipeline/                            # Audit log, gate, token log tests
+│   ├── __init__.py
+│   ├── test_audit.py
+│   ├── test_context.py
+│   ├── test_gate.py
+│   └── test_tokens.py
+├── recipe/                              # Recipe I/O, validation, schema tests
+│   ├── __init__.py
+│   ├── test_contracts.py
+│   ├── test_io.py
+│   ├── test_loader.py
+│   ├── test_recipe_structures.py
+│   ├── test_schema.py
+│   ├── test_semantic_rules.py
+│   ├── test_smoke_pipeline.py
+│   └── test_validator.py
+├── server/                              # Server unit tests (tool handlers)
+│   ├── __init__.py
+│   ├── conftest.py                      # tool_ctx fixture (imports MockSubprocessRunner from tests.conftest)
+│   ├── test_factory.py
+│   ├── test_git.py
+│   ├── test_server_init.py
+│   ├── test_service_wrappers.py         # REQ-ARCH-006/007: DefaultRecipeRepository and DefaultMigrationService
+│   ├── test_tools_clone.py
+│   ├── test_tools_execution.py
+│   ├── test_tools_git.py
+│   ├── test_tools_integrations.py
+│   ├── test_tools_recipe.py
+│   ├── test_tools_status.py
+│   └── test_tools_workspace.py
+└── workspace/                           # Workspace and clone tests
+    ├── __init__.py
+    ├── test_cleanup.py
+    ├── test_clone.py
+    └── test_skills.py
 
 temp/                        # Temporary/working files (gitignored)
 ```

@@ -286,6 +286,7 @@ steps:
       routes:
         GO: create_review_pr
         NO GO: remediate
+    on_failure: cleanup_failure
     optional: true
     skip_when_false: "inputs.audit"
     note: >

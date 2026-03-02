@@ -402,11 +402,33 @@ class TestMergeWorktreeRemoteTrackingGuard:
 
         result = json.loads(await merge_worktree(str(wt), "feature/local-only"))
 
-        assert result["failed_step"] == "rebase"
+        assert result["failed_step"] == "pre_rebase_check"
         assert result["state"] == "worktree_intact_base_not_published"
         assert "feature/local-only" in result["error"]
         assert "push" in result["error"].lower()
         assert result["worktree_path"] == str(wt)
+
+    @pytest.mark.anyio
+    async def test_merge_worktree_unpublished_base_reports_pre_rebase_check_step(
+        self, tool_ctx: object, tmp_path: Path
+    ) -> None:
+        """Step 5.5 failure must report failed_step=PRE_REBASE_CHECK, not REBASE."""
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))  # rev-parse
+        tool_ctx.runner.push(_make_result(stdout="feat/x"))  # branch
+        tool_ctx.runner.push(_make_result(stdout="PASS\n= 5 passed ="))  # test-check
+        tool_ctx.runner.push(_make_result())  # fetch
+        tool_ctx.runner.push(
+            _make_result(returncode=128, stderr="fatal: Needed a single revision")
+        )  # step 5.5
+
+        result = json.loads(await merge_worktree(str(wt), "local-only-branch"))
+
+        assert result["failed_step"] == "pre_rebase_check"  # renamed from "rebase"
+        assert result["state"] == "worktree_intact_base_not_published"
 
     @pytest.mark.anyio
     async def test_merge_worktree_fatal_invalid_upstream_produces_rebase_aborted(

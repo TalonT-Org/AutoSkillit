@@ -28,6 +28,7 @@ class MergeFailedStep(StrEnum):
     BRANCH_DETECTION = "branch_detection"
     TEST_GATE = "test_gate"
     FETCH = "fetch"
+    PRE_REBASE_CHECK = "pre_rebase_check"
     REBASE = "rebase"
     POST_REBASE_TEST_GATE = "post_rebase_test_gate"
     MERGE = "merge"

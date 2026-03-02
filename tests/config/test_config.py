@@ -32,6 +32,37 @@ class TestDefaultConfig:
         assert cfg.model.default is None
         assert cfg.model.override is None
 
+    def test_field_defaults_returns_correct_values_for_test_check(self):
+        """_field_defaults() reads TestCheckConfig field defaults without instantiating."""
+        from autoskillit.config.settings import _field_defaults, TestCheckConfig
+
+        d = _field_defaults(TestCheckConfig)
+        assert d["command"] == ["task", "test-check"]
+        assert d["timeout"] == 600
+
+    def test_field_defaults_returns_none_for_optional_fields(self):
+        """_field_defaults() returns None for Optional fields that default to None."""
+        from autoskillit.config.settings import _field_defaults, ModelConfig
+
+        d = _field_defaults(ModelConfig)
+        assert d["default"] is None
+        assert d["override"] is None
+
+    def test_from_dynaconf_empty_produces_same_result_as_constructor_defaults(self):
+        """from_dynaconf() with no overrides equals AutomationConfig() defaults exactly."""
+        import tempfile
+
+        from autoskillit.config.settings import AutomationConfig, _make_dynaconf
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            d = _make_dynaconf(project_dir=tmpdir)
+            from_dynaconf = AutomationConfig.from_dynaconf(d)
+            direct = AutomationConfig()
+            assert from_dynaconf.test_check == direct.test_check
+            assert from_dynaconf.model == direct.model
+            assert from_dynaconf.run_skill == direct.run_skill
+            assert from_dynaconf.quota_guard == direct.quota_guard
+
 
 class TestLoadConfig:
     def test_load_config_no_files_returns_defaults(self, tmp_path):

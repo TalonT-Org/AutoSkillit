@@ -7,7 +7,7 @@ import re
 import yaml
 
 from autoskillit.core.types import SkillSource
-from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
+from autoskillit.workspace.skills import SkillResolver, _INTERNAL_SKILLS, bundled_skills_dir
 
 BUNDLED_SKILLS = [
     "analyze-prs",
@@ -82,6 +82,21 @@ class TestSkillResolver:
         resolver = SkillResolver()
         names = [s.name for s in resolver.list_all()]
         assert "pipeline-summary" in names
+
+    def test_internal_skills_excluded_from_list_all(self) -> None:
+        """sous-chef must not appear in SkillResolver.list_all() — it is not user-invocable."""
+        resolver = SkillResolver()
+        names = {s.name for s in resolver.list_all()}
+        assert "sous-chef" not in names, (
+            "sous-chef is an internal bootstrap document and must be excluded from user-visible skill lists"
+        )
+
+    def test_list_all_returns_user_invocable_skills_only(self) -> None:
+        """list_all() returns BUNDLED_SKILLS minus INTERNAL_SKILLS."""
+        resolver = SkillResolver()
+        expected = frozenset(BUNDLED_SKILLS) - INTERNAL_SKILLS
+        actual = frozenset(s.name for s in resolver.list_all())
+        assert actual == expected
 
     def test_skill_md_cross_references_are_namespaced(self) -> None:
         """All /skill-name references in SKILL.md files use /autoskillit: prefix."""

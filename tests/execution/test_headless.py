@@ -14,20 +14,12 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
-from autoskillit.execution.headless import _build_skill_result, _ensure_skill_prefix, _resolve_model
+from autoskillit.execution.headless import (
+    _build_skill_result,
+    _ensure_skill_prefix,
+    _resolve_model,
+)
 from tests.conftest import _make_result, _make_timeout_result
-
-
-@pytest.fixture
-def make_config():
-    """Factory fixture that creates an AutomationConfig with custom model settings."""
-
-    def _make(model_override=None, model_default=None):
-        cfg = AutomationConfig()
-        cfg.model = ModelConfig(default=model_default, override=model_override)
-        return cfg
-
-    return _make
 
 
 def test_inject_completion_directive_appends_marker():
@@ -103,7 +95,9 @@ class TestSessionLogDir:
         from autoskillit.execution.headless import _session_log_dir
 
         result = _session_log_dir("/home/user_name/my_project/sub_dir")
-        assert result == Path.home() / ".claude" / "projects" / "-home-user-name-my-project-sub-dir"
+        assert (
+            result == Path.home() / ".claude" / "projects" / "-home-user-name-my-project-sub-dir"
+        )
 
     # --- log behavior (from test_server_init.py TestGateTransitionLogs) ---
 

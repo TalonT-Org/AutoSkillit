@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 import structlog.contextvars
@@ -31,44 +31,6 @@ _SUCCESS_JSON = (
     '{"type": "result", "subtype": "success", "is_error": false,'
     ' "result": "done", "session_id": "s1"}'
 )
-
-
-def _success_session_json(result_text: str) -> str:
-    return json.dumps(
-        {
-            "type": "result",
-            "subtype": "success",
-            "result": result_text,
-            "session_id": "test-session",
-            "is_error": False,
-        }
-    )
-
-
-def _failed_session_json() -> str:
-    return json.dumps(
-        {
-            "type": "result",
-            "subtype": "error",
-            "result": "Task failed with an error",
-            "session_id": "test-session",
-            "is_error": True,
-        }
-    )
-
-
-def _context_exhausted_session_json() -> str:
-    """Session result that triggers context exhaustion / needs_retry detection."""
-    return json.dumps(
-        {
-            "type": "result",
-            "subtype": "error",
-            "result": "prompt is too long",
-            "session_id": "test-session",
-            "is_error": True,
-            "errors": ["prompt is too long"],
-        }
-    )
 
 
 class TestRunSkillPluginDir:

@@ -425,7 +425,7 @@ class TestBuildSkillResultUsesComputeOutcome:
 class TestRunHeadlessCore:
     """Integration test for run_headless_core via the injected mock runner."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_headless_core_returns_success_result(self, tool_ctx):
         from autoskillit.execution.headless import run_headless_core
 

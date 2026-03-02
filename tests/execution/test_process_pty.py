@@ -108,7 +108,7 @@ SLEEP_FOREVER_NO_OUTPUT_SCRIPT = textwrap.dedent("""\
 class TestPtyWrapper:
     """PTY wrapping provides a TTY to the subprocess."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     @pytest.mark.skipif(
         shutil.which("script") is None,
         reason="script binary not available (util-linux required)",
@@ -128,7 +128,7 @@ class TestPtyWrapper:
         assert result.termination != TerminationReason.TIMED_OUT
         assert "True" in result.stdout
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_no_pty_shows_no_tty(self, tmp_path):
         """Without pty_mode, subprocess does not see a TTY on stdout."""
         script = tmp_path / "isatty.py"
@@ -144,7 +144,7 @@ class TestPtyWrapper:
         assert result.termination != TerminationReason.TIMED_OUT
         assert "False" in result.stdout
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     @pytest.mark.skipif(
         shutil.which("script") is None,
         reason="script binary not available (util-linux required)",
@@ -234,7 +234,7 @@ class TestSTOPDelayPipelineAdjudication:
     the _is_kill_anomaly guard that was the subject of the 2026-03-01 investigation.
     """
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_stop_delay_race_produces_retriable_skill_result(self, tmp_path):
         """NATURAL_EXIT + rc=0 + success+empty → success=False, needs_retry=True.
 
@@ -270,7 +270,7 @@ class TestSTOPDelayPipelineAdjudication:
         assert skill_result.retry_reason == RetryReason.RESUME
         assert skill_result.subtype == "success"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_natural_exit_empty_stdout_produces_retriable_skill_result(self, tmp_path):
         """NATURAL_EXIT + rc=0 + empty stdout → success=False, needs_retry=True.
 
@@ -303,7 +303,7 @@ class TestSTOPDelayPipelineAdjudication:
         assert skill_result.needs_retry is True
         assert skill_result.retry_reason == RetryReason.RESUME
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_natural_exit_truncated_json_produces_retriable_skill_result(self, tmp_path):
         """NATURAL_EXIT + rc=0 + truncated/unparseable JSON → success=False, needs_retry=True.
 
@@ -341,7 +341,7 @@ class TestSTOPDelayPipelineAdjudication:
 class TestStaleRecoveryPipelineAdjudication:
     """Integration: STALE termination with valid stdout triggers recovery path."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_stale_with_valid_result_recovers_to_success(self, tmp_path):
         """STALE + valid success result in stdout → success=True, needs_retry=False.
 
@@ -399,7 +399,7 @@ class TestTimedOutPipelineAdjudication:
     success=False, needs_retry=False — timeouts are not retriable.
     """
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_timed_out_produces_non_retriable_failure(self, tmp_path):
         """TIMED_OUT → success=False, needs_retry=False, subtype="timeout".
 

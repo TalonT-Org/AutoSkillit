@@ -112,7 +112,7 @@ class TestWriteCache:
 
 
 class TestCheckAndSleepIfNeeded:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_disabled_returns_immediately_no_io(self, monkeypatch):
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import check_and_sleep_if_needed
@@ -129,7 +129,7 @@ class TestCheckAndSleepIfNeeded:
         assert result["should_sleep"] is False
         assert fetch_called == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_below_threshold_returns_should_sleep_false(self, monkeypatch, tmp_path):
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
@@ -150,7 +150,7 @@ class TestCheckAndSleepIfNeeded:
         assert result["should_sleep"] is False
         assert result["utilization"] == pytest.approx(50.0)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_above_threshold_returns_should_sleep_true(self, monkeypatch, tmp_path):
         from unittest.mock import AsyncMock
 
@@ -175,7 +175,7 @@ class TestCheckAndSleepIfNeeded:
         assert mock_fetch.call_count == 2
         assert result["sleep_seconds"] == pytest.approx(7200, abs=60)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_uses_fresh_cache_skips_fetch(self, monkeypatch, tmp_path):
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import (
@@ -206,7 +206,7 @@ class TestCheckAndSleepIfNeeded:
         assert result["should_sleep"] is False
         assert result["utilization"] == pytest.approx(40.0)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_credentials_failure_returns_error_dict(self, tmp_path):
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import check_and_sleep_if_needed
@@ -220,7 +220,7 @@ class TestCheckAndSleepIfNeeded:
         assert result["should_sleep"] is False
         assert "error" in result
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_network_error_returns_error_dict(self, monkeypatch, tmp_path):
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import check_and_sleep_if_needed

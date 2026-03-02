@@ -9,7 +9,7 @@ NO MOCKS — that's the whole point.
 
 from __future__ import annotations
 
-import asyncio
+import anyio
 import sys
 import textwrap
 import time
@@ -120,7 +120,7 @@ PARTIAL_OUTPUT_THEN_HANG_SCRIPT = textwrap.dedent("""\
 class TestSessionLogMonitor:
     """Session log monitor detects completion and staleness."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_session_log_monitor_detects_completion(self, tmp_path):
         """Session log with completion marker in assistant record returns 'completion'."""
         import json
@@ -138,7 +138,7 @@ class TestSessionLogMonitor:
         )
 
         async def append_marker():
-            await asyncio.sleep(1.0)
+            await anyio.sleep(1.0)
             with session_file.open("a") as f:
                 f.write(
                     json.dumps(
@@ -153,15 +153,22 @@ class TestSessionLogMonitor:
                     + "\n"
                 )
 
-        task = asyncio.create_task(append_marker())
-        result = await _session_log_monitor(
-            log_dir, "%%AUTOSKILLIT_COMPLETE%%", stale_threshold=30, spawn_time=spawn_time
-        )
-        await task
+        monitor_result: list[str] = []
 
-        assert result == "completion"
+        async def _run_monitor() -> None:
+            monitor_result.append(
+                await _session_log_monitor(
+                    log_dir, "%%AUTOSKILLIT_COMPLETE%%", stale_threshold=30, spawn_time=spawn_time
+                )
+            )
 
-    @pytest.mark.asyncio
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(append_marker)
+            tg.start_soon(_run_monitor)
+
+        assert monitor_result[0] == "completion"
+
+    @pytest.mark.anyio
     async def test_session_log_monitor_detects_staleness(self, tmp_path):
         """Session log that stops being written to returns 'stale'."""
         import json
@@ -190,7 +197,7 @@ class TestSessionLogMonitor:
         assert result == "stale"
         assert elapsed < 1.0, f"Staleness should fire after ~0.2s, took {elapsed:.1f}s"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_staleness_resets_on_activity(self, tmp_path):
         """Session log that keeps getting written to does not fire staleness."""
         import json
@@ -207,7 +214,7 @@ class TestSessionLogMonitor:
 
         async def keep_writing():
             for i in range(5):
-                await asyncio.sleep(0.05)
+                await anyio.sleep(0.05)
                 with session_file.open("a") as f:
                     f.write(
                         json.dumps(
@@ -219,24 +226,32 @@ class TestSessionLogMonitor:
                         + "\n"
                     )
             # After writing stops, staleness should eventually fire
-            await asyncio.sleep(0.5)
+            await anyio.sleep(0.5)
 
-        writer = asyncio.create_task(keep_writing())
+        monitor_result: list[str] = []
 
-        result = await _session_log_monitor(
-            log_dir,
-            "NONEXISTENT_MARKER",
-            stale_threshold=0.3,
-            spawn_time=spawn_time,
-            _phase1_poll=0.01,
-            _phase2_poll=0.05,
-        )
-        writer.cancel()
+        async with anyio.create_task_group() as tg:
+
+            async def _run_monitor() -> None:
+                monitor_result.append(
+                    await _session_log_monitor(
+                        log_dir,
+                        "NONEXISTENT_MARKER",
+                        stale_threshold=0.3,
+                        spawn_time=spawn_time,
+                        _phase1_poll=0.01,
+                        _phase2_poll=0.05,
+                    )
+                )
+                tg.cancel_scope.cancel()  # cancel writer once monitor fires
+
+            tg.start_soon(keep_writing)
+            tg.start_soon(_run_monitor)
 
         # Staleness should have fired AFTER the writing stopped, not during
-        assert result == "stale"
+        assert monitor_result[0] == "stale"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_monitor_ignores_marker_in_non_assistant_records(self, tmp_path):
         """Monitor must NOT fire on completion marker in non-assistant records.
 
@@ -264,35 +279,51 @@ class TestSessionLogMonitor:
         )
         session_file.write_text(enqueue_record + "\n")
 
-        monitor_task = asyncio.create_task(
-            _session_log_monitor(
-                log_dir,
-                marker,
-                stale_threshold=30,
-                spawn_time=spawn_time,
-                _phase1_poll=0.01,
-                _phase2_poll=0.1,
+        poll_count = 0
+        polls_done = anyio.Event()
+
+        def on_poll() -> None:
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 5:
+                polls_done.set()
+
+        monitor_result: list[str] = []
+
+        async with anyio.create_task_group() as tg:
+
+            async def _run_monitor() -> None:
+                monitor_result.append(
+                    await _session_log_monitor(
+                        log_dir,
+                        marker,
+                        stale_threshold=30,
+                        spawn_time=spawn_time,
+                        _phase1_poll=0.01,
+                        _phase2_poll=0.05,
+                        _on_poll=on_poll,
+                    )
+                )
+
+            tg.start_soon(_run_monitor)
+            with anyio.fail_after(10.0):
+                await polls_done.wait()
+            assert not monitor_result, "Monitor fired on non-assistant record — false-fire bug"
+
+            # Now append an assistant record with the marker — should fire
+            assistant_record = json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"role": "assistant", "content": f"Done\n\n{marker}"},
+                }
             )
-        )
+            with session_file.open("a") as f:
+                f.write(assistant_record + "\n")
+            # task group awaits _run_monitor to detect assistant record and complete
 
-        # Monitor should NOT fire on the enqueue record — wait for several poll cycles to confirm
-        await asyncio.sleep(0.5)
-        assert not monitor_task.done(), "Monitor fired on non-assistant record — false-fire bug"
+        assert monitor_result[0] == "completion"
 
-        # Now append an assistant record with the marker — should fire
-        assistant_record = json.dumps(
-            {
-                "type": "assistant",
-                "message": {"role": "assistant", "content": f"Done\n\n{marker}"},
-            }
-        )
-        with session_file.open("a") as f:
-            f.write(assistant_record + "\n")
-
-        result = await asyncio.wait_for(monitor_task, timeout=2)
-        assert result == "completion"
-
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_monitor_realistic_jsonl_sequence(self, tmp_path):
         """Monitor correctly handles the realistic 3-record JSONL sequence.
 
@@ -332,39 +363,55 @@ class TestSessionLogMonitor:
         )
         session_file.write_text(records_12)
 
-        monitor_task = asyncio.create_task(
-            _session_log_monitor(
-                log_dir,
-                marker,
-                stale_threshold=30,
-                spawn_time=spawn_time,
-                _phase1_poll=0.01,
-                _phase2_poll=0.1,
+        poll_count = 0
+        polls_done = anyio.Event()
+
+        def on_poll() -> None:
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 5:
+                polls_done.set()
+
+        monitor_result: list[str] = []
+
+        async with anyio.create_task_group() as tg:
+
+            async def _run_monitor() -> None:
+                monitor_result.append(
+                    await _session_log_monitor(
+                        log_dir,
+                        marker,
+                        stale_threshold=30,
+                        spawn_time=spawn_time,
+                        _phase1_poll=0.01,
+                        _phase2_poll=0.05,
+                        _on_poll=on_poll,
+                    )
+                )
+
+            tg.start_soon(_run_monitor)
+            with anyio.fail_after(10.0):
+                await polls_done.wait()
+            assert not monitor_result, "Monitor fired on user/enqueue records"
+
+            # Write record 3 (assistant with marker as standalone line)
+            assistant_record = json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"role": "assistant", "content": f"All done\n\n{marker}"},
+                }
             )
-        )
+            with session_file.open("a") as f:
+                f.write(assistant_record + "\n")
+            # task group awaits _run_monitor to detect assistant record and complete
 
-        # Wait for several poll cycles and confirm no early fire
-        await asyncio.sleep(0.5)
-        assert not monitor_task.done(), "Monitor fired on user/enqueue records"
-
-        # Write record 3 (assistant with marker as standalone line)
-        assistant_record = json.dumps(
-            {
-                "type": "assistant",
-                "message": {"role": "assistant", "content": f"All done\n\n{marker}"},
-            }
-        )
-        with session_file.open("a") as f:
-            f.write(assistant_record + "\n")
-
-        result = await asyncio.wait_for(monitor_task, timeout=2)
-        assert result == "completion"
+        assert monitor_result[0] == "completion"
 
 
 class TestHeartbeatDetectsCompletion:
     """Stdout heartbeat detects completion and triggers kill."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_heartbeat_detects_completion_and_kills(self, tmp_path):
         """Script writes result JSON then hangs — heartbeat detects and returns."""
         script = tmp_path / "result_hang.py"
@@ -385,7 +432,7 @@ class TestHeartbeatDetectsCompletion:
         assert elapsed < 10, f"Heartbeat should detect within ~5s, took {elapsed:.1f}s"
         assert '"type": "result"' in result.stdout or '"type":"result"' in result.stdout
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_heartbeat_ignores_non_matching_output(self, tmp_path):
         """Script writes non-matching output — heartbeat doesn't fire, backstop does."""
         script = tmp_path / "partial_hang.py"
@@ -406,7 +453,7 @@ class TestHeartbeatDetectsCompletion:
 class TestNoHeartbeatPreservesExistingBehavior:
     """Without heartbeat, behavior matches original blind-wait."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_no_heartbeat_preserves_existing_behavior(self, tmp_path):
         """No heartbeat marker — same hanging script, same timeout behavior."""
         import textwrap
@@ -433,7 +480,7 @@ class TestNoHeartbeatPreservesExistingBehavior:
 class TestHeartbeatStructuredParsing:
     """Heartbeat uses structured parsing to avoid false-fires."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_heartbeat_ignores_marker_in_string_values(self, tmp_path):
         """Heartbeat must not fire when the marker text appears as a string
         value inside a non-result record (e.g., model discussing JSON formats).
@@ -452,38 +499,55 @@ class TestHeartbeatStructuredParsing:
         )
         stdout_path.write_text(assistant_msg + "\n")
 
-        heartbeat_task = asyncio.create_task(
-            _heartbeat(stdout_path, '"type":"result"', _poll_interval=0.05)
-        )
+        poll_count = 0
+        polls_done = anyio.Event()
 
-        # Wait for several poll cycles to confirm it doesn't fire on the assistant record
-        await asyncio.sleep(0.5)
-        assert not heartbeat_task.done(), (
-            "Heartbeat fired on non-result record containing marker text"
-        )
+        def on_poll() -> None:
+            nonlocal poll_count
+            poll_count += 1
+            if poll_count >= 5:
+                polls_done.set()
 
-        # Now write an actual result record (compact format matching Claude CLI)
-        result_record = json.dumps(
-            {
-                "type": "result",
-                "subtype": "success",
-                "is_error": False,
-                "result": "done",
-                "session_id": "s1",
-            },
-            separators=(",", ":"),
-        )
-        with stdout_path.open("a") as f:
-            f.write(result_record + "\n")
+        heartbeat_result: list[str] = []
 
-        result = await asyncio.wait_for(heartbeat_task, timeout=2)
-        assert result == "completion"
+        async with anyio.create_task_group() as tg:
+
+            async def _run_heartbeat() -> None:
+                heartbeat_result.append(
+                    await _heartbeat(
+                        stdout_path, '"type":"result"', _poll_interval=0.05, _on_poll=on_poll
+                    )
+                )
+
+            tg.start_soon(_run_heartbeat)
+            with anyio.fail_after(10.0):
+                await polls_done.wait()
+            assert not heartbeat_result, (
+                "Heartbeat fired on non-result record containing marker text"
+            )
+
+            # Now write an actual result record (compact format matching Claude CLI)
+            result_record = json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "done",
+                    "session_id": "s1",
+                },
+                separators=(",", ":"),
+            )
+            with stdout_path.open("a") as f:
+                f.write(result_record + "\n")
+            # task group awaits _run_heartbeat to detect result record and complete
+
+        assert heartbeat_result[0] == "completion"
 
 
 class TestHeartbeatTerminationReason:
     """Heartbeat kill produces COMPLETED termination reason."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_heartbeat_kill_sets_completed_termination(self, tmp_path):
         """When heartbeat detects result and kills the process, termination is COMPLETED."""
         script = tmp_path / "result_hang.py"
@@ -606,7 +670,7 @@ class TestHasActiveApiConnection:
 class TestSessionLogMonitorStaleSuppressionGate:
     """_session_log_monitor suppresses stale when process has an active port-443 connection."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_suppresses_stale_when_port_443_connection_active(self, tmp_path):
         """
         File stops growing. Monitor reaches stale_threshold. But process has
@@ -627,8 +691,8 @@ class TestSessionLogMonitorStaleSuppressionGate:
             "autoskillit.execution.process._has_active_api_connection",
             side_effect=side_effect,
         ):
-            result = await asyncio.wait_for(
-                _session_log_monitor(
+            with anyio.fail_after(5.0):
+                result = await _session_log_monitor(
                     tmp_path,
                     "DONE",
                     stale_threshold=0.05,
@@ -636,20 +700,18 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     pid=99999,
                     _phase1_poll=0.01,
                     _phase2_poll=0.05,
-                ),
-                timeout=5.0,
-            )
+                )
         assert result == "stale"
         assert call_count["n"] == 2
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_fires_stale_immediately_when_no_api_connection(self, tmp_path):
         """Standard stale: file silent, no pid provided, stale fires as before."""
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10
-        result = await asyncio.wait_for(
-            _session_log_monitor(
+        with anyio.fail_after(2.0):
+            result = await _session_log_monitor(
                 tmp_path,
                 "DONE",
                 stale_threshold=0.05,
@@ -657,12 +719,10 @@ class TestSessionLogMonitorStaleSuppressionGate:
                 # pid omitted (defaults to None)
                 _phase1_poll=0.01,
                 _phase2_poll=0.05,
-            ),
-            timeout=2.0,
-        )
+            )
         assert result == "stale"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_fires_stale_when_pid_is_none_regardless_of_tcp(self, tmp_path):
         """pid=None bypasses TCP check entirely — existing behavior preserved."""
         session_file = tmp_path / "session.jsonl"
@@ -670,8 +730,8 @@ class TestSessionLogMonitorStaleSuppressionGate:
         spawn_time = time.time() - 10
 
         with patch("autoskillit.execution.process._has_active_api_connection") as mock_tcp:
-            result = await asyncio.wait_for(
-                _session_log_monitor(
+            with anyio.fail_after(2.0):
+                result = await _session_log_monitor(
                     tmp_path,
                     "DONE",
                     stale_threshold=0.05,
@@ -679,13 +739,11 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     pid=None,
                     _phase1_poll=0.01,
                     _phase2_poll=0.05,
-                ),
-                timeout=2.0,
-            )
+                )
         assert result == "stale"
         mock_tcp.assert_not_called()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_suppression_emits_warning(self, tmp_path, capsys):
         """A suppression event must log a warning with elapsed time."""
         import structlog
@@ -705,8 +763,8 @@ class TestSessionLogMonitorStaleSuppressionGate:
             side_effect=side_effect,
         ):
             with structlog.testing.capture_logs() as logs:
-                await asyncio.wait_for(
-                    _session_log_monitor(
+                with anyio.fail_after(5.0):
+                    await _session_log_monitor(
                         tmp_path,
                         "DONE",
                         stale_threshold=0.05,
@@ -714,9 +772,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                         pid=99999,
                         _phase1_poll=0.01,
                         _phase2_poll=0.05,
-                    ),
-                    timeout=5.0,
-                )
+                    )
         # capture_logs() intercepts when structlog is in default state.
         # In a parallel worker where configure_logging() ran in a prior test,
         # bound loggers may use a stale processor reference and write to stdout.
@@ -734,7 +790,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
 class TestChannelBDrainWait:
     """Channel B (session monitor) winning before Channel A triggers bounded drain wait."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_b_wins_then_channel_a_confirms_within_drain(self, tmp_path):
         """Channel B fires first; drain wait allows Channel A to confirm stdout data.
 
@@ -769,7 +825,7 @@ class TestChannelBDrainWait:
         # Drain wait confirmed Channel A fired: stdout is non-empty
         assert result.stdout.strip()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_b_wins_drain_timeout_still_kills(self, tmp_path):
         """Channel B fires; Channel A never fires; drain times out and process is killed.
 
@@ -800,7 +856,7 @@ class TestChannelBDrainWait:
         # Drain timed out: CLI hung and never flushed its result record
         assert not result.stdout.strip()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_a_wins_unchanged_behavior(self, tmp_path):
         """Channel A (heartbeat) wins before any session monitor: no drain wait needed.
 
@@ -824,7 +880,7 @@ class TestChannelBDrainWait:
         assert result.termination == TerminationReason.COMPLETED
         assert result.stdout.strip()  # Channel A confirmed: stdout is non-empty
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_data_confirmed_false_set_on_drain_timeout(self, tmp_path):
         """Channel B wins the race; drain timeout expires without Channel A confirming.
 
@@ -851,7 +907,7 @@ class TestChannelBDrainWait:
         assert result.termination == TerminationReason.COMPLETED
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_data_confirmed_true_when_channel_a_wins(self, tmp_path):
         """Channel A (heartbeat) wins; data_confirmed must be True.
 
@@ -873,7 +929,7 @@ class TestChannelBDrainWait:
         assert result.termination == TerminationReason.COMPLETED
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_b_then_a_empty_result_data_confirmed_is_false(self, tmp_path):
         """Channel B fires (%%ORDER_UP%% in JSONL).
 
@@ -907,7 +963,7 @@ class TestChannelBDrainWait:
 class TestChannelBFullPipelineAdjudication:
     """Full end-to-end adjudication for Channel B drain-race scenarios."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_b_then_a_empty_result_produces_success(self, tmp_path):
         """Full end-to-end: Channel B fires, CLI writes type=result with result="".
 
@@ -946,7 +1002,7 @@ class TestChannelBFullPipelineAdjudication:
 class TestHeartbeatScanPosition:
     """_heartbeat uses byte-safe scan position — regression test for multi-byte content."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_heartbeat_detects_record_after_multibyte_content(self, tmp_path):
         """Heartbeat correctly scans past multi-byte UTF-8 content to detect a result record.
 
@@ -974,10 +1030,8 @@ class TestHeartbeatScanPosition:
         )
         stdout_path.write_text(assistant_msg + "\n" + result_record + "\n", encoding="utf-8")
 
-        result = await asyncio.wait_for(
-            _heartbeat(stdout_path, '"type":"result"'),
-            timeout=10,
-        )
+        with anyio.fail_after(10):
+            result = await _heartbeat(stdout_path, '"type":"result"')
         assert result == "completion"
 
 
@@ -989,7 +1043,7 @@ class TestChannelBDrainRacePipelineAdjudication:
     provenance bypass (data_confirmed=False → success=True without calling _compute_success).
     """
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_b_drain_timeout_produces_success_skill_result(self, tmp_path):
         """COMPLETED + data_confirmed=False + empty stdout → success=True, needs_retry=False.
 

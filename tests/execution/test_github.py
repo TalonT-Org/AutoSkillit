@@ -68,7 +68,7 @@ _ISSUE_NO_COMMENTS_JSON = {
 }
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_default_github_fetcher_success(httpx_mock):
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/1",
@@ -87,7 +87,7 @@ async def test_default_github_fetcher_success(httpx_mock):
     assert "commenter" in result["content"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_default_github_fetcher_no_comments_flag(httpx_mock):
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/1",
@@ -99,7 +99,7 @@ async def test_default_github_fetcher_no_comments_flag(httpx_mock):
     assert "## Comments" not in result["content"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_default_github_fetcher_404(httpx_mock):
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/999",
@@ -111,7 +111,7 @@ async def test_default_github_fetcher_404(httpx_mock):
     assert "error" in result
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_default_github_fetcher_auth_failure(httpx_mock):
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/1",
@@ -122,7 +122,7 @@ async def test_default_github_fetcher_auth_failure(httpx_mock):
     assert result["success"] is False
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_default_github_fetcher_no_token_omits_auth_header(httpx_mock):
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/1",
@@ -140,7 +140,7 @@ async def test_default_github_fetcher_no_token_omits_auth_header(httpx_mock):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_fetch_github_issue_no_client(tool_ctx):
     tool_ctx.github_client = None
     result = json.loads(await fetch_github_issue("owner/repo#1"))
@@ -148,7 +148,7 @@ async def test_fetch_github_issue_no_client(tool_ctx):
     assert "error" in result
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_fetch_github_issue_delegates_to_client(tool_ctx):
     mock_client = AsyncMock()
     mock_client.fetch_issue.return_value = {
@@ -166,7 +166,7 @@ async def test_fetch_github_issue_delegates_to_client(tool_ctx):
     mock_client.fetch_issue.assert_called_once_with("owner/repo#1", include_comments=True)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_fetch_github_issue_bare_number_with_default_repo(tool_ctx):
     tool_ctx.config.github.default_repo = "owner/repo"
     mock_client = AsyncMock()
@@ -185,7 +185,7 @@ async def test_fetch_github_issue_bare_number_with_default_repo(tool_ctx):
     mock_client.fetch_issue.assert_called_once_with("owner/repo#42", include_comments=True)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx):
     tool_ctx.config.github.default_repo = None
     tool_ctx.github_client = AsyncMock()
@@ -194,7 +194,7 @@ async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx):
     assert "default_repo" in result["error"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_fetch_github_issue_client_error_propagated(tool_ctx):
     mock_client = AsyncMock()
     mock_client.fetch_issue.return_value = {"success": False, "error": "Not Found"}
@@ -244,7 +244,7 @@ def test_default_github_fetcher_has_token_false():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_default_github_fetcher_404_no_token_hints_auth(httpx_mock):
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/1",
@@ -257,7 +257,7 @@ async def test_default_github_fetcher_404_no_token_hints_auth(httpx_mock):
     assert "private" in error or "token" in error or "auth" in error
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_default_github_fetcher_404_with_token_is_plain_not_found(httpx_mock):
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/1",
@@ -274,7 +274,7 @@ async def test_default_github_fetcher_404_with_token_is_plain_not_found(httpx_mo
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_default_github_fetcher_403_returns_structured_error(httpx_mock):
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/1",
@@ -287,7 +287,7 @@ async def test_default_github_fetcher_403_returns_structured_error(httpx_mock):
     assert "403" in result["error"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_default_github_fetcher_request_error(httpx_mock):
     httpx_mock.add_exception(httpx.ConnectError("connection refused"))
     fetcher = DefaultGitHubFetcher(token=None)
@@ -314,7 +314,7 @@ _SEARCH_JSON = {
 }
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_search_issues_success(httpx_mock):
     httpx_mock.add_response(json=_SEARCH_JSON)
     fetcher = DefaultGitHubFetcher(token="tok")
@@ -324,7 +324,7 @@ async def test_search_issues_success(httpx_mock):
     assert result["items"][0]["number"] == 7
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_search_issues_empty_result(httpx_mock):
     httpx_mock.add_response(json={"total_count": 0, "items": []})
     fetcher = DefaultGitHubFetcher(token="tok")
@@ -334,7 +334,7 @@ async def test_search_issues_empty_result(httpx_mock):
     assert result["items"] == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_search_issues_http_error(httpx_mock):
     httpx_mock.add_response(status_code=422, json={"message": "Validation Failed"})
     fetcher = DefaultGitHubFetcher(token="tok")
@@ -343,7 +343,7 @@ async def test_search_issues_http_error(httpx_mock):
     assert "422" in result["error"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_search_issues_request_error(httpx_mock):
     httpx_mock.add_exception(httpx.ConnectError("down"))
     fetcher = DefaultGitHubFetcher(token="tok")
@@ -362,7 +362,7 @@ _CREATE_ISSUE_JSON = {
 }
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_create_issue_success(httpx_mock):
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues",
@@ -378,7 +378,7 @@ async def test_create_issue_success(httpx_mock):
     assert result["url"] == "https://github.com/owner/repo/issues/42"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_create_issue_http_error(httpx_mock):
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues",
@@ -392,7 +392,7 @@ async def test_create_issue_http_error(httpx_mock):
     assert "403" in result["error"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_create_issue_request_error(httpx_mock):
     httpx_mock.add_exception(httpx.ConnectError("down"))
     fetcher = DefaultGitHubFetcher(token="tok")
@@ -410,7 +410,7 @@ _COMMENT_JSON = {
 }
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_add_comment_success(httpx_mock):
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/7/comments",
@@ -423,7 +423,7 @@ async def test_add_comment_success(httpx_mock):
     assert result["comment_id"] == 99
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_add_comment_http_error(httpx_mock):
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/7/comments",
@@ -437,7 +437,7 @@ async def test_add_comment_http_error(httpx_mock):
     assert "404" in result["error"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_add_comment_request_error(httpx_mock):
     httpx_mock.add_exception(httpx.ConnectError("down"))
     fetcher = DefaultGitHubFetcher(token="tok")

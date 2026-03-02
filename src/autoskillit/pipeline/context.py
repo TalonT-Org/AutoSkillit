@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from autoskillit.config import AutomationConfig
+from autoskillit.config import AutomationConfig  # noqa: cross-l1-import — documented singleton exception: ToolContext is the DI root and must hold config as a typed field; uniqueness enforced by test_only_pipeline_context_imports_config
 from autoskillit.core import (
     AuditStore,
     CloneManager,

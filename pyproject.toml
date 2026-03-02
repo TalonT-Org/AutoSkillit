@@ -12,7 +12,7 @@ dependencies = [
     "dynaconf>=3.2.12,<4.0",
     "fastmcp>=3.0.2",
     "httpx>=0.28,<0.29",
-    "packaging>=23.0",
+    "packaging>=25.0",
     "psutil>=7.2.0",
     "pyyaml>=6.0",
     "cyclopts>=4.0",
@@ -21,12 +21,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.3.0",
-    "pytest-asyncio>=0.23.0",  # asyncio_default_fixture_loop_scope requires >=0.23.0
+    "pytest>=9.0.0",
+    "pytest-asyncio>=1.0.0",  # asyncio_default_fixture_loop_scope stable API; requires >=1.0.0
     "pytest-httpx>=0.36",
     "pytest-xdist>=3.5.0",
-    "pytest-timeout>=2.3,<2.4",
-    "ruff>=0.9.0",
+    "pytest-timeout>=2.3,<3.0",
+    "ruff>=0.15.0",
     "import-linter>=2.1",
 ]
 

@@ -50,6 +50,7 @@ from autoskillit.recipe.validator import (  # noqa: E402
     run_semantic_rules,
     validate_recipe,
 )
+from autoskillit.recipe._triage import triage_staleness  # noqa: E402
 
 __all__ = [
     "Recipe",
@@ -78,4 +79,5 @@ __all__ = [
     "validate_from_path",
     "list_all",
     "format_recipe_list_response",
+    "triage_staleness",
 ]

@@ -362,8 +362,8 @@ class TestGroupDApiContractPreservation:
         return Path(autoskillit.__file__).parent
 
     def test_req_api_004_llm_triage_no_asyncio_module_import(self):
-        """_llm_triage.py must not import asyncio — it delegates to run_managed_async."""
-        source = (self._pkg_root() / "_llm_triage.py").read_text()
+        """recipe/_triage.py must not import asyncio — it delegates to run_managed_async."""
+        source = (self._pkg_root() / "recipe" / "_triage.py").read_text()
         tree = ast.parse(source)
         asyncio_imports = [
             node
@@ -372,7 +372,7 @@ class TestGroupDApiContractPreservation:
             and any(alias.name == "asyncio" for alias in node.names)
         ]
         assert not asyncio_imports, (
-            "_llm_triage.py imported asyncio — callers must not need asyncio after anyio migration"
+            "recipe/_triage.py imported asyncio — callers must not need asyncio after anyio migration"
         )
 
     def test_req_api_004_headless_subprocess_result_under_type_checking(self):

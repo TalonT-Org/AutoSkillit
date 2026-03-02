@@ -154,6 +154,12 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
 ]
+# recipe/_triage.py is an AI orchestration module that spawns subprocess LLM calls;
+# its import of execution/ is a valid L2→L1 downward dependency.
+ignore_imports = [
+    "autoskillit.recipe._triage -> autoskillit.execution",
+]
+unmatched_ignore_imports_alerting = "warn"
 
 [[tool.importlinter.contracts]]
 name = "L2 migration does not import L3 or config"

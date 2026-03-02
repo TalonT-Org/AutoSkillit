@@ -14,6 +14,7 @@ from autoskillit.config import (
 )
 from autoskillit.server.tools_status import read_db
 from autoskillit.server.tools_workspace import reset_test_dir, reset_workspace, test_check
+from autoskillit.workspace import CleanupResult
 from tests.conftest import _make_result
 
 test_check.__test__ = False  # type: ignore[attr-defined]
@@ -560,3 +561,51 @@ async def test_tools_status_routes_through_db_reader(tool_ctx, monkeypatch, tmp_
     _sqlite3.connect(db_path).close()
     await read_db(db_path, "SELECT 1")
     assert calls == ["SELECT 1"]
+
+
+@pytest.mark.asyncio
+async def test_reset_test_dir_returns_partial_failure_json(tool_ctx, tmp_path):
+    """reset_test_dir returns structured JSON on partial failure."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / ".autoskillit-workspace").write_text("# marker\n")
+    (workspace / "ok_file").touch()
+
+    mock_result = CleanupResult(
+        deleted=["ok_file"],
+        failed=[("bad_dir", "PermissionError: denied")],
+        skipped=[],
+    )
+    tool_ctx.workspace_mgr = type(
+        "MockWM", (), {"delete_contents": lambda self, d, preserve=None: mock_result}
+    )()
+    result = json.loads(await reset_test_dir(test_dir=str(workspace), force=False))
+
+    assert result["success"] is False
+    assert result["failed"] == [{"path": "bad_dir", "error": "PermissionError: denied"}]
+    assert "ok_file" in result["deleted"]
+
+
+@pytest.mark.asyncio
+async def test_reset_workspace_returns_partial_failure_json(tool_ctx, tmp_path):
+    """reset_workspace returns structured JSON on partial failure."""
+    tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=["true"]))
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(parents=True)
+    (workspace / ".autoskillit-workspace").write_text("# marker\n")
+
+    tool_ctx.runner.push(_make_result(0, "", ""))
+
+    mock_result = CleanupResult(
+        deleted=["ok_file"],
+        failed=[("bad_dir", "PermissionError: denied")],
+        skipped=[".cache"],
+    )
+    tool_ctx.workspace_mgr = type(
+        "MockWM", (), {"delete_contents": lambda self, d, preserve=None: mock_result}
+    )()
+    result = json.loads(await reset_workspace(test_dir=str(workspace)))
+
+    assert result["success"] is False
+    assert result["failed"] == [{"path": "bad_dir", "error": "PermissionError: denied"}]

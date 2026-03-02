@@ -1010,3 +1010,24 @@ def test_migration_engine_no_module_level_recipe_imports() -> None:
         if stem == "recipe"
     ]
     assert not recipe_violations, f"module-level recipe imports remain: {recipe_violations}"
+
+
+def test_only_yaml_imports_yaml_directly() -> None:
+    """Only core/io.py may contain 'import yaml' at any scope."""
+    src_dir = SRC_ROOT
+    allowed_rel = str(Path("core") / "io.py")
+    violations = []
+    for py_file in sorted(src_dir.rglob("*.py")):
+        rel = str(py_file.relative_to(src_dir))
+        if rel == allowed_rel:
+            continue
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "yaml" or alias.name.startswith("yaml."):
+                        violations.append(f"{rel}: import {alias.name}")
+            elif isinstance(node, ast.ImportFrom):
+                if (node.module or "").startswith("yaml"):
+                    violations.append(f"{rel}: from {node.module} import ...")
+    assert not violations, f"Direct yaml imports found outside core/io.py: {violations}"

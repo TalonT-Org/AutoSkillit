@@ -1,7 +1,6 @@
 """Tests for autoskillit.version (P12)."""
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -64,25 +63,3 @@ class TestVersionInfo:
 
         info = version_info(plugin_dir=str(tmp_path))
         assert info["plugin_json_version"] is None
-
-
-class TestVersionArchitecture:
-    def test_version_module_has_no_upward_imports(self):
-        """version.py must not import any autoskillit submodule except __init__."""
-        import ast
-
-        src = (Path(__file__).parent.parent / "src" / "autoskillit" / "version.py").read_text()
-        tree = ast.parse(src)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                parts = node.module.split(".")
-                if parts[0] == "autoskillit" and len(parts) > 1:
-                    pytest.fail(f"version.py must not import autoskillit.{parts[1]}")
-
-    def test_doctor_imports_version_not_server(self):
-        """cli/_doctor.py must import version_info from autoskillit.version, not server."""
-        src = (
-            Path(__file__).parent.parent / "src" / "autoskillit" / "cli" / "_doctor.py"
-        ).read_text()
-        assert "from autoskillit.server import version_info" not in src
-        assert "from autoskillit.version import version_info" in src

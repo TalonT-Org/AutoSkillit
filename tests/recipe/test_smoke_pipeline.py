@@ -35,7 +35,7 @@ from autoskillit.server.tools_workspace import test_check
 
 test_check.__test__ = False  # type: ignore[attr-defined]
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SMOKE_SCRIPT = builtin_recipes_dir() / "smoke-test.yaml"
 
 _TOOL_MAP = {

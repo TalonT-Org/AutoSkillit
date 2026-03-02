@@ -9,7 +9,9 @@ import pathlib
 
 def test_recipe_schema_has_zero_non_stdlib_logic_imports() -> None:
     """recipe/schema.py has zero non-stdlib logic imports (no _logging, no yaml)."""
-    src = (pathlib.Path(__file__).parent.parent / "src/autoskillit/recipe/schema.py").read_text()
+    src = (
+        pathlib.Path(__file__).parent.parent.parent / "src/autoskillit/recipe/schema.py"
+    ).read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:

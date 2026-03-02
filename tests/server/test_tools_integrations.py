@@ -1,4 +1,4 @@
-"""Tests for the report_bug MCP tool handler."""
+"""Tests for the report_bug and fetch_github_issue MCP tool handlers."""
 
 from __future__ import annotations
 
@@ -11,11 +11,12 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
-from autoskillit.pipeline.gate import GATED_TOOLS
+from autoskillit.pipeline.gate import _DEFAULT_GATE_MESSAGE, GATED_TOOLS
 from autoskillit.server.tools_integrations import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
     _parse_fingerprint,
+    fetch_github_issue,
     report_bug,
 )
 
@@ -417,3 +418,79 @@ def test_report_bug_config_defaults():
     assert cfg.report_bug.github_filing is True
     assert "autoreported" in cfg.report_bug.github_labels
     assert "bug" in cfg.report_bug.github_labels
+
+
+# ---------------------------------------------------------------------------
+# Merged from test_github_tools.py — fetch_github_issue server handler tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_github_issue_gate_closed(tool_ctx):
+    tool_ctx.gate.disable()
+    result = json.loads(await fetch_github_issue("owner/repo#1"))
+    assert result["success"] is False
+    assert result["result"] == _DEFAULT_GATE_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_fetch_github_issue_no_client(tool_ctx):
+    tool_ctx.github_client = None
+    result = json.loads(await fetch_github_issue("owner/repo#1"))
+    assert result["success"] is False
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_fetch_github_issue_delegates_to_client(tool_ctx):
+    mock_client = AsyncMock()
+    mock_client.fetch_issue.return_value = {
+        "success": True,
+        "issue_number": 1,
+        "title": "T",
+        "url": "u",
+        "state": "open",
+        "labels": [],
+        "content": "# T",
+    }
+    tool_ctx.github_client = mock_client
+    result = json.loads(await fetch_github_issue("owner/repo#1"))
+    assert result["success"] is True
+    mock_client.fetch_issue.assert_called_once_with("owner/repo#1", include_comments=True)
+
+
+@pytest.mark.asyncio
+async def test_fetch_github_issue_bare_number_with_default_repo(tool_ctx):
+    tool_ctx.config.github.default_repo = "owner/repo"
+    mock_client = AsyncMock()
+    mock_client.fetch_issue.return_value = {
+        "success": True,
+        "issue_number": 42,
+        "title": "T",
+        "url": "u",
+        "state": "open",
+        "labels": [],
+        "content": "# T",
+    }
+    tool_ctx.github_client = mock_client
+    result = json.loads(await fetch_github_issue("42"))
+    assert result["success"] is True
+    mock_client.fetch_issue.assert_called_once_with("owner/repo#42", include_comments=True)
+
+
+@pytest.mark.asyncio
+async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx):
+    tool_ctx.config.github.default_repo = None
+    tool_ctx.github_client = AsyncMock()
+    result = json.loads(await fetch_github_issue("42"))
+    assert result["success"] is False
+    assert "default_repo" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_github_issue_client_error_propagated(tool_ctx):
+    mock_client = AsyncMock()
+    mock_client.fetch_issue.return_value = {"success": False, "error": "Not Found"}
+    tool_ctx.github_client = mock_client
+    result = json.loads(await fetch_github_issue("owner/repo#404"))
+    assert result["success"] is False

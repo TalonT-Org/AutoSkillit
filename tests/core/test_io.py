@@ -70,30 +70,3 @@ class TestDumpYamlStr:
         result = dump_yaml_str(data, default_flow_style=False)
         # Block style: items on separate lines, no inline [...] for lists
         assert "[1, 2, 3]" not in result
-
-
-class TestYamlConsolidationArchitecture:
-    def test_only_yaml_imports_yaml_directly(self):
-        """Only core/io.py may contain 'import yaml' at any scope."""
-        import ast
-        from pathlib import Path
-
-        from autoskillit.core.paths import pkg_root
-
-        src_dir = pkg_root()
-        allowed_rel = str(Path("core") / "io.py")
-        violations = []
-        for py_file in sorted(src_dir.rglob("*.py")):
-            rel = str(py_file.relative_to(src_dir))
-            if rel == allowed_rel:
-                continue
-            tree = ast.parse(py_file.read_text())
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        if alias.name == "yaml" or alias.name.startswith("yaml."):
-                            violations.append(f"{rel}: import {alias.name}")
-                elif isinstance(node, ast.ImportFrom):
-                    if (node.module or "").startswith("yaml"):
-                        violations.append(f"{rel}: from {node.module} import ...")
-        assert not violations, f"Direct yaml imports found outside core/io.py: {violations}"

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-REPO_ROOT = Path(__file__).parent.parent
+REPO_ROOT = Path(__file__).parent.parent.parent
 TASKFILE = REPO_ROOT / "Taskfile.yml"
 
 

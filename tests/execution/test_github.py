@@ -1,4 +1,4 @@
-"""Tests for fetch_github_issue MCP tool and execution/github.py."""
+"""L1 unit tests for execution/github.py and fetch_github_issue handler."""
 
 from __future__ import annotations
 
@@ -11,8 +11,7 @@ import pytest
 from autoskillit.config import AutomationConfig
 from autoskillit.core import GitHubFetcher
 from autoskillit.execution.github import DefaultGitHubFetcher, _parse_issue_ref
-from autoskillit.pipeline.gate import _DEFAULT_GATE_MESSAGE, GATED_TOOLS
-from autoskillit.server.tools_integrations import fetch_github_issue
+from autoskillit.pipeline.gate import GATED_TOOLS
 
 # ---------------------------------------------------------------------------
 # _parse_issue_ref unit tests
@@ -35,8 +34,6 @@ def test_parse_issue_ref_invalid_raises():
 
 
 def test_parse_issue_ref_bare_number_raises_without_context():
-    # bare number alone is not parseable by _parse_issue_ref;
-    # resolution is the caller's (tool handler's) responsibility
     with pytest.raises(ValueError):
         _parse_issue_ref("42")
 
@@ -91,7 +88,6 @@ async def test_default_github_fetcher_success(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_default_github_fetcher_no_comments_flag(httpx_mock):
-    # Only the issue endpoint should be called (no comments call)
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/1",
         json=_ISSUE_JSON,
@@ -138,87 +134,6 @@ async def test_default_github_fetcher_no_token_omits_auth_header(httpx_mock):
     assert "authorization" not in {k.lower() for k in requests[0].headers}
 
 
-# ---------------------------------------------------------------------------
-# MCP tool handler tests (using tool_ctx fixture)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_fetch_github_issue_gate_closed(tool_ctx):
-    tool_ctx.gate.disable()
-    result = json.loads(await fetch_github_issue("owner/repo#1"))
-    assert result["success"] is False
-    assert result["result"] == _DEFAULT_GATE_MESSAGE
-
-
-@pytest.mark.asyncio
-async def test_fetch_github_issue_no_client(tool_ctx):
-    tool_ctx.github_client = None
-    result = json.loads(await fetch_github_issue("owner/repo#1"))
-    assert result["success"] is False
-    assert "error" in result
-
-
-@pytest.mark.asyncio
-async def test_fetch_github_issue_delegates_to_client(tool_ctx):
-    mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {
-        "success": True,
-        "issue_number": 1,
-        "title": "T",
-        "url": "u",
-        "state": "open",
-        "labels": [],
-        "content": "# T",
-    }
-    tool_ctx.github_client = mock_client
-    result = json.loads(await fetch_github_issue("owner/repo#1"))
-    assert result["success"] is True
-    mock_client.fetch_issue.assert_called_once_with("owner/repo#1", include_comments=True)
-
-
-@pytest.mark.asyncio
-async def test_fetch_github_issue_bare_number_with_default_repo(tool_ctx):
-    tool_ctx.config.github.default_repo = "owner/repo"
-    mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {
-        "success": True,
-        "issue_number": 42,
-        "title": "T",
-        "url": "u",
-        "state": "open",
-        "labels": [],
-        "content": "# T",
-    }
-    tool_ctx.github_client = mock_client
-    result = json.loads(await fetch_github_issue("42"))
-    assert result["success"] is True
-    mock_client.fetch_issue.assert_called_once_with("owner/repo#42", include_comments=True)
-
-
-@pytest.mark.asyncio
-async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx):
-    tool_ctx.config.github.default_repo = None
-    tool_ctx.github_client = AsyncMock()
-    result = json.loads(await fetch_github_issue("42"))
-    assert result["success"] is False
-    assert "default_repo" in result["error"]
-
-
-@pytest.mark.asyncio
-async def test_fetch_github_issue_client_error_propagated(tool_ctx):
-    mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {"success": False, "error": "Not Found"}
-    tool_ctx.github_client = mock_client
-    result = json.loads(await fetch_github_issue("owner/repo#404"))
-    assert result["success"] is False
-
-
-# ---------------------------------------------------------------------------
-# Gate and config tests
-# ---------------------------------------------------------------------------
-
-
 def test_fetch_github_issue_in_gated_tools():
     assert "fetch_github_issue" in GATED_TOOLS
 
@@ -235,8 +150,6 @@ def test_github_config_defaults():
 
 
 def test_github_fetcher_protocol_requires_has_token():
-    """GitHubFetcher protocol must require has_token — without it the impl is incomplete."""
-
     class NoTokenFetcher:
         async def fetch_issue(self, issue_ref, *, include_comments=True):
             return {}
@@ -259,7 +172,6 @@ def test_default_github_fetcher_has_token_false():
 
 @pytest.mark.asyncio
 async def test_default_github_fetcher_404_no_token_hints_auth(httpx_mock):
-    """404 with no token should include guidance about private repos / missing auth."""
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/1",
         status_code=404,
@@ -273,7 +185,6 @@ async def test_default_github_fetcher_404_no_token_hints_auth(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_default_github_fetcher_404_with_token_is_plain_not_found(httpx_mock):
-    """404 with a token in place is a genuine not-found, not an auth issue."""
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/1",
         status_code=404,
@@ -291,7 +202,6 @@ async def test_default_github_fetcher_404_with_token_is_plain_not_found(httpx_mo
 
 @pytest.mark.asyncio
 async def test_default_github_fetcher_403_returns_structured_error(httpx_mock):
-    """HTTP 403 (rate limit / forbidden) must return success=False with a useful message."""
     httpx_mock.add_response(
         url="https://api.github.com/repos/owner/repo/issues/1",
         status_code=403,
@@ -305,7 +215,6 @@ async def test_default_github_fetcher_403_returns_structured_error(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_default_github_fetcher_request_error(httpx_mock):
-    """Network errors must be caught and returned as success=False."""
     httpx_mock.add_exception(httpx.ConnectError("connection refused"))
     fetcher = DefaultGitHubFetcher(token=None)
     result = await fetcher.fetch_issue("owner/repo#1", include_comments=False)
@@ -314,7 +223,7 @@ async def test_default_github_fetcher_request_error(httpx_mock):
 
 
 # ---------------------------------------------------------------------------
-# DefaultGitHubFetcher — search_issues
+# search_issues
 # ---------------------------------------------------------------------------
 
 _SEARCH_JSON = {
@@ -333,7 +242,6 @@ _SEARCH_JSON = {
 
 @pytest.mark.asyncio
 async def test_search_issues_success(httpx_mock):
-    # URL omitted: search endpoint URL includes query params; match any request.
     httpx_mock.add_response(json=_SEARCH_JSON)
     fetcher = DefaultGitHubFetcher(token="tok")
     result = await fetcher.search_issues("KeyError in recipe/validator", "owner", "repo")
@@ -371,7 +279,7 @@ async def test_search_issues_request_error(httpx_mock):
 
 
 # ---------------------------------------------------------------------------
-# DefaultGitHubFetcher — create_issue
+# create_issue
 # ---------------------------------------------------------------------------
 
 _CREATE_ISSUE_JSON = {
@@ -419,7 +327,7 @@ async def test_create_issue_request_error(httpx_mock):
 
 
 # ---------------------------------------------------------------------------
-# DefaultGitHubFetcher — add_comment
+# add_comment
 # ---------------------------------------------------------------------------
 
 _COMMENT_JSON = {
@@ -464,12 +372,11 @@ async def test_add_comment_request_error(httpx_mock):
 
 
 # ---------------------------------------------------------------------------
-# Protocol conformance — new methods included
+# Protocol conformance
 # ---------------------------------------------------------------------------
 
 
 def test_github_fetcher_protocol_includes_write_methods():
-    """DefaultGitHubFetcher must satisfy the extended GitHubFetcher protocol."""
     fetcher = DefaultGitHubFetcher(token=None)
     assert isinstance(fetcher, GitHubFetcher)
     assert hasattr(fetcher, "search_issues")

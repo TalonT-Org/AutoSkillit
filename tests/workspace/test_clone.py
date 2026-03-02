@@ -6,10 +6,18 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from autoskillit.workspace.clone import clone_repo, push_to_remote, remove_clone
+from autoskillit.workspace.clone import (
+    clone_repo,
+    detect_branch,
+    detect_source_dir,
+    detect_uncommitted_changes,
+    push_to_remote,
+    remove_clone,
+)
 
 
 @pytest.fixture
@@ -302,3 +310,190 @@ class TestPushToRemote:
         result = push_to_remote("/nonexistent/clone", str(source), "main")
         assert result["success"] == "false"
         assert len(result["stderr"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# Merged from test_workspace.py — detect_source_dir and detect_branch tests
+# ---------------------------------------------------------------------------
+
+
+class TestDetectSourceDir:
+    def test_ds1_returns_git_toplevel(self) -> None:
+        """T_DS1: returns git rev-parse --show-toplevel when returncode=0."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "/repo/root\n"
+        with patch("subprocess.run", return_value=mock_result):
+            assert detect_source_dir("/any/cwd") == "/repo/root"
+
+    def test_ds2_falls_back_on_nonzero_returncode(self) -> None:
+        """T_DS2: returns cwd unchanged when git exits non-zero."""
+        mock_result = MagicMock()
+        mock_result.returncode = 128
+        mock_result.stdout = ""
+        with patch("subprocess.run", return_value=mock_result):
+            assert detect_source_dir("/any/cwd") == "/any/cwd"
+
+
+class TestCloneRepoDetectAndExpand:
+    def test_ds3_calls_detect_source_dir_when_source_dir_empty(self, tmp_path) -> None:
+        """T_DS3: clone_repo calls detect_source_dir when source_dir is empty."""
+        with patch(
+            "autoskillit.workspace.clone.detect_source_dir", return_value=str(tmp_path)
+        ) as mock_detect:
+            mock_clone = MagicMock()
+            mock_clone.returncode = 0
+            with patch("subprocess.run", return_value=mock_clone):
+                clone_repo("", "test-run")
+        mock_detect.assert_called_once()
+
+    def test_ds4_expands_tilde(self) -> None:
+        """T_DS4: clone_repo raises ValueError with 'resolved to' when tilde path doesn't exist."""
+        with pytest.raises(ValueError, match="resolved to"):
+            clone_repo("~/nonexistent-autoskillit-test-xyz", "test-run")
+
+    def test_ds5_raises_value_error_with_clear_message(self, tmp_path) -> None:
+        """T_DS5: non-existent path raises ValueError with 'resolved to' in message."""
+        nonexistent = str(tmp_path / "does-not-exist")
+        with pytest.raises(ValueError, match="resolved to"):
+            clone_repo(nonexistent, "test-run")
+
+    def test_cb7_calls_detect_branch_when_branch_empty(self, tmp_path) -> None:
+        """T_CB7: detect_branch is called with source_dir when branch=""."""
+        with patch(
+            "autoskillit.workspace.clone.detect_branch", return_value="main"
+        ) as mock_detect:
+            with patch("autoskillit.workspace.clone.detect_uncommitted_changes", return_value=[]):
+                mock_clone = MagicMock()
+                mock_clone.returncode = 0
+                with patch("subprocess.run", return_value=mock_clone):
+                    clone_repo(str(tmp_path), "test-run", branch="")
+        mock_detect.assert_called_once_with(str(tmp_path))
+
+    def test_cb8_skips_detect_branch_when_branch_provided(self, tmp_path) -> None:
+        """T_CB8: detect_branch is NOT called when branch is explicitly provided."""
+        with patch("autoskillit.workspace.clone.detect_branch") as mock_detect:
+            with patch("autoskillit.workspace.clone.detect_uncommitted_changes", return_value=[]):
+                mock_clone = MagicMock()
+                mock_clone.returncode = 0
+                with patch("subprocess.run", return_value=mock_clone):
+                    clone_repo(str(tmp_path), "test-run", branch="feature")
+        mock_detect.assert_not_called()
+
+    def test_cb9_passes_branch_flag_to_git(self, tmp_path) -> None:
+        """T_CB9: --branch and branch name appear in the git clone subprocess call."""
+        with patch("autoskillit.workspace.clone.detect_uncommitted_changes", return_value=[]):
+            mock_clone = MagicMock()
+            mock_clone.returncode = 0
+            with patch("subprocess.run", return_value=mock_clone) as mock_run:
+                clone_repo(str(tmp_path), "test-run", branch="dev")
+        git_clone_calls = [
+            call for call in mock_run.call_args_list if call.args and "clone" in call.args[0]
+        ]
+        assert git_clone_calls, "git clone was not called"
+        cmd = git_clone_calls[0].args[0]
+        assert "--branch" in cmd
+        assert "dev" in cmd
+
+    def test_cb10_returns_warning_dict_on_uncommitted_changes(self, tmp_path) -> None:
+        """T_CB10: uncommitted changes produce warning dict; git clone not called."""
+        with patch("autoskillit.workspace.clone.detect_branch", return_value="main"):
+            with patch(
+                "autoskillit.workspace.clone.detect_uncommitted_changes",
+                return_value=[" M file.py"],
+            ):
+                with patch("subprocess.run") as mock_run:
+                    result = clone_repo(str(tmp_path), "test-run")
+        assert result["uncommitted_changes"] == "true"
+        mock_run.assert_not_called()
+
+
+class TestDetectBranch:
+    def test_cb11_returns_branch_name_on_success(self) -> None:
+        """T_CB11: returns branch name when git rev-parse succeeds."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "main\n"
+        with patch("subprocess.run", return_value=mock_result):
+            assert detect_branch("/any") == "main"
+
+    def test_cb12_returns_empty_string_on_nonzero_returncode(self) -> None:
+        """T_CB12: returns "" when git exits non-zero."""
+        mock_result = MagicMock()
+        mock_result.returncode = 128
+        mock_result.stdout = ""
+        with patch("subprocess.run", return_value=mock_result):
+            assert detect_branch("/any") == ""
+
+    def test_cb13_returns_head_literal_for_detached_state(self) -> None:
+        """T_CB13: returns literal 'HEAD' in detached HEAD state; caller treats as no branch."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "HEAD\n"
+        with patch("subprocess.run", return_value=mock_result):
+            assert detect_branch("/any") == "HEAD"
+
+
+class TestDetectUncommittedChanges:
+    def test_cb14_returns_empty_list_when_clean(self) -> None:
+        """T_CB14: returns [] when working tree is clean."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        with patch("subprocess.run", return_value=mock_result):
+            assert detect_uncommitted_changes("/any") == []
+
+    def test_cb15_returns_changed_file_lines_when_dirty(self) -> None:
+        """T_CB15: returns non-empty status lines when changes exist."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = " M file.py\n?? new.txt\n"
+        with patch("subprocess.run", return_value=mock_result):
+            assert detect_uncommitted_changes("/any") == [" M file.py", "?? new.txt"]
+
+    def test_cb16_returns_empty_list_on_git_failure(self) -> None:
+        """T_CB16: returns [] when git exits non-zero."""
+        mock_result = MagicMock()
+        mock_result.returncode = 128
+        with patch("subprocess.run", return_value=mock_result):
+            assert detect_uncommitted_changes("/any") == []
+
+
+class TestPushToRemoteMocked:
+    def test_ds6_push_to_remote_calls_get_url_then_push(self) -> None:
+        """T_DS6: push_to_remote calls git remote get-url origin then git push <url> <branch>."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
+
+        mock_push = MagicMock()
+        mock_push.returncode = 0
+        mock_push.stderr = ""
+
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]) as mock_run:
+            result = push_to_remote("/clone", "/source", "main")
+
+        assert result == {"success": "true", "stderr": ""}
+        # First call: git remote get-url origin from source_dir
+        first_call = mock_run.call_args_list[0]
+        assert first_call[0][0] == ["git", "remote", "get-url", "origin"]
+        assert first_call[1]["cwd"] == "/source"
+        # Second call: git push <url> <branch> from clone_path
+        second_call = mock_run.call_args_list[1]
+        assert second_call[0][0] == ["git", "push", "git@github.com:org/repo.git", "main"]
+        assert second_call[1]["cwd"] == "/clone"
+
+    def test_ds7_push_to_remote_fails_when_no_origin(self) -> None:
+        """T_DS7: push_to_remote returns error when git remote get-url fails, no push attempted."""
+        mock_fail = MagicMock()
+        mock_fail.returncode = 128
+        mock_fail.stdout = ""
+        mock_fail.stderr = "error: No such remote 'origin'"
+
+        with patch("subprocess.run", return_value=mock_fail) as mock_run:
+            result = push_to_remote("/clone", "/source", "main")
+
+        assert result["success"] == "false"
+        assert "origin" in result["stderr"]
+        assert mock_run.call_count == 1  # no push attempted

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-SRC = Path(__file__).parent.parent / "src" / "autoskillit"
+SRC = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 PACKAGES = frozenset(
     [
         "core",

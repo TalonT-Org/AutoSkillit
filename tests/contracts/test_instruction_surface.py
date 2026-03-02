@@ -20,7 +20,7 @@ from autoskillit.workspace.skills import SkillResolver
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+    return Path(__file__).resolve().parent.parent.parent
 
 
 class TestClaudeMdPipelineContract:
@@ -167,7 +167,9 @@ class TestSkillMdToolNameCurrency:
 
     def test_write_recipe_skill_references_kitchen_status(self):
         """write-recipe SKILL.md must use kitchen_status, not old autoskillit_status."""
-        skill_md = Path(__file__).parent.parent / "src/autoskillit/skills/write-recipe/SKILL.md"
+        skill_md = (
+            Path(__file__).parent.parent.parent / "src/autoskillit/skills/write-recipe/SKILL.md"
+        )
         content = skill_md.read_text()
         assert "autoskillit_status" not in content, (
             "write-recipe/SKILL.md still references 'autoskillit_status'. "

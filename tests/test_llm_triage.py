@@ -23,7 +23,7 @@ def test_llm_triage_module_importable():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_triage_staleness_reads_skill_md_once_per_unique_skill(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -88,7 +88,7 @@ async def test_triage_staleness_reads_skill_md_once_per_unique_skill(
 class TestTriageStaleness:
     """Executable test coverage for triage_staleness failure paths (run_managed_async variant)."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_triage_staleness_timeout_returns_meaningful_true(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
@@ -128,7 +128,7 @@ class TestTriageStaleness:
         assert result[0]["meaningful"] is True
         assert result[0]["skill"] == "test-skill"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_triage_staleness_timeout_is_logged(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
@@ -176,7 +176,7 @@ class TestTriageStaleness:
             for log in logs
         ), "Log event must mention triage or failed"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_triage_staleness_json_decode_error_is_logged(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
@@ -221,7 +221,7 @@ class TestTriageStaleness:
             "A warning log must be emitted on JSONDecodeError"
         )
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_triage_staleness_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """On success, meaningful and summary are populated from LLM response."""
         import json as _json
@@ -275,7 +275,7 @@ class TestTriageStaleness:
         assert result[0]["meaningful"] is False
         assert result[0]["summary"] == "ok"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_triage_staleness_missing_skill_md_returns_meaningful_true(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
@@ -302,7 +302,7 @@ class TestTriageStaleness:
         assert "not found" in result[0]["summary"].lower()
         assert not mock_run.called, "run_managed_async must NOT be called when SKILL.md is missing"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_triage_staleness_parses_ndjson_result_record(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):

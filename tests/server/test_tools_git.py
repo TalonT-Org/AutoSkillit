@@ -30,7 +30,7 @@ class TestClassifyFix:
             )
         )
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_critical_files_return_full_restart(self, tool_ctx):
         changed = "src/core/handler.py\nlib/utils/helpers.py\n"
         tool_ctx.runner.push(_make_result(0, changed, ""))
@@ -42,7 +42,7 @@ class TestClassifyFix:
         assert result["critical_files"][0] == "src/core/handler.py"
         assert len(result["all_changed_files"]) == 2
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_non_critical_returns_partial_restart(self, tool_ctx):
         changed = "src/workers/runner.py\nlib/utils/helpers.py\n"
         tool_ctx.runner.push(_make_result(0, changed, ""))
@@ -53,7 +53,7 @@ class TestClassifyFix:
         assert result["critical_files"] == []
         assert len(result["all_changed_files"]) == 2
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_git_diff_failure(self, tool_ctx):
         tool_ctx.runner.push(_make_result(128, "", "fatal: bad revision"))
 
@@ -62,7 +62,7 @@ class TestClassifyFix:
         assert "restart_scope" in result
         assert "Cannot diff" in result["reason"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_critical_path_in_diff_triggers_full_restart(self, tool_ctx):
         changed = "src/api/routes.py\n"
         tool_ctx.runner.push(_make_result(0, changed, ""))
@@ -75,7 +75,7 @@ class TestClassifyFix:
 class TestMergeWorktree:
     """merge_worktree enforces test gate, rebases, and merges."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_merge_worktree_blocks_on_failing_tests(self, tool_ctx, tmp_path):
         """merge_worktree returns error with failed_step when test-check fails."""
         wt = tmp_path / "worktree"
@@ -93,7 +93,7 @@ class TestMergeWorktree:
         assert result["state"] == MergeState.WORKTREE_INTACT
         assert "test_summary" not in result
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_merge_worktree_merges_on_green(self, tool_ctx, tmp_path):
         """merge_worktree performs rebase+merge when tests pass."""
         wt = tmp_path / "worktree"
@@ -124,7 +124,7 @@ class TestMergeWorktree:
         assert result["worktree_removed"] is True
         assert result["branch_deleted"] is True
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_merge_worktree_aborts_on_rebase_failure(self, tool_ctx, tmp_path):
         """merge_worktree runs rebase --abort and returns step-specific error."""
         wt = tmp_path / "worktree"
@@ -148,13 +148,13 @@ class TestMergeWorktree:
         )
         assert "CONFLICT" in result["stderr"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_merge_worktree_rejects_nonexistent_path(self, tool_ctx):
         """merge_worktree rejects non-existent paths."""
         result = json.loads(await merge_worktree("/nonexistent/path", "main"))
         assert "error" in result
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_merge_worktree_rejects_non_worktree(self, tool_ctx, tmp_path):
         """merge_worktree rejects paths that aren't git worktrees."""
         result = json.loads(await merge_worktree(str(tmp_path), "main"))
@@ -164,13 +164,13 @@ class TestMergeWorktree:
 class TestMergeWorktreeNoBypass:
     """merge_worktree always runs its own test gate — no bypass possible."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_skip_test_gate_parameter_rejected(self):
         """merge_worktree does not accept skip_test_gate parameter."""
         with pytest.raises(TypeError, match="skip_test_gate"):
             await merge_worktree("/tmp/wt", "main", skip_test_gate=True)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_internal_gate_cross_validates_output(self, tool_ctx, tmp_path):
         """merge_worktree's internal gate catches rc=0 with failure text."""
         wt = tmp_path / "worktree"
@@ -186,7 +186,7 @@ class TestMergeWorktreeNoBypass:
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_gate_failure_does_not_expose_summary(self, tool_ctx, tmp_path):
         """When gate blocks, response contains no test output details."""
         wt = tmp_path / "worktree"
@@ -204,7 +204,7 @@ class TestMergeWorktreeNoBypass:
 class TestMergeWorktreeCleanupReporting:
     """merge_worktree reports accurate cleanup results."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_reports_worktree_remove_failure(self, tool_ctx, tmp_path):
         """3a: worktree_removed reflects actual git worktree remove result."""
         wt = tmp_path / "worktree"
@@ -235,7 +235,7 @@ class TestMergeWorktreeCleanupReporting:
         assert result["cleanup_succeeded"] is False
         assert result["worktree_removed"] is False
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_reports_branch_delete_failure(self, tool_ctx, tmp_path):
         """3b: branch_deleted reflects actual git branch -D result."""
         wt = tmp_path / "worktree"
@@ -265,7 +265,7 @@ class TestMergeWorktreeCleanupReporting:
         assert result["worktree_removed"] is True
         assert result["branch_deleted"] is False
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_checks_fetch_result(self, tool_ctx, tmp_path):
         """3c: git fetch failure returns error before rebase attempt."""
         wt = tmp_path / "worktree"
@@ -286,7 +286,7 @@ class TestMergeWorktreeCleanupReporting:
 class TestMergeWorktreeCleanupWarnings:
     """merge_worktree emits logger.warning when cleanup steps fail post-merge."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_warns_on_worktree_remove_failure(self, tool_ctx, tmp_path):
         wt = tmp_path / "worktree"
         wt.mkdir()
@@ -317,7 +317,7 @@ class TestMergeWorktreeCleanupWarnings:
         warning_entries = [entry for entry in logs if entry.get("log_level") == "warning"]
         assert any(entry.get("operation") == "worktree_remove" for entry in warning_entries)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_warns_on_branch_delete_failure(self, tool_ctx, tmp_path):
         wt = tmp_path / "worktree"
         wt.mkdir()
@@ -346,7 +346,7 @@ class TestMergeWorktreeCleanupWarnings:
         warning_entries = [entry for entry in logs if entry.get("log_level") == "warning"]
         assert any(entry.get("operation") == "branch_delete" for entry in warning_entries)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_no_warning_on_clean_cleanup(self, tool_ctx, tmp_path):
         wt = tmp_path / "worktree"
         wt.mkdir()

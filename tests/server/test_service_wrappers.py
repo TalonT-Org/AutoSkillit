@@ -47,7 +47,7 @@ class TestDefaultRecipeRepository:
 
 
 class TestDefaultMigrationService:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_migrate_up_to_date_for_current_version(
         self, tmp_path: Path, monkeypatch
     ) -> None:  # SW-UPD-1
@@ -80,7 +80,7 @@ class TestDefaultMigrationService:
         )
         assert result.get("name") == "test-recipe", f"Expected name='test-recipe', got: {result}"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_migrate_result_has_standard_structure(
         self, tmp_path: Path, monkeypatch
     ) -> None:  # SW-UPD-2
@@ -113,7 +113,7 @@ class TestDefaultMigrationService:
             f"Result must have 'status' or 'error', got keys: {list(result)}"
         )
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_migrate_stale_contract_no_version_migration_returns_migrated(  # SW-NEW-1
         self, tmp_path: Path, monkeypatch
     ) -> None:
@@ -157,7 +157,7 @@ class TestDefaultMigrationService:
         assert result["contracts_regenerated"] == ["test-recipe"]
         assert result["name"] == "test-recipe"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_migrate_fresh_contract_and_no_version_migration_returns_up_to_date(  # SW-NEW-2
         self, tmp_path: Path, monkeypatch
     ) -> None:
@@ -187,7 +187,7 @@ class TestDefaultMigrationService:
 
         assert result == {"status": "up_to_date", "name": "test-recipe"}
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_migrate_contract_regeneration_failure_is_nonfatal(  # SW-NEW-3
         self, tmp_path: Path, monkeypatch
     ) -> None:
@@ -219,7 +219,7 @@ class TestDefaultMigrationService:
         assert "status" in result
         assert result["status"] == "up_to_date"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_migrate_contracts_regenerated_included_in_migrated_result(  # SW-NEW-4
         self, tmp_path: Path, monkeypatch
     ) -> None:

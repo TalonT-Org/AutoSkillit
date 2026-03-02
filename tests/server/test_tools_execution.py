@@ -85,7 +85,7 @@ def _context_exhausted_session_json() -> str:
 class TestRunCmd:
     """T1, T2: run_cmd executes commands and returns exit code semantics."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_successful_command(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, "hello\n", ""))
         result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))
@@ -96,7 +96,7 @@ class TestRunCmd:
         assert len(tool_ctx.runner.call_args_list) == 1
         assert tool_ctx.runner.call_args_list[0][0] == ["bash", "-c", "echo hello"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_failing_command(self, tool_ctx):
         tool_ctx.runner.push(_make_result(1, "", "error"))
         result = json.loads(await run_cmd(cmd="false", cwd="/tmp"))
@@ -104,7 +104,7 @@ class TestRunCmd:
         assert result["success"] is False
         assert result["exit_code"] == 1
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_custom_timeout(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, "", ""))
         await run_cmd(cmd="sleep 1", cwd="/tmp", timeout=30)
@@ -115,7 +115,7 @@ class TestRunCmd:
 class TestRunSkillPluginDir:
     """T2: run_skill and run_skill_retry pass --plugin-dir to the claude command."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_passes_plugin_dir(self, tool_ctx):
         """run_skill includes --plugin-dir and the plugin_dir from tool_ctx in the command."""
         tool_ctx.runner.push(
@@ -133,7 +133,7 @@ class TestRunSkillPluginDir:
         plugin_dir_idx = cmd.index("--plugin-dir")
         assert cmd[plugin_dir_idx + 1] == tool_ctx.plugin_dir
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_retry_passes_plugin_dir(self, tool_ctx):
         """run_skill_retry includes --plugin-dir from tool_ctx in the command."""
         tool_ctx.runner.push(
@@ -233,7 +233,7 @@ class TestCheckDryWalkthrough:
 class TestRunSkillRetryGate:
     """run_skill_retry applies dry-walkthrough gate to implement skills."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_retry_gates_implement_no_merge(self, tool_ctx, tmp_path):
         """run_skill_retry gates /autoskillit:implement-worktree-no-merge."""
         plan = tmp_path / "plan.md"
@@ -251,7 +251,7 @@ class TestRunSkillRetryGate:
 class TestRunSubprocessDelegatesToManaged:
     """Verify _run_subprocess delegates to the runner (ToolContext.runner) correctly."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_normal_completion(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, "output", ""))
         rc, stdout, stderr = await _run_subprocess(["echo", "hi"], cwd="/tmp", timeout=10)
@@ -259,7 +259,7 @@ class TestRunSubprocessDelegatesToManaged:
         assert stdout == "output"
         assert stderr == ""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_timeout_returns_minus_one(self, tool_ctx):
         tool_ctx.runner.push(_make_timeout_result())
         rc, stdout, stderr = await _run_subprocess(["sleep", "999"], cwd="/tmp", timeout=1)
@@ -313,7 +313,7 @@ class TestRunPython:
     def _setup_ctx(self, tool_ctx):
         """Initialize ToolContext for all run_python tests."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_calls_function(self):
         """run_python imports module, calls function, returns JSON result."""
         result = json.loads(
@@ -326,7 +326,7 @@ class TestRunPython:
         assert result["success"] is True
         assert result["result"] == '{"key": "value"}'
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_import_error(self):
         """run_python returns error for non-existent module."""
         result = json.loads(
@@ -338,7 +338,7 @@ class TestRunPython:
         assert result["success"] is False
         assert "import" in result["error"].lower()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_not_callable(self):
         """run_python returns error when target is not callable."""
         result = json.loads(
@@ -350,7 +350,7 @@ class TestRunPython:
         assert result["success"] is False
         assert "callable" in result["error"].lower()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_timeout(self):
         """run_python returns error on timeout."""
         import asyncio as _aio
@@ -372,7 +372,7 @@ class TestRunPython:
         assert result["success"] is False
         assert "timeout" in result["error"].lower()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_async_function(self):
         """run_python correctly awaits async functions."""
         result = json.loads(
@@ -384,7 +384,7 @@ class TestRunPython:
         )
         assert result["success"] is True
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_sync_timeout_logs_warning(self):
         """run_python emits a warning log when TimeoutError is raised."""
         import asyncio as _aio
@@ -435,7 +435,7 @@ class TestEnsureSkillPrefix:
 class TestRunSkillPrefix:
     """run_skill passes prefixed command to subprocess."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_prefixes_skill_command(self, tool_ctx):
         tool_ctx.runner.push(
             _make_result(
@@ -449,7 +449,7 @@ class TestRunSkillPrefix:
         cmd = tool_ctx.runner.call_args_list[0][0]
         assert cmd[4].startswith("Use /investigate error")
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_no_prefix_for_plain_prompt(self, tool_ctx):
         tool_ctx.runner.push(
             _make_result(
@@ -463,7 +463,7 @@ class TestRunSkillPrefix:
         cmd = tool_ctx.runner.call_args_list[0][0]
         assert cmd[4].startswith("Fix the bug in main.py")
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_includes_completion_directive(self, tool_ctx):
         tool_ctx.runner.push(
             _make_result(
@@ -481,7 +481,7 @@ class TestRunSkillPrefix:
 class TestRunSkillRetryPrefix:
     """run_skill_retry passes prefixed command to subprocess."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_retry_prefixes_skill_command(self, tool_ctx):
         tool_ctx.runner.push(
             _make_result(
@@ -495,7 +495,7 @@ class TestRunSkillRetryPrefix:
         cmd = tool_ctx.runner.call_args_list[0][0]
         assert cmd[4].startswith("Use /investigate error")
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_retry_no_prefix_for_plain_prompt(self, tool_ctx):
         tool_ctx.runner.push(
             _make_result(
@@ -513,7 +513,7 @@ class TestRunSkillRetryPrefix:
 class TestDryWalkthroughGateWithPrefix:
     """Dry-walkthrough gate still receives raw command before prefix is applied."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_gate_still_fires_for_implement_skill(self, tool_ctx, tmp_path):
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")
@@ -528,7 +528,7 @@ class TestDryWalkthroughGateWithPrefix:
 class TestRunSkillTimeoutFromConfig:
     """run_skill and run_skill_retry use configurable timeouts."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_timeout_from_config(self, tool_ctx):
         """run_skill uses _config.run_skill.timeout instead of hardcoded value."""
         cfg = AutomationConfig()
@@ -552,7 +552,7 @@ class TestRunSkillTimeoutFromConfig:
 class TestRunSkillInjectsCompletionDirective:
     """run_skill injects completion directive into the skill command."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_injects_completion_directive(self, tool_ctx):
         """Skill command passed to claude -p contains the completion marker instruction."""
         cfg = AutomationConfig()
@@ -593,7 +593,7 @@ class TestRunSkillInjectsCompletionDirective:
 class TestRunSkillEnvPrefix:
     """run_skill and run_skill_retry inject CLAUDE_CODE_EXIT_AFTER_STOP_DELAY env prefix."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_default_delay_prepends_env_to_cmd(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
@@ -602,7 +602,7 @@ class TestRunSkillEnvPrefix:
         assert cmd[1] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000"
         assert "claude" in cmd
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_zero_delay_omits_env_prefix(self, tool_ctx):
         cfg = AutomationConfig()
         cfg.run_skill = RunSkillConfig(exit_after_stop_delay_ms=0)
@@ -614,7 +614,7 @@ class TestRunSkillEnvPrefix:
         assert cmd[0] != "env"
         assert cmd[0] == "claude"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_custom_delay_value_in_cmd(self, tool_ctx):
         cfg = AutomationConfig()
         cfg.run_skill = RunSkillConfig(exit_after_stop_delay_ms=60000)
@@ -626,7 +626,7 @@ class TestRunSkillEnvPrefix:
         assert cmd[0] == "env"
         assert cmd[1] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=60000"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_retry_also_gets_env_prefix(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill_retry("/investigate something", "/tmp")
@@ -657,7 +657,7 @@ class TestSessionLogDir:
 class TestRunSkillPassesSessionLogDir:
     """run_skill passes session_log_dir derived from cwd."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_passes_session_log_dir(self, tool_ctx):
         """runner receives session_log_dir derived from cwd."""
         cfg = AutomationConfig()
@@ -683,7 +683,7 @@ class TestRunSkillPassesSessionLogDir:
 class TestRunSkillRetryPassesSessionLogDir:
     """run_skill_retry passes session_log_dir derived from cwd."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_retry_passes_session_log_dir(self, tool_ctx):
         """run_skill_retry must pass session_log_dir just like run_skill."""
         cfg = AutomationConfig()
@@ -1188,7 +1188,7 @@ class TestRunSkillRetryConsolidation:
         """Initialize ToolContext for run_skill_retry consolidation tests."""
         self._tool_ctx = tool_ctx
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_retry_passes_add_dir_to_subprocess(self):
         """add_dir is forwarded to ctx.executor.run()."""
         mock_result = SkillResult(
@@ -1208,7 +1208,7 @@ class TestRunSkillRetryConsolidation:
 
         assert mock_run.call_args.kwargs.get("add_dir") == "/extra/dir"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_retry_uses_retry_timeout_not_skill_timeout(self):
         """run_skill_retry passes RunSkillRetryConfig.timeout (7200) not RunSkillConfig (3600)."""
         mock_result = SkillResult(
@@ -1463,7 +1463,7 @@ class TestMarkerCrossValidation:
 class TestRunSkillRetrySessionOutcome:
     """run_skill_retry correctly classifies all Claude Code session outcomes."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_detects_max_turns_via_subtype(self, tool_ctx):
         """error_max_turns in JSON output -> needs_retry=True, retry_reason=RESUME."""
         stdout = json.dumps(
@@ -1480,7 +1480,7 @@ class TestRunSkillRetrySessionOutcome:
         assert result["needs_retry"] is True
         assert result["retry_reason"] == RetryReason.RESUME
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_detects_context_limit(self, tool_ctx):
         """'Prompt is too long' -> needs_retry=True, retry_reason='retry'."""
         stdout = json.dumps(
@@ -1497,7 +1497,7 @@ class TestRunSkillRetrySessionOutcome:
         assert result["needs_retry"] is True
         assert result["retry_reason"] == RetryReason.RESUME
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_success_not_retriable(self, tool_ctx):
         """Normal success -> needs_retry=False."""
         stdout = json.dumps(
@@ -1514,7 +1514,7 @@ class TestRunSkillRetrySessionOutcome:
         assert result["needs_retry"] is False
         assert result["retry_reason"] == RetryReason.NONE
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_execution_error_not_retriable(self, tool_ctx):
         """error_during_execution -> needs_retry=False."""
         stdout = json.dumps(
@@ -1530,7 +1530,7 @@ class TestRunSkillRetrySessionOutcome:
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is False
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_unparseable_stdout_not_retriable(self, tool_ctx):
         """Non-JSON stdout -> needs_retry=False."""
         tool_ctx.runner.push(_make_result(1, "crash dump", "segfault"))
@@ -1541,7 +1541,7 @@ class TestRunSkillRetrySessionOutcome:
 class TestRunSkillRetryAgentResult:
     """run_skill_retry result field contains actionable text."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_context_limit_result_is_actionable(self, tool_ctx):
         """When context is exhausted, result text must NOT say 'Prompt is too long'."""
         stdout = json.dumps(
@@ -1558,7 +1558,7 @@ class TestRunSkillRetryAgentResult:
         assert "prompt is too long" not in result["result"].lower()
         assert result["needs_retry"] is True
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_normal_success_result_passes_through(self, tool_ctx):
         """Normal success result text is preserved."""
         stdout = json.dumps(
@@ -1578,7 +1578,7 @@ class TestRunSkillRetryAgentResult:
 class TestRunSkillRetryFields:
     """run_skill includes needs_retry and retry_reason for parity."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_includes_needs_retry_false(self, tool_ctx):
         """run_skill response includes needs_retry=False on normal success."""
         stdout = json.dumps(
@@ -1595,7 +1595,7 @@ class TestRunSkillRetryFields:
         assert result["needs_retry"] is False
         assert result["retry_reason"] == RetryReason.NONE
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_includes_needs_retry_true_on_context_limit(self, tool_ctx):
         """run_skill response includes needs_retry=True when context is exhausted."""
         stdout = json.dumps(
@@ -1617,7 +1617,7 @@ class TestRunSkillRetryFields:
 class TestRunSkillFailurePaths:
     """run_skill surfaces session outcome on failure."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_returns_subtype_on_incomplete_session(self, tool_ctx):
         """run_skill includes subtype when session didn't finish."""
         stdout = json.dumps(
@@ -1633,7 +1633,7 @@ class TestRunSkillFailurePaths:
         assert result["session_id"] == "s1"
         assert result["subtype"] == "error_max_turns"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_returns_is_error_on_context_limit(self, tool_ctx):
         """run_skill includes is_error when context limit is hit."""
         stdout = json.dumps(
@@ -1650,7 +1650,7 @@ class TestRunSkillFailurePaths:
         assert result["is_error"] is True
         assert result["subtype"] == "success"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_handles_empty_stdout(self, tool_ctx):
         """run_skill returns error result when stdout is empty."""
         tool_ctx.runner.push(
@@ -1662,7 +1662,7 @@ class TestRunSkillFailurePaths:
         assert result["subtype"] == "empty_output"
         assert result["success"] is False
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_empty_stdout_exit_zero_is_retriable(self, tool_ctx):
         """Infrastructure failure (empty stdout, exit 0) is retriable with stderr."""
         tool_ctx.runner.push(
@@ -1687,7 +1687,7 @@ class TestRunSkillModel:
     )
 
     # MOD_S1
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_passes_model_flag(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="sonnet")
@@ -1696,7 +1696,7 @@ class TestRunSkillModel:
         assert cmd[cmd.index("--model") + 1] == "sonnet"
 
     # MOD_S2
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_retry_passes_model_flag(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill_retry("/investigate error", "/tmp", model="sonnet")
@@ -1705,7 +1705,7 @@ class TestRunSkillModel:
         assert cmd[cmd.index("--model") + 1] == "sonnet"
 
     # MOD_S3
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_no_model_flag_when_empty(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="")
@@ -1926,7 +1926,7 @@ class TestRunSkillStepName:
         )
         return result_rec
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_step_name_records_token_usage(self, tool_ctx):
         tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill(
@@ -1937,13 +1937,13 @@ class TestRunSkillStepName:
         assert report[0]["step_name"] == "plan"
         assert report[0]["input_tokens"] == 200
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_no_step_name_does_not_record(self, tool_ctx):
         tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill(skill_command="/autoskillit:investigate topic", cwd="/tmp", step_name="")
         assert tool_ctx.token_log.get_report() == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_null_token_usage_does_not_record(self, tool_ctx):
         # Return NDJSON with no usage field → token_usage will be null
         no_usage_ndjson = json.dumps(
@@ -1961,7 +1961,7 @@ class TestRunSkillStepName:
         )
         assert tool_ctx.token_log.get_report() == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_step_name_run_skill_retry(self, tool_ctx):
         tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
         await run_skill_retry(
@@ -1986,7 +1986,7 @@ class TestGatedToolObservability:
         ctx.error = AsyncMock()
         return ctx
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_cmd_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
         """run_cmd binds tool='run_cmd' contextvar and calls ctx.info on success."""
         tool_ctx.runner.push(_make_result(0, "ok\n", ""))
@@ -1996,7 +1996,7 @@ class TestGatedToolObservability:
             await run_cmd(cmd="echo ok", cwd="/tmp", ctx=mock_ctx)
         assert any(entry.get("tool") == "run_cmd" for entry in logs)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_cmd_returns_failure_result_on_nonzero_exit(self, tool_ctx, mock_ctx):
         """run_cmd reports failure (success=false) when subprocess exits non-zero."""
         tool_ctx.runner.push(_make_result(1, "", "err"))
@@ -2004,7 +2004,7 @@ class TestGatedToolObservability:
         assert result["success"] is False
         assert result["exit_code"] == 1
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_python_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
         """run_python binds tool='run_python' contextvar and calls ctx.info on success."""
         with structlog.testing.capture_logs(
@@ -2013,13 +2013,13 @@ class TestGatedToolObservability:
             await run_python(callable="json.dumps", args={"obj": 1}, ctx=mock_ctx)
         assert any(entry.get("tool") == "run_python" for entry in logs)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_python_returns_failure_result_on_bad_module(self, tool_ctx, mock_ctx):
         """run_python reports failure (success=false) when callable import fails."""
         result = json.loads(await run_python(callable="nonexistent.module.func", ctx=mock_ctx))
         assert result["success"] is False
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
         """run_skill binds tool='run_skill' contextvar and calls ctx.info on success."""
         tool_ctx.runner.push(
@@ -2036,7 +2036,7 @@ class TestGatedToolObservability:
             await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
         assert any(entry.get("tool") == "run_skill" for entry in logs)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_returns_failure_result_on_error_output(self, tool_ctx, mock_ctx):
         """run_skill reports failure (success=false) when headless session fails."""
         tool_ctx.runner.push(
@@ -2051,7 +2051,7 @@ class TestGatedToolObservability:
         result = json.loads(await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx))
         assert result["success"] is False
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_retry_binds_tool_contextvar_and_calls_ctx_info(
         self, tool_ctx, mock_ctx
     ):
@@ -2070,7 +2070,7 @@ class TestGatedToolObservability:
             await run_skill_retry("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
         assert any(entry.get("tool") == "run_skill_retry" for entry in logs)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_retry_returns_failure_result_on_error_output(
         self, tool_ctx, mock_ctx
     ):
@@ -2093,7 +2093,7 @@ class TestGatedToolObservability:
 class TestNotifyHelper:
     """Unit tests for the centralized _notify() notification helper."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_notify_raises_value_error_for_reserved_key_name(self):
         """The 'name' key that caused the original bug must be rejected."""
         from autoskillit.server.helpers import _notify
@@ -2110,7 +2110,7 @@ class TestNotifyHelper:
             )
         ctx.info.assert_not_awaited()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_notify_raises_for_all_reserved_keys(self):
         """Every key in RESERVED_LOG_RECORD_KEYS must be rejected."""
         from autoskillit.core.types import RESERVED_LOG_RECORD_KEYS
@@ -2122,7 +2122,7 @@ class TestNotifyHelper:
             with pytest.raises(ValueError, match="reserved LogRecord"):
                 await _notify(ctx, "info", "msg", "logger", extra={reserved_key: "value"})
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_notify_accepts_safe_key_recipe_name(self):
         """'recipe_name' (the corrected key for migrate_recipe) must be accepted."""
         from autoskillit.server.helpers import _notify
@@ -2142,7 +2142,7 @@ class TestNotifyHelper:
             extra={"recipe_name": "foo"},
         )
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_notify_accepts_none_extra(self):
         from autoskillit.server.helpers import _notify
 
@@ -2151,7 +2151,7 @@ class TestNotifyHelper:
         await _notify(ctx, "info", "msg", "logger")  # no extra
         ctx.info.assert_awaited_once()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_notify_accepts_empty_extra(self):
         from autoskillit.server.helpers import _notify
 
@@ -2160,7 +2160,7 @@ class TestNotifyHelper:
         await _notify(ctx, "info", "msg", "logger", extra={})
         ctx.info.assert_awaited_once()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_notify_swallows_attribute_error_from_ctx(self):
         """AttributeError from ctx.info (e.g. _CurrentContext sentinel) is swallowed."""
         from autoskillit.server.helpers import _notify
@@ -2170,7 +2170,7 @@ class TestNotifyHelper:
         # Must not raise
         await _notify(ctx, "info", "msg", "logger", extra={"cwd": "/tmp"})
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_notify_swallows_runtime_error_from_ctx(self):
         """RuntimeError from ctx.info (no active MCP session) is swallowed."""
         from autoskillit.server.helpers import _notify
@@ -2179,7 +2179,7 @@ class TestNotifyHelper:
         ctx.info = AsyncMock(side_effect=RuntimeError("session not available"))
         await _notify(ctx, "info", "msg", "logger", extra={"cwd": "/tmp"})
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_notify_swallows_key_error_from_ctx(self):
         """KeyError from FastMCP's stdlib logging path is swallowed."""
         from autoskillit.server.helpers import _notify
@@ -2188,7 +2188,7 @@ class TestNotifyHelper:
         ctx.info = AsyncMock(side_effect=KeyError("Attempt to overwrite 'name' in LogRecord"))
         await _notify(ctx, "info", "msg", "logger", extra={"cwd": "/tmp"})
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_notify_dispatches_error_level(self):
         from autoskillit.server.helpers import _notify
 
@@ -2354,7 +2354,7 @@ def test_context_exhaustion_marker_is_used_in_detection():
     assert session._is_context_exhausted() is True
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) -> None:
     """run_skill routes through ctx.executor.run(), not run_headless_core directly."""
     from autoskillit.core import SkillResult
@@ -2399,7 +2399,7 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
 class TestResponseFieldsAreTypeSafe:
     """Every discriminator field in MCP tool responses uses enum values."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_retry_reason_is_enum_value(self, tool_ctx):
         stdout = json.dumps(
             {
@@ -2415,7 +2415,7 @@ class TestResponseFieldsAreTypeSafe:
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_retry_reason_none_is_enum_value(self, tool_ctx):
         stdout = json.dumps(
             {

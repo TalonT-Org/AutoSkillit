@@ -11,13 +11,13 @@ from autoskillit.server.tools_clone import clone_repo, push_to_remote, remove_cl
 
 
 class TestCloneRepoTool:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_returns_gate_error_when_disabled(self, tool_ctx):
         tool_ctx.gate.enabled = False
         result = json.loads(await clone_repo(source_dir="/src", run_name="test"))
         assert result["subtype"] == "gate_error"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_delegates_to_workspace_clone(self, tool_ctx):
         mock_mgr = MagicMock()
         mock_mgr.clone_repo.return_value = {"clone_path": "/clone/path", "source_dir": "/src"}
@@ -26,7 +26,7 @@ class TestCloneRepoTool:
         assert result["clone_path"] == "/clone/path"
         assert result["source_dir"] == "/src"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_returns_error_on_value_error(self, tool_ctx):
         mock_mgr = MagicMock()
         mock_mgr.clone_repo.side_effect = ValueError("resolved to nonexistent")
@@ -35,7 +35,7 @@ class TestCloneRepoTool:
         assert "error" in result
         assert "resolved to" in result["error"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_returns_error_on_runtime_error(self, tool_ctx):
         mock_mgr = MagicMock()
         mock_mgr.clone_repo.side_effect = RuntimeError("git clone failed")
@@ -43,7 +43,7 @@ class TestCloneRepoTool:
         result = json.loads(await clone_repo(source_dir="/src", run_name="run"))
         assert "error" in result
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_cb17_forwards_branch_to_clone_manager(self, tool_ctx):
         """T_CB17: branch param is forwarded to the underlying clone_repo call."""
         mock_mgr = MagicMock()
@@ -52,7 +52,7 @@ class TestCloneRepoTool:
         await clone_repo(source_dir="/src", run_name="r", branch="dev")
         mock_mgr.clone_repo.assert_called_once_with("/src", "r", "dev", "")
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_cb18_forwards_strategy_to_clone_manager(self, tool_ctx):
         """T_CB18: strategy param is forwarded to the underlying clone_repo call."""
         mock_mgr = MagicMock()
@@ -61,7 +61,7 @@ class TestCloneRepoTool:
         await clone_repo(source_dir="/src", run_name="r", strategy="proceed")
         mock_mgr.clone_repo.assert_called_once_with("/src", "r", "", "proceed")
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_cb19_returns_uncommitted_changes_result_as_json(self, tool_ctx):
         """T_CB19: uncommitted_changes warning dict passes through without 'error' key."""
         uncommitted_result = {
@@ -80,13 +80,13 @@ class TestCloneRepoTool:
 
 
 class TestRemoveCloneTool:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_returns_gate_error_when_disabled(self, tool_ctx):
         tool_ctx.gate.enabled = False
         result = json.loads(await remove_clone(clone_path="/clone", keep="false"))
         assert result["subtype"] == "gate_error"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_delegates_to_workspace_clone(self, tool_ctx):
         mock_mgr = MagicMock()
         mock_mgr.remove_clone.return_value = {"removed": "true"}
@@ -94,7 +94,7 @@ class TestRemoveCloneTool:
         result = json.loads(await remove_clone(clone_path="/clone/path", keep="false"))
         assert result["removed"] == "true"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_keep_true_passes_through(self, tool_ctx):
         mock_mgr = MagicMock()
         mock_mgr.remove_clone.return_value = {"removed": "false", "reason": "keep=true"}
@@ -102,7 +102,7 @@ class TestRemoveCloneTool:
         result = json.loads(await remove_clone(clone_path="/clone/path", keep="true"))
         assert result["removed"] == "false"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_always_routes_success_even_on_partial_failure(self, tool_ctx):
         mock_mgr = MagicMock()
         mock_mgr.remove_clone.return_value = {"removed": "false", "reason": "OSError"}
@@ -112,13 +112,13 @@ class TestRemoveCloneTool:
 
 
 class TestPushToRemoteTool:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_returns_gate_error_when_disabled(self, tool_ctx):
         tool_ctx.gate.enabled = False
         result = json.loads(await push_to_remote(clone_path="/c", source_dir="/s", branch="main"))
         assert result["subtype"] == "gate_error"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_delegates_to_workspace_clone_on_success(self, tool_ctx):
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": "true", "stderr": ""}
@@ -129,7 +129,7 @@ class TestPushToRemoteTool:
         assert result["success"] == "true"
         assert "error" not in result
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_returns_error_key_when_push_fails(self, tool_ctx):
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": False, "stderr": "remote rejected"}

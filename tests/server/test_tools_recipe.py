@@ -121,7 +121,7 @@ class TestRecipeTools:
         tool_ctx.gate = DefaultGateState(enabled=False)
 
     # SS1
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     @patch("autoskillit.recipe._api.list_recipes")
     async def test_list_returns_json_object(self, mock_list):
         """list_recipes returns JSON object with scripts array (not gated)."""
@@ -149,7 +149,7 @@ class TestRecipeTools:
         assert "errors" not in result
 
     # SS2
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_load_returns_json_with_content(self, tmp_path, monkeypatch):
         """load_recipe returns JSON with content and suggestions (not gated)."""
         monkeypatch.chdir(tmp_path)
@@ -163,7 +163,7 @@ class TestRecipeTools:
         assert "description: Test recipe" in result["content"]
 
     # SS3
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_load_unknown_returns_error(self, tmp_path, monkeypatch):
         """load_recipe returns error JSON for unknown recipe name."""
         monkeypatch.chdir(tmp_path)
@@ -172,7 +172,7 @@ class TestRecipeTools:
         assert "nonexistent" in result["error"]
 
     # SS4
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     @patch("autoskillit.recipe._api.list_recipes")
     async def test_list_reports_errors_in_response(self, mock_list):
         """list_recipes includes errors in JSON when recipes fail to parse."""
@@ -189,7 +189,7 @@ class TestRecipeTools:
         assert "bad yaml" in result["errors"][0]["error"]
 
     # SS5
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_list_integration_discovers_project_recipe(self, tmp_path, monkeypatch):
         """Server tool returns project recipes alongside bundled recipes."""
         monkeypatch.chdir(tmp_path)
@@ -204,7 +204,7 @@ class TestRecipeTools:
         assert "test-pipe" in names
 
     # SS6
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_list_integration_reports_errors(self, tmp_path, monkeypatch):
         """Server tool reports parse errors to the caller from real files."""
         monkeypatch.chdir(tmp_path)
@@ -216,7 +216,7 @@ class TestRecipeTools:
         assert len(result["errors"]) == 1
 
     # SS7
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_load_returns_json_with_suggestions(self, tmp_path, monkeypatch):
         """load_recipe response always has 'content' and 'suggestions' keys."""
         monkeypatch.chdir(tmp_path)
@@ -234,7 +234,7 @@ class TestRecipeTools:
         assert any(s["rule"] == "model-on-non-skill-step" for s in result["suggestions"])
 
     # SS8
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_list_recipes_includes_builtins_with_empty_project_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -250,7 +250,7 @@ class TestRecipeTools:
         assert "smoke-test" in names
 
     # SS9
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_load_recipe_mcp_returns_builtin_recipe(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -261,7 +261,7 @@ class TestRecipeTools:
         assert "content" in result
         assert len(result["content"]) > 0
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_load_recipe_parse_failure_is_logged_and_surfaced(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -289,7 +289,7 @@ class TestRecipeTools:
             "Unexpected exception must appear as a validation-error finding in suggestions"
         )
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_load_recipe_validation_error_message_includes_exception_type(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -361,7 +361,7 @@ class TestLoadRecipeExceptionHandling:
     def _setup_ctx(self, tool_ctx):
         """Initialize ToolContext so load_recipe can call _get_config()."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_yaml_error_surfaces_as_suggestion(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -380,7 +380,7 @@ class TestLoadRecipeExceptionHandling:
             for s in result["suggestions"]
         )
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_value_error_surfaces_as_suggestion(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -414,7 +414,7 @@ class TestLoadRecipeExceptionHandling:
             for s in result["suggestions"]
         )
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_file_not_found_surfaces_as_suggestion(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -436,7 +436,7 @@ class TestLoadRecipeExceptionHandling:
             for s in result["suggestions"]
         )
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_unexpected_exception_propagates(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -464,7 +464,7 @@ class TestValidateRecipeTool:
         tool_ctx.gate = DefaultGateState(enabled=False)
 
     # VS1
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_valid_recipe_returns_success(self, tmp_path):
         """validate_recipe returns valid=true for a correct recipe."""
         script = tmp_path / "good.yaml"
@@ -490,7 +490,7 @@ class TestValidateRecipeTool:
         assert result["errors"] == []
 
     # VS2
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_invalid_recipe_returns_errors(self, tmp_path):
         """validate_recipe returns valid=false with errors for missing name."""
         script = tmp_path / "bad.yaml"
@@ -500,7 +500,7 @@ class TestValidateRecipeTool:
         assert any("name" in e for e in result["errors"])
 
     # VS3
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_nonexistent_file_returns_error(self):
         """validate_recipe returns valid=False with findings for nonexistent file."""
         result = json.loads(await validate_recipe(script_path="/nonexistent/path.yaml"))
@@ -509,7 +509,7 @@ class TestValidateRecipeTool:
         assert "not found" in result["findings"][0]["error"].lower()
 
     # VS4
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_malformed_yaml_returns_error(self, tmp_path):
         """validate_recipe returns valid=False with findings for unparseable YAML."""
         script = tmp_path / "broken.yaml"
@@ -520,7 +520,7 @@ class TestValidateRecipeTool:
         assert "yaml" in result["findings"][0]["error"].lower()
 
     # T_OR10
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_validate_recipe_with_on_result(self, tmp_path):
         """validate_recipe correctly validates on_result blocks."""
         script = tmp_path / "good.yaml"
@@ -546,7 +546,7 @@ class TestValidateRecipeTool:
         assert result["valid"] is True
 
     # DFQ14
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_validate_recipe_includes_quality_field(self, tmp_path):
         """validate_recipe response includes quality report with warnings and summary."""
         script = tmp_path / "dead.yaml"
@@ -584,7 +584,7 @@ class TestValidateRecipeTool:
         assert semantic_errors[0]["step"] == "impl"
 
     # SEM1
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_validate_recipe_includes_semantic_findings(self, tmp_path):
         """validate_recipe response includes 'findings' key with semantic findings."""
         script = tmp_path / "semantic.yaml"
@@ -820,7 +820,7 @@ class TestMigrationSuggestions:
         tool_ctx.gate = DefaultGateState(enabled=False)
 
     # MSUG2
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_validate_always_includes_outdated_version(self, tmp_path):
         """MSUG2: validate_recipe always includes outdated-script-version in semantic results."""
         script = tmp_path / "test-script.yaml"
@@ -843,7 +843,7 @@ class TestMigrationSuppression:
         tool_ctx.gate = DefaultGateState(enabled=False)
 
     # SUP1
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_outdated_version_not_in_suggestions_when_suppressed(
         self, tmp_path, monkeypatch, tool_ctx
     ):
@@ -878,7 +878,7 @@ class TestMigrationSuppression:
         mock_headless.assert_not_called()
 
     # SUP4
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_validate_always_includes_outdated_version_regardless_of_suppression(
         self, tmp_path, tool_ctx
     ):
@@ -905,7 +905,7 @@ class TestLoadRecipeReadOnly:
         """load_recipe works WITHOUT tool activation."""
         tool_ctx.gate = DefaultGateState(enabled=False)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_load_recipe_does_not_call_migration_engine(self, tmp_path, monkeypatch):
         """load_recipe must not trigger headless migration even when migrations are applicable."""
         monkeypatch.chdir(tmp_path)
@@ -919,7 +919,7 @@ class TestLoadRecipeReadOnly:
         mock_headless.assert_not_called()
         mock_gen.assert_not_called()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_load_recipe_does_not_auto_generate_contract_card(self, tmp_path, monkeypatch):
         """load_recipe must not call generate_recipe_card even when no card exists."""
         monkeypatch.chdir(tmp_path)
@@ -996,7 +996,7 @@ class TestMigrateRecipe:
         """migrate_recipe is not an ungated tool."""
         assert "migrate_recipe" not in UNGATED_TOOLS
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_migrate_recipe_requires_gate(self, tool_ctx):
         """migrate_recipe returns gate_error when kitchen is closed."""
         tool_ctx.gate = DefaultGateState(enabled=False)
@@ -1004,7 +1004,7 @@ class TestMigrateRecipe:
         assert result["success"] is False
         assert result["subtype"] == "gate_error"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_migrate_recipe_not_found(self, tmp_path, monkeypatch):
         """migrate_recipe returns error for unknown recipe name."""
         monkeypatch.chdir(tmp_path)
@@ -1012,7 +1012,7 @@ class TestMigrateRecipe:
         assert "error" in result
         assert "nonexistent" in result["error"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_migrate_recipe_up_to_date(self, tmp_path, monkeypatch):  # SRV-UPD-1
         """migrate_recipe returns up_to_date when no migrations applicable and contract fresh."""
         monkeypatch.chdir(tmp_path)
@@ -1025,7 +1025,7 @@ class TestMigrateRecipe:
         assert result.get("status") == "up_to_date"
 
     # LR1
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_auto_migrates_outdated_recipe(self, tmp_path, monkeypatch, tool_ctx):
         """LR1: When recipe version < installed, _run_headless_core is called once."""
         ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
@@ -1055,7 +1055,7 @@ class TestMigrateRecipe:
         assert "contracts_regenerated" in result
 
     # LR4
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_clears_failure_record_after_successful_migration(
         self, tmp_path, monkeypatch, tool_ctx
     ):
@@ -1098,7 +1098,7 @@ class TestMigrateRecipe:
         assert not fresh_store.has_failure("test-script")
 
     # LR5
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_records_failure_when_migration_fails(self, tmp_path, monkeypatch, tool_ctx):
         """LR5: When headless returns success=False, failure is recorded to failures.json."""
         from autoskillit.migration.store import FailureStore, default_store_path
@@ -1126,7 +1126,7 @@ class TestMigrateRecipe:
         assert store.has_failure("test-script")
 
     # LR7
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_suppressed_recipe_not_migrated(self, tmp_path, monkeypatch, tool_ctx):
         """LR7: When name in migration.suppressed, headless is never called."""
         self._setup_migration_env(tmp_path, monkeypatch, tool_ctx, suppressed=["test-script"])
@@ -1151,7 +1151,7 @@ class TestMigrateRecipe:
         assert result.get("status") == "up_to_date"
 
     # LR8
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_up_to_date_recipe_not_migrated(self, tmp_path, monkeypatch, tool_ctx):
         """LR8: When applicable_migrations returns [], headless is never called."""
         import autoskillit
@@ -1195,7 +1195,7 @@ class TestMigrateRecipe:
         assert result.get("status") == "up_to_date"
 
     # SRV-NEW-1
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_migrate_recipe_regenerates_stale_contract(
         self, tmp_path, monkeypatch, tool_ctx
     ):

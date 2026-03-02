@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import anyio
 import json
 from pathlib import Path
 
@@ -54,7 +54,7 @@ class TestKitchenStatus:
     def _close_kitchen(self, tool_ctx):
         tool_ctx.gate = DefaultGateState(enabled=False)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_status_returns_version_info(self, tool_ctx):
         import autoskillit
 
@@ -67,7 +67,7 @@ class TestKitchenStatus:
         assert result["versions_match"] is True
         assert "warning" not in result
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_status_reports_mismatch(self, tmp_path, tool_ctx):
         plugin_dir = tmp_path / ".claude-plugin"
         plugin_dir.mkdir()
@@ -80,21 +80,21 @@ class TestKitchenStatus:
         assert "warning" in result
         assert "mismatch" in result["warning"].lower()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_status_works_without_enable(self, tool_ctx):
         assert tool_ctx.gate.enabled is False
         result = json.loads(await kitchen_status())
         assert result["tools_enabled"] is False
         assert isinstance(result["package_version"], str) and result["package_version"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_status_includes_token_usage_verbosity_default(self):
         """TU_S1: kitchen_status includes token_usage_verbosity key with default 'summary'."""
         result = json.loads(await kitchen_status())
         assert "token_usage_verbosity" in result
         assert result["token_usage_verbosity"] == "summary"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_status_reflects_none_verbosity(self, tool_ctx):
         """TU_S2: kitchen_status reflects 'none' verbosity from config."""
         cfg = AutomationConfig()
@@ -103,7 +103,7 @@ class TestKitchenStatus:
         result = json.loads(await kitchen_status())
         assert result["token_usage_verbosity"] == "none"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_kitchen_status_includes_github_config(self, tool_ctx):
         tool_ctx.config.github.default_repo = "owner/repo"
         status = json.loads(await kitchen_status())
@@ -111,14 +111,14 @@ class TestKitchenStatus:
         assert status["github_default_repo"] == "owner/repo"
         assert "github_token_configured" in status
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_kitchen_status_github_token_configured_true_from_client(self, tool_ctx):
         """kitchen_status must read github_token_configured from ctx.github_client.has_token."""
         tool_ctx.github_client = DefaultGitHubFetcher(token="my-token")
         status = json.loads(await kitchen_status())
         assert status["github_token_configured"] is True
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_kitchen_status_github_token_not_configured_from_client(
         self, tool_ctx, monkeypatch
     ):
@@ -127,7 +127,7 @@ class TestKitchenStatus:
         status = json.loads(await kitchen_status())
         assert status["github_token_configured"] is False
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_kitchen_status_github_token_does_not_reflect_post_construction_env(
         self, tool_ctx, monkeypatch
     ):
@@ -148,19 +148,19 @@ class TestGetPipelineReport:
 
         tool_ctx.gate = DefaultGateState(enabled=False)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_ungated_returns_empty_initially(self, tool_ctx):
         result = json.loads(await get_pipeline_report())
         assert result["total_failures"] == 0
         assert result["failures"] == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_ungated_does_not_require_open_kitchen(self, tool_ctx):
         """Must succeed even when gate is disabled."""
         result = json.loads(await get_pipeline_report())
         assert "error" not in result
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_accumulates_failures_from_run_skill(self, tool_ctx):
         from autoskillit.pipeline.gate import DefaultGateState
 
@@ -177,7 +177,7 @@ class TestGetPipelineReport:
         assert result["total_failures"] == 1
         assert result["failures"][0]["skill_command"].startswith("/autoskillit:test")
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_clear_true_resets_after_returning(self, tool_ctx):
         tool_ctx.audit.record_failure(_make_failure_record())
         result = json.loads(await get_pipeline_report(clear=True))
@@ -195,12 +195,12 @@ class TestGetTokenSummary:
 
         tool_ctx.gate = DefaultGateState(enabled=False)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_ungated_does_not_require_open_kitchen(self, tool_ctx):
         result = json.loads(await get_token_summary())
         assert "error" not in result
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_returns_empty_steps_initially(self, tool_ctx):
         result = json.loads(await get_token_summary())
         assert result["steps"] == []
@@ -209,7 +209,7 @@ class TestGetTokenSummary:
         assert result["total"]["cache_creation_input_tokens"] == 0
         assert result["total"]["cache_read_input_tokens"] == 0
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_returns_entry_per_step_name(self, tool_ctx):
         tool_ctx.token_log.record(
             "investigate",
@@ -234,7 +234,7 @@ class TestGetTokenSummary:
         assert result["steps"][0]["step_name"] == "investigate"
         assert result["steps"][1]["step_name"] == "implement"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_multiple_invocations_same_step_are_summed(self, tool_ctx):
         usage = {
             "input_tokens": 100,
@@ -250,7 +250,7 @@ class TestGetTokenSummary:
         assert result["steps"][0]["input_tokens"] == 300
         assert result["steps"][0]["invocation_count"] == 3
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_total_field_sums_all_steps(self, tool_ctx):
         tool_ctx.token_log.record(
             "plan",
@@ -276,7 +276,7 @@ class TestGetTokenSummary:
         assert result["total"]["cache_creation_input_tokens"] == 30
         assert result["total"]["cache_read_input_tokens"] == 15
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_clear_true_resets_after_returning(self, tool_ctx):
         tool_ctx.token_log.record(
             "plan",
@@ -292,7 +292,7 @@ class TestGetTokenSummary:
         result2 = json.loads(await get_token_summary())
         assert result2["steps"] == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_response_shape(self, tool_ctx):
         tool_ctx.token_log.record(
             "plan",
@@ -321,7 +321,7 @@ def test_check_quota_absent_from_mcp_registry(tool_ctx):
     Quota enforcement is the PreToolUse hook's responsibility, not an MCP tool."""
     from autoskillit.server import mcp
 
-    tools = asyncio.run(mcp.list_tools())
+    tools = anyio.run(mcp.list_tools)
     assert "check_quota" not in {t.name for t in tools}, (
         "check_quota must be removed from the MCP registry. "
         "Agents should not call it — the PreToolUse hook enforces quota automatically."

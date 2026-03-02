@@ -28,6 +28,7 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.headless import _build_skill_result, _recover_from_separate_marker
 from autoskillit.execution.process import (
+    RaceSignals,
     _has_active_api_connection,
     _heartbeat,
     _jsonl_contains_marker,
@@ -42,7 +43,6 @@ from autoskillit.execution.process import (
     resolve_termination,
     run_managed_async,
     run_managed_sync,
-    scan_done_signals,
 )
 from autoskillit.execution.session import ClaudeSessionResult
 
@@ -1211,68 +1211,43 @@ class TestDualWinnerRace:
         assert result.termination != TerminationReason.STALE
         assert result.termination != TerminationReason.TIMED_OUT
 
-    @pytest.mark.asyncio
-    async def test_scan_done_signals_wait_and_channel_b_completion_simultaneous(self):
-        """Test 1A: scan_done_signals captures wait_task + Channel B completion
-        simultaneously in done. resolve_termination preserves CHANNEL_B signal."""
-        loop = asyncio.get_running_loop()
-        wait_future = loop.create_future()
-        wait_future.set_result(0)
-        monitor_future = loop.create_future()
-        monitor_future.set_result("completion")
-
-        proc = Mock()
-        proc.returncode = 0
-
-        done = {wait_future, monitor_future}
-        signals = scan_done_signals(done, wait_future, None, monitor_future, proc)
-
-        assert signals.process_exited is True
-        assert signals.channel_b_status == "completion"
-        assert signals.channel_a_confirmed is False
-
+    def test_process_exit_and_channel_b_completion_simultaneous(self):
+        """Test 1A: Process exit + Channel B completion simultaneously.
+        resolve_termination preserves CHANNEL_B signal."""
+        signals = RaceSignals(
+            process_exited=True,
+            process_returncode=0,
+            channel_a_confirmed=False,
+            channel_b_status="completion",
+        )
         termination, channel = resolve_termination(signals)
         assert termination == TerminationReason.NATURAL_EXIT
         assert channel == ChannelConfirmation.CHANNEL_B
 
-    @pytest.mark.asyncio
-    async def test_scan_done_signals_wait_and_heartbeat_simultaneous(self):
-        """Test 1B: scan_done_signals captures wait_task + heartbeat_task (Channel A)
-        simultaneously in done. resolve_termination preserves CHANNEL_A signal."""
-        loop = asyncio.get_running_loop()
-        wait_future = loop.create_future()
-        wait_future.set_result(0)
-        heartbeat_future = loop.create_future()
-        heartbeat_future.set_result("completion")
-
-        proc = Mock()
-        proc.returncode = 0
-
-        done = {wait_future, heartbeat_future}
-        signals = scan_done_signals(done, wait_future, heartbeat_future, None, proc)
-
-        assert signals.process_exited is True
-        assert signals.channel_a_confirmed is True
-        assert signals.channel_b_status is None
-
+    def test_process_exit_and_channel_a_simultaneous(self):
+        """Test 1B: Process exit + Channel A (heartbeat) simultaneously.
+        resolve_termination preserves CHANNEL_A signal."""
+        signals = RaceSignals(
+            process_exited=True,
+            process_returncode=0,
+            channel_a_confirmed=True,
+            channel_b_status=None,
+        )
         termination, channel = resolve_termination(signals)
         assert termination == TerminationReason.NATURAL_EXIT
         assert channel == ChannelConfirmation.CHANNEL_A
 
 
-class TestScanDoneSignalsResolveTermination:
-    """Pure-function unit tests for scan_done_signals and resolve_termination.
+class TestResolveTerminationMatrix:
+    """Pure-function unit tests for resolve_termination.
 
-    Exhaustively exercises all signal combinations without subprocess involvement.
-    Uses asyncio.Future objects with pre-set results as mock tasks.
+    Builds RaceSignals directly (no scan_done_signals scaffold).
     xdist-safe: no shared state, all state local.
     """
 
-    @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "process_exited,channel_a_in_done,channel_b_result,expected_term,expected_chan",
+        "process_exited,channel_a_confirmed,channel_b_result,expected_term,expected_chan",
         [
-            # process_exited=True cases
             (True, False, None, TerminationReason.NATURAL_EXIT, ChannelConfirmation.UNMONITORED),
             (True, True, None, TerminationReason.NATURAL_EXIT, ChannelConfirmation.CHANNEL_A),
             (
@@ -1297,7 +1272,6 @@ class TestScanDoneSignalsResolveTermination:
                 ChannelConfirmation.UNMONITORED,
             ),
             (True, True, "stale", TerminationReason.NATURAL_EXIT, ChannelConfirmation.CHANNEL_A),
-            # process_exited=False cases
             (False, True, None, TerminationReason.COMPLETED, ChannelConfirmation.CHANNEL_A),
             (
                 False,
@@ -1317,46 +1291,21 @@ class TestScanDoneSignalsResolveTermination:
             (False, True, "stale", TerminationReason.STALE, ChannelConfirmation.CHANNEL_A),
         ],
     )
-    async def test_resolve_termination_matrix(
+    def test_resolve_termination_matrix(
         self,
         process_exited,
-        channel_a_in_done,
+        channel_a_confirmed,
         channel_b_result,
         expected_term,
         expected_chan,
     ):
         """Parametrized matrix: all signal combinations → correct termination/channel."""
-        loop = asyncio.get_running_loop()
-
-        wait_future = loop.create_future()
-        wait_future.set_result(0)
-
-        # Always create heartbeat_future; only add to done when channel_a_in_done=True
-        heartbeat_future = loop.create_future()
-        heartbeat_future.set_result("completion")
-
-        monitor_future = None
-        if channel_b_result is not None:
-            monitor_future = loop.create_future()
-            monitor_future.set_result(channel_b_result)
-
-        proc = Mock()
-        proc.returncode = 0 if process_exited else None
-
-        done: set = set()
-        if process_exited:
-            done.add(wait_future)
-        if channel_a_in_done:
-            done.add(heartbeat_future)
-        if channel_b_result is not None and monitor_future is not None:
-            done.add(monitor_future)
-
-        signals = scan_done_signals(done, wait_future, heartbeat_future, monitor_future, proc)
-
-        assert signals.process_exited == process_exited
-        assert signals.channel_a_confirmed == channel_a_in_done
-        assert signals.channel_b_status == channel_b_result
-
+        signals = RaceSignals(
+            process_exited=process_exited,
+            process_returncode=0 if process_exited else None,
+            channel_a_confirmed=channel_a_confirmed,
+            channel_b_status=channel_b_result,
+        )
         termination, channel = resolve_termination(signals)
         assert termination == expected_term
         assert channel == expected_chan
@@ -2785,9 +2734,9 @@ class TestAnyioPrimitivesUsed:
         source = Path("src/autoskillit/execution/process.py").read_text()
         assert "anyio.Event()" in source
 
-    def test_anyio_fail_after_present(self):
+    def test_anyio_move_on_after_present(self):
         source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "anyio.fail_after(" in source
+        assert "anyio.move_on_after(" in source
 
 
 class TestProcTypeAnnotationUpdated:
@@ -2800,3 +2749,83 @@ class TestProcTypeAnnotationUpdated:
     def test_scan_done_signals_proc_annotation_is_anyio(self):
         source = Path("src/autoskillit/execution/process.py").read_text()
         assert "anyio.abc.Process" in source
+
+
+class TestGroupCMigration:
+    """REQ-SIG-001..008: anyio task group replaces asyncio task scaffolding."""
+
+    def test_no_asyncio_create_task(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.create_task(" not in source  # REQ-SIG-001
+
+    def test_no_asyncio_wait_call(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.wait(" not in source  # REQ-SIG-001
+
+    def test_no_asyncio_import_at_runtime(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "import asyncio" not in source  # REQ-SIG-001
+
+    def test_anyio_create_task_group_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.create_task_group()" in source  # REQ-SIG-002
+
+    def test_scan_done_signals_absent(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "def scan_done_signals(" not in source  # REQ-SIG-003
+
+    def test_race_accumulator_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "class RaceAccumulator" in source  # REQ-SIG-003
+
+    def test_cancel_scope_cancel_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "cancel_scope.cancel()" in source  # REQ-SIG-004
+
+    def test_resolve_termination_preserved(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "def resolve_termination(" in source  # REQ-SIG-005
+
+    def test_channel_b_drain_wait_uses_move_on_after(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.move_on_after(" in source  # REQ-SIG-006
+
+    def test_watch_process_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "async def _watch_process(" in source  # REQ-SIG-007
+
+    def test_watch_heartbeat_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "async def _watch_heartbeat(" in source  # REQ-SIG-007
+
+    def test_watch_session_log_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "async def _watch_session_log(" in source  # REQ-SIG-007
+
+    def test_race_signals_fields_unchanged(self):
+        import dataclasses
+
+        from autoskillit.execution.process import RaceSignals
+
+        fields = {f.name for f in dataclasses.fields(RaceSignals)}
+        assert fields == {
+            "process_exited",
+            "process_returncode",
+            "channel_a_confirmed",
+            "channel_b_status",
+        }  # REQ-SIG-008
+
+    def test_race_signals_still_frozen(self):
+        import dataclasses
+
+        from autoskillit.execution.process import RaceSignals
+
+        assert dataclasses.fields(RaceSignals)  # confirms it's a dataclass
+        sig = RaceSignals(
+            process_exited=False,
+            process_returncode=None,
+            channel_a_confirmed=False,
+            channel_b_status=None,
+        )
+        with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
+            sig.process_exited = True  # REQ-SIG-008: frozen=True preserved

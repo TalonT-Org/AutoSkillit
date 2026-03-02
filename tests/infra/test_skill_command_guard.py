@@ -114,3 +114,28 @@ def test_hook_uses_skill_command_prefix_constant():
     src = inspect.getsource(mod)
     assert "from autoskillit.core import" in src
     assert "SKILL_COMMAND_PREFIX" in src
+
+
+# CC1-1
+def test_unexpected_error_denies_not_approves():
+    """CC-1: An unexpected exception (e.g., AttributeError from a bug) must
+    produce a deny, NOT a silent approve. This ensures the security gate is
+    fail-closed for programming errors, not fail-open."""
+    from contextlib import redirect_stdout
+    from unittest.mock import patch
+
+    import autoskillit.hooks.skill_command_guard as guard_mod
+
+    # Make json.loads raise AttributeError (simulates a programming bug)
+    with patch.object(guard_mod.json, "loads", side_effect=AttributeError("bug")):
+        buf = io.StringIO()
+        with patch("sys.stdin", io.StringIO('{"tool_input":{}}')):
+            with redirect_stdout(buf):
+                try:
+                    guard_mod.main()
+                except SystemExit:
+                    pass
+    output = buf.getvalue().strip()
+    assert output != "", "Unexpected error must produce output (deny), not silent approve"
+    data = json.loads(output)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"

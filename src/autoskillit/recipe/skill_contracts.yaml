@@ -150,7 +150,7 @@ skills:
 
   audit-impl:
     inputs:
-      - name: plans_input
+      - name: plan_path
         type: string
         required: true
       - name: branch_name

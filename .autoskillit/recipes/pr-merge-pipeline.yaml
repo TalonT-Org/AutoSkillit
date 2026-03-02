@@ -134,7 +134,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "plan"
     capture:
-      plan_path: "${{ result.plan_path }}"
+      pr_plan_path: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
     on_success: verify
@@ -151,7 +151,7 @@ steps:
   verify:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:dry-walkthrough ${{ context.plan_path }}"
+      skill_command: "/autoskillit:dry-walkthrough ${{ context.pr_plan_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "verify"
     on_success: implement
@@ -163,7 +163,7 @@ steps:
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.pr_plan_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "implement"
     capture:
@@ -178,7 +178,7 @@ steps:
   retry_worktree:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}"
+      skill_command: "/autoskillit:retry-worktree ${{ context.pr_plan_path }} ${{ context.worktree_path }}"
       cwd: "${{ context.worktree_path }}"
       step_name: "retry_worktree"
     capture:
@@ -216,7 +216,7 @@ steps:
     tool: run_skill
     model: sonnet
     with:
-      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ context.integration_branch }}"
+      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.pr_plan_path }} ${{ context.integration_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: "fix"
       base_branch: "${{ inputs.base_branch }}"

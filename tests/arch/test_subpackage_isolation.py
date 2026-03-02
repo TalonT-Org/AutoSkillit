@@ -415,14 +415,14 @@ def test_no_yaml_safe_load_in_migration_engine() -> None:
 
 
 def test_pytest_asyncio_version_bound() -> None:
-    """P11-2: pytest-asyncio lower bound must match the published 0.x stable series."""
+    """P11-2: pytest-asyncio lower bound must be >=1.0.0 (stable asyncio_mode API)."""
     import tomllib
 
     pyproject = Path(__file__).parent.parent.parent / "pyproject.toml"
     data = tomllib.loads(pyproject.read_text())
     deps = data["project"]["optional-dependencies"]["dev"]
     asyncio_dep = next(d for d in deps if d.startswith("pytest-asyncio"))
-    assert ">=0.23" in asyncio_dep, f"Expected pytest-asyncio>=0.23.x, got: {asyncio_dep!r}"
+    assert ">=1.0.0" in asyncio_dep, f"Expected pytest-asyncio>=1.0.0, got: {asyncio_dep!r}"
 
 
 def test_severity_not_defined_locally_in_recipe_validator() -> None:

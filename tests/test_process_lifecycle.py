@@ -9,7 +9,10 @@ NO MOCKS — that's the whole point.
 
 from __future__ import annotations
 
-import asyncio
+import ast
+import dataclasses
+import inspect
+import re
 import shutil
 import sys
 import textwrap
@@ -17,6 +20,7 @@ import time
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import anyio
 import psutil
 import pytest
 
@@ -28,6 +32,8 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.headless import _build_skill_result, _recover_from_separate_marker
 from autoskillit.execution.process import (
+    DefaultSubprocessRunner,
+    RaceSignals,
     _has_active_api_connection,
     _heartbeat,
     _jsonl_contains_marker,
@@ -42,7 +48,6 @@ from autoskillit.execution.process import (
     resolve_termination,
     run_managed_async,
     run_managed_sync,
-    scan_done_signals,
 )
 from autoskillit.execution.session import ClaudeSessionResult
 
@@ -305,11 +310,22 @@ SLEEP_FOREVER_NO_OUTPUT_SCRIPT = textwrap.dedent("""\
     time.sleep(9999)
 """)
 
+# Script that writes its PID to sys.argv[1] then sleeps forever.
+# Used by TestCancellationKillsProcess.test_cancellation_kills_process_tree
+# to verify the subprocess is dead after anyio cancel scope fires.
+_WRITE_PID_THEN_SLEEP_SCRIPT = textwrap.dedent("""\
+    import os, sys, time
+    pid_file = sys.argv[1]
+    with open(pid_file, "w") as f:
+        f.write(str(os.getpid()))
+    time.sleep(3600)
+""")
+
 
 class TestTempFileIOEliminatesPipeBlocking:
     """Temp file I/O prevents pipe-inheritance blocking."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_child_holds_fd_does_not_block_read(self, tmp_path):
         """Parent exits, child holds FD — temp file read doesn't block."""
         script = tmp_path / "parent_child.py"
@@ -346,7 +362,7 @@ class TestTempFileIOEliminatesPipeBlocking:
 class TestProcessTreeKill:
     """psutil-based kill terminates all descendants."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_process_tree_kill_terminates_all_descendants(self, tmp_path):
         """Spawn root + 2 children, kill_process_tree kills all 3."""
         script = tmp_path / "tree.py"
@@ -368,7 +384,7 @@ class TestProcessTreeKill:
                 pids.append(int(line.split(":")[1]))
 
         # All PIDs should be dead — use _wait_process_dead to avoid the flaky
-        # asyncio.sleep(0.5) + pid_exists() pattern that races kernel cleanup.
+        # anyio.sleep(0.5) + pid_exists() pattern that races kernel cleanup.
         # Guard: run_managed_async calls wait_procs() which reaps zombies, so the
         # PID may already be gone by the time we construct psutil.Process(pid).
         for pid in pids:
@@ -379,13 +395,13 @@ class TestProcessTreeKill:
             dead = await _wait_process_dead(proc, timeout=5.0)
             assert dead, f"PID {pid} still alive 5s after kill"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_process_tree_kill_pid_dead_without_timing_assumption(self, tmp_path):
         """Killing a process must be verifiable without a fixed sleep.
 
         Uses _wait_process_dead() to wait for PID reaping without relying on
         wall-clock time. This is the event-driven replacement for the pattern:
-            await asyncio.sleep(0.5)
+            await anyio.sleep(0.5)
             assert not psutil.pid_exists(pid)
         """
         script = tmp_path / "hang.py"
@@ -410,7 +426,7 @@ class TestProcessTreeKill:
 class TestTimeoutKillsHangingProcess:
     """Timeout fires and kills when process hangs."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_timeout_fires_and_kills_hanging_process(self, tmp_path):
         """Process sleeps forever, timeout kills it, partial output returned."""
         script = tmp_path / "hang.py"
@@ -428,7 +444,7 @@ class TestTimeoutKillsHangingProcess:
         assert elapsed < 5, f"Should return within ~2s timeout, took {elapsed:.1f}s"
         assert "before hang" in result.stdout  # Partial output captured
         # Process should be dead — use _wait_process_dead to avoid the flaky
-        # asyncio.sleep(0.5) + pid_exists() pattern that races kernel cleanup.
+        # anyio.sleep(0.5) + pid_exists() pattern that races kernel cleanup.
         # Guard: run_managed_async calls wait_procs() which may already reap the zombie.
         try:
             proc = psutil.Process(result.pid)
@@ -441,7 +457,7 @@ class TestTimeoutKillsHangingProcess:
 class TestNormalCompletion:
     """Normal subprocess completion captures all output."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_normal_completion_captures_full_output(self, tmp_path):
         """Process writes multi-line output and exits — all captured."""
         script = tmp_path / "clean.py"
@@ -478,7 +494,7 @@ class TestNormalCompletion:
 class TestStdinInput:
     """Stdin input via temp file works correctly."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_stdin_input_roundtrip(self, tmp_path):
         """Pass input via temp file, verify it's received and echoed."""
         script = tmp_path / "echo.py"
@@ -539,7 +555,7 @@ class TestKillProcessTreeUnit:
 class TestHeartbeatDetectsCompletion:
     """Stdout heartbeat detects completion and triggers kill."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_heartbeat_detects_completion_and_kills(self, tmp_path):
         """Script writes result JSON then hangs — heartbeat detects and returns."""
         script = tmp_path / "result_hang.py"
@@ -560,7 +576,7 @@ class TestHeartbeatDetectsCompletion:
         assert elapsed < 10, f"Heartbeat should detect within ~5s, took {elapsed:.1f}s"
         assert '"type": "result"' in result.stdout or '"type":"result"' in result.stdout
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_heartbeat_ignores_non_matching_output(self, tmp_path):
         """Script writes non-matching output — heartbeat doesn't fire, backstop does."""
         script = tmp_path / "partial_hang.py"
@@ -581,7 +597,7 @@ class TestHeartbeatDetectsCompletion:
 class TestNoHeartbeatPreservesExistingBehavior:
     """Without heartbeat, behavior matches original blind-wait."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_no_heartbeat_preserves_existing_behavior(self, tmp_path):
         """No heartbeat marker — same hanging script, same timeout behavior."""
         script = tmp_path / "hang.py"
@@ -600,10 +616,9 @@ class TestNoHeartbeatPreservesExistingBehavior:
 class TestSessionLogMonitor:
     """Session log monitor detects completion and staleness."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_session_log_monitor_detects_completion(self, tmp_path):
         """Session log with completion marker in assistant record returns 'completion'."""
-        import asyncio
         import json
 
         log_dir = tmp_path / "session_logs"
@@ -619,7 +634,7 @@ class TestSessionLogMonitor:
         )
 
         async def append_marker():
-            await asyncio.sleep(1.0)
+            await anyio.sleep(1.0)
             with session_file.open("a") as f:
                 f.write(
                     json.dumps(
@@ -634,15 +649,22 @@ class TestSessionLogMonitor:
                     + "\n"
                 )
 
-        task = asyncio.create_task(append_marker())
-        result = await _session_log_monitor(
-            log_dir, "%%AUTOSKILLIT_COMPLETE%%", stale_threshold=30, spawn_time=spawn_time
-        )
-        await task
+        monitor_result: list[str] = []
 
-        assert result == "completion"
+        async def _run_monitor() -> None:
+            monitor_result.append(
+                await _session_log_monitor(
+                    log_dir, "%%AUTOSKILLIT_COMPLETE%%", stale_threshold=30, spawn_time=spawn_time
+                )
+            )
 
-    @pytest.mark.asyncio
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(append_marker)
+            tg.start_soon(_run_monitor)
+
+        assert monitor_result[0] == "completion"
+
+    @pytest.mark.anyio
     async def test_session_log_monitor_detects_staleness(self, tmp_path):
         """Session log that stops being written to returns 'stale'."""
         import json
@@ -671,10 +693,9 @@ class TestSessionLogMonitor:
         assert result == "stale"
         assert elapsed < 1.0, f"Staleness should fire after ~0.2s, took {elapsed:.1f}s"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_staleness_resets_on_activity(self, tmp_path):
         """Session log that keeps getting written to does not fire staleness."""
-        import asyncio
         import json
 
         log_dir = tmp_path / "session_logs"
@@ -689,7 +710,7 @@ class TestSessionLogMonitor:
 
         async def keep_writing():
             for i in range(5):
-                await asyncio.sleep(0.05)
+                await anyio.sleep(0.05)
                 with session_file.open("a") as f:
                     f.write(
                         json.dumps(
@@ -701,24 +722,32 @@ class TestSessionLogMonitor:
                         + "\n"
                     )
             # After writing stops, staleness should eventually fire
-            await asyncio.sleep(0.5)
+            await anyio.sleep(0.5)
 
-        writer = asyncio.create_task(keep_writing())
+        monitor_result: list[str] = []
 
-        result = await _session_log_monitor(
-            log_dir,
-            "NONEXISTENT_MARKER",
-            stale_threshold=0.3,
-            spawn_time=spawn_time,
-            _phase1_poll=0.01,
-            _phase2_poll=0.05,
-        )
-        writer.cancel()
+        async with anyio.create_task_group() as tg:
+
+            async def _run_monitor() -> None:
+                monitor_result.append(
+                    await _session_log_monitor(
+                        log_dir,
+                        "NONEXISTENT_MARKER",
+                        stale_threshold=0.3,
+                        spawn_time=spawn_time,
+                        _phase1_poll=0.01,
+                        _phase2_poll=0.05,
+                    )
+                )
+                tg.cancel_scope.cancel()  # cancel writer once monitor fires
+
+            tg.start_soon(keep_writing)
+            tg.start_soon(_run_monitor)
 
         # Staleness should have fired AFTER the writing stopped, not during
-        assert result == "stale"
+        assert monitor_result[0] == "stale"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_monitor_ignores_marker_in_non_assistant_records(self, tmp_path):
         """Monitor must NOT fire on completion marker in non-assistant records.
 
@@ -726,8 +755,6 @@ class TestSessionLogMonitor:
         the completion marker) into a queue-operation/enqueue record at byte 0.
         The monitor should ignore it. Only an assistant-type record triggers.
         """
-        import asyncio
-
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()
         spawn_time = time.time() - 1
@@ -748,7 +775,7 @@ class TestSessionLogMonitor:
         session_file.write_text(enqueue_record + "\n")
 
         poll_count = 0
-        polls_done = asyncio.Event()
+        polls_done = anyio.Event()
 
         def on_poll() -> None:
             nonlocal poll_count
@@ -756,37 +783,44 @@ class TestSessionLogMonitor:
             if poll_count >= 5:
                 polls_done.set()
 
-        monitor_task = asyncio.create_task(
-            _session_log_monitor(
-                log_dir,
-                marker,
-                stale_threshold=30,
-                spawn_time=spawn_time,
-                _phase1_poll=0.01,
-                _phase2_poll=0.05,
-                _on_poll=on_poll,
+        monitor_result: list[str] = []
+
+        async with anyio.create_task_group() as tg:
+
+            async def _run_monitor() -> None:
+                monitor_result.append(
+                    await _session_log_monitor(
+                        log_dir,
+                        marker,
+                        stale_threshold=30,
+                        spawn_time=spawn_time,
+                        _phase1_poll=0.01,
+                        _phase2_poll=0.05,
+                        _on_poll=on_poll,
+                    )
+                )
+
+            tg.start_soon(_run_monitor)
+            # Monitor should NOT fire on the enqueue record — wait for 5 confirmed poll cycles
+            # instead of a fixed sleep, which races event loop starvation under xdist -n 4
+            with anyio.fail_after(10.0):
+                await polls_done.wait()
+            assert not monitor_result, "Monitor fired on non-assistant record — false-fire bug"
+
+            # Now append an assistant record with the marker — should fire
+            assistant_record = json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"role": "assistant", "content": f"Done\n\n{marker}"},
+                }
             )
-        )
+            with session_file.open("a") as f:
+                f.write(assistant_record + "\n")
+            # task group awaits _run_monitor to detect assistant record and complete
 
-        # Monitor should NOT fire on the enqueue record — wait for 5 confirmed poll cycles
-        # instead of a fixed sleep, which races event loop starvation under xdist -n 4
-        await asyncio.wait_for(polls_done.wait(), timeout=10.0)
-        assert not monitor_task.done(), "Monitor fired on non-assistant record — false-fire bug"
+        assert monitor_result[0] == "completion"
 
-        # Now append an assistant record with the marker — should fire
-        assistant_record = json.dumps(
-            {
-                "type": "assistant",
-                "message": {"role": "assistant", "content": f"Done\n\n{marker}"},
-            }
-        )
-        with session_file.open("a") as f:
-            f.write(assistant_record + "\n")
-
-        result = await asyncio.wait_for(monitor_task, timeout=2)
-        assert result == "completion"
-
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_monitor_realistic_jsonl_sequence(self, tmp_path):
         """Monitor correctly handles the realistic 3-record JSONL sequence.
 
@@ -797,7 +831,6 @@ class TestSessionLogMonitor:
 
         Only record 3 should trigger completion.
         """
-        import asyncio
         import json
 
         log_dir = tmp_path / "session_logs"
@@ -828,7 +861,7 @@ class TestSessionLogMonitor:
         session_file.write_text(records_12)
 
         poll_count = 0
-        polls_done = asyncio.Event()
+        polls_done = anyio.Event()
 
         def on_poll() -> None:
             nonlocal poll_count
@@ -836,59 +869,65 @@ class TestSessionLogMonitor:
             if poll_count >= 5:
                 polls_done.set()
 
-        monitor_task = asyncio.create_task(
-            _session_log_monitor(
-                log_dir,
-                marker,
-                stale_threshold=30,
-                spawn_time=spawn_time,
-                _phase1_poll=0.01,
-                _phase2_poll=0.05,
-                _on_poll=on_poll,
+        monitor_result: list[str] = []
+
+        async with anyio.create_task_group() as tg:
+
+            async def _run_monitor() -> None:
+                monitor_result.append(
+                    await _session_log_monitor(
+                        log_dir,
+                        marker,
+                        stale_threshold=30,
+                        spawn_time=spawn_time,
+                        _phase1_poll=0.01,
+                        _phase2_poll=0.05,
+                        _on_poll=on_poll,
+                    )
+                )
+
+            tg.start_soon(_run_monitor)
+            # Wait for 5 confirmed poll cycles before asserting no early fire — replaces
+            # the fixed anyio.sleep(0.5) that races event loop starvation under xdist -n 4
+            with anyio.fail_after(10.0):
+                await polls_done.wait()
+            assert not monitor_result, "Monitor fired on user/enqueue records"
+
+            # Write record 3 (assistant with marker as standalone line)
+            assistant_record = json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"role": "assistant", "content": f"All done\n\n{marker}"},
+                }
             )
-        )
+            with session_file.open("a") as f:
+                f.write(assistant_record + "\n")
+            # task group awaits _run_monitor to detect assistant record and complete
 
-        # Wait for 5 confirmed poll cycles before asserting no early fire — replaces
-        # the fixed asyncio.sleep(0.5) that races event loop starvation under xdist -n 4
-        await asyncio.wait_for(polls_done.wait(), timeout=10.0)
-        assert not monitor_task.done(), "Monitor fired on user/enqueue records"
+        assert monitor_result[0] == "completion"
 
-        # Write record 3 (assistant with marker as standalone line)
-        assistant_record = json.dumps(
-            {
-                "type": "assistant",
-                "message": {"role": "assistant", "content": f"All done\n\n{marker}"},
-            }
-        )
-        with session_file.open("a") as f:
-            f.write(assistant_record + "\n")
-
-        result = await asyncio.wait_for(monitor_task, timeout=2)
-        assert result == "completion"
-
+    @pytest.mark.anyio
     async def test_phase1_timeout_on_missing_log_dir(self, tmp_path: Path) -> None:
         """T4: If no JSONL file appears within _phase1_timeout seconds, return 'stale'."""
         nonexistent_dir = tmp_path / "no_such_subdir"
-        result = await asyncio.wait_for(
-            _session_log_monitor(
+        with anyio.fail_after(5.0):
+            result = await _session_log_monitor(
                 nonexistent_dir,
                 completion_marker="%%ORDER_UP%%",
                 stale_threshold=60.0,
                 spawn_time=time.time(),
                 _phase1_poll=0.05,
                 _phase1_timeout=0.3,
-            ),
-            timeout=5.0,
-        )
+            )
         assert result == "stale"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_monitor_no_fire_on_wrong_type_deterministic(self, tmp_path):
         """Assert monitor does not fire based on confirmed poll count, not wall-clock.
 
         Uses the _on_poll callback to count confirmed phase-2 poll iterations, then
         asserts the monitor has not fired. This is deterministically correct regardless
-        of CPU load, replacing the wall-clock asyncio.sleep() pattern.
+        of CPU load, replacing the wall-clock anyio.sleep() pattern.
         """
         import json
 
@@ -902,7 +941,7 @@ class TestSessionLogMonitor:
         session_file.write_text(enqueue_record + "\n")
 
         poll_count = 0
-        min_polls_event = asyncio.Event()
+        min_polls_event = anyio.Event()
 
         def on_poll() -> None:
             nonlocal poll_count
@@ -910,27 +949,31 @@ class TestSessionLogMonitor:
             if poll_count >= 5:
                 min_polls_event.set()
 
-        monitor_task = asyncio.create_task(
-            _session_log_monitor(
-                log_dir,
-                marker,
-                stale_threshold=30,
-                spawn_time=spawn_time,
-                _phase1_poll=0.01,
-                _phase2_poll=0.05,
-                _on_poll=on_poll,
+        monitor_result: list[str] = []
+
+        async with anyio.create_task_group() as tg:
+
+            async def _run_monitor() -> None:
+                monitor_result.append(
+                    await _session_log_monitor(
+                        log_dir,
+                        marker,
+                        stale_threshold=30,
+                        spawn_time=spawn_time,
+                        _phase1_poll=0.01,
+                        _phase2_poll=0.05,
+                        _on_poll=on_poll,
+                    )
+                )
+
+            tg.start_soon(_run_monitor)
+            # Wait for 5 confirmed polls — regardless of wall-clock time
+            with anyio.fail_after(10.0):
+                await min_polls_event.wait()
+            assert not monitor_result, (
+                "Monitor fired on non-assistant record after 5 confirmed polls"
             )
-        )
-
-        # Wait for 5 confirmed polls — regardless of wall-clock time
-        await asyncio.wait_for(min_polls_event.wait(), timeout=10.0)
-        assert not monitor_task.done(), (
-            "Monitor fired on non-assistant record after 5 confirmed polls"
-        )
-
-        monitor_task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await monitor_task
+            tg.cancel_scope.cancel()  # replaces monitor_task.cancel()
 
 
 class TestJsonlContainsMarker:
@@ -990,12 +1033,11 @@ class TestJsonlContainsMarker:
 class TestHeartbeatStructuredParsing:
     """Heartbeat uses structured parsing to avoid false-fires."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_heartbeat_ignores_marker_in_string_values(self, tmp_path):
         """Heartbeat must not fire when the marker text appears as a string
         value inside a non-result record (e.g., model discussing JSON formats).
         """
-        import asyncio
         import json
 
         stdout_path = tmp_path / "stdout.tmp"
@@ -1011,7 +1053,7 @@ class TestHeartbeatStructuredParsing:
         stdout_path.write_text(assistant_msg + "\n")
 
         poll_count = 0
-        polls_done = asyncio.Event()
+        polls_done = anyio.Event()
 
         def on_poll() -> None:
             nonlocal poll_count
@@ -1019,39 +1061,48 @@ class TestHeartbeatStructuredParsing:
             if poll_count >= 5:
                 polls_done.set()
 
-        heartbeat_task = asyncio.create_task(
-            _heartbeat(stdout_path, '"type":"result"', _poll_interval=0.05, _on_poll=on_poll)
-        )
+        heartbeat_result: list[str] = []
 
-        # Wait for 5 confirmed poll cycles before asserting no early fire — replaces
-        # the fixed asyncio.sleep(0.5) that races event loop starvation under xdist -n 4
-        await asyncio.wait_for(polls_done.wait(), timeout=10.0)
-        assert not heartbeat_task.done(), (
-            "Heartbeat fired on non-result record containing marker text"
-        )
+        async with anyio.create_task_group() as tg:
 
-        # Now write an actual result record (compact format matching Claude CLI)
-        result_record = json.dumps(
-            {
-                "type": "result",
-                "subtype": "success",
-                "is_error": False,
-                "result": "done",
-                "session_id": "s1",
-            },
-            separators=(",", ":"),
-        )
-        with stdout_path.open("a") as f:
-            f.write(result_record + "\n")
+            async def _run_heartbeat() -> None:
+                heartbeat_result.append(
+                    await _heartbeat(
+                        stdout_path, '"type":"result"', _poll_interval=0.05, _on_poll=on_poll
+                    )
+                )
 
-        result = await asyncio.wait_for(heartbeat_task, timeout=2)
-        assert result == "completion"
+            tg.start_soon(_run_heartbeat)
+            # Wait for 5 confirmed poll cycles before asserting no early fire — replaces
+            # the fixed anyio.sleep(0.5) that races event loop starvation under xdist -n 4
+            with anyio.fail_after(10.0):
+                await polls_done.wait()
+            assert not heartbeat_result, (
+                "Heartbeat fired on non-result record containing marker text"
+            )
+
+            # Now write an actual result record (compact format matching Claude CLI)
+            result_record = json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "done",
+                    "session_id": "s1",
+                },
+                separators=(",", ":"),
+            )
+            with stdout_path.open("a") as f:
+                f.write(result_record + "\n")
+            # task group awaits _run_heartbeat to detect result record and complete
+
+        assert heartbeat_result[0] == "completion"
 
 
 class TestPtyWrapper:
     """PTY wrapping provides a TTY to the subprocess."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     @pytest.mark.skipif(
         shutil.which("script") is None,
         reason="script binary not available (util-linux required)",
@@ -1071,7 +1122,7 @@ class TestPtyWrapper:
         assert result.termination != TerminationReason.TIMED_OUT
         assert "True" in result.stdout
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_no_pty_shows_no_tty(self, tmp_path):
         """Without pty_mode, subprocess does not see a TTY on stdout."""
         script = tmp_path / "isatty.py"
@@ -1087,7 +1138,7 @@ class TestPtyWrapper:
         assert result.termination != TerminationReason.TIMED_OUT
         assert "False" in result.stdout
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     @pytest.mark.skipif(
         shutil.which("script") is None,
         reason="script binary not available (util-linux required)",
@@ -1118,39 +1169,75 @@ class TestPtyWrapper:
 class TestCancellationKillsProcess:
     """Cancellation of run_managed_async kills the subprocess."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_cancellation_kills_process(self, tmp_path):
         """Cancel run_managed_async — process should be cleaned up."""
-        import asyncio
-
         script = tmp_path / "sleep.py"
         script.write_text("import time; time.sleep(3600)")
 
-        task = asyncio.create_task(
-            run_managed_async(
-                [sys.executable, str(script)],
-                cwd=tmp_path,
-                timeout=60,
-            )
-        )
+        async with anyio.create_task_group() as tg:
 
-        await asyncio.sleep(1.0)
-        task.cancel()
+            async def _run() -> None:
+                await run_managed_async(
+                    [sys.executable, str(script)],
+                    cwd=tmp_path,
+                    timeout=60,
+                )
 
-        with pytest.raises(asyncio.CancelledError):
-            await task
+            tg.start_soon(_run)
+            await anyio.sleep(1.0)
+            tg.cancel_scope.cancel()  # replaces task.cancel()
 
         # Give the kernel a moment
-        await asyncio.sleep(0.5)
+        await anyio.sleep(0.5)
+
+    @pytest.mark.anyio
+    async def test_cancellation_kills_process_tree(self, tmp_path):
+        """Cancel run_managed_async — subprocess must be confirmed dead (REQ-BEH-010).
+
+        Captures the subprocess PID from a pid file the child writes before
+        sleeping, then verifies the process is no longer alive after the
+        cancel scope fires.
+        """
+        script = tmp_path / "pid_sleep.py"
+        script.write_text(_WRITE_PID_THEN_SLEEP_SCRIPT)
+        pid_file = tmp_path / "pid.txt"
+
+        async with anyio.create_task_group() as tg:
+
+            async def _run() -> None:
+                await run_managed_async(
+                    [sys.executable, str(script), str(pid_file)],
+                    cwd=tmp_path,
+                    timeout=60,
+                )
+
+            tg.start_soon(_run)
+
+            # Poll until pid_file appears (up to 2s)
+            deadline = time.monotonic() + 2.0
+            while not pid_file.exists():
+                if time.monotonic() > deadline:
+                    pytest.fail("pid_file never appeared within 2s")
+                await anyio.sleep(0.01)
+
+            tg.cancel_scope.cancel()
+
+        pid = int(pid_file.read_text().strip())
+        try:
+            proc = psutil.Process(pid)
+        except psutil.NoSuchProcess:
+            return  # Already reaped — process is definitely dead
+        dead = await _wait_process_dead(proc, timeout=5.0)
+        assert dead, f"PID {pid} still alive 5s after cancel"
 
 
 class TestAsyncKillDoesNotBlockLoop:
     """async_kill_process_tree doesn't block the event loop."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_async_kill_does_not_block_loop(self, tmp_path):
         """A concurrent coroutine runs while kill is in progress."""
-        import asyncio
         import subprocess as sp
 
         proc = sp.Popen(
@@ -1163,13 +1250,12 @@ class TestAsyncKillDoesNotBlockLoop:
 
         async def concurrent_work():
             nonlocal concurrent_ran
-            await asyncio.sleep(0.1)
+            await anyio.sleep(0.1)
             concurrent_ran = True
 
-        await asyncio.gather(
-            async_kill_process_tree(pid),
-            concurrent_work(),
-        )
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(async_kill_process_tree, pid)
+            tg.start_soon(concurrent_work)
 
         assert concurrent_ran, "Concurrent coroutine should run during async kill"
         proc.wait()
@@ -1178,7 +1264,7 @@ class TestAsyncKillDoesNotBlockLoop:
 class TestDualWinnerRace:
     """When wait_task and session_monitor both complete, process exit wins."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_wait_task_wins_over_stale_monitor(self, tmp_path):
         """When process exits AND monitor reports stale simultaneously,
         the process exit takes priority — stale must be False."""
@@ -1200,7 +1286,7 @@ class TestDualWinnerRace:
         assert result.termination != TerminationReason.STALE
         assert result.returncode == 0
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_wait_task_wins_over_completion_monitor(self, tmp_path):
         """Process exit + monitor completion simultaneously — use process exit."""
         result = await run_managed_async(
@@ -1211,68 +1297,43 @@ class TestDualWinnerRace:
         assert result.termination != TerminationReason.STALE
         assert result.termination != TerminationReason.TIMED_OUT
 
-    @pytest.mark.asyncio
-    async def test_scan_done_signals_wait_and_channel_b_completion_simultaneous(self):
-        """Test 1A: scan_done_signals captures wait_task + Channel B completion
-        simultaneously in done. resolve_termination preserves CHANNEL_B signal."""
-        loop = asyncio.get_running_loop()
-        wait_future = loop.create_future()
-        wait_future.set_result(0)
-        monitor_future = loop.create_future()
-        monitor_future.set_result("completion")
-
-        proc = Mock()
-        proc.returncode = 0
-
-        done = {wait_future, monitor_future}
-        signals = scan_done_signals(done, wait_future, None, monitor_future, proc)
-
-        assert signals.process_exited is True
-        assert signals.channel_b_status == "completion"
-        assert signals.channel_a_confirmed is False
-
+    def test_process_exit_and_channel_b_completion_simultaneous(self):
+        """Test 1A: Process exit + Channel B completion simultaneously.
+        resolve_termination preserves CHANNEL_B signal."""
+        signals = RaceSignals(
+            process_exited=True,
+            process_returncode=0,
+            channel_a_confirmed=False,
+            channel_b_status="completion",
+        )
         termination, channel = resolve_termination(signals)
         assert termination == TerminationReason.NATURAL_EXIT
         assert channel == ChannelConfirmation.CHANNEL_B
 
-    @pytest.mark.asyncio
-    async def test_scan_done_signals_wait_and_heartbeat_simultaneous(self):
-        """Test 1B: scan_done_signals captures wait_task + heartbeat_task (Channel A)
-        simultaneously in done. resolve_termination preserves CHANNEL_A signal."""
-        loop = asyncio.get_running_loop()
-        wait_future = loop.create_future()
-        wait_future.set_result(0)
-        heartbeat_future = loop.create_future()
-        heartbeat_future.set_result("completion")
-
-        proc = Mock()
-        proc.returncode = 0
-
-        done = {wait_future, heartbeat_future}
-        signals = scan_done_signals(done, wait_future, heartbeat_future, None, proc)
-
-        assert signals.process_exited is True
-        assert signals.channel_a_confirmed is True
-        assert signals.channel_b_status is None
-
+    def test_process_exit_and_channel_a_simultaneous(self):
+        """Test 1B: Process exit + Channel A (heartbeat) simultaneously.
+        resolve_termination preserves CHANNEL_A signal."""
+        signals = RaceSignals(
+            process_exited=True,
+            process_returncode=0,
+            channel_a_confirmed=True,
+            channel_b_status=None,
+        )
         termination, channel = resolve_termination(signals)
         assert termination == TerminationReason.NATURAL_EXIT
         assert channel == ChannelConfirmation.CHANNEL_A
 
 
-class TestScanDoneSignalsResolveTermination:
-    """Pure-function unit tests for scan_done_signals and resolve_termination.
+class TestResolveTerminationMatrix:
+    """Pure-function unit tests for resolve_termination.
 
-    Exhaustively exercises all signal combinations without subprocess involvement.
-    Uses asyncio.Future objects with pre-set results as mock tasks.
+    Builds RaceSignals directly (no scan_done_signals scaffold).
     xdist-safe: no shared state, all state local.
     """
 
-    @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "process_exited,channel_a_in_done,channel_b_result,expected_term,expected_chan",
+        "process_exited,channel_a_confirmed,channel_b_result,expected_term,expected_chan",
         [
-            # process_exited=True cases
             (True, False, None, TerminationReason.NATURAL_EXIT, ChannelConfirmation.UNMONITORED),
             (True, True, None, TerminationReason.NATURAL_EXIT, ChannelConfirmation.CHANNEL_A),
             (
@@ -1297,7 +1358,6 @@ class TestScanDoneSignalsResolveTermination:
                 ChannelConfirmation.UNMONITORED,
             ),
             (True, True, "stale", TerminationReason.NATURAL_EXIT, ChannelConfirmation.CHANNEL_A),
-            # process_exited=False cases
             (False, True, None, TerminationReason.COMPLETED, ChannelConfirmation.CHANNEL_A),
             (
                 False,
@@ -1317,46 +1377,21 @@ class TestScanDoneSignalsResolveTermination:
             (False, True, "stale", TerminationReason.STALE, ChannelConfirmation.CHANNEL_A),
         ],
     )
-    async def test_resolve_termination_matrix(
+    def test_resolve_termination_matrix(
         self,
         process_exited,
-        channel_a_in_done,
+        channel_a_confirmed,
         channel_b_result,
         expected_term,
         expected_chan,
     ):
         """Parametrized matrix: all signal combinations → correct termination/channel."""
-        loop = asyncio.get_running_loop()
-
-        wait_future = loop.create_future()
-        wait_future.set_result(0)
-
-        # Always create heartbeat_future; only add to done when channel_a_in_done=True
-        heartbeat_future = loop.create_future()
-        heartbeat_future.set_result("completion")
-
-        monitor_future = None
-        if channel_b_result is not None:
-            monitor_future = loop.create_future()
-            monitor_future.set_result(channel_b_result)
-
-        proc = Mock()
-        proc.returncode = 0 if process_exited else None
-
-        done: set = set()
-        if process_exited:
-            done.add(wait_future)
-        if channel_a_in_done:
-            done.add(heartbeat_future)
-        if channel_b_result is not None and monitor_future is not None:
-            done.add(monitor_future)
-
-        signals = scan_done_signals(done, wait_future, heartbeat_future, monitor_future, proc)
-
-        assert signals.process_exited == process_exited
-        assert signals.channel_a_confirmed == channel_a_in_done
-        assert signals.channel_b_status == channel_b_result
-
+        signals = RaceSignals(
+            process_exited=process_exited,
+            process_returncode=0 if process_exited else None,
+            channel_a_confirmed=channel_a_confirmed,
+            channel_b_status=channel_b_result,
+        )
         termination, channel = resolve_termination(signals)
         assert termination == expected_term
         assert channel == expected_chan
@@ -1486,7 +1521,7 @@ class TestJsonlFieldLevelMarkerMatching:
 class TestHeartbeatTerminationReason:
     """Heartbeat kill produces COMPLETED termination reason."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_heartbeat_kill_sets_completed_termination(self, tmp_path):
         """When heartbeat detects result and kills the process, termination is COMPLETED."""
         script = tmp_path / "result_hang.py"
@@ -1700,15 +1735,13 @@ class TestHasActiveApiConnection:
 class TestSessionLogMonitorStaleSuppressionGate:
     """_session_log_monitor suppresses stale when process has an active port-443 connection."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_suppresses_stale_when_port_443_connection_active(self, tmp_path):
         """
         File stops growing. Monitor reaches stale_threshold. But process has
         an ESTABLISHED port-443 connection → suppression fires, clock resets,
         monitor continues. On second check (connection dropped) → stale fires.
         """
-        import asyncio
-
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10
@@ -1723,8 +1756,8 @@ class TestSessionLogMonitorStaleSuppressionGate:
             "autoskillit.execution.process._has_active_api_connection",
             side_effect=side_effect,
         ):
-            result = await asyncio.wait_for(
-                _session_log_monitor(
+            with anyio.fail_after(5.0):
+                result = await _session_log_monitor(
                     tmp_path,
                     "DONE",
                     stale_threshold=0.05,
@@ -1732,22 +1765,18 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     pid=99999,
                     _phase1_poll=0.01,
                     _phase2_poll=0.05,
-                ),
-                timeout=5.0,
-            )
+                )
         assert result == "stale"
         assert call_count["n"] == 2
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_fires_stale_immediately_when_no_api_connection(self, tmp_path):
         """Standard stale: file silent, no pid provided, stale fires as before."""
-        import asyncio
-
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10
-        result = await asyncio.wait_for(
-            _session_log_monitor(
+        with anyio.fail_after(2.0):
+            result = await _session_log_monitor(
                 tmp_path,
                 "DONE",
                 stale_threshold=0.05,
@@ -1755,23 +1784,19 @@ class TestSessionLogMonitorStaleSuppressionGate:
                 # pid omitted (defaults to None)
                 _phase1_poll=0.01,
                 _phase2_poll=0.05,
-            ),
-            timeout=2.0,
-        )
+            )
         assert result == "stale"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_fires_stale_when_pid_is_none_regardless_of_tcp(self, tmp_path):
         """pid=None bypasses TCP check entirely — existing behavior preserved."""
-        import asyncio
-
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10
 
         with patch("autoskillit.execution.process._has_active_api_connection") as mock_tcp:
-            result = await asyncio.wait_for(
-                _session_log_monitor(
+            with anyio.fail_after(2.0):
+                result = await _session_log_monitor(
                     tmp_path,
                     "DONE",
                     stale_threshold=0.05,
@@ -1779,17 +1804,13 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     pid=None,
                     _phase1_poll=0.01,
                     _phase2_poll=0.05,
-                ),
-                timeout=2.0,
-            )
+                )
         assert result == "stale"
         mock_tcp.assert_not_called()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_suppression_emits_warning(self, tmp_path, capsys):
         """A suppression event must log a warning with elapsed time."""
-        import asyncio
-
         import structlog
 
         session_file = tmp_path / "session.jsonl"
@@ -1807,8 +1828,8 @@ class TestSessionLogMonitorStaleSuppressionGate:
             side_effect=side_effect,
         ):
             with structlog.testing.capture_logs() as logs:
-                await asyncio.wait_for(
-                    _session_log_monitor(
+                with anyio.fail_after(5.0):
+                    await _session_log_monitor(
                         tmp_path,
                         "DONE",
                         stale_threshold=0.05,
@@ -1816,9 +1837,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                         pid=99999,
                         _phase1_poll=0.01,
                         _phase2_poll=0.05,
-                    ),
-                    timeout=5.0,
-                )
+                    )
         # capture_logs() intercepts when structlog is in default state.
         # In a parallel worker where configure_logging() ran in a prior test,
         # bound loggers may use a stale processor reference and write to stdout.
@@ -1836,7 +1855,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
 class TestRunManagedAsyncPassesPidToMonitor:
     """Verify that run_managed_async passes proc.pid to _session_log_monitor."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_pid_passed_to_session_monitor(self, tmp_path):
         """
         Spawn a real subprocess. Patch _session_log_monitor to capture args.
@@ -1872,7 +1891,7 @@ class TestRunManagedAsyncPassesPidToMonitor:
 class TestChannelBDrainWait:
     """Channel B (session monitor) winning before Channel A triggers bounded drain wait."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_b_wins_then_channel_a_confirms_within_drain(self, tmp_path):
         """Channel B fires first; drain wait allows Channel A to confirm stdout data.
 
@@ -1907,7 +1926,7 @@ class TestChannelBDrainWait:
         # Drain wait confirmed Channel A fired: stdout is non-empty
         assert result.stdout.strip()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_b_wins_drain_timeout_still_kills(self, tmp_path):
         """Channel B fires; Channel A never fires; drain times out and process is killed.
 
@@ -1938,7 +1957,7 @@ class TestChannelBDrainWait:
         # Drain timed out: CLI hung and never flushed its result record
         assert not result.stdout.strip()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_a_wins_unchanged_behavior(self, tmp_path):
         """Channel A (heartbeat) wins before any session monitor: no drain wait needed.
 
@@ -1962,7 +1981,7 @@ class TestChannelBDrainWait:
         assert result.termination == TerminationReason.COMPLETED
         assert result.stdout.strip()  # Channel A confirmed: stdout is non-empty
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_b_drain_timeout_produces_channel_b_confirmation(self, tmp_path):
         """Channel B wins the race; drain timeout expires without Channel A confirming.
 
@@ -1989,7 +2008,7 @@ class TestChannelBDrainWait:
         assert result.termination == TerminationReason.COMPLETED
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_a_wins_produces_channel_a_confirmation(self, tmp_path):
         """Channel A (heartbeat) wins; channel_confirmation must be CHANNEL_A.
 
@@ -2011,7 +2030,7 @@ class TestChannelBDrainWait:
         assert result.termination == TerminationReason.COMPLETED
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_b_then_a_empty_result_data_confirmed_is_false(self, tmp_path):
         """Channel B fires (%%ORDER_UP%% in JSONL).
 
@@ -2041,7 +2060,7 @@ class TestChannelBDrainWait:
             result.channel_confirmation == ChannelConfirmation.CHANNEL_B
         )  # FAILS before fix: UNMONITORED (was True)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_b_no_heartbeat_produces_channel_b_confirmation(self, tmp_path):
         """T3: When heartbeat is disabled and Channel B fires, channel_confirmation=CHANNEL_B.
 
@@ -2078,7 +2097,7 @@ class TestChannelBDrainWait:
 class TestChannelBFullPipelineAdjudication:
     """Full end-to-end adjudication for Channel B drain-race scenarios."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_b_then_a_empty_result_produces_success(self, tmp_path):
         """Full end-to-end: Channel B fires, CLI writes type=result with result="".
 
@@ -2151,14 +2170,13 @@ class TestJsonlHasRecordTypeResultContent:
 class TestHeartbeatScanPosition:
     """_heartbeat uses byte-safe scan position — regression test for multi-byte content."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_heartbeat_detects_record_after_multibyte_content(self, tmp_path):
         """Heartbeat correctly scans past multi-byte UTF-8 content to detect a result record.
 
         Regression test: ensures the byte-offset refactor (scan_pos tracks bytes, not chars)
         does not break detection when prior content contains multi-byte characters.
         """
-        import asyncio
         import json
 
         stdout_path = tmp_path / "stdout.tmp"
@@ -2180,10 +2198,8 @@ class TestHeartbeatScanPosition:
         )
         stdout_path.write_text(assistant_msg + "\n" + result_record + "\n", encoding="utf-8")
 
-        result = await asyncio.wait_for(
-            _heartbeat(stdout_path, '"type":"result"'),
-            timeout=10,
-        )
+        with anyio.fail_after(10):
+            result = await _heartbeat(stdout_path, '"type":"result"')
         assert result == "completion"
 
 
@@ -2279,7 +2295,7 @@ class TestChannelBDrainRacePipelineAdjudication:
     provenance bypass (channel_confirmation=CHANNEL_B → success=True via Gate 0.5).
     """
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_channel_b_drain_timeout_produces_success_skill_result(self, tmp_path):
         """COMPLETED + channel_confirmation=CHANNEL_B + empty stdout → success=True.
 
@@ -2326,7 +2342,7 @@ class TestSTOPDelayPipelineAdjudication:
     the _is_kill_anomaly guard that was the subject of the 2026-03-01 investigation.
     """
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_stop_delay_race_produces_retriable_skill_result(self, tmp_path):
         """NATURAL_EXIT + rc=0 + success+empty → success=False, needs_retry=True.
 
@@ -2362,7 +2378,7 @@ class TestSTOPDelayPipelineAdjudication:
         assert skill_result.retry_reason == RetryReason.RESUME
         assert skill_result.subtype == "success"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_natural_exit_empty_stdout_produces_retriable_skill_result(self, tmp_path):
         """NATURAL_EXIT + rc=0 + empty stdout → success=False, needs_retry=True.
 
@@ -2395,7 +2411,7 @@ class TestSTOPDelayPipelineAdjudication:
         assert skill_result.needs_retry is True
         assert skill_result.retry_reason == RetryReason.RESUME
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_natural_exit_truncated_json_produces_retriable_skill_result(self, tmp_path):
         """NATURAL_EXIT + rc=0 + truncated/unparseable JSON → success=False, needs_retry=True.
 
@@ -2433,7 +2449,7 @@ class TestSTOPDelayPipelineAdjudication:
 class TestStaleRecoveryPipelineAdjudication:
     """Integration: STALE termination with valid stdout triggers recovery path."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_stale_with_valid_result_recovers_to_success(self, tmp_path):
         """STALE + valid success result in stdout → success=True, needs_retry=False.
 
@@ -2491,7 +2507,7 @@ class TestTimedOutPipelineAdjudication:
     success=False, needs_retry=False — timeouts are not retriable.
     """
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_timed_out_produces_non_retriable_failure(self, tmp_path):
         """TIMED_OUT → success=False, needs_retry=False, subtype="timeout".
 
@@ -2526,23 +2542,168 @@ class TestTimedOutPipelineAdjudication:
         assert skill_result.subtype == "timeout"
 
 
+# ---------------------------------------------------------------------------
+# Behavioral equivalence tests (REQ-BEH-001..006)
+# These classes test the run_managed_async → SubprocessResult boundary directly,
+# asserting termination and channel_confirmation fields without going through
+# _build_skill_result. They complement the pipeline adjudication tests above.
+# ---------------------------------------------------------------------------
+
+
+class TestNaturalExit:
+    """REQ-BEH-001: process exits cleanly with no monitors → NATURAL_EXIT + UNMONITORED."""
+
+    @pytest.mark.anyio
+    async def test_natural_exit_no_monitors(self, tmp_path):
+        """No session_log_dir, no heartbeat_marker — clean exit produces NATURAL_EXIT."""
+        script = tmp_path / "clean.py"
+        script.write_text(CLEAN_OUTPUT_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=10,
+        )
+
+        assert result.termination == TerminationReason.NATURAL_EXIT
+        assert result.channel_confirmation == ChannelConfirmation.UNMONITORED
+        assert result.returncode == 0
+
+    @pytest.mark.parametrize("heartbeat_marker", [None, "NEVER_APPEARS_IN_OUTPUT"])
+    @pytest.mark.anyio
+    async def test_natural_exit_inactive_heartbeat(self, tmp_path, heartbeat_marker):
+        """Process exits before heartbeat could ever match — still NATURAL_EXIT + UNMONITORED."""
+        script = tmp_path / "clean.py"
+        script.write_text(CLEAN_OUTPUT_SCRIPT)
+
+        kwargs: dict = {"timeout": 10}
+        if heartbeat_marker is not None:
+            kwargs["heartbeat_marker"] = heartbeat_marker
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            **kwargs,
+        )
+
+        assert result.termination == TerminationReason.NATURAL_EXIT
+        assert result.channel_confirmation == ChannelConfirmation.UNMONITORED
+
+
+class TestHeartbeatDetection:
+    """REQ-BEH-002: heartbeat marker matched → COMPLETED + CHANNEL_A."""
+
+    @pytest.mark.anyio
+    async def test_heartbeat_produces_completed_channel_a(self, tmp_path):
+        """WRITE_RESULT_THEN_HANG_SCRIPT + heartbeat_marker → COMPLETED + CHANNEL_A."""
+        script = tmp_path / "result_hang.py"
+        script.write_text(WRITE_RESULT_THEN_HANG_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=10,
+            heartbeat_marker='"type":"result"',
+            _heartbeat_poll=0.05,
+        )
+
+        assert result.termination == TerminationReason.COMPLETED
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A
+
+        # Verify the subprocess is dead after run_managed_async returns
+        try:
+            proc = psutil.Process(result.pid)
+        except psutil.NoSuchProcess:
+            return  # Already reaped
+        dead = await _wait_process_dead(proc, timeout=5.0)
+        assert dead, f"PID {result.pid} still alive 5s after COMPLETED"
+
+
+class TestStalenessDetection:
+    """REQ-BEH-005: stale session log fires STALE + UNMONITORED."""
+
+    @pytest.mark.anyio
+    async def test_stale_session_log_fires_stale_unmonitored(self, tmp_path):
+        """WRITE_VALID_RESULT_AND_JSONL_THEN_HANG_SCRIPT → STALE + UNMONITORED.
+
+        The subprocess writes one JSONL record (Phase 1 finds file) then hangs
+        without writing more. Phase 2 detects staleness after stale_threshold.
+        completion_marker is set to a value that never appears so the completion
+        path does not fire first.
+        """
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        script = tmp_path / "stale.py"
+        script.write_text(WRITE_VALID_RESULT_AND_JSONL_THEN_HANG_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script), str(session_dir)],
+            cwd=tmp_path,
+            timeout=10,
+            session_log_dir=session_dir,
+            completion_marker="NEVER_APPEARS",
+            stale_threshold=0.1,
+            _phase1_poll=0.05,
+            _phase2_poll=0.05,
+        )
+
+        assert result.termination == TerminationReason.STALE
+        assert result.channel_confirmation == ChannelConfirmation.UNMONITORED
+
+        # Verify the subprocess is dead
+        try:
+            proc = psutil.Process(result.pid)
+        except psutil.NoSuchProcess:
+            return  # Already reaped
+        dead = await _wait_process_dead(proc, timeout=5.0)
+        assert dead, f"PID {result.pid} still alive 5s after STALE"
+
+
+class TestTimeout:
+    """REQ-BEH-006: wall-clock timeout fires TIMED_OUT + UNMONITORED."""
+
+    @pytest.mark.anyio
+    async def test_wall_clock_timeout_produces_timed_out_unmonitored(self, tmp_path):
+        """SLEEP_FOREVER_NO_OUTPUT_SCRIPT + short timeout → TIMED_OUT + UNMONITORED."""
+        script = tmp_path / "sleep.py"
+        script.write_text(SLEEP_FOREVER_NO_OUTPUT_SCRIPT)
+
+        t0 = time.monotonic()
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=0.5,
+        )
+        elapsed = time.monotonic() - t0
+
+        assert result.termination == TerminationReason.TIMED_OUT
+        assert result.channel_confirmation == ChannelConfirmation.UNMONITORED
+        assert elapsed < 3.0, f"Timeout test took {elapsed:.2f}s (expected < 3.0s)"
+
+
 class TestAdjudicationCoverageMatrix:
     """Structural guard: every TerminationReason must have a subprocess integration test.
 
     This test introspects the TerminationReason enum and asserts that each value
     appears in COVERED_BY_INTEGRATION_TESTS — the authoritative registry of
     TerminationReason values with confirmed full-boundary integration test coverage
-    (subprocess → run_managed_async → _build_skill_result → SkillResult).
+    at both coverage levels.
 
     It fails immediately if a new TerminationReason value is added without a
     corresponding integration test class in this file, or if an existing integration
     test is removed without updating this registry.
 
-    Covered by:
+    Covered (pipeline adjudication boundary):
       COMPLETED    → TestChannelBDrainRacePipelineAdjudication
       NATURAL_EXIT → TestSTOPDelayPipelineAdjudication
       STALE        → TestStaleRecoveryPipelineAdjudication
       TIMED_OUT    → TestTimedOutPipelineAdjudication
+
+    Covered (behavioral equivalence boundary):
+      NATURAL_EXIT → TestNaturalExit
+      COMPLETED    → TestHeartbeatDetection
+      STALE        → TestStalenessDetection
+      TIMED_OUT    → TestTimeout
 
     See core/types.py _TERMINATION_CONTRACT for the per-reason semantic invariants.
     """
@@ -2560,10 +2721,16 @@ class TestAdjudicationCoverageMatrix:
     )
     INTEGRATION_TEST_CLASS_NAMES: frozenset = frozenset(
         {
+            # Pipeline adjudication boundary (subprocess → _build_skill_result → SkillResult)
             "TestChannelBDrainRacePipelineAdjudication",
             "TestSTOPDelayPipelineAdjudication",
             "TestStaleRecoveryPipelineAdjudication",
             "TestTimedOutPipelineAdjudication",
+            # Behavioral equivalence boundary (run_managed_async → SubprocessResult)
+            "TestNaturalExit",
+            "TestHeartbeatDetection",
+            "TestStalenessDetection",
+            "TestTimeout",
         }
     )
 
@@ -2728,3 +2895,417 @@ class TestAdjudicationGuards:
         )
         assert skill_result.needs_retry is True
         assert skill_result.success is False
+
+
+class TestNoAsyncioRuntimePrimitives:
+    """REQ-MIG-001: asyncio primitives are removed from execution/process.py call sites."""
+
+    def test_no_asyncio_sleep_calls(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.sleep(" not in source
+
+    def test_no_asyncio_to_thread_calls(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.to_thread(" not in source
+
+    def test_no_asyncio_create_subprocess_exec(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.create_subprocess_exec(" not in source
+
+    def test_no_asyncio_event_instantiation(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.Event()" not in source
+
+    def test_no_asyncio_wait_for_calls(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.wait_for(" not in source
+
+    def test_no_asyncio_get_event_loop_time(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.get_event_loop()" not in source
+
+    def test_no_asyncio_get_running_loop_run_in_executor(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.get_running_loop()" not in source
+
+    def test_no_asyncio_cancelled_error_reference(self):
+        """REQ-BEH-010: asyncio.CancelledError must not appear in process.py.
+
+        anyio raises anyio.get_cancelled_exc_class() (trio.Cancelled on the trio
+        backend), not asyncio.CancelledError. Catching asyncio.CancelledError in
+        a finally/except block would silently miss cancellations on trio, breaking
+        the anyio backend contract.
+        """
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.CancelledError" not in source
+
+
+class TestAnyioPrimitivesUsed:
+    """REQ-MIG-002..004: anyio primitives replace the removed asyncio calls."""
+
+    def test_anyio_to_thread_run_sync_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.to_thread.run_sync(" in source
+
+    def test_anyio_sleep_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.sleep(" in source
+
+    def test_time_monotonic_replaces_event_loop_time(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert ".monotonic()" in source
+
+    def test_anyio_open_process_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.open_process(" in source
+
+    def test_anyio_event_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.Event()" in source
+
+    def test_anyio_move_on_after_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.move_on_after(" in source
+
+
+class TestProcTypeAnnotationUpdated:
+    """REQ-MIG-005/scan_done_signals: proc annotation is anyio.abc.Process, not asyncio."""
+
+    def test_scan_done_signals_proc_annotation_not_asyncio_subprocess(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.subprocess.Process" not in source
+
+    def test_scan_done_signals_proc_annotation_is_anyio(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.abc.Process" in source
+
+
+class TestGroupCMigration:
+    """REQ-SIG-001..008: anyio task group replaces asyncio task scaffolding."""
+
+    def test_no_asyncio_create_task(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.create_task(" not in source  # REQ-SIG-001
+
+    def test_no_asyncio_wait_call(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.wait(" not in source  # REQ-SIG-001
+
+    def test_no_asyncio_import_at_runtime(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "import asyncio" not in source  # REQ-SIG-001
+
+    def test_anyio_create_task_group_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.create_task_group()" in source  # REQ-SIG-002
+
+    def test_scan_done_signals_absent(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "def scan_done_signals(" not in source  # REQ-SIG-003
+
+    def test_race_accumulator_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "class RaceAccumulator" in source  # REQ-SIG-003
+
+    def test_cancel_scope_cancel_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "cancel_scope.cancel()" in source  # REQ-SIG-004
+
+    def test_resolve_termination_preserved(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "def resolve_termination(" in source  # REQ-SIG-005
+
+    def test_channel_b_drain_wait_uses_move_on_after(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.move_on_after(" in source  # REQ-SIG-006
+
+    def test_watch_process_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "async def _watch_process(" in source  # REQ-SIG-007
+
+    def test_watch_heartbeat_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "async def _watch_heartbeat(" in source  # REQ-SIG-007
+
+    def test_watch_session_log_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "async def _watch_session_log(" in source  # REQ-SIG-007
+
+    def test_race_signals_fields_unchanged(self):
+        import dataclasses
+
+        from autoskillit.execution.process import RaceSignals
+
+        fields = {f.name for f in dataclasses.fields(RaceSignals)}
+        assert fields == {
+            "process_exited",
+            "process_returncode",
+            "channel_a_confirmed",
+            "channel_b_status",
+        }  # REQ-SIG-008
+
+    def test_race_signals_still_frozen(self):
+        import dataclasses
+
+        from autoskillit.execution.process import RaceSignals
+
+        assert dataclasses.fields(RaceSignals)  # confirms it's a dataclass
+        sig = RaceSignals(
+            process_exited=False,
+            process_returncode=None,
+            channel_a_confirmed=False,
+            channel_b_status=None,
+        )
+        with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
+            sig.process_exited = True  # REQ-SIG-008: frozen=True preserved
+
+
+# ---------------------------------------------------------------------------
+# Group D — Public API and Protocol Preservation
+# ---------------------------------------------------------------------------
+
+
+class TestGroupDApiContractPreservation:
+    """REQ-API-001..006: Public API contract of execution/process.py is preserved
+    after the anyio migration and guarded against future regressions.
+
+    All tests are source-inspection or introspection-based — no subprocesses.
+    """
+
+    # ------------------------------------------------------------------
+    # REQ-API-001: run_managed_async signature unchanged
+    # ------------------------------------------------------------------
+
+    def test_req_api_001_public_params_present(self):
+        """run_managed_async exposes the full expected public parameter set."""
+        sig = inspect.signature(run_managed_async)
+        public_params = {k for k in sig.parameters if not k.startswith("_")}
+        expected = {
+            "cmd",
+            "cwd",
+            "timeout",
+            "input_data",
+            "env",
+            "pty_mode",
+            "heartbeat_marker",
+            "heartbeat_record_types",
+            "session_log_dir",
+            "completion_marker",
+            "stale_threshold",
+            "session_record_types",
+            "completion_drain_timeout",
+        }
+        assert expected == public_params, (
+            f"run_managed_async public params changed.\n"
+            f"  Missing: {expected - public_params}\n"
+            f"  Extra:   {public_params - expected}"
+        )
+
+    def test_req_api_001_is_coroutine_function(self):
+        """run_managed_async must remain an async function."""
+        assert inspect.iscoroutinefunction(run_managed_async), (
+            "run_managed_async is no longer an async function — "
+            "anyio migration violated REQ-API-001"
+        )
+
+    def test_req_api_001_public_param_defaults(self):
+        """run_managed_async default values for optional public params are unchanged."""
+        sig = inspect.signature(run_managed_async)
+        p = sig.parameters
+        assert p["pty_mode"].default is False
+        assert p["heartbeat_marker"].default is None
+        assert p["session_log_dir"].default is None
+        assert p["input_data"].default is None
+        assert p["env"].default is None
+        assert p["completion_marker"].default == ""
+        assert p["stale_threshold"].default == 1200
+        assert p["completion_drain_timeout"].default == 5.0
+
+    # ------------------------------------------------------------------
+    # REQ-API-002: DefaultSubprocessRunner satisfies SubprocessRunner protocol
+    # ------------------------------------------------------------------
+
+    def test_req_api_002_satisfies_runtime_checkable_protocol(self):
+        """DefaultSubprocessRunner() must pass isinstance(SubprocessRunner)."""
+        from autoskillit.core.types import SubprocessRunner
+
+        runner = DefaultSubprocessRunner()
+        assert isinstance(runner, SubprocessRunner), (
+            "DefaultSubprocessRunner no longer satisfies the SubprocessRunner protocol"
+        )
+
+    def test_req_api_002_call_is_coroutine_function(self):
+        """DefaultSubprocessRunner.__call__ must be async."""
+        assert inspect.iscoroutinefunction(DefaultSubprocessRunner.__call__)
+
+    def test_req_api_002_call_params_match_protocol(self):
+        """DefaultSubprocessRunner.__call__ exposes the protocol-defined parameter set."""
+        sig = inspect.signature(DefaultSubprocessRunner.__call__)
+        actual = set(sig.parameters) - {"self"}
+        expected = {
+            "cmd",
+            "cwd",
+            "timeout",
+            "heartbeat_marker",
+            "stale_threshold",
+            "completion_marker",
+            "session_log_dir",
+            "pty_mode",
+            "input_data",
+            "completion_drain_timeout",
+        }
+        assert expected == actual, (
+            f"DefaultSubprocessRunner.__call__ params changed.\n"
+            f"  Missing: {expected - actual}\n"
+            f"  Extra:   {actual - expected}"
+        )
+
+    # ------------------------------------------------------------------
+    # REQ-API-003: run_managed_sync unchanged
+    # ------------------------------------------------------------------
+
+    def test_req_api_003_is_sync_not_async(self):
+        """run_managed_sync must not be async — it uses subprocess.Popen."""
+        assert not inspect.iscoroutinefunction(run_managed_sync)
+
+    def test_req_api_003_params(self):
+        """run_managed_sync parameter set is unchanged."""
+        sig = inspect.signature(run_managed_sync)
+        params = set(sig.parameters)
+        expected = {"cmd", "cwd", "timeout", "input_data", "env"}
+        assert expected == params, (
+            f"run_managed_sync params changed.\n"
+            f"  Missing: {expected - params}\n"
+            f"  Extra:   {params - expected}"
+        )
+
+    def test_req_api_003_uses_popen_not_asyncio(self):
+        """run_managed_sync source must reference subprocess.Popen, never asyncio."""
+        source = inspect.getsource(run_managed_sync)
+        assert "subprocess.Popen" in source, "run_managed_sync no longer uses subprocess.Popen"
+        assert "asyncio" not in source, (
+            "run_managed_sync must not reference asyncio — it is a sync function"
+        )
+
+    # ------------------------------------------------------------------
+    # REQ-API-004: Callers require no new asyncio runtime imports
+    # ------------------------------------------------------------------
+
+    def _pkg_root(self) -> Path:
+        import autoskillit
+
+        return Path(autoskillit.__file__).parent
+
+    def test_req_api_004_llm_triage_no_asyncio_module_import(self):
+        """_llm_triage.py must not import asyncio — it delegates to run_managed_async."""
+        source = (self._pkg_root() / "_llm_triage.py").read_text()
+        tree = ast.parse(source)
+        asyncio_imports = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import)
+            and any(alias.name == "asyncio" for alias in node.names)
+        ]
+        assert not asyncio_imports, (
+            "_llm_triage.py imported asyncio — callers must not need asyncio after anyio migration"
+        )
+
+    def test_req_api_004_headless_subprocess_result_under_type_checking(self):
+        """execution/headless.py must import SubprocessResult only under TYPE_CHECKING."""
+        source = (self._pkg_root() / "execution" / "headless.py").read_text()
+        assert "SubprocessResult" in source, (
+            "SubprocessResult reference vanished from headless.py entirely"
+        )
+        assert "TYPE_CHECKING" in source, "TYPE_CHECKING guard removed from headless.py"
+        # A top-level (non-indented) import of SubprocessResult is the violation.
+        runtime_import = re.search(
+            r"^from\s+\S+\s+import\s+.*SubprocessResult",
+            source,
+            re.MULTILINE,
+        )
+        assert runtime_import is None, (
+            f"SubprocessResult has a runtime (non-TYPE_CHECKING) import in headless.py: "
+            f"{runtime_import.group()!r}"
+        )
+
+    def test_req_api_004_server_helpers_subprocess_result_under_type_checking(self):
+        """server/helpers.py must import SubprocessResult only under TYPE_CHECKING."""
+        source = (self._pkg_root() / "server" / "helpers.py").read_text()
+        assert "SubprocessResult" in source, (
+            "SubprocessResult reference vanished from server/helpers.py entirely"
+        )
+        assert "TYPE_CHECKING" in source, "TYPE_CHECKING guard removed from server/helpers.py"
+        runtime_import = re.search(
+            r"^from\s+\S+\s+import\s+.*SubprocessResult",
+            source,
+            re.MULTILINE,
+        )
+        assert runtime_import is None, (
+            f"SubprocessResult has a runtime import in server/helpers.py: "
+            f"{runtime_import.group()!r}"
+        )
+
+    # ------------------------------------------------------------------
+    # REQ-API-005: SubprocessResult fields unchanged
+    # ------------------------------------------------------------------
+
+    def test_req_api_005_subprocess_result_field_names(self):
+        """SubprocessResult must have exactly the 6 canonical fields."""
+        from autoskillit.core.types import SubprocessResult
+
+        fields = {f.name for f in dataclasses.fields(SubprocessResult)}
+        expected = {"returncode", "stdout", "stderr", "termination", "pid", "channel_confirmation"}
+        assert fields == expected, (
+            f"SubprocessResult fields changed.\n"
+            f"  Missing: {expected - fields}\n"
+            f"  Extra:   {fields - expected}"
+        )
+
+    def test_req_api_005_channel_confirmation_default(self):
+        """SubprocessResult.channel_confirmation defaults to UNMONITORED."""
+        from autoskillit.core.types import ChannelConfirmation, SubprocessResult
+
+        field_map = {f.name: f for f in dataclasses.fields(SubprocessResult)}
+        assert field_map["channel_confirmation"].default == ChannelConfirmation.UNMONITORED
+
+    # ------------------------------------------------------------------
+    # REQ-API-006: TerminationReason and ChannelConfirmation enums unchanged
+    # ------------------------------------------------------------------
+
+    def test_req_api_006_termination_reason_members(self):
+        """TerminationReason must have exactly the 4 canonical values."""
+        from autoskillit.core.types import TerminationReason
+
+        assert set(TerminationReason) == {
+            TerminationReason.NATURAL_EXIT,
+            TerminationReason.COMPLETED,
+            TerminationReason.STALE,
+            TerminationReason.TIMED_OUT,
+        }
+
+    def test_req_api_006_termination_reason_string_values(self):
+        """TerminationReason string values are unchanged (consumed by downstream parsers)."""
+        from autoskillit.core.types import TerminationReason
+
+        assert TerminationReason.NATURAL_EXIT == "natural_exit"
+        assert TerminationReason.COMPLETED == "completed"
+        assert TerminationReason.STALE == "stale"
+        assert TerminationReason.TIMED_OUT == "timed_out"
+
+    def test_req_api_006_channel_confirmation_members(self):
+        """ChannelConfirmation must have exactly the 3 canonical values."""
+        from autoskillit.core.types import ChannelConfirmation
+
+        assert set(ChannelConfirmation) == {
+            ChannelConfirmation.CHANNEL_A,
+            ChannelConfirmation.CHANNEL_B,
+            ChannelConfirmation.UNMONITORED,
+        }
+
+    def test_req_api_006_channel_confirmation_string_values(self):
+        """ChannelConfirmation string values are unchanged."""
+        from autoskillit.core.types import ChannelConfirmation
+
+        assert ChannelConfirmation.CHANNEL_A == "channel_a"
+        assert ChannelConfirmation.CHANNEL_B == "channel_b"
+        assert ChannelConfirmation.UNMONITORED == "unmonitored"

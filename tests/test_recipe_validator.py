@@ -3810,7 +3810,8 @@ class TestPredicateOnResultValidation:
         assert errors == []
 
     def test_predicate_on_result_empty_conditions_rejected(self) -> None:
-        """on_result with conditions=[] bypasses predicate path; legacy validator emits field error.
+        """on_result with conditions=[] bypasses predicate path; legacy validator emits
+        field error.
 
         When StepResultRoute(conditions=[]) is constructed directly (bypassing _parse_step,
         which collapses empty conditions to on_result=None), the validator falls through to

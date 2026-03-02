@@ -155,7 +155,7 @@ class TestRecipeMigrationAdapter:
         assert adapter.needs_migration(file) is True
 
     # ME6
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_recipe_adapter_build_skill_command(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -301,7 +301,7 @@ class TestContractMigrationAdapter:
         assert adapter.needs_migration(file) is True
 
     # ME13
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_contract_adapter_migrate_regenerates_card(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -335,7 +335,7 @@ class TestContractMigrationAdapter:
         assert result.name == "test"
 
     # ME14
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_contract_adapter_migrate_fails_gracefully_when_no_source(
         self, tmp_path: Path
     ) -> None:
@@ -373,7 +373,7 @@ class TestMigrationEngine:
         assert engine.get_adapter("unknown") is None
 
     # ME17
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_engine_skips_migration_when_not_needed(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -395,7 +395,7 @@ class TestMigrationEngine:
         mock_headless.assert_not_awaited()
 
     # ME18
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_engine_writes_back_on_successful_headless_run(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -427,7 +427,7 @@ class TestMigrationEngine:
         mock_headless.assert_awaited_once()
 
     # ME19
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_engine_returns_failure_when_headless_errors(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -456,7 +456,7 @@ class TestMigrationEngine:
         mock_headless.assert_awaited_once()
 
     # ME20
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_engine_returns_failure_when_temp_output_missing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -528,7 +528,7 @@ class TestMigrateRecipesConstant:
     def test_constant_value(self) -> None:
         assert MIGRATE_RECIPES_MAX_RETRIES == 3
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_failed_headless_retries_match_constant(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

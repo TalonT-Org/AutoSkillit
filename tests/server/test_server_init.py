@@ -192,7 +192,7 @@ class TestGatedToolAccess:
         """Override the global autouse fixture — start disabled for gate tests."""
         tool_ctx.gate = DefaultGateState(enabled=False)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_tools_return_error_when_disabled(self, tool_ctx):
         """All tools return standard gate error when gate is disabled."""
         from autoskillit.server.tools_execution import run_cmd
@@ -202,7 +202,7 @@ class TestGatedToolAccess:
         assert result["is_error"] is True
         assert "not enabled" in result["result"].lower()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_tools_work_after_enable(self, tool_ctx):
         """After open_kitchen prompt handler sets the flag, tools execute normally."""
         from autoskillit.server.tools_execution import run_cmd
@@ -213,7 +213,7 @@ class TestGatedToolAccess:
         result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))
         assert result["success"] is True
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_disable_reverses_enable(self, tool_ctx):
         """After close_kitchen prompt handler, tools return error again."""
         from autoskillit.server.tools_execution import run_cmd
@@ -234,7 +234,7 @@ class TestGatedToolAccess:
         prompt_names = {p.name for p in prompts}
         assert prompt_names == {"open_kitchen", "close_kitchen"}
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_python_gated(self):
         """run_python requires tools to be enabled."""
         from autoskillit.server.tools_execution import run_python
@@ -492,7 +492,7 @@ class TestServerLazyInit:
 class TestConfigDrivenBehavior:
     """S1-S10: Verify tools use config instead of hardcoded values."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_test_check_uses_config_command(self, tool_ctx):
         """S1: test_check runs config.test_check.command."""
         from autoskillit.config import TestCheckConfig
@@ -512,7 +512,7 @@ class TestConfigDrivenBehavior:
         assert tool_ctx.runner.call_args_list[0][0] == ["pytest", "-x"]
         assert tool_ctx.runner.call_args_list[0][2] == 300.0
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_classify_fix_uses_config_prefixes(self, tool_ctx):
         """S2: classify_fix uses config.classify_fix.path_prefixes."""
         from autoskillit.config import ClassifyFixConfig
@@ -531,7 +531,7 @@ class TestConfigDrivenBehavior:
         assert result["restart_scope"] == RestartScope.FULL_RESTART
         assert "src/custom/handler.py" in result["critical_files"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_classify_fix_empty_prefixes_always_partial(self, tool_ctx):
         """S3: Empty prefix list -> always returns partial_restart."""
         from autoskillit.config import ClassifyFixConfig
@@ -547,7 +547,7 @@ class TestConfigDrivenBehavior:
 
         assert result["restart_scope"] == RestartScope.PARTIAL_RESTART
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_reset_workspace_uses_config_command(self, tool_ctx, tmp_path):
         """S4: reset_workspace runs config.reset_workspace.command."""
         from autoskillit.config import ResetWorkspaceConfig
@@ -566,7 +566,7 @@ class TestConfigDrivenBehavior:
         await reset_workspace(test_dir=str(workspace))
         assert tool_ctx.runner.call_args_list[0][0] == ["make", "reset"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_reset_workspace_not_configured_returns_error(self, tool_ctx, tmp_path):
         """S5: command=None -> returns not-configured error."""
         from autoskillit.config import ResetWorkspaceConfig
@@ -581,7 +581,7 @@ class TestConfigDrivenBehavior:
 
         assert result["error"] == "reset_workspace not configured for this project"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_reset_workspace_uses_config_preserve_dirs(self, tool_ctx, tmp_path):
         """S6: Preserves config.reset_workspace.preserve_dirs."""
         from autoskillit.config import ResetWorkspaceConfig
@@ -645,7 +645,7 @@ class TestConfigDrivenBehavior:
         result = _check_dry_walkthrough(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         assert result is None  # /autoskillit:implement-worktree is NOT gated (not in skill_names)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_merge_worktree_uses_config_test_command(self, tool_ctx, tmp_path):
         """S9: Merge's test gate runs config.test_check.command."""
         from autoskillit.config import TestCheckConfig
@@ -674,7 +674,7 @@ class TestConfigDrivenBehavior:
         test_call = tool_ctx.runner.call_args_list[2]
         assert test_call[0] == ["make", "test"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_require_enabled_still_gates_execution(self, tool_ctx):
         """S10: _require_enabled() defense-in-depth still works with config."""
         from autoskillit.server.tools_execution import run_cmd
@@ -689,7 +689,7 @@ class TestConfigDrivenBehavior:
 class TestSafetyConfigWiring:
     """Safety config fields are read at the point of enforcement."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_reset_test_dir_allows_with_marker(self, tool_ctx, tmp_path):
         """2a: Directory with marker passes the reset guard."""
         from autoskillit.server.tools_workspace import reset_test_dir
@@ -702,7 +702,7 @@ class TestSafetyConfigWiring:
         result = json.loads(await reset_test_dir(test_dir=str(target), force=False))
         assert result["success"] is True
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_reset_test_dir_enforces_marker_when_missing(self, tool_ctx, tmp_path):
         """2b: Missing marker blocks reset_test_dir."""
         from autoskillit.server.tools_workspace import reset_test_dir
@@ -713,7 +713,7 @@ class TestSafetyConfigWiring:
         assert "error" in result
         assert "marker" in result["error"].lower()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_reset_workspace_enforces_marker(self, tool_ctx, tmp_path):
         """2c: reset_workspace requires marker, then checks command config."""
         from autoskillit.config import ResetWorkspaceConfig
@@ -729,7 +729,7 @@ class TestSafetyConfigWiring:
         # Should pass marker guard but fail on "not configured"
         assert result["error"] == "reset_workspace not configured for this project"
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_merge_worktree_skips_test_gate_when_disabled(self, tool_ctx, tmp_path):
         """2d: test_gate_on_merge=False skips test execution."""
         from autoskillit.server.tools_git import merge_worktree
@@ -764,7 +764,7 @@ class TestSafetyConfigWiring:
         third_call_cmd = tool_ctx.runner.call_args_list[2][0]
         assert third_call_cmd == ["git", "fetch", "origin"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_retry_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
         """2e: require_dry_walkthrough=False bypasses dry-walkthrough gate."""
         from autoskillit.server.tools_execution import run_skill_retry
@@ -782,7 +782,7 @@ class TestSafetyConfigWiring:
         assert result["subtype"] != "gate_error"
         assert result["exit_code"] == 0
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_enforces_dry_walkthrough_when_enabled(self, tool_ctx, tmp_path):
         """2f: run_skill enforces dry-walkthrough gate when enabled (default)."""
         from autoskillit.server.tools_execution import run_skill
@@ -797,7 +797,7 @@ class TestSafetyConfigWiring:
         assert result["is_error"] is True
         assert "dry-walked" in result["result"].lower()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_run_skill_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
         """2g: run_skill skips dry-walkthrough gate when disabled."""
         from autoskillit.server.tools_execution import run_skill

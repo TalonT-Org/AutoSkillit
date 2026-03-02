@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+import anyio
 import pytest
 
 from autoskillit.core import SkillResult
@@ -62,7 +62,7 @@ def test_parse_fingerprint_first_nonempty_line():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_gate_closed(tool_ctx):
     tool_ctx.gate.disable()
     result = json.loads(await report_bug("some error", "/tmp"))
@@ -70,7 +70,7 @@ async def test_report_bug_gate_closed(tool_ctx):
     assert "not enabled" in result["result"].lower() or "gate" in result["result"].lower()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_no_executor(tool_ctx):
     tool_ctx.executor = None
     result = json.loads(await report_bug("error ctx", "/tmp"))
@@ -116,7 +116,7 @@ def _skill_fail() -> SkillResult:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_blocking_success(tool_ctx, tmp_path):
     """Blocking mode awaits the session and returns status=complete."""
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
@@ -135,7 +135,7 @@ async def test_report_bug_blocking_success(tool_ctx, tmp_path):
     mock_executor.run.assert_awaited_once()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_blocking_failure_propagated(tool_ctx, tmp_path):
     """If the headless session fails, status=failed is returned."""
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
@@ -151,7 +151,7 @@ async def test_report_bug_blocking_failure_propagated(tool_ctx, tmp_path):
     assert result["status"] == "failed"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_blocking_writes_report_file(tool_ctx, tmp_path):
     """The report text must be written to the resolved report_path."""
     report_dir = tmp_path / "rpts"
@@ -174,13 +174,13 @@ async def test_report_bug_blocking_writes_report_file(tool_ctx, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_non_blocking_returns_immediately(tool_ctx, tmp_path):
     """Non-blocking mode must return dispatched before the session completes."""
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
     tool_ctx.config.report_bug.github_filing = False
 
-    ready = asyncio.Event()
+    ready = anyio.Event()
 
     async def slow_run(*args, **kwargs):
         await ready.wait()  # blocks until test signals
@@ -198,10 +198,10 @@ async def test_report_bug_non_blocking_returns_immediately(tool_ctx, tmp_path):
 
     # Let the background task finish cleanly.
     ready.set()
-    await asyncio.sleep(0)
+    await anyio.sleep(0)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_non_blocking_default_severity(tool_ctx, tmp_path):
     """The default severity is non_blocking."""
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
@@ -220,7 +220,7 @@ async def test_report_bug_non_blocking_default_severity(tool_ctx, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_creates_github_issue_on_no_duplicate(tool_ctx, tmp_path):
     """When no matching issue is found, create_issue is called."""
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
@@ -256,7 +256,7 @@ async def test_report_bug_creates_github_issue_on_no_duplicate(tool_ctx, tmp_pat
     assert result["github"]["issue_url"] == "https://github.com/owner/repo/issues/99"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_comments_on_duplicate_issue(tool_ctx, tmp_path):
     """When a matching issue exists and error_context is new, add_comment is called."""
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
@@ -297,7 +297,7 @@ async def test_report_bug_comments_on_duplicate_issue(tool_ctx, tmp_path):
     assert result["github"]["comment_added"] is True
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_skips_comment_if_already_present(tool_ctx, tmp_path):
     """If error_context is already in the issue body, no comment is posted."""
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
@@ -332,7 +332,7 @@ async def test_report_bug_skips_comment_if_already_present(tool_ctx, tmp_path):
     assert result["github"]["comment_added"] is False
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_skips_github_if_no_token(tool_ctx, tmp_path):
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
     tool_ctx.config.report_bug.github_filing = True
@@ -353,7 +353,7 @@ async def test_report_bug_skips_github_if_no_token(tool_ctx, tmp_path):
     assert result["github"]["reason"] == "no_token"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_skips_github_if_no_default_repo(tool_ctx, tmp_path):
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
     tool_ctx.config.report_bug.github_filing = True
@@ -373,7 +373,7 @@ async def test_report_bug_skips_github_if_no_default_repo(tool_ctx, tmp_path):
     assert result["github"]["skipped"] is True
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_report_bug_github_filing_disabled(tool_ctx, tmp_path):
     """github_filing=false must skip all GitHub calls."""
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
@@ -429,7 +429,7 @@ def test_fetch_github_issue_in_ungated_tools():
     assert "fetch_github_issue" in UNGATED_TOOLS
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_fetch_github_issue_no_client(tool_ctx):
     tool_ctx.github_client = None
     result = json.loads(await fetch_github_issue("owner/repo#1"))
@@ -437,7 +437,7 @@ async def test_fetch_github_issue_no_client(tool_ctx):
     assert "error" in result
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_fetch_github_issue_delegates_to_client(tool_ctx):
     mock_client = AsyncMock()
     mock_client.fetch_issue.return_value = {
@@ -455,7 +455,7 @@ async def test_fetch_github_issue_delegates_to_client(tool_ctx):
     mock_client.fetch_issue.assert_called_once_with("owner/repo#1", include_comments=True)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_fetch_github_issue_bare_number_with_default_repo(tool_ctx):
     tool_ctx.config.github.default_repo = "owner/repo"
     mock_client = AsyncMock()
@@ -474,7 +474,7 @@ async def test_fetch_github_issue_bare_number_with_default_repo(tool_ctx):
     mock_client.fetch_issue.assert_called_once_with("owner/repo#42", include_comments=True)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx):
     tool_ctx.config.github.default_repo = None
     tool_ctx.github_client = AsyncMock()
@@ -483,7 +483,7 @@ async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx):
     assert "default_repo" in result["error"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_fetch_github_issue_client_error_propagated(tool_ctx):
     mock_client = AsyncMock()
     mock_client.fetch_issue.return_value = {"success": False, "error": "Not Found"}

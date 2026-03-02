@@ -122,14 +122,14 @@ def test_recipe_list_all_includes_builtins():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_migration_check_and_migrate_in_all():
     import autoskillit.migration as m
 
     assert "check_and_migrate" in m.__all__
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_migration_check_and_migrate_not_found(tmp_path):
     from autoskillit import __version__
     from autoskillit.migration import check_and_migrate
@@ -138,7 +138,7 @@ async def test_migration_check_and_migrate_not_found(tmp_path):
     assert "error" in result
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_migration_check_and_migrate_up_to_date(tmp_path):
     from autoskillit import __version__
     from autoskillit.migration import check_and_migrate

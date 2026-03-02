@@ -61,7 +61,7 @@ def test_python_version_constraint_unchanged():
     import tomllib
     from pathlib import Path
 
-    pyproject = Path(__file__).parent.parent / "pyproject.toml"
+    pyproject = Path(__file__).parent.parent.parent / "pyproject.toml"
     with pyproject.open("rb") as f:
         data = tomllib.load(f)
     assert data["project"]["requires-python"] == ">=3.11"
@@ -73,7 +73,7 @@ def test_anyio_is_direct_dependency():
     import tomllib
     from pathlib import Path
 
-    pyproject = Path(__file__).parent.parent / "pyproject.toml"
+    pyproject = Path(__file__).parent.parent.parent / "pyproject.toml"
     with pyproject.open("rb") as f:
         data = tomllib.load(f)
 

@@ -3,6 +3,20 @@
 All tests in this file are expected to FAIL before implementation and PASS after.
 """
 
+from __future__ import annotations
+
+import ast
+import dataclasses
+import inspect
+import re
+from pathlib import Path
+
+from autoskillit.execution.process import (
+    DefaultSubprocessRunner,
+    run_managed_async,
+    run_managed_sync,
+)
+
 # ── Importability ──────────────────────────────────────────────────────────────
 
 
@@ -209,3 +223,254 @@ def test_moved_types_in_core_all():
     assert "SkillResult" in core.__all__
     assert "CleanupResult" in core.__all__
     assert "truncate_text" in core.__all__
+
+
+# ---------------------------------------------------------------------------
+# Group D — Public API and Protocol Preservation
+# ---------------------------------------------------------------------------
+
+
+class TestGroupDApiContractPreservation:
+    """REQ-API-001..006: Public API contract of execution/process.py is preserved
+    after the anyio migration and guarded against future regressions.
+
+    All tests are source-inspection or introspection-based — no subprocesses.
+    """
+
+    # ------------------------------------------------------------------
+    # REQ-API-001: run_managed_async signature unchanged
+    # ------------------------------------------------------------------
+
+    def test_req_api_001_public_params_present(self):
+        """run_managed_async exposes the full expected public parameter set."""
+        sig = inspect.signature(run_managed_async)
+        public_params = {k for k in sig.parameters if not k.startswith("_")}
+        expected = {
+            "cmd",
+            "cwd",
+            "timeout",
+            "input_data",
+            "env",
+            "pty_mode",
+            "heartbeat_marker",
+            "heartbeat_record_types",
+            "session_log_dir",
+            "completion_marker",
+            "stale_threshold",
+            "session_record_types",
+            "completion_drain_timeout",
+        }
+        assert expected == public_params, (
+            f"run_managed_async public params changed.\n"
+            f"  Missing: {expected - public_params}\n"
+            f"  Extra:   {public_params - expected}"
+        )
+
+    def test_req_api_001_is_coroutine_function(self):
+        """run_managed_async must remain an async function."""
+        assert inspect.iscoroutinefunction(run_managed_async), (
+            "run_managed_async is no longer an async function — "
+            "anyio migration violated REQ-API-001"
+        )
+
+    def test_req_api_001_public_param_defaults(self):
+        """run_managed_async default values for optional public params are unchanged."""
+        sig = inspect.signature(run_managed_async)
+        p = sig.parameters
+        assert p["pty_mode"].default is False
+        assert p["heartbeat_marker"].default is None
+        assert p["session_log_dir"].default is None
+        assert p["input_data"].default is None
+        assert p["env"].default is None
+        assert p["completion_marker"].default == ""
+        assert p["stale_threshold"].default == 1200
+        assert p["completion_drain_timeout"].default == 5.0
+
+    # ------------------------------------------------------------------
+    # REQ-API-002: DefaultSubprocessRunner satisfies SubprocessRunner protocol
+    # ------------------------------------------------------------------
+
+    def test_req_api_002_satisfies_runtime_checkable_protocol(self):
+        """DefaultSubprocessRunner() must pass isinstance(SubprocessRunner)."""
+        from autoskillit.core.types import SubprocessRunner
+
+        runner = DefaultSubprocessRunner()
+        assert isinstance(runner, SubprocessRunner), (
+            "DefaultSubprocessRunner no longer satisfies the SubprocessRunner protocol"
+        )
+
+    def test_req_api_002_call_is_coroutine_function(self):
+        """DefaultSubprocessRunner.__call__ must be async."""
+        assert inspect.iscoroutinefunction(DefaultSubprocessRunner.__call__)
+
+    def test_req_api_002_call_params_match_protocol(self):
+        """DefaultSubprocessRunner.__call__ exposes the protocol-defined parameter set."""
+        sig = inspect.signature(DefaultSubprocessRunner.__call__)
+        actual = set(sig.parameters) - {"self"}
+        expected = {
+            "cmd",
+            "cwd",
+            "timeout",
+            "heartbeat_marker",
+            "stale_threshold",
+            "completion_marker",
+            "session_log_dir",
+            "pty_mode",
+            "input_data",
+            "completion_drain_timeout",
+        }
+        assert expected == actual, (
+            f"DefaultSubprocessRunner.__call__ params changed.\n"
+            f"  Missing: {expected - actual}\n"
+            f"  Extra:   {actual - expected}"
+        )
+
+    # ------------------------------------------------------------------
+    # REQ-API-003: run_managed_sync unchanged
+    # ------------------------------------------------------------------
+
+    def test_req_api_003_is_sync_not_async(self):
+        """run_managed_sync must not be async — it uses subprocess.Popen."""
+        assert not inspect.iscoroutinefunction(run_managed_sync)
+
+    def test_req_api_003_params(self):
+        """run_managed_sync parameter set is unchanged."""
+        sig = inspect.signature(run_managed_sync)
+        params = set(sig.parameters)
+        expected = {"cmd", "cwd", "timeout", "input_data", "env"}
+        assert expected == params, (
+            f"run_managed_sync params changed.\n"
+            f"  Missing: {expected - params}\n"
+            f"  Extra:   {params - expected}"
+        )
+
+    def test_req_api_003_uses_popen_not_asyncio(self):
+        """run_managed_sync source must reference subprocess.Popen, never asyncio."""
+        source = inspect.getsource(run_managed_sync)
+        assert "subprocess.Popen" in source, "run_managed_sync no longer uses subprocess.Popen"
+        assert "asyncio" not in source, (
+            "run_managed_sync must not reference asyncio — it is a sync function"
+        )
+
+    # ------------------------------------------------------------------
+    # REQ-API-004: Callers require no new asyncio runtime imports
+    # ------------------------------------------------------------------
+
+    def _pkg_root(self) -> Path:
+        import autoskillit
+
+        return Path(autoskillit.__file__).parent
+
+    def test_req_api_004_llm_triage_no_asyncio_module_import(self):
+        """_llm_triage.py must not import asyncio — it delegates to run_managed_async."""
+        source = (self._pkg_root() / "_llm_triage.py").read_text()
+        tree = ast.parse(source)
+        asyncio_imports = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import)
+            and any(alias.name == "asyncio" for alias in node.names)
+        ]
+        assert not asyncio_imports, (
+            "_llm_triage.py imported asyncio — callers must not need asyncio after anyio migration"
+        )
+
+    def test_req_api_004_headless_subprocess_result_under_type_checking(self):
+        """execution/headless.py must import SubprocessResult only under TYPE_CHECKING."""
+        source = (self._pkg_root() / "execution" / "headless.py").read_text()
+        assert "SubprocessResult" in source, (
+            "SubprocessResult reference vanished from headless.py entirely"
+        )
+        assert "TYPE_CHECKING" in source, "TYPE_CHECKING guard removed from headless.py"
+        # A top-level (non-indented) import of SubprocessResult is the violation.
+        runtime_import = re.search(
+            r"^from\s+\S+\s+import\s+.*SubprocessResult",
+            source,
+            re.MULTILINE,
+        )
+        assert runtime_import is None, (
+            f"SubprocessResult has a runtime (non-TYPE_CHECKING) import in headless.py: "
+            f"{runtime_import.group()!r}"
+        )
+
+    def test_req_api_004_server_helpers_subprocess_result_under_type_checking(self):
+        """server/helpers.py must import SubprocessResult only under TYPE_CHECKING."""
+        source = (self._pkg_root() / "server" / "helpers.py").read_text()
+        assert "SubprocessResult" in source, (
+            "SubprocessResult reference vanished from server/helpers.py entirely"
+        )
+        assert "TYPE_CHECKING" in source, "TYPE_CHECKING guard removed from server/helpers.py"
+        runtime_import = re.search(
+            r"^from\s+\S+\s+import\s+.*SubprocessResult",
+            source,
+            re.MULTILINE,
+        )
+        assert runtime_import is None, (
+            f"SubprocessResult has a runtime import in server/helpers.py: "
+            f"{runtime_import.group()!r}"
+        )
+
+    # ------------------------------------------------------------------
+    # REQ-API-005: SubprocessResult fields unchanged
+    # ------------------------------------------------------------------
+
+    def test_req_api_005_subprocess_result_field_names(self):
+        """SubprocessResult must have exactly the 6 canonical fields."""
+        from autoskillit.core.types import SubprocessResult
+
+        fields = {f.name for f in dataclasses.fields(SubprocessResult)}
+        expected = {"returncode", "stdout", "stderr", "termination", "pid", "channel_confirmation"}
+        assert fields == expected, (
+            f"SubprocessResult fields changed.\n"
+            f"  Missing: {expected - fields}\n"
+            f"  Extra:   {fields - expected}"
+        )
+
+    def test_req_api_005_channel_confirmation_default(self):
+        """SubprocessResult.channel_confirmation defaults to UNMONITORED."""
+        from autoskillit.core.types import ChannelConfirmation, SubprocessResult
+
+        field_map = {f.name: f for f in dataclasses.fields(SubprocessResult)}
+        assert field_map["channel_confirmation"].default == ChannelConfirmation.UNMONITORED
+
+    # ------------------------------------------------------------------
+    # REQ-API-006: TerminationReason and ChannelConfirmation enums unchanged
+    # ------------------------------------------------------------------
+
+    def test_req_api_006_termination_reason_members(self):
+        """TerminationReason must have exactly the 4 canonical values."""
+        from autoskillit.core.types import TerminationReason
+
+        assert set(TerminationReason) == {
+            TerminationReason.NATURAL_EXIT,
+            TerminationReason.COMPLETED,
+            TerminationReason.STALE,
+            TerminationReason.TIMED_OUT,
+        }
+
+    def test_req_api_006_termination_reason_string_values(self):
+        """TerminationReason string values are unchanged (consumed by downstream parsers)."""
+        from autoskillit.core.types import TerminationReason
+
+        assert TerminationReason.NATURAL_EXIT == "natural_exit"
+        assert TerminationReason.COMPLETED == "completed"
+        assert TerminationReason.STALE == "stale"
+        assert TerminationReason.TIMED_OUT == "timed_out"
+
+    def test_req_api_006_channel_confirmation_members(self):
+        """ChannelConfirmation must have exactly the 3 canonical values."""
+        from autoskillit.core.types import ChannelConfirmation
+
+        assert set(ChannelConfirmation) == {
+            ChannelConfirmation.CHANNEL_A,
+            ChannelConfirmation.CHANNEL_B,
+            ChannelConfirmation.UNMONITORED,
+        }
+
+    def test_req_api_006_channel_confirmation_string_values(self):
+        """ChannelConfirmation string values are unchanged."""
+        from autoskillit.core.types import ChannelConfirmation
+
+        assert ChannelConfirmation.CHANNEL_A == "channel_a"
+        assert ChannelConfirmation.CHANNEL_B == "channel_b"
+        assert ChannelConfirmation.UNMONITORED == "unmonitored"

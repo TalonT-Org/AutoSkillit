@@ -34,7 +34,7 @@ def conftest_mock_runner():
     return MockSubprocessRunner()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_perform_merge_returns_error_for_nonexistent_path(
     default_config, conftest_mock_runner
 ):
@@ -46,7 +46,7 @@ async def test_perform_merge_returns_error_for_nonexistent_path(
     assert "error" in result
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_perform_merge_blocks_on_failing_tests(
     default_config, conftest_mock_runner, tmp_path
 ):
@@ -68,7 +68,7 @@ async def test_perform_merge_blocks_on_failing_tests(
     assert result["state"] == MergeState.WORKTREE_INTACT
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_perform_merge_returns_success_on_green_tests(
     default_config, conftest_mock_runner, tmp_path
 ):
@@ -100,7 +100,7 @@ async def test_perform_merge_returns_success_on_green_tests(
     assert tester.call_count == 2  # both pre- and post-rebase gates ran
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_perform_merge_blocks_on_post_rebase_test_failure(
     default_config, conftest_mock_runner, tmp_path
 ):
@@ -129,7 +129,7 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
     assert tester.call_count == 2  # both gates ran
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_perform_merge_both_gates_run_on_full_success(
     default_config, conftest_mock_runner, tmp_path
 ):

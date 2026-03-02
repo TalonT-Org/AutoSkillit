@@ -13,11 +13,20 @@ import textwrap
 
 import pytest
 
-from autoskillit.core.types import ChannelConfirmation, RetryReason, TerminationReason
+from autoskillit.core.types import (
+    ChannelConfirmation,
+    RetryReason,
+    SubprocessResult,
+    TerminationReason,
+)
+from autoskillit.execution.headless import _build_skill_result, _recover_from_separate_marker
 from autoskillit.execution.process import (
+    RaceSignals,
     pty_wrap_command,
+    resolve_termination,
     run_managed_async,
 )
+from autoskillit.execution.session import ClaudeSessionResult
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
@@ -474,3 +483,234 @@ class TestAdjudicationCoverageMatrix:
             f"Add a TestXxxPipelineAdjudication class in tests/execution/test_process_pty.py "
             f"and add the value to COVERED_BY_INTEGRATION_TESTS."
         )
+
+
+# ---------------------------------------------------------------------------
+# Module-level helper for adjudication guard tests
+# ---------------------------------------------------------------------------
+
+
+def _result_ndjson(
+    result: str = "done",
+    subtype: str = "success",
+    is_error: bool = False,
+    session_id: str = "s1",
+) -> str:
+    """Build a minimal NDJSON string with a single type=result record."""
+    import json
+
+    return json.dumps(
+        {
+            "type": "result",
+            "subtype": subtype,
+            "is_error": is_error,
+            "result": result,
+            "session_id": session_id,
+            "errors": [],
+        }
+    )
+
+
+class TestResolveTerminationMatrix:
+    """Pure-function unit tests for resolve_termination.
+
+    Builds RaceSignals directly (no scan_done_signals scaffold).
+    xdist-safe: no shared state, all state local.
+    """
+
+    @pytest.mark.parametrize(
+        "process_exited,channel_a_confirmed,channel_b_result,expected_term,expected_chan",
+        [
+            (True, False, None, TerminationReason.NATURAL_EXIT, ChannelConfirmation.UNMONITORED),
+            (True, True, None, TerminationReason.NATURAL_EXIT, ChannelConfirmation.CHANNEL_A),
+            (
+                True,
+                False,
+                "completion",
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.CHANNEL_B,
+            ),
+            (
+                True,
+                True,
+                "completion",
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.CHANNEL_A,
+            ),
+            (
+                True,
+                False,
+                "stale",
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.UNMONITORED,
+            ),
+            (True, True, "stale", TerminationReason.NATURAL_EXIT, ChannelConfirmation.CHANNEL_A),
+            (False, True, None, TerminationReason.COMPLETED, ChannelConfirmation.CHANNEL_A),
+            (
+                False,
+                False,
+                "completion",
+                TerminationReason.COMPLETED,
+                ChannelConfirmation.CHANNEL_B,
+            ),
+            (
+                False,
+                True,
+                "completion",
+                TerminationReason.COMPLETED,
+                ChannelConfirmation.CHANNEL_A,
+            ),
+            (False, False, "stale", TerminationReason.STALE, ChannelConfirmation.UNMONITORED),
+            (False, True, "stale", TerminationReason.STALE, ChannelConfirmation.CHANNEL_A),
+        ],
+    )
+    def test_resolve_termination_matrix(
+        self,
+        process_exited,
+        channel_a_confirmed,
+        channel_b_result,
+        expected_term,
+        expected_chan,
+    ):
+        """Parametrized matrix: all signal combinations → correct termination/channel."""
+        signals = RaceSignals(
+            process_exited=process_exited,
+            process_returncode=0 if process_exited else None,
+            channel_a_confirmed=channel_a_confirmed,
+            channel_b_status=channel_b_result,
+        )
+        termination, channel = resolve_termination(signals)
+        assert termination == expected_term
+        assert channel == expected_chan
+
+
+class TestRecoverFromSeparateMarker:
+    """_recover_from_separate_marker must use standalone-line semantics."""
+
+    def test_t3_does_not_fire_on_marker_in_prose(self) -> None:
+        """T3: marker embedded in prose must not trigger recovery.
+
+        Regression: before fix, substring check caused _recover_from_separate_marker
+        to fire when the model mentioned the marker in a sentence, producing a
+        false-positive success result.
+        """
+        session = ClaudeSessionResult(
+            subtype="stale",
+            is_error=True,
+            result="",
+            session_id="test",
+            assistant_messages=["I will emit %%ORDER_UP%% when done"],
+        )
+        recovered = _recover_from_separate_marker(session, "%%ORDER_UP%%")
+        assert recovered is None, (
+            "Recovery should not fire when marker appears only in prose, not as standalone line"
+        )
+
+    def test_t3_fires_on_standalone_marker(self) -> None:
+        """T3: recovery must fire when the marker appears as a standalone line."""
+        session = ClaudeSessionResult(
+            subtype="stale",
+            is_error=True,
+            result="",
+            session_id="test",
+            assistant_messages=["I have completed the task.\n%%ORDER_UP%%"],
+        )
+        recovered = _recover_from_separate_marker(session, "%%ORDER_UP%%")
+        assert recovered is not None, (
+            "Recovery should fire when marker appears as a standalone line"
+        )
+
+    def test_t3_does_not_fire_when_no_messages(self) -> None:
+        """T3: recovery returns None when there are no assistant messages."""
+        session = ClaudeSessionResult(
+            subtype="stale",
+            is_error=True,
+            result="",
+            session_id="test",
+            assistant_messages=[],
+        )
+        recovered = _recover_from_separate_marker(session, "%%ORDER_UP%%")
+        assert recovered is None
+
+
+# ---------------------------------------------------------------------------
+# Adjudication guards — integration through _build_skill_result
+# ---------------------------------------------------------------------------
+
+
+class TestAdjudicationGuards:
+    """Verify _build_skill_result guards prevent impossible (success, needs_retry) states.
+
+    These integration tests exercise the composition guards added to _build_skill_result.
+    They fail before the guards are implemented and pass after.
+    """
+
+    def test_channel_a_empty_result_not_dead_end(self) -> None:
+        """CHANNEL_A + empty result: dead-end guard escalates to retriable."""
+        result = SubprocessResult(
+            returncode=0,
+            stdout=_result_ndjson(subtype="success", result=""),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="",
+            skill_command="/test",
+            audit=None,
+        )
+        # Must not be a dead end — guard must escalate to retriable
+        assert skill_result.success or skill_result.needs_retry, (
+            f"Dead end: success={skill_result.success}, needs_retry={skill_result.needs_retry}"
+        )
+        assert skill_result.needs_retry is True
+        assert skill_result.retry_reason == RetryReason.RESUME
+
+    def test_channel_b_max_turns_no_contradiction(self) -> None:
+        """CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""
+        result = SubprocessResult(
+            returncode=0,
+            stdout=_result_ndjson(subtype="error_max_turns", result="partial", is_error=True),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="",
+            skill_command="/test",
+            audit=None,
+        )
+        # Must not be contradictory — contradiction guard must set success=False
+        assert not (skill_result.success and skill_result.needs_retry), (
+            f"Contradiction: success={skill_result.success}, "
+            f"needs_retry={skill_result.needs_retry}"
+        )
+        assert skill_result.needs_retry is True
+        assert skill_result.success is False
+
+    def test_completed_channel_b_max_turns_no_contradiction(self) -> None:
+        """COMPLETED + CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""
+        result = SubprocessResult(
+            returncode=-15,
+            stdout=_result_ndjson(subtype="error_max_turns", result="partial", is_error=True),
+            stderr="",
+            termination=TerminationReason.COMPLETED,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="",
+            skill_command="/test",
+            audit=None,
+        )
+        assert not (skill_result.success and skill_result.needs_retry), (
+            f"Contradiction: success={skill_result.success}, "
+            f"needs_retry={skill_result.needs_retry}"
+        )
+        assert skill_result.needs_retry is True
+        assert skill_result.success is False

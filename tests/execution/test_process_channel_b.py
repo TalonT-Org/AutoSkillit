@@ -17,7 +17,7 @@ from unittest.mock import patch
 import anyio
 import pytest
 
-from autoskillit.core.types import ChannelConfirmation, TerminationReason
+from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason
 from autoskillit.execution.process import (
     _has_active_api_connection,
     _heartbeat,
@@ -1079,5 +1079,36 @@ class TestChannelBDrainRacePipelineAdjudication:
             audit=None,
         )
 
+        assert skill_result.success is True
+        assert skill_result.needs_retry is False
+
+
+class TestNaturalExitWithChannelConfirmation:
+    """NATURAL_EXIT + channel signals flow correctly through _build_skill_result.
+
+    Test 1C: Validates the downstream adjudication path for the combination
+    produced by the signal-accumulation fix when wait_task and session_monitor
+    both complete in the same event loop tick.
+    """
+
+    def test_natural_exit_channel_b_empty_stdout_is_success(self):
+        """NATURAL_EXIT + CHANNEL_B + empty stdout → success=True, no retry.
+
+        _compute_success: CHANNEL_B provenance bypass fires → True.
+        _compute_retry: NATURAL_EXIT + CHANNEL_B channel guard fires → (False, NONE).
+        """
+        from autoskillit.execution.headless import _build_skill_result
+
+        result = SubprocessResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result, completion_marker="", skill_command="test", audit=None
+        )
         assert skill_result.success is True
         assert skill_result.needs_retry is False

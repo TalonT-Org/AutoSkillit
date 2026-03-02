@@ -2700,7 +2700,7 @@ class TestNoAsyncioRuntimePrimitives:
 
     def test_no_asyncio_sleep_calls(self):
         source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "anyio.sleep(" not in source
+        assert "asyncio.sleep(" not in source
 
     def test_no_asyncio_to_thread_calls(self):
         source = Path("src/autoskillit/execution/process.py").read_text()
@@ -2712,7 +2712,7 @@ class TestNoAsyncioRuntimePrimitives:
 
     def test_no_asyncio_event_instantiation(self):
         source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "anyio.Event()" not in source
+        assert "asyncio.Event()" not in source
 
     def test_no_asyncio_wait_for_calls(self):
         source = Path("src/autoskillit/execution/process.py").read_text()

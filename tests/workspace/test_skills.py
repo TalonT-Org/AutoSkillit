@@ -7,7 +7,7 @@ import re
 import yaml
 
 from autoskillit.core.types import SkillSource
-from autoskillit.workspace.skills import SkillResolver, _INTERNAL_SKILLS, bundled_skills_dir
+from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
 
 BUNDLED_SKILLS = [
     "analyze-prs",
@@ -88,7 +88,8 @@ class TestSkillResolver:
         resolver = SkillResolver()
         names = {s.name for s in resolver.list_all()}
         assert "sous-chef" not in names, (
-            "sous-chef is an internal bootstrap document and must be excluded from user-visible skill lists"
+            "sous-chef is an internal bootstrap document and must be excluded "
+            "from user-visible skill lists"
         )
 
     def test_list_all_returns_user_invocable_skills_only(self) -> None:

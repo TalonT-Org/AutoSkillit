@@ -34,7 +34,7 @@ class TestDefaultConfig:
 
     def test_field_defaults_returns_correct_values_for_test_check(self):
         """_field_defaults() reads TestCheckConfig field defaults without instantiating."""
-        from autoskillit.config.settings import _field_defaults, TestCheckConfig
+        from autoskillit.config.settings import TestCheckConfig, _field_defaults
 
         d = _field_defaults(TestCheckConfig)
         assert d["command"] == ["task", "test-check"]
@@ -42,7 +42,7 @@ class TestDefaultConfig:
 
     def test_field_defaults_returns_none_for_optional_fields(self):
         """_field_defaults() returns None for Optional fields that default to None."""
-        from autoskillit.config.settings import _field_defaults, ModelConfig
+        from autoskillit.config.settings import ModelConfig, _field_defaults
 
         d = _field_defaults(ModelConfig)
         assert d["default"] is None

@@ -36,9 +36,7 @@ SUBPACKAGE_LAYERS: dict[str, int] = {
 }
 # Root-level isolated modules are exempt from sub-package layer enforcement.
 # Their import constraints are tested by test_isolated_modules_do_not_import_server_or_cli.
-_LAYER_EXEMPT_STEMS: frozenset[str] = frozenset(
-    {"version", "smoke_utils", "__init__", "__main__"}
-)
+_LAYER_EXEMPT_STEMS: frozenset[str] = frozenset({"version", "smoke_utils", "__init__", "__main__"})
 
 _SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
 

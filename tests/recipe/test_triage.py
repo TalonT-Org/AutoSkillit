@@ -26,7 +26,8 @@ def test_old_llm_triage_module_does_not_exist():
 
     old_path = pkg_root() / "_llm_triage.py"
     assert not old_path.exists(), (
-        f"_llm_triage.py still exists at {old_path}; should be deleted after move to recipe/_triage.py"
+        f"_llm_triage.py still exists at {old_path}; "
+        "should be deleted after move to recipe/_triage.py"
     )
 
 
@@ -42,8 +43,8 @@ async def test_triage_staleness_reads_skill_md_once_per_unique_skill(
     """SKILL.md is read at most once per unique skill name per triage_staleness call."""
     from unittest.mock import AsyncMock
 
-    from autoskillit.recipe._triage import triage_staleness
     from autoskillit.execution.process import SubprocessResult, TerminationReason
+    from autoskillit.recipe._triage import triage_staleness
 
     skill_dir = tmp_path / "implement-worktree"
     skill_dir.mkdir()
@@ -107,8 +108,8 @@ class TestTriageStaleness:
         """When run_managed_async returns TIMED_OUT, result is meaningful=True."""
         from unittest.mock import AsyncMock
 
-        from autoskillit.recipe._triage import triage_staleness
         from autoskillit.execution.process import SubprocessResult, TerminationReason
+        from autoskillit.recipe._triage import triage_staleness
 
         skill_dir = tmp_path / "test-skill"
         skill_dir.mkdir()
@@ -149,8 +150,8 @@ class TestTriageStaleness:
 
         import structlog
 
-        from autoskillit.recipe._triage import triage_staleness
         from autoskillit.execution.process import SubprocessResult, TerminationReason
+        from autoskillit.recipe._triage import triage_staleness
 
         skill_dir = tmp_path / "test-skill"
         skill_dir.mkdir()
@@ -197,8 +198,8 @@ class TestTriageStaleness:
 
         import structlog
 
-        from autoskillit.recipe._triage import triage_staleness
         from autoskillit.execution.process import SubprocessResult, TerminationReason
+        from autoskillit.recipe._triage import triage_staleness
 
         skill_dir = tmp_path / "test-skill"
         skill_dir.mkdir()
@@ -239,9 +240,9 @@ class TestTriageStaleness:
         import json as _json
         from unittest.mock import AsyncMock
 
-        from autoskillit.recipe._triage import triage_staleness
         from autoskillit.core.types import TerminationReason
         from autoskillit.execution.process import SubprocessResult
+        from autoskillit.recipe._triage import triage_staleness
 
         skill_dir = tmp_path / "test-skill"
         skill_dir.mkdir()
@@ -322,9 +323,9 @@ class TestTriageStaleness:
         import json as _json
         from unittest.mock import AsyncMock
 
-        from autoskillit.recipe._triage import triage_staleness
         from autoskillit.core.types import TerminationReason
         from autoskillit.execution.process import SubprocessResult
+        from autoskillit.recipe._triage import triage_staleness
 
         skill_dir = tmp_path / "test-skill"
         skill_dir.mkdir()

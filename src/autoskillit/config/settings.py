@@ -223,7 +223,9 @@ class AutomationConfig:
             ),
             safety=SafetyConfig(
                 reset_guard_marker=str(val(sf, "reset_guard_marker", _sf["reset_guard_marker"])),
-                require_dry_walkthrough=bool(val(sf, "require_dry_walkthrough", _sf["require_dry_walkthrough"])),
+                require_dry_walkthrough=bool(
+                    val(sf, "require_dry_walkthrough", _sf["require_dry_walkthrough"])
+                ),
                 test_gate_on_merge=bool(val(sf, "test_gate_on_merge", _sf["test_gate_on_merge"])),
             ),
             read_db=ReadDbConfig(
@@ -235,8 +237,12 @@ class AutomationConfig:
                 heartbeat_marker=str(val(rs, "heartbeat_marker", _rs["heartbeat_marker"])),
                 stale_threshold=int(val(rs, "stale_threshold", _rs["stale_threshold"])),
                 completion_marker=str(val(rs, "completion_marker", _rs["completion_marker"])),
-                completion_drain_timeout=float(val(rs, "completion_drain_timeout", _rs["completion_drain_timeout"])),
-                exit_after_stop_delay_ms=int(val(rs, "exit_after_stop_delay_ms", _rs["exit_after_stop_delay_ms"])),
+                completion_drain_timeout=float(
+                    val(rs, "completion_drain_timeout", _rs["completion_drain_timeout"])
+                ),
+                exit_after_stop_delay_ms=int(
+                    val(rs, "exit_after_stop_delay_ms", _rs["exit_after_stop_delay_ms"])
+                ),
             ),
             run_skill_retry=RunSkillRetryConfig(
                 timeout=int(val(rsr, "timeout", _rsr["timeout"])),

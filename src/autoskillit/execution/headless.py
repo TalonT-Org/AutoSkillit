@@ -34,9 +34,13 @@ from autoskillit.execution.session import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.config import AutomationConfig  # noqa: cross-l1-import — TYPE_CHECKING only, no runtime coupling
+    from autoskillit.config import (
+        AutomationConfig,  # noqa: cross-l1-import — TYPE_CHECKING only, no runtime coupling
+    )
     from autoskillit.core import AuditStore, SubprocessResult
-    from autoskillit.pipeline.context import ToolContext  # noqa: cross-l1-import — TYPE_CHECKING only, no runtime coupling
+    from autoskillit.pipeline.context import (
+        ToolContext,  # noqa: cross-l1-import — TYPE_CHECKING only, no runtime coupling
+    )
 
 logger = get_logger(__name__)
 

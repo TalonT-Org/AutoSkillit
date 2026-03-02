@@ -29,6 +29,12 @@ from autoskillit.recipe.io import (  # noqa: E402
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
 from autoskillit.recipe.schema import Recipe, RecipeStep  # noqa: E402
+from autoskillit.recipe.staleness_cache import (  # noqa: E402
+    StalenessEntry,
+    compute_recipe_hash,
+    read_staleness_cache,
+    write_staleness_cache,
+)
 from autoskillit.recipe.validator import (  # noqa: E402
     RuleFinding,
     analyze_dataflow,
@@ -40,6 +46,10 @@ __all__ = [
     "Recipe",
     "RecipeStep",
     "StaleItem",
+    "StalenessEntry",
+    "compute_recipe_hash",
+    "read_staleness_cache",
+    "write_staleness_cache",
     "RuleFinding",
     "load_recipe",
     "list_recipes",

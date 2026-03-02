@@ -216,7 +216,8 @@ These skills ship with the autoskillit plugin and are invoked as `/autoskillit:<
 
 analyze-prs, audit-friction, audit-impl, dry-walkthrough, implement-worktree, implement-worktree-no-merge,
 investigate, make-groups, make-plan, merge-pr, write-recipe, mermaid, migrate-recipes, open-pr,
-pipeline-summary, rectify, report-bug, resolve-failures, retry-worktree, review-approach, setup-project
+pipeline-summary, rectify, report-bug, resolve-failures, retry-worktree, review-approach, setup-project,
+smoke-task
 
 ## Skill Reference Disambiguation
 
@@ -384,13 +385,15 @@ steps:
     with:
       skill_command: "/autoskillit:rectify the investigation findings"
       cwd: "${{ inputs.helper_dir }}"
+    capture:
+      plan_path: "${{ result.plan_path }}"
     on_success: implement
     on_failure: escalate
 
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:implement-worktree-no-merge the plan"
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
       cwd: "${{ inputs.helper_dir }}"
     retry:
       max_attempts: 3

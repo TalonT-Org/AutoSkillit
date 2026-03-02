@@ -11,10 +11,12 @@ from autoskillit.workspace.cleanup import (
 )
 from autoskillit.workspace.clone import (
     DefaultCloneManager,
+    classify_remote_url,
     clone_repo,
     detect_branch,
     detect_source_dir,
     detect_uncommitted_changes,
+    detect_unpublished_branch,
     push_to_remote,
     remove_clone,
 )
@@ -26,6 +28,7 @@ __all__ = [
     "CleanupResult",
     "_delete_directory_contents",
     "delete_directory_contents",
+    "classify_remote_url",
     "DefaultCloneManager",
     "DefaultWorkspaceManager",
     "SkillResolver",
@@ -34,6 +37,7 @@ __all__ = [
     "detect_branch",
     "detect_source_dir",
     "detect_uncommitted_changes",
+    "detect_unpublished_branch",
     "push_to_remote",
     "remove_clone",
 ]

@@ -31,6 +31,7 @@ BUNDLED_SKILLS = [
     "retry-worktree",
     "review-approach",
     "setup-project",
+    "smoke-task",
 ]
 
 BUNDLED_SKILL_NAMES = set(BUNDLED_SKILLS)

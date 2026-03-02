@@ -1,7 +1,7 @@
 name: smoke-test
 autoskillit_version: "0.2.0"
 description: End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
-summary: setup > seed_task > set_feature_branch > create_branch? > investigate > rectify > implement > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
+summary: setup > seed_task > set_feature_branch > create_branch? > investigate > rectify > implement > set_worktree_path > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
 
 ingredients:
   workspace:
@@ -70,6 +70,7 @@ steps:
     on_success: investigate
     on_failure: escalate
     optional: true
+    skip_when_false: "inputs.collect_on_branch"
     note: >
       Only execute if inputs.collect_on_branch is 'true'. Otherwise skip to investigate.
       Creates the feature branch, initialises bug_report.json, and overrides
@@ -79,7 +80,7 @@ steps:
   investigate:
     tool: run_skill
     with:
-      skill_command: "Create investigation.txt in the current directory with the text 'No critical issues found.' Then output exactly this line on its own: investigation_path=investigation.txt"
+      skill_command: "/autoskillit:smoke-task Create investigation.txt in the current directory with the text 'No critical issues found.' Then output exactly this line on its own: investigation_path=investigation.txt"
       cwd: "${{ inputs.workspace }}"
     on_success: rectify
     on_failure: escalate
@@ -87,7 +88,7 @@ steps:
   rectify:
     tool: run_skill
     with:
-      skill_command: "Create plan.md in the current directory at ${{ inputs.workspace }}/plan.md. The file MUST have this exact first line: Dry-walkthrough verified = TRUE followed by a blank line, then # Plan and Create ok.txt with content OK."
+      skill_command: "/autoskillit:smoke-task Create plan.md in the current directory at ${{ inputs.workspace }}/plan.md. The file MUST have this exact first line: Dry-walkthrough verified = TRUE followed by a blank line, then # Plan and Create ok.txt with content OK."
       cwd: "${{ inputs.workspace }}"
     on_success: implement
     on_failure: escalate
@@ -95,16 +96,24 @@ steps:
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "In the git repo at ${{ inputs.workspace }}, run: git worktree add ${{ inputs.workspace }}/.claude/worktrees/smoke-impl -b smoke-impl. Then in that worktree directory, write ok.txt with content OK. Run git add ok.txt && git commit -m 'smoke: add ok.txt'. Then output exactly this line on its own: worktree_path=${{ inputs.workspace }}/.claude/worktrees/smoke-impl"
+      skill_command: "/autoskillit:smoke-task In the git repo at ${{ inputs.workspace }}, run: git worktree add ${{ inputs.workspace }}/.claude/worktrees/smoke-impl -b smoke-impl. Then in that worktree directory, write ok.txt with content OK. Run git add ok.txt && git commit -m 'smoke: add ok.txt'."
       cwd: "${{ inputs.workspace }}"
-    capture:
-      worktree_path: "${{ result.worktree_path }}"
-    on_success: test
+    on_success: set_worktree_path
     on_failure: escalate
     retry:
       max_attempts: 2
       on: needs_retry
       on_exhausted: escalate
+
+  set_worktree_path:
+    tool: run_cmd
+    with:
+      cmd: "printf '%s' '${{ inputs.workspace }}/.claude/worktrees/smoke-impl'"
+      cwd: "${{ inputs.workspace }}"
+    capture:
+      worktree_path: "${{ result.stdout }}"
+    on_success: test
+    on_failure: escalate
 
   test:
     tool: test_check
@@ -116,7 +125,7 @@ steps:
   assess:
     tool: run_skill
     with:
-      skill_command: "In the git worktree at ${{ context.worktree_path }}, check what file is expected by the test and create/fix it. Commit any changes. After fixing, append a JSON object to ${{ inputs.workspace }}/bug_report.json with keys: step (string 'test'), error (what failed), fix (what you did), iteration (number). The file contains a JSON array — read it, append your entry, write it back. Then output: fixed=true"
+      skill_command: "/autoskillit:smoke-task In the git worktree at ${{ context.worktree_path }}, check what file is expected by the test and create/fix it. Commit any changes. After fixing, append a JSON object to ${{ inputs.workspace }}/bug_report.json with keys: step (string 'test'), error (what failed), fix (what you did), iteration (number). The file contains a JSON array — read it, append your entry, write it back. Then output: fixed=true"
       cwd: "${{ context.worktree_path }}"
     on_success: test
     on_failure: classify
@@ -165,11 +174,12 @@ steps:
   create_summary:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:pipeline-summary ${{ inputs.workspace }}/bug_report.json smoke-run ${{ inputs.original_base_branch }} ${{ inputs.workspace }}"
+      skill_command: "/autoskillit:pipeline-summary ${{ inputs.workspace }}/bug_report.json ${{ context.feature_branch }} ${{ inputs.original_base_branch }} ${{ inputs.workspace }}"
       cwd: "${{ inputs.workspace }}"
     on_success: done
     on_failure: escalate
     optional: true
+    skip_when_false: "inputs.collect_on_branch"
     note: >
       Skipped when collect_on_branch is 'false' or no bugs were encountered.
       Terminal reporting step — outputs (summary file, issue URL, PR URL) are written to

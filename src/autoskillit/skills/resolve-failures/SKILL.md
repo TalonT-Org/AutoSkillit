@@ -34,7 +34,13 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 ## Workflow
 
 ### Step 0: Validate Arguments
-1. Parse three positional args: `{worktree_path}`, `{plan_path}`, `{base_branch}`
+1. Parse three positional args using **path detection**: scan all tokens after
+   the skill name for those starting with `/`, `./`, or `.autoskillit/`. The
+   first path-like token is `worktree_path`; the second is `plan_path`. The
+   `base_branch` is the remaining non-path token. Ignore any non-path tokens
+   that appear before the path arguments. If fewer than two path-like tokens
+   are found, abort with a clear error and the correct format:
+   `/autoskillit:resolve-failures <worktree_path> <plan_path> <base_branch>`
 2. Verify worktree exists and is a valid git worktree
 3. Verify plan file exists and is readable
 4. Check for development environment in worktree, recreate if missing. Use the project's configured `worktree_setup.command`, or: `cd "${worktree_path}" && task install-worktree`

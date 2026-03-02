@@ -12,7 +12,7 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import get_logger
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled
+from autoskillit.server.helpers import _apply_triage_gate, _notify, _require_enabled
 
 logger = get_logger(__name__)
 
@@ -199,7 +199,7 @@ async def load_recipe(name: str) -> str:
         return json.dumps({"error": "Server not initialized"})
     suppressed = _ctx.config.migration.suppressed
     result = _ctx.recipes.load_and_validate(name, Path.cwd(), suppressed=suppressed)
-    return json.dumps(result)
+    return json.dumps(await _apply_triage_gate(result, name))
 
 
 @mcp.tool(tags={"automation"})

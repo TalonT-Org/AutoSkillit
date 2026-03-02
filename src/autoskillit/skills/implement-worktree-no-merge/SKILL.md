@@ -20,6 +20,10 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - MCP orchestrator calls this via `run_skill_retry`
 - Orchestrator wants to control test/merge gates independently
 
+## Arguments
+
+`{plan_path}`   — Absolute path to the implementation plan file (required)
+
 ## Critical Constraints
 
 **NEVER:**
@@ -60,7 +64,14 @@ Correct orchestration on `needs_retry=true`:
 
 ### Step 0: Validate Prerequisites
 
-1. Verify plan exists (file path or pasted content)
+1. Extract and verify the plan path using **path detection**: scan the tokens
+   after the skill name for the first one that starts with `/`, `./`, `temp/`,
+   or `.autoskillit/` — that token is the plan path. Ignore any non-path words
+   that appear before it (orchestrators sometimes prepend descriptive text such
+   as "the verified plan"). If no path-like token is found, treat the entire
+   argument string as pasted plan content. Verify the resolved file exists before
+   proceeding; if it does not, abort with:
+   `"Plan file not found: {path}. Correct format: /autoskillit:implement-worktree-no-merge <plan_path>"`
 2. **Check for dry-walkthrough verification:** Read the first line of the plan file. If it does not contain exactly `Dry-walkthrough verified = TRUE`:
    - Display warning: "WARNING: This plan has NOT been validated with a dry-walkthrough. Implementation may encounter issues that could have been caught beforehand."
    - Use `AskUserQuestion` to prompt: "Do you want to continue without dry-walkthrough validation?"
@@ -86,8 +97,14 @@ git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
 mkdir -p ".autoskillit/temp/worktrees/${WORKTREE_NAME}"
 echo "${CURRENT_BRANCH}" > ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch"
 # 2) Set git upstream tracking (requires remote tracking ref in local fetch cache)
-git fetch origin "${CURRENT_BRANCH}" 2>/dev/null || true
-git -C "${WORKTREE_PATH}" branch --set-upstream-to="origin/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null || true
+if ! git fetch origin "${CURRENT_BRANCH}" 2>/dev/null; then
+    echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on origin."
+    echo "      merge_worktree will fail unless you push first: git push -u origin ${CURRENT_BRANCH}"
+    echo "      Continuing — implementation will proceed, but the merge step will be blocked."
+fi
+if ! git -C "${WORKTREE_PATH}" branch --set-upstream-to="origin/${CURRENT_BRANCH}" "${WORKTREE_NAME}" 2>/dev/null; then
+    echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → 'origin/${CURRENT_BRANCH}'."
+fi
 ```
 
 ### Step 1.5: Initialize Code Index for Original Project

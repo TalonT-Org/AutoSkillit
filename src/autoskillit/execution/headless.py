@@ -13,10 +13,18 @@ from __future__ import annotations
 import dataclasses
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
-from autoskillit.core import FailureRecord, RetryReason, SkillResult, TerminationReason, get_logger
+from autoskillit.core import (
+    ChannelConfirmation,
+    FailureRecord,
+    RetryReason,
+    SkillResult,
+    TerminationReason,
+    get_logger,
+)
 from autoskillit.execution.commands import build_headless_cmd
+from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     _compute_retry,
@@ -34,7 +42,11 @@ logger = get_logger(__name__)
 
 
 def _ensure_skill_prefix(skill_command: str) -> str:
-    """Ensure skill commands start with 'Use' for headless session loading."""
+    """Prompt-formatting helper: prepend 'Use ' to slash-commands for headless session loading.
+
+    This is NOT a validator. Non-slash input passes through unchanged by design —
+    runtime validation is enforced by the skill_command_guard PreToolUse hook.
+    """
     stripped = skill_command.strip()
     if stripped.startswith("/"):
         return f"Use {stripped}"
@@ -100,7 +112,9 @@ def _recover_from_separate_marker(
     """
     if not session.assistant_messages:
         return None
-    if not any(completion_marker in msg for msg in session.assistant_messages):
+    if not any(
+        _marker_is_standalone(msg, completion_marker) for msg in session.assistant_messages
+    ):
         return None
     combined = "\n\n".join(session.assistant_messages)
     stripped = combined.replace(completion_marker, "").strip()
@@ -133,23 +147,20 @@ def _build_skill_result(
     """Route SubprocessResult fields into the standard run_skill response."""
     if result.termination == TerminationReason.STALE:
         # Attempt to recover from stdout before declaring stale failure.
-        # Also attempt provenance bypass when data_confirmed=False (Change 2b):
-        # Channel B confirmed the session completed via session JSONL, so even
-        # empty stdout is sufficient evidence of completion.
         stale_session = parse_session_result(result.stdout)
         stale_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_stale_recovery = (
             stale_session.subtype == "success"
             and stale_session.result.strip()
             and not stale_session.is_error
-        ) or not result.data_confirmed
+        )
         if can_attempt_stale_recovery:
             success = _compute_success(
                 stale_session,
                 stale_returncode,
                 TerminationReason.COMPLETED,
                 completion_marker=completion_marker,
-                data_confirmed=result.data_confirmed,
+                channel_confirmation=result.channel_confirmation,
             )
             if success:
                 logger.warning(
@@ -211,14 +222,27 @@ def _build_skill_result(
         returncode,
         result.termination,
         completion_marker,
-        data_confirmed=result.data_confirmed,
+        channel_confirmation=result.channel_confirmation,
     )
     needs_retry, retry_reason = _compute_retry(
         session,
         returncode,
         result.termination,
-        data_confirmed=result.data_confirmed,
+        channel_confirmation=result.channel_confirmation,
     )
+
+    # --- Composition guard: contradiction ---
+    # success=True AND needs_retry=True is an impossible state.
+    # The retry signal (session-level error) is authoritative over the
+    # channel provenance bypass in _compute_success.
+    if success and needs_retry:
+        logger.warning(
+            "contradiction_guard_resolved",
+            subtype=session.subtype,
+            termination=result.termination.value,
+            channel=result.channel_confirmation.value,
+        )
+        success = False
 
     if not success and completion_marker:
         recovered = _recover_from_separate_marker(session, completion_marker)
@@ -228,13 +252,35 @@ def _build_skill_result(
                 returncode,
                 result.termination,
                 completion_marker,
-                data_confirmed=result.data_confirmed,
+                channel_confirmation=result.channel_confirmation,
             )
             if recovered_success:
                 session = recovered
                 success = True
                 needs_retry = False
                 retry_reason = RetryReason.NONE
+
+    # --- Composition guard: dead end ---
+    # success=False AND needs_retry=False with channel confirmation is a dead end.
+    # A channel confirmed the session completed, but content validation failed.
+    # This is a data-availability issue, not a permanent session failure.
+    # Escalate to retriable so the orchestrator has a recovery path.
+    if not success and not needs_retry:
+        match result.channel_confirmation:
+            case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.CHANNEL_B:
+                logger.warning(
+                    "dead_end_guard_escalated",
+                    channel=result.channel_confirmation.value,
+                    termination=result.termination.value,
+                    subtype=session.subtype,
+                    result_empty=not session.result.strip(),
+                )
+                needs_retry = True
+                retry_reason = RetryReason.RESUME
+            case ChannelConfirmation.UNMONITORED:
+                pass  # legitimate terminal failure — no channel confirmed completion
+            case _ as unreachable_cc:
+                assert_never(unreachable_cc)
 
     if not success or needs_retry:
         _capture_failure(

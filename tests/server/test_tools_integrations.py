@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import anyio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+import anyio
 import pytest
 
 from autoskillit.core import SkillResult

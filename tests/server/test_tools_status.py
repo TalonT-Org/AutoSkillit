@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import anyio
 import json
 from pathlib import Path
 
+import anyio
 import pytest
 
 from autoskillit.config import AutomationConfig, TokenUsageConfig

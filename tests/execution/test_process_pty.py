@@ -13,7 +13,12 @@ import textwrap
 
 import pytest
 
-from autoskillit.core.types import ChannelConfirmation, RetryReason, SubprocessResult, TerminationReason
+from autoskillit.core.types import (
+    ChannelConfirmation,
+    RetryReason,
+    SubprocessResult,
+    TerminationReason,
+)
 from autoskillit.execution.headless import _build_skill_result, _recover_from_separate_marker
 from autoskillit.execution.process import (
     RaceSignals,

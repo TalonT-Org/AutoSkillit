@@ -11,7 +11,11 @@ import inspect
 import re
 from pathlib import Path
 
-from autoskillit.execution.process import DefaultSubprocessRunner, run_managed_async, run_managed_sync
+from autoskillit.execution.process import (
+    DefaultSubprocessRunner,
+    run_managed_async,
+    run_managed_sync,
+)
 
 # ── Importability ──────────────────────────────────────────────────────────────
 

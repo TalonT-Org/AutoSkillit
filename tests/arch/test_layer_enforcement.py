@@ -37,7 +37,7 @@ SUBPACKAGE_LAYERS: dict[str, int] = {
 # Root-level isolated modules are exempt from sub-package layer enforcement.
 # Their import constraints are tested by test_isolated_modules_do_not_import_server_or_cli.
 _LAYER_EXEMPT_STEMS: frozenset[str] = frozenset(
-    {"version", "smoke_utils", "_llm_triage", "__init__", "__main__"}
+    {"version", "smoke_utils", "__init__", "__main__"}
 )
 
 _SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
@@ -477,15 +477,23 @@ def test_only_pipeline_context_imports_config() -> None:
 
 
 def test_recipe_no_forbidden_imports() -> None:
-    """T5: REQ-COMP-009 — recipe/ modules import only from core/ and workspace/."""
+    """T5: REQ-COMP-009 — recipe/ modules import only from core/ and workspace/.
+
+    Exception: _triage.py may also import from execution/ because it is an AI
+    orchestration module that spawns subprocess LLM calls (valid L2→L1 downward dep).
+    """
     recipe_pkg = SRC_ROOT / "recipe"
     assert recipe_pkg.exists(), "recipe/ package must exist"
     violations: list[str] = []
     for py in recipe_pkg.glob("*.py"):
         if py.name == "__init__.py":
             continue
+        # _triage.py is an AI orchestration module: valid L2→L1 call into execution/
+        allowed = {"core", "workspace", "recipe"}
+        if py.name == "_triage.py":
+            allowed = allowed | {"execution"}
         for stem, lineno in _extract_module_level_internal_imports(py):
-            if stem not in {"core", "workspace", "recipe"}:
+            if stem not in allowed:
                 violations.append(
                     f"recipe/{py.name}:{lineno} imports {stem} — forbidden by REQ-COMP-009"
                 )

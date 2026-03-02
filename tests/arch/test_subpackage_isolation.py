@@ -553,19 +553,19 @@ def test_migration_subpackage_importable() -> None:
 
 
 def test_llm_triage_imports_from_contracts_not_validator() -> None:
-    """T7: REQ-DSGN-007 — _llm_triage.py imports contract types, not recipe/validator.
+    """T7: REQ-DSGN-007 — recipe/_triage.py imports contract types, not recipe/validator.
 
     Accepts both direct sub-module import (recipe.contracts) and gateway import
     (autoskillit.recipe) since REQ-IMP-001 requires gateway imports for non-server/cli files.
     """
-    src = (SRC_ROOT / "_llm_triage.py").read_text()
+    src = (SRC_ROOT / "recipe" / "_triage.py").read_text()
     assert (
         "recipe.contracts" in src
         or "recipe/contracts" in src
         or "from autoskillit.recipe import" in src
-    ), "_llm_triage.py must import contract types from recipe package"
+    ), "recipe/_triage.py must import contract types from recipe package"
     assert "recipe.validator" not in src and "recipe_validator" not in src, (
-        "_llm_triage.py must not import from recipe.validator or old recipe_validator"
+        "recipe/_triage.py must not import from recipe.validator or old recipe_validator"
     )
 
 
@@ -683,11 +683,13 @@ def test_tmp_path_has_worktree_hash(tmp_path: Path) -> None:
 def test_no_subpackage_exceeds_10_files() -> None:
     """REQ-CNST-003: No sub-package directory may contain more than 10 Python files.
 
-    server/ is exempt at 12 files to accommodate tools_clone and tools_integrations modules.
+    server/ is exempt at 13 files to accommodate tools_clone and tools_integrations modules.
     execution/ is exempt at 15 files to accommodate the 6 private _process_*.py sub-modules
     introduced by the P8-2 refactor (process.py monolith decomposition).
+    recipe/ is exempt at 18 files to accommodate the rule sub-modules and _triage.py
+    relocated from package root.
     """
-    EXEMPTIONS: dict[str, int] = {"server": 13, "recipe": 17, "execution": 15}
+    EXEMPTIONS: dict[str, int] = {"server": 13, "recipe": 18, "execution": 15}
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":
@@ -727,7 +729,7 @@ def test_core_has_no_autoskillit_imports() -> None:
 
 def test_isolated_modules_do_not_import_server_or_cli() -> None:
     """REQ-CNST-007: Root-level isolated modules must not import from server/ or cli/."""
-    isolated = ["_llm_triage.py", "smoke_utils.py", "version.py"]
+    isolated = ["smoke_utils.py", "version.py"]
     forbidden_prefixes = ("autoskillit.server", "autoskillit.cli")
     violations: list[str] = []
     for filename in isolated:

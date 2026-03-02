@@ -894,6 +894,21 @@ class TestSkillResult:
         parsed = json.loads(sr.to_json())
         assert parsed["token_usage"] is None
 
+    def test_outcome_property_succeeded(self):
+        sr = self._make(success=True, needs_retry=False)
+        assert sr.outcome is SessionOutcome.SUCCEEDED
+        assert sr.outcome == "succeeded"
+
+    def test_outcome_property_retriable(self):
+        sr = self._make(success=False, needs_retry=True, retry_reason=RetryReason.RESUME)
+        assert sr.outcome is SessionOutcome.RETRIABLE
+        assert sr.outcome == "retriable"
+
+    def test_outcome_property_failed(self):
+        sr = self._make(success=False, needs_retry=False, retry_reason=RetryReason.NONE)
+        assert sr.outcome is SessionOutcome.FAILED
+        assert sr.outcome == "failed"
+
 
 # ---------------------------------------------------------------------------
 # Adjudication consistency — raw function level documentation

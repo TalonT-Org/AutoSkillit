@@ -119,21 +119,16 @@ class TestExtractFrontmatter:
 class TestRecipeVersion:
     """RecipeInfo includes version from autoskillit_version field."""
 
-    # SV1: RecipeInfo.version is None when field absent
-    def test_version_none_when_absent(self, tmp_path: Path) -> None:
-        """parse_recipe_metadata sets version=None when autoskillit_version is absent."""
+    # SV1+SV2 merged
+    @pytest.mark.parametrize("version_val,expected", [(None, None), ("0.2.0", "0.2.0")])
+    def test_version_field(self, version_val, expected, tmp_path: Path) -> None:
         path = tmp_path / "recipe.yaml"
-        path.write_text("name: my-recipe\ndescription: A recipe\n")
+        content = "name: my-recipe\ndescription: A recipe\n"
+        if version_val is not None:
+            content += f'autoskillit_version: "{version_val}"\n'
+        path.write_text(content)
         info = parse_recipe_metadata(path)
-        assert info.version is None
-
-    # SV2: RecipeInfo.version is "0.2.0" when field present
-    def test_version_set_when_present(self, tmp_path: Path) -> None:
-        """parse_recipe_metadata reads autoskillit_version and stores it as version."""
-        path = tmp_path / "recipe.yaml"
-        path.write_text('name: my-recipe\ndescription: A recipe\nautoskillit_version: "0.2.0"\n')
-        info = parse_recipe_metadata(path)
-        assert info.version == "0.2.0"
+        assert info.version == expected
 
 
 # RL-VK1 — AST: recipe_loader must not hard-code the version key string

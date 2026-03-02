@@ -277,7 +277,7 @@ class TestRecipeTools:
         with (
             patch(
                 "autoskillit.recipe._api.run_semantic_rules",
-                side_effect=ValueError("injected parse failure"),
+                side_effect=ValueError("injected crash"),
             ),
             patch("autoskillit.recipe._api._logger") as mock_logger,
         ):
@@ -288,28 +288,9 @@ class TestRecipeTools:
         assert any(s.get("rule") == "validation-error" for s in result["suggestions"]), (
             "Unexpected exception must appear as a validation-error finding in suggestions"
         )
-
-    @pytest.mark.anyio
-    async def test_load_recipe_validation_error_message_includes_exception_type(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The validation-error finding message names the exception type."""
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "test.yaml").write_text(
-            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
-        )
-        with patch(
-            "autoskillit.recipe._api.run_semantic_rules",
-            side_effect=ValueError("injected crash"),
-        ):
-            result = json.loads(await load_recipe(name="test"))
-
-        assert "content" in result
         findings = [s for s in result["suggestions"] if s.get("rule") == "validation-error"]
         assert findings, "Expected at least one validation-error finding"
-        assert "Invalid recipe structure: injected crash" == findings[0]["message"]
+        assert findings[0]["message"] == "Invalid recipe structure: injected crash"
 
 
 class TestContractMigrationAdapterValidate:

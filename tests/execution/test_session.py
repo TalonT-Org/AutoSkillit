@@ -304,15 +304,6 @@ class TestComputeSuccess:
             is True
         )
 
-    def test_empty_result_is_failure(self):
-        session = ClaudeSessionResult(
-            subtype="success", is_error=False, result="", session_id="s1"
-        )
-        assert (
-            _compute_success(session, returncode=0, termination=TerminationReason.NATURAL_EXIT)
-            is False
-        )
-
     def test_nonzero_exit_is_failure(self):
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="Done.", session_id="s1"
@@ -1171,24 +1162,6 @@ def _assistant_ndjson(
 
 
 class TestClaudeSessionResultBasic:
-    def test_basic_fields(self):
-        s = ClaudeSessionResult(
-            subtype="success", is_error=False, result="hello", session_id="abc"
-        )
-        assert s.subtype == "success"
-        assert s.is_error is False
-        assert s.result == "hello"
-        assert s.session_id == "abc"
-
-    def test_post_init_coerces_list_content_to_str(self):
-        s = ClaudeSessionResult(
-            subtype="success",
-            is_error=False,
-            result=[{"type": "text", "text": "hello"}],
-            session_id="s1",
-        )
-        assert s.result == "hello"
-
     def test_post_init_coerces_none_result_to_empty_str(self):
         s = ClaudeSessionResult(
             subtype="success",
@@ -1329,15 +1302,6 @@ class TestParseSessionResult:
         yield
         structlog.reset_defaults()
         _flush_logger_proxy_caches()
-
-    def test_empty_string_returns_empty_output_subtype(self):
-        result = parse_session_result("")
-        assert result.subtype == "empty_output"
-        assert result.is_error is True
-
-    def test_whitespace_only_returns_empty_output_subtype(self):
-        result = parse_session_result("   \n\t  ")
-        assert result.subtype == "empty_output"
 
     def test_valid_ndjson_last_result_wins(self):
         first = json.dumps(

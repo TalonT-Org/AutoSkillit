@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from dataclasses import fields
 
+import pytest
+
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
 
 
@@ -100,14 +102,10 @@ class TestDefaultTokenLog:
         assert report[0]["step_name"] == "plan"
         assert report[1]["step_name"] == "implement"
 
-    def test_record_noop_on_empty_step_name(self):
+    @pytest.mark.parametrize("step,usage", [("", _make_usage()), ("plan", None)])
+    def test_record_is_noop_for_invalid_input(self, step, usage):
         log = DefaultTokenLog()
-        log.record("", _make_usage())
-        assert log.get_report() == []
-
-    def test_record_noop_on_none_token_usage(self):
-        log = DefaultTokenLog()
-        log.record("plan", None)
+        log.record(step, usage)
         assert log.get_report() == []
 
     def test_get_report_is_defensive_copy(self):

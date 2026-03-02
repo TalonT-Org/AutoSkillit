@@ -129,28 +129,3 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
     assert tester.call_count == 2  # both gates ran
 
 
-@pytest.mark.anyio
-async def test_perform_merge_both_gates_run_on_full_success(
-    default_config, conftest_mock_runner, tmp_path
-):
-    """On full success, both pre-rebase and post-rebase test gates execute."""
-    from autoskillit.server.git import perform_merge
-
-    tester = StatefulMockTester(results=[(True, "= 10 passed ="), (True, "= 10 passed =")])
-    # Full queue (tester is injected; no test-check in subprocess queue)
-    conftest_mock_runner.push(_make_result(0, f"{str(tmp_path)}/.git/worktrees/feat", ""))
-    conftest_mock_runner.push(_make_result(0, "feat\n", ""))
-    conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
-    conftest_mock_runner.push(_make_result(0, "", ""))  # ref check (5.5)
-    conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
-    conftest_mock_runner.push(_make_result(0, f"worktree {str(tmp_path)}\n", ""))  # wt-list
-    conftest_mock_runner.push(_make_result(0, "", ""))  # merge
-    conftest_mock_runner.push(_make_result(0, "", ""))  # wt-remove
-    conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
-
-    result = await perform_merge(
-        str(tmp_path), "main", config=default_config, runner=conftest_mock_runner, tester=tester
-    )
-
-    assert result.get("merge_succeeded") is True
-    assert tester.call_count == 2

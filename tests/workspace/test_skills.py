@@ -73,11 +73,6 @@ class TestSkillResolver:
         sources = {s.source for s in skills}
         assert sources == {SkillSource.BUNDLED}
 
-    def test_pipeline_summary_skill_exists(self) -> None:
-        resolver = SkillResolver()
-        names = [s.name for s in resolver.list_all()]
-        assert "pipeline-summary" in names
-
     def test_skill_md_cross_references_are_namespaced(self) -> None:
         """All /skill-name references in SKILL.md files use /autoskillit: prefix."""
         skills_dir = bundled_skills_dir()

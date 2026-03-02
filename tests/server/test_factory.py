@@ -67,12 +67,6 @@ def test_make_context_all_service_fields_populated_includes_github_client():
     assert isinstance(ctx.workspace_mgr, DefaultWorkspaceManager)
 
 
-def test_make_context_github_client_is_populated():
-    """make_context must always wire github_client — never leave it None."""
-    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".")
-    assert ctx.github_client is not None
-
-
 def test_make_context_github_client_is_default_fetcher():
     ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".")
     assert isinstance(ctx.github_client, DefaultGitHubFetcher)

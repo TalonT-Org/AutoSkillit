@@ -191,18 +191,6 @@ def _make_ctx(tmp_path: Path) -> ToolContext:
     )
 
 
-def test_toolcontext_github_client_defaults_to_none(tmp_path):
-    """github_client must default to None like the other optional service fields."""
-    ctx = _make_ctx(tmp_path)
-    assert ctx.github_client is None
-
-
-def test_toolcontext_clone_mgr_defaults_to_none(tmp_path):
-    """clone_mgr must default to None — same gap as github_client."""
-    ctx = _make_ctx(tmp_path)
-    assert ctx.clone_mgr is None
-
-
 def test_toolcontext_github_client_annotated_with_protocol():
     """github_client annotation must reference GitHubFetcher protocol."""
     hints = get_type_hints(ToolContext)

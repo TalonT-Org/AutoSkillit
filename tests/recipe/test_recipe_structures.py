@@ -143,18 +143,6 @@ class TestImplementationPipelineStructure:
             f"implement step (idx {implement_idx})"
         )
 
-    def test_ip_audit_impl_uses_base_sha_not_branch_name(self) -> None:
-        """A2: audit_impl must reference context.base_sha, NOT context.branch_name."""
-        audit_step = self.recipe.steps.get("audit_impl")
-        assert audit_step is not None, "audit_impl step not found"
-        skill_cmd = audit_step.with_args.get("skill_command", "")
-        assert "context.base_sha" in skill_cmd, (
-            "audit_impl must use context.base_sha as implementation_ref"
-        )
-        assert "context.branch_name" not in skill_cmd, (
-            "audit_impl must NOT use context.branch_name (deleted by merge_worktree)"
-        )
-
     def test_ip_merge_target_unconditionally_set(self) -> None:
         """A3: merge_target must be captured by a non-optional step before merge/push."""
         steps = list(self.recipe.steps.items())

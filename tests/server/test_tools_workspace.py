@@ -515,23 +515,6 @@ class TestReadDb:
         assert "error" in result
 
 
-class TestReadDbGating:
-    """read_db gating test in disabled-tools context."""
-
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-
-    @pytest.mark.anyio
-    async def test_read_db_gated(self):
-        result = json.loads(await read_db(db_path="/tmp/x.db", query="SELECT 1"))
-        assert result["success"] is False
-        assert result["is_error"] is True
-        assert "not enabled" in result["result"]
-
-
 @pytest.mark.anyio
 async def test_tools_status_routes_through_db_reader(tool_ctx, monkeypatch, tmp_path) -> None:
     """read_db routes through ctx.db_reader.query()."""

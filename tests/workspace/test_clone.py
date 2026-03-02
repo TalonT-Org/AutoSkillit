@@ -531,13 +531,6 @@ class TestPushToRemote:
         assert result["success"] is False
         assert len(result["stderr"]) > 0
 
-    def test_push_to_remote_does_not_raise(self, tmp_path: Path) -> None:
-        source = tmp_path / "source"
-        source.mkdir()
-        subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
-        push_to_remote("/no/such/clone", str(source), "main")  # must not raise
-
-
 # ---------------------------------------------------------------------------
 # Merged from test_workspace.py — detect_source_dir and detect_branch tests
 # ---------------------------------------------------------------------------

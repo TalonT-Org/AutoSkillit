@@ -417,8 +417,31 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
 
 
 class TestOutdatedScriptVersionRule:
-    # MSR1
-    def test_fires_when_version_below_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize("script_ver,installed_ver,expected_count", [
+        ("0.1.0", "0.2.0", 1),   # MSR1: below installed → fires
+        ("0.2.0", "0.2.0", 0),   # MSR2: matches → does not fire
+        (None,    "0.2.0", 1),   # MSR3: None → fires
+        ("0.1.0", "0.2.0", 1),   # MSR4: also fires (same as MSR1; severity checked separately)
+    ])
+    def test_outdated_recipe_version_rule(
+        self, monkeypatch: pytest.MonkeyPatch, script_ver, installed_ver, expected_count
+    ) -> None:
+        import autoskillit
+
+        monkeypatch.setattr(autoskillit, "__version__", installed_ver)
+        wf = _make_workflow(
+            {
+                "do_thing": {"tool": "run_cmd", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        wf.version = script_ver
+        findings = [f for f in run_semantic_rules(wf) if f.rule == "outdated-recipe-version"]
+        assert len(findings) == expected_count
+
+    def test_outdated_recipe_version_rule_severity_is_warning(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import autoskillit
 
         monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
@@ -429,55 +452,8 @@ class TestOutdatedScriptVersionRule:
             }
         )
         wf.version = "0.1.0"
-        findings = run_semantic_rules(wf)
-        assert len([f for f in findings if f.rule == "outdated-recipe-version"]) == 1
-
-    # MSR2
-    def test_does_not_fire_when_version_matches(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import autoskillit
-
-        monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
-        wf = _make_workflow(
-            {
-                "do_thing": {"tool": "run_cmd", "on_success": "done"},
-                "done": {"action": "stop", "message": "Done."},
-            }
-        )
-        wf.version = "0.2.0"
-        findings = run_semantic_rules(wf)
-        assert len([f for f in findings if f.rule == "outdated-recipe-version"]) == 0
-
-    # MSR3
-    def test_fires_when_version_is_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import autoskillit
-
-        monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
-        wf = _make_workflow(
-            {
-                "do_thing": {"tool": "run_cmd", "on_success": "done"},
-                "done": {"action": "stop", "message": "Done."},
-            }
-        )
-        assert wf.version is None
-        findings = run_semantic_rules(wf)
-        assert len([f for f in findings if f.rule == "outdated-recipe-version"]) == 1
-
-    # MSR4
-    def test_finding_severity_is_warning(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import autoskillit
-
-        monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
-        wf = _make_workflow(
-            {
-                "do_thing": {"tool": "run_cmd", "on_success": "done"},
-                "done": {"action": "stop", "message": "Done."},
-            }
-        )
-        wf.version = "0.1.0"
-        findings = run_semantic_rules(wf)
-        version_findings = [f for f in findings if f.rule == "outdated-recipe-version"]
-        assert len(version_findings) == 1
-        assert version_findings[0].severity == Severity.WARNING
+        findings = [f for f in run_semantic_rules(wf) if f.rule == "outdated-recipe-version"]
+        assert findings[0].severity == Severity.WARNING
 
 
 # ---------------------------------------------------------------------------

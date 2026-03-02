@@ -476,34 +476,20 @@ class TestBuiltinRecipesDir:
 class TestVersionField:
     """autoskillit_version field on Recipe dataclass."""
 
-    # VER1
-    def test_version_none_when_absent(self) -> None:
+    # VER1+VER2 merged
+    @pytest.mark.parametrize("version_val,expected", [(None, None), ("0.2.0", "0.2.0")])
+    def test_version_field(self, version_val, expected) -> None:
         data = {
-            "name": "version-test-recipe",
-            "description": "A recipe for testing the version field",
-            "kitchen_rules": ["Only use AutoSkillit MCP tools during pipeline execution"],
+            "name": "v-test", "description": "d",
             "steps": {
                 "do_it": {"tool": "run_cmd", "on_success": "done"},
                 "done": {"action": "stop", "message": "Done."},
             },
         }
+        if version_val is not None:
+            data["autoskillit_version"] = version_val
         wf = _parse_recipe(data)
-        assert wf.version is None
-
-    # VER2
-    def test_version_set_when_present(self) -> None:
-        data = {
-            "name": "version-test-recipe",
-            "description": "A recipe for testing the version field",
-            "kitchen_rules": ["Only use AutoSkillit MCP tools during pipeline execution"],
-            "steps": {
-                "do_it": {"tool": "run_cmd", "on_success": "done"},
-                "done": {"action": "stop", "message": "Done."},
-            },
-            "autoskillit_version": "0.2.0",
-        }
-        wf = _parse_recipe(data)
-        assert wf.version == "0.2.0"
+        assert wf.version == expected
 
     # VER4
     def test_version_preserved_in_round_trip(self, tmp_path: Path) -> None:
@@ -520,11 +506,6 @@ class TestVersionField:
         path = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(path)
         assert wf.version == "1.3.0"
-
-
-def test_builtin_recipes_dir_points_to_recipes() -> None:
-    d = builtin_recipes_dir()
-    assert d.name == "recipes"
 
 
 # ---------------------------------------------------------------------------

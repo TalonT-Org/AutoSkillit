@@ -42,6 +42,17 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **Route Failures, Do Not Investigate**: When a pipeline step fails, follow the step's `on_failure` route. Do NOT use native tools to diagnose failures — the downstream skill has diagnostic access that the orchestrator does not.
   * **Use `run_cmd` for Shell Access**: If shell commands are needed during a pipeline, use the `run_cmd` MCP tool, not the native Bash tool.
 
+### **3.5. Code Index MCP Usage**
+
+  * **Index is locked to the main project root**: The `code-index` MCP server is indexed against the source repo and must never be redirected to a worktree or branch. Its value is for exploration before code changes — at that point any worktree is identical to main, so the index is accurate regardless of where you are working.
+  * **Prefer code-index tools over native search tools when exploring the codebase**:
+    * `find_files` instead of Glob for in-project file discovery
+    * `search_code_advanced` instead of Grep for in-project content search (auto-selects best backend, paginates results, supports fuzzy matching)
+    * `get_file_summary` to understand a file's structure before reading it
+    * `get_symbol_body` to retrieve a specific function or class by name, including a `called_by` call graph, without loading the whole file
+  * **Do not rely on code-index tools for code added or modified during a branch** — use Read/Grep directly for that.
+  * **Fall back to native Grep/Glob** for multiline patterns or paths outside the project root.
+
 ### **3.4. CLAUDE.md Modifications**
 
   * **Correcting existing content is permitted**: If you discover that CLAUDE.md contains inaccurate information (wrong file paths, stale names, incorrect tool attributions), you may correct it without being asked.

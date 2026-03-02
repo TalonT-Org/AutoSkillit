@@ -182,8 +182,7 @@ tests/
 ├── __init__.py
 ├── conftest.py                          # Shared fixtures: MockSubprocessRunner, _make_result, _make_timeout_result
 ├── test_conftest.py                     # Tests for conftest fixtures
-├── test_llm_triage.py                   # LLM triage tests
-├── test_smoke_utils.py                  # Smoke utility tests
+├── test_version.py                      # Version module tests
 ├── arch/                                # AST enforcement + sub-package layer contracts
 │   ├── __init__.py
 │   ├── test_ast_rules.py
@@ -212,14 +211,14 @@ tests/
 │   ├── test_core.py
 │   ├── test_io.py
 │   ├── test_logging.py
-│   ├── test_types.py
-│   └── test_version.py
+│   └── test_types.py
 ├── execution/                           # Subprocess integration + session tests
 │   ├── __init__.py
 │   ├── test_commands.py
 │   ├── test_db.py
 │   ├── test_github.py
 │   ├── test_headless.py
+│   ├── test_llm_triage.py
 │   ├── test_process_channel_b.py
 │   ├── test_process_jsonl.py
 │   ├── test_process_kill.py
@@ -257,6 +256,7 @@ tests/
 │   ├── test_schema.py
 │   ├── test_semantic_rules.py
 │   ├── test_smoke_pipeline.py
+│   ├── test_smoke_utils.py
 │   ├── test_staleness_cache.py
 │   └── test_validator.py
 ├── server/                              # Server unit tests (tool handlers)

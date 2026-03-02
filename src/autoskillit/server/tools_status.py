@@ -29,14 +29,16 @@ async def kitchen_status() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
-    from autoskillit.server import _get_config, _get_ctx, version_info
+    from autoskillit.server._state import _ctx, version_info
 
+    if _ctx is None:
+        return json.dumps({"error": "Server not initialized"})
     info = version_info()
     status = {
         "package_version": info["package_version"],
         "plugin_json_version": info["plugin_json_version"],
         "versions_match": info["match"],
-        "tools_enabled": _get_ctx().gate.enabled,
+        "tools_enabled": _ctx.gate.enabled,
     }
     if not info["match"]:
         status["warning"] = (
@@ -45,13 +47,13 @@ async def kitchen_status() -> str:
             f"Run `autoskillit doctor` for details or "
             f"`autoskillit install` to refresh the plugin cache."
         )
-    status["token_usage_verbosity"] = _get_config().token_usage.verbosity
-    status["quota_guard_enabled"] = _get_config().quota_guard.enabled
-    github_client = _get_ctx().github_client
+    status["token_usage_verbosity"] = _ctx.config.token_usage.verbosity
+    status["quota_guard_enabled"] = _ctx.config.quota_guard.enabled
+    github_client = _ctx.github_client
     status["github_token_configured"] = (
         github_client.has_token if github_client is not None else False
     )
-    status["github_default_repo"] = _get_config().github.default_repo
+    status["github_default_repo"] = _ctx.config.github.default_repo
     return json.dumps(status)
 
 
@@ -72,11 +74,13 @@ async def get_pipeline_report(clear: bool = False) -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
-    from autoskillit.server import _get_ctx
+    from autoskillit.server._state import _ctx
 
-    failures = _get_ctx().audit.get_report_as_dicts()
+    if _ctx is None:
+        return json.dumps({"error": "Server not initialized"})
+    failures = _ctx.audit.get_report_as_dicts()
     if clear:
-        _get_ctx().audit.clear()
+        _ctx.audit.clear()
     return json.dumps(
         {
             "total_failures": len(failures),
@@ -103,12 +107,14 @@ async def get_token_summary(clear: bool = False) -> str:
     Args:
         clear: If True, reset the token log after returning current data.
     """
-    from autoskillit.server import _get_ctx
+    from autoskillit.server._state import _ctx
 
-    steps = _get_ctx().token_log.get_report()
-    total = _get_ctx().token_log.compute_total()
+    if _ctx is None:
+        return json.dumps({"error": "Server not initialized"})
+    steps = _ctx.token_log.get_report()
+    total = _ctx.token_log.compute_total()
     if clear:
-        _get_ctx().token_log.clear()
+        _ctx.token_log.clear()
     return json.dumps({"steps": steps, "total": total})
 
 

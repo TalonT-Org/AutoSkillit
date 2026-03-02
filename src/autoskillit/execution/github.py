@@ -7,6 +7,7 @@ Never raises — all errors are captured and returned as {"success": False, "err
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -16,6 +17,19 @@ from autoskillit.core import get_logger
 _log = get_logger(__name__)
 
 _FULL_URL_RE = re.compile(r"https?://github\.com/([^/]+)/([^/]+)/issues/(\d+)")
+
+
+def save_bug_report(path: Path, text: str) -> None:
+    """Persist a bug report to disk using an atomic write.
+
+    Separated from the MCP handler layer so that L3 does not directly
+    invoke L0 I/O primitives.
+    """
+    from autoskillit.core.io import _atomic_write
+
+    _atomic_write(path, text)
+
+
 _SHORTHAND_RE = re.compile(r"^([^/]+)/([^#]+)#(\d+)$")
 
 

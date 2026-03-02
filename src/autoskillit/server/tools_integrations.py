@@ -12,7 +12,8 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import _atomic_write, get_logger
+from autoskillit.core import get_logger
+from autoskillit.execution.github import save_bug_report
 from autoskillit.server import mcp
 from autoskillit.server.helpers import _notify, _require_enabled
 
@@ -58,15 +59,17 @@ async def fetch_github_issue(
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
-    from autoskillit.server import _get_config, _get_ctx
+    from autoskillit.server._state import _ctx
 
     logger.info("fetch_github_issue", issue_url=issue_url, include_comments=include_comments)
 
-    tool_ctx = _get_ctx()
+    if _ctx is None:
+        return json.dumps({"success": False, "error": "Server not initialized"})
+    tool_ctx = _ctx
     if tool_ctx.github_client is None:
         return json.dumps({"success": False, "error": "GitHub client not configured"})
 
-    config = _get_config()
+    config = _ctx.config
 
     # Resolve bare issue numbers using default_repo from config
     resolved_ref = issue_url
@@ -320,7 +323,7 @@ async def _run_report_session(
 
     report_text = skill_result.result or skill_result.stderr or "No report generated."
     try:
-        _atomic_write(report_path, report_text)
+        save_bug_report(report_path, report_text)
     except OSError as exc:
         logger.warning("report_bug write failed", path=str(report_path), error=str(exc))
 

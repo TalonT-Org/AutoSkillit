@@ -100,6 +100,53 @@ async def run_python(
     return json.dumps(result)
 
 
+async def _run_skill_common(
+    tool_name: str,
+    skill_command: str,
+    cwd: str,
+    add_dir: str,
+    model: str,
+    step_name: str,
+    ctx: Context,
+    timeout: float | None = None,
+    stale_threshold: float | None = None,
+) -> str:
+    """Shared preamble and execution body for run_skill and run_skill_retry.
+
+    Handles dry-walkthrough gate check, executor availability guard, skill
+    execution, and failure notification. run_skill_retry passes timeout and
+    stale_threshold; run_skill passes neither (uses the protocol defaults).
+    """
+    from autoskillit.server import _get_config, _get_ctx
+
+    if _get_config().safety.require_dry_walkthrough:
+        if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
+            return gate_error
+
+    tool_ctx = _get_ctx()
+    if tool_ctx.executor is None:
+        return json.dumps({"success": False, "error": "Executor not configured"})
+
+    skill_result = await tool_ctx.executor.run(
+        skill_command,
+        cwd,
+        model=model,
+        add_dir=add_dir,
+        step_name=step_name,
+        timeout=timeout,
+        stale_threshold=stale_threshold,
+    )
+    if not skill_result.success:
+        await _notify(
+            ctx,
+            "error",
+            f"{tool_name} failed",
+            f"autoskillit.{tool_name}",
+            extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
+        )
+    return skill_result.to_json()
+
+
 @mcp.tool(tags={"automation"})
 async def run_skill(
     skill_command: str,
@@ -142,27 +189,7 @@ async def run_skill(
         extra={"cwd": cwd, "model": model or "default"},
     )
 
-    from autoskillit.server import _get_config, _get_ctx
-
-    if _get_config().safety.require_dry_walkthrough:
-        if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
-            return gate_error
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.executor is None:
-        return json.dumps({"success": False, "error": "Executor not configured"})
-    skill_result = await tool_ctx.executor.run(
-        skill_command, cwd, model=model, add_dir=add_dir, step_name=step_name
-    )
-    if not skill_result.success:
-        await _notify(
-            ctx,
-            "error",
-            "run_skill failed",
-            "autoskillit.run_skill",
-            extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
-        )
-    return skill_result.to_json()
+    return await _run_skill_common("run_skill", skill_command, cwd, add_dir, model, step_name, ctx)
 
 
 @mcp.tool(tags={"automation"})
@@ -214,38 +241,25 @@ async def run_skill_retry(
         extra={"cwd": cwd, "model": model or "default"},
     )
 
-    from autoskillit.server import _get_config, _get_ctx
+    from autoskillit.server import _get_config
 
-    if _get_config().safety.require_dry_walkthrough:
-        if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
-            return gate_error
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.executor is None:
-        return json.dumps({"success": False, "error": "Executor not configured"})
     cfg = _get_config().run_skill_retry
-    skill_result = await tool_ctx.executor.run(
+    return await _run_skill_common(
+        "run_skill_retry",
         skill_command,
         cwd,
-        model=model,
-        add_dir=add_dir,
-        step_name=step_name,
+        add_dir,
+        model,
+        step_name,
+        ctx,
         timeout=cfg.timeout,
         stale_threshold=cfg.stale_threshold,
     )
-    if not skill_result.success:
-        await _notify(
-            ctx,
-            "error",
-            "run_skill_retry failed",
-            "autoskillit.run_skill_retry",
-            extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
-        )
-    return skill_result.to_json()
 
 
 __all__ = [
     "PIPELINE_FORBIDDEN_TOOLS",
+    "_run_skill_common",
     "run_cmd",
     "run_python",
     "run_skill",

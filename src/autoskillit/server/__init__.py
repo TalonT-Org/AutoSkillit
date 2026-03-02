@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from fastmcp import FastMCP
 
-from autoskillit.config import AutomationConfig
 from autoskillit.core import get_logger
 from autoskillit.pipeline import (  # noqa: F401
     GATED_TOOLS,
@@ -24,45 +23,20 @@ from autoskillit.pipeline import (  # noqa: F401
     ToolContext,
     gate_error_result,
 )
+from autoskillit.server._state import (  # noqa: E402, F401
+    _get_config,
+    _get_ctx,
+    _initialize,
+    version_info,
+)
 
 mcp: FastMCP = FastMCP("autoskillit")
-
-_ctx: ToolContext | None = None
 
 logger = get_logger(__name__)
 
 
-def _initialize(ctx: ToolContext) -> None:
-    """Set the server's ToolContext. Called by cli/app.py serve() before mcp.run()."""
-    global _ctx
-    _ctx = ctx
-
-
-def _get_ctx() -> ToolContext:
-    """Return the active ToolContext. Raises if _initialize() has not been called."""
-    if _ctx is None:
-        raise RuntimeError(
-            "serve() must be called before accessing context. "
-            "Call server._initialize(ctx) before mcp.run()."
-        )
-    return _ctx
-
-
-def _get_config() -> AutomationConfig:
-    """Return the active AutomationConfig from the ToolContext."""
-    return _get_ctx().config
-
-
-def version_info() -> dict:
-    """Return version health information for the running server."""
-    from autoskillit.version import version_info as _compute_version
-
-    plugin_dir = _ctx.plugin_dir if _ctx is not None else None
-    return _compute_version(plugin_dir)
-
-
 # Import all tool sub-modules to trigger @mcp.tool() registration.
-# These imports must come AFTER mcp, _ctx, _get_ctx, _get_config are defined
+# These imports must come AFTER mcp, _get_ctx, _get_config are defined
 # because tool modules import `mcp` from this package at import time.
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
 from autoskillit.server import (  # noqa: E402, F401

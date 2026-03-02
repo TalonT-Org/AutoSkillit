@@ -17,6 +17,41 @@ from autoskillit.server.helpers import _notify, _require_enabled, _run_subproces
 logger = get_logger(__name__)
 
 
+def _validate_reset_target(
+    test_dir: str, *, force: bool = False
+) -> tuple[str | None, str, str, Path]:
+    """Validate a reset target directory and its guard marker.
+
+    Returns (error_json_or_None, resolved_path, marker_name, marker_path).
+    When force=True, the marker-existence check is skipped.
+    """
+    resolved = os.path.realpath(test_dir)
+    if not os.path.isdir(resolved):
+        return (
+            json.dumps({"error": f"Directory does not exist: {resolved}"}),
+            resolved,
+            "",
+            Path(resolved),
+        )
+    from autoskillit.server._state import _get_config
+
+    marker_name = _get_config().safety.reset_guard_marker
+    marker_path = Path(resolved) / marker_name
+    if not force and not marker_path.is_file():
+        return (
+            json.dumps(
+                {
+                    "error": f"Safety: directory missing reset guard marker ({marker_name})",
+                    "hint": f"Create the marker with: autoskillit workspace init {resolved}",
+                }
+            ),
+            resolved,
+            marker_name,
+            marker_path,
+        )
+    return None, resolved, marker_name, marker_path
+
+
 @mcp.tool(tags={"automation"})
 async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str:
     """Run the configured test command in a worktree directory. Returns unambiguous PASS/FAIL.
@@ -93,34 +128,16 @@ async def reset_test_dir(
         extra={"resolved": resolved, "force": force},
     )
 
-    if not os.path.isdir(resolved):
+    error, resolved, marker_name, marker_path = _validate_reset_target(test_dir, force=force)
+    if error is not None:
         await _notify(
             ctx,
             "error",
             "reset_test_dir failed",
             "autoskillit.reset_test_dir",
-            extra={"reason": "directory does not exist"},
+            extra={"reason": "validation failed"},
         )
-        return json.dumps({"error": f"Directory does not exist: {resolved}"})
-
-    from autoskillit.server import _get_config
-
-    marker_name = _get_config().safety.reset_guard_marker
-    marker_path = Path(resolved) / marker_name
-    if not force and not marker_path.is_file():
-        await _notify(
-            ctx,
-            "error",
-            "reset_test_dir failed",
-            "autoskillit.reset_test_dir",
-            extra={"reason": "marker missing"},
-        )
-        return json.dumps(
-            {
-                "error": f"Safety: directory missing reset guard marker ({marker_name})",
-                "hint": f"Create the marker with: autoskillit workspace init {resolved}",
-            }
-        )
+        return error
 
     from autoskillit.server import _get_ctx
 
@@ -155,34 +172,18 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
         extra={"resolved": resolved},
     )
 
-    if not os.path.isdir(resolved):
+    error, resolved, marker_name, marker_path = _validate_reset_target(test_dir)
+    if error is not None:
         await _notify(
             ctx,
             "error",
             "reset_workspace failed",
             "autoskillit.reset_workspace",
-            extra={"reason": "directory does not exist"},
+            extra={"reason": "validation failed"},
         )
-        return json.dumps({"error": f"Directory does not exist: {resolved}"})
+        return error
 
     from autoskillit.server import _get_config
-
-    marker_name = _get_config().safety.reset_guard_marker
-    marker_path = Path(resolved) / marker_name
-    if not marker_path.is_file():
-        await _notify(
-            ctx,
-            "error",
-            "reset_workspace failed",
-            "autoskillit.reset_workspace",
-            extra={"reason": "marker missing"},
-        )
-        return json.dumps(
-            {
-                "error": f"Safety: directory missing reset guard marker ({marker_name})",
-                "hint": f"Create the marker with: autoskillit workspace init {resolved}",
-            }
-        )
 
     reset_cmd = _get_config().reset_workspace.command
     if reset_cmd is None:
@@ -217,7 +218,7 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
             }
         )
 
-    from autoskillit.server import _get_ctx
+    from autoskillit.server import _get_config, _get_ctx
 
     tool_ctx = _get_ctx()
     if tool_ctx.workspace_mgr is None:

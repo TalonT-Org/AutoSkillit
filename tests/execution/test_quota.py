@@ -244,29 +244,6 @@ class TestCheckAndSleepIfNeeded:
         assert "error" in result
 
     @pytest.mark.anyio
-    async def test_above_threshold_with_buffer_seconds_default(self, monkeypatch, tmp_path):
-        from unittest.mock import AsyncMock
-
-        from autoskillit.config.settings import QuotaGuardConfig
-        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
-
-        resets_at = datetime.now(UTC) + timedelta(hours=2)
-        # Do NOT override buffer_seconds — exercises the real default (60)
-        config = QuotaGuardConfig(
-            enabled=True,
-            threshold=80.0,
-            credentials_path=str(tmp_path / ".credentials.json"),
-            cache_path=str(tmp_path / "cache.json"),
-        )
-        first_status = QuotaStatus(utilization=90.0, resets_at=resets_at)
-        second_status = QuotaStatus(utilization=90.0, resets_at=resets_at)
-        mock_fetch = AsyncMock(side_effect=[first_status, second_status])
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
-        result = await check_and_sleep_if_needed(config)
-        assert result["should_sleep"] is True
-        assert result["sleep_seconds"] > 0
-
-    @pytest.mark.anyio
     async def test_resets_at_none_after_refetch_logs_warning_with_fallback(
         self, monkeypatch, tmp_path
     ):
@@ -294,8 +271,8 @@ class TestCheckAndSleepIfNeeded:
         with structlog.testing.capture_logs() as cap:
             result = await check_and_sleep_if_needed(config)
 
-        assert result["should_sleep"] is False
-        assert result["resets_at"] is None
+        assert result["should_sleep"] is True
+        assert result["sleep_seconds"] > 0
         assert mock_fetch.call_count == 2
         # Exact message required by the rectify plan
         assert any(
@@ -348,10 +325,8 @@ class TestCheckAndSleepResetAtNoneBlocks:
         mock_fetch = AsyncMock(side_effect=[first_status, second_status])
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
-        # Gate 2 (after re-fetch): returns should_sleep=False with "blocking with fallback" log
-        assert result["should_sleep"] is False
-        assert result["sleep_seconds"] == 0
-        assert result["resets_at"] is None
+        assert result["should_sleep"] is True
+        assert result["sleep_seconds"] > 0
 
     @pytest.mark.anyio
     async def test_cache_hit_resets_at_none_above_threshold_blocks(self, monkeypatch, tmp_path):
@@ -404,3 +379,26 @@ class TestCheckAndSleepResetAtNoneBlocks:
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
         assert result["sleep_seconds"] >= 120
+
+    @pytest.mark.anyio
+    async def test_above_threshold_with_buffer_seconds_default(self, monkeypatch, tmp_path):
+        from unittest.mock import AsyncMock
+
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+
+        resets_at = datetime.now(UTC) + timedelta(hours=2)
+        # Do NOT override buffer_seconds — exercises the real default (60)
+        config = QuotaGuardConfig(
+            enabled=True,
+            threshold=80.0,
+            credentials_path=str(tmp_path / ".credentials.json"),
+            cache_path=str(tmp_path / "cache.json"),
+        )
+        first_status = QuotaStatus(utilization=90.0, resets_at=resets_at)
+        second_status = QuotaStatus(utilization=90.0, resets_at=resets_at)
+        mock_fetch = AsyncMock(side_effect=[first_status, second_status])
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is True
+        assert result["sleep_seconds"] > 0

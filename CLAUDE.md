@@ -83,7 +83,6 @@ Configured hooks: ruff format (auto-fix), ruff check (auto-fix), mypy type check
 src/autoskillit/
 ├── __init__.py              # Package version + NullHandler for stdlib compat
 ├── __main__.py              # python -m autoskillit entry point (delegates to cli)
-├── _llm_triage.py           # LLM-assisted contract staleness triage (Haiku subprocess)
 ├── smoke_utils.py           # Utility callables for smoke-test pipeline run_python steps
 ├── version.py               # Version health utilities (Layer 0)
 ├── .claude-plugin/          # Plugin metadata (plugin.json)
@@ -126,6 +125,7 @@ src/autoskillit/
 │   └── skills.py            #   Bundled skill listing (SkillResolver)
 ├── recipe/                  # L2 recipe sub-package
 │   ├── __init__.py          #   Re-exports Recipe, RecipeStep, validate_recipe, load_recipe, etc.
+│   ├── _triage.py           #   AI orchestration for contract staleness triage (Haiku subprocess)
 │   ├── contracts.py         #   Contract card generation and staleness triage utilities
 │   ├── io.py                #   load_recipe, list_recipes, iter_steps_with_context, find_recipe_by_name
 │   ├── loader.py            #   Path-based recipe metadata utilities (parse_recipe_metadata, RecipeInfo)
@@ -192,7 +192,6 @@ tests/
 ├── __init__.py
 ├── conftest.py                          # Shared fixtures: MockSubprocessRunner, _make_result, _make_timeout_result
 ├── test_conftest.py                     # Tests for conftest fixtures
-├── test_llm_triage.py                   # LLM triage tests
 ├── test_smoke_utils.py                  # Smoke utility tests
 ├── arch/                                # AST enforcement + sub-package layer contracts
 │   ├── __init__.py
@@ -264,6 +263,7 @@ tests/
 │   ├── test_schema.py
 │   ├── test_semantic_rules.py
 │   ├── test_smoke_pipeline.py
+│   ├── test_triage.py
 │   └── test_validator.py
 ├── server/                              # Server unit tests (tool handlers)
 │   ├── __init__.py
@@ -339,7 +339,7 @@ temp/                        # Temporary/working files (gitignored)
   * **recipe/loader.py**: Path-based recipe metadata utilities for `migration/engine.py`. Exports `parse_recipe_metadata(path: Path) -> RecipeInfo`, which handles both plain YAML and frontmatter-format files (`---` delimited). Reads the `name`, `description`, `summary`, `source`, and `version` fields from the YAML document and returns a `RecipeInfo` instance. Recipe discovery (`list_recipes`, `load_recipe`) lives in `recipe/io.py`, not here.
   * **recipe/registry.py**: Rule registry infrastructure for semantic validation. `RuleFinding`, `RuleSpec`, `_RULE_REGISTRY`, `semantic_rule` decorator. Also houses `run_semantic_rules`, `findings_to_dicts`, `filter_version_rule`, `build_quality_dict`, `compute_recipe_validity`. Extracted from validator.py to keep that file under 1000 lines. All symbols are re-exported from `recipe/validator.py` for backward compatibility.
   * **recipe/validator.py**: Recipe validation layer. `validate_recipe(recipe)` structural checks. `run_semantic_rules(recipe)` semantic rule engine (decorator-based registry — implementation in registry.py). `analyze_dataflow(recipe)` traces data flow. Uses `iter_steps_with_context` from `recipe/io.py` for context-aware validation.
-  * **recipe/contracts.py**: Contract card generation and LLM staleness triage utilities. `generate_recipe_card(pipeline_path, recipes_dir)` returns dict and writes YAML to disk. Imported by `_llm_triage.py`.
+  * **recipe/contracts.py**: Contract card generation and LLM staleness triage utilities. `generate_recipe_card(pipeline_path, recipes_dir)` returns dict and writes YAML to disk. Imported by `recipe/_triage.py`.
   * **recipe/_api.py**: Recipe orchestration API — `load_and_validate`, `validate_from_path`, `list_all` convenience functions. Aggregates recipe I/O, validation, and contract-staleness checks into a single call surface for the server layer.
   * **recipe/repository.py**: Concrete `DefaultRecipeRepository` implementation backed by `recipe/io.py` and `recipe/_api.py`. Provides `find`, `list`, `load_and_validate`, `validate_from_path`, and `list_all` as a dependency-injected repository interface.
   * **recipe/_analysis.py**: Data-flow analysis functions extracted from `validator.py`. Provides `analyze_dataflow`, `_build_step_graph`, and 6 helper functions (`_bfs_reachable`, `_build_capture_origin_map`, `_bfs_capped`, `_detect_ref_invalidations`, `_detect_dead_outputs`, `_detect_implicit_handoffs`). Imported by rule sub-modules and `validator.py`; imports from `contracts.py`, `io.py`, and `schema.py` — no cycle.
@@ -359,7 +359,7 @@ temp/                        # Temporary/working files (gitignored)
   * **core/logging.py**: Centralized structlog configuration. `get_logger(name)` is the single import point for all production modules. `configure_logging()` is called once by the CLI `serve` command — routes all output to stderr via `WriteLoggerFactory`, never stdout.
   * **core/io.py**: Infrastructure and YAML I/O primitives. `_atomic_write(path, content)` (crash-safe write via temp file + `os.replace`); `ensure_project_temp(project_dir)` (creates `.autoskillit/temp/` with `.gitignore`, idempotent); `load_yaml(source)` (path-or-string YAML loader); `dump_yaml(data, path)` (write YAML to disk); `dump_yaml_str(data, **kwargs)` (serialize to string). Zero autoskillit imports.
   * **version.py**: Version health layer. `version_info(plugin_dir: Path | str | None = None)` reads `plugin.json` from the plugin directory and compares with `autoskillit.__version__` to return `{"package_version", "plugin_json_version", "match"}`. Layer 0: no autoskillit imports except `__init__` for `__version__`. Imported by `server/__init__.py` and `cli/_doctor.py`.
-  * **_llm_triage.py**: AI orchestration layer for contract staleness semantic triage. `triage_staleness(stale_items)` spawns a `claude -p` subprocess via `execution/process.py` `run_managed_async` (Haiku model) to determine whether SKILL.md changes are semantically meaningful. Falls back to `meaningful=True` on timeout, JSON parse error, or OS error. Depends on `core/logging.py`, `recipe/contracts.py`, `execution/process.py`, `workspace/skills.py`.
+  * **recipe/_triage.py**: AI orchestration layer for contract staleness semantic triage. `triage_staleness(stale_items)` spawns a `claude -p` subprocess via `execution/process.py` `run_managed_async` (Haiku model) to determine whether SKILL.md changes are semantically meaningful. Falls back to `meaningful=True` on timeout, JSON parse error, or OS error. Depends on `core/logging.py`, `recipe/contracts.py`, `execution/process.py`, `workspace/skills.py`. L2 module: valid downward dependency on `execution/`.
   * **smoke_utils.py**: Utility callables for smoke-test pipeline `run_python` steps. `check_bug_report_non_empty(workspace)` reads `bug_report.json` and returns `{"non_empty": "true"/"false"}`. Zero autoskillit imports.
 
 ### **Plugin Structure**

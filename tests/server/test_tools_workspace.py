@@ -311,12 +311,9 @@ class TestConfigDefaults:
         assert cfg.classify_fix.path_prefixes == []
 
 
+@pytest.mark.usefixtures("tool_ctx")
 class TestReadDb:
     """Integration tests for read_db tool with real SQLite databases."""
-
-    @pytest.fixture(autouse=True)
-    def _setup_ctx(self, tool_ctx):
-        """Initialize ToolContext for all read_db tests."""
 
     @pytest.fixture
     def sample_db(self, tmp_path):

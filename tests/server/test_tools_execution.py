@@ -306,12 +306,9 @@ class TestProcessRunnerResult:
         assert "5" in stderr
 
 
+@pytest.mark.usefixtures("tool_ctx")
 class TestRunPython:
     """run_python tool: import, call, timeout, async support."""
-
-    @pytest.fixture(autouse=True)
-    def _setup_ctx(self, tool_ctx):
-        """Initialize ToolContext for all run_python tests."""
 
     @pytest.mark.anyio
     async def test_calls_function(self):

@@ -199,7 +199,8 @@ async def load_recipe(name: str) -> str:
         return json.dumps({"error": "Server not initialized"})
     suppressed = _ctx.config.migration.suppressed
     result = _ctx.recipes.load_and_validate(name, Path.cwd(), suppressed=suppressed)
-    return json.dumps(await _apply_triage_gate(result, name))
+    recipe_info = _ctx.recipes.find(name, Path.cwd())
+    return json.dumps(await _apply_triage_gate(result, name, recipe_info=recipe_info))
 
 
 @mcp.tool(tags={"automation"})

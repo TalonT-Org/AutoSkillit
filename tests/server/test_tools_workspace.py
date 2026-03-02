@@ -609,3 +609,43 @@ async def test_reset_workspace_returns_partial_failure_json(tool_ctx, tmp_path):
 
     assert result["success"] is False
     assert result["failed"] == [{"path": "bad_dir", "error": "PermissionError: denied"}]
+
+
+# ---------------------------------------------------------------------------
+# P6-3: _validate_reset_target helper tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_validate_reset_target_nonexistent_dir_returns_error(tool_ctx):
+    """_validate_reset_target must return an error dict for a missing directory."""
+    import json
+
+    from autoskillit.server.tools_workspace import _validate_reset_target
+
+    error, *_ = _validate_reset_target("/nonexistent/path/guaranteed")
+    assert error is not None
+    parsed = json.loads(error)
+    assert "error" in parsed
+
+
+@pytest.mark.anyio
+async def test_validate_reset_target_missing_marker_returns_error(tool_ctx, tmp_path):
+    """_validate_reset_target returns error when the guard marker is absent."""
+    import json
+
+    from autoskillit.server.tools_workspace import _validate_reset_target
+
+    error, *_ = _validate_reset_target(str(tmp_path))
+    assert error is not None
+    parsed = json.loads(error)
+    assert "marker" in parsed.get("error", "").lower()
+
+
+@pytest.mark.anyio
+async def test_validate_reset_target_force_bypasses_marker(tool_ctx, tmp_path):
+    """force=True skips the marker check and returns no error."""
+    from autoskillit.server.tools_workspace import _validate_reset_target
+
+    error, *_ = _validate_reset_target(str(tmp_path), force=True)
+    assert error is None

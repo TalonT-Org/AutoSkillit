@@ -2430,3 +2430,49 @@ class TestResponseFieldsAreTypeSafe:
         tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
+
+
+# ---------------------------------------------------------------------------
+# P6-7: _run_skill_common extraction tests
+# ---------------------------------------------------------------------------
+
+
+def test_run_skill_common_exists_in_tools_execution():
+    """_run_skill_common must be importable from tools_execution."""
+    import inspect
+
+    from autoskillit.server.tools_execution import _run_skill_common
+
+    assert inspect.iscoroutinefunction(_run_skill_common)
+
+
+@pytest.mark.anyio
+async def test_run_skill_uses_run_skill_common(tool_ctx):
+    """run_skill must delegate to _run_skill_common for shared preamble."""
+    from unittest.mock import AsyncMock, patch
+
+    from autoskillit.server.tools_execution import run_skill
+
+    with patch(
+        "autoskillit.server.tools_execution._run_skill_common",
+        new_callable=AsyncMock,
+        return_value='{"success":true}',
+    ) as mock_common:
+        await run_skill("/investigate hello", "/tmp")
+        mock_common.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_run_skill_retry_uses_run_skill_common(tool_ctx):
+    """run_skill_retry must delegate to _run_skill_common for shared preamble."""
+    from unittest.mock import AsyncMock, patch
+
+    from autoskillit.server.tools_execution import run_skill_retry
+
+    with patch(
+        "autoskillit.server.tools_execution._run_skill_common",
+        new_callable=AsyncMock,
+        return_value='{"success":true}',
+    ) as mock_common:
+        await run_skill_retry("/investigate hello", "/tmp")
+        mock_common.assert_called_once()

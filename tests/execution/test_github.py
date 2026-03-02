@@ -456,3 +456,24 @@ def test_github_fetcher_protocol_includes_write_methods():
     assert hasattr(fetcher, "search_issues")
     assert hasattr(fetcher, "create_issue")
     assert hasattr(fetcher, "add_comment")
+
+
+# ---------------------------------------------------------------------------
+# P7-3: save_bug_report tests
+# ---------------------------------------------------------------------------
+
+
+def test_save_bug_report_exists_in_github_module():
+    """save_bug_report must be importable from execution/github.py."""
+    from autoskillit.execution.github import save_bug_report
+
+    assert callable(save_bug_report)
+
+
+def test_save_bug_report_writes_file(tmp_path):
+    """save_bug_report must persist report text to disk atomically."""
+    from autoskillit.execution.github import save_bug_report
+
+    report_path = tmp_path / "report.md"
+    save_bug_report(report_path, "## Bug Report\ndetails")
+    assert report_path.read_text() == "## Bug Report\ndetails"

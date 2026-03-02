@@ -490,3 +490,26 @@ async def test_fetch_github_issue_client_error_propagated(tool_ctx):
     tool_ctx.github_client = mock_client
     result = json.loads(await fetch_github_issue("owner/repo#404"))
     assert result["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# P7-3: tools_integrations must not import _atomic_write directly
+# ---------------------------------------------------------------------------
+
+
+def test_tools_integrations_does_not_import_atomic_write_directly():
+    """tools_integrations.py must not import _atomic_write from core."""
+    import ast
+
+    from autoskillit.core import pkg_root
+
+    src = (pkg_root() / "server" / "tools_integrations.py").read_text()
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module and "core" in node.module:
+                names = [alias.name for alias in node.names]
+                assert "_atomic_write" not in names, (
+                    "tools_integrations.py must not import _atomic_write directly; "
+                    "use execution.github.save_bug_report"
+                )

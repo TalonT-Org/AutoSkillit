@@ -154,3 +154,20 @@ async def test_perform_merge_both_gates_run_on_full_success(
 
     assert result.get("merge_succeeded") is True
     assert tester.call_count == 2
+
+
+@pytest.mark.anyio
+async def test_run_git_timeout_delegates_to_process_runner_result(conftest_mock_runner, tmp_path):
+    """_run_git must call _process_runner_result (not re-implement TIMED_OUT handling)."""
+    from unittest.mock import patch
+
+    from autoskillit.server.git import _run_git
+    from autoskillit.server.helpers import _process_runner_result
+
+    with patch(
+        "autoskillit.server.git._process_runner_result",
+        wraps=_process_runner_result,
+    ) as spy:
+        conftest_mock_runner.push(_make_result(0, "out", "err", TerminationReason.NATURAL_EXIT))
+        await _run_git(["git", "status"], tmp_path, 10.0, conftest_mock_runner)
+        spy.assert_called_once()

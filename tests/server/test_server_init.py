@@ -1087,3 +1087,120 @@ def test_open_kitchen_has_no_update_advisory(tool_ctx):
     assert "RECIPE UPDATE AVAILABLE" not in text
     assert "accept_recipe_update" not in text
     assert "decline_recipe_update" not in text
+
+
+# ---------------------------------------------------------------------------
+# P14-1: server/_state.py extraction tests
+# ---------------------------------------------------------------------------
+
+
+def test_state_module_exists_with_ctx_functions():
+    """_state.py is the authoritative home for ctx management functions."""
+    from autoskillit.server import _state
+
+    assert hasattr(_state, "_ctx")
+    assert hasattr(_state, "_initialize")
+    assert hasattr(_state, "_get_ctx")
+    assert hasattr(_state, "_get_config")
+
+
+def test_init_py_reexports_state_functions_not_defines():
+    """server/__init__.py must not define _initialize/_get_ctx/_get_config directly."""
+    import ast
+    import inspect
+
+    import autoskillit.server as srv_init
+
+    src = inspect.getsource(srv_init)
+    tree = ast.parse(src)
+    direct_defs = {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
+    assert "_initialize" not in direct_defs, "__init__.py must not define _initialize"
+    assert "_get_ctx" not in direct_defs, "__init__.py must not define _get_ctx"
+    assert "_get_config" not in direct_defs, "__init__.py must not define _get_config"
+
+
+def test_init_py_reexports_are_same_objects_as_state():
+    """Re-exported functions must be the identical objects from _state.py."""
+    import autoskillit.server as srv
+    from autoskillit.server import _state
+
+    assert srv._initialize is _state._initialize
+    assert srv._get_ctx is _state._get_ctx
+
+
+def test_raw_ctx_imports_come_from_state_not_init(tmp_path):
+    """No tool module does 'from autoskillit.server import _ctx' (mutable alias)."""
+    import re
+
+    from autoskillit.core import pkg_root
+
+    server_dir = pkg_root() / "server"
+    bad_pattern = re.compile(r"from autoskillit\.server import[^_\n]*_ctx\b")
+    tool_files = list(server_dir.glob("tools_*.py")) + [server_dir / "helpers.py"]
+    violations = []
+    for f in tool_files:
+        text = f.read_text()
+        if bad_pattern.search(text):
+            violations.append(f.name)
+    assert not violations, f"Use 'from autoskillit.server._state import _ctx' in: {violations}"
+
+
+# ---------------------------------------------------------------------------
+# P5-1 / P5-2: Ungated tools safe before _initialize()
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_fetch_github_issue_safe_before_init(monkeypatch):
+    """fetch_github_issue must return JSON (not raise) when server is uninitialized."""
+    import json
+
+    from autoskillit.server import _state
+
+    monkeypatch.setattr(_state, "_ctx", None)
+    from autoskillit.server.tools_integrations import fetch_github_issue
+
+    result = json.loads(await fetch_github_issue("https://github.com/owner/repo/issues/1"))
+    assert isinstance(result, dict)
+
+
+@pytest.mark.anyio
+async def test_kitchen_status_safe_before_init(monkeypatch):
+    """kitchen_status must return JSON (not raise) when server is uninitialized."""
+    import json
+
+    from autoskillit.server import _state
+
+    monkeypatch.setattr(_state, "_ctx", None)
+    from autoskillit.server.tools_status import kitchen_status
+
+    result = json.loads(await kitchen_status())
+    assert isinstance(result, dict)
+
+
+@pytest.mark.anyio
+async def test_get_pipeline_report_safe_before_init(monkeypatch):
+    """get_pipeline_report must return JSON (not raise) when uninitialized."""
+    import json
+
+    from autoskillit.server import _state
+
+    monkeypatch.setattr(_state, "_ctx", None)
+    from autoskillit.server.tools_status import get_pipeline_report
+
+    result = json.loads(await get_pipeline_report())
+    assert isinstance(result, dict)
+
+
+@pytest.mark.anyio
+async def test_get_token_summary_safe_before_init(monkeypatch):
+    """get_token_summary must return JSON (not raise) when uninitialized."""
+    import json
+
+    from autoskillit.server import _state
+
+    monkeypatch.setattr(_state, "_ctx", None)
+    from autoskillit.server.tools_status import get_token_summary
+
+    result = json.loads(await get_token_summary())
+    assert isinstance(result, dict)

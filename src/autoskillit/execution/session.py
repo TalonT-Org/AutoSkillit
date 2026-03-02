@@ -55,18 +55,21 @@ class ClaudeSessionResult:
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
-            if isinstance(self.result, list):
-                self.result = "\n".join(
-                    b.get("text", "") if isinstance(b, dict) else str(b) for b in self.result
-                )
-            elif not isinstance(self.result, str):
-                self.result = "" if self.result is None else str(self.result)
+            raise TypeError(
+                f"ClaudeSessionResult.result must be str, got {type(self.result).__name__}"
+            )
         if not isinstance(self.errors, list):
-            self.errors = [] if self.errors is None else [str(self.errors)]
+            raise TypeError(
+                f"ClaudeSessionResult.errors must be list, got {type(self.errors).__name__}"
+            )
         if not isinstance(self.subtype, str):
-            self.subtype = "unknown" if self.subtype is None else str(self.subtype)
+            raise TypeError(
+                f"ClaudeSessionResult.subtype must be str, got {type(self.subtype).__name__}"
+            )
         if not isinstance(self.session_id, str):
-            self.session_id = "" if self.session_id is None else str(self.session_id)
+            raise TypeError(
+                f"ClaudeSessionResult.session_id must be str, got {type(self.session_id).__name__}"
+            )
 
     def _is_context_exhausted(self) -> bool:
         """Detect context window exhaustion from Claude's error output.
@@ -274,11 +277,11 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         logger.debug("unknown_result_keys", unknown_fields=sorted(extra_keys))
 
     return ClaudeSessionResult(
-        subtype=result_obj.get("subtype", "unknown"),
+        subtype=result_obj.get("subtype") or "unknown",
         is_error=result_obj.get("is_error", False),
-        result=result_obj.get("result", ""),
-        session_id=result_obj.get("session_id", ""),
-        errors=result_obj.get("errors", []),
+        result=result_obj.get("result") or "",
+        session_id=result_obj.get("session_id") or "",
+        errors=result_obj.get("errors") or [],
         token_usage=token_usage,
         assistant_messages=assistant_messages,
     )

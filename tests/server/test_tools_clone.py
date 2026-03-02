@@ -132,7 +132,7 @@ class TestPushToRemoteTool:
     @pytest.mark.asyncio
     async def test_returns_error_key_when_push_fails(self, tool_ctx):
         mock_mgr = MagicMock()
-        mock_mgr.push_to_remote.return_value = {"success": "false", "stderr": "remote rejected"}
+        mock_mgr.push_to_remote.return_value = {"success": False, "stderr": "remote rejected"}
         tool_ctx.clone_mgr = mock_mgr
         result = json.loads(
             await push_to_remote(clone_path="/clone", source_dir="/src", branch="main")

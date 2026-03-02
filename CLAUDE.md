@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 22 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, fetch_github_issue, report_bug + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 16 gated behind MCP prompts for user-only activation, and 21 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 22 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, fetch_github_issue, report_bug + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 16 gated behind MCP prompts for user-only activation, and 22 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -113,7 +113,9 @@ src/autoskillit/
 │   ├── io.py                #   load_recipe, list_recipes, iter_steps_with_context, find_recipe_by_name
 │   ├── loader.py            #   Path-based recipe metadata utilities (parse_recipe_metadata, RecipeInfo)
 │   ├── registry.py          #   RuleFinding, RuleSpec, _RULE_REGISTRY, semantic_rule, run_semantic_rules
+│   ├── rules_bypass.py      #   Semantic rules for skip_when_false bypass routing contracts
 │   ├── schema.py            #   Recipe, RecipeStep, DataFlowWarning, AUTOSKILLIT_VERSION_KEY
+│   ├── staleness_cache.py   #   Disk-backed staleness check cache (StalenessEntry, load_cache, save_cache)
 │   └── validator.py         #   validate_recipe, run_semantic_rules (re-exported), analyze_dataflow
 ├── migration/               # L2 migration sub-package
 │   ├── __init__.py          #   Re-exports MigrationEngine, applicable_migrations, FailureStore
@@ -140,7 +142,9 @@ src/autoskillit/
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration (auto-discovered by Claude Code)
 │   ├── quota_check.py       #   Quota guard hook — blocks run_skill when threshold exceeded
-│   └── remove_clone_guard.py #  Remove-clone guard — denies remove_clone calls with keep != "true"
+│   ├── remove_clone_guard.py #  Remove-clone guard — denies remove_clone calls with keep != "true"
+│   ├── skill_cmd_check.py   #   PreToolUse hook — validates skill_command path argument format
+│   └── skill_command_guard.py #  PreToolUse hook — blocks run_skill with non-slash skill_command
 ├── migrations/              # Data: versioned migration YAML notes
 │   └── __init__.py
 ├── recipes/                 # Bundled recipe YAML definitions
@@ -149,7 +153,7 @@ src/autoskillit/
 │   ├── implementation-pipeline.yaml
 │   ├── investigate-first.yaml
 │   └── smoke-test.yaml
-└── skills/                  # 20 bundled skills (SKILL.md per skill)
+└── skills/                  # 22 bundled skills (SKILL.md per skill)
     ├── analyze-prs/          ├── audit-friction/
     ├── audit-impl/           ├── dry-walkthrough/
     ├── implement-worktree/   ├── implement-worktree-no-merge/
@@ -157,9 +161,10 @@ src/autoskillit/
     ├── make-plan/            ├── merge-pr/
     ├── mermaid/              ├── migrate-recipes/
     ├── open-pr/              ├── pipeline-summary/
-    ├── rectify/              ├── resolve-failures/
-    ├── retry-worktree/       ├── review-approach/
-    ├── setup-project/        └── write-recipe/
+    ├── rectify/              ├── report-bug/
+    ├── resolve-failures/     ├── retry-worktree/
+    ├── review-approach/      ├── setup-project/
+    ├── smoke-task/           └── write-recipe/
 
 tests/
 ├── CLAUDE.md                            # xdist compatibility guidelines
@@ -293,6 +298,8 @@ temp/                        # Temporary/working files (gitignored)
   * **execution/quota.py**: Quota-aware check for long-running pipeline recipes. `QuotaStatus` dataclass. `_read_credentials(path)` reads Bearer token from `~/.claude/.credentials.json`. `_read_cache(path, max_age)` returns fresh status or None. `_write_cache(path, status)` persists to cache (silent on failure). `_fetch_quota(credentials_path)` fetches 5-hour utilization from Anthropic quota API via `httpx`. `check_and_sleep_if_needed(config)` is the main async entry point — returns metadata dict; does NOT sleep. L1 module: depends only on stdlib, httpx, and `core/logging`.
   * **hooks/quota_check.py**: PreToolUse hook that runs `autoskillit quota-status` before each `run_skill`/`run_skill_retry` call. Blocks with a recovery message if quota threshold is exceeded. Silently approves otherwise. Registered in `.claude/settings.json` by `autoskillit install` and auto-discovered as `hooks/hooks.json` for plugin installs.
   * **hooks/remove_clone_guard.py**: PreToolUse hook that prompts the user for permission on any `remove_clone` call where `keep != "true"`. Clones are never removed automatically — the user must approve each removal. Registered in `.claude/settings.json` by `autoskillit install` and auto-discovered via `hooks/hooks.json`.
+  * **hooks/skill_cmd_check.py**: PreToolUse hook that validates `skill_command` path argument format. Denies `run_skill`/`run_skill_retry` calls where a path-argument skill is invoked with extra descriptive text before the actual file path. Auto-discovered via `hooks/hooks.json`.
+  * **hooks/skill_command_guard.py**: PreToolUse hook that blocks `run_skill`/`run_skill_retry` calls where `skill_command` does not start with a `/` prefix. Fail-open: any error approves silently. Auto-discovered via `hooks/hooks.json`.
   * **workspace/cleanup.py**: Infrastructure layer for directory teardown. `_delete_directory_contents(directory, preserve)` removes all items in a directory except preserved names, recording failures in `CleanupResult` without raising. Depends only on `core/logging.py`.
   * **workspace/clone.py**: Clone-based run isolation for pipeline recipes. `clone_repo(source_dir, run_name)` clones source into `../autoskillit-runs/<run_name>-<timestamp>/` and returns `{"clone_path", "source_dir"}`. `remove_clone(clone_path, keep)` tears down the clone (never raises). `push_to_remote(clone_path, source_dir, branch)` reads the upstream remote URL from source_dir via `git remote get-url origin` (read-only) and pushes from clone_path directly to the remote, never touching source_dir. SOURCE ISOLATION: after clone_repo returns, source_dir must not be touched (no git checkout, fetch, reset, pull, or any command). All pipeline work runs in clone_path. source_dir is used only to read the remote URL. L1 module: depends only on stdlib and `core/logging`.
   * **workspace/skills.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
@@ -305,6 +312,8 @@ temp/                        # Temporary/working files (gitignored)
   * **recipe/_api.py**: Recipe orchestration API — `load_and_validate`, `validate_from_path`, `list_all` convenience functions. Aggregates recipe I/O, validation, and contract-staleness checks into a single call surface for the server layer.
   * **recipe/repository.py**: Concrete `DefaultRecipeRepository` implementation backed by `recipe/io.py` and `recipe/_api.py`. Provides `find`, `list`, `load_and_validate`, `validate_from_path`, and `list_all` as a dependency-injected repository interface.
   * **recipe/rules.py**: Semantic validation rules registered with the `semantic_rule` decorator. Houses all rule implementations (forbidden-tool checks, ingredient reference validation, worktree safety, context-ref checks). Extracted from `recipe/registry.py` / `recipe/validator.py` to keep rule logic separate from infrastructure.
+  * **recipe/rules_bypass.py**: Semantic validation rules for `skip_when_false` bypass routing contracts. `_check_optional_without_skip_when` fires when a step is marked `optional: true` but lacks a `skip_when_false` declaration. Registered via `semantic_rule` decorator.
+  * **recipe/staleness_cache.py**: Disk-backed staleness check cache for recipe contract verification. `StalenessEntry` dataclass persists recipe hash, manifest version, staleness flag, and triage result. Provides `load_cache`, `save_cache`, and `get_or_check` for efficient staleness reuse across invocations.
   * **migration/_api.py**: Migration API convenience layer. `check_and_migrate(name, project_dir, installed_version)` checks applicable migrations and applies deterministic ones automatically; returns error dict when LLM-driven migration is required via MCP tool.
   * **migration/engine.py**: Orchestration layer for recipe and contract migration. Layer B domain logic — no FastMCP dependency. `MigrationEngine` dispatches to registered adapters: `RecipeMigrationAdapter` (LLM-driven via headless Claude session) and `ContractMigrationAdapter` (deterministic contract regeneration). ABC hierarchy: `MigrationAdapter` → `HeadlessMigrationAdapter` / `DeterministicMigrationAdapter`. `default_migration_engine()` factory builds the standard adapter set.
   * **migration/loader.py**: Data access layer for the migration version graph. Discovers and parses versioned migration YAML files from the bundled `migrations/` package directory. `list_migrations()` enumerates all notes; `applicable_migrations(script_version, installed_version)` chains applicable notes from the script's current version to the installed version using semver ordering. Depends on `core/io.py` and `packaging`.
@@ -322,12 +331,12 @@ temp/                        # Temporary/working files (gitignored)
 The Python package directory (`src/autoskillit/`) is the plugin root:
   * `.claude-plugin/plugin.json` — plugin manifest (name, version, description)
   * `.mcp.json` — MCP server config (command: `autoskillit`)
-  * `skills/` — 20 bundled skills discovered by Claude Code as `/autoskillit:*` slash commands
+  * `skills/` — 22 bundled skills discovered by Claude Code as `/autoskillit:*` slash commands
   * `pyproject.toml` declares `artifacts` to include dotfiles in the wheel
 
 ### **Skills**
 
-20 bundled skills, invoked as `/autoskillit:<name>`. These are the building blocks that project-specific pipeline recipes (generated by `setup-project`) compose together.
+22 bundled skills, invoked as `/autoskillit:<name>`. These are the building blocks that project-specific pipeline recipes (generated by `setup-project`) compose together.
 
 Skills are discovered by Claude Code via the plugin structure. Headless sessions receive `--plugin-dir` automatically via `run_skill` and `run_skill_retry`. Project-specific pipeline recipes go in `.autoskillit/recipes/` as YAML files, discovered via `list_recipes` and loaded via `load_recipe`.
 

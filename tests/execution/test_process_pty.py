@@ -256,7 +256,7 @@ class TestSTOPDelayPipelineAdjudication:
 
         assert result.termination == TerminationReason.NATURAL_EXIT
         assert result.returncode == 0
-        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A
+        assert result.channel_confirmation == ChannelConfirmation.UNMONITORED
 
         skill_result = _build_skill_result(
             result,

@@ -18,6 +18,7 @@ from autoskillit.server.tools_status import (
     get_token_summary,
     kitchen_status,
 )
+from autoskillit.core.types import ChannelConfirmation
 from tests.conftest import _make_result
 
 
@@ -164,7 +165,13 @@ class TestGetPipelineReport:
         from autoskillit.pipeline.gate import DefaultGateState
 
         tool_ctx.gate = DefaultGateState(enabled=True)
-        tool_ctx.runner.push(_make_result(returncode=1, stdout=_failed_session_json()))
+        tool_ctx.runner.push(
+            _make_result(
+                returncode=1,
+                stdout=_failed_session_json(),
+                channel_confirmation=ChannelConfirmation.UNMONITORED,
+            )
+        )
         await run_skill(skill_command="/autoskillit:test", cwd="/tmp")
         result = json.loads(await get_pipeline_report())
         assert result["total_failures"] == 1

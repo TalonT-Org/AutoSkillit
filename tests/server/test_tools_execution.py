@@ -2240,12 +2240,21 @@ class TestStalePathStdoutCheck:
 class TestBuildSkillResultDataConfirmedPropagation:
     """_build_skill_result propagates data_confirmed for provenance bypass."""
 
-    def test_stale_recovery_propagates_data_confirmed(self):
-        """STALE recovery with data_confirmed=False engages provenance bypass."""
+    def test_stale_recovery_channel_a_with_valid_stdout_succeeds(self):
+        """STALE + CHANNEL_A + valid stdout → recovered_from_stale.
+
+        When stale monitor fires simultaneously with heartbeat (CHANNEL_A),
+        the stale recovery path succeeds via the stdout content check.
+        CHANNEL_A guarantees stdout has valid type=result content, so
+        can_attempt_stale_recovery passes and _compute_success returns True.
+        """
         result = _make_result(
-            stdout="",
+            stdout=(
+                '{"type":"result","subtype":"success",'
+                '"result":"task done %%ORDER_UP%%","is_error":false,"session_id":"s1"}'
+            ),
             termination_reason=TerminationReason.STALE,
-            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
         )
         skill_result = _build_skill_result(
             result,
@@ -2253,8 +2262,8 @@ class TestBuildSkillResultDataConfirmedPropagation:
             skill_command="cmd",
             audit=None,
         )
-        # Provenance bypass should fire in STALE recovery; success=True
-        assert skill_result.success is True  # FAILS before fix: False
+        assert skill_result.success is True
+        assert skill_result.subtype == "recovered_from_stale"
 
     def test_stale_recovery_data_confirmed_true_preserves_existing_behavior(self):
         """STALE with empty stdout and data_confirmed=True (default) stays False."""

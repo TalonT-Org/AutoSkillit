@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import textwrap
-from pathlib import Path
 
 import pytest
 import yaml
@@ -26,7 +25,6 @@ from autoskillit.recipe.validator import (
     RuleFinding,
     run_semantic_rules,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared helper

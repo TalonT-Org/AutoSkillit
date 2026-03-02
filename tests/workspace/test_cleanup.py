@@ -31,6 +31,7 @@ def _make_result(
         data_confirmed=data_confirmed,
     )
 
+
 reset_test_dir.__test__ = False  # type: ignore[attr-defined]
 
 
@@ -78,6 +79,7 @@ class TestDeleteDirectoryContents:
 
         # Capture real rmtree before patching
         import shutil
+
         real_rmtree = shutil.rmtree
 
         def selective_rmtree(path, *args, **kwargs):

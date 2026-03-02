@@ -342,7 +342,7 @@ class TestInstallCommand:
 
 
 class TestGroupFInstall:
-    """P8-2, P3-2, P5-4: CLI refactoring — install/quota/upgrade tests from TestGroupFRefactoring."""
+    """P8-2, P3-2, P5-4: CLI refactoring — install/quota/upgrade tests."""
 
     def test_upgrade_uses_atomic_write(self, tmp_path, monkeypatch):
         """upgrade() must call _atomic_write, not yaml_file.write_text."""
@@ -404,7 +404,6 @@ class TestGroupFInstall:
 
     def test_install_writes_pretooluse_hooks(self, tmp_path, monkeypatch):
         """install must register the quota PreToolUse hook in .claude/settings.json."""
-        import importlib
 
         settings_path = tmp_path / ".claude" / "settings.json"
         settings_path.parent.mkdir(parents=True)
@@ -443,7 +442,6 @@ class TestGroupFInstall:
 
     def test_install_registers_remove_clone_guard_hook(self, tmp_path, monkeypatch):
         """install must register the remove_clone_guard PreToolUse hook in settings.json."""
-        import importlib
 
         settings_path = tmp_path / ".claude" / "settings.json"
         settings_path.parent.mkdir(parents=True)
@@ -470,7 +468,6 @@ class TestGroupFInstall:
 
     def test_install_remove_clone_guard_hook_idempotent(self, tmp_path, monkeypatch):
         """Running install twice must not duplicate the remove_clone_guard hook entry."""
-        import importlib
 
         settings_path = tmp_path / ".claude" / "settings.json"
         settings_path.parent.mkdir(parents=True)

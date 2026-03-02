@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -16,7 +14,6 @@ from autoskillit.config import (
 )
 from autoskillit.server.tools_status import read_db
 from autoskillit.server.tools_workspace import reset_test_dir, reset_workspace, test_check
-from autoskillit.workspace import CleanupResult
 from tests.conftest import _make_result
 
 test_check.__test__ = False  # type: ignore[attr-defined]

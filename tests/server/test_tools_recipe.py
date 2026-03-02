@@ -19,7 +19,6 @@ from autoskillit.server.tools_recipe import (
     migrate_recipe,
     validate_recipe,
 )
-from tests.conftest import _make_result
 
 
 def _extract_docstring_sections(desc: str) -> dict[str, str]:

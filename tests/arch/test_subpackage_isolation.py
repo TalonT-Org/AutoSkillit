@@ -626,8 +626,18 @@ def test_test_suite_has_domain_subdirectories():
     """All 12 domain-aligned test subdirectories exist after groupE reorganization."""
     tests_root = Path(__file__).parent.parent
     expected = [
-        "core", "config", "pipeline", "execution", "workspace",
-        "recipe", "migration", "server", "cli", "arch", "contracts", "infra",
+        "core",
+        "config",
+        "pipeline",
+        "execution",
+        "workspace",
+        "recipe",
+        "migration",
+        "server",
+        "cli",
+        "arch",
+        "contracts",
+        "infra",
     ]
     missing = [d for d in expected if not (tests_root / d / "__init__.py").exists()]
     assert not missing, f"Missing test subdirectories (run groupE): {missing}"

@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from autoskillit.execution.process import (
     _jsonl_contains_marker,
     _jsonl_has_record_type,

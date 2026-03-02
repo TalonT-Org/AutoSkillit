@@ -12,10 +12,8 @@ import structlog.testing
 from autoskillit.config import (
     AutomationConfig,
     SafetyConfig,
-    TokenUsageConfig,
 )
-from autoskillit.execution.github import DefaultGitHubFetcher
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
+from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.helpers import _require_enabled
 from autoskillit.server.prompts import _close_kitchen_handler, _open_kitchen_handler
 from autoskillit.server.tools_recipe import (
@@ -205,9 +203,8 @@ class TestGatedToolAccess:
     @pytest.mark.asyncio
     async def test_tools_work_after_enable(self, tool_ctx):
         """After open_kitchen prompt handler sets the flag, tools execute normally."""
-        from tests.conftest import _make_result
-
         from autoskillit.server.tools_execution import run_cmd
+        from tests.conftest import _make_result
 
         _open_kitchen_handler()
         tool_ctx.runner.push(_make_result(0, "hello\n", ""))
@@ -461,7 +458,6 @@ class TestServerLazyInit:
     def test_server_import_does_not_call_load_config(self, monkeypatch):
         """Importing server.py must not trigger load_config() as a side effect."""
         import sys
-        from unittest.mock import patch
 
         import autoskillit
 
@@ -499,9 +495,8 @@ class TestConfigDrivenBehavior:
         """S1: test_check runs config.test_check.command."""
         from autoskillit.config import TestCheckConfig
         from autoskillit.execution import DefaultTestRunner
-        from tests.conftest import _make_result
-
         from autoskillit.server.tools_workspace import test_check
+        from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(
             test_check=TestCheckConfig(command=["pytest", "-x"], timeout=300)
@@ -520,9 +515,8 @@ class TestConfigDrivenBehavior:
         """S2: classify_fix uses config.classify_fix.path_prefixes."""
         from autoskillit.config import ClassifyFixConfig
         from autoskillit.core.types import RestartScope
-        from tests.conftest import _make_result
-
         from autoskillit.server.tools_git import classify_fix
+        from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(
             classify_fix=ClassifyFixConfig(path_prefixes=["src/custom/"])
@@ -540,9 +534,8 @@ class TestConfigDrivenBehavior:
         """S3: Empty prefix list -> always returns partial_restart."""
         from autoskillit.config import ClassifyFixConfig
         from autoskillit.core.types import RestartScope
-        from tests.conftest import _make_result
-
         from autoskillit.server.tools_git import classify_fix
+        from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(classify_fix=ClassifyFixConfig(path_prefixes=[]))
 
@@ -556,9 +549,8 @@ class TestConfigDrivenBehavior:
     async def test_reset_workspace_uses_config_command(self, tool_ctx, tmp_path):
         """S4: reset_workspace runs config.reset_workspace.command."""
         from autoskillit.config import ResetWorkspaceConfig
-        from tests.conftest import _make_result
-
         from autoskillit.server.tools_workspace import reset_workspace
+        from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(
             reset_workspace=ResetWorkspaceConfig(command=["make", "reset"])
@@ -576,7 +568,6 @@ class TestConfigDrivenBehavior:
     async def test_reset_workspace_not_configured_returns_error(self, tool_ctx, tmp_path):
         """S5: command=None -> returns not-configured error."""
         from autoskillit.config import ResetWorkspaceConfig
-
         from autoskillit.server.tools_workspace import reset_workspace
 
         tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
@@ -592,9 +583,8 @@ class TestConfigDrivenBehavior:
     async def test_reset_workspace_uses_config_preserve_dirs(self, tool_ctx, tmp_path):
         """S6: Preserves config.reset_workspace.preserve_dirs."""
         from autoskillit.config import ResetWorkspaceConfig
-        from tests.conftest import _make_result
-
         from autoskillit.server.tools_workspace import reset_workspace
+        from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(
             reset_workspace=ResetWorkspaceConfig(
@@ -620,7 +610,6 @@ class TestConfigDrivenBehavior:
     def test_dry_walkthrough_uses_config_marker(self, tool_ctx, tmp_path):
         """S7: Gate checks config.implement_gate.marker."""
         from autoskillit.config import ImplementGateConfig
-
         from autoskillit.server.helpers import _check_dry_walkthrough
 
         tool_ctx.config = AutomationConfig(
@@ -639,7 +628,6 @@ class TestConfigDrivenBehavior:
     def test_dry_walkthrough_uses_config_skill_names(self, tool_ctx, tmp_path):
         """S8: Gate checks config.implement_gate.skill_names."""
         from autoskillit.config import ImplementGateConfig
-
         from autoskillit.server.helpers import _check_dry_walkthrough
 
         tool_ctx.config = AutomationConfig(
@@ -661,9 +649,8 @@ class TestConfigDrivenBehavior:
         from autoskillit.config import TestCheckConfig
         from autoskillit.core.types import MergeFailedStep
         from autoskillit.execution import DefaultTestRunner
-        from tests.conftest import _make_result
-
         from autoskillit.server.tools_git import merge_worktree
+        from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(
             test_check=TestCheckConfig(command=["make", "test"], timeout=120)
@@ -728,7 +715,6 @@ class TestSafetyConfigWiring:
     async def test_reset_workspace_enforces_marker(self, tool_ctx, tmp_path):
         """2c: reset_workspace requires marker, then checks command config."""
         from autoskillit.config import ResetWorkspaceConfig
-
         from autoskillit.server.tools_workspace import reset_workspace
 
         tool_ctx.config = AutomationConfig(reset_workspace=ResetWorkspaceConfig(command=None))
@@ -744,9 +730,8 @@ class TestSafetyConfigWiring:
     @pytest.mark.asyncio
     async def test_merge_worktree_skips_test_gate_when_disabled(self, tool_ctx, tmp_path):
         """2d: test_gate_on_merge=False skips test execution."""
-        from tests.conftest import _make_result
-
         from autoskillit.server.tools_git import merge_worktree
+        from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(safety=SafetyConfig(test_gate_on_merge=False))
 
@@ -779,9 +764,8 @@ class TestSafetyConfigWiring:
     @pytest.mark.asyncio
     async def test_run_skill_retry_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
         """2e: require_dry_walkthrough=False bypasses dry-walkthrough gate."""
-        from tests.conftest import _make_result
-
         from autoskillit.server.tools_execution import run_skill_retry
+        from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(safety=SafetyConfig(require_dry_walkthrough=False))
 
@@ -813,9 +797,8 @@ class TestSafetyConfigWiring:
     @pytest.mark.asyncio
     async def test_run_skill_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
         """2g: run_skill skips dry-walkthrough gate when disabled."""
-        from tests.conftest import _make_result
-
         from autoskillit.server.tools_execution import run_skill
+        from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(safety=SafetyConfig(require_dry_walkthrough=False))
 

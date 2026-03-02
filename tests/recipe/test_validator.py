@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from autoskillit.core.types import RETRY_RESPONSE_FIELDS
 from autoskillit.recipe.io import (
     _parse_recipe,
     _parse_step,
@@ -19,14 +20,11 @@ from autoskillit.recipe.io import (
 )
 from autoskillit.recipe.schema import (
     Recipe,
-    RecipeStep,
 )
 from autoskillit.recipe.validator import (
     analyze_dataflow,
     validate_recipe,
 )
-from autoskillit.core.types import RETRY_RESPONSE_FIELDS
-
 
 # ---------------------------------------------------------------------------
 # Importability assertions

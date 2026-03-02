@@ -573,8 +573,9 @@ class TestHasActiveApiConnection:
             assert _has_active_api_connection(12345) is False
 
     def test_skips_dead_child_gracefully(self):
-        import psutil as _psutil
         from unittest.mock import Mock
+
+        import psutil as _psutil
 
         mock_parent = Mock()
         mock_parent.net_connections.return_value = []
@@ -587,8 +588,9 @@ class TestHasActiveApiConnection:
             assert _has_active_api_connection(12345) is True
 
     def test_skips_zombie_child_gracefully(self):
-        import psutil as _psutil
         from unittest.mock import Mock
+
+        import psutil as _psutil
 
         mock_parent = Mock()
         mock_parent.net_connections.return_value = []

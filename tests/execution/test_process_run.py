@@ -14,7 +14,6 @@ import sys
 import textwrap
 import time
 from pathlib import Path
-from unittest.mock import patch
 
 import psutil
 import pytest

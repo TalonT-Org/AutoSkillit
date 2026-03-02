@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 
 from autoskillit.recipe.contracts import (
@@ -15,7 +14,6 @@ from autoskillit.recipe.contracts import (
     load_recipe_card,
     validate_recipe_cards,
 )
-
 
 # ---------------------------------------------------------------------------
 # Bundled manifest tests

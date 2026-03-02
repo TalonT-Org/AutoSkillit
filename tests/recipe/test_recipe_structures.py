@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import yaml
 import pytest
+import yaml
 
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import analyze_dataflow
-
 
 # ---------------------------------------------------------------------------
 # TestImplementationPipelineStructure

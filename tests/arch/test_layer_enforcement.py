@@ -731,7 +731,9 @@ def test_make_context_no_isinstance_against_concrete_migration() -> None:
     """REQ-P12-001: _factory.py must not isinstance-check DefaultMigrationService."""
     from pathlib import Path
 
-    factory_src = (Path(__file__).parent.parent.parent / "src/autoskillit/server/_factory.py").read_text()
+    factory_src = (
+        Path(__file__).parent.parent.parent / "src/autoskillit/server/_factory.py"
+    ).read_text()
     tree = ast.parse(factory_src)
 
     for node in ast.walk(tree):

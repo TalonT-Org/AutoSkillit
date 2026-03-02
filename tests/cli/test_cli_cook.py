@@ -11,7 +11,6 @@ import pytest
 
 from autoskillit import cli
 
-
 _SCRIPT_YAML = """\
 name: test-script
 description: A test script

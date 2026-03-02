@@ -7,7 +7,6 @@ import json
 import pytest
 
 from autoskillit.core.types import (
-    RETRY_RESPONSE_FIELDS,
     RetryReason,
     SubprocessResult,
     TerminationReason,

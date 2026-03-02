@@ -259,7 +259,7 @@ class TestAgentResult:
 class TestResponseFieldsAreTypeSafe:
     """Every discriminator field in MCP tool responses uses enum values."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_retry_reason_is_enum_value(self, tool_ctx):
         stdout = json.dumps(
             {
@@ -275,7 +275,7 @@ class TestResponseFieldsAreTypeSafe:
         result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_retry_reason_none_is_enum_value(self, tool_ctx):
         stdout = json.dumps(
             {

@@ -1,0 +1,229 @@
+generated_at: '2026-03-02T02:12:41.231712+00:00'
+bundled_manifest_version: 0.1.0
+skill_hashes:
+  investigate: sha256:e2ddaaaeff4ae44ebb40271ef06ce3101a75dbc9dcbfa02c06aa768019f780e4
+  rectify: sha256:3586bc4000a194178c85ec1202f4c1edb75a723650b0c7f0640acb92fec6adb2
+  implement-worktree-no-merge: sha256:86515d79175468eb205e964d033ad48598812e7997014f7c0e6b52d80a7c002d
+  retry-worktree: sha256:c66703245d49df7f94a71456a4f76da62c3527652f03bec62b71cc344d5028b9
+  resolve-failures: sha256:81ee708f6c8f1e75edb27a5f68dde6d1eac7db229fd5e18690f4c74185de8b45
+skills:
+  investigate:
+    inputs:
+    - name: topic
+      type: string
+      required: true
+    outputs: []
+  rectify:
+    inputs:
+    - name: investigation_path
+      type: file_path
+      required: false
+    outputs:
+    - name: plan_path
+      type: file_path
+    - name: plan_parts
+      type: file_path_list
+  implement-worktree-no-merge:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+    outputs:
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
+  retry-worktree:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: worktree_path
+      type: directory_path
+      required: true
+    outputs:
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
+  resolve-failures:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs: []
+dataflow:
+- step: clone
+  available:
+  - audit_type
+  - base_branch
+  - run_name
+  - source_dir
+  required: []
+  produced:
+  - work_dir
+  - remote_url
+- step: audit
+  available:
+  - audit_type
+  - base_branch
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: investigate
+  available:
+  - audit_type
+  - base_branch
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: plan
+  available:
+  - audit_type
+  - base_branch
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - plan_path
+- step: implement
+  available:
+  - audit_type
+  - base_branch
+  - plan_path
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - worktree_path
+- step: retry_worktree
+  available:
+  - audit_type
+  - base_branch
+  - plan_path
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - worktree_path
+- step: test
+  available:
+  - audit_type
+  - base_branch
+  - plan_path
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: fix
+  available:
+  - audit_type
+  - base_branch
+  - plan_path
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: merge
+  available:
+  - audit_type
+  - base_branch
+  - plan_path
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - cleanup_succeeded
+- step: push
+  available:
+  - audit_type
+  - base_branch
+  - cleanup_succeeded
+  - plan_path
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: cleanup_success
+  available:
+  - audit_type
+  - base_branch
+  - cleanup_succeeded
+  - plan_path
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: cleanup_failure
+  available:
+  - audit_type
+  - base_branch
+  - cleanup_succeeded
+  - plan_path
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: done
+  available:
+  - audit_type
+  - base_branch
+  - cleanup_succeeded
+  - plan_path
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: escalate_stop
+  available:
+  - audit_type
+  - base_branch
+  - cleanup_succeeded
+  - plan_path
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []

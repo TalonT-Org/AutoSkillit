@@ -9,10 +9,10 @@ NO MOCKS — that's the whole point.
 
 from __future__ import annotations
 
-import asyncio
 import sys
 import textwrap
 
+import anyio
 import psutil
 import pytest
 
@@ -55,7 +55,7 @@ HANG_FOREVER_SCRIPT = textwrap.dedent("""\
 class TestProcessTreeKill:
     """psutil-based kill terminates all descendants."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_process_tree_kill_terminates_all_descendants(self, tmp_path):
         """Spawn root + 2 children, kill_process_tree kills all 3."""
         script = tmp_path / "tree.py"
@@ -77,7 +77,7 @@ class TestProcessTreeKill:
                 pids.append(int(line.split(":")[1]))
 
         # All PIDs should be dead
-        await asyncio.sleep(0.5)  # Brief wait for kernel cleanup
+        await anyio.sleep(0.5)  # Brief wait for kernel cleanup
         for pid in pids:
             assert not psutil.pid_exists(pid), f"PID {pid} should be dead"
 
@@ -109,34 +109,33 @@ class TestKillProcessTreeUnit:
 class TestCancellationKillsProcess:
     """Cancellation of run_managed_async kills the subprocess."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_cancellation_kills_process(self, tmp_path):
         """Cancel run_managed_async — process should be cleaned up."""
         script = tmp_path / "sleep.py"
         script.write_text("import time; time.sleep(3600)")
 
-        task = asyncio.create_task(
-            run_managed_async(
-                [sys.executable, str(script)],
-                cwd=tmp_path,
-                timeout=60,
-            )
-        )
+        async with anyio.create_task_group() as tg:
 
-        await asyncio.sleep(1.0)
-        task.cancel()
+            async def _run() -> None:
+                await run_managed_async(
+                    [sys.executable, str(script)],
+                    cwd=tmp_path,
+                    timeout=60,
+                )
 
-        with pytest.raises(asyncio.CancelledError):
-            await task
+            tg.start_soon(_run)
+            await anyio.sleep(1.0)
+            tg.cancel_scope.cancel()  # replaces task.cancel()
 
         # Give the kernel a moment
-        await asyncio.sleep(0.5)
+        await anyio.sleep(0.5)
 
 
 class TestAsyncKillDoesNotBlockLoop:
     """async_kill_process_tree doesn't block the event loop."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_async_kill_does_not_block_loop(self, tmp_path):
         """A concurrent coroutine runs while kill is in progress."""
         import subprocess as sp
@@ -151,13 +150,12 @@ class TestAsyncKillDoesNotBlockLoop:
 
         async def concurrent_work():
             nonlocal concurrent_ran
-            await asyncio.sleep(0.1)
+            await anyio.sleep(0.1)
             concurrent_ran = True
 
-        await asyncio.gather(
-            async_kill_process_tree(pid),
-            concurrent_work(),
-        )
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(async_kill_process_tree, pid)
+            tg.start_soon(concurrent_work)
 
         assert concurrent_ran, "Concurrent coroutine should run during async kill"
         proc.wait()
@@ -166,7 +164,7 @@ class TestAsyncKillDoesNotBlockLoop:
 class TestDualWinnerRace:
     """When wait_task and session_monitor both complete, process exit wins."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_wait_task_wins_over_stale_monitor(self, tmp_path):
         """When process exits AND monitor reports stale simultaneously,
         the process exit takes priority — stale must be False."""
@@ -188,7 +186,7 @@ class TestDualWinnerRace:
         assert result.termination != TerminationReason.STALE
         assert result.returncode == 0
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_wait_task_wins_over_completion_monitor(self, tmp_path):
         """Process exit + monitor completion simultaneously — use process exit."""
         result = await run_managed_async(
@@ -203,7 +201,7 @@ class TestDualWinnerRace:
 class TestRunManagedAsyncPassesPidToMonitor:
     """Verify that run_managed_async passes proc.pid to _session_log_monitor."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_pid_passed_to_session_monitor(self, tmp_path):
         """
         Spawn a real subprocess. Patch _session_log_monitor to capture args.

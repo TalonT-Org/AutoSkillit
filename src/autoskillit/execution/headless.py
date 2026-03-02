@@ -13,12 +13,12 @@ from __future__ import annotations
 import dataclasses
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, assert_never
+from typing import TYPE_CHECKING
 
 from autoskillit.core import (
-    ChannelConfirmation,
     FailureRecord,
     RetryReason,
+    SessionOutcome,
     SkillResult,
     TerminationReason,
     get_logger,
@@ -27,7 +27,7 @@ from autoskillit.execution.commands import build_headless_cmd
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
     ClaudeSessionResult,
-    _compute_retry,
+    _compute_outcome,
     _compute_success,
     _truncate,
     parse_session_result,
@@ -217,70 +217,22 @@ def _build_skill_result(
         returncode = result.returncode if result.returncode is not None else -1
         session = parse_session_result(result.stdout)
 
-    success = _compute_success(
+    # Recovery check: attempt before _compute_outcome so the recovered session
+    # is the input for outcome computation rather than the original.
+    if completion_marker:
+        recovered = _recover_from_separate_marker(session, completion_marker)
+        if recovered is not None:
+            session = recovered
+
+    outcome, retry_reason = _compute_outcome(
         session,
         returncode,
         result.termination,
         completion_marker,
         channel_confirmation=result.channel_confirmation,
     )
-    needs_retry, retry_reason = _compute_retry(
-        session,
-        returncode,
-        result.termination,
-        channel_confirmation=result.channel_confirmation,
-    )
-
-    # --- Composition guard: contradiction ---
-    # success=True AND needs_retry=True is an impossible state.
-    # The retry signal (session-level error) is authoritative over the
-    # channel provenance bypass in _compute_success.
-    if success and needs_retry:
-        logger.warning(
-            "contradiction_guard_resolved",
-            subtype=session.subtype,
-            termination=result.termination.value,
-            channel=result.channel_confirmation.value,
-        )
-        success = False
-
-    if not success and completion_marker:
-        recovered = _recover_from_separate_marker(session, completion_marker)
-        if recovered is not None:
-            recovered_success = _compute_success(
-                recovered,
-                returncode,
-                result.termination,
-                completion_marker,
-                channel_confirmation=result.channel_confirmation,
-            )
-            if recovered_success:
-                session = recovered
-                success = True
-                needs_retry = False
-                retry_reason = RetryReason.NONE
-
-    # --- Composition guard: dead end ---
-    # success=False AND needs_retry=False with channel confirmation is a dead end.
-    # A channel confirmed the session completed, but content validation failed.
-    # This is a data-availability issue, not a permanent session failure.
-    # Escalate to retriable so the orchestrator has a recovery path.
-    if not success and not needs_retry:
-        match result.channel_confirmation:
-            case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.CHANNEL_B:
-                logger.warning(
-                    "dead_end_guard_escalated",
-                    channel=result.channel_confirmation.value,
-                    termination=result.termination.value,
-                    subtype=session.subtype,
-                    result_empty=not session.result.strip(),
-                )
-                needs_retry = True
-                retry_reason = RetryReason.RESUME
-            case ChannelConfirmation.UNMONITORED:
-                pass  # legitimate terminal failure — no channel confirmed completion
-            case _ as unreachable_cc:
-                assert_never(unreachable_cc)
+    success = outcome == SessionOutcome.SUCCEEDED
+    needs_retry = outcome == SessionOutcome.RETRIABLE
 
     if not success or needs_retry:
         _capture_failure(

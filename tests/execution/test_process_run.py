@@ -73,7 +73,7 @@ ECHO_STDIN_SCRIPT = textwrap.dedent("""\
 class TestNormalCompletion:
     """Normal subprocess completion captures all output."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_normal_completion_captures_full_output(self, tmp_path):
         """Process writes multi-line output and exits — all captured."""
         script = tmp_path / "clean.py"
@@ -110,7 +110,7 @@ class TestNormalCompletion:
 class TestStdinInput:
     """Stdin input via temp file works correctly."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_stdin_input_roundtrip(self, tmp_path):
         """Pass input via temp file, verify it's received and echoed."""
         script = tmp_path / "echo.py"
@@ -147,7 +147,7 @@ class TestStdinInput:
 class TestTimeoutKillsHangingProcess:
     """Timeout fires and kills when process hangs."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_timeout_fires_and_kills_hanging_process(self, tmp_path):
         """Process sleeps forever, timeout kills it, partial output returned."""
         script = tmp_path / "hang.py"
@@ -165,16 +165,16 @@ class TestTimeoutKillsHangingProcess:
         assert elapsed < 5, f"Should return within ~2s timeout, took {elapsed:.1f}s"
         assert "before hang" in result.stdout  # Partial output captured
         # Process should be dead
-        import asyncio
+        import anyio
 
-        await asyncio.sleep(0.5)
+        await anyio.sleep(0.5)
         assert not psutil.pid_exists(result.pid)
 
 
 class TestTempFileIOEliminatesPipeBlocking:
     """Temp file I/O prevents pipe-inheritance blocking."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_child_holds_fd_does_not_block_read(self, tmp_path):
         """Parent exits, child holds FD — temp file read doesn't block."""
         script = tmp_path / "parent_child.py"

@@ -15,6 +15,7 @@ from autoskillit.core import (
     CONTEXT_EXHAUSTION_MARKER,
     ChannelConfirmation,
     RetryReason,
+    SessionOutcome,
     SkillResult,
     TerminationReason,
     get_logger,
@@ -452,3 +453,53 @@ def _compute_retry(
 
         case _ as unreachable:
             assert_never(unreachable)
+
+
+def _compute_outcome(
+    session: ClaudeSessionResult,
+    returncode: int,
+    termination: TerminationReason,
+    completion_marker: str = "",
+    channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
+) -> tuple[SessionOutcome, RetryReason]:
+    """Compose _compute_success and _compute_retry into a single SessionOutcome.
+
+    Applies both composition guards (contradiction and dead-end) before mapping
+    the resulting (success, needs_retry) pair to the bijective SessionOutcome enum.
+
+    Returns (SessionOutcome, RetryReason). The outcome is never the impossible
+    (success=True, needs_retry=True) state — the contradiction guard structurally
+    prevents it from reaching the mapping step.
+
+    Does NOT handle _recover_from_separate_marker recovery; that recovery path
+    lives in _build_skill_result (headless.py), which calls _compute_success on
+    the recovered session then delegates to _compute_outcome.
+    """
+    success = _compute_success(
+        session, returncode, termination, completion_marker, channel_confirmation
+    )
+    needs_retry, retry_reason = _compute_retry(
+        session, returncode, termination, channel_confirmation
+    )
+
+    # Contradiction guard: retry signal is authoritative over the channel bypass.
+    if success and needs_retry:
+        success = False
+
+    # Dead-end guard: channel confirmation means the session reached a natural end;
+    # failure to parse content is a data-availability issue, not a terminal failure.
+    if not success and not needs_retry:
+        match channel_confirmation:
+            case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.CHANNEL_B:
+                needs_retry = True
+                retry_reason = RetryReason.RESUME
+            case ChannelConfirmation.UNMONITORED:
+                pass  # legitimate terminal failure — no channel confirmed completion
+            case _ as unreachable_cc:
+                assert_never(unreachable_cc)
+
+    if success:
+        return SessionOutcome.SUCCEEDED, retry_reason
+    if needs_retry:
+        return SessionOutcome.RETRIABLE, retry_reason
+    return SessionOutcome.FAILED, retry_reason

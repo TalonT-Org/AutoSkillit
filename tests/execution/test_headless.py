@@ -1,6 +1,7 @@
 """Tests for headless_runner.py extracted helpers."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -60,6 +61,94 @@ def test_resolve_model_priority(make_config, override, step, default, expected):
 def _sr(returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT):
     """Build a minimal SubprocessResult for _build_skill_result tests."""
     return SubprocessResult(returncode, stdout, stderr, termination, pid=12345)
+
+
+class TestSessionLogDir:
+    """Unit tests for _session_log_dir — path derivation and log emission."""
+
+    # --- path derivation (from test_tools_execution.py TestSessionLogDir) ---
+
+    def test_replaces_slashes(self):
+        from autoskillit.execution.headless import _session_log_dir
+
+        result = _session_log_dir("/home/user/project")
+        assert result == Path.home() / ".claude" / "projects" / "-home-user-project"
+
+    def test_replaces_underscores(self):
+        from autoskillit.execution.headless import _session_log_dir
+
+        result = _session_log_dir("/home/user/my_project")
+        assert result == Path.home() / ".claude" / "projects" / "-home-user-my-project"
+
+    def test_replaces_both_slashes_and_underscores(self):
+        from autoskillit.execution.headless import _session_log_dir
+
+        result = _session_log_dir("/home/user_name/my_project/sub_dir")
+        assert result == Path.home() / ".claude" / "projects" / "-home-user-name-my-project-sub-dir"
+
+    # --- log behavior (from test_server_init.py TestGateTransitionLogs) ---
+
+    def test_warns_when_dir_missing(self, tmp_path, monkeypatch):
+        import structlog.testing
+
+        from autoskillit.execution.headless import _session_log_dir
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        cwd = str(tmp_path / "my-project")
+        with structlog.testing.capture_logs() as logs:
+            _session_log_dir(cwd)
+        assert any(
+            e.get("event") == "session_log_dir_missing"
+            for e in logs
+            if e.get("log_level") == "warning"
+        )
+
+    def test_no_warning_when_dir_present(self, tmp_path, monkeypatch):
+        import structlog.testing
+
+        from autoskillit.execution.headless import _session_log_dir
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        cwd = str(tmp_path)
+        project_hash = cwd.replace("/", "-").replace("_", "-")
+        log_dir = tmp_path / "home" / ".claude" / "projects" / project_hash
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with structlog.testing.capture_logs() as logs:
+            _session_log_dir(cwd)
+        assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
+
+    def test_logs_path_when_dir_exists(self, tmp_path, monkeypatch):
+        import structlog.testing
+
+        from autoskillit.execution.headless import _session_log_dir
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        cwd = str(tmp_path)
+        project_hash = cwd.replace("/", "-").replace("_", "-")
+        log_dir = tmp_path / "home" / ".claude" / "projects" / project_hash
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with structlog.testing.capture_logs() as logs:
+            result = _session_log_dir(cwd)
+        info_entries = [e for e in logs if e.get("log_level") == "info"]
+        assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
+        computed = next(e for e in info_entries if e.get("event") == "session_log_dir_computed")
+        assert computed.get("path") == str(result)
+        assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
+
+    def test_logs_path_when_dir_missing(self, tmp_path, monkeypatch):
+        import structlog.testing
+
+        from autoskillit.execution.headless import _session_log_dir
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        cwd = str(tmp_path / "my-project")
+        with structlog.testing.capture_logs() as logs:
+            result = _session_log_dir(cwd)
+        info_entries = [e for e in logs if e.get("log_level") == "info"]
+        assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
+        computed = next(e for e in info_entries if e.get("event") == "session_log_dir_computed")
+        assert computed.get("path") == str(result)
+        assert any(e.get("event") == "session_log_dir_missing" for e in logs)
 
 
 class TestBuildSkillResult:

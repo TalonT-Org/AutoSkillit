@@ -632,25 +632,6 @@ class TestRunSkillEnvPrefix:
         assert cmd[1] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000"
 
 
-class TestSessionLogDir:
-    """Unit tests for _session_log_dir path derivation."""
-
-    def test_replaces_slashes(self):
-        result = _session_log_dir("/home/user/project")
-        assert result == Path.home() / ".claude" / "projects" / "-home-user-project"
-
-    def test_replaces_underscores(self):
-        """Underscores must be replaced with dashes to match Claude Code's encoding."""
-        result = _session_log_dir("/home/user/my_project")
-        assert result == Path.home() / ".claude" / "projects" / "-home-user-my-project"
-
-    def test_replaces_both_slashes_and_underscores(self):
-        result = _session_log_dir("/home/user_name/my_project/sub_dir")
-        assert (
-            result == Path.home() / ".claude" / "projects" / "-home-user-name-my-project-sub-dir"
-        )
-
-
 class TestRunSkillPassesSessionLogDir:
     """run_skill passes session_log_dir derived from cwd."""
 

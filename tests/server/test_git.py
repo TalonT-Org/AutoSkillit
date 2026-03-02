@@ -4,6 +4,7 @@ import pytest
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core.types import SubprocessResult, TerminationReason
+from tests.conftest import StatefulMockTester
 
 
 def _make_result(
@@ -67,23 +68,11 @@ async def test_perform_merge_blocks_on_failing_tests(
     assert result["state"] == MergeState.WORKTREE_INTACT
 
 
-class _MockTester:
-    """Mock TestRunner for perform_merge tests."""
-
-    def __init__(self, passed: bool = True, output: str = "50 passed"):
-        self._passed = passed
-        self._output = output
-
-    async def run(self, cwd):
-        return (self._passed, self._output)
-
-
 @pytest.mark.asyncio
 async def test_perform_merge_returns_success_on_green_tests(
     default_config, conftest_mock_runner, tmp_path
 ):
     from autoskillit.server.git import perform_merge
-    from tests.conftest import StatefulMockTester
 
     fake_wt = str(tmp_path)
     tester = StatefulMockTester(results=[(True, "= 50 passed ="), (True, "= 50 passed =")])
@@ -118,7 +107,6 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
     """Post-rebase test failure returns POST_REBASE_TEST_GATE and WORKTREE_INTACT."""
     from autoskillit.core.types import MergeFailedStep, MergeState
     from autoskillit.server.git import perform_merge
-    from tests.conftest import StatefulMockTester
 
     # Pre-rebase: pass; post-rebase: fail
     tester = StatefulMockTester(results=[(True, "= 10 passed ="), (False, "= 1 failed =")])
@@ -147,7 +135,6 @@ async def test_perform_merge_both_gates_run_on_full_success(
 ):
     """On full success, both pre-rebase and post-rebase test gates execute."""
     from autoskillit.server.git import perform_merge
-    from tests.conftest import StatefulMockTester
 
     tester = StatefulMockTester(results=[(True, "= 10 passed ="), (True, "= 10 passed =")])
     # Full queue (tester is injected; no test-check in subprocess queue)

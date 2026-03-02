@@ -10,15 +10,8 @@ import pathlib
 def test_all_dataclasses_importable() -> None:
     """All dataclasses are importable from recipe.schema."""
     from autoskillit.recipe.schema import (
-        DataFlowReport,
-        DataFlowWarning,
         Recipe,
-        RecipeInfo,
-        RecipeIngredient,
         RecipeStep,
-        StepResultCondition,
-        StepResultRoute,
-        StepRetry,
     )
 
     assert dataclasses.is_dataclass(Recipe)

@@ -123,7 +123,9 @@ def test_session_outcome_is_str_enum_with_expected_values():
 
     assert issubclass(SessionOutcome, StrEnum)
     assert set(SessionOutcome) == {
-        SessionOutcome.SUCCEEDED, SessionOutcome.RETRIABLE, SessionOutcome.FAILED,
+        SessionOutcome.SUCCEEDED,
+        SessionOutcome.RETRIABLE,
+        SessionOutcome.FAILED,
     }
     assert SessionOutcome.SUCCEEDED == "succeeded"
     assert SessionOutcome.RETRIABLE == "retriable"

@@ -11,7 +11,6 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 from autoskillit.server.tools_integrations import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,

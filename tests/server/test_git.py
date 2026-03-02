@@ -127,5 +127,3 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
     assert result["state"] == MergeState.WORKTREE_INTACT
     assert "worktree_path" in result
     assert tester.call_count == 2  # both gates ran
-
-

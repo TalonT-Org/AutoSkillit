@@ -122,4 +122,3 @@ class TestDeleteDirectoryContents:
         result = _delete_directory_contents(tmp_path)
         assert result.success
         assert result.deleted == []
-

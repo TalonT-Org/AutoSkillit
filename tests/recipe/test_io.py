@@ -480,7 +480,8 @@ class TestVersionField:
     @pytest.mark.parametrize("version_val,expected", [(None, None), ("0.2.0", "0.2.0")])
     def test_version_field(self, version_val, expected) -> None:
         data = {
-            "name": "v-test", "description": "d",
+            "name": "v-test",
+            "description": "d",
             "steps": {
                 "do_it": {"tool": "run_cmd", "on_success": "done"},
                 "done": {"action": "stop", "message": "Done."},

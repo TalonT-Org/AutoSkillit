@@ -248,6 +248,7 @@ class TestMigrationConfig:
         cfg = load_config(tmp_path)
         assert cfg.migration.suppressed == ["script-a", "script-b"]
 
+
 class TestEnsureProjectTempAbsent:
     def test_ensure_project_temp_absent_from_config(self):
         import autoskillit.config as config_mod

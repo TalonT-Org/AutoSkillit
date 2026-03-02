@@ -917,7 +917,10 @@ class TestApplyTriageGate:
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
-        recipe_yaml = "name: triage-test\ndescription: T\nsteps:\n  done:\n    action: stop\n    message: Done\n"
+        recipe_yaml = (
+            "name: triage-test\ndescription: T\n"
+            "steps:\n  done:\n    action: stop\n    message: Done\n"
+        )
         recipe_path = recipes_dir / "triage-test.yaml"
         recipe_path.write_text(recipe_yaml)
 
@@ -946,7 +949,9 @@ class TestApplyTriageGate:
         mock_find = AsyncMock(return_value=recipe_info)
         monkeypatch.setattr(tool_ctx.recipes, "find", mock_find)
 
-        mock_triage = AsyncMock(return_value=[{"meaningful": False, "summary": "ok", "skill": "investigate"}])
+        mock_triage = AsyncMock(
+            return_value=[{"meaningful": False, "summary": "ok", "skill": "investigate"}]
+        )
         with patch("autoskillit._llm_triage.triage_staleness", mock_triage):
             # First call: triage_staleness invoked once
             await _apply_triage_gate(copy.deepcopy(result_template), name, recipe_info=recipe_info)
@@ -963,7 +968,9 @@ class TestApplyTriageGate:
             # Second call: must read from cache and skip triage_staleness entirely
             await _apply_triage_gate(copy.deepcopy(result_template), name, recipe_info=recipe_info)
 
-        assert mock_triage.call_count == 1, "triage_staleness must not be called on second invocation"
+        assert mock_triage.call_count == 1, (
+            "triage_staleness must not be called on second invocation"
+        )
 
 
 class TestLoadRecipeReadOnly:

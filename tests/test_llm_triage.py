@@ -243,7 +243,14 @@ class TestTriageStaleness:
                         "type": "result",
                         "subtype": "success",
                         "result": _json.dumps(
-                            [{"index": 1, "skill": "test-skill", "meaningful_change": False, "summary": "ok"}]
+                            [
+                                {
+                                    "index": 1,
+                                    "skill": "test-skill",
+                                    "meaningful_change": False,
+                                    "summary": "ok",
+                                }
+                            ]
                         ),
                         "session_id": "test-session",
                         "is_error": False,
@@ -321,7 +328,14 @@ class TestTriageStaleness:
         (skill_dir / "SKILL.md").write_text("# Test Skill\nDummy content.")
 
         agent_response = _json.dumps(
-            [{"index": 1, "skill": "test-skill", "meaningful_change": False, "summary": "only whitespace changes"}]
+            [
+                {
+                    "index": 1,
+                    "skill": "test-skill",
+                    "meaningful_change": False,
+                    "summary": "only whitespace changes",
+                }
+            ]
         )
         ndjson = "\n".join(
             [
@@ -383,8 +397,6 @@ async def test_triage_staleness_concurrent_calls(
 ) -> None:
     """Multiple batches are dispatched concurrently via anyio task group."""
     import asyncio
-    import json as _json
-    from unittest.mock import AsyncMock
 
     from autoskillit._llm_triage import BATCH_SIZE, triage_staleness
     from autoskillit.core.types import TerminationReason
@@ -492,7 +504,9 @@ async def test_triage_staleness_batches_five_skills(
     monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
 
     items = [
-        StaleItem(skill=f"skill-{i}", reason="hash_mismatch", stored_value="old", current_value="new")
+        StaleItem(
+            skill=f"skill-{i}", reason="hash_mismatch", stored_value="old", current_value="new"
+        )
         for i in range(n)
     ]
     results = await triage_staleness(items)
@@ -557,7 +571,9 @@ async def test_triage_staleness_batch_fallback_on_malformed_response(
     monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
 
     items = [
-        StaleItem(skill=f"skill-{i}", reason="hash_mismatch", stored_value="old", current_value="new")
+        StaleItem(
+            skill=f"skill-{i}", reason="hash_mismatch", stored_value="old", current_value="new"
+        )
         for i in range(n)
     ]
     results = await triage_staleness(items)

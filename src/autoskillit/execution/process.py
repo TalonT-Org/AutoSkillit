@@ -11,7 +11,6 @@ Two composed functions wire the utilities together correctly:
 
 from __future__ import annotations
 
-import asyncio
 import shlex
 import shutil
 import signal
@@ -22,8 +21,13 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO
+from typing import IO, TYPE_CHECKING
 
+if TYPE_CHECKING:
+    import asyncio  # asyncio.Task annotations remain until groupC
+
+import anyio
+import anyio.abc
 import psutil
 
 from autoskillit.core import ChannelConfirmation, SubprocessResult, TerminationReason, get_logger
@@ -77,8 +81,8 @@ def kill_process_tree(pid: int, timeout: float = 2.0) -> None:
 
 
 async def async_kill_process_tree(pid: int, timeout: float = 2.0) -> None:
-    """Non-blocking wrapper around kill_process_tree for asyncio callers."""
-    await asyncio.to_thread(kill_process_tree, pid, timeout)
+    """Non-blocking wrapper around kill_process_tree for async callers."""
+    await anyio.to_thread.run_sync(kill_process_tree, pid, timeout)
 
 
 async def _wait_process_dead(proc: psutil.Process, timeout: float = 5.0) -> bool:
@@ -90,15 +94,11 @@ async def _wait_process_dead(proc: psutil.Process, timeout: float = 5.0) -> bool
     - For non-child processes (grandchildren adopted by init): psutil polls internally,
       which is equivalent to pid_exists() but still handles the NoSuchProcess case correctly.
 
-    Replaces the pattern::
-
-        await asyncio.sleep(0.5)
-        assert not psutil.pid_exists(pid)
-
-    which is flaky because pid_exists() returns True for zombies (killed but not reaped).
+    pid_exists() returns True for zombies (killed but not reaped), so wait() is required
+    for reliable dead confirmation.
     """
     try:
-        await asyncio.get_running_loop().run_in_executor(None, proc.wait, timeout)
+        await anyio.to_thread.run_sync(proc.wait, timeout)
         return True
     except psutil.TimeoutExpired:
         return False
@@ -235,7 +235,7 @@ async def _heartbeat(
     scan_pos = 0  # byte offset into the file
     os_error_count = 0
     while True:
-        await asyncio.sleep(_poll_interval)
+        await anyio.sleep(_poll_interval)
         if _on_poll is not None:
             _on_poll()
         try:
@@ -320,7 +320,7 @@ async def _session_log_monitor(
                 _phase1_timeout,
             )
             return "stale"
-        await asyncio.sleep(_phase1_poll)
+        await anyio.sleep(_phase1_poll)
         try:
             candidates = [
                 f
@@ -340,12 +340,12 @@ async def _session_log_monitor(
 
     # Phase 2: Monitor the session log
     last_size = 0
-    last_change = asyncio.get_event_loop().time()
+    last_change = _time.monotonic()
     scan_pos = 0
     os_error_count = 0
 
     while True:
-        await asyncio.sleep(_phase2_poll)
+        await anyio.sleep(_phase2_poll)
         if _on_poll is not None:
             _on_poll()
         try:
@@ -359,7 +359,7 @@ async def _session_log_monitor(
 
         if current_size > last_size:
             last_size = current_size
-            last_change = asyncio.get_event_loop().time()
+            last_change = _time.monotonic()
 
             # Check new content for completion marker (structured)
             try:
@@ -372,10 +372,10 @@ async def _session_log_monitor(
                 pass
         else:
             # Check staleness
-            elapsed = asyncio.get_event_loop().time() - last_change
+            elapsed = _time.monotonic() - last_change
             if elapsed >= stale_threshold:
                 if pid is not None and _has_active_api_connection(pid):
-                    last_change = asyncio.get_event_loop().time()
+                    last_change = _time.monotonic()
                     logger.warning(
                         "JSONL silent for %.0fs but ESTABLISHED port-443 connection — "
                         "suppressing stale kill (pid=%d)",
@@ -484,7 +484,7 @@ def scan_done_signals(
     wait_task: asyncio.Task,
     heartbeat_task: asyncio.Task | None,
     session_monitor_task: asyncio.Task | None,
-    proc: asyncio.subprocess.Process,
+    proc: anyio.abc.Process,
 ) -> RaceSignals:
     """Extract signals from ALL completed tasks. No signal is discarded.
 
@@ -565,7 +565,7 @@ async def run_managed_async(
     Wires all lifecycle utilities together:
     1. create_temp_io for stdout/stderr/stdin
     2. optional PTY wrapping for TTY-dependent CLIs
-    3. spawn with process_group=0
+    3. spawn with start_new_session=True
     4. two-channel race: proc.wait / stdout heartbeat / session log monitor
     5. async_kill_process_tree on failure/timeout/completion-detection
     6. read_temp_output for results
@@ -609,14 +609,14 @@ async def run_managed_async(
             stdin_handle = open(stdin_path)  # noqa: SIM115
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
+            proc = await anyio.open_process(
+                cmd,
                 stdout=stdout_file,
                 stderr=stderr_file,
                 stdin=stdin_handle if stdin_handle is not None else subprocess.DEVNULL,
                 cwd=cwd,
                 env=env,
-                process_group=0,
+                start_new_session=True,
             )
 
             termination = TerminationReason.NATURAL_EXIT
@@ -658,10 +658,9 @@ async def run_managed_async(
                 tasks.add(session_monitor_task)
 
             try:
-                done, pending = await asyncio.wait_for(
-                    asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED),
-                    timeout=timeout,
-                )
+                # TODO(groupC): replace asyncio.wait with anyio task group to eliminate asyncio/anyio mixing
+                with anyio.fail_after(timeout):
+                    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
                 # Phase A — Signal extraction (pure, no side effects).
                 # Scans ALL tasks in done: multiple may complete simultaneously.
@@ -685,12 +684,11 @@ async def run_managed_async(
                     # Channel B won, process still alive, Channel A not yet in done.
                     # Drain wait: give heartbeat a window to confirm stdout data.
                     if heartbeat_task is not None:
-                        channel_a_ready = asyncio.Event()
+                        channel_a_ready = anyio.Event()
                         heartbeat_task.add_done_callback(lambda _: channel_a_ready.set())
                         try:
-                            await asyncio.wait_for(
-                                channel_a_ready.wait(), timeout=completion_drain_timeout
-                            )
+                            with anyio.fail_after(completion_drain_timeout):
+                                await channel_a_ready.wait()
                             # Channel A confirmed within drain window — upgrade confirmation.
                             _channel_confirmation = ChannelConfirmation.CHANNEL_A
                         except TimeoutError:

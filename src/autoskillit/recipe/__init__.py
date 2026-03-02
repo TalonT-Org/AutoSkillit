@@ -42,6 +42,15 @@ from autoskillit.recipe.validator import (  # noqa: E402
     validate_recipe,
 )
 
+# Rule registration — import order determines _RULE_REGISTRY insertion order.
+# All rule sub-modules must be imported here so @semantic_rule decorators fire.
+from autoskillit.recipe import rules_inputs as _rules_inputs  # noqa: E402 F401
+from autoskillit.recipe import rules_worktree as _rules_worktree  # noqa: E402 F401
+from autoskillit.recipe import rules_dataflow as _rules_dataflow  # noqa: E402 F401
+from autoskillit.recipe import rules_graph as _rules_graph  # noqa: E402 F401
+from autoskillit.recipe import rules_clone as _rules_clone  # noqa: E402 F401
+from autoskillit.recipe import rules_bypass as _rules_bypass  # noqa: E402 F401
+
 __all__ = [
     "Recipe",
     "RecipeStep",

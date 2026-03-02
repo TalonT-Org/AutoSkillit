@@ -971,11 +971,11 @@ def test_recipe_rules_module_exists() -> None:
     assert rules is not None
 
 
-def test_semantic_rule_functions_defined_in_rules_module() -> None:
-    """P8: Semantic rule functions must be defined in recipe/rules.py."""
-    from autoskillit.recipe.validator import _check_outdated_version
+def test_semantic_rule_functions_defined_in_rule_submodules() -> None:
+    """P8: Semantic rule functions must be defined in recipe/rules_*.py sub-modules."""
+    from autoskillit.recipe.rules_inputs import _check_outdated_version
 
-    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules"
+    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules_inputs"
 
 
 def test_installed_version_in_core_types() -> None:
@@ -985,10 +985,15 @@ def test_installed_version_in_core_types() -> None:
     assert isinstance(AUTOSKILLIT_INSTALLED_VERSION, str) and AUTOSKILLIT_INSTALLED_VERSION
 
 
-def test_rules_module_no_autoskillit_init_import() -> None:
-    """P3-F2: recipe/rules.py must not import from autoskillit top-level __init__."""
-    rules_path = SRC_ROOT / "recipe" / "rules.py"
-    assert "from autoskillit import __version__" not in rules_path.read_text()
+def test_rule_submodules_no_autoskillit_init_import() -> None:
+    """P3-F2: recipe/rules_*.py sub-modules must not import from autoskillit top-level __init__."""
+    recipe_dir = SRC_ROOT / "recipe"
+    rule_files = list(recipe_dir.glob("rules_*.py"))
+    assert len(rule_files) >= 5, "Expected at least 5 rule sub-modules"
+    for rules_path in rule_files:
+        assert "from autoskillit import __version__" not in rules_path.read_text(), (
+            f"{rules_path.name}: must not import from autoskillit top-level __init__"
+        )
 
 
 def test_recipe_api_module_exists() -> None:

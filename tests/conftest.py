@@ -204,6 +204,12 @@ def parse_stdout_json(capsys):
     return _parse
 
 
+@pytest.fixture(scope="function")
+def anyio_backend():
+    """Lock all @pytest.mark.anyio tests to the asyncio backend."""
+    return "asyncio"
+
+
 @pytest.fixture
 def tool_ctx(monkeypatch, tmp_path):
     """Provide a fully isolated ToolContext for server tests.

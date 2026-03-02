@@ -11,19 +11,21 @@ Two composed functions wire the utilities together correctly:
 
 from __future__ import annotations
 
-import asyncio
 import shlex
 import shutil
 import signal
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
 
+import anyio
+import anyio.abc
 import psutil
 
 from autoskillit.core import ChannelConfirmation, SubprocessResult, TerminationReason, get_logger
@@ -77,8 +79,8 @@ def kill_process_tree(pid: int, timeout: float = 2.0) -> None:
 
 
 async def async_kill_process_tree(pid: int, timeout: float = 2.0) -> None:
-    """Non-blocking wrapper around kill_process_tree for asyncio callers."""
-    await asyncio.to_thread(kill_process_tree, pid, timeout)
+    """Non-blocking wrapper around kill_process_tree for async callers."""
+    await anyio.to_thread.run_sync(kill_process_tree, pid, timeout)
 
 
 async def _wait_process_dead(proc: psutil.Process, timeout: float = 5.0) -> bool:
@@ -90,15 +92,11 @@ async def _wait_process_dead(proc: psutil.Process, timeout: float = 5.0) -> bool
     - For non-child processes (grandchildren adopted by init): psutil polls internally,
       which is equivalent to pid_exists() but still handles the NoSuchProcess case correctly.
 
-    Replaces the pattern::
-
-        await asyncio.sleep(0.5)
-        assert not psutil.pid_exists(pid)
-
-    which is flaky because pid_exists() returns True for zombies (killed but not reaped).
+    pid_exists() returns True for zombies (killed but not reaped), so wait() is required
+    for reliable dead confirmation.
     """
     try:
-        await asyncio.get_running_loop().run_in_executor(None, proc.wait, timeout)
+        await anyio.to_thread.run_sync(proc.wait, timeout)
         return True
     except psutil.TimeoutExpired:
         return False
@@ -235,7 +233,7 @@ async def _heartbeat(
     scan_pos = 0  # byte offset into the file
     os_error_count = 0
     while True:
-        await asyncio.sleep(_poll_interval)
+        await anyio.sleep(_poll_interval)
         if _on_poll is not None:
             _on_poll()
         try:
@@ -320,7 +318,7 @@ async def _session_log_monitor(
                 _phase1_timeout,
             )
             return "stale"
-        await asyncio.sleep(_phase1_poll)
+        await anyio.sleep(_phase1_poll)
         try:
             candidates = [
                 f
@@ -340,12 +338,12 @@ async def _session_log_monitor(
 
     # Phase 2: Monitor the session log
     last_size = 0
-    last_change = asyncio.get_event_loop().time()
+    last_change = _time.monotonic()
     scan_pos = 0
     os_error_count = 0
 
     while True:
-        await asyncio.sleep(_phase2_poll)
+        await anyio.sleep(_phase2_poll)
         if _on_poll is not None:
             _on_poll()
         try:
@@ -359,7 +357,7 @@ async def _session_log_monitor(
 
         if current_size > last_size:
             last_size = current_size
-            last_change = asyncio.get_event_loop().time()
+            last_change = _time.monotonic()
 
             # Check new content for completion marker (structured)
             try:
@@ -372,10 +370,10 @@ async def _session_log_monitor(
                 pass
         else:
             # Check staleness
-            elapsed = asyncio.get_event_loop().time() - last_change
+            elapsed = _time.monotonic() - last_change
             if elapsed >= stale_threshold:
                 if pid is not None and _has_active_api_connection(pid):
-                    last_change = asyncio.get_event_loop().time()
+                    last_change = _time.monotonic()
                     logger.warning(
                         "JSONL silent for %.0fs but ESTABLISHED port-443 connection — "
                         "suppressing stale kill (pid=%d)",
@@ -466,7 +464,7 @@ def read_temp_output(stdout_path: Path, stderr_path: Path) -> tuple[str, str]:
 
 @dataclass(frozen=True)
 class RaceSignals:
-    """Accumulated signals from all tasks that completed in asyncio.wait.
+    """Accumulated signals produced by the anyio task group race in run_managed_async.
 
     Captures what happened without making any decisions about what it means.
     All fields are independent: multiple can be True simultaneously when tasks
@@ -479,30 +477,98 @@ class RaceSignals:
     channel_b_status: str | None  # "completion", "stale", or None
 
 
-def scan_done_signals(
-    done: set[asyncio.Task],
-    wait_task: asyncio.Task,
-    heartbeat_task: asyncio.Task | None,
-    session_monitor_task: asyncio.Task | None,
-    proc: asyncio.subprocess.Process,
-) -> RaceSignals:
-    """Extract signals from ALL completed tasks. No signal is discarded.
+@dataclass
+class RaceAccumulator:
+    """Mutable signal accumulator for the anyio task group race in run_managed_async.
 
-    Pure function: reads task states without performing any side effects.
-    Multiple tasks may be present in ``done`` when their completion callbacks
-    land in the same event loop tick — this function captures all of them.
+    Each watch coroutine writes exactly one field before setting the trigger.
+    In async cooperative concurrency there are no concurrent writes — only one
+    coroutine runs between yield points. to_race_signals() converts to the
+    frozen RaceSignals consumed by resolve_termination.
     """
-    process_exited = wait_task in done
-    channel_a_confirmed = heartbeat_task is not None and heartbeat_task in done
-    channel_b_status = None
-    if session_monitor_task is not None and session_monitor_task in done:
-        channel_b_status = session_monitor_task.result()
-    return RaceSignals(
-        process_exited=process_exited,
-        process_returncode=proc.returncode if process_exited else None,
-        channel_a_confirmed=channel_a_confirmed,
-        channel_b_status=channel_b_status,
+
+    process_exited: bool = False
+    process_returncode: int | None = None
+    channel_a_confirmed: bool = False
+    channel_b_status: str | None = None
+
+    def to_race_signals(self) -> RaceSignals:
+        return RaceSignals(
+            process_exited=self.process_exited,
+            process_returncode=self.process_returncode,
+            channel_a_confirmed=self.channel_a_confirmed,
+            channel_b_status=self.channel_b_status,
+        )
+
+
+async def _watch_process(
+    proc: anyio.abc.Process,
+    acc: RaceAccumulator,
+    trigger: anyio.Event,
+) -> None:
+    """Wait for the subprocess to exit and deposit the process-exit signal."""
+    await proc.wait()
+    acc.process_exited = True
+    acc.process_returncode = proc.returncode
+    trigger.set()
+
+
+async def _watch_heartbeat(
+    stdout_path: Path,
+    heartbeat_marker: str,
+    heartbeat_record_types: frozenset[str],
+    acc: RaceAccumulator,
+    trigger: anyio.Event,
+    _poll_interval: float,
+) -> None:
+    """Poll stdout NDJSON for a result record and deposit the Channel A signal."""
+    await _heartbeat(
+        stdout_path, heartbeat_marker, heartbeat_record_types, _poll_interval=_poll_interval
     )
+    acc.channel_a_confirmed = True
+    trigger.set()
+
+
+async def _watch_session_log(
+    session_log_dir: Path,
+    completion_marker: str,
+    stale_threshold: float,
+    spawn_time: float,
+    session_record_types: frozenset[str],
+    pid: int,
+    completion_drain_timeout: float,
+    acc: RaceAccumulator,
+    trigger: anyio.Event,
+    _phase1_poll: float,
+    _phase2_poll: float,
+    _phase1_timeout: float,
+) -> None:
+    """Monitor the session JSONL log and deposit the Channel B signal.
+
+    When the session reports completion (not stale), a drain-wait window
+    is opened via anyio.move_on_after so Channel A can fire first if it
+    is about to confirm. The trigger is set after the B signal is deposited.
+    """
+    result = await _session_log_monitor(
+        session_log_dir,
+        completion_marker,
+        stale_threshold,
+        spawn_time,
+        session_record_types,
+        pid=pid,
+        _phase1_poll=_phase1_poll,
+        _phase2_poll=_phase2_poll,
+        _phase1_timeout=_phase1_timeout,
+    )
+    if result == "completion":
+        # Drain-wait: give Channel A a window to confirm before Channel B wins.
+        # move_on_after absorbs timeout; trigger may already be set if A fired.
+        with anyio.move_on_after(completion_drain_timeout):
+            await trigger.wait()
+    # These writes execute atomically before any cancellation delivery:
+    # there is no await between them and the function return.
+    acc.channel_b_status = result
+    trigger.set()
 
 
 def resolve_termination(
@@ -565,7 +631,7 @@ async def run_managed_async(
     Wires all lifecycle utilities together:
     1. create_temp_io for stdout/stderr/stdin
     2. optional PTY wrapping for TTY-dependent CLIs
-    3. spawn with process_group=0
+    3. spawn with start_new_session=True
     4. two-channel race: proc.wait / stdout heartbeat / session log monitor
     5. async_kill_process_tree on failure/timeout/completion-detection
     6. read_temp_output for results
@@ -609,103 +675,70 @@ async def run_managed_async(
             stdin_handle = open(stdin_path)  # noqa: SIM115
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
+            proc = await anyio.open_process(
+                cmd,
                 stdout=stdout_file,
                 stderr=stderr_file,
                 stdin=stdin_handle if stdin_handle is not None else subprocess.DEVNULL,
                 cwd=cwd,
                 env=env,
-                process_group=0,
+                start_new_session=True,
             )
 
             termination = TerminationReason.NATURAL_EXIT
             _channel_confirmation = ChannelConfirmation.UNMONITORED
 
-            # Build the race participants
-            wait_task = asyncio.create_task(proc.wait())
-            tasks: set[asyncio.Task] = {wait_task}
+            acc = RaceAccumulator()
+            trigger = anyio.Event()
+            timeout_scope = None  # bound inside task group body; initialized for safety
 
-            heartbeat_task = None
-            if heartbeat_marker:
-                heartbeat_task = asyncio.create_task(
-                    _heartbeat(
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(_watch_process, proc, acc, trigger)
+                if heartbeat_marker:
+                    tg.start_soon(
+                        _watch_heartbeat,
                         stdout_path,
                         heartbeat_marker,
                         heartbeat_record_types,
-                        _poll_interval=_heartbeat_poll,
+                        acc,
+                        trigger,
+                        _heartbeat_poll,
                     )
-                )
-                tasks.add(heartbeat_task)
-
-            session_monitor_task = None
-            if session_log_dir is not None:
-                import time
-
-                session_monitor_task = asyncio.create_task(
-                    _session_log_monitor(
+                if session_log_dir is not None:
+                    tg.start_soon(
+                        _watch_session_log,
                         session_log_dir,
                         completion_marker,
                         stale_threshold,
                         time.time(),
                         session_record_types,
-                        pid=proc.pid,
-                        _phase1_poll=_phase1_poll,
-                        _phase2_poll=_phase2_poll,
-                        _phase1_timeout=_phase1_timeout,
+                        proc.pid,
+                        completion_drain_timeout,
+                        acc,
+                        trigger,
+                        _phase1_poll,
+                        _phase2_poll,
+                        _phase1_timeout,
                     )
-                )
-                tasks.add(session_monitor_task)
+                with anyio.move_on_after(timeout) as timeout_scope:
+                    await trigger.wait()
+                tg.cancel_scope.cancel()
 
-            try:
-                done, pending = await asyncio.wait_for(
-                    asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED),
-                    timeout=timeout,
-                )
+            signals = acc.to_race_signals()
+            termination, _channel_confirmation = resolve_termination(signals)
 
-                # Phase A — Signal extraction (pure, no side effects).
-                # Scans ALL tasks in done: multiple may complete simultaneously.
-                signals = scan_done_signals(
-                    done, wait_task, heartbeat_task, session_monitor_task, proc
-                )
-                termination, _channel_confirmation = resolve_termination(signals)
-
-                # Phase B — Side-effect dispatch (kill / drain-wait).
-                # Operates on signals and resolved termination; order matters.
-                if signals.process_exited:
-                    # Process already exited — no kill needed.
-                    pass
-                elif termination == TerminationReason.STALE:
-                    logger.warning("Session stale for %ss, killing tree", stale_threshold)
-                    await async_kill_process_tree(proc.pid)
-                elif signals.channel_a_confirmed:
-                    # Channel A confirmed stdout data, process still alive — kill immediately.
-                    await async_kill_process_tree(proc.pid)
-                elif signals.channel_b_status == "completion":
-                    # Channel B won, process still alive, Channel A not yet in done.
-                    # Drain wait: give heartbeat a window to confirm stdout data.
-                    if heartbeat_task is not None:
-                        channel_a_ready = asyncio.Event()
-                        heartbeat_task.add_done_callback(lambda _: channel_a_ready.set())
-                        try:
-                            await asyncio.wait_for(
-                                channel_a_ready.wait(), timeout=completion_drain_timeout
-                            )
-                            # Channel A confirmed within drain window — upgrade confirmation.
-                            _channel_confirmation = ChannelConfirmation.CHANNEL_A
-                        except TimeoutError:
-                            # CLI did not flush type=result within drain_timeout.
-                            # _channel_confirmation stays CHANNEL_B from resolve_termination.
-                            pass
-                    await async_kill_process_tree(proc.pid)
-            except TimeoutError:
+            if timeout_scope.cancelled_caught:
                 termination = TerminationReason.TIMED_OUT
                 logger.warning("Process %d timed out after %ss, killing tree", proc.pid, timeout)
                 await async_kill_process_tree(proc.pid)
-            finally:
-                for t in tasks:
-                    if not t.done():
-                        t.cancel()
+            elif signals.process_exited:
+                pass  # process already exited — no kill needed
+            elif termination == TerminationReason.STALE:
+                logger.warning("Session stale for %ss, killing tree", stale_threshold)
+                await async_kill_process_tree(proc.pid)
+            else:
+                # Channel A or B won; process still alive — kill immediately.
+                await async_kill_process_tree(proc.pid)
 
             # Flush and close before reading
             stdout_file.close()

@@ -1,27 +1,13 @@
-generated_at: '2026-03-02T00:02:11.259493+00:00'
+generated_at: '2026-03-02T02:12:42.454223+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes:
-  make-groups: sha256:f92caf72b4fbe044b3af7ad9f5a51fd07563f7faec2d6362750b9aeecb9ab94e
   make-plan: sha256:4d33f1e86f9ffb91d29924a65b968d056887c271a73249f4472b874126291e0c
-  review-approach: sha256:44f8aaf2fdb9ad79c65150e470695573535bde5eb56a43d771ab9cfb1203f46c
   dry-walkthrough: sha256:a479c92bcf9afe200fb84fdbe8cd46b7b376e63d9e3b134a1caab2fe5611e095
   implement-worktree-no-merge: sha256:86515d79175468eb205e964d033ad48598812e7997014f7c0e6b52d80a7c002d
   retry-worktree: sha256:c66703245d49df7f94a71456a4f76da62c3527652f03bec62b71cc344d5028b9
   resolve-failures: sha256:81ee708f6c8f1e75edb27a5f68dde6d1eac7db229fd5e18690f4c74185de8b45
   audit-impl: sha256:d8fca36db95f0de3ca32c1d1201d6b913f0dbcd541dfa12c7f868f04c8f4c411
 skills:
-  make-groups:
-    inputs:
-    - name: source_doc
-      type: file_path
-      required: true
-    outputs:
-    - name: groups_path
-      type: file_path
-    - name: manifest_path
-      type: file_path
-    - name: group_files
-      type: file_path_list
   make-plan:
     inputs:
     - name: task
@@ -32,14 +18,6 @@ skills:
       type: file_path
     - name: plan_parts
       type: file_path_list
-  review-approach:
-    inputs:
-    - name: plan_path
-      type: file_path
-      required: false
-    outputs:
-    - name: review_path
-      type: file_path
   dry-walkthrough:
     inputs:
     - name: plan_path
@@ -102,141 +80,86 @@ dataflow:
   available:
   - audit
   - base_branch
-  - make_groups
-  - open_pr
-  - review_approach
+  - keep_clone_on_failure
   - run_name
   - source_dir
-  - source_doc
-  - task
   required: []
   produced:
   - work_dir
-  - remote_url
-- step: capture_base_sha
+- step: setup_remote
   available:
   - audit
   - base_branch
-  - make_groups
-  - open_pr
-  - remote_url
-  - review_approach
+  - keep_clone_on_failure
   - run_name
   - source_dir
-  - source_doc
-  - task
   - work_dir
   required: []
-  produced:
-  - base_sha
-- step: set_merge_target
+  produced: []
+- step: analyze_prs
   available:
   - audit
   - base_branch
-  - base_sha
-  - make_groups
-  - open_pr
-  - remote_url
-  - review_approach
+  - keep_clone_on_failure
   - run_name
   - source_dir
-  - source_doc
-  - task
   - work_dir
   required: []
   produced:
-  - merge_target
-- step: create_branch
+  - pr_order_file
+  - integration_branch
+- step: create_integration_branch
   available:
   - audit
   - base_branch
-  - base_sha
-  - make_groups
-  - merge_target
-  - open_pr
-  - remote_url
-  - review_approach
+  - integration_branch
+  - keep_clone_on_failure
+  - pr_order_file
   - run_name
   - source_dir
-  - source_doc
-  - task
   - work_dir
   required: []
-  produced:
-  - merge_target
-- step: group
+  produced: []
+- step: merge_pr
   available:
   - audit
   - base_branch
-  - base_sha
-  - make_groups
-  - merge_target
-  - open_pr
-  - remote_url
-  - review_approach
+  - integration_branch
+  - keep_clone_on_failure
+  - pr_order_file
   - run_name
   - source_dir
-  - source_doc
-  - task
   - work_dir
   required: []
   produced:
-  - group_files
+  - needs_plan
+  - task
 - step: plan
   available:
   - audit
   - base_branch
-  - base_sha
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
-  - remote_url
-  - review_approach
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - pr_order_file
   - run_name
   - source_dir
-  - source_doc
   - task
   - work_dir
   required: []
   produced:
   - plan_path
-- step: review
-  available:
-  - audit
-  - base_branch
-  - base_sha
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
-  - plan_path
-  - remote_url
-  - review_approach
-  - run_name
-  - source_dir
-  - source_doc
-  - task
-  - work_dir
-  required: []
-  produced:
-  - review_path
 - step: verify
   available:
   - audit
   - base_branch
-  - base_sha
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
-  - remote_url
-  - review_approach
-  - review_path
+  - pr_order_file
   - run_name
   - source_dir
-  - source_doc
   - task
   - work_dir
   required: []
@@ -245,18 +168,13 @@ dataflow:
   available:
   - audit
   - base_branch
-  - base_sha
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
-  - remote_url
-  - review_approach
-  - review_path
+  - pr_order_file
   - run_name
   - source_dir
-  - source_doc
   - task
   - work_dir
   required: []
@@ -266,18 +184,13 @@ dataflow:
   available:
   - audit
   - base_branch
-  - base_sha
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
-  - remote_url
-  - review_approach
-  - review_path
+  - pr_order_file
   - run_name
   - source_dir
-  - source_doc
   - task
   - work_dir
   - worktree_path
@@ -288,107 +201,98 @@ dataflow:
   available:
   - audit
   - base_branch
-  - base_sha
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
-  - remote_url
-  - review_approach
-  - review_path
+  - pr_order_file
   - run_name
   - source_dir
-  - source_doc
   - task
   - work_dir
   - worktree_path
   required: []
   produced: []
-- step: merge
+- step: merge_to_integration
   available:
   - audit
   - base_branch
-  - base_sha
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
-  - remote_url
-  - review_approach
-  - review_path
+  - pr_order_file
   - run_name
   - source_dir
-  - source_doc
   - task
   - work_dir
   - worktree_path
   required: []
   produced:
   - cleanup_succeeded
-  - worktree_path
-- step: push
-  available:
-  - audit
-  - base_branch
-  - base_sha
-  - cleanup_succeeded
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
-  - plan_path
-  - remote_url
-  - review_approach
-  - review_path
-  - run_name
-  - source_dir
-  - source_doc
-  - task
-  - work_dir
-  - worktree_path
-  required: []
-  produced: []
 - step: fix
   available:
   - audit
   - base_branch
-  - base_sha
   - cleanup_succeeded
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
-  - remote_url
-  - review_approach
-  - review_path
+  - pr_order_file
   - run_name
   - source_dir
-  - source_doc
   - task
   - work_dir
   - worktree_path
   required: []
   produced: []
-- step: next_or_done
+- step: next_part_or_next_pr
   available:
   - audit
   - base_branch
-  - base_sha
   - cleanup_succeeded
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
-  - remote_url
-  - review_approach
-  - review_path
+  - pr_order_file
   - run_name
   - source_dir
-  - source_doc
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: push_integration_branch
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: collect_artifacts
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - run_name
+  - source_dir
   - task
   - work_dir
   - worktree_path
@@ -398,19 +302,14 @@ dataflow:
   available:
   - audit
   - base_branch
-  - base_sha
   - cleanup_succeeded
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
-  - remote_url
-  - review_approach
-  - review_path
+  - pr_order_file
   - run_name
   - source_dir
-  - source_doc
   - task
   - work_dir
   - worktree_path
@@ -422,44 +321,34 @@ dataflow:
   available:
   - audit
   - base_branch
-  - base_sha
   - cleanup_succeeded
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
+  - pr_order_file
   - remediation_path
-  - remote_url
-  - review_approach
-  - review_path
   - run_name
   - source_dir
-  - source_doc
   - task
   - verdict
   - work_dir
   - worktree_path
   required: []
   produced: []
-- step: open_pr_step
+- step: create_review_pr
   available:
   - audit
   - base_branch
-  - base_sha
   - cleanup_succeeded
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
+  - pr_order_file
   - remediation_path
-  - remote_url
-  - review_approach
-  - review_path
   - run_name
   - source_dir
-  - source_doc
   - task
   - verdict
   - work_dir
@@ -470,20 +359,15 @@ dataflow:
   available:
   - audit
   - base_branch
-  - base_sha
   - cleanup_succeeded
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
+  - pr_order_file
   - remediation_path
-  - remote_url
-  - review_approach
-  - review_path
   - run_name
   - source_dir
-  - source_doc
   - task
   - verdict
   - work_dir
@@ -494,20 +378,15 @@ dataflow:
   available:
   - audit
   - base_branch
-  - base_sha
   - cleanup_succeeded
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
+  - pr_order_file
   - remediation_path
-  - remote_url
-  - review_approach
-  - review_path
   - run_name
   - source_dir
-  - source_doc
   - task
   - verdict
   - work_dir
@@ -518,20 +397,15 @@ dataflow:
   available:
   - audit
   - base_branch
-  - base_sha
   - cleanup_succeeded
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
+  - pr_order_file
   - remediation_path
-  - remote_url
-  - review_approach
-  - review_path
   - run_name
   - source_dir
-  - source_doc
   - task
   - verdict
   - work_dir
@@ -542,20 +416,15 @@ dataflow:
   available:
   - audit
   - base_branch
-  - base_sha
   - cleanup_succeeded
-  - group_files
-  - make_groups
-  - merge_target
-  - open_pr
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
   - plan_path
+  - pr_order_file
   - remediation_path
-  - remote_url
-  - review_approach
-  - review_path
   - run_name
   - source_dir
-  - source_doc
   - task
   - verdict
   - work_dir

@@ -610,7 +610,7 @@ class TestHasActiveApiConnection:
             mock_child.net_connections.return_value = child_conns
             children.append(mock_child)
         mock_parent.children.return_value = children
-        return patch("autoskillit.execution.process.psutil.Process", return_value=mock_parent)
+        return patch("autoskillit.execution._process_monitor.psutil.Process", return_value=mock_parent)
 
     def test_returns_true_when_parent_has_established_port_443(self):
         with self._patch_psutil([self._make_conn(443)]):
@@ -653,7 +653,7 @@ class TestHasActiveApiConnection:
         import psutil as _psutil
 
         with patch(
-            "autoskillit.execution.process.psutil.Process",
+            "autoskillit.execution._process_monitor.psutil.Process",
             side_effect=_psutil.NoSuchProcess(12345),
         ):
             assert _has_active_api_connection(12345) is False
@@ -670,7 +670,7 @@ class TestHasActiveApiConnection:
         mock_live_child = Mock()
         mock_live_child.net_connections.return_value = [self._make_conn(443)]
         mock_parent.children.return_value = [mock_dead_child, mock_live_child]
-        with patch("autoskillit.execution.process.psutil.Process", return_value=mock_parent):
+        with patch("autoskillit.execution._process_monitor.psutil.Process", return_value=mock_parent):
             assert _has_active_api_connection(12345) is True
 
     def test_skips_zombie_child_gracefully(self):
@@ -685,7 +685,7 @@ class TestHasActiveApiConnection:
         mock_live_child = Mock()
         mock_live_child.net_connections.return_value = [self._make_conn(443)]
         mock_parent.children.return_value = [mock_zombie, mock_live_child]
-        with patch("autoskillit.execution.process.psutil.Process", return_value=mock_parent):
+        with patch("autoskillit.execution._process_monitor.psutil.Process", return_value=mock_parent):
             assert _has_active_api_connection(12345) is True
 
 
@@ -710,7 +710,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
             return call_count["n"] == 1  # True on first call, False on second
 
         with patch(
-            "autoskillit.execution.process._has_active_api_connection",
+            "autoskillit.execution._process_monitor._has_active_api_connection",
             side_effect=side_effect,
         ):
             with anyio.fail_after(5.0):
@@ -751,7 +751,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
         session_file.write_text("")
         spawn_time = time.time() - 10
 
-        with patch("autoskillit.execution.process._has_active_api_connection") as mock_tcp:
+        with patch("autoskillit.execution._process_monitor._has_active_api_connection") as mock_tcp:
             with anyio.fail_after(2.0):
                 result = await _session_log_monitor(
                     tmp_path,
@@ -781,7 +781,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
             return calls["n"] == 1
 
         with patch(
-            "autoskillit.execution.process._has_active_api_connection",
+            "autoskillit.execution._process_monitor._has_active_api_connection",
             side_effect=side_effect,
         ):
             with structlog.testing.capture_logs() as logs:

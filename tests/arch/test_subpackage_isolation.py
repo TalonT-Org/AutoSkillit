@@ -681,8 +681,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """REQ-CNST-003: No sub-package directory may contain more than 10 Python files.
 
     server/ is exempt at 12 files to accommodate tools_clone and tools_integrations modules.
+    execution/ is exempt at 15 files to accommodate the 6 private _process_*.py sub-modules
+    introduced by the P8-2 refactor (process.py monolith decomposition).
     """
-    EXEMPTIONS: dict[str, int] = {"server": 12, "recipe": 12}
+    EXEMPTIONS: dict[str, int] = {"server": 12, "recipe": 12, "execution": 15}
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":

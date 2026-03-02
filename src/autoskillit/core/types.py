@@ -95,6 +95,25 @@ class ChannelConfirmation(StrEnum):
     UNMONITORED = "unmonitored"
 
 
+class SessionOutcome(StrEnum):
+    """Classification of a completed headless session.
+
+    Maps bijectively from the two-field (success, needs_retry) boolean pair
+    on SkillResult to a single named discriminant:
+
+        SUCCEEDED  → (success=True,  needs_retry=False)
+        RETRIABLE  → (success=False, needs_retry=True)
+        FAILED     → (success=False, needs_retry=False)
+
+    The combination (success=True, needs_retry=True) is structurally impossible
+    and has no corresponding member.
+    """
+
+    SUCCEEDED = "succeeded"
+    RETRIABLE = "retriable"
+    FAILED = "failed"
+
+
 #: Semantic contract for SubprocessResult fields per TerminationReason.
 #: These invariants are enforced by tests/test_process_lifecycle.py
 #: TestAdjudicationCoverageMatrix.
@@ -319,6 +338,19 @@ class SkillResult:
             },
             default=lambda o: o.value if isinstance(o, Enum) else str(o),
         )
+
+    @property
+    def outcome(self) -> SessionOutcome:
+        """Classify this result as SUCCEEDED, RETRIABLE, or FAILED.
+
+        Derived from the (success, needs_retry) pair — not a stored field.
+        Not included in to_json() or RETRY_RESPONSE_FIELDS.
+        """
+        if self.success:
+            return SessionOutcome.SUCCEEDED
+        if self.needs_retry:
+            return SessionOutcome.RETRIABLE
+        return SessionOutcome.FAILED
 
 
 # Structurally derived from SkillResult — cannot drift as fields are added/removed.

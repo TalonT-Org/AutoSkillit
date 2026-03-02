@@ -4010,6 +4010,8 @@ class TestRecipeIntegrationPredicateRouting:
             assert errors == [], f"{name} has ERROR-severity semantic findings: " + str(
                 [(f.rule, f.step_name, f.message) for f in errors]
             )
+
+
 # ---------------------------------------------------------------------------
 # skill-command-missing-prefix rule tests
 # ---------------------------------------------------------------------------

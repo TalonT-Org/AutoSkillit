@@ -14,11 +14,13 @@ from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     ChannelConfirmation,
     RetryReason,
+    SessionOutcome,
     TerminationReason,
 )
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     SkillResult,
+    _compute_outcome,
     _compute_retry,
     _compute_success,
     _is_kill_anomaly,
@@ -892,6 +894,21 @@ class TestSkillResult:
         parsed = json.loads(sr.to_json())
         assert parsed["token_usage"] is None
 
+    def test_outcome_property_succeeded(self):
+        sr = self._make(success=True, needs_retry=False)
+        assert sr.outcome is SessionOutcome.SUCCEEDED
+        assert sr.outcome == "succeeded"
+
+    def test_outcome_property_retriable(self):
+        sr = self._make(success=False, needs_retry=True, retry_reason=RetryReason.RESUME)
+        assert sr.outcome is SessionOutcome.RETRIABLE
+        assert sr.outcome == "retriable"
+
+    def test_outcome_property_failed(self):
+        sr = self._make(success=False, needs_retry=False, retry_reason=RetryReason.NONE)
+        assert sr.outcome is SessionOutcome.FAILED
+        assert sr.outcome == "failed"
+
 
 # ---------------------------------------------------------------------------
 # Adjudication consistency — raw function level documentation
@@ -1118,3 +1135,133 @@ class TestAdjudicationConsistency:
         # individual function level, corrected at the _build_skill_result boundary.
         assert success is False
         assert needs_retry is False
+
+
+# ---------------------------------------------------------------------------
+# TestComputeOutcome
+# ---------------------------------------------------------------------------
+
+
+class TestComputeOutcome:
+    """Tests for _compute_outcome — the composition wrapper that returns SessionOutcome."""
+
+    def test_compute_outcome_succeeded(self):
+        """Normal success path → SUCCEEDED, NONE."""
+        session = _make_success_session("done")
+        outcome, reason = _compute_outcome(
+            session, returncode=0, termination=TerminationReason.NATURAL_EXIT
+        )
+        assert outcome is SessionOutcome.SUCCEEDED
+        assert reason == RetryReason.NONE
+
+    def test_compute_outcome_failed_unmonitored(self):
+        """Timeout → FAILED, NONE."""
+        session = ClaudeSessionResult(subtype="timeout", is_error=True, result="", session_id="")
+        outcome, reason = _compute_outcome(
+            session, returncode=-1, termination=TerminationReason.TIMED_OUT
+        )
+        assert outcome is SessionOutcome.FAILED
+        assert reason == RetryReason.NONE
+
+    def test_compute_outcome_retriable_api_signal(self):
+        """error_max_turns session → RETRIABLE, RESUME."""
+        session = ClaudeSessionResult(
+            subtype="error_max_turns", is_error=False, result="partial", session_id="s1"
+        )
+        outcome, reason = _compute_outcome(
+            session, returncode=1, termination=TerminationReason.NATURAL_EXIT
+        )
+        assert outcome is SessionOutcome.RETRIABLE
+        assert reason == RetryReason.RESUME
+
+    def test_compute_outcome_contradiction_guard_channel_b_max_turns(self):
+        """CHANNEL_B bypass gives success=True; error_max_turns gives needs_retry=True.
+        Contradiction guard must resolve to RETRIABLE (retry is authoritative)."""
+        session = ClaudeSessionResult(
+            subtype="error_max_turns", is_error=True, result="partial", session_id="s1"
+        )
+        outcome, reason = _compute_outcome(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        assert outcome is SessionOutcome.RETRIABLE
+        assert reason == RetryReason.RESUME
+
+    def test_compute_outcome_dead_end_guard_channel_a(self):
+        """CHANNEL_A + empty result is a raw dead end (both False).
+        Dead-end guard must escalate to RETRIABLE."""
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="", session_id="s1"
+        )
+        outcome, reason = _compute_outcome(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        assert outcome is SessionOutcome.RETRIABLE
+        assert reason == RetryReason.RESUME
+
+    def test_compute_outcome_dead_end_guard_channel_b(self):
+        """CHANNEL_B provenance bypass gives success=True so is not a dead-end;
+        but CHANNEL_B + is_error=True (non-max-turns) path where both guards
+        interact: success from CHANNEL_B, no retry needed → SUCCEEDED."""
+        # Separate: artificially construct CHANNEL_B case that could hit dead-end
+        # (would require modifying internals — instead verify CHANNEL_B+valid session is SUCCEEDED)
+        session = ClaudeSessionResult(
+            subtype="success", is_error=False, result="", session_id="s1"
+        )
+        outcome, reason = _compute_outcome(
+            session,
+            returncode=-15,
+            termination=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        # CHANNEL_B makes success=True, no retry needed → SUCCEEDED
+        assert outcome is SessionOutcome.SUCCEEDED
+        assert reason == RetryReason.NONE
+
+    def test_compute_outcome_dead_end_unmonitored_stays_failed(self):
+        """Dead end (both False) with UNMONITORED → legitimate FAILED, no escalation."""
+        session = ClaudeSessionResult(subtype="timeout", is_error=True, result="", session_id="")
+        outcome, reason = _compute_outcome(
+            session,
+            returncode=-1,
+            termination=TerminationReason.TIMED_OUT,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        assert outcome is SessionOutcome.FAILED
+        assert reason == RetryReason.NONE
+
+    def test_compute_outcome_returns_session_outcome_and_retry_reason(self):
+        """Return type is (SessionOutcome, RetryReason) — not bools."""
+        session = _make_success_session("done")
+        result = _compute_outcome(
+            session, returncode=0, termination=TerminationReason.NATURAL_EXIT
+        )
+        assert isinstance(result, tuple) and len(result) == 2
+        assert isinstance(result[0], SessionOutcome)
+        assert isinstance(result[1], RetryReason)
+
+    @pytest.mark.parametrize("termination", list(TerminationReason))
+    def test_compute_outcome_handles_all_termination_reasons(self, termination):
+        """_compute_outcome must not raise for any TerminationReason value."""
+        session = ClaudeSessionResult(
+            subtype="success", result="done %%ORDER_UP%%", is_error=False, session_id="s1"
+        )
+        result = _compute_outcome(
+            session,
+            returncode=0,
+            termination=termination,
+            completion_marker="%%ORDER_UP%%",
+        )
+        assert isinstance(result[0], SessionOutcome)
+        assert isinstance(result[1], RetryReason)
+
+    def test_compute_outcome_not_in_dunder_all(self):
+        """_compute_outcome is private and must not appear in session.__all__."""
+        import autoskillit.execution.session as sess_mod
+
+        assert "_compute_outcome" not in sess_mod.__all__

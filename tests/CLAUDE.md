@@ -18,7 +18,7 @@ All tests run under `-n 4 --dist worksteal`. Every test must be safe for paralle
   tool handler calls use the test context without global state leakage.
 - To test with the kitchen closed, set `tool_ctx.gate = DefaultGateState(enabled=False)` at
   the start of the test or in a class-level autouse fixture (see `_close_kitchen` in
-  `test_instruction_surface_contract.py` for an example).
+  `test_instruction_surface.py` for an example).
 - Never use bare assignment or `try/finally` to restore server state — use `monkeypatch` or
   rely on `tool_ctx`'s fixture teardown.
 
@@ -31,5 +31,5 @@ All tests run under `-n 4 --dist worksteal`. Every test must be safe for paralle
 - `TMPDIR` is set to the platform path via Taskfile — all `tempfile` calls are routed there
 - `--basetemp` is passed to pytest — `tmp_path` fixtures resolve to the platform path
 - `cache_dir` is redirected to the platform cache path — no stray pytest cache writes
-- `test_tmp_path_is_ram_backed` in `test_architecture.py` enforces the `/dev/shm` prefix
+- `test_tmp_path_is_ram_backed` in `tests/arch/test_ast_rules.py` enforces the `/dev/shm` prefix
   on Linux; on macOS it is a no-op (disk temp is acceptable there)

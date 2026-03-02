@@ -230,9 +230,12 @@ tests/
 │   └── test_testing.py
 ├── infra/                               # CI/CD and security configuration tests
 │   ├── __init__.py
+│   ├── test_anyio_infra.py
 │   ├── test_ci_dev_config.py
 │   ├── test_remove_clone_guard.py
 │   ├── test_security_config.py
+│   ├── test_skill_cmd_check.py
+│   ├── test_skill_command_guard.py
 │   └── test_taskfile.py
 ├── migration/                           # Migration engine and store tests
 │   ├── __init__.py
@@ -254,6 +257,7 @@ tests/
 │   ├── test_schema.py
 │   ├── test_semantic_rules.py
 │   ├── test_smoke_pipeline.py
+│   ├── test_staleness_cache.py
 │   └── test_validator.py
 ├── server/                              # Server unit tests (tool handlers)
 │   ├── __init__.py

@@ -6,7 +6,16 @@ from pathlib import Path
 import pytest
 
 from autoskillit.config import AutomationConfig, ModelConfig
-from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason
+from autoskillit.core.types import (
+    CONTEXT_EXHAUSTION_MARKER,
+    RETRY_RESPONSE_FIELDS,
+    ChannelConfirmation,
+    RetryReason,
+    SubprocessResult,
+    TerminationReason,
+)
+from autoskillit.execution.headless import _build_skill_result, _ensure_skill_prefix, _resolve_model
+from tests.conftest import _make_result, _make_timeout_result
 
 
 @pytest.fixture
@@ -21,18 +30,6 @@ def make_config():
     return _make
 
 
-def test_ensure_skill_prefix_prepends_use_for_slash_commands():
-    from autoskillit.execution.headless import _ensure_skill_prefix
-
-    assert _ensure_skill_prefix("/investigate foo") == "Use /investigate foo"
-
-
-def test_ensure_skill_prefix_leaves_plain_text_unchanged():
-    from autoskillit.execution.headless import _ensure_skill_prefix
-
-    assert _ensure_skill_prefix("just a plain prompt") == "just a plain prompt"
-
-
 def test_inject_completion_directive_appends_marker():
     from autoskillit.execution.headless import _inject_completion_directive
 
@@ -42,20 +39,42 @@ def test_inject_completion_directive_appends_marker():
     assert "ORCHESTRATION DIRECTIVE" in result
 
 
-@pytest.mark.parametrize(
-    "override,step,default,expected",
-    [
-        ("opus", "haiku", None, "opus"),  # override wins regardless of step
-        (None, "haiku", None, "haiku"),  # step model used when no override/default
-        (None, "", "sonnet", "sonnet"),  # config default fills empty step
-        (None, "", None, None),  # all empty → None
-    ],
-)
-def test_resolve_model_priority(make_config, override, step, default, expected):
-    from autoskillit.execution.headless import _resolve_model
+def _success_session_json(result_text: str) -> str:
+    return json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "result": result_text,
+            "session_id": "test-session",
+            "is_error": False,
+        }
+    )
 
-    cfg = make_config(model_override=override, model_default=default)
-    assert _resolve_model(step, cfg) == expected
+
+def _failed_session_json() -> str:
+    return json.dumps(
+        {
+            "type": "result",
+            "subtype": "error",
+            "result": "Task failed with an error",
+            "session_id": "test-session",
+            "is_error": True,
+        }
+    )
+
+
+def _context_exhausted_session_json() -> str:
+    """Session result that triggers context exhaustion / needs_retry detection."""
+    return json.dumps(
+        {
+            "type": "result",
+            "subtype": "error",
+            "result": "prompt is too long",
+            "session_id": "test-session",
+            "is_error": True,
+            "errors": ["prompt is too long"],
+        }
+    )
 
 
 def _sr(returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT):
@@ -509,3 +528,1037 @@ class TestRunHeadlessCore:
         assert result.success is True
         assert result.needs_retry is False
         assert result.result == "Task completed."
+
+
+class TestEnsureSkillPrefix:
+    """Unit tests for _ensure_skill_prefix helper."""
+
+    def test_adds_use_to_slash_command(self):
+        assert _ensure_skill_prefix("/investigate error") == "Use /investigate error"
+
+    def test_adds_use_to_namespaced_skill(self):
+        assert (
+            _ensure_skill_prefix("/autoskillit:investigate error")
+            == "Use /autoskillit:investigate error"
+        )
+
+    def test_no_double_prefix(self):
+        assert _ensure_skill_prefix("Use /investigate error") == "Use /investigate error"
+
+    def test_ignores_plain_prompts(self):
+        assert _ensure_skill_prefix("Fix the bug in main.py") == "Fix the bug in main.py"
+
+    def test_handles_leading_whitespace(self):
+        assert _ensure_skill_prefix("  /investigate error") == "Use /investigate error"
+
+
+class TestStalenessReturnsNeedsRetry:
+    """Stale SubprocessResult triggers needs_retry response."""
+
+    def test_staleness_returns_needs_retry(self):
+        """A stale result produces needs_retry=True, retry_reason='resume'."""
+        stale_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=12345,
+        )
+        response = json.loads(_build_skill_result(stale_result).to_json())
+        assert response["needs_retry"] is True
+        assert response["retry_reason"] == "resume"
+        assert response["subtype"] == "stale"
+        assert response["success"] is False
+
+
+class TestBuildSkillResultCrossValidation:
+    """_build_skill_result cross-validates signals to produce unambiguous success."""
+
+    EXPECTED_SKILL_KEYS = {
+        "success",
+        "result",
+        "session_id",
+        "subtype",
+        "is_error",
+        "exit_code",
+        "needs_retry",
+        "retry_reason",
+        "stderr",
+        "token_usage",
+    }
+
+    def test_empty_stdout_exit_zero_is_failure(self):
+        """Exit 0 with empty stdout is NOT success — output was lost."""
+        result_obj = SubprocessResult(
+            returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT, pid=1
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert response["success"] is False
+        assert response["is_error"] is True
+
+    def test_timed_out_session_is_failure(self):
+        """Timed-out sessions are always failures, regardless of partial stdout."""
+        result_obj = SubprocessResult(
+            returncode=-1, stdout="", stderr="", termination=TerminationReason.TIMED_OUT, pid=1
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert response["success"] is False
+        assert response["is_error"] is True
+        assert response["subtype"] == "timeout"
+
+    def test_stale_session_is_failure(self):
+        """Stale sessions are failures (even though retriable)."""
+        result_obj = SubprocessResult(
+            returncode=-1, stdout="", stderr="", termination=TerminationReason.STALE, pid=1
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert response["success"] is False
+        assert response["needs_retry"] is True
+
+    def test_normal_success_has_success_true(self):
+        """A valid session result with non-empty output is success."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Task completed.",
+                "session_id": "s1",
+            }
+        )
+        result_obj = SubprocessResult(
+            returncode=0,
+            stdout=valid_json,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert response["success"] is True
+        assert response["is_error"] is False
+        assert response["result"] == "Task completed."
+
+    def test_nonzero_exit_overrides_is_error_false(self):
+        """Exit code != 0 means failure even if Claude wrote is_error=false."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "partial",
+                "session_id": "s1",
+            }
+        )
+        result_obj = SubprocessResult(
+            returncode=1,
+            stdout=valid_json,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert response["success"] is False
+
+    def test_gate_disabled_schema(self, tool_ctx):
+        """Gate-disabled response has standard keys."""
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server.helpers import _require_enabled
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        response = json.loads(_require_enabled())
+        assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
+
+    def test_stale_schema(self):
+        """Stale response has standard keys."""
+        result_obj = SubprocessResult(
+            returncode=-1, stdout="", stderr="", termination=TerminationReason.STALE, pid=1
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
+
+    def test_timeout_schema(self):
+        """Timeout response has standard keys."""
+        result_obj = SubprocessResult(
+            returncode=-1, stdout="", stderr="", termination=TerminationReason.TIMED_OUT, pid=1
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
+
+    def test_normal_success_schema(self):
+        """Normal success response has standard keys."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        result_obj = SubprocessResult(
+            returncode=0,
+            stdout=valid_json,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
+
+    def test_empty_stdout_schema(self):
+        """Empty stdout response has standard keys."""
+        result_obj = SubprocessResult(
+            returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT, pid=1
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
+
+
+class TestBuildSkillResultStderr:
+    """_build_skill_result includes stderr in responses."""
+
+    def test_stderr_included_in_response(self):
+        """Subprocess stderr is surfaced in the response."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        result_obj = SubprocessResult(
+            returncode=0,
+            stdout=valid_json,
+            stderr="queue contention",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert response["stderr"] == "queue contention"
+
+    def test_stderr_truncated(self):
+        """Stderr exceeding 5000 chars is truncated."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        long_stderr = "x" * 6000
+        result_obj = SubprocessResult(
+            returncode=0,
+            stdout=valid_json,
+            stderr=long_stderr,
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert len(response["stderr"]) < len(long_stderr)
+        assert "truncated" in response["stderr"]
+
+    def test_empty_stderr_is_empty_string(self):
+        """Empty stderr produces empty string, not omitted."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+            }
+        )
+        result_obj = SubprocessResult(
+            returncode=0,
+            stdout=valid_json,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert response["stderr"] == ""
+
+    def test_stale_branch_has_empty_stderr(self):
+        """Stale branch produces empty stderr (process killed before output)."""
+        result_obj = SubprocessResult(
+            returncode=-1, stdout="", stderr="", termination=TerminationReason.STALE, pid=1
+        )
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert response["stderr"] == ""
+
+
+class TestRetryResponseFieldsIncludesStderr:
+    """RETRY_RESPONSE_FIELDS schema includes stderr."""
+
+    def test_stderr_in_fields(self):
+        assert "stderr" in RETRY_RESPONSE_FIELDS
+
+    def test_field_count(self):
+        assert len(RETRY_RESPONSE_FIELDS) == 10
+
+
+class TestContextExhaustionStructured:
+    """_is_context_exhausted uses structured detection, not substring on result."""
+
+    def test_context_exhaustion_not_triggered_by_model_prose(self):
+        """Model output discussing prompt length must NOT trigger context exhaustion."""
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        session = ClaudeSessionResult(
+            subtype="error_during_execution",
+            is_error=True,
+            result="The user said: prompt is too long for this task",
+            session_id="s1",
+        )
+        assert session.needs_retry is False
+        assert session._is_context_exhausted() is False
+
+    def test_real_context_exhaustion_still_detected(self):
+        """Genuine context exhaustion (specific subtype) is still detected."""
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        session = ClaudeSessionResult(
+            subtype="error_during_execution",
+            is_error=True,
+            result="prompt is too long",
+            session_id="s1",
+            errors=["prompt is too long"],
+        )
+        assert session._is_context_exhausted() is True
+        assert session.needs_retry is True
+
+
+class TestParseFallbackRejectsUntypedJson:
+    """parse_session_result fallback path requires type == result."""
+
+    def test_parse_fallback_rejects_untyped_json(self):
+        """Single JSON object without type=result must be rejected."""
+        from autoskillit.execution.session import parse_session_result
+
+        parsed = parse_session_result('{"error": "something broke"}')
+        assert parsed.subtype == "unparseable"
+        assert parsed.is_error is True
+
+
+class TestCompletionViaMonitorKill:
+    """Completion detected by monitor + kill returncode is not failure."""
+
+    MARKER = "%%ORDER_UP%%"
+
+    def test_completion_via_monitor_kill_is_not_failure(self):
+        """When the session monitor detects completion and kills the process,
+        returncode is -15 (SIGTERM). _compute_success should treat this as
+        success when the session result envelope says success.
+        """
+        from autoskillit.execution.session import ClaudeSessionResult, _compute_success
+
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=f"Task completed successfully.\n\n{self.MARKER}",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=-15,
+                termination=TerminationReason.COMPLETED,
+                completion_marker=self.MARKER,
+            )
+            is True
+        )
+
+    def test_completion_via_monitor_kill_returncode_zero(self):
+        """PTY may mask signal codes to returncode=0 — COMPLETED still works."""
+        from autoskillit.execution.session import ClaudeSessionResult, _compute_success
+
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=f"Task completed successfully.\n\n{self.MARKER}",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=0,
+                termination=TerminationReason.COMPLETED,
+                completion_marker=self.MARKER,
+            )
+            is True
+        )
+
+
+class TestBuildSkillResultCompleted:
+    """_build_skill_result and _compute_success handle COMPLETED termination correctly."""
+
+    def test_build_skill_result_completed_nonempty_result_is_success(self):
+        """COMPLETED + valid JSON stdout with non-empty result → success=True."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Task done.",
+                "session_id": "s1",
+            }
+        )
+        result = _make_result(
+            returncode=-15,
+            stdout=stdout,
+            termination_reason=TerminationReason.COMPLETED,
+        )
+        parsed = json.loads(_build_skill_result(result).to_json())
+        assert parsed["success"] is True
+
+    def test_build_skill_result_completed_empty_result_is_failure(self):
+        """COMPLETED + empty stdout + rc=-15 → success=False, needs_retry=True."""
+        result = _make_result(
+            returncode=-15,
+            stdout="",
+            termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        parsed = json.loads(_build_skill_result(result).to_json())
+        assert parsed["success"] is False
+        assert parsed["needs_retry"] is True
+
+    def test_compute_success_completed_empty_result_returns_false(self):
+        """Empty result with COMPLETED termination: bypass does NOT engage → returns False."""
+        from autoskillit.execution.session import ClaudeSessionResult, _compute_success
+
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            result="",
+            is_error=True,
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=-15,
+                termination=TerminationReason.COMPLETED,
+            )
+            is False
+        )
+
+    def test_success_empty_completed_returns_needs_retry_true(self, tool_ctx):
+        """Full path: stdout with success+empty under COMPLETED → needs_retry=True."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "",
+                "session_id": "s1",
+            }
+        )
+        result = _make_result(
+            returncode=0,
+            stdout=stdout,
+            termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        parsed = json.loads(
+            _build_skill_result(result, completion_marker="", skill_command="/test").to_json()
+        )
+        assert parsed["success"] is False
+        assert parsed["needs_retry"] is True
+        assert parsed["retry_reason"] == RetryReason.RESUME.value
+        assert parsed["subtype"] == "success"
+
+    def test_success_empty_completed_subtype_captured_in_audit_log(self, tool_ctx):
+        """_capture_failure must be called with subtype='success' for audit log integrity."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "",
+                "session_id": "s1",
+            }
+        )
+        result = _make_result(
+            returncode=0,
+            stdout=stdout,
+            termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        _build_skill_result(
+            result, completion_marker="", skill_command="/test", audit=tool_ctx.audit
+        )
+        report = tool_ctx.audit.get_report()
+        assert len(report) == 1
+        assert report[0].subtype == "success"
+        assert report[0].needs_retry is True
+
+
+class TestMarkerCrossValidation:
+    """Completion marker cross-validation catches misclassified sessions."""
+
+    MARKER = "%%ORDER_UP%%"
+
+    def test_marker_only_result_is_not_success(self):
+        """Result containing only the marker with no real content is failure."""
+        from autoskillit.execution.session import ClaudeSessionResult, _compute_success
+
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=self.MARKER,
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker=self.MARKER,
+            )
+            is False
+        )
+
+    def test_marker_stripped_from_result(self):
+        """_build_skill_result strips the completion marker from result text."""
+        valid_json = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": f"Task completed.\n\n{self.MARKER}",
+                "session_id": "s1",
+            }
+        )
+        result_obj = SubprocessResult(
+            returncode=0,
+            stdout=valid_json,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        )
+        response = json.loads(
+            _build_skill_result(result_obj, completion_marker=self.MARKER).to_json()
+        )
+        assert self.MARKER not in response["result"]
+        assert "Task completed." in response["result"]
+
+    def test_natural_exit_without_marker_not_success(self):
+        """Session claims success but never wrote the marker — not success."""
+        from autoskillit.execution.session import ClaudeSessionResult, _compute_success
+
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Some partial output",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker=self.MARKER,
+            )
+            is False
+        )
+
+    def test_termination_reason_natural_exit(self):
+        """NATURAL_EXIT with marker in result is success."""
+        from autoskillit.execution.session import ClaudeSessionResult, _compute_success
+
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=f"Done.\n\n{self.MARKER}",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker=self.MARKER,
+            )
+            is True
+        )
+
+    def test_termination_reason_completed(self):
+        """COMPLETED termination with marker in result is success."""
+        from autoskillit.execution.session import ClaudeSessionResult, _compute_success
+
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=f"Done.\n\n{self.MARKER}",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=0,
+                termination=TerminationReason.COMPLETED,
+                completion_marker=self.MARKER,
+            )
+            is True
+        )
+
+    def test_termination_reason_completed_without_marker_fails(self):
+        """COMPLETED but result doesn't contain marker — not success."""
+        from autoskillit.execution.session import ClaudeSessionResult, _compute_success
+
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Some output without marker",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=0,
+                termination=TerminationReason.COMPLETED,
+                completion_marker=self.MARKER,
+            )
+            is False
+        )
+
+    @pytest.mark.parametrize(
+        "termination,returncode,result_text,expected",
+        [
+            (TerminationReason.NATURAL_EXIT, 0, f"Done.\n\n{MARKER}", True),
+            (TerminationReason.NATURAL_EXIT, 0, "No marker here", False),
+            (TerminationReason.NATURAL_EXIT, 0, MARKER, False),  # marker-only
+            (TerminationReason.COMPLETED, 0, f"Done.\n\n{MARKER}", True),
+            (TerminationReason.COMPLETED, -15, f"Done.\n\n{MARKER}", True),
+            (TerminationReason.COMPLETED, 0, "No marker here", False),
+            (TerminationReason.STALE, -15, f"Done.\n\n{MARKER}", False),
+            (TerminationReason.TIMED_OUT, -1, f"Done.\n\n{MARKER}", False),
+        ],
+        ids=[
+            "natural_exit+marker=success",
+            "natural_exit+no_marker=failure",
+            "natural_exit+marker_only=failure",
+            "completed+marker=success",
+            "completed_sigterm+marker=success",
+            "completed+no_marker=failure",
+            "stale+marker=failure",
+            "timed_out+marker=failure",
+        ],
+    )
+    def test_cross_validation_matrix(self, termination, returncode, result_text, expected):
+        """Full cross-validation matrix for termination x marker presence."""
+        from autoskillit.execution.session import ClaudeSessionResult, _compute_success
+
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=result_text,
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=returncode,
+                termination=termination,
+                completion_marker=self.MARKER,
+            )
+            is expected
+        )
+
+    def test_build_skill_result_recovers_when_marker_in_separate_assistant_message(self):
+        """
+        If the model emits substantive content in an assistant record and %%ORDER_UP%%
+        as a separate final message, _build_skill_result must return success=True with
+        the substantive content — not success=False with empty result.
+        """
+        marker = self.MARKER
+        ndjson = (
+            '{"type":"assistant","message":{"role":"assistant",'
+            '"content":"Detailed audit report.\\nGO verdict."}}\n'
+            '{"type":"assistant","message":{"role":"assistant","content":"%%ORDER_UP%%"}}\n'
+            '{"type":"result","subtype":"success","result":"%%ORDER_UP%%",'
+            '"session_id":"s1","is_error":false}\n'
+        )
+        result = _build_skill_result(
+            SubprocessResult(
+                returncode=0,
+                stdout=ndjson,
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=1,
+            ),
+            completion_marker=marker,
+            skill_command="audit-impl",
+            audit=None,
+        )
+        assert result.success is True
+        assert "Detailed audit report." in result.result
+        assert marker not in result.result
+        assert result.needs_retry is False
+
+    def test_build_skill_result_does_not_recover_when_only_marker_in_assistant(self):
+        """
+        If ALL assistant records contain only the marker and result is also marker-only,
+        recovery must not produce a false positive — there is no substantive content.
+        """
+        marker = self.MARKER
+        ndjson = (
+            '{"type":"assistant","message":{"role":"assistant","content":"%%ORDER_UP%%"}}\n'
+            '{"type":"result","subtype":"success","result":"%%ORDER_UP%%",'
+            '"session_id":"s1","is_error":false}\n'
+        )
+        result = _build_skill_result(
+            SubprocessResult(
+                returncode=0,
+                stdout=ndjson,
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=1,
+            ),
+            completion_marker=marker,
+            skill_command="",
+            audit=None,
+        )
+        assert result.success is False
+
+
+class TestResolveModel:
+    """Tests for _resolve_model resolution chain."""
+
+    @pytest.fixture(autouse=True)
+    def _set_config(self, tool_ctx):
+        self._tool_ctx = tool_ctx
+
+    def _set_model_config(self, default=None, override=None):
+        cfg = AutomationConfig(model=ModelConfig(default=default, override=override))
+        self._tool_ctx.config = cfg
+
+    # MOD_R1
+    def test_resolve_model_override_wins(self):
+        self._set_model_config(override="haiku")
+        assert _resolve_model("sonnet", self._tool_ctx.config) == "haiku"
+
+    # MOD_R2
+    def test_resolve_model_step_model(self):
+        self._set_model_config()
+        assert _resolve_model("sonnet", self._tool_ctx.config) == "sonnet"
+
+    # MOD_R3
+    def test_resolve_model_config_default(self):
+        self._set_model_config(default="haiku")
+        assert _resolve_model("", self._tool_ctx.config) == "haiku"
+
+    # MOD_R4
+    def test_resolve_model_nothing_set(self):
+        self._set_model_config()
+        assert _resolve_model("", self._tool_ctx.config) is None
+
+
+class TestBuildSkillResultTokenUsage:
+    """token_usage field in _build_skill_result output."""
+
+    def _make_ndjson(self, *, model: str = "claude-sonnet-4-6") -> str:
+        """Build a two-line NDJSON with an assistant record and a result record with usage."""
+        assistant = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": model,
+                    "usage": {
+                        "input_tokens": 120,
+                        "output_tokens": 45,
+                        "cache_creation_input_tokens": 8,
+                        "cache_read_input_tokens": 3,
+                    },
+                },
+            }
+        )
+        result_rec = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Task complete.",
+                "session_id": "sess-abc",
+                "usage": {
+                    "input_tokens": 200,
+                    "output_tokens": 80,
+                    "cache_creation_input_tokens": 8,
+                    "cache_read_input_tokens": 3,
+                },
+            }
+        )
+        return assistant + "\n" + result_rec
+
+    def test_token_usage_included_when_present(self):
+        """JSON response includes token_usage when session has usage data."""
+        stdout = self._make_ndjson()
+        result_obj = _make_result(0, stdout, "")
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert "token_usage" in response
+        usage = response["token_usage"]
+        assert usage is not None
+        assert usage["input_tokens"] == 200
+        assert usage["output_tokens"] == 80
+        assert usage["cache_creation_input_tokens"] == 8
+        assert usage["cache_read_input_tokens"] == 3
+        assert "model_breakdown" in usage
+        assert "claude-sonnet-4-6" in usage["model_breakdown"]
+
+    def test_token_usage_null_when_absent(self):
+        """JSON response has token_usage: null when no usage data."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+                # no usage field
+            }
+        )
+        result_obj = _make_result(0, stdout, "")
+        response = json.loads(_build_skill_result(result_obj).to_json())
+        assert response["token_usage"] is None
+
+    def test_stale_result_has_null_token_usage(self):
+        """Stale termination produces null token_usage."""
+        stale_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=1,
+        )
+        response = json.loads(_build_skill_result(stale_result).to_json())
+        assert response["token_usage"] is None
+
+    def test_timeout_result_has_null_token_usage(self):
+        """Timeout termination produces null token_usage."""
+        timeout_result = _make_timeout_result(stdout="", stderr="")
+        response = json.loads(_build_skill_result(timeout_result).to_json())
+        assert response["token_usage"] is None
+
+
+class TestRetryResponseFieldsTokenUsage:
+    """RETRY_RESPONSE_FIELDS includes token_usage."""
+
+    def test_token_usage_in_fields(self):
+        assert "token_usage" in RETRY_RESPONSE_FIELDS
+
+
+class TestFailureCaptureInBuildSkillResult:
+    """_build_skill_result() must capture failures into tool_ctx.audit."""
+
+    def test_captures_non_zero_exit_code(self, tool_ctx):
+        result = _make_result(
+            returncode=1,
+            stdout=_failed_session_json(),
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        _build_skill_result(result, skill_command="/test:cmd", audit=tool_ctx.audit)
+        assert len(tool_ctx.audit.get_report()) == 1
+
+    def test_does_not_capture_clean_success(self, tool_ctx):
+        result = _make_result(returncode=0, stdout=_success_session_json("done"))
+        _build_skill_result(result, skill_command="/test:cmd", audit=tool_ctx.audit)
+        assert tool_ctx.audit.get_report() == []
+
+    def test_captured_record_has_correct_skill_command(self, tool_ctx):
+        result = _make_result(
+            returncode=1,
+            stdout=_failed_session_json(),
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        _build_skill_result(
+            result, skill_command="/autoskillit:implement-worktree", audit=tool_ctx.audit
+        )
+        assert tool_ctx.audit.get_report()[0].skill_command == "/autoskillit:implement-worktree"
+
+    def test_captured_record_has_timestamp(self, tool_ctx):
+        from datetime import datetime
+
+        result = _make_result(
+            returncode=1,
+            stdout=_failed_session_json(),
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
+        record = tool_ctx.audit.get_report()[0]
+        assert record.timestamp  # non-empty ISO timestamp
+        datetime.fromisoformat(record.timestamp)  # must parse as ISO
+
+    def test_stale_termination_is_captured(self, tool_ctx):
+        result = _make_result(returncode=0, termination_reason=TerminationReason.STALE)
+        _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
+        report = tool_ctx.audit.get_report()
+        assert len(report) == 1
+        assert report[0].subtype == "stale"
+
+    def test_needs_retry_is_captured(self, tool_ctx):
+        result = _make_result(returncode=1, stdout=_context_exhausted_session_json())
+        _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
+        report = tool_ctx.audit.get_report()
+        assert len(report) == 1
+        assert report[0].needs_retry is True
+
+    def test_stderr_truncated_to_500_chars(self, tool_ctx):
+        long_stderr = "e" * 2000
+        result = _make_result(
+            returncode=1,
+            stderr=long_stderr,
+            stdout=_failed_session_json(),
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
+        assert len(tool_ctx.audit.get_report()[0].stderr) <= 500
+
+
+class TestStalePathStdoutCheck:
+    """STALE termination recovers from stdout when a valid result record is present."""
+
+    def _make_stale_result(self, stdout: str, returncode: int = -15) -> SubprocessResult:
+        return SubprocessResult(
+            returncode=returncode,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=12345,
+        )
+
+    def test_stale_kill_with_completed_result_in_stdout_is_success(self):
+        """Session wrote a valid type=result record before going stale — should recover."""
+        valid_completed_jsonl = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Task completed successfully.",
+                "session_id": "sess-stale-recovery",
+            }
+        )
+        result_obj = self._make_stale_result(stdout=valid_completed_jsonl)
+        parsed = json.loads(_build_skill_result(result_obj).to_json())
+        assert parsed["success"] is True
+        assert parsed["subtype"] == "recovered_from_stale"
+
+    def test_stale_with_empty_stdout_returns_failure(self):
+        """Stale session with no stdout — original failure response preserved."""
+        result_obj = self._make_stale_result(stdout="")
+        parsed = json.loads(_build_skill_result(result_obj).to_json())
+        assert parsed["success"] is False
+        assert parsed["subtype"] == "stale"
+
+    def test_stale_with_error_result_returns_failure(self):
+        """Stale session where the result record has is_error=True — not recovered."""
+        error_jsonl = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "result": "Tool call failed.",
+                "session_id": "sess-err",
+            }
+        )
+        result_obj = self._make_stale_result(stdout=error_jsonl)
+        parsed = json.loads(_build_skill_result(result_obj).to_json())
+        assert parsed["success"] is False
+        assert parsed["subtype"] == "stale"
+
+
+class TestBuildSkillResultDataConfirmedPropagation:
+    """_build_skill_result propagates data_confirmed for provenance bypass."""
+
+    def test_stale_recovery_channel_a_with_valid_stdout_succeeds(self):
+        """STALE + CHANNEL_A + valid stdout → recovered_from_stale.
+
+        When stale monitor fires simultaneously with heartbeat (CHANNEL_A),
+        the stale recovery path succeeds via the stdout content check.
+        CHANNEL_A guarantees stdout has valid type=result content, so
+        can_attempt_stale_recovery passes and _compute_success returns True.
+        """
+        result = _make_result(
+            stdout=(
+                '{"type":"result","subtype":"success",'
+                '"result":"task done %%ORDER_UP%%","is_error":false,"session_id":"s1"}'
+            ),
+            termination_reason=TerminationReason.STALE,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="cmd",
+            audit=None,
+        )
+        assert skill_result.success is True
+        assert skill_result.subtype == "recovered_from_stale"
+
+    def test_stale_recovery_data_confirmed_true_preserves_existing_behavior(self):
+        """STALE with empty stdout and data_confirmed=True (default) stays False."""
+        result = _make_result(
+            stdout="",
+            termination_reason=TerminationReason.STALE,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="cmd",
+            audit=None,
+        )
+        assert skill_result.success is False
+        assert skill_result.subtype == "stale"
+
+    def test_completed_empty_result_data_confirmed_false_produces_success(self):
+        """COMPLETED with empty stdout and data_confirmed=False uses provenance bypass."""
+        result = _make_result(
+            stdout='{"type":"result","subtype":"success","result":"","is_error":false,'
+            '"session_id":"s1"}',
+            returncode=-15,
+            termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="cmd",
+            audit=None,
+        )
+        assert skill_result.success is True  # FAILS before fix: False
+        assert skill_result.needs_retry is False  # FAILS before fix: True
+
+    def test_completed_empty_result_data_confirmed_true_is_still_retriable(self):
+        """COMPLETED with empty result and data_confirmed=True remains a retriable anomaly."""
+        result = _make_result(
+            stdout='{"type":"result","subtype":"success","result":"","is_error":false,'
+            '"session_id":"s1"}',
+            returncode=-15,
+            termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            skill_command="cmd",
+            audit=None,
+        )
+        assert skill_result.success is False
+        assert skill_result.needs_retry is True
+
+
+def test_context_exhaustion_marker_is_used_in_detection():
+    """_is_context_exhausted() uses the CONTEXT_EXHAUSTION_MARKER constant."""
+    from autoskillit.execution.session import ClaudeSessionResult
+
+    session = ClaudeSessionResult(
+        subtype="success",
+        is_error=True,
+        result=CONTEXT_EXHAUSTION_MARKER,
+        session_id="s1",
+    )
+    assert session._is_context_exhausted() is True

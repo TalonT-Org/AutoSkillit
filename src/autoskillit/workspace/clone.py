@@ -251,6 +251,22 @@ def clone_repo(
     if url_result.returncode == 0:
         remote_url = url_result.stdout.strip()
 
+    # Enforce invariant: clone.origin == remote_url at creation time (INIT_ONLY field gate)
+    if remote_url:
+        rewrite_result = subprocess.run(
+            ["git", "remote", "set-url", "origin", remote_url],
+            cwd=str(clone_path),
+            capture_output=True,
+            text=True,
+        )
+        if rewrite_result.returncode != 0:
+            logger.warning(
+                "clone_repo_origin_rewrite_failed",
+                clone_path=str(clone_path),
+                remote_url=remote_url,
+                stderr=rewrite_result.stderr.strip(),
+            )
+
     return {"clone_path": str(clone_path), "source_dir": str(source), "remote_url": remote_url}
 
 

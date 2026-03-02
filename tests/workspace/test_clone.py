@@ -118,6 +118,7 @@ class TestCloneRepo:
             assert (clone_path / ".git").is_dir()
             assert "clone_path" in result
             assert "source_dir" in result
+            assert "remote_url" in result
             assert result["source_dir"] == str(git_repo.resolve())
             expected_parent = git_repo.parent / "autoskillit-runs"
             assert clone_path.parent == expected_parent
@@ -293,6 +294,108 @@ def test_clone_path_within_tmp_path(tmp_path: Path, git_repo: Path) -> None:
         "a directory shared across all tests in the same xdist worker."
     )
     shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+
+class TestCloneOriginContract:
+    """Contract: clone's git origin remote == the remote_url returned by clone_repo."""
+
+    def test_clone_origin_equals_remote_url_for_bare_upstream(self, tmp_path: Path) -> None:
+        """Clone's origin must be rewritten to the real upstream, not source_dir.
+
+        Before the fix: clone's origin = source_dir (local path), not the bare remote.
+        After the fix: clone's origin = bare_remote path = result["remote_url"].
+        """
+        bare_remote = tmp_path / "bare.git"
+        bare_remote.mkdir()
+        subprocess.run(["git", "init", "--bare", str(bare_remote)], check=True)
+
+        source = tmp_path / "source"
+        subprocess.run(["git", "clone", str(bare_remote), str(source)], check=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.email", "t@t.com"], check=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.name", "T"], check=True)
+        (source / "README.md").write_text("hello")
+        subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(source), "commit", "-m", "init"], check=True)
+        subprocess.run(["git", "-C", str(source), "push", "origin", "main"], check=True)
+
+        result = clone_repo(str(source), "contract-test")
+        clone_path = Path(result["clone_path"])
+        remote_url = result["remote_url"]
+
+        try:
+            # The clone's own origin must equal remote_url (the bare remote), NOT source_dir
+            origin_in_clone = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+
+            assert origin_in_clone == remote_url, (
+                f"Clone's origin ({origin_in_clone!r}) should equal remote_url ({remote_url!r}), "
+                f"not source_dir ({str(source)!r})"
+            )
+            assert origin_in_clone != str(source), (
+                "Clone's origin must not be the local source_dir path"
+            )
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    def test_clone_origin_unchanged_when_no_upstream(self, tmp_path: Path) -> None:
+        """When source has no origin, clone still succeeds and remote_url is empty.
+
+        Contract test — passes on main before the fix (no origin means no rewrite).
+        """
+        source = tmp_path / "source"
+        subprocess.run(["git", "init", str(source)], check=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.email", "t@t.com"], check=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.name", "T"], check=True)
+        (source / "f.txt").write_text("x")
+        subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(source), "commit", "-m", "init"], check=True)
+
+        result = clone_repo(str(source), "no-upstream-test")
+        try:
+            assert result["remote_url"] == ""
+            # No assertion on clone's origin — no upstream exists, contract vacuously holds
+        finally:
+            shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
+
+    def test_clone_local_strategy_origin_also_satisfies_contract(self, tmp_path: Path) -> None:
+        """clone_local strategy (copytree) should also satisfy the origin == remote_url contract.
+
+        Contract test — passes on main before the fix because copytree copies .git/config
+        verbatim (source's origin = bare_remote = remote_url). The rewrite in the fix is a
+        no-op for this path. This test guards against future regressions.
+        """
+        bare_remote = tmp_path / "bare.git"
+        bare_remote.mkdir()
+        subprocess.run(["git", "init", "--bare", str(bare_remote)], check=True)
+        source = tmp_path / "source"
+        subprocess.run(["git", "clone", str(bare_remote), str(source)], check=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.email", "t@t.com"], check=True)
+        subprocess.run(["git", "-C", str(source), "config", "user.name", "T"], check=True)
+        (source / "README.md").write_text("hello")
+        subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(source), "commit", "-m", "init"], check=True)
+
+        result = clone_repo(str(source), "clone-local-contract", strategy="clone_local")
+        clone_path = Path(result["clone_path"])
+        remote_url = result["remote_url"]
+
+        try:
+            origin_in_clone = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+
+            assert origin_in_clone == remote_url
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
 
 
 class TestRemoveClone:
@@ -720,6 +823,18 @@ class TestPushToRemoteNonBare:
 
         assert "remote_url" in result
         assert str(remote) in result["remote_url"]
+
+        # Contract invariant: clone's own origin must equal the returned remote_url
+        origin_in_clone = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=result["clone_path"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert origin_in_clone == result["remote_url"], (
+            "Clone's origin must equal the returned remote_url"
+        )
 
         import shutil
 

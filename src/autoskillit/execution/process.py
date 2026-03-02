@@ -539,6 +539,7 @@ async def _watch_session_log(
     completion_drain_timeout: float,
     acc: RaceAccumulator,
     trigger: anyio.Event,
+    channel_b_ready: anyio.Event,
     _phase1_poll: float,
     _phase2_poll: float,
     _phase1_timeout: float,
@@ -568,6 +569,7 @@ async def _watch_session_log(
     # These writes execute atomically before any cancellation delivery:
     # there is no await between them and the function return.
     acc.channel_b_status = result
+    channel_b_ready.set()
     trigger.set()
 
 
@@ -690,6 +692,7 @@ async def run_managed_async(
 
             acc = RaceAccumulator()
             trigger = anyio.Event()
+            channel_b_ready = anyio.Event()
             timeout_scope = None  # bound inside task group body; initialized for safety
 
             async with anyio.create_task_group() as tg:
@@ -716,12 +719,23 @@ async def run_managed_async(
                         completion_drain_timeout,
                         acc,
                         trigger,
+                        channel_b_ready,
                         _phase1_poll,
                         _phase2_poll,
                         _phase1_timeout,
                     )
                 with anyio.move_on_after(timeout) as timeout_scope:
                     await trigger.wait()
+                # Symmetric drain: if the process exited before Channel B deposited,
+                # give the session monitor a bounded window to complete its current
+                # poll cycle and deposit its signal.
+                if (
+                    acc.process_exited
+                    and acc.channel_b_status is None
+                    and session_log_dir is not None
+                ):
+                    with anyio.move_on_after(completion_drain_timeout):
+                        await channel_b_ready.wait()
                 tg.cancel_scope.cancel()
 
             signals = acc.to_race_signals()

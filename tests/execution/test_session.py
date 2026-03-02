@@ -1463,6 +1463,25 @@ class TestParseSessionResult:
         result = parse_session_result(ndjson)
         assert result.assistant_messages == []
 
+    def test_list_format_content_blocks_joined_with_newline(self):
+        """List-format content blocks are joined with newline, preserving standalone lines.
+
+        When an assistant record's content is a list of blocks and the marker
+        occupies its own block, the resulting joined text preserves the marker
+        as a standalone line so _marker_is_standalone returns True.
+        """
+        ndjson = (
+            '{"type":"assistant","message":{"role":"assistant","content":'
+            '[{"type":"text","text":"GO verdict."},{"type":"text","text":"%%ORDER_UP%%"}]}}\n'
+            '{"type":"result","subtype":"success","result":"","session_id":"s1","is_error":false}\n'
+        )
+        result = parse_session_result(ndjson)
+        assert result.assistant_messages == ["GO verdict.\n%%ORDER_UP%%"]
+        # The newline join means _marker_is_standalone correctly detects the marker
+        from autoskillit.execution.process import _marker_is_standalone
+
+        assert _marker_is_standalone(result.assistant_messages[0], "%%ORDER_UP%%") is True
+
 
 # ---------------------------------------------------------------------------
 # Merged from test_session_result.py — token usage architecture

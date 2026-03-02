@@ -235,7 +235,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                     continue
                 content = msg.get("content", "")
                 if isinstance(content, list):
-                    text = " ".join(
+                    text = "\n".join(
                         block.get("text", "") for block in content if isinstance(block, dict)
                     ).strip()
                 else:

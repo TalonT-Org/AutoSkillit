@@ -116,6 +116,28 @@ PARTIAL_OUTPUT_THEN_HANG_SCRIPT = textwrap.dedent("""\
     time.sleep(3600)
 """)
 
+# Script that writes %%ORDER_UP%% to session JSONL then immediately exits rc=0
+# with an empty type=result on stdout. Used with _phase1_poll=1.0 so the process
+# exits before the first Phase 1 poll, exercising the post-exit drain window.
+# Pass session_dir as sys.argv[1].
+PROCESS_EXIT_THEN_CHANNEL_B_FIRES_SCRIPT = textwrap.dedent("""\
+    import sys, json, os, time
+    session_dir = sys.argv[1]
+    os.makedirs(session_dir, exist_ok=True)
+    # Small delay ensures file ctime > spawn_time recorded in run_managed_async
+    time.sleep(0.1)
+    with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
+        record = {"type": "assistant", "message": {"role": "assistant",
+                  "content": "%%ORDER_UP%%"}}
+        f.write(json.dumps(record) + "\\n")
+        f.flush()
+    payload = {"type": "result", "subtype": "success", "is_error": False,
+               "result": "", "session_id": "test-drain"}
+    sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\\n")
+    sys.stdout.flush()
+    sys.exit(0)
+""")
+
 
 class TestSessionLogMonitor:
     """Session log monitor detects completion and staleness."""
@@ -1112,3 +1134,71 @@ class TestNaturalExitWithChannelConfirmation:
         )
         assert skill_result.success is True
         assert skill_result.needs_retry is False
+
+
+class TestPostExitDrainWindow:
+    """Symmetric drain window: process exits first, Channel B gets a bounded window to deposit."""
+
+    @pytest.mark.anyio
+    async def test_drain_window_allows_channel_b_to_deposit(self, tmp_path):
+        """Process exits before Phase 1 polls; drain window lets Channel B detect marker.
+
+        Uses _phase1_poll=1.0 to guarantee the process exits (~100ms) before the
+        first Phase 1 poll fires. The drain window (completion_drain_timeout=5.0)
+        gives the session monitor enough time to complete its poll and detect the
+        marker in the JSONL file, producing CHANNEL_B confirmation.
+        """
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        script = tmp_path / "process_exit_then_channel_b.py"
+        script.write_text(PROCESS_EXIT_THEN_CHANNEL_B_FIRES_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script), str(session_dir)],
+            cwd=tmp_path,
+            timeout=30,
+            session_log_dir=session_dir,
+            completion_marker="%%ORDER_UP%%",
+            completion_drain_timeout=5.0,
+            _phase1_poll=1.0,
+            _phase2_poll=0.05,
+            _heartbeat_poll=0.05,
+        )
+
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+
+    @pytest.mark.anyio
+    async def test_drain_window_times_out_when_no_session_jsonl(self, tmp_path):
+        """Process exits with no session JSONL; drain window times out, UNMONITORED preserved.
+
+        The drain window expires after completion_drain_timeout seconds without
+        Channel B depositing. Existing behavior (UNMONITORED) is unchanged.
+        """
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        # Script that writes empty result to stdout and exits — no JSONL written
+        script = tmp_path / "empty_exit.py"
+        script.write_text(
+            textwrap.dedent("""\
+            import sys, json
+            payload = {"type": "result", "subtype": "success", "is_error": False,
+                       "result": "", "session_id": "test-stop-delay"}
+            sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\\n")
+            sys.stdout.flush()
+            sys.exit(0)
+        """)
+        )
+
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=10,
+            session_log_dir=session_dir,
+            completion_marker="%%ORDER_UP%%",
+            completion_drain_timeout=0.2,
+            _phase1_poll=0.05,
+            _phase2_poll=0.05,
+            _heartbeat_poll=0.05,
+        )
+
+        assert result.channel_confirmation == ChannelConfirmation.UNMONITORED

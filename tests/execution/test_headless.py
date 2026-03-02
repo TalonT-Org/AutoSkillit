@@ -243,6 +243,54 @@ class TestRecoverFromSeparateMarker:
         # returns None → no session replacement → success=False
         assert skill.success is False
 
+    def test_recovery_fires_with_unmonitored_channel_and_realistic_cli_output(self):
+        """UNMONITORED + assistant messages with standalone marker + empty result → success.
+
+        Exercises the process-exits-first scenario: Channel B was never detected
+        (UNMONITORED), but stdout contains type=assistant records with the marker
+        on a standalone line. Recovery via _recover_from_separate_marker produces
+        success=True.
+
+        The marker occupies its own content block so that the newline-join fix
+        (session.py) is required for _marker_is_standalone to return True.
+        """
+        msg_work = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "Task completed successfully."}]},
+            }
+        )
+        msg_marker = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "text", "text": "Signalling completion."},
+                        {"type": "text", "text": "%%DONE%%"},
+                    ]
+                },
+            }
+        )
+        result_rec = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "",
+                "session_id": "s1",
+            }
+        )
+        stdout = "\n".join([msg_work, msg_marker, result_rec])
+
+        skill = self._make_result(
+            stdout=stdout,
+            marker="%%DONE%%",
+            channel=ChannelConfirmation.UNMONITORED,
+        )
+        assert skill.success is True
+        assert skill.needs_retry is False
+        assert "Task completed successfully." in skill.result
+
 
 class TestStaleRecoveryPipelineAdjudication:
     """STALE path must produce the same SkillResult values before and after the refactor."""

@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.arch._rules import RuleDescriptor
+
 SRC = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 PACKAGES = frozenset(
     [
@@ -28,6 +30,126 @@ PACKAGES = frozenset(
         "cli",
     ]
 )
+
+
+IMP_RULES: tuple[RuleDescriptor, ...] = (
+    RuleDescriptor(
+        rule_id="REQ-IMP-001",
+        name="no-cross-package-submodule-imports",
+        lens="module-dependency",
+        description=(
+            "No module outside package X may import from autoskillit.X.<submodule> "
+            "in L0-L2 packages. Excludes server/ and cli/ -- see REQ-ARCH-001."
+        ),
+        rationale=(
+            "Enforces package encapsulation: consumers must use a package's public "
+            "__init__ surface, not internal submodule paths. Excludes server/ and cli/ "
+            "-- see REQ-ARCH-001 in test_layer_enforcement.py for the full-scope version."
+        ),
+        exemptions=frozenset(
+            {
+                "server/",  # covered by REQ-ARCH-001 in test_layer_enforcement.py
+                "cli/",  # covered by REQ-ARCH-001 in test_layer_enforcement.py
+                "TYPE_CHECKING",  # TYPE_CHECKING blocks are excluded from scan
+            }
+        ),
+        severity="high",
+        defense_standard="DS-008",
+    ),
+    RuleDescriptor(
+        rule_id="REQ-IMP-002",
+        name="no-core-submodule-imports",
+        lens="module-dependency",
+        description=(
+            "Callers outside core/server/cli must import autoskillit.core, "
+            "not autoskillit.core.logging etc."
+        ),
+        rationale=(
+            "Callers outside core/server/cli must import autoskillit.core, "
+            "not autoskillit.core.logging etc. This ensures all consumers use the "
+            "canonical gateway surface."
+        ),
+        exemptions=frozenset(),
+        severity="high",
+        defense_standard="DS-008",
+    ),
+    RuleDescriptor(
+        rule_id="REQ-IMP-003",
+        name="tools-import-namespace",
+        lens="module-dependency",
+        description=(
+            "server/tools_*.py may only import autoskillit.core, "
+            "autoskillit.pipeline, autoskillit.server."
+        ),
+        rationale=(
+            "Tool handlers must not reach into domain sub-packages directly; "
+            "all domain access goes through the ToolContext DI container."
+        ),
+        exemptions=frozenset(),
+        severity="high",
+        defense_standard="DS-008",
+    ),
+    RuleDescriptor(
+        rule_id="REQ-IMP-004",
+        name="cli-app-namespace-limit",
+        lens="module-dependency",
+        description=(
+            "cli/app.py may only import at gateway level -- no cross-package submodule paths."
+        ),
+        rationale=(
+            "CLI entry point must not bypass package gateway surfaces. "
+            "All access must go through package __init__ re-exports."
+        ),
+        exemptions=frozenset(),
+        severity="high",
+        defense_standard="DS-008",
+    ),
+    RuleDescriptor(
+        rule_id="REQ-IMP-005",
+        name="git-only-core-at-runtime",
+        lens="module-dependency",
+        description=(
+            "server/git.py runtime imports (outside TYPE_CHECKING) "
+            "must only be from autoskillit.core."
+        ),
+        rationale=(
+            "server/git.py is the merge workflow service. Keeping runtime imports "
+            "limited to autoskillit.core ensures it can be tested in isolation "
+            "without importing the full server layer."
+        ),
+        exemptions=frozenset({"TYPE_CHECKING"}),
+        severity="high",
+        defense_standard="DS-008",
+    ),
+    RuleDescriptor(
+        rule_id="REQ-IMP-006",
+        name="prompts-no-gate-state-import",
+        lens="module-dependency",
+        description=("server/prompts.py must not import DefaultGateState or the gate submodule."),
+        rationale=(
+            "Prompt handlers must not depend on the concrete gate implementation; "
+            "gate state is managed by the server layer, not prompt handlers."
+        ),
+        exemptions=frozenset(),
+        severity="high",
+        defense_standard="DS-008",
+    ),
+)
+
+
+def test_imp_rules_complete() -> None:
+    """P13-4: IMP_RULES must contain RuleDescriptors for all 6 REQ-IMP rules."""
+    assert {r.rule_id for r in IMP_RULES} == {
+        "REQ-IMP-001",
+        "REQ-IMP-002",
+        "REQ-IMP-003",
+        "REQ-IMP-004",
+        "REQ-IMP-005",
+        "REQ-IMP-006",
+    }
+    for r in IMP_RULES:
+        assert r.defense_standard is not None
+        assert r.rationale
 
 
 def _parse_imports(path: Path) -> list[tuple[str, bool]]:
@@ -106,7 +228,15 @@ def test_req_imp_002_no_core_submodule_imports() -> None:
 
 
 def test_req_imp_001_no_cross_package_submodule_imports() -> None:
-    """No non-server/cli file may import from an internal sub-module of a different package."""
+    """REQ-IMP-001: No cross-package sub-module imports outside server/ and cli/.
+
+    Files in L0-L2 packages must not import autoskillit.X.<submodule> from a different
+    package. TYPE_CHECKING-guarded imports are excluded.
+
+    Scope: Excludes server/ and cli/ (see line 111). Those packages are covered by
+    REQ-ARCH-001 in test_layer_enforcement.test_no_cross_package_submodule_imports,
+    which scans all source packages.
+    """
     violations: list[str] = []
     for path in _src_files(exclude_dirs={"server", "cli"}):
         this_pkg = _pkg_of(path)

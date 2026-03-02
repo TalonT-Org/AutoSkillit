@@ -21,6 +21,7 @@ from autoskillit.recipe._api import (  # noqa: E402
     load_and_validate,
     validate_from_path,
 )
+from autoskillit.recipe._triage import triage_staleness  # noqa: E402
 from autoskillit.recipe.contracts import (  # noqa: E402
     StaleItem,
     check_contract_staleness,
@@ -50,7 +51,6 @@ from autoskillit.recipe.validator import (  # noqa: E402
     run_semantic_rules,
     validate_recipe,
 )
-from autoskillit.recipe._triage import triage_staleness  # noqa: E402
 
 __all__ = [
     "Recipe",

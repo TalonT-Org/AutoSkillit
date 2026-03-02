@@ -21,45 +21,25 @@ from __future__ import annotations
 
 import ast
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
 
 import pytest
 
+from tests.arch._rules import (
+    _ASYNCIO_PIPE_EXEMPT,
+    _BROAD_EXCEPT_EXEMPT,
+    _DISPATCH_TABLE_EXEMPT_FUNCTIONS,
+    _LOGGER_METHODS,
+    _PRINT_EXEMPT,
+    _RULE,
+    _SENSITIVE_KEYWORDS,
+    RuleDescriptor,
+    Violation,
+)
+
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
-_SENSITIVE_KEYWORDS = frozenset({"token", "secret", "password", "key", "api_key", "auth"})
-_LOGGER_METHODS = frozenset({"debug", "info", "warning", "error", "critical", "exception"})
-_PRINT_EXEMPT = frozenset(
-    {
-        "app.py",
-        "_doctor.py",
-        "_marketplace.py",
-        "quota_check.py",
-        "remove_clone_guard.py",
-        "skill_cmd_check.py",
-        "skill_command_guard.py",
-    }
-)
 _BROAD_EXCEPTION_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"})
-# Standalone hook scripts: fail-open design requires silent broad excepts and print() for JSON
-_BROAD_EXCEPT_EXEMPT = frozenset(
-    {
-        "quota_check.py",
-        "remove_clone_guard.py",
-        "skill_cmd_check.py",
-        "skill_command_guard.py",
-    }
-)
-
-# ARCH-007: Functions that check TerminationReason as sequential early-exit guards
-# (single-value checks), not as dispatch tables (≥2 values). Exempt from ARCH-007.
-_DISPATCH_TABLE_EXEMPT_FUNCTIONS: frozenset[str] = frozenset(
-    {
-        "_build_skill_result",  # sequential early-exit guards, not a dispatch table
-    }
-)
 
 
 def _has_log_call(body: list[ast.stmt]) -> bool:
@@ -87,151 +67,6 @@ def _rel(path: Path) -> str:
         return str(path.relative_to(Path(__file__).parent.parent.parent))
     except ValueError:
         return str(path)
-
-
-class Violation(NamedTuple):
-    file: Path
-    line: int
-    col: int
-    message: str
-    rule_id: str = ""
-    lens: str = ""
-
-    def __str__(self) -> str:
-        if not self.rule_id:
-            return f"{_rel(self.file)}:{self.line}:{self.col}: {self.message}"
-        rule = next((r for r in RULES if r.rule_id == self.rule_id), None)
-        ds_part = f" / {rule.defense_standard}" if rule and rule.defense_standard else ""
-        loc = f"{_rel(self.file)}:{self.line}:{self.col}"
-        return f"[{self.rule_id} / {self.lens}{ds_part}] {loc}: {self.message}"
-
-
-@dataclass(frozen=True)
-class RuleDescriptor:
-    """Metadata for a single AST-enforced architecture rule."""
-
-    rule_id: str
-    name: str
-    lens: str
-    description: str
-    rationale: str
-    exemptions: frozenset[str]
-    severity: str
-    defense_standard: str | None = None
-    adr_ref: str | None = None
-
-
-RULES: tuple[RuleDescriptor, ...] = (
-    RuleDescriptor(
-        rule_id="ARCH-001",
-        name="no-print",
-        lens="operational",
-        description="Production modules must not call print(); use structured logger instead.",
-        rationale=(
-            "AutoSkillit routes all output through MCP tool results and Claude CLI stdout. "
-            "print() calls emit directly to stdout, polluting the JSON stream that headless "
-            "sessions depend on for structured result parsing. The operational lens governs "
-            "observability contracts; uncontrolled stdout corrupts the MCP communication protocol."
-        ),
-        exemptions=frozenset({"app.py", "_doctor.py"}),
-        severity="error",
-        defense_standard="DS-003",
-    ),
-    RuleDescriptor(
-        rule_id="ARCH-002",
-        name="no-sensitive-logger-kwargs",
-        lens="security",
-        description="Sensitive values must not be passed as keyword arguments to logger calls.",
-        rationale=(
-            "Structured logging with sensitive kwargs (token, secret, password, key) persists "
-            "credentials in log files, structlog output, or monitoring systems. AutoSkillit tools "
-            "handle API keys and auth tokens for headless Claude sessions; accidental logging of "
-            "these values via structlog kwargs creates audit-trail and credential-leak risks."
-        ),
-        exemptions=frozenset(),
-        severity="error",
-        defense_standard="DS-006",
-    ),
-    RuleDescriptor(
-        rule_id="ARCH-003",
-        name="no-silent-broad-except",
-        lens="error-resilience",
-        description=(
-            "Broad except clauses must log the error or re-raise; silent swallowing is forbidden."
-        ),
-        rationale=(
-            "AutoSkillit orchestrates multi-step pipelines where silent failure "
-            "propagates corrupt state across recipe steps, worktrees, and headless "
-            "sessions. Silent broad-except in "
-            "the execution or merge path causes spurious PASS results to be reported upstream. "
-            "The error-resilience lens mandates observable failures at all levels of the stack."
-        ),
-        exemptions=frozenset(),
-        severity="error",
-        defense_standard="DS-001",
-    ),
-    RuleDescriptor(
-        rule_id="ARCH-004",
-        name="no-asyncio-PIPE",
-        lens="process-flow",
-        description=(
-            "asyncio.PIPE must not be used directly; "
-            "route subprocess I/O through create_temp_io() from process_lifecycle instead."
-        ),
-        rationale=(
-            "asyncio.PIPE causes OS pipe-buffer blocking when subprocess output exceeds 64 KB — "
-            "a common occurrence with Claude CLI stdout containing full session JSON. "
-            "create_temp_io() redirects to RAM-backed temp files, eliminating buffer deadlock in "
-            "the process-flow path. Direct asyncio.PIPE usage outside process_lifecycle.py "
-            "bypasses this protection."
-        ),
-        exemptions=frozenset({"process.py"}),
-        severity="error",
-        defense_standard="DS-002",
-    ),
-    RuleDescriptor(
-        rule_id="ARCH-005",
-        name="get-logger-name",
-        lens="operational",
-        description=(
-            "get_logger() must always be called with __name__ to ensure correct logger hierarchy."
-        ),
-        rationale=(
-            "AutoSkillit uses structlog routed through a package-level NullHandler for stdlib "
-            "compatibility. Logger hierarchy relies on __name__ for correct propagation through "
-            "autoskillit.*. Literal or computed names break filtering, sampling, and structured "
-            "log context. The operational lens requires that observability infrastructure is "
-            "self-consistent."
-        ),
-        exemptions=frozenset(),
-        severity="error",
-        defense_standard="DS-005",
-    ),
-    RuleDescriptor(
-        rule_id="ARCH-006",
-        name="no-fstring-secrets",
-        lens="security",
-        description=(
-            "Sensitive variable names must not be interpolated into "
-            "f-string logger positional arguments."
-        ),
-        rationale=(
-            "f-string interpolation of sensitive variables in logger messages embeds the value in "
-            "the rendered string before structlog can apply masking or filtering. AutoSkillit's "
-            "headless sessions handle API keys and auth tokens; accidental f-string log "
-            "interpolation creates credential-exposure vectors in Claude CLI stdout, structured "
-            "session output, and any downstream log aggregation."
-        ),
-        exemptions=frozenset(),
-        severity="error",
-        defense_standard="DS-006",
-    ),
-)
-
-_RULE: dict[str, RuleDescriptor] = {r.rule_id: r for r in RULES}
-
-# ── Rule 5 (visitor): asyncio.PIPE ban ────────────────────────────────────────
-_ASYNCIO_PIPE_EXEMPT: frozenset[str] = frozenset({"process.py"})
 
 
 class ArchitectureViolationVisitor(ast.NodeVisitor):
@@ -359,7 +194,7 @@ def _check_termination_dispatch_exhaustive(src_dir: Path) -> list[str]:
     chains (dispatch tables) rather than exhaustive match/case + assert_never.
 
     A "dispatch table" is detected when a single FunctionDef contains comparisons
-    to ≥2 distinct TerminationReason.* values (including values inside tuple
+    to >=2 distinct TerminationReason.* values (including values inside tuple
     membership tests like `termination in (TerminationReason.X, TerminationReason.Y)`).
     A single comparison (guard) is exempt. Functions in
     _DISPATCH_TABLE_EXEMPT_FUNCTIONS are also exempt.
@@ -408,7 +243,7 @@ def _check_termination_dispatch_exhaustive(src_dir: Path) -> list[str]:
                     and child.func.id == "assert_never"
                 ):
                     has_assert_never = True
-            # Dispatch table = ≥2 distinct TerminationReason values checked
+            # Dispatch table = >=2 distinct TerminationReason values checked
             if len(tr_values) >= 2 and not (has_match and has_assert_never):
                 violations.append(
                     f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
@@ -464,7 +299,7 @@ def test_no_direct_write_text_in_src() -> None:
 def test_tmp_path_is_ram_backed(tmp_path: Path) -> None:
     """On Linux/WSL2, tmp_path must resolve to /dev/shm (RAM-backed tmpfs).
 
-    On macOS no assertion is made — disk-backed /tmp is acceptable there.
+    On macOS no assertion is made -- disk-backed /tmp is acceptable there.
     Fails intentionally on Linux when pytest is invoked directly without --basetemp.
     Always run tests via 'task test-all', not pytest directly.
     """
@@ -614,7 +449,7 @@ def test_fstring_secret_safe_for_nonsensitive(tmp_path: Path) -> None:
 
 def test_arch007_termination_dispatch_tables_use_exhaustive_match() -> None:
     """
-    ARCH-007: Any function in execution/ that dispatches on ≥2 distinct
+    ARCH-007: Any function in execution/ that dispatches on >=2 distinct
     TerminationReason values via if/elif must use match/case with assert_never.
     Single-value guard checks (e.g., `if termination == TIMED_OUT:`) are exempt.
     """
@@ -630,7 +465,7 @@ def _check_channel_confirmation_dispatch_exhaustive(src_dir: Path) -> list[str]:
     via if/elif chains rather than exhaustive match/case + assert_never.
 
     A "dispatch table" is detected when a single FunctionDef contains comparisons
-    to ≥2 distinct ChannelConfirmation.* values (CHANNEL_A, CHANNEL_B, UNMONITORED).
+    to >=2 distinct ChannelConfirmation.* values (CHANNEL_A, CHANNEL_B, UNMONITORED).
     A single-value guard is exempt.
 
     Returns a list of violation strings for failing tests.
@@ -680,7 +515,7 @@ def _check_channel_confirmation_dispatch_exhaustive(src_dir: Path) -> list[str]:
 
 def test_arch007_channel_confirmation_dispatch_uses_match_case() -> None:
     """
-    T7 / ARCH-007 extension: Any function in execution/ that dispatches on ≥2
+    T7 / ARCH-007 extension: Any function in execution/ that dispatches on >=2
     distinct ChannelConfirmation values via if/elif must use match/case with
     assert_never. Single-value guard checks are exempt.
     """
@@ -737,7 +572,7 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
     that re-exports 'name' FROM that exact submodule, are wrong and must be corrected.
 
     Note: patching autoskillit.X.B.name where X imports 'name' from a DIFFERENT submodule
-    (not B) is correct — it targets the local binding in B, which is the namespace that
+    (not B) is correct -- it targets the local binding in B, which is the namespace that
     module B's own functions resolve.
     """
     import importlib
@@ -774,13 +609,13 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
             # Refine: only flag if the parent pkg actually imports 'name' FROM this
             # exact submodule. If it imports 'name' from a different module (e.g.
             # autoskillit.migration imports applicable_migrations from .loader, not
-            # .engine), then the patch targets a local binding in 'submod' — which
+            # .engine), then the patch targets a local binding in 'submod' -- which
             # is the correct mock target for module-level imports in that submodule.
             try:
                 parent_source = inspect.getsource(parent_mod)
                 tree = ast.parse(parent_source)
             except Exception:
-                # Can't inspect source — conservatively flag as violation.
+                # Can't inspect source -- conservatively flag as violation.
                 imports_from_this_submod = True
             else:
                 imports_from_this_submod = False
@@ -892,3 +727,32 @@ class TestProcTypeAnnotationUpdated:
     def test_scan_done_signals_proc_annotation_is_anyio(self):
         source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "anyio.abc.Process" in source
+
+
+# ── P14-2: Sub-package __init__.py facade enforcement ─────────────────────────
+
+
+def test_init_files_are_pure_facades() -> None:
+    """P14-2: Sub-package __init__.py files must not define FunctionDef or AsyncFunctionDef
+    at module scope. They must be pure re-export facades.
+
+    After groupE (P14-1), server/__init__.py is a pure facade. This test enforces the
+    same constraint across all immediate sub-package __init__.py files.
+
+    Exempt: src/autoskillit/__init__.py (package root, defines __version__ at module scope).
+    """
+    violations: list[str] = []
+
+    for init_file in SRC_ROOT.glob("*/__init__.py"):
+        source = init_file.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(init_file))
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                violations.append(
+                    f"  {_rel(init_file)}:{node.lineno}: defines {node.name!r} at module scope"
+                )
+
+    assert not violations, (
+        "Sub-package __init__.py files must not define functions at module scope "
+        "(pure re-export facades only):\n" + "\n".join(violations)
+    )

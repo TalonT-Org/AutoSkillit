@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.arch._rules import RuleDescriptor
+
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
 # ── Sub-package layer registry ────────────────────────────────────────────────
@@ -39,6 +41,47 @@ SUBPACKAGE_LAYERS: dict[str, int] = {
 _LAYER_EXEMPT_STEMS: frozenset[str] = frozenset({"version", "smoke_utils", "__init__", "__main__"})
 
 _SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
+
+LAYER_RULES: dict[str, RuleDescriptor] = {
+    "REQ-ARCH-001": RuleDescriptor(
+        rule_id="REQ-ARCH-001",
+        name="no-cross-package-submodule-imports",
+        lens="module-dependency",
+        description=(
+            "No module outside package X may import from autoskillit.X.<submodule>. "
+            "Covers all source packages including server/ and cli/. "
+            "Scoped complement to REQ-IMP-001 (which excludes server/ and cli/)."
+        ),
+        rationale=(
+            "Cross-package submodule imports bypass the public gateway __init__ surface "
+            "and create tight coupling to internal implementation details."
+        ),
+        exemptions=frozenset(
+            {
+                "TYPE_CHECKING",  # P14-3: runtime import filter excludes TYPE_CHECKING guards
+                "intra-package",  # intra-package imports (e.g. server/__init__.py importing server.helpers) allowed
+            }
+        ),
+        severity="high",
+        defense_standard="DS-008",
+    ),
+    "REQ-ARCH-003": RuleDescriptor(
+        rule_id="REQ-ARCH-003",
+        name="server-tools-import-only-allowed-packages",
+        lens="module-dependency",
+        description=(
+            "server/tools_*.py files may only import from autoskillit.core, "
+            "autoskillit.pipeline, autoskillit.server.*"
+        ),
+        rationale=(
+            "Tool handlers must not reach into domain sub-packages directly; "
+            "all domain access goes through the ToolContext DI container."
+        ),
+        exemptions=frozenset(),
+        severity="high",
+        defense_standard="DS-008",
+    ),
+}
 
 
 def _rel(path: Path) -> str:
@@ -380,6 +423,58 @@ def test_l2_no_deferred_upward_imports(pkg_name: str) -> None:
     assert not violations, f"Deferred layer violations in {pkg_name}/:\n" + "\n".join(violations)
 
 
+def test_req_arch_001_type_checking_exemption_named() -> None:
+    """P14-3: REQ-ARCH-001 RuleDescriptor must explicitly name the TYPE_CHECKING exemption."""
+    assert "TYPE_CHECKING" in LAYER_RULES["REQ-ARCH-001"].exemptions
+
+
+@pytest.mark.parametrize("pkg_name", ["config", "execution", "pipeline", "workspace"])
+def test_l1_no_deferred_upward_imports(pkg_name: str) -> None:
+    """L1 sub-packages must not use deferred imports that violate layer contracts.
+
+    Extends test_import_layer_enforcement to cover function-body (deferred) imports
+    via ast.walk, not just tree.body scans. L1 packages (config, execution, pipeline,
+    workspace) must not deferred-import L2 packages (recipe, migration) or L3 packages
+    (server, cli) -- always forbidden.
+    """
+    pkg_dir = SRC_ROOT / pkg_name
+    if not pkg_dir.exists():
+        pytest.skip(f"{pkg_name}/ not found -- prerequisite group not merged")
+
+    pkg_layer = SUBPACKAGE_LAYERS[pkg_name]  # == 1 for all L1 packages
+    violations: list[str] = []
+
+    for py_file in pkg_dir.rglob("*.py"):
+        source = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(py_file))
+        deferred_nodes = _collect_deferred_imports(tree)
+
+        for node in deferred_nodes:
+            stems_to_check: list[str] = []
+            if isinstance(node, ast.ImportFrom) and node.module:
+                parts = node.module.split(".")
+                if parts[0] == "autoskillit" and len(parts) > 1:
+                    stems_to_check = [parts[1]]
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    parts = alias.name.split(".")
+                    if parts[0] == "autoskillit" and len(parts) > 1:
+                        stems_to_check.append(parts[1])
+
+            for imported_stem in stems_to_check:
+                if imported_stem not in SUBPACKAGE_LAYERS:
+                    continue
+                imported_layer = SUBPACKAGE_LAYERS[imported_stem]
+                if imported_layer > pkg_layer:
+                    violations.append(
+                        f"  {_rel(py_file)}:{node.lineno}: {pkg_name} (L{pkg_layer}) "
+                        f"deferred-imports {imported_stem} (L{imported_layer})"
+                        f" -- upward deferred import"
+                    )
+
+    assert not violations, f"Deferred layer violations in {pkg_name}/:\n" + "\n".join(violations)
+
+
 # ── Calibration ────────────────────────────────────────────────────────────────
 
 
@@ -541,8 +636,13 @@ def test_migration_no_forbidden_imports() -> None:
 def test_no_cross_package_submodule_imports() -> None:
     """REQ-ARCH-001: No module outside package X may import from autoskillit.X.<submodule>.
 
-    Intra-package imports (e.g., server/__init__.py importing autoskillit.server.helpers)
-    are explicitly allowed. TYPE_CHECKING-guarded imports are excluded.
+    Intra-package imports (e.g. server/__init__.py importing autoskillit.server.helpers)
+    are explicitly allowed. TYPE_CHECKING-guarded imports are excluded (see LAYER_RULES
+    exemptions for REQ-ARCH-001).
+
+    Scope: ALL source packages, including server/ and cli/.
+    Complement: REQ-IMP-001 in test_import_paths.py enforces the same principle but
+    excludes server/ and cli/ -- see that test for the narrower enforcement scope.
     """
     AUTOSKILLIT_ROOT = SRC_ROOT
     violations: list[str] = []

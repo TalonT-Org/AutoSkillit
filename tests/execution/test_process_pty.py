@@ -13,7 +13,7 @@ import textwrap
 
 import pytest
 
-from autoskillit.core.types import RetryReason, TerminationReason
+from autoskillit.core.types import ChannelConfirmation, RetryReason, TerminationReason
 from autoskillit.execution.process import (
     pty_wrap_command,
     run_managed_async,
@@ -256,7 +256,7 @@ class TestSTOPDelayPipelineAdjudication:
 
         assert result.termination == TerminationReason.NATURAL_EXIT
         assert result.returncode == 0
-        assert result.data_confirmed is True
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A
 
         skill_result = _build_skill_result(
             result,

@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.core.types import TerminationReason
+from autoskillit.core.types import ChannelConfirmation, TerminationReason
 from autoskillit.execution.process import (
     _has_active_api_connection,
     _heartbeat,
@@ -849,7 +849,7 @@ class TestChannelBDrainWait:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        assert result.data_confirmed is False
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
     @pytest.mark.asyncio
     async def test_data_confirmed_true_when_channel_a_wins(self, tmp_path):
@@ -871,7 +871,7 @@ class TestChannelBDrainWait:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        assert result.data_confirmed is True
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A
 
     @pytest.mark.asyncio
     async def test_channel_b_then_a_empty_result_data_confirmed_is_false(self, tmp_path):
@@ -899,7 +899,7 @@ class TestChannelBDrainWait:
             _heartbeat_poll=0.05,
         )
         assert result.termination == TerminationReason.COMPLETED
-        assert result.data_confirmed is False  # FAILS before fix: True
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B  # FAILS before fix: True
 
 
 class TestChannelBFullPipelineAdjudication:
@@ -1014,7 +1014,7 @@ class TestChannelBDrainRacePipelineAdjudication:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        assert result.data_confirmed is False
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
         skill_result = _build_skill_result(
             result,

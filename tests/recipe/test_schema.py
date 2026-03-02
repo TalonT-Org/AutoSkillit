@@ -84,6 +84,31 @@ def test_recipe_step_has_on_retry_field() -> None:
     assert step.on_retry == "verify"
 
 
+def test_all_dataclasses_importable() -> None:
+    """All dataclasses are importable from recipe.schema."""
+    from autoskillit.recipe.schema import (
+        DataFlowReport,
+        DataFlowWarning,
+        Recipe,
+        RecipeInfo,
+        RecipeIngredient,
+        RecipeStep,
+        StepResultCondition,
+        StepResultRoute,
+        StepRetry,
+    )
+
+    assert Recipe is not None
+    assert RecipeStep is not None
+    assert RecipeIngredient is not None
+    assert RecipeInfo is not None
+    assert DataFlowWarning is not None
+    assert DataFlowReport is not None
+    assert StepRetry is not None
+    assert StepResultRoute is not None
+    assert StepResultCondition is not None
+
+
 def test_step_result_condition_dataclass_exists() -> None:
     """StepResultCondition is importable and has route and when fields."""
     from autoskillit.recipe.schema import StepResultCondition

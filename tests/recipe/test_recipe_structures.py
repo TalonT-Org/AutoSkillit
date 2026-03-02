@@ -202,6 +202,90 @@ class TestImplementationPipelineStructure:
             "base_sha is captured but never consumed — audit_impl must reference it"
         )
 
+    def test_ip_push_after_audit_warning_fires(self) -> None:
+        """T_IP_PBA: after Part B, audit_impl has skip_when_false so push-before-audit
+        fires as a WARNING. This is correct and expected — the user can opt out of audit
+        (audit=false), and the rule signals that push is reachable without audit on that path.
+        """
+        from autoskillit.core.types import Severity
+        from autoskillit.recipe.validator import run_semantic_rules
+
+        findings = run_semantic_rules(self.recipe)
+        violations = [f for f in findings if f.rule == "push-before-audit"]
+        assert len(violations) >= 1, (
+            "push-before-audit must fire: audit_impl has skip_when_false so push is "
+            "reachable via the audit=false bypass path"
+        )
+        assert all(v.severity == Severity.WARNING for v in violations)
+
+    def test_ip_open_pr_step_routes_to_cleanup_not_push(self) -> None:
+        """open_pr_step.on_success must be cleanup_success, never push.
+        The push step already ran before open_pr_step; routing back to push is a double-push."""
+        open_pr_step = self.recipe.steps["open_pr_step"]
+        assert open_pr_step.on_success != "push", (
+            "open_pr_step.on_success must not be 'push' — that would trigger a double-push"
+        )
+        assert open_pr_step.on_success == "cleanup_success"
+
+    def test_ip_open_pr_step_has_skip_when_false(self) -> None:
+        """open_pr_step must declare skip_when_false: inputs.open_pr."""
+        open_pr_step = self.recipe.steps["open_pr_step"]
+        assert open_pr_step.skip_when_false == "inputs.open_pr"
+
+    def test_ip_audit_impl_has_skip_when_false(self) -> None:
+        """audit_impl must declare skip_when_false: inputs.audit."""
+        audit_step = self.recipe.steps["audit_impl"]
+        assert audit_step.skip_when_false == "inputs.audit"
+
+    def test_ip_create_branch_has_skip_when_false(self) -> None:
+        """create_branch must declare skip_when_false: inputs.open_pr."""
+        create_branch = self.recipe.steps["create_branch"]
+        assert create_branch.skip_when_false == "inputs.open_pr"
+
+    def test_ip_no_push_to_remote_step_after_open_pr_in_routing_chain(self) -> None:
+        """No push_to_remote step must be reachable from open_pr_step's on_success chain.
+        After open_pr_step, we must be in the cleanup/done path only."""
+        from autoskillit.recipe.validator import _build_step_graph
+
+        graph = _build_step_graph(self.recipe)
+        # BFS from open_pr_step.on_success (cleanup_success)
+        visited: set[str] = set()
+        queue = [self.recipe.steps["open_pr_step"].on_success]
+        while queue:
+            current = queue.pop(0)
+            if current in visited or current not in self.recipe.steps:
+                continue
+            visited.add(current)
+            queue.extend(graph.get(current, []))
+        push_to_remote_steps = {
+            name for name, step in self.recipe.steps.items() if step.tool == "push_to_remote"
+        }
+        reachable_push = push_to_remote_steps & visited
+        assert not reachable_push, (
+            f"push_to_remote step(s) {reachable_push} are reachable "
+            "after open_pr_step — double-push risk"
+        )
+
+    def test_ip_open_pr_false_path_reaches_push_then_cleanup(self) -> None:
+        """When open_pr_step is bypassed (open_pr=false), execution must go:
+        audit_impl (GO) → push → [open_pr_step bypassed] → cleanup_success → done.
+        After the fix, audit_impl's GO route points directly to push, so push is
+        always reachable from audit_impl's successors."""
+        from autoskillit.recipe.validator import _build_step_graph
+
+        graph = _build_step_graph(self.recipe)
+        # After the fix: audit_impl.on_result.GO → push (directly).
+        # Verify push is reachable from audit_impl's successors.
+        reachable: set[str] = set()
+        queue = list(graph.get("audit_impl", []))
+        while queue:
+            node = queue.pop(0)
+            if node in reachable or node not in self.recipe.steps:
+                continue
+            reachable.add(node)
+            queue.extend(graph.get(node, []))
+        assert "push" in reachable
+
 
 # ---------------------------------------------------------------------------
 # TestBugfixLoopStructure

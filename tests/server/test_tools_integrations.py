@@ -11,7 +11,7 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
-from autoskillit.pipeline.gate import _DEFAULT_GATE_MESSAGE, GATED_TOOLS
+from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 from autoskillit.server.tools_integrations import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
@@ -425,12 +425,8 @@ def test_report_bug_config_defaults():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_fetch_github_issue_gate_closed(tool_ctx):
-    tool_ctx.gate.disable()
-    result = json.loads(await fetch_github_issue("owner/repo#1"))
-    assert result["success"] is False
-    assert result["result"] == _DEFAULT_GATE_MESSAGE
+def test_fetch_github_issue_in_ungated_tools():
+    assert "fetch_github_issue" in UNGATED_TOOLS
 
 
 @pytest.mark.asyncio

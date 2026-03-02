@@ -201,7 +201,7 @@ class TestExecuteReadonlyQuery:
 
     def test_write_blocked(self, tmp_path):
         db_path = self._make_db(tmp_path)
-        with pytest.raises(sqlite3.DatabaseError):
+        with pytest.raises(sqlite3.DatabaseError, match="not authorized"):
             _execute_readonly_query(
                 db_path, "INSERT INTO items VALUES (99, 'evil', NULL)", [], 30, 1000
             )

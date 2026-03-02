@@ -175,11 +175,11 @@ class TestPtyTestGuard:
         """
         # Check if 'script' is available; if it is, this guard isn't exercised locally
         # but the structural assertion below still validates the test code.
-        test_source = (REPO_ROOT / "tests" / "test_process_lifecycle.py").read_text()
+        test_source = (REPO_ROOT / "tests" / "execution" / "test_process_pty.py").read_text()
         # The guard must reference both shutil.which and "script"
         assert (
             'shutil.which("script")' in test_source or "shutil.which('script')" in test_source
         ), (
-            'test_process_lifecycle.py does not use shutil.which("script") — '
+            'test_process_pty.py does not use shutil.which("script") — '
             "test_pty_wrapper_provides_tty needs a skipif guard for missing script binary"
         )

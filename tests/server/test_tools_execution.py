@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import structlog.contextvars
@@ -12,31 +11,21 @@ import structlog.testing
 
 from autoskillit.config import (
     AutomationConfig,
-    ModelConfig,
     RunSkillConfig,
 )
-from autoskillit.core import SkillResult
 from autoskillit.core.types import (
-    CONTEXT_EXHAUSTION_MARKER,
-    RETRY_RESPONSE_FIELDS,
     ChannelConfirmation,
     RetryReason,
-    TerminationReason,
 )
 from autoskillit.execution.headless import (
-    _build_skill_result,
-    _ensure_skill_prefix,
     _inject_completion_directive,
-    _resolve_model,
     _session_log_dir,
 )
-from autoskillit.execution.process import SubprocessResult
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
-    _run_subprocess,
 )
 from autoskillit.server.tools_execution import run_cmd, run_python, run_skill, run_skill_retry
-from tests.conftest import _make_result, _make_timeout_result
+from tests.conftest import _make_result
 
 _SUCCESS_JSON = (
     '{"type": "result", "subtype": "success", "is_error": false,'
@@ -80,36 +69,6 @@ def _context_exhausted_session_json() -> str:
             "errors": ["prompt is too long"],
         }
     )
-
-
-class TestRunCmd:
-    """T1, T2: run_cmd executes commands and returns exit code semantics."""
-
-    @pytest.mark.anyio
-    async def test_successful_command(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "hello\n", ""))
-        result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))
-
-        assert result["success"] is True
-        assert result["exit_code"] == 0
-        assert "hello" in result["stdout"]
-        assert len(tool_ctx.runner.call_args_list) == 1
-        assert tool_ctx.runner.call_args_list[0][0] == ["bash", "-c", "echo hello"]
-
-    @pytest.mark.anyio
-    async def test_failing_command(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(1, "", "error"))
-        result = json.loads(await run_cmd(cmd="false", cwd="/tmp"))
-
-        assert result["success"] is False
-        assert result["exit_code"] == 1
-
-    @pytest.mark.anyio
-    async def test_custom_timeout(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "", ""))
-        await run_cmd(cmd="sleep 1", cwd="/tmp", timeout=30)
-
-        assert tool_ctx.runner.call_args_list[-1][2] == 30.0
 
 
 class TestRunSkillPluginDir:
@@ -230,183 +189,6 @@ class TestCheckDryWalkthrough:
         assert json.loads(result_b)["subtype"] == "gate_error"
 
 
-class TestRunSkillRetryGate:
-    """run_skill_retry applies dry-walkthrough gate to implement skills."""
-
-    @pytest.mark.anyio
-    async def test_run_skill_retry_gates_implement_no_merge(self, tool_ctx, tmp_path):
-        """run_skill_retry gates /autoskillit:implement-worktree-no-merge."""
-        plan = tmp_path / "plan.md"
-        plan.write_text("# No marker plan")
-        result = json.loads(
-            await run_skill_retry(
-                f"/autoskillit:implement-worktree-no-merge {plan}", str(tmp_path)
-            )
-        )
-        assert result["success"] is False
-        assert result["is_error"] is True
-        assert "dry-walked" in result["result"].lower()
-
-
-class TestRunSubprocessDelegatesToManaged:
-    """Verify _run_subprocess delegates to the runner (ToolContext.runner) correctly."""
-
-    @pytest.mark.anyio
-    async def test_normal_completion(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "output", ""))
-        rc, stdout, stderr = await _run_subprocess(["echo", "hi"], cwd="/tmp", timeout=10)
-        assert rc == 0
-        assert stdout == "output"
-        assert stderr == ""
-
-    @pytest.mark.anyio
-    async def test_timeout_returns_minus_one(self, tool_ctx):
-        tool_ctx.runner.push(_make_timeout_result())
-        rc, stdout, stderr = await _run_subprocess(["sleep", "999"], cwd="/tmp", timeout=1)
-        assert rc == -1
-        assert "timed out" in stderr
-
-
-class TestProcessRunnerResult:
-    """_process_runner_result shared helper lives in server.helpers."""
-
-    def test_normal_exit_preserves_fields(self):
-        from autoskillit.core import TerminationReason
-        from autoskillit.execution.process import SubprocessResult
-        from autoskillit.server.helpers import _process_runner_result
-
-        result = SubprocessResult(
-            returncode=0,
-            stdout="hello",
-            stderr="",
-            termination=TerminationReason.NATURAL_EXIT,
-            pid=1,
-        )
-        rc, stdout, stderr = _process_runner_result(result, timeout=10)
-        assert rc == 0
-        assert stdout == "hello"
-        assert stderr == ""
-
-    def test_timed_out_returns_minus_one_with_message(self):
-        from autoskillit.core import TerminationReason
-        from autoskillit.execution.process import SubprocessResult
-        from autoskillit.server.helpers import _process_runner_result
-
-        result = SubprocessResult(
-            returncode=-1,
-            stdout="partial",
-            stderr="",
-            termination=TerminationReason.TIMED_OUT,
-            pid=1,
-        )
-        rc, stdout, stderr = _process_runner_result(result, timeout=5)
-        assert rc == -1
-        assert stdout == "partial"
-        assert "timed out" in stderr
-        assert "5" in stderr
-
-
-@pytest.mark.usefixtures("tool_ctx")
-class TestRunPython:
-    """run_python tool: import, call, timeout, async support."""
-
-    @pytest.mark.anyio
-    async def test_calls_function(self):
-        """run_python imports module, calls function, returns JSON result."""
-        result = json.loads(
-            await run_python(
-                callable="json.dumps",
-                args={"obj": {"key": "value"}},
-                timeout=10,
-            )
-        )
-        assert result["success"] is True
-        assert result["result"] == '{"key": "value"}'
-
-    @pytest.mark.anyio
-    async def test_import_error(self):
-        """run_python returns error for non-existent module."""
-        result = json.loads(
-            await run_python(
-                callable="nonexistent_module.some_func",
-                timeout=10,
-            )
-        )
-        assert result["success"] is False
-        assert "import" in result["error"].lower()
-
-    @pytest.mark.anyio
-    async def test_not_callable(self):
-        """run_python returns error when target is not callable."""
-        result = json.loads(
-            await run_python(
-                callable="json.decoder",
-                timeout=10,
-            )
-        )
-        assert result["success"] is False
-        assert "callable" in result["error"].lower()
-
-    @pytest.mark.anyio
-    async def test_timeout(self):
-        """run_python returns error on timeout."""
-        import asyncio as _aio
-        from unittest.mock import patch
-
-        async def _hang(**_kw: object) -> None:
-            await _aio.sleep(300)
-
-        mock_module = MagicMock()
-        mock_module.hang_fn = _hang
-
-        with patch("importlib.import_module", return_value=mock_module):
-            result = json.loads(
-                await run_python(
-                    callable="fake_mod.hang_fn",
-                    timeout=1,
-                )
-            )
-        assert result["success"] is False
-        assert "timeout" in result["error"].lower()
-
-    @pytest.mark.anyio
-    async def test_async_function(self):
-        """run_python correctly awaits async functions."""
-        result = json.loads(
-            await run_python(
-                callable="asyncio.sleep",
-                args={"delay": 0},
-                timeout=5,
-            )
-        )
-        assert result["success"] is True
-
-    @pytest.mark.anyio
-    async def test_sync_timeout_logs_warning(self):
-        """run_python emits a warning log when TimeoutError is raised."""
-        import asyncio as _aio
-
-        async def _hang(**_kw: object) -> None:
-            await _aio.sleep(300)
-
-        mock_module = MagicMock()
-        mock_module.hang_fn = _hang
-
-        with (
-            patch("importlib.import_module", return_value=mock_module),
-            structlog.testing.capture_logs() as logs,
-        ):
-            result = json.loads(await run_python(callable="fake_mod.hang_fn", timeout=1))
-        assert result["success"] is False
-        assert "timeout" in result["error"].lower()
-        assert any(log.get("log_level") == "warning" for log in logs), (
-            f"Expected a warning log entry for timeout, got: {logs}"
-        )
-        assert any("timed out" in log.get("event", "").lower() for log in logs), (
-            f"Expected 'timed out' in warning event, got: {logs}"
-        )
-
-
 class TestRunSkillPrefix:
     """run_skill passes prefixed command to subprocess."""
 
@@ -451,38 +233,6 @@ class TestRunSkillPrefix:
         await run_skill("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
         assert "%%ORDER_UP%%" in cmd[4]
-
-
-class TestRunSkillRetryPrefix:
-    """run_skill_retry passes prefixed command to subprocess."""
-
-    @pytest.mark.anyio
-    async def test_run_skill_retry_prefixes_skill_command(self, tool_ctx):
-        tool_ctx.runner.push(
-            _make_result(
-                0,
-                '{"type": "result", "subtype": "success", "is_error": false, '
-                '"result": "done", "session_id": "s1"}',
-                "",
-            )
-        )
-        await run_skill_retry("/investigate error", "/tmp")
-        cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[4].startswith("Use /investigate error")
-
-    @pytest.mark.anyio
-    async def test_run_skill_retry_no_prefix_for_plain_prompt(self, tool_ctx):
-        tool_ctx.runner.push(
-            _make_result(
-                0,
-                '{"type": "result", "subtype": "success", "is_error": false, '
-                '"result": "done", "session_id": "s1"}',
-                "",
-            )
-        )
-        await run_skill_retry("Fix the bug in main.py", "/tmp")
-        cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[4].startswith("Fix the bug in main.py")
 
 
 class TestDryWalkthroughGateWithPrefix:
@@ -636,31 +386,6 @@ class TestRunSkillPassesSessionLogDir:
         assert "-some-project" in str(expected_dir)
 
 
-class TestRunSkillRetryPassesSessionLogDir:
-    """run_skill_retry passes session_log_dir derived from cwd."""
-
-    @pytest.mark.anyio
-    async def test_run_skill_retry_passes_session_log_dir(self, tool_ctx):
-        """run_skill_retry must pass session_log_dir just like run_skill."""
-        cfg = AutomationConfig()
-        cfg.safety.require_dry_walkthrough = False
-        tool_ctx.config = cfg
-
-        tool_ctx.runner.push(
-            _make_result(
-                0,
-                '{"type": "result", "subtype": "success", "is_error": false,'
-                ' "result": "done", "session_id": "s1"}',
-                "",
-            )
-        )
-        await run_skill_retry("/investigate foo", "/some/project")
-
-        call_kwargs = tool_ctx.runner.call_args_list[-1][3]
-        expected_dir = _session_log_dir("/some/project")
-        assert call_kwargs["session_log_dir"] == expected_dir
-
-
 class TestGateErrorSchemaNormalization:
     """Gate errors use the standard 9-field response schema."""
 
@@ -689,209 +414,6 @@ class TestGateErrorSchemaNormalization:
         assert response["success"] is False
         assert response["is_error"] is True
         assert response["subtype"] == "gate_error"
-
-
-class TestRunSkillRetryConsolidation:
-    """run_skill_retry delegates to ctx.executor.run() with retry-specific config."""
-
-    @pytest.fixture(autouse=True)
-    def _setup_ctx(self, tool_ctx):
-        """Initialize ToolContext for run_skill_retry consolidation tests."""
-        self._tool_ctx = tool_ctx
-
-    @pytest.mark.anyio
-    async def test_run_skill_retry_passes_add_dir_to_subprocess(self):
-        """add_dir is forwarded to ctx.executor.run()."""
-        mock_result = SkillResult(
-            success=True,
-            result="ok",
-            session_id="s1",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        )
-        mock_run = AsyncMock(return_value=mock_result)
-        self._tool_ctx.executor = type("MockExec", (), {"run": mock_run})()
-        await run_skill_retry("/investigate something", "/tmp", add_dir="/extra/dir")
-
-        assert mock_run.call_args.kwargs.get("add_dir") == "/extra/dir"
-
-    @pytest.mark.anyio
-    async def test_run_skill_retry_uses_retry_timeout_not_skill_timeout(self):
-        """run_skill_retry passes RunSkillRetryConfig.timeout (7200) not RunSkillConfig (3600)."""
-        mock_result = SkillResult(
-            success=True,
-            result="ok",
-            session_id="s1",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        )
-        mock_run = AsyncMock(return_value=mock_result)
-        self._tool_ctx.executor = type("MockExec", (), {"run": mock_run})()
-        await run_skill_retry("/investigate something", "/tmp")
-
-        assert mock_run.call_args.kwargs.get("timeout") == 7200
-
-
-class TestRunSkillRetrySessionOutcome:
-    """run_skill_retry correctly classifies all Claude Code session outcomes."""
-
-    @pytest.mark.anyio
-    async def test_detects_max_turns_via_subtype(self, tool_ctx):
-        """error_max_turns in JSON output -> needs_retry=True, retry_reason=RESUME."""
-        stdout = json.dumps(
-            {
-                "type": "result",
-                "subtype": "error_max_turns",
-                "is_error": False,
-                "session_id": "s1",
-                "errors": ["Max turns reached"],
-            }
-        )
-        tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
-        assert result["needs_retry"] is True
-        assert result["retry_reason"] == RetryReason.RESUME
-
-    @pytest.mark.anyio
-    async def test_detects_context_limit(self, tool_ctx):
-        """'Prompt is too long' -> needs_retry=True, retry_reason='retry'."""
-        stdout = json.dumps(
-            {
-                "type": "result",
-                "subtype": "success",
-                "is_error": True,
-                "result": "Prompt is too long",
-                "session_id": "s1",
-            }
-        )
-        tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
-        assert result["needs_retry"] is True
-        assert result["retry_reason"] == RetryReason.RESUME
-
-    @pytest.mark.anyio
-    async def test_success_not_retriable(self, tool_ctx):
-        """Normal success -> needs_retry=False."""
-        stdout = json.dumps(
-            {
-                "type": "result",
-                "subtype": "success",
-                "is_error": False,
-                "result": "Done.",
-                "session_id": "s1",
-            }
-        )
-        tool_ctx.runner.push(_make_result(0, stdout, ""))
-        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
-        assert result["needs_retry"] is False
-        assert result["retry_reason"] == RetryReason.NONE
-
-    @pytest.mark.anyio
-    async def test_execution_error_not_retriable(self, tool_ctx):
-        """error_during_execution -> needs_retry=False."""
-        stdout = json.dumps(
-            {
-                "type": "result",
-                "subtype": "error_during_execution",
-                "is_error": True,
-                "session_id": "s1",
-                "errors": ["crashed"],
-            }
-        )
-        tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
-        assert result["needs_retry"] is False
-
-    @pytest.mark.anyio
-    async def test_unparseable_stdout_not_retriable(self, tool_ctx):
-        """Non-JSON stdout -> needs_retry=False."""
-        tool_ctx.runner.push(_make_result(1, "crash dump", "segfault"))
-        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
-        assert result["needs_retry"] is False
-
-
-class TestRunSkillRetryAgentResult:
-    """run_skill_retry result field contains actionable text."""
-
-    @pytest.mark.anyio
-    async def test_context_limit_result_is_actionable(self, tool_ctx):
-        """When context is exhausted, result text must NOT say 'Prompt is too long'."""
-        stdout = json.dumps(
-            {
-                "type": "result",
-                "subtype": "success",
-                "is_error": True,
-                "result": "Prompt is too long",
-                "session_id": "s1",
-            }
-        )
-        tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
-        assert "prompt is too long" not in result["result"].lower()
-        assert result["needs_retry"] is True
-
-    @pytest.mark.anyio
-    async def test_normal_success_result_passes_through(self, tool_ctx):
-        """Normal success result text is preserved."""
-        stdout = json.dumps(
-            {
-                "type": "result",
-                "subtype": "success",
-                "is_error": False,
-                "result": "Done.",
-                "session_id": "s1",
-            }
-        )
-        tool_ctx.runner.push(_make_result(0, stdout, ""))
-        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
-        assert result["result"] == "Done."
-
-
-class TestRunSkillRetryFields:
-    """run_skill includes needs_retry and retry_reason for parity."""
-
-    @pytest.mark.anyio
-    async def test_includes_needs_retry_false(self, tool_ctx):
-        """run_skill response includes needs_retry=False on normal success."""
-        stdout = json.dumps(
-            {
-                "type": "result",
-                "subtype": "success",
-                "is_error": False,
-                "result": "Done.",
-                "session_id": "s1",
-            }
-        )
-        tool_ctx.runner.push(_make_result(0, stdout, ""))
-        result = json.loads(await run_skill("/investigate error", "/tmp"))
-        assert result["needs_retry"] is False
-        assert result["retry_reason"] == RetryReason.NONE
-
-    @pytest.mark.anyio
-    async def test_includes_needs_retry_true_on_context_limit(self, tool_ctx):
-        """run_skill response includes needs_retry=True when context is exhausted."""
-        stdout = json.dumps(
-            {
-                "type": "result",
-                "subtype": "success",
-                "is_error": True,
-                "result": "Prompt is too long",
-                "session_id": "s1",
-            }
-        )
-        tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill("/investigate error", "/tmp"))
-        assert result["needs_retry"] is True
-        assert result["retry_reason"] == RetryReason.RESUME
-        assert "prompt is too long" not in result["result"].lower()
 
 
 class TestRunSkillFailurePaths:

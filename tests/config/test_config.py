@@ -51,11 +51,12 @@ class TestDefaultConfig:
     def test_from_dynaconf_empty_produces_same_result_as_constructor_defaults(self):
         """from_dynaconf() with no overrides equals AutomationConfig() defaults exactly."""
         import tempfile
+        from pathlib import Path
 
         from autoskillit.config.settings import AutomationConfig, _make_dynaconf
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            d = _make_dynaconf(project_dir=tmpdir)
+            d = _make_dynaconf(project_dir=Path(tmpdir))
             from_dynaconf = AutomationConfig.from_dynaconf(d)
             direct = AutomationConfig()
             assert from_dynaconf.test_check == direct.test_check

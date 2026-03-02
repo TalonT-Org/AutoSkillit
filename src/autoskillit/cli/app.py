@@ -199,115 +199,12 @@ def install(*, scope: str = "user"):
     _print_next_steps()
 
 
-def _claude_settings_path(scope: str) -> Path:
-    """Return the Claude Code settings.json path for the given scope."""
-    if scope == "user":
-        return Path.home() / ".claude" / "settings.json"
-    return Path.cwd() / ".claude" / "settings.json"
-
-
-def _register_quota_hook(settings_path: Path) -> None:
-    """Idempotently add the quota PreToolUse hook to .claude/settings.json."""
-    from autoskillit.core import _atomic_write
-
-    data: dict = {}
-    if settings_path.exists():
-        try:
-            data = json.loads(settings_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    hooks = data.setdefault("hooks", {})
-    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
-
-    MATCHER = "mcp__.*autoskillit.*__run_skill.*"
-    COMMAND = "python3 -m autoskillit.hooks.quota_check"
-    for entry in pretooluse:
-        if entry.get("matcher") == MATCHER or (
-            entry.get("hooks", [{}])[0].get("command") == COMMAND
-        ):
-            return  # already registered
-
-    pretooluse.append(
-        {
-            "matcher": MATCHER,
-            "hooks": [{"type": "command", "command": COMMAND}],
-        }
-    )
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(settings_path, json.dumps(data, indent=2))
-
-
-def _register_remove_clone_guard_hook(settings_path: Path) -> None:
-    """Idempotently add the remove_clone_guard PreToolUse hook to .claude/settings.json."""
-    from autoskillit.core import _atomic_write
-
-    data: dict = {}
-    if settings_path.exists():
-        try:
-            data = json.loads(settings_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    hooks = data.setdefault("hooks", {})
-    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
-
-    MATCHER = "mcp__.*autoskillit.*__remove_clone"
-    COMMAND = "python3 -m autoskillit.hooks.remove_clone_guard"
-    for entry in pretooluse:
-        if entry.get("matcher") == MATCHER or (
-            entry.get("hooks", [{}])[0].get("command") == COMMAND
-        ):
-            return  # already registered
-
-    pretooluse.append(
-        {
-            "matcher": MATCHER,
-            "hooks": [{"type": "command", "command": COMMAND}],
-        }
-    )
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(settings_path, json.dumps(data, indent=2))
-
-
-def _register_skill_command_guard_hook(settings_path: Path) -> None:
-    """Idempotently add the skill_command_guard PreToolUse hook to .claude/settings.json."""
-    from autoskillit.core import _atomic_write
-
-    data: dict = {}
-    if settings_path.exists():
-        try:
-            data = json.loads(settings_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    hooks = data.setdefault("hooks", {})
-    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
-
-    MATCHER = "mcp__.*autoskillit.*__run_skill.*"
-    COMMAND = "python3 -m autoskillit.hooks.skill_command_guard"
-
-    # Check if COMMAND is already present in any existing hook entry
-    for entry in pretooluse:
-        if any(h.get("command") == COMMAND for h in entry.get("hooks", [])):
-            return  # already registered
-
-    # Add to existing run_skill matcher entry if one exists, else create a new entry
-    for entry in pretooluse:
-        if entry.get("matcher") == MATCHER:
-            entry["hooks"].append({"type": "command", "command": COMMAND})
-            settings_path.parent.mkdir(parents=True, exist_ok=True)
-            _atomic_write(settings_path, json.dumps(data, indent=2))
-            return
-
-    pretooluse.append(
-        {
-            "matcher": MATCHER,
-            "hooks": [{"type": "command", "command": COMMAND}],
-        }
-    )
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(settings_path, json.dumps(data, indent=2))
+from autoskillit.cli._hooks import (
+    _claude_settings_path,
+    _register_quota_hook,
+    _register_remove_clone_guard_hook,
+    _register_skill_command_guard_hook,
+)
 
 
 def _clear_plugin_cache() -> None:

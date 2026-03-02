@@ -26,6 +26,36 @@ logger = get_logger(__name__)
 
 _RUNS_DIR = "autoskillit-runs"
 
+# URL prefixes that unambiguously identify a network remote
+_NETWORK_URL_PREFIXES = ("https://", "http://", "git@", "git://", "ssh://", "file://")
+
+
+def classify_remote_url(url: str) -> str:
+    """Classify a git remote URL as 'network', 'bare_local', 'nonbare_local', 'none', or 'unknown'.
+
+    Network URLs: https://, http://, git@, git://, ssh://, file:// scheme.
+    Bare local: a local filesystem path where git rev-parse --is-bare-repository returns true.
+    Nonbare local: a local filesystem path that is a non-bare git repo.
+    None: empty string (no remote configured).
+    Unknown: local path that does not exist or is not a git repo.
+    """
+    if not url:
+        return "none"
+    if any(url.startswith(prefix) for prefix in _NETWORK_URL_PREFIXES):
+        return "network"
+    # Treat as a local filesystem path
+    path = Path(url).expanduser().resolve()
+    if not path.exists():
+        return "unknown"
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--is-bare-repository"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return "unknown"
+    return "bare_local" if result.stdout.strip() == "true" else "nonbare_local"
+
 
 def detect_source_dir(cwd: str) -> str:
     """Detect the git repository root for cwd, falling back to cwd.
@@ -80,6 +110,38 @@ def detect_uncommitted_changes(source_dir: str) -> list[str]:
     return []
 
 
+def detect_unpublished_branch(source_dir: str, branch: str) -> bool:
+    """Return True if `branch` has no ref on `origin` in `source_dir`.
+
+    Fail-open: returns False (do not block) when:
+    - No 'origin' remote is configured
+    - Any git command errors (network issue, non-git dir, etc.)
+    - Network probe times out (firewalled remote, unreachable SSH host, etc.)
+    Returns True only when origin is reachable and explicitly has no matching ref.
+    """
+    remote_check = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=source_dir,
+        capture_output=True,
+        text=True,
+    )
+    if remote_check.returncode != 0:
+        return False  # No remote configured — can't confirm, don't block
+
+    try:
+        ls_remote = subprocess.run(
+            ["git", "ls-remote", "--exit-code", "origin", f"refs/heads/{branch}"],
+            cwd=source_dir,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except subprocess.TimeoutExpired:
+        return False  # Network hung — fail-open, don't block the pipeline
+    # exit code 2 from --exit-code means "no matching refs found"
+    return ls_remote.returncode == 2
+
+
 def clone_repo(
     source_dir: str, run_name: str, branch: str = "", strategy: str = ""
 ) -> dict[str, str]:
@@ -95,22 +157,28 @@ def clone_repo(
     and used as the clone branch. If the repo is in detached HEAD state, no
     --branch flag is passed (git clones the default branch).
 
-    When strategy is "" (default), checks for uncommitted changes before cloning.
-    If changes are found, returns a warning dict instead of cloning. The caller
-    may re-invoke with strategy="proceed" (clone remote committed state only) or
-    strategy="clone_local" (copytree — includes working-tree changes).
+    When strategy is "" (default), checks for uncommitted changes and unpublished
+    branches before cloning. If either guard fires, returns a warning dict instead
+    of cloning. The caller may re-invoke with strategy="proceed" (clone remote
+    committed state only) or strategy="clone_local" (copytree — includes working-tree
+    changes).
 
     After this function returns, source_dir is off-limits except for push_to_remote
     reading its remote URL. See module docstring for the full SOURCE ISOLATION contract.
 
     Returns:
-        On success: {"clone_path": str, "source_dir": str}
+        On success: {"clone_path": str, "source_dir": str, "remote_url": str}
         On uncommitted changes (strategy=""): {
             "uncommitted_changes": "true",
             "source_dir": str,
             "branch": str,
             "changed_files": str,
             "total_changed": str,
+        }
+        On unpublished branch (strategy=""): {
+            "unpublished_branch": "true",
+            "branch": str,
+            "source_dir": str,
         }
     """
     if not source_dir:
@@ -141,6 +209,14 @@ def clone_repo(
                 "changed_files": "\n".join(changed[:20]),
                 "total_changed": str(len(changed)),
             }
+        # Unpublished branch guard
+        if branch and detect_unpublished_branch(str(source), branch):
+            logger.warning("clone_unpublished_branch", source=str(source), branch=branch)
+            return {
+                "unpublished_branch": "true",
+                "branch": branch,
+                "source_dir": str(source),
+            }
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     runs_parent = source.parent / _RUNS_DIR
@@ -164,7 +240,18 @@ def clone_repo(
             )
         logger.info("clone_created", clone_path=str(clone_path), source=str(source), branch=branch)
 
-    return {"clone_path": str(clone_path), "source_dir": str(source)}
+    # Resolve real upstream URL once at clone time (INIT_ONLY field)
+    remote_url = ""
+    url_result = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=str(source),
+        capture_output=True,
+        text=True,
+    )
+    if url_result.returncode == 0:
+        remote_url = url_result.stdout.strip()
+
+    return {"clone_path": str(clone_path), "source_dir": str(source), "remote_url": remote_url}
 
 
 def remove_clone(clone_path: str, keep: str = "false") -> dict[str, str]:
@@ -195,40 +282,73 @@ def remove_clone(clone_path: str, keep: str = "false") -> dict[str, str]:
 
 def push_to_remote(
     clone_path: str,
-    source_dir: str,
-    branch: str,
-) -> dict[str, str]:
+    source_dir: str = "",
+    branch: str = "",
+    *,
+    remote_url: str = "",
+) -> dict[str, str | bool]:
     """Push the merged branch from the clone directly to the upstream remote.
 
-    Reads the upstream remote URL from source_dir using
-    'git remote get-url origin' (read-only — no writes to source_dir),
-    then runs 'git push <remote_url> <branch>' from clone_path.
+    When remote_url is provided (non-empty), it is used directly and source_dir
+    is not accessed for URL lookup. This is the preferred calling convention when
+    remote_url has been captured from clone_repo at pipeline start.
 
-    This preserves clone-based pipeline isolation: source_dir is never
-    modified. Changes flow: clone_path → upstream remote (e.g. GitHub).
+    When remote_url is empty, falls back to reading the upstream URL from
+    source_dir via 'git remote get-url origin' (read-only — no writes to source_dir).
+
+    If the resolved remote URL is a non-bare local repository (branch checked out),
+    returns immediately with error_type="local_non_bare_remote" rather than letting
+    git push fail with an unhelpful error.
 
     Returns:
-        {"success": "true", "stderr": ""} on success,
-        {"success": "false", "stderr": str} on failure (does not raise).
+        {"success": True, "stderr": ""} on success,
+        {"success": False, "stderr": str} on failure (does not raise).
+        {"success": False, "error_type": str, "stderr": str} on classified failure.
     """
-    url_result = subprocess.run(
-        ["git", "remote", "get-url", "origin"],
-        cwd=source_dir,
-        capture_output=True,
-        text=True,
-    )
-    if url_result.returncode != 0:
-        logger.error(
-            "push_to_remote_get_url_failed",
-            source_dir=source_dir,
-            branch=branch,
-            stderr=url_result.stderr.strip(),
+    resolved_url = remote_url
+    if not resolved_url:
+        if not source_dir:
+            logger.error("push_to_remote_no_url_or_source", clone_path=clone_path, branch=branch)
+            return {
+                "success": False,
+                "stderr": "push_to_remote: neither remote_url nor source_dir was provided",
+            }
+        url_result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=source_dir,
+            capture_output=True,
+            text=True,
         )
-        return {"success": "false", "stderr": url_result.stderr.strip()}
+        if url_result.returncode != 0:
+            logger.error(
+                "push_to_remote_get_url_failed",
+                source_dir=source_dir,
+                branch=branch,
+                stderr=url_result.stderr.strip(),
+            )
+            return {"success": False, "stderr": url_result.stderr.strip()}
+        resolved_url = url_result.stdout.strip()
 
-    remote_url = url_result.stdout.strip()
+    # Classify the resolved URL to catch non-bare local remotes early
+    url_type = classify_remote_url(resolved_url)
+    if url_type == "nonbare_local":
+        logger.error(
+            "push_to_remote_nonbare_local",
+            clone_path=clone_path,
+            remote_url=resolved_url,
+            branch=branch,
+        )
+        return {
+            "success": False,
+            "error_type": "local_non_bare_remote",
+            "stderr": (
+                "push_to_remote: target is a non-bare local repository with the branch "
+                "checked out. Use a bare repository or a network remote."
+            ),
+        }
+
     push_result = subprocess.run(
-        ["git", "push", remote_url, branch],
+        ["git", "push", resolved_url, branch],
         cwd=clone_path,
         capture_output=True,
         text=True,
@@ -237,19 +357,19 @@ def push_to_remote(
         logger.error(
             "push_to_remote_failed",
             clone_path=clone_path,
-            remote_url=remote_url,
+            remote_url=resolved_url,
             branch=branch,
             stderr=push_result.stderr.strip(),
         )
-        return {"success": "false", "stderr": push_result.stderr.strip()}
+        return {"success": False, "stderr": push_result.stderr.strip()}
 
     logger.info(
         "push_to_remote_succeeded",
         clone_path=clone_path,
-        remote_url=remote_url,
+        remote_url=resolved_url,
         branch=branch,
     )
-    return {"success": "true", "stderr": ""}
+    return {"success": True, "stderr": ""}
 
 
 class DefaultCloneManager:
@@ -263,5 +383,7 @@ class DefaultCloneManager:
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]:
         return remove_clone(clone_path, keep)
 
-    def push_to_remote(self, clone_path: str, source_dir: str, branch: str) -> dict[str, str]:
-        return push_to_remote(clone_path, source_dir, branch)
+    def push_to_remote(
+        self, clone_path: str, source_dir: str = "", branch: str = "", *, remote_url: str = ""
+    ) -> dict[str, str | bool]:
+        return push_to_remote(clone_path, source_dir, branch, remote_url=remote_url)

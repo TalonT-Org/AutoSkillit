@@ -1,6 +1,6 @@
 name: implementation-pipeline
 description: Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
-summary: clone > capture_base_sha > set_merge_target > (create_branch?) > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > (audit-impl?) > (open_pr?) > merge > push > cleanup (per group, per plan part)
+summary: clone > capture_base_sha > set_merge_target > (create_branch?) > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part) > (audit-impl?) > (open_pr?) > push > cleanup
 autoskillit_version: "0.2.0"
 
 ingredients:
@@ -43,7 +43,7 @@ kitchen_rules:
   - "When make_groups is false, task input is required."
   - "When make_groups is true, source_doc input is required."
   - "Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront."
-  - "When open_pr is true, feature branch is named from inputs.run_name. All worktree merges and pushes target the feature branch (context.merge_target), not base_branch directly. The open_pr_step runs after audit_impl to create the GitHub PR."
+  - "When open_pr is true, feature branch is named from inputs.run_name. All worktree merges target the feature branch (context.merge_target), not base_branch directly. The push step always runs before open_pr_step; open_pr_step is skipped when open_pr=false."
   - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
     off-limits. Never run any command in source_dir — no git checkout, git
     fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
@@ -60,7 +60,7 @@ steps:
       branch: "${{ inputs.base_branch }}"
     capture:
       work_dir: "${{ result.clone_path }}"
-      source_dir: "${{ result.source_dir }}"
+      remote_url: "${{ result.remote_url }}"
     on_success: capture_base_sha
     on_failure: escalate_stop
     note: >
@@ -109,6 +109,7 @@ steps:
     on_success: group
     on_failure: cleanup_failure
     optional: true
+    skip_when_false: "inputs.open_pr"
     note: >
       Only execute if open_pr is 'true'.
       When open_pr='true': runs git checkout -b {run_name} and captures stdout (the branch name)
@@ -228,29 +229,37 @@ steps:
       base_branch: "${{ context.merge_target }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-    on_success: push
-    on_failure: cleanup_failure
+      worktree_path: "${{ result.worktree_path }}"
+    on_result:
+      - when: "result.failed_step == 'test_gate'"
+        route: fix
+      - when: "result.error"
+        route: cleanup_failure
+      - route: next_or_done
     note: >
-      After merge, push changes back to source_dir via the push step.
+      After merge, route to next_or_done to process remaining parts/groups before pushing.
       GROUPS MODE: When all plan_parts for the current group are merged, advance to the
       next group (back to plan step with the next group's description). When all groups
-      are complete, go to done.
+      are complete, go to audit_impl (via next_or_done).
       In PR mode (open_pr=true), merge_target is the feature branch named from run_name.
       In direct mode (open_pr=false), merge_target equals base_branch — behavior unchanged.
+      test_gate failures route to fix (resolve-failures) for recovery;
+      all other failures route to cleanup_failure.
 
   push:
     tool: push_to_remote
     with:
       clone_path: "${{ context.work_dir }}"
-      source_dir: "${{ context.source_dir }}"
+      remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
-    on_success: next_or_done
+    on_success: open_pr_step
     on_failure: cleanup_failure
     note: >
+      Runs once at the end, after audit_impl passes.
       Pushes merge_target branch from the clone to the upstream remote.
       In PR mode, this pushes the feature branch; in direct mode, pushes base_branch.
-      Reads the remote URL from source_dir (read-only) and pushes from clone_path,
-      preserving clone isolation — source_dir is never modified.
+      Uses the pre-resolved remote_url captured at clone time, preserving clone isolation.
+      On success, routes to open_pr_step (which is skipped when open_pr=false via skip_when_false).
       On failure, cleanup_failure still removes the clone.
 
   fix:
@@ -291,13 +300,14 @@ steps:
     on_result:
       field: verdict
       routes:
-        GO: open_pr_step
+        GO: push
         NO GO: remediate
     on_failure: escalate_stop
     optional: true
+    skip_when_false: "inputs.audit"
     note: >
-      Only execute if inputs.audit is 'true'. If false, skip directly to open_pr_step.
-      Captures verdict and remediation_path. Routes GO → open_pr_step, NO GO → remediate
+      Only execute if inputs.audit is 'true'. If false, skip directly to push.
+      Captures verdict and remediation_path. Routes GO → push, NO GO → remediate
       which re-enters the plan step with the remediation file.
       All groups and parts have been merged at this point — no worktree exists.
       Uses context.base_sha (a stable commit SHA captured before any merge began)
@@ -320,8 +330,10 @@ steps:
     on_success: cleanup_success
     on_failure: cleanup_failure
     optional: true
+    skip_when_false: "inputs.open_pr"
     note: >
       Only execute if open_pr is 'true'. If open_pr is 'false', skip directly to cleanup_success.
+      The feature branch is already published by the push step that precedes this step.
       Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
       and runs gh pr create. Captures pr_url from the skill's output for final reporting.
       The skill gracefully degrades if gh is unavailable (outputs empty pr_url, exits 0).

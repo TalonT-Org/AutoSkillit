@@ -55,7 +55,7 @@ steps:
       branch: "${{ inputs.base_branch }}"
     capture:
       work_dir: "${{ result.clone_path }}"
-      source_dir: "${{ result.source_dir }}"
+      remote_url: "${{ result.remote_url }}"
     on_success: investigate
     on_failure: escalate_stop
     note: >
@@ -102,7 +102,7 @@ steps:
   dry_walkthrough:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:dry-walkthrough the plan"
+      skill_command: "/autoskillit:dry-walkthrough ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
       add_dir: "${{ context.review_path }}"
       step_name: "dry_walkthrough"
@@ -113,11 +113,12 @@ steps:
   implement:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:implement-worktree-no-merge the verified plan"
+      skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "implement"
     capture:
       implementation_ref: "${{ result.worktree_path }}"
+      worktree_path: "${{ result.worktree_path }}"
       branch_name: "${{ result.branch_name }}"
     retry:
       max_attempts: 0
@@ -129,11 +130,12 @@ steps:
   retry_worktree:
     tool: run_skill_retry
     with:
-      skill_command: "/autoskillit:retry-worktree the verified plan ${{ context.implementation_ref }}"
-      cwd: "${{ context.implementation_ref }}"
+      skill_command: "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}"
+      cwd: "${{ context.worktree_path }}"
       step_name: "retry_worktree"
     capture:
       implementation_ref: "${{ result.worktree_path }}"
+      worktree_path: "${{ result.worktree_path }}"
       branch_name: "${{ result.branch_name }}"
     retry:
       max_attempts: 3
@@ -153,8 +155,8 @@ steps:
     tool: run_skill
     model: sonnet
     with:
-      skill_command: "/autoskillit:resolve-failures fix test failures"
-      cwd: "${{ context.implementation_ref }}"
+      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.worktree_path }}"
       step_name: "assess"
     on_success: verify
     on_failure: cleanup_failure
@@ -206,21 +208,25 @@ steps:
       base_branch: "${{ inputs.base_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-    on_success: push
-    on_failure: cleanup_failure
+      worktree_path: "${{ result.worktree_path }}"
+    on_result:
+      - when: "result.failed_step == 'test_gate'"
+        route: assess
+      - when: "result.error"
+        route: cleanup_failure
+      - route: push
 
   push:
     tool: push_to_remote
     with:
       clone_path: "${{ context.work_dir }}"
-      source_dir: "${{ context.source_dir }}"
+      remote_url: "${{ context.remote_url }}"
       branch: "${{ inputs.base_branch }}"
     on_success: cleanup_success
     on_failure: cleanup_failure
     note: >
       Pushes the merged base_branch directly from the clone to the upstream remote.
-      Reads the remote URL from source_dir (read-only) and pushes from clone_path,
-      preserving clone isolation — source_dir is never modified.
+      Uses the pre-resolved remote_url captured at clone time, preserving clone isolation.
       On failure, cleanup_failure still removes the clone.
 
   cleanup_success:

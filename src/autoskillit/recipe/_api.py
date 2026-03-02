@@ -133,12 +133,12 @@ def load_and_validate(
     if match is None:
         return {"error": f"No recipe named '{name}' found"}
 
-    content = match.path.read_text()
+    raw = match.content if match.content is not None else match.path.read_text()
     suggestions: list[dict[str, Any]] = []
     valid = True
 
     try:
-        data = load_yaml(content)
+        data = load_yaml(raw)
         if isinstance(data, dict) and "steps" in data:
             recipe = _parse_recipe(data)
             errors = validate_recipe(recipe)
@@ -156,7 +156,10 @@ def load_and_validate(
             if contract:
                 contract_findings = validate_recipe_cards(recipe, contract)
                 suggestions.extend(contract_findings)
-                stale = check_contract_staleness(contract)
+                cache_path = _pdir / ".autoskillit" / "temp" / "recipe_staleness_cache.json"
+                stale = check_contract_staleness(
+                    contract, recipe_path=match.path, cache_path=cache_path
+                )
                 suggestions.extend(stale_to_suggestions(stale))
 
             valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
@@ -194,4 +197,4 @@ def load_and_validate(
         )
         valid = False
 
-    return {"content": content, "suggestions": suggestions, "valid": valid}
+    return {"content": raw, "suggestions": suggestions, "valid": valid}

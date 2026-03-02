@@ -14,7 +14,7 @@ from typing import Annotated
 
 from cyclopts import App, Parameter
 
-from autoskillit.core import is_git_worktree, pkg_root
+from autoskillit.core import _atomic_write, is_git_worktree, pkg_root
 from autoskillit.execution import build_interactive_cmd
 from autoskillit.recipe import list_recipes
 
@@ -106,7 +106,7 @@ def init(
         else:
             cmd_parts = _prompt_test_command()
 
-        config_path.write_text(_generate_config_yaml(cmd_parts))
+        _atomic_write(config_path, _generate_config_yaml(cmd_parts))
         print(f"Config written to: {config_path}")
 
     ensure_project_temp(project_dir)
@@ -195,6 +195,7 @@ def install(*, scope: str = "user"):
     settings_path = _claude_settings_path(scope)
     _register_quota_hook(settings_path)
     _register_remove_clone_guard_hook(settings_path)
+    _register_skill_command_guard_hook(settings_path)
     _print_next_steps()
 
 
@@ -269,6 +270,46 @@ def _register_remove_clone_guard_hook(settings_path: Path) -> None:
     _atomic_write(settings_path, json.dumps(data, indent=2))
 
 
+def _register_skill_command_guard_hook(settings_path: Path) -> None:
+    """Idempotently add the skill_command_guard PreToolUse hook to .claude/settings.json."""
+    from autoskillit.core import _atomic_write
+
+    data: dict = {}
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    hooks = data.setdefault("hooks", {})
+    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
+
+    MATCHER = "mcp__.*autoskillit.*__run_skill.*"
+    COMMAND = "python3 -m autoskillit.hooks.skill_command_guard"
+
+    # Check if COMMAND is already present in any existing hook entry
+    for entry in pretooluse:
+        if any(h.get("command") == COMMAND for h in entry.get("hooks", [])):
+            return  # already registered
+
+    # Add to existing run_skill matcher entry if one exists, else create a new entry
+    for entry in pretooluse:
+        if entry.get("matcher") == MATCHER:
+            entry["hooks"].append({"type": "command", "command": COMMAND})
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write(settings_path, json.dumps(data, indent=2))
+            return
+
+    pretooluse.append(
+        {
+            "matcher": MATCHER,
+            "hooks": [{"type": "command", "command": COMMAND}],
+        }
+    )
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(settings_path, json.dumps(data, indent=2))
+
+
 def _clear_plugin_cache() -> None:
     """Remove the cached plugin snapshot and installed_plugins.json entry.
 
@@ -289,7 +330,7 @@ def _clear_plugin_cache() -> None:
             plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
             if plugin_ref in data:
                 del data[plugin_ref]
-                installed_json.write_text(json.dumps(data, indent=2))
+                _atomic_write(installed_json, json.dumps(data, indent=2))
         except (OSError, json.JSONDecodeError):
             pass  # non-fatal — install will proceed regardless
 
@@ -332,7 +373,7 @@ def _ensure_marketplace() -> Path:
             }
         ],
     }
-    (plugin_dir / "marketplace.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    _atomic_write(plugin_dir / "marketplace.json", json.dumps(manifest, indent=2) + "\n")
 
     # Symlink to the live package directory
     link_path = marketplace_dir / "plugins" / "autoskillit"
@@ -536,11 +577,12 @@ def workspace_init(path: str):
 
     target.mkdir(parents=True, exist_ok=True)
     marker = target / marker_name
-    marker.write_text(
+    _atomic_write(
+        marker,
         _MARKER_CONTENT.format(
             timestamp=datetime.now(UTC).isoformat(),
             version=__version__,
-        )
+        ),
     )
     print(f"Prep station initialized: {target}")
     print(f"Reset guard marker created: {marker}")

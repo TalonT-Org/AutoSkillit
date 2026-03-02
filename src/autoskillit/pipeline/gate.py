@@ -43,7 +43,6 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "clone_repo",
         "remove_clone",
         "push_to_remote",
-        "fetch_github_issue",
         "report_bug",
     }
 )
@@ -56,6 +55,7 @@ UNGATED_TOOLS: frozenset[str] = frozenset(
         "list_recipes",
         "load_recipe",
         "validate_recipe",
+        "fetch_github_issue",
     }
 )
 

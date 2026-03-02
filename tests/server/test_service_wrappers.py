@@ -312,3 +312,116 @@ def test_default_migration_service_has_no_bind_headless() -> None:
         "bind_headless must be removed from DefaultMigrationService. "
         "Pass run_headless at construction time instead."
     )
+
+
+# --- SW-B helpers and tests: DefaultRecipeRepository in-memory index ---
+
+
+def _write_valid_recipe(path: Path) -> str:
+    """Write a minimal valid recipe to path, return raw YAML text."""
+    raw = (
+        f"name: {path.stem}\n"
+        "description: Test recipe\n"
+        "steps:\n"
+        "  done:\n"
+        "    action: stop\n"
+        "    message: Done\n"
+    )
+    path.write_text(raw)
+    return raw
+
+
+# SW-B1: load_and_validate does NOT call Path.read_text when info.content is available
+def test_load_and_validate_skips_file_read_when_content_in_recipe_info(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Patching Path.read_text to raise ensures the content is never re-read."""
+    import autoskillit.recipe.io as recipe_io
+    from autoskillit.recipe._api import load_and_validate
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_valid_recipe(recipes_dir / "my-recipe.yaml")
+
+    # Pre-compute the result while Path.read_text is still real; content is
+    # already populated by Phase 2 (_collect_recipes stores raw text).
+    pre_result = recipe_io.list_recipes(tmp_path)
+    assert any(r.content is not None for r in pre_result.items if r.name == "my-recipe")
+
+    # Replace list_recipes with a lambda returning the pre-computed result so
+    # the lambda itself never calls read_text after the patch below.
+    monkeypatch.setattr(recipe_io, "list_recipes", lambda _: pre_result)
+
+    # Patch Path.read_text AFTER pre-compute to assert it is NOT called.
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            AssertionError("Path.read_text should not be called when content is cached")
+        ),
+    )
+
+    result = load_and_validate("my-recipe", tmp_path)
+    assert "content" in result
+
+
+# SW-B2: DefaultRecipeRepository.list() returns cached object on second call
+def test_default_recipe_repository_caches_list_between_calls(tmp_path: Path) -> None:
+    """Second call to list() returns the same object (no re-scan)."""
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_valid_recipe(recipes_dir / "my-recipe.yaml")
+
+    repo = DefaultRecipeRepository()
+    r1 = repo.list(tmp_path)
+    r2 = repo.list(tmp_path)
+    assert r1 is r2  # same object — no re-scan
+
+
+# SW-B3: Cache invalidated when recipe directory mtime changes
+def test_default_recipe_repository_invalidates_cache_on_new_file(tmp_path: Path) -> None:
+    """Adding a file triggers mtime change and cache invalidation."""
+    import time
+
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_valid_recipe(recipes_dir / "r1.yaml")
+
+    repo = DefaultRecipeRepository()
+    r1 = repo.list(tmp_path)
+
+    time.sleep(0.01)  # ensure mtime advances
+    _write_valid_recipe(recipes_dir / "r2.yaml")
+
+    r2 = repo.list(tmp_path)
+    assert r1 is not r2  # new scan triggered
+
+
+# SW-B4: DefaultRecipeRepository.find() uses in-memory index (no double list_recipes call)
+def test_default_recipe_repository_find_uses_index(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """find() after list() must not call list_recipes() again."""
+    from autoskillit.recipe.io import list_recipes as _original_list_recipes
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    call_count: dict[str, int] = {"n": 0}
+
+    def counting_list(project_dir: Path) -> object:
+        call_count["n"] += 1
+        return _original_list_recipes(project_dir)
+
+    monkeypatch.setattr("autoskillit.recipe.repository.list_recipes", counting_list)
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_valid_recipe(recipes_dir / "r.yaml")
+
+    repo = DefaultRecipeRepository()
+    repo.list(tmp_path)  # populates index (count=1)
+    repo.find("r", tmp_path)  # should use index (count still 1)
+    assert call_count["n"] == 1

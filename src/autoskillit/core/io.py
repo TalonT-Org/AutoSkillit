@@ -47,7 +47,7 @@ def ensure_project_temp(project_dir: Path) -> Path:
     temp_dir.mkdir(parents=True, exist_ok=True)
     gitignore_path = autoskillit_dir / ".gitignore"
     if not gitignore_path.exists():
-        gitignore_path.write_text("temp/\n")
+        _atomic_write(gitignore_path, "temp/\n")
     return temp_dir
 
 
@@ -66,10 +66,7 @@ def load_yaml(source: os.PathLike[str] | str) -> Any:
 
 def dump_yaml(data: Any, path: Path) -> None:
     """Write data as YAML to path."""
-    path.write_text(
-        yaml.dump(data, default_flow_style=False, allow_unicode=True),
-        encoding="utf-8",
-    )
+    _atomic_write(path, yaml.dump(data, default_flow_style=False, allow_unicode=True))
 
 
 def dump_yaml_str(data: Any, **kwargs: Any) -> str:

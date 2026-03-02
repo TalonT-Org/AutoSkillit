@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from enum import Enum, StrEnum
 from importlib.metadata import version
 from pathlib import Path
@@ -24,16 +24,23 @@ class RetryReason(StrEnum):
 
 
 class MergeFailedStep(StrEnum):
+    PATH_VALIDATION = "path_validation"
+    BRANCH_DETECTION = "branch_detection"
     TEST_GATE = "test_gate"
     FETCH = "fetch"
     REBASE = "rebase"
+    POST_REBASE_TEST_GATE = "post_rebase_test_gate"
     MERGE = "merge"
 
 
 class MergeState(StrEnum):
     WORKTREE_INTACT = "worktree_intact"
     WORKTREE_INTACT_REBASE_ABORTED = "worktree_intact_rebase_aborted"
+    WORKTREE_INTACT_BASE_NOT_PUBLISHED = "worktree_intact_base_not_published"
+    WORKTREE_DIRTY_ABORT_FAILED = "worktree_dirty_abort_failed"
+    WORKTREE_DIRTY_MID_OPERATION = "worktree_dirty_mid_operation"
     MAIN_REPO_MERGE_ABORTED = "main_repo_merge_aborted"
+    MAIN_REPO_DIRTY_ABORT_FAILED = "main_repo_dirty_abort_failed"
 
 
 class RestartScope(StrEnum):
@@ -69,36 +76,61 @@ class TerminationReason(StrEnum):
     TIMED_OUT = "timed_out"
 
 
+class ChannelConfirmation(StrEnum):
+    """How subprocess completion was confirmed by the two-channel detection system.
+
+    Replaces SubprocessResult.data_confirmed: bool to eliminate ambiguity
+    between "Channel A confirmed content" and "no monitoring ran".
+
+    Invariant (from process.py):
+    - CHANNEL_A: heartbeat fired; stdout contains non-empty type=result record.
+    - CHANNEL_B: session JSONL marker fired; drain expired OR no heartbeat configured.
+      stdout may be empty. Downstream must not require stdout content.
+    - UNMONITORED: no channel monitoring active (NATURAL_EXIT, STALE, TIMED_OUT,
+      sync path, or heartbeat disabled with no Channel B win).
+    """
+
+    CHANNEL_A = "channel_a"
+    CHANNEL_B = "channel_b"
+    UNMONITORED = "unmonitored"
+
+
 #: Semantic contract for SubprocessResult fields per TerminationReason.
 #: These invariants are enforced by tests/test_process_lifecycle.py
 #: TestAdjudicationCoverageMatrix.
 #:
 #: NATURAL_EXIT:
-#:   data_confirmed=True (never modified; wait_task won naturally)
+#:   channel_confirmation=UNMONITORED (typical: process exited before channels fired)
+#:   channel_confirmation=CHANNEL_A (simultaneous: process exit + heartbeat in same tick)
+#:   channel_confirmation=CHANNEL_B (simultaneous: process exit + session monitor completion)
 #:   returncode=process's actual exit code (0 = voluntary, nonzero = crash)
 #:   stdout=whatever was flushed to the temp file before exit
-#:   Kill-anomaly possible when returncode==0 and stdout is success+empty,
+#:   Kill-anomaly possible when returncode==0, UNMONITORED, and stdout is success+empty,
 #:   empty_output, or unparseable → _is_kill_anomaly returns True.
+#:   When CHANNEL_A or CHANNEL_B: no kill anomaly; session completed.
 #:
 #: COMPLETED (Channel A):
-#:   data_confirmed=True (heartbeat confirmed type=result in stdout)
+#:   channel_confirmation=CHANNEL_A (heartbeat confirmed type=result in stdout)
 #:   returncode=nonzero (SIGTERM/SIGKILL from async_kill_process_tree)
 #:   stdout=contains a complete type=result NDJSON record
 #:
-#: COMPLETED (Channel B, drain expired):
-#:   data_confirmed=False (drain wait timed out; stdout not yet confirmed)
+#: COMPLETED (Channel B, drain expired OR no heartbeat configured):
+#:   channel_confirmation=CHANNEL_B (session JSONL is sole authority)
 #:   returncode=nonzero (SIGTERM/SIGKILL)
 #:   stdout=may be empty (CLI not yet flushed type=result before kill)
 #:   _compute_success provenance bypass applies: return True immediately.
 #:
 #: STALE:
-#:   data_confirmed=True (never modified; _data_confirmed starts True)
+#:   channel_confirmation=UNMONITORED (typical: stale monitor fired alone)
+#:   channel_confirmation=CHANNEL_A (simultaneous: stale monitor + heartbeat in same tick)
 #:   returncode=nonzero (SIGTERM/SIGKILL)
 #:   _build_skill_result intercepts before _compute_success: attempts
 #:   stdout recovery; if successful returns subtype="recovered_from_stale".
+#:   STALE+CHANNEL_B is structurally impossible: session_monitor returns either
+#:   "stale" or "completion", never both; stale path sets UNMONITORED.
 #:
 #: TIMED_OUT:
-#:   data_confirmed=True (never modified)
+#:   channel_confirmation=UNMONITORED (never modified)
 #:   returncode=-1 (hardcoded in _build_skill_result, not from process)
 #:   _build_skill_result constructs synthetic ClaudeSessionResult(subtype="timeout").
 #:   Always returns success=False, needs_retry=False.
@@ -114,13 +146,13 @@ class SubprocessResult:
     stderr: str
     termination: TerminationReason
     pid: int
-    data_confirmed: bool = True
-    """True when Channel A (heartbeat) confirmed stdout data before the kill.
+    channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED
+    """How completion was confirmed by the two-channel detection system.
 
-    False only when Channel B (session_monitor) won the completion race and the
-    bounded drain wait expired before Channel A confirmed.  When False, stdout
-    may be empty even though the session completed successfully — callers must
-    trust Channel B's session-JSONL signal rather than demanding stdout content.
+    CHANNEL_A: heartbeat confirmed type=result in stdout; data availability guaranteed.
+    CHANNEL_B: session JSONL marker fired; drain expired or no heartbeat configured.
+               stdout may be empty — callers must trust JSONL signal, not stdout content.
+    UNMONITORED: no channel monitoring active (NATURAL_EXIT, STALE, TIMED_OUT, sync path).
     """
 
 
@@ -220,21 +252,12 @@ PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
 # recipe_validator.py.
 SKILL_TOOLS: frozenset[str] = frozenset({"run_skill", "run_skill_retry"})
 
-# Known field names in run_skill_retry response — used by workflow validation
-RETRY_RESPONSE_FIELDS: frozenset[str] = frozenset(
-    {
-        "success",
-        "result",
-        "session_id",
-        "subtype",
-        "is_error",
-        "exit_code",
-        "needs_retry",
-        "retry_reason",
-        "stderr",
-        "token_usage",
-    }
-)
+# Canonical prefix required for all skill_command values passed to run_skill / run_skill_retry.
+# Enforced at the Claude Code hook boundary by skill_command_guard.py.
+SKILL_COMMAND_PREFIX: str = "/"
+
+# Canonical prefix for bundled autoskillit slash commands.
+AUTOSKILLIT_SKILL_PREFIX: str = "/autoskillit:"
 
 
 @dataclass
@@ -296,6 +319,11 @@ class SkillResult:
             },
             default=lambda o: o.value if isinstance(o, Enum) else str(o),
         )
+
+
+# Structurally derived from SkillResult — cannot drift as fields are added/removed.
+# Used by recipe step `retry.on` validation to ensure field names are valid.
+RETRY_RESPONSE_FIELDS: frozenset[str] = frozenset(f.name for f in fields(SkillResult))
 
 
 @dataclass
@@ -438,7 +466,9 @@ class CloneManager(Protocol):
 
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]: ...
 
-    def push_to_remote(self, clone_path: str, source_dir: str, branch: str) -> dict[str, str]: ...
+    def push_to_remote(
+        self, clone_path: str, source_dir: str = "", branch: str = "", *, remote_url: str = ""
+    ) -> dict[str, str | bool]: ...
 
 
 @runtime_checkable

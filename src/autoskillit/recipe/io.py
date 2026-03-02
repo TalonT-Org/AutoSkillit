@@ -13,6 +13,7 @@ from autoskillit.recipe.schema import (
     RecipeInfo,
     RecipeIngredient,
     RecipeStep,
+    StepResultCondition,
     StepResultRoute,
     StepRetry,
 )
@@ -127,6 +128,18 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
             field=on_result_data.get("field", ""),
             routes=on_result_data.get("routes", {}),
         )
+    elif isinstance(on_result_data, list):
+        conditions = []
+        for item in on_result_data:
+            if isinstance(item, dict):
+                conditions.append(
+                    StepResultCondition(
+                        when=item.get("when"),
+                        route=item.get("route", ""),
+                    )
+                )
+        if conditions:
+            on_result = StepResultRoute(conditions=conditions)
 
     return RecipeStep(
         tool=data.get("tool"),
@@ -143,6 +156,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         capture=data.get("capture", {}),
         capture_list=data.get("capture_list", {}),
         optional=bool(data.get("optional", False)),
+        skip_when_false=data.get("skip_when_false"),
         model=data.get("model"),
     )
 
@@ -159,7 +173,11 @@ def _collect_recipes(
     for f in sorted(directory.iterdir()):
         if f.suffix in (".yaml", ".yml") and f.is_file():
             try:
-                recipe = load_recipe(f)
+                raw = f.read_text(encoding="utf-8")
+                data = load_yaml(raw)
+                if not isinstance(data, dict):
+                    raise ValueError("recipe must be a YAML mapping")
+                recipe = _parse_recipe(data)
                 if recipe.name and recipe.name not in seen:
                     seen.add(recipe.name)
                     result.append(
@@ -170,6 +188,7 @@ def _collect_recipes(
                             path=f,
                             summary=recipe.summary,
                             version=recipe.version,
+                            content=raw,
                         )
                     )
             except Exception as exc:

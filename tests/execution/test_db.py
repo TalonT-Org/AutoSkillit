@@ -38,7 +38,19 @@ class TestValidateSelectOnly:
         with pytest.raises(ValueError, match="forbidden"):
             _validate_select_only("INSERT INTO users VALUES (1, 'a')")
 
-    def test_rejects_update(self):
+    def test_whitespace_only_raises(self):
+        with pytest.raises(ValueError, match="empty"):
+            _validate_select_only("   ")
+
+    def test_drop_raises(self):
+        with pytest.raises(ValueError, match="forbidden"):
+            _validate_select_only("DROP TABLE foo")
+
+    def test_insert_raises(self):
+        with pytest.raises(ValueError, match="forbidden"):
+            _validate_select_only("INSERT INTO foo VALUES (1)")
+
+    def test_update_raises(self):
         with pytest.raises(ValueError, match="forbidden"):
             _validate_select_only("UPDATE users SET name = 'x'")
 

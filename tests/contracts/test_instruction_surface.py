@@ -447,3 +447,47 @@ class TestSourceIsolationContract:
         assert self._SENTINEL in doc, (
             "autoskillit.workspace.clone module docstring must contain 'SOURCE ISOLATION'"
         )
+
+
+def test_open_pr_skill_does_not_contain_git_push():
+    """The open-pr SKILL.md must not contain 'git push -u origin' as a workflow step.
+    The recipe manages all push operations via push_to_remote. The skill is a pure
+    PR creation operation."""
+    import re
+
+    from autoskillit.core.paths import pkg_root
+
+    skill_path = pkg_root() / "skills" / "open-pr" / "SKILL.md"
+    content = skill_path.read_text()
+    # Match lines that start with a step number and contain 'git push -u origin'
+    push_step_pattern = re.compile(r"^\s*\d+\.\s.*git push\s+-u origin", re.MULTILINE)
+    matches = push_step_pattern.findall(content)
+    assert not matches, (
+        "open-pr SKILL.md must not contain 'git push -u origin' as a workflow step. "
+        "The recipe's push_to_remote step manages publishing the branch."
+    )
+
+
+class TestPathArgSkillsContract:
+    """Path-argument skills must document path-detection parsing in their SKILL.md."""
+
+    PATH_ARG_SKILLS = [
+        "implement-worktree-no-merge",
+        "implement-worktree",
+        "retry-worktree",
+        "resolve-failures",
+    ]
+    SENTINEL = "path detection"
+
+    def test_path_arg_skills_have_path_detection_instructions(self):
+        skills_root = _project_root() / "src" / "autoskillit" / "skills"
+        missing = []
+        for skill_name in self.PATH_ARG_SKILLS:
+            skill_md = skills_root / skill_name / "SKILL.md"
+            content = skill_md.read_text().lower()
+            if self.SENTINEL not in content:
+                missing.append(skill_name)
+        assert not missing, (
+            f"These SKILL.md files lack path-detection instructions "
+            f"(missing '{self.SENTINEL}'): {missing}"
+        )

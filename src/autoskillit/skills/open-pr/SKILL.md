@@ -32,11 +32,13 @@ relevant arch-lens lenses, and open a GitHub Pull Request.
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations
-- Push the feature branch before creating the PR
+- ALWAYS assume the feature branch is already on the remote (the recipe pushes before invoking this skill)
 - Output `pr_url=<url>` on the last output line (empty string if GitHub unavailable)
 - Select 2–3 arch-lens lenses, no more
 
 ## Workflow
+
+**Precondition:** The feature branch is already published to the remote by the `push_to_remote` recipe step that precedes this skill invocation. Do NOT push the branch yourself.
 
 ### Step 1: Parse Arguments
 
@@ -126,15 +128,7 @@ Run `gh auth status 2>/dev/null`. If exit code is non-zero:
 - Output: `pr_url=`
 - Exit successfully
 
-### Step 8: Push Feature Branch
-
-```bash
-git push -u origin {feature_branch}
-```
-
-If push fails, log the error, output `pr_url=`, and exit successfully.
-
-### Step 9: Create Pull Request
+### Step 8: Create Pull Request
 
 ```bash
 gh pr create \

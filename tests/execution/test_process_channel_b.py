@@ -493,7 +493,7 @@ class TestNoHeartbeatPreservesExistingBehavior:
             [sys.executable, str(script)],
             cwd=tmp_path,
             timeout=3,
-            heartbeat_marker=None,
+            heartbeat_marker="",
         )
 
         assert result.termination == TerminationReason.TIMED_OUT

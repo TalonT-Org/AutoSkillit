@@ -206,6 +206,12 @@ class TestClaudeSessionResult:
         assert context_case.needs_retry is True
         assert max_turns_case.retry_reason == context_case.retry_reason
 
+    def test_is_context_exhausted_with_null_safe_fields(self):
+        session = ClaudeSessionResult(
+            subtype="error", is_error=True, result="", session_id="s1", errors=[]
+        )
+        assert session._is_context_exhausted() is False
+
 
 class TestAgentResult:
     """agent_result produces actionable text for LLM callers."""
@@ -763,41 +769,35 @@ class TestComputeRetrySuccessEmptyResult:
 
 
 class TestClaudeSessionResultTypeEnforcement:
-    """ClaudeSessionResult.__post_init__ enforces field types."""
+    """ClaudeSessionResult.__post_init__ must raise on wrong types (P9-4)."""
 
-    def test_null_result_becomes_empty_string(self):
-        session = ClaudeSessionResult(subtype="error", is_error=True, result=None, session_id="s1")
-        assert session.result == ""
-
-    def test_null_errors_becomes_empty_list(self):
-        session = ClaudeSessionResult(
-            subtype="error", is_error=True, result="err", session_id="s1", errors=None
+    def _make_valid(self, **overrides):
+        defaults = dict(
+            subtype="success", is_error=False,
+            result="text", session_id="abc", errors=[],
         )
-        assert session.errors == []
+        defaults.update(overrides)
+        return defaults
 
-    def test_null_subtype_becomes_unknown(self):
-        session = ClaudeSessionResult(subtype=None, is_error=False, result="ok", session_id="s1")
-        assert session.subtype == "unknown"
+    def test_result_none_raises_type_error(self):
+        with pytest.raises(TypeError, match="result"):
+            ClaudeSessionResult(**self._make_valid(result=None))
 
-    def test_null_session_id_becomes_empty(self):
-        session = ClaudeSessionResult(
-            subtype="success", is_error=False, result="ok", session_id=None
-        )
-        assert session.session_id == ""
+    def test_result_list_raises_type_error(self):
+        with pytest.raises(TypeError, match="result"):
+            ClaudeSessionResult(**self._make_valid(result=[{"type": "text", "text": "hi"}]))
 
-    def test_is_context_exhausted_with_null_safe_fields(self):
-        session = ClaudeSessionResult(
-            subtype="error", is_error=True, result=None, session_id="s1", errors=None
-        )
-        assert session._is_context_exhausted() is False
+    def test_errors_none_raises_type_error(self):
+        with pytest.raises(TypeError, match="errors"):
+            ClaudeSessionResult(**self._make_valid(errors=None))
 
-    def test_list_content_result_becomes_string(self):
-        blocks = [{"type": "text", "text": "Task completed."}]
-        session = ClaudeSessionResult(
-            subtype="success", is_error=False, result=blocks, session_id="s1"
-        )
-        assert session.result == "Task completed."
-        assert isinstance(session.result, str)
+    def test_subtype_none_raises_type_error(self):
+        with pytest.raises(TypeError, match="subtype"):
+            ClaudeSessionResult(**self._make_valid(subtype=None))
+
+    def test_session_id_none_raises_type_error(self):
+        with pytest.raises(TypeError, match="session_id"):
+            ClaudeSessionResult(**self._make_valid(session_id=None))
 
 
 class TestParseSessionResultNullFields:
@@ -1179,43 +1179,6 @@ class TestClaudeSessionResultBasic:
         assert s.is_error is False
         assert s.result == "hello"
         assert s.session_id == "abc"
-
-    def test_post_init_coerces_list_content_to_str(self):
-        s = ClaudeSessionResult(
-            subtype="success",
-            is_error=False,
-            result=[{"type": "text", "text": "hello"}],
-            session_id="s1",
-        )
-        assert s.result == "hello"
-
-    def test_post_init_coerces_none_result_to_empty_str(self):
-        s = ClaudeSessionResult(
-            subtype="success",
-            is_error=False,
-            result=None,
-            session_id="s1",  # type: ignore[arg-type]
-        )
-        assert s.result == ""
-
-    def test_post_init_coerces_non_list_errors(self):
-        s = ClaudeSessionResult(
-            subtype="success",
-            is_error=False,
-            result="ok",
-            session_id="s1",
-            errors=None,  # type: ignore[arg-type]
-        )
-        assert s.errors == []
-
-    def test_post_init_list_with_non_dict_element(self):
-        s = ClaudeSessionResult(
-            subtype="success",
-            is_error=False,
-            result=["plain string", {"type": "text", "text": "extra"}],
-            session_id="s1",
-        )
-        assert s.result == "plain string\nextra"
 
 
 class TestClaudeSessionResultContextExhausted:

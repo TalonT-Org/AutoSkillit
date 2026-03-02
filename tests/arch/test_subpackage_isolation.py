@@ -1066,7 +1066,7 @@ class TestGroupCMigration:
         assert "def scan_done_signals(" not in source  # REQ-SIG-003
 
     def test_race_accumulator_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "class RaceAccumulator" in source  # REQ-SIG-003
 
     def test_cancel_scope_cancel_present(self):
@@ -1074,7 +1074,7 @@ class TestGroupCMigration:
         assert "cancel_scope.cancel()" in source  # REQ-SIG-004
 
     def test_resolve_termination_preserved(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "def resolve_termination(" in source  # REQ-SIG-005
 
     def test_channel_b_drain_wait_uses_move_on_after(self):
@@ -1082,15 +1082,15 @@ class TestGroupCMigration:
         assert "anyio.move_on_after(" in source  # REQ-SIG-006
 
     def test_watch_process_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "async def _watch_process(" in source  # REQ-SIG-007
 
     def test_watch_heartbeat_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "async def _watch_heartbeat(" in source  # REQ-SIG-007
 
     def test_watch_session_log_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "async def _watch_session_log(" in source  # REQ-SIG-007
 
     def test_race_signals_fields_unchanged(self):

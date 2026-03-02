@@ -242,3 +242,26 @@ class TestCheckAndSleepIfNeeded:
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is False
         assert "error" in result
+
+    @pytest.mark.anyio
+    async def test_unexpected_exception_propagates(self, tmp_path, monkeypatch):
+        """Unexpected exceptions (programming bugs) must not be swallowed (CC-5)."""
+        import httpx
+        from autoskillit.execution.quota import check_and_sleep_if_needed
+
+        class FakeConfig:
+            enabled = True
+            cache_path = str(tmp_path / "quota_cache.json")
+            cache_max_age = 0  # force live fetch
+            credentials_path = str(tmp_path / "creds.json")
+            threshold = 0.5
+            buffer_seconds = 60
+
+        async def raise_runtime(*args, **kwargs):
+            raise RuntimeError("unexpected programming bug")
+
+        monkeypatch.setattr(
+            "autoskillit.execution.quota._fetch_quota", raise_runtime
+        )
+        with pytest.raises(RuntimeError, match="unexpected programming bug"):
+            await check_and_sleep_if_needed(FakeConfig())

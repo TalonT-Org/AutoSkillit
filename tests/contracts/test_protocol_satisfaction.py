@@ -278,7 +278,7 @@ class TestGroupDApiContractPreservation:
         sig = inspect.signature(run_managed_async)
         p = sig.parameters
         assert p["pty_mode"].default is False
-        assert p["heartbeat_marker"].default is None
+        assert p["heartbeat_marker"].default == ""
         assert p["session_log_dir"].default is None
         assert p["input_data"].default is None
         assert p["env"].default is None

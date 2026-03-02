@@ -211,6 +211,7 @@ tests/
 │   ├── test_core.py
 │   ├── test_io.py
 │   ├── test_logging.py
+│   ├── test_paths.py
 │   └── test_types.py
 ├── execution/                           # Subprocess integration + session tests
 │   ├── __init__.py

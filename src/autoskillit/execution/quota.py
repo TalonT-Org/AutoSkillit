@@ -130,15 +130,18 @@ async def check_and_sleep_if_needed(config: Any) -> dict:
             }
 
         if status.resets_at is None:
+            fallback_seconds = max(config.buffer_seconds, 60)
             _log.warning(
-                "quota above threshold but resets_at is None — cannot compute sleep",
+                "quota above threshold but resets_at is None — blocking with fallback",
                 utilization=status.utilization,
+                fallback_sleep_seconds=fallback_seconds,
             )
             return {
-                "should_sleep": False,
-                "sleep_seconds": 0,
+                "should_sleep": True,
+                "sleep_seconds": fallback_seconds,
                 "utilization": status.utilization,
                 "resets_at": None,
+                "reason": "unknown_reset",
             }
 
         # Re-fetch for accurate resets_at before returning sleep metadata
@@ -146,11 +149,18 @@ async def check_and_sleep_if_needed(config: Any) -> dict:
         _write_cache(config.cache_path, status)
 
         if status.resets_at is None:
+            fallback_seconds = max(config.buffer_seconds, 60)
+            _log.warning(
+                "quota above threshold but resets_at is None after re-fetch — blocking with fallback",
+                utilization=status.utilization,
+                fallback_sleep_seconds=fallback_seconds,
+            )
             return {
-                "should_sleep": False,
-                "sleep_seconds": 0,
+                "should_sleep": True,
+                "sleep_seconds": fallback_seconds,
                 "utilization": status.utilization,
                 "resets_at": None,
+                "reason": "unknown_reset",
             }
 
         now = datetime.now(UTC)

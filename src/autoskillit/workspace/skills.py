@@ -7,6 +7,8 @@ from pathlib import Path
 
 from autoskillit.core import SkillSource, pkg_root
 
+_INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
+
 
 @dataclass
 class SkillInfo:
@@ -39,11 +41,11 @@ def bundled_skills_dir() -> Path:
 
 
 def _scan_directory(source: SkillSource, directory: Path) -> list[SkillInfo]:
-    """Find all SKILL.md files in immediate subdirectories."""
+    """Find all SKILL.md files in immediate subdirectories, excluding internal-only skills."""
     if not directory.is_dir():
         return []
     return [
         SkillInfo(name=d.name, source=source, path=d / "SKILL.md")
         for d in sorted(directory.iterdir())
-        if d.is_dir() and (d / "SKILL.md").is_file()
+        if d.is_dir() and (d / "SKILL.md").is_file() and d.name not in _INTERNAL_SKILLS
     ]

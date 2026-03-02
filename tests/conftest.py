@@ -5,7 +5,12 @@ from pathlib import Path as _Path
 
 import pytest
 
-from autoskillit.core.types import SubprocessResult, SubprocessRunner, TerminationReason
+from autoskillit.core.types import (
+    ChannelConfirmation,
+    SubprocessResult,
+    SubprocessRunner,
+    TerminationReason,
+)
 
 
 class StatefulMockTester:
@@ -134,6 +139,36 @@ def _structlog_to_null():
     with structlog.testing.capture_logs():
         yield
     structlog.reset_defaults()
+
+
+def _make_result(
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+    termination_reason: TerminationReason = TerminationReason.NATURAL_EXIT,
+    channel_confirmation: ChannelConfirmation = ChannelConfirmation.CHANNEL_B,
+) -> SubprocessResult:
+    """Create a SubprocessResult for mocking run_managed_async."""
+    return SubprocessResult(
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        termination=termination_reason,
+        pid=12345,
+        channel_confirmation=channel_confirmation,
+    )
+
+
+def _make_timeout_result(stdout: str = "", stderr: str = "") -> SubprocessResult:
+    """Create a timed-out SubprocessResult."""
+    return SubprocessResult(
+        returncode=-1,
+        stdout=stdout,
+        stderr=stderr,
+        termination=TerminationReason.TIMED_OUT,
+        pid=12345,
+        channel_confirmation=ChannelConfirmation.UNMONITORED,
+    )
 
 
 @pytest.fixture

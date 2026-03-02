@@ -113,7 +113,9 @@ src/autoskillit/
 │   ├── io.py                #   load_recipe, list_recipes, iter_steps_with_context, find_recipe_by_name
 │   ├── loader.py            #   Path-based recipe metadata utilities (parse_recipe_metadata, RecipeInfo)
 │   ├── registry.py          #   RuleFinding, RuleSpec, _RULE_REGISTRY, semantic_rule, run_semantic_rules
+│   ├── rules_bypass.py      #   Semantic rules for skip_when_false bypass routing contracts
 │   ├── schema.py            #   Recipe, RecipeStep, DataFlowWarning, AUTOSKILLIT_VERSION_KEY
+│   ├── staleness_cache.py   #   Disk-backed staleness check cache (StalenessEntry, load_cache, save_cache)
 │   └── validator.py         #   validate_recipe, run_semantic_rules (re-exported), analyze_dataflow
 ├── migration/               # L2 migration sub-package
 │   ├── __init__.py          #   Re-exports MigrationEngine, applicable_migrations, FailureStore
@@ -140,7 +142,9 @@ src/autoskillit/
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration (auto-discovered by Claude Code)
 │   ├── quota_check.py       #   Quota guard hook — blocks run_skill when threshold exceeded
-│   └── remove_clone_guard.py #  Remove-clone guard — denies remove_clone calls with keep != "true"
+│   ├── remove_clone_guard.py #  Remove-clone guard — denies remove_clone calls with keep != "true"
+│   ├── skill_cmd_check.py   #   PreToolUse hook — validates skill_command path argument format
+│   └── skill_command_guard.py #  PreToolUse hook — blocks run_skill with non-slash skill_command
 ├── migrations/              # Data: versioned migration YAML notes
 │   └── __init__.py
 ├── recipes/                 # Bundled recipe YAML definitions
@@ -165,52 +169,100 @@ src/autoskillit/
 tests/
 ├── CLAUDE.md                            # xdist compatibility guidelines
 ├── __init__.py
-├── conftest.py                          # Shared fixtures (tools enabled + default config)
-├── test_architecture.py                 # AST enforcement + sub-package layer contracts
-├── test_audit.py                        # Audit log and FailureRecord tests
-├── test_ci_dev_config.py
-├── test_cli.py                          # CLI command tests
-├── test_clone.py
-├── test_config.py                       # Config loading tests
-├── test_conftest.py
-├── test_context.py
-├── test_core.py
-├── test_db_tools.py
-├── test_factory.py
-├── test_failure_store.py
-├── test_gate.py
-├── test_git_operations.py
-├── test_github_tools.py
-├── test_headless_runner.py
-├── test_import_paths.py
-├── test_instruction_surface_contract.py
-├── test_l1_packages.py
-├── test_llm_triage.py
-├── test_logging.py                      # Logging infrastructure tests
-├── test_migration_engine.py
-├── test_migration_loader.py
-├── test_package_gateways.py
-├── test_process_lifecycle.py            # Subprocess integration tests
-├── test_protocols.py
-├── test_quota.py
-├── test_recipe_io.py
-├── test_recipe_loader.py                # Recipe loader tests
-├── test_recipe_schema.py
-├── test_recipe_validator.py
-├── test_security_config.py
-├── test_server.py                       # Server unit tests
-├── test_service_wrappers.py             # REQ-ARCH-006/007: DefaultRecipeRepository and DefaultMigrationService behavior
-├── test_session_result.py
-├── test_skill_resolver.py               # Skill resolution tests
-├── test_smoke_pipeline.py
-├── test_smoke_utils.py
-├── test_test_runner.py
-├── test_token_log.py                    # Token usage tracking tests
-├── test_types.py
-├── test_version.py
-├── test_version_consistency.py
-├── test_workspace.py
-└── test_yaml_extended.py
+├── conftest.py                          # Shared fixtures: MockSubprocessRunner, _make_result, _make_timeout_result
+├── test_conftest.py                     # Tests for conftest fixtures
+├── test_llm_triage.py                   # LLM triage tests
+├── test_smoke_utils.py                  # Smoke utility tests
+├── arch/                                # AST enforcement + sub-package layer contracts
+│   ├── __init__.py
+│   ├── test_ast_rules.py
+│   ├── test_import_paths.py
+│   ├── test_layer_enforcement.py
+│   ├── test_registry.py
+│   └── test_subpackage_isolation.py
+├── cli/                                 # CLI command tests
+│   ├── __init__.py
+│   ├── test_cli_cook.py
+│   ├── test_cli_doctor.py
+│   ├── test_cli_init.py
+│   └── test_cli_install.py
+├── config/                              # Config loading tests
+│   ├── __init__.py
+│   └── test_config.py
+├── contracts/                           # Protocol satisfaction + package gateway contracts
+│   ├── __init__.py
+│   ├── test_instruction_surface.py
+│   ├── test_l1_packages.py
+│   ├── test_package_gateways.py
+│   ├── test_protocol_satisfaction.py
+│   └── test_version_consistency.py
+├── core/                                # Core layer tests
+│   ├── __init__.py
+│   ├── test_core.py
+│   ├── test_io.py
+│   ├── test_logging.py
+│   ├── test_types.py
+│   └── test_version.py
+├── execution/                           # Subprocess integration + session tests
+│   ├── __init__.py
+│   ├── test_commands.py
+│   ├── test_db.py
+│   ├── test_github.py
+│   ├── test_headless.py
+│   ├── test_process_channel_b.py
+│   ├── test_process_jsonl.py
+│   ├── test_process_kill.py
+│   ├── test_process_pty.py
+│   ├── test_process_run.py
+│   ├── test_quota.py
+│   ├── test_session.py
+│   └── test_testing.py
+├── infra/                               # CI/CD and security configuration tests
+│   ├── __init__.py
+│   ├── test_ci_dev_config.py
+│   ├── test_remove_clone_guard.py
+│   ├── test_security_config.py
+│   └── test_taskfile.py
+├── migration/                           # Migration engine and store tests
+│   ├── __init__.py
+│   ├── test_engine.py
+│   ├── test_loader.py
+│   └── test_store.py
+├── pipeline/                            # Audit log, gate, token log tests
+│   ├── __init__.py
+│   ├── test_audit.py
+│   ├── test_context.py
+│   ├── test_gate.py
+│   └── test_tokens.py
+├── recipe/                              # Recipe I/O, validation, schema tests
+│   ├── __init__.py
+│   ├── test_contracts.py
+│   ├── test_io.py
+│   ├── test_loader.py
+│   ├── test_recipe_structures.py
+│   ├── test_schema.py
+│   ├── test_semantic_rules.py
+│   ├── test_smoke_pipeline.py
+│   └── test_validator.py
+├── server/                              # Server unit tests (tool handlers)
+│   ├── __init__.py
+│   ├── conftest.py                      # tool_ctx fixture (imports MockSubprocessRunner from tests.conftest)
+│   ├── test_factory.py
+│   ├── test_git.py
+│   ├── test_server_init.py
+│   ├── test_service_wrappers.py         # REQ-ARCH-006/007: DefaultRecipeRepository and DefaultMigrationService
+│   ├── test_tools_clone.py
+│   ├── test_tools_execution.py
+│   ├── test_tools_git.py
+│   ├── test_tools_integrations.py
+│   ├── test_tools_recipe.py
+│   ├── test_tools_status.py
+│   └── test_tools_workspace.py
+└── workspace/                           # Workspace and clone tests
+    ├── __init__.py
+    ├── test_cleanup.py
+    ├── test_clone.py
+    └── test_skills.py
 
 temp/                        # Temporary/working files (gitignored)
 ```
@@ -246,8 +298,8 @@ temp/                        # Temporary/working files (gitignored)
   * **execution/quota.py**: Quota-aware check for long-running pipeline recipes. `QuotaStatus` dataclass. `_read_credentials(path)` reads Bearer token from `~/.claude/.credentials.json`. `_read_cache(path, max_age)` returns fresh status or None. `_write_cache(path, status)` persists to cache (silent on failure). `_fetch_quota(credentials_path)` fetches 5-hour utilization from Anthropic quota API via `httpx`. `check_and_sleep_if_needed(config)` is the main async entry point — returns metadata dict; does NOT sleep. L1 module: depends only on stdlib, httpx, and `core/logging`.
   * **hooks/quota_check.py**: PreToolUse hook that runs `autoskillit quota-status` before each `run_skill`/`run_skill_retry` call. Blocks with a recovery message if quota threshold is exceeded. Silently approves otherwise. Registered in `.claude/settings.json` by `autoskillit install` and auto-discovered as `hooks/hooks.json` for plugin installs.
   * **hooks/remove_clone_guard.py**: PreToolUse hook that prompts the user for permission on any `remove_clone` call where `keep != "true"`. Clones are never removed automatically — the user must approve each removal. Registered in `.claude/settings.json` by `autoskillit install` and auto-discovered via `hooks/hooks.json`.
-  * **hooks/skill_cmd_check.py**: PreToolUse hook that validates `skill_command` format for path-argument skills (`implement-worktree-no-merge`, `implement-worktree`, `retry-worktree`, `resolve-failures`). Detects the anti-pattern where extra descriptive text precedes the file path (e.g., `"the verified plan temp/plan.md"`) and denies the call with an actionable correction showing the expected format. Fail-fast, zero LLM tokens wasted. Runs first in the `run_skill.*` hook chain, before `quota_check.py`. Auto-discovered via `hooks/hooks.json`.
-  * **hooks/skill_command_guard.py**: PreToolUse hook that enforces slash-command prefix on `run_skill`/`run_skill_retry` calls. Denies any `skill_command` that does not start with `/`, preventing arbitrary prose prompts from being passed as skill invocations. Fail-open: malformed events silently approve. Auto-discovered via `hooks/hooks.json`.
+  * **hooks/skill_cmd_check.py**: PreToolUse hook that validates `skill_command` path argument format. Denies `run_skill`/`run_skill_retry` calls where a path-argument skill is invoked with extra descriptive text before the actual file path. Auto-discovered via `hooks/hooks.json`.
+  * **hooks/skill_command_guard.py**: PreToolUse hook that blocks `run_skill`/`run_skill_retry` calls where `skill_command` does not start with a `/` prefix. Fail-open: any error approves silently. Auto-discovered via `hooks/hooks.json`.
   * **workspace/cleanup.py**: Infrastructure layer for directory teardown. `_delete_directory_contents(directory, preserve)` removes all items in a directory except preserved names, recording failures in `CleanupResult` without raising. Depends only on `core/logging.py`.
   * **workspace/clone.py**: Clone-based run isolation for pipeline recipes. `clone_repo(source_dir, run_name)` clones source into `../autoskillit-runs/<run_name>-<timestamp>/` and returns `{"clone_path", "source_dir"}`. `remove_clone(clone_path, keep)` tears down the clone (never raises). `push_to_remote(clone_path, source_dir, branch)` reads the upstream remote URL from source_dir via `git remote get-url origin` (read-only) and pushes from clone_path directly to the remote, never touching source_dir. SOURCE ISOLATION: after clone_repo returns, source_dir must not be touched (no git checkout, fetch, reset, pull, or any command). All pipeline work runs in clone_path. source_dir is used only to read the remote URL. L1 module: depends only on stdlib and `core/logging`.
   * **workspace/skills.py**: Lists bundled skills from the package `skills/` directory. `SkillResolver` (no args) scans for `SKILL.md` files.
@@ -257,11 +309,11 @@ temp/                        # Temporary/working files (gitignored)
   * **recipe/registry.py**: Rule registry infrastructure for semantic validation. `RuleFinding`, `RuleSpec`, `_RULE_REGISTRY`, `semantic_rule` decorator. Also houses `run_semantic_rules`, `findings_to_dicts`, `filter_version_rule`, `build_quality_dict`, `compute_recipe_validity`. Extracted from validator.py to keep that file under 1000 lines. All symbols are re-exported from `recipe/validator.py` for backward compatibility.
   * **recipe/validator.py**: Recipe validation layer. `validate_recipe(recipe)` structural checks. `run_semantic_rules(recipe)` semantic rule engine (decorator-based registry — implementation in registry.py). `analyze_dataflow(recipe)` traces data flow. Uses `iter_steps_with_context` from `recipe/io.py` for context-aware validation.
   * **recipe/contracts.py**: Contract card generation and LLM staleness triage utilities. `generate_recipe_card(pipeline_path, recipes_dir)` returns dict and writes YAML to disk. Imported by `_llm_triage.py`.
-  * **recipe/staleness_cache.py**: Staleness result cache for `check_contract_staleness`. `StalenessEntry` dataclass holds `recipe_hash`, `manifest_version`, `is_stale`, `triage_result`, and `checked_at`. `compute_recipe_hash(path)` returns `"sha256:<hex>"`. `read_staleness_cache(cache_path, name)` and `write_staleness_cache(cache_path, name, entry)` atomically persist entries to `.autoskillit/temp/recipe_staleness_cache.json`. L2 module: imports only from `autoskillit.core`.
   * **recipe/_api.py**: Recipe orchestration API — `load_and_validate`, `validate_from_path`, `list_all` convenience functions. Aggregates recipe I/O, validation, and contract-staleness checks into a single call surface for the server layer.
   * **recipe/repository.py**: Concrete `DefaultRecipeRepository` implementation backed by `recipe/io.py` and `recipe/_api.py`. Provides `find`, `list`, `load_and_validate`, `validate_from_path`, and `list_all` as a dependency-injected repository interface.
-  * **recipe/rules.py**: Semantic validation rules registered with the `semantic_rule` decorator. Houses the majority of rule implementations (forbidden-tool checks, ingredient reference validation, worktree safety, context-ref checks). Extracted from `recipe/registry.py` / `recipe/validator.py` to keep rule logic separate from infrastructure.
-  * **recipe/rules_bypass.py**: Bypass-routing validation rules: `optional-without-skip-when` (optional: true steps must declare skip_when_false) and `skip-when-false-undeclared` (skip_when_false must reference a declared ingredient). Extracted to keep rules.py under 1,000 lines. Auto-loaded by `validator.py` alongside `rules.py`.
+  * **recipe/rules.py**: Semantic validation rules registered with the `semantic_rule` decorator. Houses all rule implementations (forbidden-tool checks, ingredient reference validation, worktree safety, context-ref checks). Extracted from `recipe/registry.py` / `recipe/validator.py` to keep rule logic separate from infrastructure.
+  * **recipe/rules_bypass.py**: Semantic validation rules for `skip_when_false` bypass routing contracts. `_check_optional_without_skip_when` fires when a step is marked `optional: true` but lacks a `skip_when_false` declaration. Registered via `semantic_rule` decorator.
+  * **recipe/staleness_cache.py**: Disk-backed staleness check cache for recipe contract verification. `StalenessEntry` dataclass persists recipe hash, manifest version, staleness flag, and triage result. Provides `load_cache`, `save_cache`, and `get_or_check` for efficient staleness reuse across invocations.
   * **migration/_api.py**: Migration API convenience layer. `check_and_migrate(name, project_dir, installed_version)` checks applicable migrations and applies deterministic ones automatically; returns error dict when LLM-driven migration is required via MCP tool.
   * **migration/engine.py**: Orchestration layer for recipe and contract migration. Layer B domain logic — no FastMCP dependency. `MigrationEngine` dispatches to registered adapters: `RecipeMigrationAdapter` (LLM-driven via headless Claude session) and `ContractMigrationAdapter` (deterministic contract regeneration). ABC hierarchy: `MigrationAdapter` → `HeadlessMigrationAdapter` / `DeterministicMigrationAdapter`. `default_migration_engine()` factory builds the standard adapter set.
   * **migration/loader.py**: Data access layer for the migration version graph. Discovers and parses versioned migration YAML files from the bundled `migrations/` package directory. `list_migrations()` enumerates all notes; `applicable_migrations(script_version, installed_version)` chains applicable notes from the script's current version to the installed version using semver ordering. Depends on `core/io.py` and `packaging`.

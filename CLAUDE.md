@@ -193,10 +193,10 @@ tests/
 │   └── test_subpackage_isolation.py
 ├── cli/                                 # CLI command tests
 │   ├── __init__.py
-│   ├── test_cli_cook.py
-│   ├── test_cli_doctor.py
-│   ├── test_cli_init.py
-│   └── test_cli_install.py
+│   ├── test_cook.py
+│   ├── test_doctor.py
+│   ├── test_init.py
+│   └── test_install.py
 ├── config/                              # Config loading tests
 │   ├── __init__.py
 │   └── test_config.py
@@ -253,7 +253,7 @@ tests/
 │   ├── test_contracts.py
 │   ├── test_io.py
 │   ├── test_loader.py
-│   ├── test_recipe_structures.py
+│   ├── test_bundled_recipes.py
 │   ├── test_schema.py
 │   ├── test_semantic_rules.py
 │   ├── test_smoke_pipeline.py

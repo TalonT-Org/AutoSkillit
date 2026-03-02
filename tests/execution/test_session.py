@@ -773,8 +773,11 @@ class TestClaudeSessionResultTypeEnforcement:
 
     def _make_valid(self, **overrides):
         defaults = dict(
-            subtype="success", is_error=False,
-            result="text", session_id="abc", errors=[],
+            subtype="success",
+            is_error=False,
+            result="text",
+            session_id="abc",
+            errors=[],
         )
         defaults.update(overrides)
         return defaults

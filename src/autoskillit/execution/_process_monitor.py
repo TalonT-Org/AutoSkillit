@@ -8,8 +8,8 @@ from pathlib import Path
 import anyio
 import psutil
 
-from autoskillit.execution._process_jsonl import _jsonl_contains_marker, _jsonl_has_record_type
 from autoskillit.core import get_logger
+from autoskillit.execution._process_jsonl import _jsonl_contains_marker, _jsonl_has_record_type
 
 logger = get_logger(__name__)
 

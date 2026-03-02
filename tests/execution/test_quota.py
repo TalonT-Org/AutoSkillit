@@ -246,7 +246,6 @@ class TestCheckAndSleepIfNeeded:
     @pytest.mark.anyio
     async def test_unexpected_exception_propagates(self, tmp_path, monkeypatch):
         """Unexpected exceptions (programming bugs) must not be swallowed (CC-5)."""
-        import httpx
         from autoskillit.execution.quota import check_and_sleep_if_needed
 
         class FakeConfig:
@@ -260,8 +259,6 @@ class TestCheckAndSleepIfNeeded:
         async def raise_runtime(*args, **kwargs):
             raise RuntimeError("unexpected programming bug")
 
-        monkeypatch.setattr(
-            "autoskillit.execution.quota._fetch_quota", raise_runtime
-        )
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", raise_runtime)
         with pytest.raises(RuntimeError, match="unexpected programming bug"):
             await check_and_sleep_if_needed(FakeConfig())

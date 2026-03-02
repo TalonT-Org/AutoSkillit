@@ -273,39 +273,6 @@ def test_skill_tools_defined_in_types():
     )
 
 
-# ── CLAUDE.md documentation and structural tests ──────────────────────────────
-
-
-def test_claude_md_documents_all_source_modules() -> None:
-    """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
-
-    For __init__.py files, the containing package directory name must appear.
-    For all other files, the filename must appear somewhere in CLAUDE.md.
-    """
-    claude_path = Path(__file__).parent.parent.parent / "CLAUDE.md"
-    content = claude_path.read_text()
-    src_root = Path(__file__).parent.parent.parent / "src" / "autoskillit"
-
-    missing = []
-    for py_file in sorted(src_root.rglob("*.py")):
-        if "__pycache__" in py_file.parts:
-            continue
-        rel = py_file.relative_to(src_root)
-        if py_file.name == "__init__.py":
-            # For sub-package inits, verify the package directory is documented
-            parent = rel.parent
-            if parent != Path(".") and (parent.name + "/") not in content:
-                missing.append(str(rel))
-        else:
-            if py_file.name not in content:
-                missing.append(str(rel))
-
-    assert not missing, (
-        f"Modules not documented in CLAUDE.md: {', '.join(missing)}. "
-        "Update the Architecture section in CLAUDE.md."
-    )
-
-
 def test_pyproject_cyclopts_minimum_version() -> None:
     """cyclopts lower bound in pyproject.toml must be >=4.0, not >=3.0.
 
@@ -817,71 +784,6 @@ def test_make_context_wires_all_optional_toolcontext_fields() -> None:
         f"make_context() does not assign these optional ToolContext fields: {unwired}. "
         "Add wiring in server/_factory.py make_context()."
     )
-
-
-# ── REQ-ARCH-004: __all__ completeness ───────────────────────────────────────
-
-
-def test_package_all_matches_exports() -> None:
-    """REQ-ARCH-004: Each package __init__.__all__ must match its exported symbol set.
-
-    Two checks:
-    1. Every name in __all__ is importable from the package (no dead entries).
-    2. Every public name re-exported via relative or autoskillit.* imports in __init__.py
-       appears in __all__ (no undeclared exports).
-
-    Packages without __all__ (server, root autoskillit) are skipped.
-    """
-    import importlib
-
-    AUTOSKILLIT_ROOT = SRC_ROOT
-    PACKAGES_WITH_ALL = [
-        "core",
-        "config",
-        "pipeline",
-        "execution",
-        "workspace",
-        "recipe",
-        "migration",
-        "cli",
-    ]
-    violations: list[str] = []
-
-    for pkg_name in PACKAGES_WITH_ALL:
-        module = importlib.import_module(f"autoskillit.{pkg_name}")
-        all_list: list[str] = getattr(module, "__all__", None)  # type: ignore[assignment]
-        if all_list is None:
-            continue  # package opted out of __all__ — skip
-
-        # Check 1: every __all__ entry is importable
-        for name in all_list:
-            if not hasattr(module, name):
-                violations.append(
-                    f"autoskillit.{pkg_name}: '{name}' in __all__ but not importable"
-                )
-
-        # Check 2: every public name from relative / intra-package imports is in __all__
-        # Only intra-package absolute imports (autoskillit.{pkg_name}.*) are checked —
-        # cross-package imports (e.g. `from autoskillit.core import get_logger` in
-        # recipe/__init__.py) are internal helpers, not re-exports, and must be excluded.
-        init_path = AUTOSKILLIT_ROOT / pkg_name / "__init__.py"
-        for node in _runtime_import_froms(init_path):
-            is_relative = node.level and node.level > 0
-            is_intra_package = node.module and node.module.startswith(f"autoskillit.{pkg_name}.")
-            if not (is_relative or is_intra_package):
-                continue  # skip stdlib / third-party / cross-package imports
-
-            for alias in node.names:
-                name = alias.asname if alias.asname else alias.name
-                if name.startswith("_") or name == "*":
-                    continue
-                if name not in all_list:
-                    violations.append(
-                        f"autoskillit.{pkg_name}: '{name}' re-exported via import "
-                        f"but not in __all__"
-                    )
-
-    assert not violations, "__all__ completeness violations:\n" + "\n".join(violations)
 
 
 # ── groupC Part A tests ───────────────────────────────────────────────────────

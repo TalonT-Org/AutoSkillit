@@ -76,9 +76,3 @@ def test_t_typevar_not_in_core_all():
     assert "T" not in core.__all__
 
 
-def test_severity_has_ok_member():
-    from autoskillit.core.types import Severity
-
-    assert Severity.OK == "ok"
-    assert Severity.ERROR == "error"
-    assert Severity.WARNING == "warning"

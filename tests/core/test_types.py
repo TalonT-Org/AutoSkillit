@@ -217,3 +217,11 @@ def test_session_outcome_in_core_all():
     import autoskillit.core as core_pkg
 
     assert "SessionOutcome" in core_pkg.__all__
+
+
+def test_severity_has_ok_member():
+    from autoskillit.core.types import Severity
+
+    assert Severity.OK == "ok"
+    assert Severity.ERROR == "error"
+    assert Severity.WARNING == "warning"

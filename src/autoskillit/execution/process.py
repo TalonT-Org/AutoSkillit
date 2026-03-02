@@ -11,6 +11,7 @@ Two composed functions wire the utilities together correctly:
 
 from __future__ import annotations
 
+import asyncio  # task scaffolding (create_task, wait, FIRST_COMPLETED) deferred to groupC
 import shlex
 import shutil
 import signal
@@ -21,10 +22,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import asyncio  # asyncio.Task annotations remain until groupC
+from typing import IO
 
 import anyio
 import anyio.abc

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.config import AutomationConfig, TokenUsageConfig
+from autoskillit.core.types import ChannelConfirmation
 from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.pipeline.audit import FailureRecord
 from autoskillit.pipeline.gate import DefaultGateState
@@ -18,7 +19,6 @@ from autoskillit.server.tools_status import (
     get_token_summary,
     kitchen_status,
 )
-from autoskillit.core.types import ChannelConfirmation
 from tests.conftest import _make_result
 
 

@@ -899,7 +899,9 @@ class TestChannelBDrainWait:
             _heartbeat_poll=0.05,
         )
         assert result.termination == TerminationReason.COMPLETED
-        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B  # FAILS before fix: True
+        assert (
+            result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        )  # FAILS before fix: True
 
 
 class TestChannelBFullPipelineAdjudication:

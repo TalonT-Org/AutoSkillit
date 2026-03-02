@@ -1653,7 +1653,9 @@ class TestRunSkillFailurePaths:
     @pytest.mark.asyncio
     async def test_handles_empty_stdout(self, tool_ctx):
         """run_skill returns error result when stdout is empty."""
-        tool_ctx.runner.push(_make_result(1, "", "segfault", channel_confirmation=ChannelConfirmation.UNMONITORED))
+        tool_ctx.runner.push(
+            _make_result(1, "", "segfault", channel_confirmation=ChannelConfirmation.UNMONITORED)
+        )
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["exit_code"] == 1
         assert result["is_error"] is True
@@ -1663,7 +1665,11 @@ class TestRunSkillFailurePaths:
     @pytest.mark.asyncio
     async def test_empty_stdout_exit_zero_is_retriable(self, tool_ctx):
         """Infrastructure failure (empty stdout, exit 0) is retriable with stderr."""
-        tool_ctx.runner.push(_make_result(0, "", "session dropped", channel_confirmation=ChannelConfirmation.UNMONITORED))
+        tool_ctx.runner.push(
+            _make_result(
+                0, "", "session dropped", channel_confirmation=ChannelConfirmation.UNMONITORED
+            )
+        )
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["subtype"] == "empty_output"
         assert result["success"] is False
@@ -1836,7 +1842,11 @@ class TestFailureCaptureInBuildSkillResult:
     """_build_skill_result() must capture failures into tool_ctx.audit."""
 
     def test_captures_non_zero_exit_code(self, tool_ctx):
-        result = _make_result(returncode=1, stdout=_failed_session_json(), channel_confirmation=ChannelConfirmation.UNMONITORED)
+        result = _make_result(
+            returncode=1,
+            stdout=_failed_session_json(),
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
         _build_skill_result(result, skill_command="/test:cmd", audit=tool_ctx.audit)
         assert len(tool_ctx.audit.get_report()) == 1
 
@@ -1846,7 +1856,11 @@ class TestFailureCaptureInBuildSkillResult:
         assert tool_ctx.audit.get_report() == []
 
     def test_captured_record_has_correct_skill_command(self, tool_ctx):
-        result = _make_result(returncode=1, stdout=_failed_session_json(), channel_confirmation=ChannelConfirmation.UNMONITORED)
+        result = _make_result(
+            returncode=1,
+            stdout=_failed_session_json(),
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
         _build_skill_result(
             result, skill_command="/autoskillit:implement-worktree", audit=tool_ctx.audit
         )
@@ -1855,7 +1869,11 @@ class TestFailureCaptureInBuildSkillResult:
     def test_captured_record_has_timestamp(self, tool_ctx):
         from datetime import datetime
 
-        result = _make_result(returncode=1, stdout=_failed_session_json(), channel_confirmation=ChannelConfirmation.UNMONITORED)
+        result = _make_result(
+            returncode=1,
+            stdout=_failed_session_json(),
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
         _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
         record = tool_ctx.audit.get_report()[0]
         assert record.timestamp  # non-empty ISO timestamp
@@ -1877,7 +1895,12 @@ class TestFailureCaptureInBuildSkillResult:
 
     def test_stderr_truncated_to_500_chars(self, tool_ctx):
         long_stderr = "e" * 2000
-        result = _make_result(returncode=1, stderr=long_stderr, stdout=_failed_session_json(), channel_confirmation=ChannelConfirmation.UNMONITORED)
+        result = _make_result(
+            returncode=1,
+            stderr=long_stderr,
+            stdout=_failed_session_json(),
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
         _build_skill_result(result, skill_command="/test", audit=tool_ctx.audit)
         assert len(tool_ctx.audit.get_report()[0].stderr) <= 500
 

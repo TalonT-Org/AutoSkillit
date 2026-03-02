@@ -454,6 +454,39 @@ class TestOpenKitchenVersionReporting:
         assert tool_ctx.gate.enabled is True
 
 
+class TestOpenKitchenSousChef:
+    """sous-chef/SKILL.md content is injected at open_kitchen activation time."""
+
+    @pytest.fixture(autouse=True)
+    def _close_kitchen(self, tool_ctx):
+        tool_ctx.gate = DefaultGateState(enabled=False)
+
+    @staticmethod
+    def _prompt_text(result) -> str:
+        content = result.messages[0].content
+        return content.text if hasattr(content, "text") else str(content)
+
+    def test_sous_chef_rules_injected_at_open_kitchen(self):
+        """open_kitchen must include sous-chef global orchestration rules."""
+        from autoskillit.server.prompts import open_kitchen
+
+        result = open_kitchen()
+        text = self._prompt_text(result)
+        assert "MULTI-PART PLAN SEQUENCING" in text
+        assert "retry-worktree" in text.lower()
+
+    def test_open_kitchen_degrades_gracefully_without_sous_chef(self, monkeypatch, tmp_path):
+        """open_kitchen must not raise when sous-chef/SKILL.md is absent."""
+        import autoskillit.server.prompts as prompts_mod
+        from autoskillit.server.prompts import open_kitchen
+
+        monkeypatch.setattr(prompts_mod, "pkg_root", lambda: tmp_path)
+        result = open_kitchen()  # must not raise
+        text = self._prompt_text(result)
+        assert "Kitchen is open" in text
+        assert "kitchen_status" in text
+
+
 class TestServerLazyInit:
     """Tests for the _ctx / _initialize() / _get_ctx() / _get_config() pattern."""
 

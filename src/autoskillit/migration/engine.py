@@ -19,17 +19,6 @@ from autoskillit.core import (
 )
 from autoskillit.migration.loader import applicable_migrations
 from autoskillit.migration.store import FailureStore, default_store_path
-from autoskillit.recipe import (
-    check_contract_staleness,
-    generate_recipe_card,
-    load_recipe_card,
-    parse_recipe_metadata,
-    validate_recipe,
-)
-from autoskillit.recipe import (
-    load_recipe as _parse_recipe,
-)
-from autoskillit.workspace import bundled_skills_dir
 
 logger = get_logger(__name__)
 
@@ -172,6 +161,8 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
         self._migration_cache: dict[str, list] = {}
 
     def discover(self, project_dir: Path) -> list[MigrationFile]:
+        from autoskillit.recipe import parse_recipe_metadata
+
         recipes_dir = project_dir / ".autoskillit" / "recipes"
         if not recipes_dir.exists():
             return []
@@ -266,6 +257,9 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
         return temp_dir / "migrations" / f"{file.path.stem}.yaml"
 
     def validate(self, path: Path) -> tuple[bool, str]:
+        from autoskillit.recipe import load_recipe as _parse_recipe
+        from autoskillit.recipe import validate_recipe
+
         try:
             recipe = _parse_recipe(path)
             errors = validate_recipe(recipe)
@@ -297,6 +291,8 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         return files
 
     def needs_migration(self, file: MigrationFile) -> bool:
+        from autoskillit.recipe import check_contract_staleness, load_recipe_card
+
         recipes_dir = file.path.parent.parent
         contract = load_recipe_card(file.name, recipes_dir)
         if contract is None:
@@ -317,6 +313,9 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
                 name=file.name,
                 error=f"Source recipe '{file.name}.yaml' not found",
             )
+        from autoskillit.recipe import generate_recipe_card
+        from autoskillit.workspace import bundled_skills_dir
+
         try:
             _ = generate_recipe_card(recipe_path, recipes_dir, skills_dir=bundled_skills_dir())
             return MigrationResult(success=True, name=file.name)
@@ -370,6 +369,8 @@ class DefaultMigrationService:
               — version migration applied and/or stale contracts regenerated
           {"error": str, "name": name}             — migration failed
         """
+        from autoskillit.recipe import parse_recipe_metadata
+
         meta = parse_recipe_metadata(recipe_path)
         name = meta.name
         migrations = applicable_migrations(meta.version, __version__)

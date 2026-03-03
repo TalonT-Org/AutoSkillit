@@ -130,9 +130,7 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
 
 
 @pytest.mark.anyio
-async def test_perform_merge_uses_no_edit_flag(
-    default_config, conftest_mock_runner, tmp_path
-):
+async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_runner, tmp_path):
     """The merge command must include --no-edit for headless automation."""
     from autoskillit.server.git import perform_merge
 
@@ -150,17 +148,24 @@ async def test_perform_merge_uses_no_edit_flag(
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
     result = await perform_merge(
-        fake_wt, "main", config=default_config, runner=conftest_mock_runner, tester=tester,
+        fake_wt,
+        "main",
+        config=default_config,
+        runner=conftest_mock_runner,
+        tester=tester,
     )
     assert result.get("merge_succeeded") is True
 
     # Find the merge command in call_args_list
     merge_cmds = [
-        args[0] for args in conftest_mock_runner.call_args_list
+        args[0]
+        for args in conftest_mock_runner.call_args_list
         if "merge" in args[0] and "--abort" not in args[0]
     ]
     assert len(merge_cmds) == 1
-    assert "--no-edit" in merge_cmds[0], f"Expected --no-edit in merge command, got: {merge_cmds[0]}"
+    assert "--no-edit" in merge_cmds[0], (
+        f"Expected --no-edit in merge command, got: {merge_cmds[0]}"
+    )
 
 
 @pytest.mark.anyio

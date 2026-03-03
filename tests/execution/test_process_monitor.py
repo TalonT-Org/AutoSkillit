@@ -658,7 +658,9 @@ class TestSessionLogMonitorStaleSuppressionGate:
         session_file.write_text("")
         spawn_time = time.time() - 10
 
-        with patch("autoskillit.execution._process_monitor._has_active_api_connection") as mock_tcp:
+        with patch(
+            "autoskillit.execution._process_monitor._has_active_api_connection"
+        ) as mock_tcp:
             with anyio.fail_after(2.0):
                 result = await _session_log_monitor(
                     tmp_path,

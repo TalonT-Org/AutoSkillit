@@ -259,7 +259,6 @@ def skills_list():
         print(f"{s.name:<{name_w}}  {s.source:<{src_w}}  {s.path}")
 
 
-
 @workspace_app.command(name="init")
 def workspace_init(path: str):
     """Create a prep station directory with the reset guard marker.

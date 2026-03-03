@@ -28,7 +28,7 @@ dev = [
     "pytest-timeout>=2.3",
     "ruff>=0.15.0",
     "import-linter>=2.1",
-    "packaging>=24.0",
+    "packaging>=25.0",
 ]
 
 [project.scripts]

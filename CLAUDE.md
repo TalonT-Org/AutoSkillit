@@ -167,6 +167,7 @@ src/autoskillit/
 │   ├── __init__.py          #   Re-exports main entry point
 │   ├── _doctor.py           #   Doctor command -- 7 project setup checks
 │   ├── _hooks.py            #   Unified PreToolUse hook registration helpers
+│   ├── _init_helpers.py     #   Init command helpers: interactive prompts and workspace marker
 │   ├── _marketplace.py      #   Plugin install/upgrade marketplace operations
 │   ├── _prompts.py          #   Orchestrator prompt builder for recipe execution
 │   └── app.py               #   CLI: serve, init, config show, skills, recipes, workspace, doctor

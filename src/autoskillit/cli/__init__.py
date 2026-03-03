@@ -10,6 +10,7 @@ import subprocess  # noqa: F401 — tests patch autoskillit.cli.subprocess.run
 from pathlib import Path  # noqa: F401 — tests patch autoskillit.cli.Path.home
 
 from autoskillit.cli._hooks import _claude_settings_path
+from autoskillit.cli._init_helpers import _prompt_recipe_choice
 from autoskillit.cli._marketplace import (
     _clear_plugin_cache,
     _ensure_marketplace,
@@ -17,7 +18,6 @@ from autoskillit.cli._marketplace import (
     install,
     upgrade,
 )
-from autoskillit.cli._init_helpers import _prompt_recipe_choice
 from autoskillit.cli._prompts import _build_orchestrator_prompt
 from autoskillit.cli.app import (
     _generate_config_yaml,

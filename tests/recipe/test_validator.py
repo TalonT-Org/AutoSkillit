@@ -5,7 +5,6 @@ from __future__ import annotations
 import dataclasses
 from pathlib import Path
 
-import pytest
 import yaml
 
 from autoskillit.recipe.io import (
@@ -13,7 +12,6 @@ from autoskillit.recipe.io import (
     _parse_step,
     builtin_recipes_dir,
     iter_steps_with_context,
-    list_recipes,
     load_recipe,
 )
 from autoskillit.recipe.schema import (
@@ -405,6 +403,7 @@ class TestValidateRecipe:
         wf = _parse_recipe(data)
         errors = validate_recipe(wf)
         assert errors == []
+
 
 # ---------------------------------------------------------------------------
 # TestDataFlowQuality — migrated from test_recipe_parser.py

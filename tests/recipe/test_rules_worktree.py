@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import (
     _parse_recipe,
@@ -13,12 +11,10 @@ from autoskillit.recipe.io import (
 )
 from autoskillit.recipe.schema import (
     Recipe,
-    RecipeStep,
 )
 from autoskillit.recipe.validator import (
     run_semantic_rules,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared helper

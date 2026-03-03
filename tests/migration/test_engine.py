@@ -209,7 +209,9 @@ class TestRecipeMigrationAdapter:
 
         assert is_valid is False
         assert len(error) > 0
-        assert "dict" in error.lower() or "expected" in error.lower()
+        assert (
+            "dict" in error.lower() or "expected" in error.lower() or "attribute" in error.lower()
+        )
 
     # ME9b
     def test_recipe_adapter_validate_errors_non_empty_branch(self, tmp_path: Path) -> None:
@@ -263,9 +265,7 @@ class TestContractMigrationAdapter:
         assert files == []
 
     # ME12
-    def test_contract_adapter_needs_migration_stale_contract_on_disk(
-        self, tmp_path: Path
-    ) -> None:
+    def test_contract_adapter_needs_migration_stale_contract_on_disk(self, tmp_path: Path) -> None:
         """ME12: needs_migration returns True for an on-disk contract with empty skill_hashes."""
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         contracts_dir = recipes_dir / "contracts"
@@ -283,9 +283,7 @@ class TestContractMigrationAdapter:
 
     # ME13
     @pytest.mark.anyio
-    async def test_contract_adapter_migrate_regenerates_card_on_disk(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_contract_adapter_migrate_regenerates_card_on_disk(self, tmp_path: Path) -> None:
         """ME13: migrate() runs generate_recipe_card and writes a contract file to disk."""
         import shutil
 

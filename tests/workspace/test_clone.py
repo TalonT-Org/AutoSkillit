@@ -500,9 +500,6 @@ class TestPushToRemote:
         assert len(result["stderr"]) > 0
 
 
-
-
-
 class TestDetectSourceDir:
     def test_ds1_returns_git_toplevel(self) -> None:
         """T_DS1: returns git rev-parse --show-toplevel when returncode=0."""

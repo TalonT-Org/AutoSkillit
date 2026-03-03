@@ -17,12 +17,10 @@ from autoskillit.recipe.io import (
 from autoskillit.recipe.schema import (
     Recipe,
     RecipeStep,
-    StepResultRoute,
 )
 from autoskillit.recipe.validator import (
     run_semantic_rules,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared helper

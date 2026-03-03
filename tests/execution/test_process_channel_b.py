@@ -5,7 +5,6 @@ from __future__ import annotations
 import sys
 import textwrap
 
-import anyio
 import pytest
 
 from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason

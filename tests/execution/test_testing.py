@@ -85,7 +85,6 @@ class TestParsePytestSummaryAnchored:
         assert "error" not in counts
 
 
-
 _REALISTIC_VERBOSE = (
     "============================= test session starts ==============================\n"
     "platform linux -- Python 3.12\n"
@@ -148,8 +147,6 @@ def test_parse_pytest_summary_returns_empty_dict_for_no_match():
 
 def test_parse_pytest_summary_only_matches_equals_delimited_lines():
     assert _parse_pytest_summary("3 failed connections\n= 5 passed =") == {"passed": 5}
-
-
 
 
 def test_check_test_passed_true_on_zero_rc_clean_output():

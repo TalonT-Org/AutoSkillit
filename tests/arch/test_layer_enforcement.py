@@ -17,8 +17,8 @@ from pathlib import Path
 import pytest
 
 from tests.arch._helpers import (
-    SRC_ROOT,
     _SOURCE_FILES,
+    SRC_ROOT,
     _extract_module_level_internal_imports,
     _is_mcp_tool_decorator,
     _rel,
@@ -408,7 +408,7 @@ def test_only_pipeline_context_imports_config() -> None:
 
 
 def test_recipe_no_forbidden_imports() -> None:
-    """T5: REQ-COMP-009 — recipe/ modules import only from core/, workspace/, and sibling recipe/ modules."""
+    """T5: REQ-COMP-009 — recipe/ modules import only from core/, workspace/, recipe/ siblings."""
     recipe_pkg = SRC_ROOT / "recipe"
     assert recipe_pkg.exists(), "recipe/ package must exist"
     violations: list[str] = []

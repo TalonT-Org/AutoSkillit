@@ -11,7 +11,6 @@ from autoskillit.recipe.schema import (
 )
 from autoskillit.recipe.validator import run_semantic_rules
 
-
 # ---------------------------------------------------------------------------
 # Shared helper
 # ---------------------------------------------------------------------------

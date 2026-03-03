@@ -411,9 +411,6 @@ def test_report_bug_config_defaults():
     assert "bug" in cfg.report_bug.github_labels
 
 
-
-
-
 @pytest.mark.anyio
 async def test_fetch_github_issue_no_client(tool_ctx):
     tool_ctx.github_client = None

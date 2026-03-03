@@ -1,4 +1,4 @@
-"""Shared helpers for arch test suite — AST visitor infrastructure and import analysis utilities."""
+"""Shared helpers for arch test suite — AST visitor infrastructure and import analysis utils."""
 
 from __future__ import annotations
 

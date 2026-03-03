@@ -26,17 +26,10 @@ from pathlib import Path
 import pytest
 
 from tests.arch._helpers import (
-    PROCESS_PY,
-    RULES,
+    _SOURCE_FILES,
     SRC_ROOT,
-    ArchitectureViolationVisitor,
-    RuleDescriptor,
-    Violation,
-    _has_log_call,
-    _has_reraise,
     _rel,
     _scan,
-    _SOURCE_FILES,
 )
 
 # ARCH-007: Functions that check TerminationReason as sequential early-exit guards
@@ -504,5 +497,3 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
     assert not violations, "Monkeypatch paths bypass package re-exports:\n" + "\n".join(
         f"  {v}" for v in violations
     )
-
-

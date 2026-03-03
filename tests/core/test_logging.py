@@ -30,6 +30,7 @@ class TestGetLogger:
         assert logs, "Expected at least one log record"
         assert logs[0]["logger"] == "autoskillit.server"
 
+
 class TestNullHandlerContract:
     def test_no_output_before_configure(self, capsys: pytest.CaptureFixture[str]):
         """NullHandler in autoskillit/__init__.py prevents stdlib lastResort output.

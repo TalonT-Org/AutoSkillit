@@ -23,20 +23,20 @@ from autoskillit.execution.process import (
 
 # Script that writes a JSON result line then hangs (simulates Claude CLI completed-but-hung)
 WRITE_RESULT_THEN_HANG_SCRIPT = (
-    'import sys, time, json\n'
+    "import sys, time, json\n"
     'result = {"type": "result", "subtype": "success", "is_error": False,\n'
     '          "result": "done", "session_id": "s1"}\n'
     'sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\\n")\n'
-    'sys.stdout.flush()\n'
-    'time.sleep(3600)\n'
+    "sys.stdout.flush()\n"
+    "time.sleep(3600)\n"
 )
 
 # Script that writes non-matching output then hangs
 PARTIAL_OUTPUT_THEN_HANG_SCRIPT = (
-    'import sys, time\n'
+    "import sys, time\n"
     'sys.stdout.write("partial output\\n")\n'
-    'sys.stdout.flush()\n'
-    'time.sleep(3600)\n'
+    "sys.stdout.flush()\n"
+    "time.sleep(3600)\n"
 )
 
 

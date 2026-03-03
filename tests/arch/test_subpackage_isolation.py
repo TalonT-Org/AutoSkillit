@@ -25,12 +25,11 @@ from pathlib import Path
 import pytest
 
 from tests.arch._helpers import (
-    SRC_ROOT,
     _SOURCE_FILES,
+    SRC_ROOT,
     _extract_module_level_internal_imports,
     _is_mcp_tool_decorator,
     _rel,
-    _runtime_import_froms,
 )
 
 

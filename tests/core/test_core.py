@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 def test_core_logging_importable():
     from autoskillit.core.logging import (  # noqa: F401
         PACKAGE_LOGGER_NAME,

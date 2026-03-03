@@ -1055,5 +1055,3 @@ class TestSkillResult:
         sr = self._make(token_usage=None)
         parsed = json.loads(sr.to_json())
         assert parsed["token_usage"] is None
-
-

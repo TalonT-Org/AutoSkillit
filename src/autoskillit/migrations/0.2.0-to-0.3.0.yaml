@@ -1,0 +1,49 @@
+from_version: "0.2.0"
+to_version: "0.3.0"
+description: "Legacy on_result field+routes format removed; use predicate conditions format"
+changes:
+  - id: convert-on-result-legacy-format
+    description: "Convert on_result field+routes blocks to predicate conditions format"
+    instruction: |
+      Find every step that has an `on_result:` block using the legacy format (a YAML
+      mapping with `field:` and `routes:` keys). Convert it to the predicate conditions
+      format (a YAML list of condition objects).
+
+      For each route entry `ROUTE_VALUE: target_step`, create a condition object:
+        - For all but the last route: add a `when` guard:
+            - when: "${{ result.<field> }} == <ROUTE_VALUE>"
+              route: <target_step>
+        - For the last route (or a catch-all): omit the `when` guard:
+            - route: <target_step>
+
+      The `on_result` must also change from a dict to a list. If the step previously
+      had `on_failure:` alongside the legacy `on_result:`, keep `on_failure:` — it
+      remains valid for predicate format (the predicate handles success-path routing,
+      on_failure handles tool-call failures).
+
+      NOTE: If the last route's key is the "negative" path (e.g., "NO GO", "false"),
+      make it the default (no `when`). If there are 3+ routes, order them so the
+      default catch-all is last.
+    detect:
+      on_result_has_field: true
+    example_before: |
+      audit_impl:
+        tool: run_skill
+        capture:
+          verdict: "${{ result.verdict }}"
+        on_result:
+          field: verdict
+          routes:
+            GO: merge
+            NO GO: remediate
+        on_failure: escalate
+    example_after: |
+      audit_impl:
+        tool: run_skill
+        capture:
+          verdict: "${{ result.verdict }}"
+        on_result:
+          - when: "${{ result.verdict }} == GO"
+            route: merge
+          - route: remediate
+        on_failure: escalate

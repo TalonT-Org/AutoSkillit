@@ -10,8 +10,14 @@ def main() -> None:
     try:
         raw = sys.stdin.read()
         _ = json.loads(raw)  # validate event is JSON; contents not needed
-    except Exception:
+    except (json.JSONDecodeError, ValueError):
         sys.exit(0)  # malformed event — approve
+    except Exception as e:
+        print(
+            f"quota_check: unexpected error reading stdin: {type(e).__name__}: {e}",
+            file=sys.stderr,
+        )
+        sys.exit(0)  # log but approve — don't block run_skill on hook bugs
 
     try:
         proc = subprocess.run(
@@ -23,8 +29,14 @@ def main() -> None:
         if proc.returncode != 0:
             sys.exit(0)  # tool failed — approve
         data = json.loads(proc.stdout)
-    except Exception:
-        sys.exit(0)  # any error — approve
+    except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError, ValueError):
+        sys.exit(0)  # expected infrastructure errors — approve
+    except Exception as e:
+        print(
+            f"quota_check: unexpected error running quota-status: {type(e).__name__}: {e}",
+            file=sys.stderr,
+        )
+        sys.exit(0)  # log but approve — quota check must never block valid runs
 
     if data.get("should_sleep"):
         n = int(data.get("sleep_seconds", 60))

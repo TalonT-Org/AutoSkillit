@@ -10,6 +10,9 @@ kitchen_rules:
   - "Route to on_failure when a step fails — the downstream skill (e.g.,
     resolve-failures) has diagnostic access that the orchestrator does not.
     Do not investigate or attempt to fix failures directly."
+  - "SEQUENTIAL EXECUTION: complete full cycle per part before advancing.
+    For each plan_part, run the full cycle (implement → test → merge) before
+    starting the next part. Do NOT batch-implement all parts upfront."
 
 ingredients:
   test_dir:

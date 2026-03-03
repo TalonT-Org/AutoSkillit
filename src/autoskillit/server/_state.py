@@ -44,6 +44,11 @@ def _get_config() -> AutomationConfig:
     return _get_ctx().config
 
 
+def _get_plugin_dir() -> str | None:
+    """Return plugin_dir from the current server context, or None if uninitialized."""
+    return _ctx.plugin_dir if _ctx is not None else None
+
+
 def version_info() -> dict:
     """Return version health information for the running server."""
     from autoskillit.version import version_info as _compute_version

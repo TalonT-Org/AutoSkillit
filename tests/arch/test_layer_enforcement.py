@@ -64,6 +64,7 @@ LAYER_RULES: dict[str, RuleDescriptor] = {
             "ensures that low-level modules (core, config) remain unaware of high-level "
             "modules (server, cli)."
         ),
+        exemptions=frozenset(),
         severity="high",
         defense_standard="DS-001",
     ),
@@ -79,6 +80,7 @@ LAYER_RULES: dict[str, RuleDescriptor] = {
             "Runtime L1\u2192L2 imports would introduce cyclic dependency risk because L2 "
             "packages (recipe, migration) are permitted to import from L1."
         ),
+        exemptions=frozenset(),
         severity="high",
         defense_standard="DS-001",
     ),

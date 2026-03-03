@@ -17,10 +17,10 @@ from autoskillit.cli._marketplace import (
     install,
     upgrade,
 )
+from autoskillit.cli._init_helpers import _prompt_recipe_choice
 from autoskillit.cli._prompts import _build_orchestrator_prompt
 from autoskillit.cli.app import (
     _generate_config_yaml,
-    _prompt_recipe_choice,
     _prompt_test_command,
     app,
     config_app,

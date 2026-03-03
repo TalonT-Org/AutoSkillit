@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -513,34 +514,20 @@ class TestReadDb:
 
 
 @pytest.mark.anyio
-async def test_tools_status_routes_through_db_reader(tool_ctx, monkeypatch, tmp_path) -> None:
+async def test_tools_status_routes_through_db_reader(tool_ctx, tmp_path) -> None:
     """read_db routes through ctx.db_reader.query()."""
-    calls = []
+    import sqlite3 as _sqlite3
 
-    class MockDbReader:
-        def query(
-            self,
-            db_path: str,
-            sql: str,
-            params: list | dict,
-            timeout_sec: int,
-            max_rows: int,
-        ) -> dict:
-            calls.append(sql)
-            return {"rows": [], "count": 0}
-
-    tool_ctx.db_reader = MockDbReader()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
-
-    from autoskillit.server.tools_status import read_db
+    tool_ctx.db_reader = MagicMock()
+    tool_ctx.db_reader.query.return_value = {"rows": [], "count": 0}
 
     db_path = str(tmp_path / "test.db")
     # Create an empty sqlite db so path-exists check passes
-    import sqlite3 as _sqlite3
-
     _sqlite3.connect(db_path).close()
     await read_db(db_path, "SELECT 1")
-    assert calls == ["SELECT 1"]
+    tool_ctx.db_reader.query.assert_called_once()
+    call_kwargs = tool_ctx.db_reader.query.call_args
+    assert "SELECT 1" in str(call_kwargs)
 
 
 @pytest.mark.anyio

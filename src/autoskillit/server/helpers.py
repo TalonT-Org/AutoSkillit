@@ -139,7 +139,7 @@ async def _apply_triage_gate(
         if hash_items:
             from datetime import UTC, datetime
 
-            from autoskillit.recipe._triage import triage_staleness
+            from autoskillit._llm_triage import triage_staleness
 
             triage = await triage_staleness(hash_items)
             all_cosmetic = all(not r.get("meaningful", True) for r in triage)

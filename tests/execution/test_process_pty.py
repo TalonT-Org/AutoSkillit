@@ -191,7 +191,7 @@ class TestPtyWrapCommand:
         cmd = ["claude", "--no-color", "do something"]
         fake_script = "/usr/bin/script"
         with (
-            patch("autoskillit.execution.process.sys.platform", "linux"),
+            patch("autoskillit.execution._process_pty.sys.platform", "linux"),
             patch("shutil.which", return_value=fake_script),
         ):
             result = pty_wrap_command(cmd)
@@ -209,7 +209,7 @@ class TestPtyWrapCommand:
         cmd = ["claude", "--no-color", "do something"]
         fake_script = "/usr/bin/script"
         with (
-            patch("autoskillit.execution.process.sys.platform", "darwin"),
+            patch("autoskillit.execution._process_pty.sys.platform", "darwin"),
             patch("shutil.which", return_value=fake_script),
         ):
             result = pty_wrap_command(cmd)

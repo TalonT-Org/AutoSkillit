@@ -814,7 +814,7 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
             )
 
     tool_ctx.executor = MockExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+    monkeypatch.setattr("autoskillit.server._state._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
 

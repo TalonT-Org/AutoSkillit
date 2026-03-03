@@ -1,11 +1,8 @@
 """LLM-assisted triage for contract staleness.
 
-L2 module (recipe/). Depends on execution/ for subprocess infrastructure
+Top-level autoskillit module. Depends on execution/ for subprocess infrastructure
 because triage_staleness spawns a Claude CLI process (claude -p) to perform
-semantic comparison of SKILL.md changes. This is the intended home for all
-LLM subprocess calls that support the contract validation system.
-
-Valid L2->L1 downward dependency: recipe/ may import from execution/.
+semantic comparison of SKILL.md changes.
 """
 
 from __future__ import annotations

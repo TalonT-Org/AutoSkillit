@@ -32,7 +32,7 @@ class TestCLIInstall:
         monkeypatch.delenv("CLAUDECODE", raising=False)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         with pytest.raises(SystemExit) as exc_info:
             cli.install()
@@ -47,7 +47,7 @@ class TestCLIInstall:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         marketplace_dir = cli._ensure_marketplace()
         assert (marketplace_dir / ".claude-plugin" / "marketplace.json").is_file()
@@ -62,7 +62,7 @@ class TestCLIInstall:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         marketplace_dir = cli._ensure_marketplace()
         link = marketplace_dir / "plugins" / "autoskillit"
@@ -76,7 +76,7 @@ class TestCLIInstall:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         marketplace_dir = cli._ensure_marketplace()
         data = json.loads((marketplace_dir / ".claude-plugin" / "marketplace.json").read_text())
@@ -95,7 +95,7 @@ class TestCLIInstall:
         monkeypatch.delenv("CLAUDECODE", raising=False)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
@@ -120,7 +120,7 @@ class TestCLIInstall:
         """install forwards the scope argument to claude plugin install."""
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
@@ -143,7 +143,7 @@ class TestCLIInstall:
         """Running install twice recreates the symlink without error."""
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
@@ -296,7 +296,7 @@ class TestInstallCommand:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: True)
 
         with pytest.raises(SystemExit, match="worktree"):
@@ -309,7 +309,7 @@ class TestInstallCommand:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
 
         result = cli._ensure_marketplace()
@@ -346,6 +346,7 @@ class TestGroupFInstall:
 
     def test_upgrade_uses_atomic_write(self, tmp_path, monkeypatch):
         """upgrade() must call _atomic_write, not yaml_file.write_text."""
+        import autoskillit.cli._marketplace as _mkt
         import autoskillit.core as _core
 
         monkeypatch.chdir(tmp_path)
@@ -360,7 +361,7 @@ class TestGroupFInstall:
             atomic_calls.append((path, content))
             return original(path, content)
 
-        monkeypatch.setattr(_core, "_atomic_write", capture)
+        monkeypatch.setattr(_mkt, "_atomic_write", capture)
         cli.upgrade()
 
         assert len(atomic_calls) == 1, "Expected exactly one _atomic_write call"
@@ -410,7 +411,7 @@ class TestGroupFInstall:
 
         # monkeypatch via the actual module object — string path resolves to the App object
         # due to autoskillit.cli.__init__.py re-exporting `app = App(...)` as attribute `app`
-        app_module = importlib.import_module("autoskillit.cli.app")
+        app_module = importlib.import_module("autoskillit.cli._hooks")
         monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
         monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
         monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
@@ -418,7 +419,7 @@ class TestGroupFInstall:
         monkeypatch.delenv("CLAUDECODE", raising=False)
         import importlib as _importlib
 
-        _app_mod = _importlib.import_module("autoskillit.cli.app")
+        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -446,13 +447,13 @@ class TestGroupFInstall:
         settings_path = tmp_path / ".claude" / "settings.json"
         settings_path.parent.mkdir(parents=True)
 
-        app_module = importlib.import_module("autoskillit.cli.app")
+        app_module = importlib.import_module("autoskillit.cli._hooks")
         monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
         monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
         monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
         monkeypatch.delenv("CLAUDECODE", raising=False)
 
-        _app_mod = importlib.import_module("autoskillit.cli.app")
+        _app_mod = importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -472,13 +473,13 @@ class TestGroupFInstall:
         settings_path = tmp_path / ".claude" / "settings.json"
         settings_path.parent.mkdir(parents=True)
 
-        app_module = importlib.import_module("autoskillit.cli.app")
+        app_module = importlib.import_module("autoskillit.cli._hooks")
         monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
         monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
         monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
         monkeypatch.delenv("CLAUDECODE", raising=False)
 
-        _app_mod = importlib.import_module("autoskillit.cli.app")
+        _app_mod = importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 

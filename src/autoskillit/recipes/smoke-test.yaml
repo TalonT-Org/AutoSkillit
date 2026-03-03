@@ -29,8 +29,25 @@ steps:
     with:
       cmd: "git init -b main && git commit --allow-empty -m 'initial' && touch .autoskillit-workspace"
       cwd: "${{ inputs.workspace }}"
+    on_success: setup_remote
+    on_failure: escalate
+
+  setup_remote:
+    tool: run_cmd
+    with:
+      cmd: >-
+        REMOTE="${{ inputs.workspace }}-bare.git" &&
+        git init --bare "$REMOTE" &&
+        git remote add origin "$REMOTE" &&
+        printf '%s' "$REMOTE"
+      cwd: "${{ inputs.workspace }}"
+    capture:
+      remote_url: "${{ result.stdout }}"
     on_success: seed_task
     on_failure: escalate
+    note: >
+      Creates a bare git repo as a local remote and configures origin.
+      Captures remote_url for use by push_feature_branch.
 
   seed_task:
     tool: run_cmd
@@ -119,8 +136,23 @@ steps:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
-    on_success: merge
+    on_success: push_feature_branch
     on_failure: assess
+
+  push_feature_branch:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ inputs.workspace }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.feature_branch }}"
+    on_success: merge
+    on_failure: escalate
+    optional: true
+    skip_when_false: "inputs.collect_on_branch"
+    note: >
+      Only execute if collect_on_branch is 'true'.
+      Publishes the feature branch to the local bare remote before merge_worktree.
+      merge_worktree requires the base_branch ref to exist on the remote.
 
   assess:
     tool: run_skill

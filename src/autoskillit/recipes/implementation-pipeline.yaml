@@ -106,7 +106,7 @@ steps:
       cwd: "${{ context.work_dir }}"
     capture:
       merge_target: "${{ result.stdout }}"
-    on_success: group
+    on_success: push_merge_target
     on_failure: cleanup_failure
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -118,6 +118,23 @@ steps:
       When open_pr='false': skip this step; context.merge_target retains the value set by
       set_merge_target (inputs.base_branch), so merge_worktree and push_to_remote continue
       to target base_branch directly.
+
+  push_merge_target:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.merge_target }}"
+    on_success: group
+    on_failure: cleanup_failure
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Only execute if open_pr is 'true'.
+      Publishes the feature branch to origin before any merge_worktree call.
+      merge_worktree requires refs/remotes/origin/{branch} to exist after fetch (step 5.5).
+      Without this step, merge_worktree fails with WORKTREE_INTACT_BASE_NOT_PUBLISHED.
+      Uses the pre-resolved remote_url from the clone step to preserve clone isolation.
 
   group:
     tool: run_skill

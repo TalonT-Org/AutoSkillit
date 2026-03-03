@@ -451,19 +451,19 @@ class TestServerLazyInit:
 
     def test_get_ctx_raises_before_initialize(self, monkeypatch):
         """_get_ctx() raises RuntimeError when _ctx is None."""
-        import autoskillit.server as srv
+        from autoskillit.server import _state
 
-        monkeypatch.setattr(srv, "_ctx", None)
+        monkeypatch.setattr(_state, "_ctx", None)
         with pytest.raises(RuntimeError, match="serve\\(\\) must be called"):
-            srv._get_ctx()
+            _state._get_ctx()
 
     def test_get_config_raises_before_initialize(self, monkeypatch):
         """_get_config() raises RuntimeError when _ctx is None."""
-        import autoskillit.server as srv
+        from autoskillit.server import _state
 
-        monkeypatch.setattr(srv, "_ctx", None)
+        monkeypatch.setattr(_state, "_ctx", None)
         with pytest.raises(RuntimeError, match="serve\\(\\) must be called"):
-            srv._get_config()
+            _state._get_config()
 
 
 class TestConfigDrivenBehavior:

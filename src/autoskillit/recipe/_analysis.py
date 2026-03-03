@@ -256,8 +256,9 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                     continue
                 consumed.update(_CONTEXT_REF_RE.findall(arg_val))
 
-        # on_result routing: if any condition routes to a step that consumes the var,
-        # that is implicit structural consumption — already covered by BFS above.
+        # on_result routing on a captured key is structural self-consumption
+        if step.on_result and step.on_result.field in step.capture:
+            consumed.add(step.on_result.field)
 
         # Flag captured vars not consumed on any path
         for cap_key in step.capture:

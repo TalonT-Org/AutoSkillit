@@ -55,21 +55,18 @@ class ClaudeSessionResult:
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
-            raise TypeError(
-                f"ClaudeSessionResult.result must be str, got {type(self.result).__name__}"
-            )
+            if isinstance(self.result, list):
+                self.result = "\n".join(
+                    b.get("text", "") if isinstance(b, dict) else str(b) for b in self.result
+                )
+            elif not isinstance(self.result, str):
+                self.result = "" if self.result is None else str(self.result)
         if not isinstance(self.errors, list):
-            raise TypeError(
-                f"ClaudeSessionResult.errors must be list, got {type(self.errors).__name__}"
-            )
+            self.errors = [] if self.errors is None else [str(self.errors)]
         if not isinstance(self.subtype, str):
-            raise TypeError(
-                f"ClaudeSessionResult.subtype must be str, got {type(self.subtype).__name__}"
-            )
+            self.subtype = "unknown" if self.subtype is None else str(self.subtype)
         if not isinstance(self.session_id, str):
-            raise TypeError(
-                f"ClaudeSessionResult.session_id must be str, got {type(self.session_id).__name__}"
-            )
+            self.session_id = "" if self.session_id is None else str(self.session_id)
 
     def _is_context_exhausted(self) -> bool:
         """Detect context window exhaustion from Claude's error output.

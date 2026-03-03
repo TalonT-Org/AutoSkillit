@@ -241,7 +241,7 @@ async def perform_merge(
         }
 
     # 8. Merge
-    rc, _, merge_stderr = await _run_git(["git", "merge", worktree_branch], main_repo, 60, runner)
+    rc, _, merge_stderr = await _run_git(["git", "merge", "--no-edit", worktree_branch], main_repo, 60, runner)
     if rc != 0:
         abort_rc, _, abort_stderr = await _run_git(
             ["git", "merge", "--abort"], main_repo, 30, runner

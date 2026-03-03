@@ -130,6 +130,40 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
 
 
 @pytest.mark.anyio
+async def test_perform_merge_uses_no_edit_flag(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """The merge command must include --no-edit for headless automation."""
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
+    # Queue all 9 steps for success path
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
+    conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
+    conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
+    conftest_mock_runner.push(_make_result(0, "", ""))  # merge
+    conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
+    conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
+
+    result = await perform_merge(
+        fake_wt, "main", config=default_config, runner=conftest_mock_runner, tester=tester,
+    )
+    assert result.get("merge_succeeded") is True
+
+    # Find the merge command in call_args_list
+    merge_cmds = [
+        args[0] for args in conftest_mock_runner.call_args_list
+        if "merge" in args[0] and "--abort" not in args[0]
+    ]
+    assert len(merge_cmds) == 1
+    assert "--no-edit" in merge_cmds[0], f"Expected --no-edit in merge command, got: {merge_cmds[0]}"
+
+
+@pytest.mark.anyio
 async def test_perform_merge_blocks_on_missing_remote_tracking_ref(
     conftest_mock_runner, default_config, tmp_path
 ):

@@ -57,7 +57,6 @@ steps:
       step_name: "plan"
     capture:
       plan_path: "${{ result.plan_path }}"
-      plans_input: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
     on_success: implement
@@ -135,7 +134,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl ${{ context.plans_input }} ${{ context.branch_name }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.branch_name }} ${{ inputs.base_branch }}"
       cwd: ${{ inputs.helper_dir }}
       step_name: "audit_impl"
     capture:

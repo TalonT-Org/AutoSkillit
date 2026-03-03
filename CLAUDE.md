@@ -107,9 +107,15 @@ src/autoskillit/
 │   ├── __init__.py          #   Re-exports public surface
 │   ├── commands.py          #   ClaudeInteractiveCmd/ClaudeHeadlessCmd builders
 │   ├── db.py                #   Read-only SQLite execution with defence-in-depth
-│   ├── headless.py          #   Headless Claude session orchestration (L3 service)
+│   ├── headless.py          #   Headless Claude session orchestration (L1 service)
 │   ├── linux_tracing.py     #   Linux-only /proc + psutil process tracing (Tier 2 debug)
-│   ├── process.py           #   Subprocess management (kill trees, temp I/O, timeouts)
+│   ├── process.py           #   Subprocess management facade (re-exports from _process_*.py)
+│   ├── _process_io.py       #   create_temp_io, read_temp_output
+│   ├── _process_jsonl.py    #   _jsonl_contains_marker, _jsonl_has_record_type, _marker_is_standalone
+│   ├── _process_kill.py     #   kill_process_tree, async_kill_process_tree
+│   ├── _process_monitor.py  #   _heartbeat, _session_log_monitor, _has_active_api_connection
+│   ├── _process_pty.py      #   pty_wrap_command
+│   ├── _process_race.py     #   RaceAccumulator, RaceSignals, resolve_termination, _watch_*
 │   ├── quota.py             #   Quota-aware check: QuotaStatus, cache, fetch, check_and_sleep_if_needed
 │   ├── github.py            #   GitHub issue fetcher (L1, httpx-based, never raises)
 │   ├── session.py           #   ClaudeSessionResult, SkillResult, extract_token_usage
@@ -127,8 +133,13 @@ src/autoskillit/
 │   ├── _api.py              #   Recipe orchestration API: load/validate pipelines, format responses
 │   ├── registry.py          #   RuleFinding, RuleSpec, _RULE_REGISTRY, semantic_rule, run_semantic_rules
 │   ├── repository.py        #   Concrete RecipeRepository implementation
-│   ├── rules.py             #   Semantic validation rules for the recipe schema
+│   ├── _analysis.py         #   Step graph building and dataflow analysis
 │   ├── rules_bypass.py      #   Semantic rules for skip_when_false bypass routing contracts
+│   ├── rules_clone.py       #   Semantic rules for clone/push workflow validation
+│   ├── rules_dataflow.py    #   Semantic rules for capture/output dataflow analysis
+│   ├── rules_graph.py       #   Semantic rules for step graph reachability and cycles
+│   ├── rules_inputs.py      #   Semantic rules for ingredient/version validation
+│   ├── rules_worktree.py    #   Semantic rules for worktree retry lifecycle
 │   ├── schema.py            #   Recipe, RecipeStep, DataFlowWarning, AUTOSKILLIT_VERSION_KEY
 │   ├── staleness_cache.py   #   Disk-backed staleness check cache (StalenessEntry, load_cache, save_cache)
 │   └── validator.py         #   validate_recipe, run_semantic_rules (re-exported), analyze_dataflow
@@ -150,10 +161,14 @@ src/autoskillit/
 │   ├── tools_status.py      #   kitchen_status, get_pipeline_report, get_token_summary tool handlers
 │   ├── tools_integrations.py #  fetch_github_issue, report_bug tool handlers
 │   ├── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace, read_db tool handlers
-│   └── _factory.py              #   Composition Root: make_context() wires ToolContext
+│   ├── _factory.py          #   Composition Root: make_context() wires ToolContext
+│   └── _state.py            #   Server state extraction (lazy init, plugin dir resolution)
 ├── cli/                     # L3 CLI sub-package
 │   ├── __init__.py          #   Re-exports main entry point
-│   ├── _doctor.py           #   Doctor command — 7 project setup checks
+│   ├── _doctor.py           #   Doctor command -- 7 project setup checks
+│   ├── _hooks.py            #   Unified PreToolUse hook registration helpers
+│   ├── _marketplace.py      #   Plugin install/upgrade marketplace operations
+│   ├── _prompts.py          #   Orchestrator prompt builder for recipe execution
 │   └── app.py               #   CLI: serve, init, config show, skills, recipes, workspace, doctor
 ├── hooks/                   # Claude Code PreToolUse hook scripts
 │   ├── __init__.py

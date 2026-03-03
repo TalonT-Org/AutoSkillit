@@ -193,6 +193,7 @@ class SubprocessRunner(Protocol):
         pty_mode: bool = True,
         input_data: str | None = None,
         completion_drain_timeout: float = 5.0,
+        linux_tracing_config: Any | None = None,
     ) -> Awaitable[SubprocessResult]: ...
 
 

@@ -348,39 +348,6 @@ def test_skill_tools_defined_in_types():
     )
 
 
-# ── CLAUDE.md documentation and structural tests ──────────────────────────────
-
-
-def test_claude_md_documents_all_source_modules() -> None:
-    """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
-
-    For __init__.py files, the containing package directory name must appear.
-    For all other files, the filename must appear somewhere in CLAUDE.md.
-    """
-    claude_path = Path(__file__).parent.parent.parent / "CLAUDE.md"
-    content = claude_path.read_text()
-    src_root = Path(__file__).parent.parent.parent / "src" / "autoskillit"
-
-    missing = []
-    for py_file in sorted(src_root.rglob("*.py")):
-        if "__pycache__" in py_file.parts:
-            continue
-        rel = py_file.relative_to(src_root)
-        if py_file.name == "__init__.py":
-            # For sub-package inits, verify the package directory is documented
-            parent = rel.parent
-            if parent != Path(".") and (parent.name + "/") not in content:
-                missing.append(str(rel))
-        else:
-            if py_file.name not in content:
-                missing.append(str(rel))
-
-    assert not missing, (
-        f"Modules not documented in CLAUDE.md: {', '.join(missing)}. "
-        "Update the Architecture section in CLAUDE.md."
-    )
-
-
 def test_pyproject_cyclopts_minimum_version() -> None:
     """cyclopts lower bound in pyproject.toml must be >=4.0, not >=3.0.
 

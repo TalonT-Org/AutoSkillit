@@ -136,6 +136,30 @@ class TestConfigureLogging:
         captured = capsys.readouterr()
         assert captured.out == ""
 
+    def test_configure_logging_level_debug(self):
+        """configure_logging(level=DEBUG) sets structlog filter to DEBUG."""
+        from autoskillit.core.logging import configure_logging, get_logger
+
+        stream = io.StringIO()
+        configure_logging(level=logging.DEBUG, json_output=False, stream=stream)
+        get_logger("autoskillit.test").debug("debug_probe")
+        assert "debug_probe" in stream.getvalue()
+        # Also verify stdlib logger is at DEBUG
+        stdlib_logger = logging.getLogger("autoskillit")  # noqa: TID251
+        assert stdlib_logger.level == logging.DEBUG
+
+    def test_configure_logging_safe_to_call_twice(self):
+        """configure_logging() can be called twice (two-phase boot)."""
+        from autoskillit.core.logging import configure_logging, get_logger
+
+        stream1 = io.StringIO()
+        configure_logging(level=logging.INFO, json_output=False, stream=stream1)
+        stream2 = io.StringIO()
+        configure_logging(level=logging.DEBUG, json_output=False, stream=stream2)
+        _flush_logger_proxy_caches()
+        get_logger("autoskillit.test").debug("second_config_probe")
+        assert "second_config_probe" in stream2.getvalue()
+
 
 class TestContextVarBinding:
     def test_bound_context_appears_in_all_records(self):

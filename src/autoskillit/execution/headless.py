@@ -15,6 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import structlog
+
 from autoskillit.core import (
     FailureRecord,
     RetryReason,
@@ -130,11 +132,15 @@ def _recover_from_separate_marker(
 def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
     """Resolve model selection: config override > step > config default."""
     if config.model.override:
+        logger.debug("model_resolved", tier="override", model=config.model.override)
         return config.model.override
     if step_model:
+        logger.debug("model_resolved", tier="step", model=step_model)
         return step_model
     if config.model.default:
+        logger.debug("model_resolved", tier="default", model=config.model.default)
         return config.model.default
+    logger.debug("model_resolved", tier="none", model=None)
     return None
 
 
@@ -145,6 +151,23 @@ def _build_skill_result(
     audit: AuditStore | None = None,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
+    branch = (
+        "stale"
+        if result.termination == TerminationReason.STALE
+        else "timed_out"
+        if result.termination == TerminationReason.TIMED_OUT
+        else "normal"
+    )
+    logger.debug(
+        "build_skill_result_entry",
+        termination=str(result.termination),
+        returncode=result.returncode,
+        channel=str(result.channel_confirmation),
+        pid=result.pid,
+        stdout_len=len(result.stdout),
+        stderr_len=len(result.stderr),
+        branch=branch,
+    )
     if result.termination == TerminationReason.STALE:
         # Attempt to recover from stdout before declaring stale failure.
         stale_session = parse_session_result(result.stdout)
@@ -249,7 +272,7 @@ def _build_skill_result(
     if completion_marker:
         result_text = result_text.replace(completion_marker, "").strip()
 
-    return SkillResult(
+    sr = SkillResult(
         success=success,
         result=result_text,
         session_id=session.session_id,
@@ -261,6 +284,16 @@ def _build_skill_result(
         stderr=_truncate(result.stderr),
         token_usage=session.token_usage,
     )
+    logger.debug(
+        "build_skill_result_exit",
+        success=sr.success,
+        subtype=sr.subtype,
+        needs_retry=sr.needs_retry,
+        retry_reason=str(sr.retry_reason),
+        is_error=sr.is_error,
+        result_len=len(sr.result),
+    )
+    return sr
 
 
 async def run_headless_core(
@@ -281,43 +314,76 @@ async def run_headless_core(
     """
     cfg = ctx.config.run_skill
     original_skill_command = skill_command
-    skill_command = _inject_completion_directive(
-        _ensure_skill_prefix(skill_command), cfg.completion_marker
-    )
-    effective_plugin_dir = ctx.plugin_dir
-    resolved_model = _resolve_model(model, ctx.config)
-    spec = build_headless_cmd(skill_command, model=resolved_model)
-    cmd = spec.cmd + ["--plugin-dir", effective_plugin_dir, "--output-format", "json"]
-    if add_dir:
-        cmd.extend(["--add-dir", add_dir])
 
-    delay_ms = cfg.exit_after_stop_delay_ms
-    if delay_ms > 0:
-        cmd = ["env", f"CLAUDE_CODE_EXIT_AFTER_STOP_DELAY={delay_ms}"] + cmd
+    with structlog.contextvars.bound_contextvars(
+        skill_command=original_skill_command[:100],
+        step_name=step_name or None,
+    ):
+        skill_command = _inject_completion_directive(
+            _ensure_skill_prefix(skill_command), cfg.completion_marker
+        )
+        effective_plugin_dir = ctx.plugin_dir
+        resolved_model = _resolve_model(model, ctx.config)
+        spec = build_headless_cmd(skill_command, model=resolved_model)
+        cmd = spec.cmd + ["--plugin-dir", effective_plugin_dir, "--output-format", "json"]
+        if add_dir:
+            cmd.extend(["--add-dir", add_dir])
 
-    runner = ctx.runner
-    assert runner is not None, "No subprocess runner configured"
-    result = await runner(
-        cmd,
-        cwd=Path(cwd),
-        timeout=timeout if timeout is not None else cfg.timeout,
-        pty_mode=True,
-        heartbeat_marker=cfg.heartbeat_marker,
-        session_log_dir=_session_log_dir(cwd),
-        completion_marker=cfg.completion_marker,
-        stale_threshold=stale_threshold if stale_threshold is not None else cfg.stale_threshold,
-        completion_drain_timeout=cfg.completion_drain_timeout,
-    )
+        delay_ms = cfg.exit_after_stop_delay_ms
+        if delay_ms > 0:
+            cmd = ["env", f"CLAUDE_CODE_EXIT_AFTER_STOP_DELAY={delay_ms}"] + cmd
 
-    skill_result = _build_skill_result(
-        result,
-        completion_marker=cfg.completion_marker,
-        skill_command=original_skill_command,
-        audit=ctx.audit,
-    )
-    if step_name:
-        ctx.token_log.record(step_name, skill_result.token_usage)
-    return skill_result
+        effective_timeout = timeout if timeout is not None else cfg.timeout
+        effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
+
+        logger.debug(
+            "run_headless_core_entry",
+            cwd=cwd,
+            resolved_model=resolved_model,
+            timeout=effective_timeout,
+            stale_threshold=effective_stale,
+            plugin_dir=str(effective_plugin_dir),
+            add_dir=add_dir or None,
+        )
+
+        runner = ctx.runner
+        assert runner is not None, "No subprocess runner configured"
+
+        linux_tracing_cfg = None
+        if ctx.config.logging.level == "DEBUG":
+            linux_tracing_cfg = ctx.config.linux_tracing
+
+        result = await runner(
+            cmd,
+            cwd=Path(cwd),
+            timeout=effective_timeout,
+            pty_mode=True,
+            heartbeat_marker=cfg.heartbeat_marker,
+            session_log_dir=_session_log_dir(cwd),
+            completion_marker=cfg.completion_marker,
+            stale_threshold=effective_stale,
+            completion_drain_timeout=cfg.completion_drain_timeout,
+            linux_tracing_config=linux_tracing_cfg,
+        )
+
+        skill_result = _build_skill_result(
+            result,
+            completion_marker=cfg.completion_marker,
+            skill_command=original_skill_command,
+            audit=ctx.audit,
+        )
+
+        logger.debug(
+            "run_headless_core_exit",
+            success=skill_result.success,
+            needs_retry=skill_result.needs_retry,
+            subtype=skill_result.subtype,
+            session_id=skill_result.session_id,
+        )
+
+        if step_name:
+            ctx.token_log.record(step_name, skill_result.token_usage)
+        return skill_result
 
 
 class DefaultHeadlessExecutor:

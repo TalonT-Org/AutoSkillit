@@ -307,7 +307,9 @@ class TestCloneOriginContract:
         """
         bare_remote = tmp_path / "bare.git"
         bare_remote.mkdir()
-        subprocess.run(["git", "init", "--bare", str(bare_remote)], check=True)
+        subprocess.run(
+            ["git", "init", "--bare", "--initial-branch=main", str(bare_remote)], check=True
+        )
 
         source = tmp_path / "source"
         subprocess.run(["git", "clone", str(bare_remote), str(source)], check=True)

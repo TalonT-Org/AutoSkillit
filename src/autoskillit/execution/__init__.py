@@ -15,6 +15,12 @@ from autoskillit.execution.commands import (
 from autoskillit.execution.db import DefaultDatabaseReader, _execute_readonly_query
 from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.execution.headless import DefaultHeadlessExecutor, run_headless_core
+from autoskillit.execution.linux_tracing import (
+    LINUX_TRACING_AVAILABLE,
+    LinuxTracingHandle,
+    ProcSnapshot,
+    start_linux_tracing,
+)
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
     run_managed_async,
@@ -64,4 +70,9 @@ __all__ = [
     "DefaultDatabaseReader",
     # github
     "DefaultGitHubFetcher",
+    # linux_tracing
+    "LINUX_TRACING_AVAILABLE",
+    "LinuxTracingHandle",
+    "ProcSnapshot",
+    "start_linux_tracing",
 ]

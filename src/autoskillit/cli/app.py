@@ -43,14 +43,32 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     from autoskillit.core import configure_logging, get_logger
     from autoskillit.server import _initialize, make_context, mcp
 
+    # Phase 1: Early init at INFO (or DEBUG if --verbose) — ensures logging
+    # works for config load errors.
+    cli_level = _stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO
     configure_logging(
-        level=_stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO,
+        level=cli_level,
         json_output=not sys.stderr.isatty(),
         stream=sys.stderr,
     )
 
     project_dir = Path.cwd()
     cfg = load_config(project_dir)
+
+    # Phase 2: Reconfigure if config specifies a different level.
+    # min() ensures --verbose OR config DEBUG both enable debug — most verbose wins.
+    config_level = getattr(_stdlib_logging, cfg.logging.level.upper(), _stdlib_logging.INFO)
+    effective_level = min(config_level, cli_level)
+    json_output = (
+        cfg.logging.json_output if cfg.logging.json_output is not None else not sys.stderr.isatty()
+    )
+    if effective_level != cli_level or cfg.logging.json_output is not None:
+        configure_logging(
+            level=effective_level,
+            json_output=json_output,
+            stream=sys.stderr,
+        )
+
     project_path = project_dir / ".autoskillit" / "config.yaml"
     user_path = Path.home() / ".autoskillit" / "config.yaml"
     resolved_path: str | None = (

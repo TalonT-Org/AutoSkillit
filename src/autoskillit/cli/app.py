@@ -17,11 +17,11 @@ from cyclopts import App, Parameter
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _generate_config_yaml,
-    _prompt_recipe_choice,
     _prompt_test_command,
 )
 from autoskillit.core import _atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
+from autoskillit.recipe import list_recipes
 
 app = App(
     name="autoskillit",
@@ -154,9 +154,9 @@ def doctor(*, output_json: bool = False):
         Output results as JSON instead of human-readable text.
     """
     from autoskillit.cli._doctor import run_doctor
-    from autoskillit.server import _ctx as _server_ctx
+    from autoskillit.server import _get_plugin_dir
 
-    plugin_dir = _server_ctx.plugin_dir if _server_ctx is not None else None
+    plugin_dir = _get_plugin_dir()
     run_doctor(output_json=output_json, plugin_dir=plugin_dir)
 
 
@@ -394,7 +394,14 @@ def cook(recipe: str | None = None):
         sys.exit(1)
 
     if recipe is None:
-        recipe = _prompt_recipe_choice()
+        available = list_recipes(Path.cwd()).items
+        if not available:
+            print("No recipes found. Run 'autoskillit recipes list' to check.")
+            sys.exit(1)
+        print("Available recipes:")
+        for i, r in enumerate(available, 1):
+            print(f"  {i}. {r.name}")
+        recipe = input("Recipe name: ").strip()
 
     from autoskillit.core import YAMLError
     from autoskillit.recipe import find_recipe_by_name, validate_recipe

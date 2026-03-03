@@ -24,6 +24,7 @@ from tests.arch._helpers import (
     _rel,
     _runtime_import_froms,
 )
+from tests.arch._rules import RuleDescriptor
 
 # ── Sub-package layer registry ────────────────────────────────────────────────
 SUBPACKAGE_LAYERS: dict[str, int] = {
@@ -46,6 +47,42 @@ SUBPACKAGE_LAYERS: dict[str, int] = {
 _LAYER_EXEMPT_STEMS: frozenset[str] = frozenset(
     {"version", "smoke_utils", "_llm_triage", "__init__", "__main__"}
 )
+
+# ── REQ-ARCH layer enforcement rule descriptors ───────────────────────────────────
+LAYER_RULES: dict[str, RuleDescriptor] = {
+    "REQ-ARCH-001": RuleDescriptor(
+        rule_id="REQ-ARCH-001",
+        name="sub-package-import-layer-ordering",
+        lens="module-dependency",
+        description=(
+            "Each autoskillit sub-package may only import from packages at the same or lower "
+            "layer (L0 \u2264 L1 \u2264 L2 \u2264 L3). Upward imports introduce coupling that "
+            "hinders independent testing and layering guarantees."
+        ),
+        rationale=(
+            "Enforcing a strict layered architecture prevents circular dependencies and "
+            "ensures that low-level modules (core, config) remain unaware of high-level "
+            "modules (server, cli)."
+        ),
+        severity="high",
+        defense_standard="DS-001",
+    ),
+    "REQ-ARCH-003": RuleDescriptor(
+        rule_id="REQ-ARCH-003",
+        name="l1-packages-no-runtime-l2-l3-imports",
+        lens="module-dependency",
+        description=(
+            "L1 sub-packages (config, pipeline, execution, workspace) must not import from "
+            "L2 or L3 packages at runtime. TYPE_CHECKING-guarded imports are permitted."
+        ),
+        rationale=(
+            "Runtime L1\u2192L2 imports would introduce cyclic dependency risk because L2 "
+            "packages (recipe, migration) are permitted to import from L1."
+        ),
+        severity="high",
+        defense_standard="DS-001",
+    ),
+}
 
 
 def _collect_deferred_imports(tree: ast.Module) -> list[ast.Import | ast.ImportFrom]:

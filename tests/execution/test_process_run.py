@@ -213,12 +213,14 @@ class TestReadTempOutputLogging:
 
     @pytest.fixture(autouse=True)
     def _reset_structlog_config(self):
-        """Sync only process.logger._processors with the current structlog config.
+        """Sync process and _process_io loggers with the current structlog config.
 
         Scoped to this test class only — no cross-module mutation.
+        _process_io.logger must also be synced because read_temp_output lives there.
         """
         import structlog
 
+        import autoskillit.execution._process_io as io_mod
         import autoskillit.execution.process as proc_mod
 
         structlog.reset_defaults()
@@ -226,10 +228,15 @@ class TestReadTempOutputLogging:
         old_procs = getattr(proc_mod.logger, "_processors", None)
         if old_procs is not None:
             proc_mod.logger._processors = current_procs
+        old_io_procs = getattr(io_mod.logger, "_processors", None)
+        if old_io_procs is not None:
+            io_mod.logger._processors = current_procs
         yield
         structlog.reset_defaults()
         if old_procs is not None:
             proc_mod.logger._processors = old_procs
+        if old_io_procs is not None:
+            io_mod.logger._processors = old_io_procs
 
     def test_oserror_logs_warning(self):
         """OSError during temp file read should produce a warning log."""

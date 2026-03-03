@@ -10,8 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import autoskillit.cli._hooks as _hooks_mod
 from autoskillit.cli._hooks import (
-    _claude_settings_path,
     _register_quota_hook,
     _register_remove_clone_guard_hook,
     _register_skill_command_guard_hook,
@@ -165,7 +165,7 @@ def install(*, scope: str = "user"):
         sys.exit(1)
 
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
-    settings_path = _claude_settings_path(scope)
+    settings_path = _hooks_mod._claude_settings_path(scope)
     _register_quota_hook(settings_path)
     _register_remove_clone_guard_hook(settings_path)
     _register_skill_command_guard_hook(settings_path)

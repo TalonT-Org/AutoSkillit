@@ -14,9 +14,14 @@ from typing import Annotated
 
 from cyclopts import App, Parameter
 
+from autoskillit.cli._init_helpers import (
+    _MARKER_CONTENT,
+    _generate_config_yaml,
+    _prompt_recipe_choice,
+    _prompt_test_command,
+)
 from autoskillit.core import _atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
-from autoskillit.recipe import list_recipes
 
 app = App(
     name="autoskillit",
@@ -149,7 +154,7 @@ def doctor(*, output_json: bool = False):
         Output results as JSON instead of human-readable text.
     """
     from autoskillit.cli._doctor import run_doctor
-    from autoskillit.server._state import _ctx as _server_ctx
+    from autoskillit.server import _ctx as _server_ctx
 
     plugin_dir = _server_ctx.plugin_dir if _server_ctx is not None else None
     run_doctor(output_json=output_json, plugin_dir=plugin_dir)
@@ -253,13 +258,6 @@ def skills_list():
     for s in skills:
         print(f"{s.name:<{name_w}}  {s.source:<{src_w}}  {s.path}")
 
-
-_MARKER_CONTENT = """\
-# autoskillit workspace - do not delete
-# This file authorizes reset_test_dir and reset_workspace to clear this directory.
-# Created: {timestamp}
-# Tool: autoskillit {version}
-"""
 
 
 @workspace_app.command(name="init")
@@ -454,64 +452,6 @@ def cook(recipe: str | None = None):
     result = subprocess.run(cmd, env={**os.environ, **spec.env})
     if result.returncode != 0:
         sys.exit(result.returncode)
-
-
-# --- Init helpers ---
-
-
-def _prompt_recipe_choice() -> str:
-    available = list_recipes(Path.cwd()).items
-    if not available:
-        print("No recipes found. Run 'autoskillit recipes list' to check.")
-        raise SystemExit(1)
-    print("Available recipes:")
-    for i, r in enumerate(available, 1):
-        print(f"  {i}. {r.name}")
-    return input("Recipe name: ").strip()
-
-
-def _prompt_test_command() -> list[str]:
-    default = "task test-all"
-    answer = input(f"Test command [{default}]: ").strip()
-    return (answer if answer else default).split()
-
-
-def _generate_config_yaml(test_command: list[str]) -> str:
-    """Generate config YAML with active settings and commented advanced sections."""
-    cmd_str = json.dumps(test_command)
-    return f"""\
-test_check:
-  command: {cmd_str}
-  # timeout: 600
-
-safety:
-  reset_guard_marker: ".autoskillit-workspace"
-  require_dry_walkthrough: true
-  test_gate_on_merge: true
-
-# --- Advanced settings (uncomment and configure as needed) ---
-#
-# classify_fix:
-#   path_prefixes: []
-#
-# reset_workspace:
-#   command: null
-#   preserve_dirs: []
-#
-# implement_gate:
-#   marker: "Dry-walkthrough verified = TRUE"
-#   skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
-#
-# run_skill:
-#   timeout: 3600
-#   heartbeat_marker: '"type":"result"'
-#   stale_threshold: 1200
-#   completion_marker: "%%ORDER_UP%%"
-#
-# run_skill_retry:
-#   timeout: 7200
-#   stale_threshold: 1200
-"""
 
 
 def main() -> None:

@@ -42,6 +42,14 @@ from autoskillit.recipe.validator import (  # noqa: E402
     validate_recipe,
 )
 
+# Rule registration — import triggers @semantic_rule registration.
+from autoskillit.recipe import rules_bypass as _rules_bypass  # noqa: E402 F401
+from autoskillit.recipe import rules_clone as _rules_clone  # noqa: E402 F401
+from autoskillit.recipe import rules_dataflow as _rules_dataflow  # noqa: E402 F401
+from autoskillit.recipe import rules_graph as _rules_graph  # noqa: E402 F401
+from autoskillit.recipe import rules_inputs as _rules_inputs  # noqa: E402 F401
+from autoskillit.recipe import rules_worktree as _rules_worktree  # noqa: E402 F401
+
 __all__ = [
     "Recipe",
     "RecipeStep",

@@ -1,0 +1,81 @@
+"""Tests verifying process.py decomposition into focused sub-modules.
+
+P8-2: Each _process_*.py sub-module exports its expected symbols.
+process.py remains a re-export facade for all public symbols.
+"""
+
+from __future__ import annotations
+
+
+def test_process_kill_exports():
+    """_process_kill.py exports kill/async_kill functions."""
+    from autoskillit.execution._process_kill import async_kill_process_tree, kill_process_tree
+
+    assert callable(kill_process_tree)
+    assert callable(async_kill_process_tree)
+
+
+def test_process_pty_exports():
+    """_process_pty.py exports pty_wrap_command."""
+    from autoskillit.execution._process_pty import pty_wrap_command
+
+    assert callable(pty_wrap_command)
+
+
+def test_process_jsonl_exports():
+    """_process_jsonl.py exports JSONL parsing helpers."""
+    from autoskillit.execution._process_jsonl import (
+        _jsonl_contains_marker,
+        _jsonl_has_record_type,
+        _marker_is_standalone,
+    )
+
+    assert callable(_jsonl_contains_marker)
+    assert callable(_jsonl_has_record_type)
+    assert callable(_marker_is_standalone)
+
+
+def test_process_io_exports():
+    """_process_io.py exports temp I/O helpers."""
+    from autoskillit.execution._process_io import create_temp_io, read_temp_output
+
+    assert callable(create_temp_io)
+    assert callable(read_temp_output)
+
+
+def test_process_monitor_exports():
+    """_process_monitor.py exports monitoring functions."""
+    from autoskillit.execution._process_monitor import (
+        _has_active_api_connection,
+        _heartbeat,
+        _session_log_monitor,
+    )
+
+    assert callable(_heartbeat)
+    assert callable(_session_log_monitor)
+    assert callable(_has_active_api_connection)
+
+
+def test_process_race_exports():
+    """_process_race.py exports race coordination types and functions."""
+    from autoskillit.execution._process_race import (
+        RaceAccumulator,
+        RaceSignals,
+        _watch_heartbeat,
+        resolve_termination,
+    )
+
+    assert RaceAccumulator is not None
+    assert RaceSignals is not None
+    assert callable(resolve_termination)
+    assert callable(_watch_heartbeat)
+
+
+def test_process_facade_reexports_all_public_symbols():
+    """process.py facade re-exports all 21 public symbols."""
+    from autoskillit.execution import process
+
+    assert hasattr(process, "__all__")
+    assert len(process.__all__) == 21, (
+        f"process.py __all__ has {len(process.__all__)} symbols, expected 21"
+    )

@@ -248,3 +248,22 @@ class TestSkillResolver:
             f"  Listed:  {listed_skills}\n"
             f"  On disk: {actual_skills}"
         )
+
+    def test_pipeline_summary_skill_exists(self) -> None:
+        """pipeline-summary must be in the bundled skills list."""
+        resolver = SkillResolver()
+        all_names = {s.name for s in resolver.list_all()}
+        assert "pipeline-summary" in all_names
+
+    def test_internal_skills_excluded_from_list_all(self) -> None:
+        """sous-chef must NOT appear in list_all (internal-only skill)."""
+        resolver = SkillResolver()
+        all_names = {s.name for s in resolver.list_all()}
+        assert "sous-chef" not in all_names
+
+    def test_list_all_returns_user_invocable_skills_only(self) -> None:
+        """list_all returns bundled skills minus internal skills."""
+        resolver = SkillResolver()
+        all_names = {s.name for s in resolver.list_all()}
+        expected = set(BUNDLED_SKILLS) - INTERNAL_SKILLS
+        assert all_names == expected

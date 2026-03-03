@@ -113,26 +113,20 @@ class TestCloneRepo:
         """Clone creates a sibling directory with expected keys, parent, and git repo."""
         result = clone_repo(str(git_repo), "myrun")
         clone_path = Path(result["clone_path"])
-        try:
-            assert clone_path.is_dir()
-            assert (clone_path / ".git").is_dir()
-            assert "clone_path" in result
-            assert "source_dir" in result
-            assert "remote_url" in result
-            assert result["source_dir"] == str(git_repo.resolve())
-            expected_parent = git_repo.parent / "autoskillit-runs"
-            assert clone_path.parent == expected_parent
-        finally:
-            shutil.rmtree(clone_path, ignore_errors=True)
+        assert clone_path.is_dir()
+        assert (clone_path / ".git").is_dir()
+        assert "clone_path" in result
+        assert "source_dir" in result
+        assert "remote_url" in result
+        assert result["source_dir"] == str(git_repo.resolve())
+        expected_parent = git_repo.parent / "autoskillit-runs"
+        assert clone_path.parent == expected_parent
 
     def test_clone_path_name_format(self, git_repo: Path) -> None:
         """Clone directory name follows run_name-YYYYMMDD-HHMMSS-ffffff format."""
         result = clone_repo(str(git_repo), "myrun")
         clone_path = Path(result["clone_path"])
-        try:
-            assert re.match(r"myrun-\d{8}-\d{6}-\d{6}$", clone_path.name), clone_path.name
-        finally:
-            shutil.rmtree(clone_path, ignore_errors=True)
+        assert re.match(r"myrun-\d{8}-\d{6}-\d{6}$", clone_path.name), clone_path.name
 
     def test_invalid_source_dir_raises_value_error(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="source_dir does not exist"):
@@ -145,8 +139,6 @@ class TestCloneRepo:
 
     def test_cb1_explicit_branch_is_checked_out_in_clone(self, git_repo: Path) -> None:
         """T_CB1: explicit branch is checked out in the clone."""
-        import shutil
-
         subprocess.run(
             ["git", "-C", str(git_repo), "checkout", "-b", "dev"],
             check=True,
@@ -166,12 +158,9 @@ class TestCloneRepo:
             check=True,
         ).stdout.strip()
         assert head == "dev"
-        shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_cb2_auto_detects_current_branch_when_branch_empty(self, git_repo: Path) -> None:
         """T_CB2: branch="" auto-detects current HEAD branch and clones it."""
-        import shutil
-
         subprocess.run(
             ["git", "-C", str(git_repo), "checkout", "-b", "feature"],
             check=True,
@@ -191,7 +180,6 @@ class TestCloneRepo:
             check=True,
         ).stdout.strip()
         assert head == "feature"
-        shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_cb3_returns_uncommitted_changes_warning_when_dirty(self, git_repo: Path) -> None:
         """T_CB3: untracked files trigger warning dict; no clone is created."""
@@ -203,30 +191,22 @@ class TestCloneRepo:
 
     def test_cb4_strategy_proceed_skips_uncommitted_check(self, git_repo: Path) -> None:
         """T_CB4: strategy='proceed' clones without uncommitted changes check."""
-        import shutil
-
         (git_repo / "untracked.txt").write_text("dirty")
         result = clone_repo(str(git_repo), "test", strategy="proceed")
         assert "clone_path" in result
         clone_path = Path(result["clone_path"])
         assert not (clone_path / "untracked.txt").exists()
-        shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_cb5_strategy_clone_local_includes_uncommitted_changes(self, git_repo: Path) -> None:
         """T_CB5: strategy='clone_local' copytree includes untracked files."""
-        import shutil
-
         (git_repo / "untracked.txt").write_text("dirty")
         result = clone_repo(str(git_repo), "test", strategy="clone_local")
         assert "clone_path" in result
         clone_path = Path(result["clone_path"])
         assert (clone_path / "untracked.txt").exists()
-        shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_cb6_detached_head_falls_back_to_no_branch_flag(self, git_repo: Path) -> None:
         """T_CB6: detached HEAD yields branch=''; git clone succeeds without --branch."""
-        import shutil
-
         sha = subprocess.run(
             ["git", "-C", str(git_repo), "rev-parse", "HEAD"],
             capture_output=True,
@@ -242,7 +222,6 @@ class TestCloneRepo:
         assert "clone_path" in result
         clone_path = Path(result["clone_path"])
         assert clone_path.is_dir()
-        shutil.rmtree(clone_path, ignore_errors=True)
 
     def test_returns_unpublished_branch_warning_when_not_on_remote(
         self, local_with_remote: Path
@@ -256,27 +235,20 @@ class TestCloneRepo:
 
     def test_published_branch_proceeds_to_clone(self, local_with_remote: Path) -> None:
         """clone_repo clones normally when branch is on origin."""
-        import shutil
-
         result = clone_repo(str(local_with_remote), "test-run", branch="main")
         assert "clone_path" in result
         assert "unpublished_branch" not in result
-        shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
 
     def test_strategy_proceed_bypasses_unpublished_guard(self, local_with_remote: Path) -> None:
         """strategy='proceed' bypasses the unpublished_branch guard."""
-        import shutil
-
         result = clone_repo(
             str(local_with_remote), "test-run", branch="feature/local-only", strategy="proceed"
         )
         # Guard bypassed — clone proceeds (NOT an unpublished warning)
         assert "unpublished_branch" not in result
-        if "clone_path" in result:
-            shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
 
 
-def test_clone_path_within_tmp_path(tmp_path: Path, git_repo: Path) -> None:
+def test_clone_output_stays_within_test_isolation_boundary(tmp_path: Path, git_repo: Path) -> None:
     """clone_repo output must be a descendant of tmp_path, never its parent.
 
     Fails when the git_repo fixture returns tmp_path itself, because clone_repo
@@ -307,7 +279,9 @@ class TestCloneOriginContract:
         """
         bare_remote = tmp_path / "bare.git"
         bare_remote.mkdir()
-        subprocess.run(["git", "init", "--bare", str(bare_remote)], check=True)
+        subprocess.run(
+            ["git", "init", "--bare", "--initial-branch=main", str(bare_remote)], check=True
+        )
 
         source = tmp_path / "source"
         subprocess.run(["git", "clone", str(bare_remote), str(source)], check=True)
@@ -524,10 +498,6 @@ class TestPushToRemote:
         ).stdout.strip()
         assert source_head_before == source_head_after
 
-        import shutil
-
-        shutil.rmtree(Path(clone_path), ignore_errors=True)
-
     def test_push_to_remote_fails_when_source_has_no_origin(self, tmp_path: Path) -> None:
         source = tmp_path / "source"
         source.mkdir()
@@ -536,17 +506,6 @@ class TestPushToRemote:
         result = push_to_remote("/nonexistent/clone", str(source), "main")
         assert result["success"] is False
         assert len(result["stderr"]) > 0
-
-    def test_push_to_remote_does_not_raise(self, tmp_path: Path) -> None:
-        source = tmp_path / "source"
-        source.mkdir()
-        subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
-        push_to_remote("/no/such/clone", str(source), "main")  # must not raise
-
-
-# ---------------------------------------------------------------------------
-# Merged from test_workspace.py — detect_source_dir and detect_branch tests
-# ---------------------------------------------------------------------------
 
 
 class TestDetectSourceDir:

@@ -14,7 +14,7 @@ from autoskillit import cli
 
 class TestCLIInit:
     # CL1
-    def test_default_command_starts_server(self) -> None:
+    def test_serve_calls_mcp_run(self) -> None:
         mock_mcp = MagicMock()
         with patch.object(cli, "serve", wraps=cli.serve):
             with (

@@ -247,9 +247,11 @@ class TestCheckAndSleepIfNeeded:
     async def test_resets_at_none_after_refetch_logs_warning_with_fallback(
         self, monkeypatch, tmp_path
     ):
-        """Second resets_at-is-None guard (after re-fetch) must emit the 'blocking with fallback' warning."""
-        import structlog.testing
+        """Second resets_at-is-None guard (after re-fetch) must emit
+        the 'blocking with fallback' warning."""
         from unittest.mock import AsyncMock
+
+        import structlog.testing
 
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
@@ -261,7 +263,9 @@ class TestCheckAndSleepIfNeeded:
             cache_path=str(tmp_path / "cache.json"),
         )
         # First fetch: above threshold, has resets_at so Gate 1 passes
-        first_status = QuotaStatus(utilization=90.0, resets_at=datetime.now(UTC) + timedelta(hours=1))
+        first_status = QuotaStatus(
+            utilization=90.0, resets_at=datetime.now(UTC) + timedelta(hours=1)
+        )
         # Second fetch (re-fetch): above threshold, resets_at is None → Gate 2 fires
         second_status = QuotaStatus(utilization=90.0, resets_at=None)
 

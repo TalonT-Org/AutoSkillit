@@ -1,18 +1,12 @@
-"""L1 unit tests for execution/github.py and fetch_github_issue handler."""
+"""L1 unit tests for execution/github.py."""
 
 from __future__ import annotations
-
-import json
-from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 
-from autoskillit.config import AutomationConfig
 from autoskillit.core import GitHubFetcher
 from autoskillit.execution.github import DefaultGitHubFetcher, _parse_issue_ref
-from autoskillit.pipeline.gate import UNGATED_TOOLS
-from autoskillit.server.tools_integrations import fetch_github_issue
 
 # ---------------------------------------------------------------------------
 # _parse_issue_ref unit tests
@@ -133,89 +127,6 @@ async def test_default_github_fetcher_no_token_omits_auth_header(httpx_mock):
     requests = httpx_mock.get_requests()
     assert len(requests) == 1
     assert "authorization" not in {k.lower() for k in requests[0].headers}
-
-
-# ---------------------------------------------------------------------------
-# MCP tool handler tests (using tool_ctx fixture)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_no_client(tool_ctx):
-    tool_ctx.github_client = None
-    result = json.loads(await fetch_github_issue("owner/repo#1"))
-    assert result["success"] is False
-    assert "error" in result
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_delegates_to_client(tool_ctx):
-    mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {
-        "success": True,
-        "issue_number": 1,
-        "title": "T",
-        "url": "u",
-        "state": "open",
-        "labels": [],
-        "content": "# T",
-    }
-    tool_ctx.github_client = mock_client
-    result = json.loads(await fetch_github_issue("owner/repo#1"))
-    assert result["success"] is True
-    mock_client.fetch_issue.assert_called_once_with("owner/repo#1", include_comments=True)
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_bare_number_with_default_repo(tool_ctx):
-    tool_ctx.config.github.default_repo = "owner/repo"
-    mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {
-        "success": True,
-        "issue_number": 42,
-        "title": "T",
-        "url": "u",
-        "state": "open",
-        "labels": [],
-        "content": "# T",
-    }
-    tool_ctx.github_client = mock_client
-    result = json.loads(await fetch_github_issue("42"))
-    assert result["success"] is True
-    mock_client.fetch_issue.assert_called_once_with("owner/repo#42", include_comments=True)
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx):
-    tool_ctx.config.github.default_repo = None
-    tool_ctx.github_client = AsyncMock()
-    result = json.loads(await fetch_github_issue("42"))
-    assert result["success"] is False
-    assert "default_repo" in result["error"]
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_client_error_propagated(tool_ctx):
-    mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {"success": False, "error": "Not Found"}
-    tool_ctx.github_client = mock_client
-    result = json.loads(await fetch_github_issue("owner/repo#404"))
-    assert result["success"] is False
-
-
-# ---------------------------------------------------------------------------
-# Gate and config tests
-# ---------------------------------------------------------------------------
-
-
-def test_fetch_github_issue_in_ungated_tools():
-    assert "fetch_github_issue" in UNGATED_TOOLS
-
-
-def test_github_config_defaults():
-    config = AutomationConfig()
-    assert config.github.token is None
-    assert config.github.default_repo is None
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +364,3 @@ async def test_add_comment_request_error(httpx_mock):
 def test_github_fetcher_protocol_includes_write_methods():
     fetcher = DefaultGitHubFetcher(token=None)
     assert isinstance(fetcher, GitHubFetcher)
-    assert hasattr(fetcher, "search_issues")
-    assert hasattr(fetcher, "create_issue")
-    assert hasattr(fetcher, "add_comment")

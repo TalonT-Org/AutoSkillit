@@ -79,3 +79,11 @@ report_bug:
   github_labels:
     - "autoreported"
     - "bug"
+
+logging:
+  level: "INFO"
+  json_output: null
+
+linux_tracing:
+  enabled: false
+  proc_interval: 5.0

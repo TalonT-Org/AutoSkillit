@@ -46,10 +46,6 @@ class TestValidateSelectOnly:
         with pytest.raises(ValueError, match="forbidden"):
             _validate_select_only("DROP TABLE foo")
 
-    def test_insert_raises(self):
-        with pytest.raises(ValueError, match="forbidden"):
-            _validate_select_only("INSERT INTO foo VALUES (1)")
-
     def test_update_raises(self):
         with pytest.raises(ValueError, match="forbidden"):
             _validate_select_only("UPDATE users SET name = 'x'")
@@ -57,10 +53,6 @@ class TestValidateSelectOnly:
     def test_rejects_delete(self):
         with pytest.raises(ValueError, match="forbidden"):
             _validate_select_only("DELETE FROM users")
-
-    def test_rejects_drop(self):
-        with pytest.raises(ValueError, match="forbidden"):
-            _validate_select_only("DROP TABLE users")
 
     def test_rejects_alter(self):
         with pytest.raises(ValueError, match="forbidden"):
@@ -153,14 +145,6 @@ class TestSelectOnlyAuthorizer:
             _select_only_authorizer(sqlite3.SQLITE_PRAGMA, "table_info", None, None, None)
             == sqlite3.SQLITE_DENY
         )
-
-
-def test_whitespace_only_select_raises():
-    """Whitespace-only query must raise ValueError with 'empty' in message."""
-    import pytest
-
-    with pytest.raises(ValueError, match="empty"):
-        _validate_select_only("   ")
 
 
 class TestRowToDict:

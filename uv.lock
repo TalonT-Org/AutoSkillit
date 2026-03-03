@@ -103,7 +103,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28,<0.29" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.1" },
     { name = "packaging", specifier = ">=23.0" },
-    { name = "packaging", marker = "extra == 'dev'", specifier = ">=24.0" },
+    { name = "packaging", marker = "extra == 'dev'", specifier = ">=25.0" },
     { name = "psutil", specifier = ">=7.2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.0.0" },

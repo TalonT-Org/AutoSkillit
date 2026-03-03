@@ -11,7 +11,7 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
+from autoskillit.pipeline.gate import UNGATED_TOOLS
 from autoskillit.server.tools_integrations import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
@@ -395,15 +395,6 @@ async def test_report_bug_github_filing_disabled(tool_ctx, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Gate registry
-# ---------------------------------------------------------------------------
-
-
-def test_report_bug_in_gated_tools():
-    assert "report_bug" in GATED_TOOLS
-
-
-# ---------------------------------------------------------------------------
 # Config defaults
 # ---------------------------------------------------------------------------
 
@@ -418,15 +409,6 @@ def test_report_bug_config_defaults():
     assert cfg.report_bug.github_filing is True
     assert "autoreported" in cfg.report_bug.github_labels
     assert "bug" in cfg.report_bug.github_labels
-
-
-# ---------------------------------------------------------------------------
-# Merged from test_github_tools.py — fetch_github_issue server handler tests
-# ---------------------------------------------------------------------------
-
-
-def test_fetch_github_issue_in_ungated_tools():
-    assert "fetch_github_issue" in UNGATED_TOOLS
 
 
 @pytest.mark.anyio
@@ -490,3 +472,15 @@ async def test_fetch_github_issue_client_error_propagated(tool_ctx):
     tool_ctx.github_client = mock_client
     result = json.loads(await fetch_github_issue("owner/repo#404"))
     assert result["success"] is False
+
+
+def test_fetch_github_issue_in_ungated_tools():
+    assert "fetch_github_issue" in UNGATED_TOOLS
+
+
+def test_github_config_defaults():
+    from autoskillit.config import AutomationConfig
+
+    config = AutomationConfig()
+    assert config.github.token is None
+    assert config.github.default_repo is None

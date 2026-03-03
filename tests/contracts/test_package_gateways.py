@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.arch._helpers import SRC_ROOT, _runtime_import_froms
+
 # ---------------------------------------------------------------------------
 # REQ-GWAY-006: execution/__init__.py public surface
 # ---------------------------------------------------------------------------
@@ -256,3 +258,68 @@ def test_workspace_gateway_exports_public_delete_alias() -> None:
     import autoskillit.workspace as m
 
     assert "delete_directory_contents" in m.__all__
+
+
+# ── REQ-ARCH-004: __all__ completeness ───────────────────────────────────────
+
+
+def test_package_all_matches_exports() -> None:
+    """REQ-ARCH-004: Each package __init__.__all__ must match its exported symbol set.
+
+    Two checks:
+    1. Every name in __all__ is importable from the package (no dead entries).
+    2. Every public name re-exported via relative or autoskillit.* imports in __init__.py
+       appears in __all__ (no undeclared exports).
+
+    Packages without __all__ (server, root autoskillit) are skipped.
+    """
+    import importlib
+
+    AUTOSKILLIT_ROOT = SRC_ROOT
+    PACKAGES_WITH_ALL = [
+        "core",
+        "config",
+        "pipeline",
+        "execution",
+        "workspace",
+        "recipe",
+        "migration",
+        "cli",
+    ]
+    violations: list[str] = []
+
+    for pkg_name in PACKAGES_WITH_ALL:
+        module = importlib.import_module(f"autoskillit.{pkg_name}")
+        all_list: list[str] = getattr(module, "__all__", None)  # type: ignore[assignment]
+        if all_list is None:
+            continue  # package opted out of __all__ — skip
+
+        # Check 1: every __all__ entry is importable
+        for name in all_list:
+            if not hasattr(module, name):
+                violations.append(
+                    f"autoskillit.{pkg_name}: '{name}' in __all__ but not importable"
+                )
+
+        # Check 2: every public name from relative / intra-package imports is in __all__
+        # Only intra-package absolute imports (autoskillit.{pkg_name}.*) are checked —
+        # cross-package imports (e.g. `from autoskillit.core import get_logger` in
+        # recipe/__init__.py) are internal helpers, not re-exports, and must be excluded.
+        init_path = AUTOSKILLIT_ROOT / pkg_name / "__init__.py"
+        for node in _runtime_import_froms(init_path):
+            is_relative = node.level and node.level > 0
+            is_intra_package = node.module and node.module.startswith(f"autoskillit.{pkg_name}.")
+            if not (is_relative or is_intra_package):
+                continue  # skip stdlib / third-party / cross-package imports
+
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name
+                if name.startswith("_") or name == "*":
+                    continue
+                if name not in all_list:
+                    violations.append(
+                        f"autoskillit.{pkg_name}: '{name}' re-exported via import "
+                        f"but not in __all__"
+                    )
+
+    assert not violations, "__all__ completeness violations:\n" + "\n".join(violations)

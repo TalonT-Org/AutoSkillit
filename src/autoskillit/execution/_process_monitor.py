@@ -1,0 +1,201 @@
+"""Session and heartbeat monitor coroutines for subprocess output tracking."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+
+import anyio
+import psutil
+
+from autoskillit.core import get_logger
+from autoskillit.execution._process_jsonl import _jsonl_contains_marker, _jsonl_has_record_type
+
+logger = get_logger(__name__)
+
+
+async def _heartbeat(
+    stdout_path: Path,
+    marker: str = "",
+    record_types: frozenset[str] = frozenset({"result"}),
+    _poll_interval: float = 0.5,
+    _on_poll: Callable[[], None] | None = None,
+) -> str:
+    """Poll session NDJSON output for a result-type record with non-empty content.
+
+    Fires when a JSONL record whose ``"type"`` field is in *record_types* appears
+    in stdout AND, for ``type=result`` records, the ``result`` field is non-empty.
+    This guards against confirming on empty-result envelopes flushed before content
+    is populated (drain-race false negative). The *marker* parameter is accepted
+    for API compatibility but is not used.
+
+    *_on_poll* is a test-only callback invoked after each sleep iteration. Pass
+    ``None`` (the default) in production — zero overhead.
+    """
+    scan_pos = 0  # byte offset into the file
+    os_error_count = 0
+    while True:
+        await anyio.sleep(_poll_interval)
+        if _on_poll is not None:
+            _on_poll()
+        try:
+            raw = stdout_path.read_bytes()
+            os_error_count = 0
+        except OSError:
+            os_error_count += 1
+            if os_error_count == 10:
+                logger.warning("Heartbeat: 10 consecutive read failures on %s", stdout_path)
+            continue
+        new_raw = raw[scan_pos:]
+        scan_pos = len(raw)
+        new_content = new_raw.decode("utf-8", errors="replace")
+        if _jsonl_has_record_type(new_content, record_types):
+            return "completion"
+
+
+def _has_active_api_connection(pid: int) -> bool:
+    """Return True if the process tree rooted at `pid` has an ESTABLISHED TCP
+    connection to port 443 (the Anthropic API endpoint).
+
+    Used by _session_log_monitor to suppress stale-kill when a long-running
+    API streaming call is in-flight.
+    """
+    try:
+        parent = psutil.Process(pid)
+        for proc in [parent] + parent.children(recursive=True):
+            try:
+                get_conns = getattr(proc, "net_connections", proc.connections)
+                conns = get_conns(kind="tcp")
+                for conn in conns:
+                    if conn.status == "ESTABLISHED" and conn.raddr and conn.raddr.port == 443:
+                        return True
+            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+                continue
+    except psutil.NoSuchProcess:
+        pass
+    return False
+
+
+async def _session_log_monitor(
+    session_log_dir: Path,
+    completion_marker: str,
+    stale_threshold: float,
+    spawn_time: float,
+    record_types: frozenset[str] = frozenset({"assistant"}),
+    pid: int | None = None,
+    _phase1_poll: float = 1.0,
+    _phase2_poll: float = 2.0,
+    _phase1_timeout: float = 30.0,
+    _on_poll: Callable[[], None] | None = None,
+) -> str:
+    """Watch Claude Code session log for completion or staleness.
+
+    Finds the session JSONL file (newest in session_log_dir created after
+    spawn_time), then monitors it for:
+    - completion_marker in a JSONL record of an allowed type -> return "completion"
+    - No mtime change for stale_threshold seconds -> return "stale"
+
+    The *record_types* parameter specifies which JSONL record types may
+    contain the completion marker.  Defaults to ``{"assistant"}`` so that
+    markers appearing in user prompts, queue-operation records, or tool
+    results are ignored.
+
+    *_phase1_timeout* caps how long Phase 1 may poll for a JSONL file.
+    When no file appears within this window, returns "stale" immediately
+    rather than spinning until the outer wall-clock timeout fires.
+
+    *_on_poll* is a test-only callback invoked after each Phase 2 sleep iteration.
+    Pass ``None`` (the default) in production — zero overhead.
+    """
+    import time as _time
+
+    # Phase 1: Find the session log file
+    session_file = None
+    os_error_count = 0
+    phase1_start = _time.monotonic()
+    while session_file is None:
+        if _time.monotonic() - phase1_start >= _phase1_timeout:
+            logger.warning(
+                "Session log file not found within phase1_timeout (%.1fs); treating as stale",
+                _phase1_timeout,
+            )
+            return "stale"
+        await anyio.sleep(_phase1_poll)
+        try:
+            candidates = [
+                f
+                for f in session_log_dir.iterdir()
+                if f.suffix == ".jsonl" and f.stat().st_ctime > spawn_time
+            ]
+            if candidates:
+                session_file = max(candidates, key=lambda f: f.stat().st_ctime)
+                _chosen_ctime = session_file.stat().st_ctime
+                logger.debug(
+                    "session_log_phase1_discovered",
+                    candidate_count=len(candidates),
+                    chosen_file=str(session_file),
+                    ctime=_chosen_ctime,
+                    spawn_time=spawn_time,
+                    ctime_delta=_chosen_ctime - spawn_time,
+                )
+            os_error_count = 0
+        except OSError:
+            os_error_count += 1
+            if os_error_count == 10:
+                logger.warning(
+                    "Session monitor: 10 consecutive failures reading %s", session_log_dir
+                )
+            continue
+
+    # Phase 2: Monitor the session log
+    last_size = 0
+    last_change = _time.monotonic()
+    scan_pos = 0
+    os_error_count = 0
+
+    while True:
+        await anyio.sleep(_phase2_poll)
+        if _on_poll is not None:
+            _on_poll()
+        try:
+            current_size = session_file.stat().st_size
+            os_error_count = 0
+        except OSError:
+            os_error_count += 1
+            if os_error_count == 10:
+                logger.warning("Session monitor: 10 consecutive stat failures on %s", session_file)
+            continue
+
+        if current_size > last_size:
+            last_size = current_size
+            last_change = _time.monotonic()
+
+            # Check new content for completion marker (structured)
+            try:
+                content = session_file.read_text(errors="replace")
+                new_content = content[scan_pos:]
+                scan_pos = len(content)
+                if _jsonl_contains_marker(new_content, completion_marker, record_types):
+                    logger.debug(
+                        "session_log_phase2_marker_found",
+                        file=str(session_file),
+                        file_size=current_size,
+                        scan_pos=scan_pos,
+                    )
+                    return "completion"
+            except OSError:
+                pass
+        else:
+            # Check staleness
+            elapsed = _time.monotonic() - last_change
+            if elapsed >= stale_threshold:
+                if pid is not None and _has_active_api_connection(pid):
+                    last_change = _time.monotonic()
+                    logger.warning(
+                        "JSONL silent for %.0fs but ESTABLISHED port-443 connection — "
+                        "suppressing stale kill (pid=%d)",
+                        elapsed,
+                        pid,
+                    )
+                else:
+                    return "stale"

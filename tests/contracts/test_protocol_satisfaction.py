@@ -259,6 +259,7 @@ class TestGroupDApiContractPreservation:
             "stale_threshold",
             "session_record_types",
             "completion_drain_timeout",
+            "linux_tracing_config",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -318,6 +319,7 @@ class TestGroupDApiContractPreservation:
             "pty_mode",
             "input_data",
             "completion_drain_timeout",
+            "linux_tracing_config",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

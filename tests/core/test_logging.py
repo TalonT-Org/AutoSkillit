@@ -30,8 +30,10 @@ class TestGetLogger:
         assert logs, "Expected at least one log record"
         assert logs[0]["logger"] == "autoskillit.server"
 
+
+class TestNullHandlerContract:
     def test_no_output_before_configure(self, capsys: pytest.CaptureFixture[str]):
-        """NullHandler prevents stdlib lastResort from writing to stderr before configure().
+        """NullHandler in autoskillit/__init__.py prevents stdlib lastResort output.
 
         Python 3.2+ invokes a lastResort handler that writes WARNING+ records to
         sys.stderr when no handlers are found anywhere in the logger hierarchy.
@@ -79,7 +81,6 @@ def _flush_logger_proxy_caches() -> None:
             if isinstance(lg, _sc.BoundLoggerLazyProxy):
                 lg.__dict__.pop("bind", None)
             elif hasattr(lg, "_processors"):
-                # Resolved bound logger — reconnect to current processor list
                 lg._processors = current_procs
 
 
@@ -135,6 +136,55 @@ class TestConfigureLogging:
         get_logger("autoskillit.test").info("stdout_check")
         captured = capsys.readouterr()
         assert captured.out == ""
+        assert "stdout_check" in captured.err
+
+    def test_configure_logging_level_debug(self):
+        """configure_logging(level=DEBUG) sets structlog filter to DEBUG."""
+        from autoskillit.core.logging import configure_logging, get_logger
+
+        stream = io.StringIO()
+        configure_logging(level=logging.DEBUG, json_output=False, stream=stream)
+        get_logger("autoskillit.test").debug("debug_probe")
+        assert "debug_probe" in stream.getvalue()
+        # Also verify stdlib logger is at DEBUG
+        stdlib_logger = logging.getLogger("autoskillit")  # noqa: TID251
+        assert stdlib_logger.level == logging.DEBUG
+
+    def test_configure_logging_safe_to_call_twice(self):
+        """configure_logging() can be called twice (two-phase boot)."""
+        from autoskillit.core.logging import configure_logging, get_logger
+
+        stream1 = io.StringIO()
+        configure_logging(level=logging.INFO, json_output=False, stream=stream1)
+        stream2 = io.StringIO()
+        configure_logging(level=logging.DEBUG, json_output=False, stream=stream2)
+        _flush_logger_proxy_caches()
+        get_logger("autoskillit.test").debug("second_config_probe")
+        assert "second_config_probe" in stream2.getvalue()
+
+    def test_configure_logging_level_debug(self):
+        """configure_logging(level=DEBUG) sets structlog filter to DEBUG."""
+        from autoskillit.core.logging import configure_logging, get_logger
+
+        stream = io.StringIO()
+        configure_logging(level=logging.DEBUG, json_output=False, stream=stream)
+        get_logger("autoskillit.test").debug("debug_probe")
+        assert "debug_probe" in stream.getvalue()
+        # Also verify stdlib logger is at DEBUG
+        stdlib_logger = logging.getLogger("autoskillit")  # noqa: TID251
+        assert stdlib_logger.level == logging.DEBUG
+
+    def test_configure_logging_safe_to_call_twice(self):
+        """configure_logging() can be called twice (two-phase boot)."""
+        from autoskillit.core.logging import configure_logging, get_logger
+
+        stream1 = io.StringIO()
+        configure_logging(level=logging.INFO, json_output=False, stream=stream1)
+        stream2 = io.StringIO()
+        configure_logging(level=logging.DEBUG, json_output=False, stream=stream2)
+        _flush_logger_proxy_caches()
+        get_logger("autoskillit.test").debug("second_config_probe")
+        assert "second_config_probe" in stream2.getvalue()
 
 
 class TestContextVarBinding:

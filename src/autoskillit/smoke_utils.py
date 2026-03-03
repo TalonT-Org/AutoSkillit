@@ -1,4 +1,7 @@
-"""Utility callables for smoke-test pipeline run_python steps."""
+"""Utility callables for smoke-test pipeline run_python steps.
+
+Known limitation: functions use hardcoded path conventions from the pipeline recipe.
+"""
 
 from __future__ import annotations
 

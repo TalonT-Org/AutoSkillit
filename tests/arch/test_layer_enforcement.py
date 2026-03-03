@@ -16,7 +16,15 @@ from pathlib import Path
 
 import pytest
 
-SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
+from tests.arch._helpers import (
+    _SOURCE_FILES,
+    SRC_ROOT,
+    _extract_module_level_internal_imports,
+    _is_mcp_tool_decorator,
+    _rel,
+    _runtime_import_froms,
+)
+from tests.arch._rules import RuleDescriptor
 
 # ── Sub-package layer registry ────────────────────────────────────────────────
 SUBPACKAGE_LAYERS: dict[str, int] = {
@@ -40,36 +48,43 @@ _LAYER_EXEMPT_STEMS: frozenset[str] = frozenset(
     {"version", "smoke_utils", "_llm_triage", "__init__", "__main__"}
 )
 
-_SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
-
-
-def _rel(path: Path) -> str:
-    try:
-        return str(path.relative_to(Path(__file__).parent.parent.parent))
-    except ValueError:
-        return str(path)
-
-
-def _extract_module_level_internal_imports(path: Path) -> list[tuple[str, int]]:
-    """Return (imported_module_stem, lineno) for all autoskillit imports at module level.
-
-    Only iterates tree.body (module-level statements). Import nodes inside
-    function or class bodies are intentionally excluded.
-    """
-    source = path.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(path))
-    results: list[tuple[str, int]] = []
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and node.module:
-            parts = node.module.split(".")
-            if parts[0] == "autoskillit" and len(parts) > 1:
-                results.append((parts[1], node.lineno))
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                parts = alias.name.split(".")
-                if parts[0] == "autoskillit" and len(parts) > 1:
-                    results.append((parts[1], node.lineno))
-    return results
+# ── REQ-ARCH layer enforcement rule descriptors ───────────────────────────────────
+LAYER_RULES: dict[str, RuleDescriptor] = {
+    "REQ-ARCH-001": RuleDescriptor(
+        rule_id="REQ-ARCH-001",
+        name="sub-package-import-layer-ordering",
+        lens="module-dependency",
+        description=(
+            "Each autoskillit sub-package may only import from packages at the same or lower "
+            "layer (L0 \u2264 L1 \u2264 L2 \u2264 L3). Upward imports introduce coupling that "
+            "hinders independent testing and layering guarantees."
+        ),
+        rationale=(
+            "Enforcing a strict layered architecture prevents circular dependencies and "
+            "ensures that low-level modules (core, config) remain unaware of high-level "
+            "modules (server, cli)."
+        ),
+        exemptions=frozenset(),
+        severity="high",
+        defense_standard="DS-001",
+    ),
+    "REQ-ARCH-003": RuleDescriptor(
+        rule_id="REQ-ARCH-003",
+        name="l1-packages-no-runtime-l2-l3-imports",
+        lens="module-dependency",
+        description=(
+            "L1 sub-packages (config, pipeline, execution, workspace) must not import from "
+            "L2 or L3 packages at runtime. TYPE_CHECKING-guarded imports are permitted."
+        ),
+        rationale=(
+            "Runtime L1\u2192L2 imports would introduce cyclic dependency risk because L2 "
+            "packages (recipe, migration) are permitted to import from L1."
+        ),
+        exemptions=frozenset(),
+        severity="high",
+        defense_standard="DS-001",
+    ),
+}
 
 
 def _collect_deferred_imports(tree: ast.Module) -> list[ast.Import | ast.ImportFrom]:
@@ -93,38 +108,6 @@ def _collect_deferred_imports(tree: ast.Module) -> list[ast.Import | ast.ImportF
     return deferred
 
 
-def _runtime_import_froms(path: Path) -> list[ast.ImportFrom]:
-    """Return ImportFrom nodes not inside a TYPE_CHECKING guard."""
-    tree = ast.parse(path.read_text())
-    result: list[ast.ImportFrom] = []
-
-    def _walk(stmts: list) -> None:
-        for stmt in stmts:
-            if isinstance(stmt, ast.ImportFrom):
-                result.append(stmt)
-            elif isinstance(stmt, ast.If):
-                test = stmt.test
-                is_tc = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
-                    isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
-                )
-                if not is_tc:
-                    _walk(stmt.body)
-                    _walk(stmt.orelse)
-            elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                _walk(stmt.body)
-            elif isinstance(stmt, ast.ClassDef):
-                _walk(stmt.body)
-            elif isinstance(stmt, ast.Try):
-                _walk(stmt.body)
-                for handler in stmt.handlers:
-                    _walk(handler.body)
-                _walk(stmt.orelse)
-                _walk(getattr(stmt, "finalbody", []))
-
-    _walk(tree.body)
-    return result
-
-
 def _type_checking_lines(tree: ast.AST) -> set[int]:
     """Return line numbers of all imports inside ``if TYPE_CHECKING:`` blocks."""
     lines: set[int] = set()
@@ -138,19 +121,6 @@ def _type_checking_lines(tree: ast.AST) -> set[int]:
                 if isinstance(child, ast.Import | ast.ImportFrom):
                     lines.add(child.lineno)
     return lines
-
-
-def _is_mcp_tool_decorator(node: ast.expr) -> bool:
-    """Return True if node represents @mcp.tool or @mcp.tool(...)."""
-    if isinstance(node, ast.Attribute) and node.attr == "tool":
-        return True
-    if (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "tool"
-    ):
-        return True
-    return False
 
 
 def _has_call_to(stmt: ast.stmt, func_name: str) -> bool:
@@ -477,7 +447,7 @@ def test_only_pipeline_context_imports_config() -> None:
 
 
 def test_recipe_no_forbidden_imports() -> None:
-    """T5: REQ-COMP-009 — recipe/ modules import only from core/ and workspace/."""
+    """T5: REQ-COMP-009 — recipe/ modules import only from core/, workspace/, recipe/ siblings."""
     recipe_pkg = SRC_ROOT / "recipe"
     assert recipe_pkg.exists(), "recipe/ package must exist"
     violations: list[str] = []

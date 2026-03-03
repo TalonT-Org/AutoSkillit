@@ -1,4 +1,4 @@
-"""CLI for autoskillit: serve, init, install, cook, config, skills, recipes, update."""
+"""CLI for autoskillit: serve, init, cook, config, skills, recipes, workspace."""
 
 from __future__ import annotations
 
@@ -14,7 +14,12 @@ from typing import Annotated
 
 from cyclopts import App, Parameter
 
-from autoskillit.core import _atomic_write, is_git_worktree, pkg_root
+from autoskillit.cli._init_helpers import (
+    _MARKER_CONTENT,
+    _generate_config_yaml,
+    _prompt_test_command,
+)
+from autoskillit.core import _atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
 from autoskillit.recipe import list_recipes
 
@@ -43,14 +48,32 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     from autoskillit.core import configure_logging, get_logger
     from autoskillit.server import _initialize, make_context, mcp
 
+    # Phase 1: Early init at INFO (or DEBUG if --verbose) — ensures logging
+    # works for config load errors.
+    cli_level = _stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO
     configure_logging(
-        level=_stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO,
+        level=cli_level,
         json_output=not sys.stderr.isatty(),
         stream=sys.stderr,
     )
 
     project_dir = Path.cwd()
     cfg = load_config(project_dir)
+
+    # Phase 2: Reconfigure if config specifies a different level.
+    # min() ensures --verbose OR config DEBUG both enable debug — most verbose wins.
+    config_level = getattr(_stdlib_logging, cfg.logging.level.upper(), _stdlib_logging.INFO)
+    effective_level = min(config_level, cli_level)
+    json_output = (
+        cfg.logging.json_output if cfg.logging.json_output is not None else not sys.stderr.isatty()
+    )
+    if effective_level != cli_level or cfg.logging.json_output is not None:
+        configure_logging(
+            level=effective_level,
+            json_output=json_output,
+            stream=sys.stderr,
+        )
+
     project_path = project_dir / ".autoskillit" / "config.yaml"
     user_path = Path.home() / ".autoskillit" / "config.yaml"
     resolved_path: str | None = (
@@ -121,310 +144,6 @@ def init(
         print("  /mcp__autoskillit__open_kitchen")
 
 
-_VALID_SCOPES = {"user", "project", "local"}
-_MARKETPLACE_NAME = "autoskillit-local"
-
-
-@app.command
-def install(*, scope: str = "user"):
-    """Install the plugin persistently for Claude Code.
-
-    Sets up a local marketplace and installs the plugin so it loads
-    automatically in every Claude Code session (no --plugin-dir needed).
-
-    After updating autoskillit, re-run this command to refresh the cache.
-
-    Parameters
-    ----------
-    scope
-        Where to enable: "user" (all projects), "project" (shared via repo),
-        or "local" (this project, gitignored).
-    """
-    if scope not in _VALID_SCOPES:
-        print(f"Invalid scope: {scope!r}. Must be one of: {', '.join(sorted(_VALID_SCOPES))}")
-        sys.exit(1)
-
-    marketplace_dir = _ensure_marketplace()
-    plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
-    print(f"Marketplace prepared: {marketplace_dir}")
-
-    # Cannot run `claude plugin` commands from inside a Claude Code session
-    if os.environ.get("CLAUDECODE"):
-        print("\nRun these commands in a regular terminal to complete installation:")
-        print(f"  claude plugin marketplace add {marketplace_dir}")
-        print(f"  claude plugin install {plugin_ref} --scope {scope}")
-        print("\nThen run: autoskillit init (in your project directory)")
-        return
-
-    if shutil.which("claude") is None:
-        print("\nERROR: 'claude' command not found on PATH.")
-        print("Install Claude Code, then run:")
-        print(f"  claude plugin marketplace add {marketplace_dir}")
-        print(f"  claude plugin install {plugin_ref} --scope {scope}")
-        print("\nThen run: autoskillit init (in your project directory)")
-        sys.exit(1)
-
-    _clear_plugin_cache()
-
-    # Register the marketplace (idempotent)
-    result = subprocess.run(
-        ["claude", "plugin", "marketplace", "add", str(marketplace_dir)],
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        print(f"Failed to register marketplace: {result.stderr.strip()}")
-        sys.exit(1)
-    print("Marketplace registered.")
-
-    # Install the plugin
-    result = subprocess.run(
-        ["claude", "plugin", "install", plugin_ref, "--scope", scope],
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        print(f"Failed to install plugin: {result.stderr.strip()}")
-        sys.exit(1)
-
-    print(f"Plugin installed: {plugin_ref} (scope: {scope})")
-    settings_path = _claude_settings_path(scope)
-    _register_quota_hook(settings_path)
-    _register_remove_clone_guard_hook(settings_path)
-    _register_skill_command_guard_hook(settings_path)
-    _print_next_steps()
-
-
-def _claude_settings_path(scope: str) -> Path:
-    """Return the Claude Code settings.json path for the given scope."""
-    if scope == "user":
-        return Path.home() / ".claude" / "settings.json"
-    return Path.cwd() / ".claude" / "settings.json"
-
-
-def _register_quota_hook(settings_path: Path) -> None:
-    """Idempotently add the quota PreToolUse hook to .claude/settings.json."""
-    from autoskillit.core import _atomic_write
-
-    data: dict = {}
-    if settings_path.exists():
-        try:
-            data = json.loads(settings_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    hooks = data.setdefault("hooks", {})
-    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
-
-    MATCHER = "mcp__.*autoskillit.*__run_skill.*"
-    COMMAND = "python3 -m autoskillit.hooks.quota_check"
-    for entry in pretooluse:
-        if entry.get("matcher") == MATCHER or (
-            entry.get("hooks", [{}])[0].get("command") == COMMAND
-        ):
-            return  # already registered
-
-    pretooluse.append(
-        {
-            "matcher": MATCHER,
-            "hooks": [{"type": "command", "command": COMMAND}],
-        }
-    )
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(settings_path, json.dumps(data, indent=2))
-
-
-def _register_remove_clone_guard_hook(settings_path: Path) -> None:
-    """Idempotently add the remove_clone_guard PreToolUse hook to .claude/settings.json."""
-    from autoskillit.core import _atomic_write
-
-    data: dict = {}
-    if settings_path.exists():
-        try:
-            data = json.loads(settings_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    hooks = data.setdefault("hooks", {})
-    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
-
-    MATCHER = "mcp__.*autoskillit.*__remove_clone"
-    COMMAND = "python3 -m autoskillit.hooks.remove_clone_guard"
-    for entry in pretooluse:
-        if entry.get("matcher") == MATCHER or (
-            entry.get("hooks", [{}])[0].get("command") == COMMAND
-        ):
-            return  # already registered
-
-    pretooluse.append(
-        {
-            "matcher": MATCHER,
-            "hooks": [{"type": "command", "command": COMMAND}],
-        }
-    )
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(settings_path, json.dumps(data, indent=2))
-
-
-def _register_skill_command_guard_hook(settings_path: Path) -> None:
-    """Idempotently add the skill_command_guard PreToolUse hook to .claude/settings.json."""
-    from autoskillit.core import _atomic_write
-
-    data: dict = {}
-    if settings_path.exists():
-        try:
-            data = json.loads(settings_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    hooks = data.setdefault("hooks", {})
-    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
-
-    MATCHER = "mcp__.*autoskillit.*__run_skill.*"
-    COMMAND = "python3 -m autoskillit.hooks.skill_command_guard"
-
-    # Check if COMMAND is already present in any existing hook entry
-    for entry in pretooluse:
-        if any(h.get("command") == COMMAND for h in entry.get("hooks", [])):
-            return  # already registered
-
-    # Add to existing run_skill matcher entry if one exists, else create a new entry
-    for entry in pretooluse:
-        if entry.get("matcher") == MATCHER:
-            entry["hooks"].append({"type": "command", "command": COMMAND})
-            settings_path.parent.mkdir(parents=True, exist_ok=True)
-            _atomic_write(settings_path, json.dumps(data, indent=2))
-            return
-
-    pretooluse.append(
-        {
-            "matcher": MATCHER,
-            "hooks": [{"type": "command", "command": COMMAND}],
-        }
-    )
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(settings_path, json.dumps(data, indent=2))
-
-
-def _clear_plugin_cache() -> None:
-    """Remove the cached plugin snapshot and installed_plugins.json entry.
-
-    Claude Code caches a snapshot of the plugin at install time, keyed by
-    version. When the version changes, it orphans the old cache but does not
-    automatically create the new one until a second install is run. Clearing
-    the cache beforehand ensures a single ``autoskillit install`` is always
-    sufficient.
-    """
-    cache_dir = Path.home() / ".claude" / "plugins" / "cache" / _MARKETPLACE_NAME / "autoskillit"
-    if cache_dir.is_dir():
-        shutil.rmtree(cache_dir)
-
-    installed_json = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-    if installed_json.exists():
-        try:
-            data = json.loads(installed_json.read_text())
-            plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
-            if plugin_ref in data:
-                del data[plugin_ref]
-                _atomic_write(installed_json, json.dumps(data, indent=2))
-        except (OSError, json.JSONDecodeError):
-            pass  # non-fatal — install will proceed regardless
-
-
-def _ensure_marketplace() -> Path:
-    """Create or update the local marketplace directory."""
-    from autoskillit import __version__
-
-    pkg_dir = pkg_root()
-
-    # Guard: refuse to create the symlink when the package is installed
-    # from a git worktree. The symlink target must outlive the Python
-    # process that creates it — transient worktree paths will break it.
-    if is_git_worktree(pkg_dir):
-        raise SystemExit(
-            "ERROR: 'autoskillit install' cannot be run when the package\n"
-            "is installed from a git worktree.\n\n"
-            f"  Detected worktree path: {pkg_dir}\n\n"
-            "The marketplace symlink would point to this transient path and\n"
-            "break when the worktree is deleted.\n\n"
-            "Fix: run 'autoskillit install' from the main project checkout:\n"
-            "  cd /path/to/main/repo && autoskillit install"
-        )
-
-    marketplace_dir = Path.home() / ".autoskillit" / "marketplace"
-    plugin_dir = marketplace_dir / ".claude-plugin"
-    plugin_dir.mkdir(parents=True, exist_ok=True)
-
-    # Write marketplace manifest
-    manifest = {
-        "name": _MARKETPLACE_NAME,
-        "owner": {"name": "autoskillit"},
-        "plugins": [
-            {
-                "name": "autoskillit",
-                "source": "./plugins/autoskillit",
-                "description": "Orchestrated skill-driven workflows"
-                " using Claude Code headless sessions",
-                "version": __version__,
-            }
-        ],
-    }
-    _atomic_write(plugin_dir / "marketplace.json", json.dumps(manifest, indent=2) + "\n")
-
-    # Symlink to the live package directory
-    link_path = marketplace_dir / "plugins" / "autoskillit"
-    link_path.parent.mkdir(parents=True, exist_ok=True)
-    if link_path.is_symlink() or link_path.exists():
-        link_path.unlink()
-    link_path.symlink_to(pkg_dir)
-
-    return marketplace_dir
-
-
-@app.command
-def upgrade():
-    """Migrate a project from .autoskillit/scripts/ to .autoskillit/recipes/.
-
-    Renames the directory and rewrites YAML top-level keys:
-      inputs: -> ingredients:
-      constraints: -> kitchen_rules:
-
-    Idempotent: safe to run multiple times.
-    """
-    import re
-
-    from autoskillit.core import _atomic_write
-
-    project_dir = Path.cwd()
-    scripts_dir = project_dir / ".autoskillit" / "scripts"
-    recipes_dir = project_dir / ".autoskillit" / "recipes"
-
-    if not scripts_dir.exists():
-        print("Nothing to do — .autoskillit/scripts/ not found.")
-        return
-
-    if recipes_dir.exists():
-        print("Nothing to do — .autoskillit/recipes/ already present.")
-        return
-
-    scripts_dir.rename(recipes_dir)
-
-    changed = 0
-    for yaml_file in sorted(recipes_dir.rglob("*.yaml")):
-        text = yaml_file.read_text()
-        new_text = re.sub(r"^inputs:", "ingredients:", text, flags=re.MULTILINE)
-        new_text = re.sub(r"^constraints:", "kitchen_rules:", new_text, flags=re.MULTILINE)
-        if new_text != text:
-            _atomic_write(yaml_file, new_text)
-            changed += 1
-
-    print(f"Upgraded: directory renamed, {changed} file(s) updated.")
-
-
 @app.command
 def doctor(*, output_json: bool = False):
     """Check project setup for common issues.
@@ -434,10 +153,10 @@ def doctor(*, output_json: bool = False):
     output_json
         Output results as JSON instead of human-readable text.
     """
-    from autoskillit import server as _server
     from autoskillit.cli._doctor import run_doctor
+    from autoskillit.server import _get_plugin_dir
 
-    plugin_dir = _server._ctx.plugin_dir if _server._ctx is not None else None
+    plugin_dir = _get_plugin_dir()
     run_doctor(output_json=output_json, plugin_dir=plugin_dir)
 
 
@@ -538,14 +257,6 @@ def skills_list():
     print(f"{'-' * name_w}  {'-' * src_w}  {'-' * 4}")
     for s in skills:
         print(f"{s.name:<{name_w}}  {s.source:<{src_w}}  {s.path}")
-
-
-_MARKER_CONTENT = """\
-# autoskillit workspace - do not delete
-# This file authorizes reset_test_dir and reset_workspace to clear this directory.
-# Created: {timestamp}
-# Tool: autoskillit {version}
-"""
 
 
 @workspace_app.command(name="init")
@@ -660,83 +371,6 @@ def recipes_show(name: str):
     print(match.path.read_text())
 
 
-def _build_orchestrator_prompt(script_yaml: str) -> str:
-    """Build the --append-system-prompt content for a cook session."""
-    return f"""\
-You are a pipeline orchestrator. Execute the recipe below step-by-step.
-
-1. Present the recipe to the user using the preview format below
-2. Prompt for input values using AskUserQuestion
-3. Execute the pipeline steps by calling MCP tools directly
-
-Preview format:
-
-    ## {{name}}
-    {{description}}
-
-    **Flow:** {{summary}}
-
-    ### Ingredients
-    For each ingredient show: name, description, required/optional, default value.
-    Distinguish user-supplied ingredients (required=true or meaningful defaults)
-    from agent-managed state (default="" or default=null with description
-    indicating it is set by a prior step or the agent).
-
-    ### Steps
-    For each step show:
-    - Step name and tool/action/python discriminator
-    - Routing: on_success → X, on_failure → Y
-    - If on_result: show field name and each route
-    - If optional: true, mark as "[Optional]" and show the note explaining
-      the skip condition
-    - If retry block exists: retries Nx on {{condition}}, then → {{on_exhausted}}
-    - If note exists, show it (notes contain critical agent instructions)
-    - If capture exists, show what values are extracted
-
-    ### Kitchen Rules
-    If present, list all kitchen_rules strings.
-    If absent, note: "No kitchen rules defined"
-
-During pipeline execution, only use AutoSkillit MCP tools:
-- Read, Grep, Glob (code investigation) — not used here because investigation
-  happens inside headless sessions launched by run_skill/run_skill_retry,
-  which have full tool access.
-- Edit, Write (code modification) — not used here because all code changes
-  are delegated through run_skill/run_skill_retry.
-- Bash (shell commands) — not used here; use run_cmd if shell access is needed.
-- Task/Explore subagents, WebFetch, WebSearch — not used here; delegate via
-  run_skill for any research or multi-step work.
-
-Allowed during pipeline execution:
-- AutoSkillit MCP tools (call directly, not via subagents)
-- AskUserQuestion (user interaction)
-- Steps with `capture:` fields extract values from tool results into a
-  pipeline context dict. Use captured values in subsequent steps via
-  ${{{{ context.var_name }}}} in `with:` arguments.
-- Thread outputs from each step into the next (e.g. worktree_path from
-  implement into test_check).
-
-ROUTING RULES — MANDATORY:
-- When a tool returns a failure result, you MUST follow the step's on_failure route.
-- When a step fails, route to on_failure — do not use Read, Grep, Glob, Edit,
-  Write, Bash, or Explore subagents to investigate. The on_failure step (e.g.,
-  resolve-failures) has diagnostic access that the orchestrator does not.
-- Your ONLY job is to route to the correct next step and pass the
-  required arguments. The downstream skill does the actual work.
-
-FAILURE PREDICATES — when to follow on_failure:
-- test_check: {{"passed": false}}
-- merge_worktree: "error" key present in response
-- run_cmd: {{"success": false}}
-- run_skill / run_skill_retry: {{"success": false}}
-- classify_fix: "error" key present in response
-
---- RECIPE ---
-{script_yaml}
---- END RECIPE ---
-"""
-
-
 @app.command
 def cook(recipe: str | None = None):
     """Launch an interactive Claude Code session to execute a recipe.
@@ -751,13 +385,22 @@ def cook(recipe: str | None = None):
     recipe
         Name of the recipe (from .autoskillit/recipes/). Prompts if omitted.
     """
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
     if os.environ.get("CLAUDECODE"):
         print("ERROR: 'cook' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
     if recipe is None:
-        recipe = _prompt_recipe_choice()
+        available = list_recipes(Path.cwd()).items
+        if not available:
+            print("No recipes found. Run 'autoskillit recipes list' to check.")
+            sys.exit(1)
+        print("Available recipes:")
+        for i, r in enumerate(available, 1):
+            print(f"  {i}. {r.name}")
+        recipe = input("Recipe name: ").strip()
 
     from autoskillit.core import YAMLError
     from autoskillit.recipe import find_recipe_by_name, validate_recipe
@@ -815,72 +458,6 @@ def cook(recipe: str | None = None):
     result = subprocess.run(cmd, env={**os.environ, **spec.env})
     if result.returncode != 0:
         sys.exit(result.returncode)
-
-
-def _print_next_steps() -> None:
-    """Print concise post-install getting started instructions."""
-    print("\nNext steps:")
-    print("  1. cd into your project and run: autoskillit init")
-    print("  2. Start Claude Code: claude")
-    print("  3. Open the kitchen: /mcp__plugin_autoskillit_autoskillit__open_kitchen")
-
-
-# --- Init helpers ---
-
-
-def _prompt_recipe_choice() -> str:
-    available = list_recipes(Path.cwd()).items
-    if not available:
-        print("No recipes found. Run 'autoskillit recipes list' to check.")
-        raise SystemExit(1)
-    print("Available recipes:")
-    for i, r in enumerate(available, 1):
-        print(f"  {i}. {r.name}")
-    return input("Recipe name: ").strip()
-
-
-def _prompt_test_command() -> list[str]:
-    default = "task test-all"
-    answer = input(f"Test command [{default}]: ").strip()
-    return (answer if answer else default).split()
-
-
-def _generate_config_yaml(test_command: list[str]) -> str:
-    """Generate config YAML with active settings and commented advanced sections."""
-    cmd_str = json.dumps(test_command)
-    return f"""\
-test_check:
-  command: {cmd_str}
-  # timeout: 600
-
-safety:
-  reset_guard_marker: ".autoskillit-workspace"
-  require_dry_walkthrough: true
-  test_gate_on_merge: true
-
-# --- Advanced settings (uncomment and configure as needed) ---
-#
-# classify_fix:
-#   path_prefixes: []
-#
-# reset_workspace:
-#   command: null
-#   preserve_dirs: []
-#
-# implement_gate:
-#   marker: "Dry-walkthrough verified = TRUE"
-#   skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
-#
-# run_skill:
-#   timeout: 3600
-#   heartbeat_marker: '"type":"result"'
-#   stale_threshold: 1200
-#   completion_marker: "%%ORDER_UP%%"
-#
-# run_skill_retry:
-#   timeout: 7200
-#   stale_threshold: 1200
-"""
 
 
 def main() -> None:

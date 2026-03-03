@@ -1,7 +1,7 @@
 """PreToolUse hook: block run_skill/run_skill_retry calls with non-slash skill_command.
 
 Protocol: read PreToolUse JSON event from stdin, write decision JSON to stdout, exit 0.
-Fail-open: any error approves silently (never block Claude Code).
+Expected errors (malformed JSON): fail-open (approve). Unexpected errors: fail-closed (deny).
 """
 
 from __future__ import annotations
@@ -18,8 +18,27 @@ def main() -> None:
         event = json.loads(raw)
         tool_input = event.get("tool_input", {})
         skill_command = str(tool_input.get("skill_command", SKILL_COMMAND_PREFIX)).strip()
-    except Exception:
+    except (json.JSONDecodeError, ValueError):
         sys.exit(0)  # fail-open: malformed event → approve
+    except Exception as e:
+        # Unexpected error (bug, import issue, etc.) — deny rather than silently approve.
+        # A security validator that silently passes on unknown errors is not a validator.
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            f"skill_command_guard encountered an unexpected error "
+                            f"({type(e).__name__}: {e}). "
+                            "Denying as a safety measure — check hook configuration."
+                        ),
+                    }
+                }
+            )
+        )
+        sys.exit(0)
 
     if not skill_command.startswith(SKILL_COMMAND_PREFIX):
         print(

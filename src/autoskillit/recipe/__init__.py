@@ -6,6 +6,13 @@ from autoskillit.core import get_logger
 
 _logger = get_logger(__name__)
 
+# Rule registration — import triggers @semantic_rule registration.
+from autoskillit.recipe import rules_bypass as _rules_bypass  # noqa: E402 F401
+from autoskillit.recipe import rules_clone as _rules_clone  # noqa: E402 F401
+from autoskillit.recipe import rules_dataflow as _rules_dataflow  # noqa: E402 F401
+from autoskillit.recipe import rules_graph as _rules_graph  # noqa: E402 F401
+from autoskillit.recipe import rules_inputs as _rules_inputs  # noqa: E402 F401
+from autoskillit.recipe import rules_worktree as _rules_worktree  # noqa: E402 F401
 from autoskillit.recipe._api import (  # noqa: E402
     format_recipe_list_response,
     list_all,

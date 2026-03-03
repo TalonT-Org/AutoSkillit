@@ -1,5 +1,5 @@
 name: smoke-test
-autoskillit_version: "0.2.0"
+autoskillit_version: "0.3.0"
 description: End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
 summary: setup > seed_task > set_feature_branch > create_branch? > investigate > rectify > implement > set_worktree_path > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
 
@@ -29,8 +29,25 @@ steps:
     with:
       cmd: "git init -b main && git commit --allow-empty -m 'initial' && touch .autoskillit-workspace"
       cwd: "${{ inputs.workspace }}"
+    on_success: setup_remote
+    on_failure: escalate
+
+  setup_remote:
+    tool: run_cmd
+    with:
+      cmd: >-
+        REMOTE="${{ inputs.workspace }}-bare.git" &&
+        git init --bare "$REMOTE" &&
+        git remote add origin "$REMOTE" &&
+        printf '%s' "$REMOTE"
+      cwd: "${{ inputs.workspace }}"
+    capture:
+      remote_url: "${{ result.stdout }}"
     on_success: seed_task
     on_failure: escalate
+    note: >
+      Creates a bare git repo as a local remote and configures origin.
+      Captures remote_url for use by push_feature_branch.
 
   seed_task:
     tool: run_cmd
@@ -119,8 +136,23 @@ steps:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
-    on_success: merge
+    on_success: push_feature_branch
     on_failure: assess
+
+  push_feature_branch:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ inputs.workspace }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.feature_branch }}"
+    on_success: merge
+    on_failure: escalate
+    optional: true
+    skip_when_false: "inputs.collect_on_branch"
+    note: >
+      Only execute if collect_on_branch is 'true'.
+      Publishes the feature branch to the local bare remote before merge_worktree.
+      merge_worktree requires the base_branch ref to exist on the remote.
 
   assess:
     tool: run_skill
@@ -140,11 +172,11 @@ steps:
       worktree_path: "${{ context.worktree_path }}"
       base_branch: "${{ inputs.base_branch }}"
     on_result:
-      field: restart_scope
-      routes:
-        full_restart: investigate
-        partial_restart: implement
-    on_failure: escalate
+      - when: "${{ result.restart_scope }} == full_restart"
+        route: investigate
+      - when: "result.error"
+        route: escalate
+      - route: implement
 
   merge:
     tool: merge_worktree
@@ -161,11 +193,9 @@ steps:
     with:
       workspace: ${{ inputs.workspace }}
     on_result:
-      field: non_empty
-      routes:
-        "true": create_summary
-        "false": done
-    on_failure: done
+      - when: "${{ result.non_empty }} == true"
+        route: create_summary
+      - route: done
     note: >
       Only execute if inputs.collect_on_branch is 'true'. Otherwise skip to done.
       Reads bug_report.json from the workspace. Routes to create_summary when bugs

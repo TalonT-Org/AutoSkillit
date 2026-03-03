@@ -1,0 +1,332 @@
+"""Semantic validation rules — dataflow analysis."""
+
+from __future__ import annotations
+
+from autoskillit.core import (
+    PIPELINE_FORBIDDEN_TOOLS,
+    SKILL_TOOLS,
+    Severity,
+    get_logger,
+)
+from autoskillit.recipe._analysis import analyze_dataflow
+from autoskillit.recipe.contracts import (
+    _RESULT_CAPTURE_RE,
+    get_skill_contract,
+    load_bundled_manifest,
+    resolve_skill_name,
+)
+from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.schema import Recipe
+
+logger = get_logger(__name__)
+
+
+@semantic_rule(
+    name="weak-constraint-text",
+    description="Pipeline constraints must enumerate forbidden native tools by name.",
+    severity=Severity.WARNING,
+)
+def _check_weak_constraint_text(wf: Recipe) -> list[RuleFinding]:
+    if not wf.kitchen_rules:
+        return []
+
+    all_text = " ".join(wf.kitchen_rules)
+    found = sum(1 for tool in PIPELINE_FORBIDDEN_TOOLS if tool in all_text)
+    if found < len(PIPELINE_FORBIDDEN_TOOLS):
+        tool_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
+        return [
+            RuleFinding(
+                rule="weak-constraint-text",
+                severity=Severity.WARNING,
+                step_name="(recipe)",
+                message=(
+                    "Recipe kitchen_rules do not enumerate forbidden native tools. "
+                    f"Name specific tools ({tool_list}) "
+                    "for orchestrator discipline."
+                ),
+            )
+        ]
+    return []
+
+
+@semantic_rule(
+    name="undeclared-capture-key",
+    description="result.X captures must match skill output keys in skill_contracts.yaml",
+    severity=Severity.WARNING,
+)
+def _check_capture_output_coverage(wf: Recipe) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        if not step.capture and not step.capture_list:
+            continue
+
+        skill_cmd = step.with_args.get("skill_command", "")
+        skill_name = resolve_skill_name(skill_cmd)
+        if not skill_name:
+            # Dynamic or non-autoskillit skill_command — cannot validate.
+            continue
+
+        contract = get_skill_contract(skill_name, manifest)
+        if contract is None:
+            findings.append(
+                RuleFinding(
+                    rule="undeclared-capture-key",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' captures from skill '{skill_name}' "
+                        f"which has no outputs contract entry in skill_contracts.yaml. "
+                        f"Add an outputs section to verify capture correctness."
+                    ),
+                )
+            )
+            continue
+
+        declared_keys = {out.name for out in contract.outputs}
+
+        for _capture_var, capture_expr in step.capture.items():
+            for ref_key in _RESULT_CAPTURE_RE.findall(capture_expr):
+                if ref_key not in declared_keys:
+                    findings.append(
+                        RuleFinding(
+                            rule="undeclared-capture-key",
+                            severity=Severity.WARNING,
+                            step_name=step_name,
+                            message=(
+                                f"Step '{step_name}' captures result.{ref_key} "
+                                f"but skill '{skill_name}' does not declare '{ref_key}' "
+                                f"in its outputs contract."
+                            ),
+                        )
+                    )
+
+        for _capture_var, capture_expr in step.capture_list.items():
+            for ref_key in _RESULT_CAPTURE_RE.findall(capture_expr):
+                if ref_key not in declared_keys:
+                    findings.append(
+                        RuleFinding(
+                            rule="undeclared-capture-key",
+                            severity=Severity.WARNING,
+                            step_name=step_name,
+                            message=(
+                                f"Step '{step_name}' captures result.{ref_key} via capture_list "
+                                f"but skill '{skill_name}' does not declare '{ref_key}' "
+                                f"in its outputs contract."
+                            ),
+                        )
+                    )
+
+    return findings
+
+
+@semantic_rule(
+    name="dead-output",
+    description="Captured variable never consumed downstream",
+    severity=Severity.ERROR,
+)
+def _check_dead_output(wf: Recipe) -> list[RuleFinding]:
+    """Error when any captured context variable is never consumed downstream."""
+    report = analyze_dataflow(wf)
+    return [
+        RuleFinding(
+            rule="dead-output",
+            severity=Severity.ERROR,
+            step_name=w.step_name,
+            message=w.message,
+        )
+        for w in report.warnings
+        if w.code == "DEAD_OUTPUT"
+    ]
+
+
+@semantic_rule(
+    name="implicit-handoff",
+    description="Skill with declared outputs missing capture block",
+    severity=Severity.ERROR,
+)
+def _check_implicit_handoff(wf: Recipe) -> list[RuleFinding]:
+    """Error when a skill step has contract outputs but no capture: block."""
+    try:
+        manifest = load_bundled_manifest()
+    except Exception:
+        logger.warning("implicit-handoff: failed to load skill_contracts.yaml; skipping")
+        return []
+
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not isinstance(skill_cmd, str):
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if not skill_name:
+            continue
+        contract = manifest.get("skills", {}).get(skill_name)
+        if not contract:
+            continue
+        if not contract.get("outputs"):
+            continue
+        if not step.capture:
+            findings.append(
+                RuleFinding(
+                    rule="implicit-handoff",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls '/autoskillit:{skill_name}' "
+                        f"which declares {len(contract['outputs'])} output(s) "
+                        f"but has no capture: block. Add a capture: block to "
+                        f"thread the skill's structured output into pipeline context."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="multipart-iteration-notes",
+    description="Multi-part plan recipes must declare iteration conventions.",
+    severity=Severity.ERROR,
+)
+def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
+    _MULTIPART_SKILLS = {"/autoskillit:make-plan", "/autoskillit:rectify"}
+    findings: list[RuleFinding] = []
+
+    has_multipart_step = any(
+        step.tool in SKILL_TOOLS
+        and any(s in step.with_args.get("skill_command", "") for s in _MULTIPART_SKILLS)
+        for step in wf.steps.values()
+    )
+    if not has_multipart_step:
+        return []
+
+    plan_step = wf.steps.get("plan")
+    plan_note = (plan_step.note or "") if plan_step is not None else ""
+    # Also accept the glob pattern from the note of whichever step invokes the multipart skill
+    multipart_step_notes = [
+        (step.note or "")
+        for step in wf.steps.values()
+        if step.tool in SKILL_TOOLS
+        and any(s in step.with_args.get("skill_command", "") for s in _MULTIPART_SKILLS)
+    ]
+    if "*_part_*.md" not in plan_note and not any(
+        "*_part_*.md" in note for note in multipart_step_notes
+    ):
+        findings.append(
+            RuleFinding(
+                rule="multipart-glob-note",
+                severity=Severity.ERROR,
+                step_name="plan",
+                message=(
+                    "Recipe uses make-plan or rectify but neither the 'plan' step note nor "
+                    "the planning step's own note contains '*_part_*.md'. Agents will not "
+                    "know to glob for multi-part plan files. Add: "
+                    "'Glob plan_dir for *_part_*.md or single plan file.' to the plan "
+                    "step's note (or to the make-plan/rectify step's note if no separate "
+                    "'plan' step exists)."
+                ),
+            )
+        )
+
+    sequential_keywords = ("SEQUENTIAL EXECUTION", "full cycle", "Never run verify for all parts")
+    rules_text = " ".join(wf.kitchen_rules)
+    if not any(kw in rules_text for kw in sequential_keywords):
+        findings.append(
+            RuleFinding(
+                rule="multipart-sequential-kitchen-rule",
+                severity=Severity.WARNING,
+                step_name="kitchen_rules",
+                message=(
+                    "Recipe uses make-plan or rectify but kitchen_rules do not contain "
+                    "a sequential execution constraint. Without it, agents may "
+                    "batch-verify all parts before "
+                    "implementing any. Add a rule such as: 'SEQUENTIAL EXECUTION: complete full "
+                    "cycle per part before advancing.'"
+                ),
+            )
+        )
+
+    next_or_done = wf.steps.get("next_or_done")
+    if next_or_done is not None and next_or_done.on_result is not None:
+        # Legacy format: field/routes dict with explicit "more_parts" → "verify"
+        has_more_parts_to_verify = next_or_done.on_result.routes.get("more_parts") == "verify"
+        # Predicate format: condition with "more_parts" in the when clause routing to "verify"
+        if not has_more_parts_to_verify:
+            has_more_parts_to_verify = any(
+                cond.route == "verify" and cond.when is not None and "more_parts" in cond.when
+                for cond in next_or_done.on_result.conditions
+            )
+        if not has_more_parts_to_verify:
+            findings.append(
+                RuleFinding(
+                    rule="multipart-route-back",
+                    severity=Severity.ERROR,
+                    step_name="next_or_done",
+                    message=(
+                        "Recipe uses make-plan or rectify but next_or_done does not route "
+                        "'more_parts' back to 'verify'. Sequential part processing requires "
+                        "more_parts → verify in the on_result routes."
+                    ),
+                )
+            )
+
+    return findings
+
+
+@semantic_rule(
+    name="merge-cleanup-uncaptured",
+    description="merge_worktree steps should capture cleanup_succeeded to track orphaned results.",
+    severity=Severity.WARNING,
+)
+def _check_merge_cleanup_captured(wf: Recipe) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+
+    for step_name, step in wf.steps.items():
+        if step.tool != "merge_worktree":
+            continue
+        # Check whether any capture value references cleanup_succeeded
+        captures_cleanup = any("result.cleanup_succeeded" in str(v) for v in step.capture.values())
+        if not captures_cleanup:
+            findings.append(
+                RuleFinding(
+                    rule="merge-cleanup-uncaptured",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls merge_worktree but does not capture "
+                        f"'cleanup_succeeded'. Add a capture entry such as "
+                        f'cleanup_ok: "${{{{ result.cleanup_succeeded }}}}" '
+                        f"so cleanup failures (orphaned worktree/branch) are not silently ignored."
+                    ),
+                )
+            )
+
+    return findings
+
+
+@semantic_rule(
+    name="stale-ref-after-merge",
+    description=(
+        "A context variable sourced from a worktree path or branch name is consumed "
+        "by a step that executes after merge_worktree (or remove_clone), which deletes "
+        "the resource the variable refers to."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_stale_ref_after_merge(wf: Recipe) -> list[RuleFinding]:
+    report = analyze_dataflow(wf)
+    return [
+        RuleFinding(
+            rule="stale-ref-after-merge",
+            severity=Severity.WARNING,
+            step_name=w.step_name,
+            message=w.message,
+        )
+        for w in report.warnings
+        if w.code == "REF_INVALIDATED"
+    ]

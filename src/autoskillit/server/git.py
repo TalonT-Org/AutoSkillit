@@ -177,7 +177,7 @@ async def perform_merge(
                 f"push it to origin before running this pipeline: "
                 f"git push -u origin {base_branch}"
             ),
-            "failed_step": MergeFailedStep.REBASE,
+            "failed_step": MergeFailedStep.PRE_REBASE_CHECK,
             "state": MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED,
             "base_branch": base_branch,
             "worktree_path": worktree_path,
@@ -241,7 +241,9 @@ async def perform_merge(
         }
 
     # 8. Merge
-    rc, _, merge_stderr = await _run_git(["git", "merge", worktree_branch], main_repo, 60, runner)
+    rc, _, merge_stderr = await _run_git(
+        ["git", "merge", "--no-edit", worktree_branch], main_repo, 60, runner
+    )
     if rc != 0:
         abort_rc, _, abort_stderr = await _run_git(
             ["git", "merge", "--abort"], main_repo, 30, runner

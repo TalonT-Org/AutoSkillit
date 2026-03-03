@@ -284,62 +284,6 @@ class TestGateTransitionLogs:
             for entry in logs
         )
 
-    def test_session_log_dir_warns_when_missing(self, tmp_path, monkeypatch):
-        from autoskillit.execution.headless import _session_log_dir
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
-        # Do NOT create the log dir — we want the missing-dir branch
-        cwd = str(tmp_path / "my-project")
-        with structlog.testing.capture_logs() as logs:
-            _session_log_dir(cwd)
-        warning_entries = [entry for entry in logs if entry.get("log_level") == "warning"]
-        assert any(entry.get("event") == "session_log_dir_missing" for entry in warning_entries)
-
-    def test_session_log_dir_no_warning_when_present(self, tmp_path, monkeypatch):
-        from autoskillit.execution.headless import _session_log_dir
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
-        cwd = str(tmp_path)
-        project_hash = cwd.replace("/", "-").replace("_", "-")
-        log_dir = tmp_path / "home" / ".claude" / "projects" / project_hash
-        log_dir.mkdir(parents=True, exist_ok=True)
-        with structlog.testing.capture_logs() as logs:
-            _session_log_dir(cwd)
-        assert not any(entry.get("event") == "session_log_dir_missing" for entry in logs)
-
-    def test_session_log_dir_logs_path_when_dir_exists(self, tmp_path, monkeypatch):
-        from autoskillit.execution.headless import _session_log_dir
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
-        cwd = str(tmp_path)
-        project_hash = cwd.replace("/", "-").replace("_", "-")
-        log_dir = tmp_path / "home" / ".claude" / "projects" / project_hash
-        log_dir.mkdir(parents=True, exist_ok=True)
-        with structlog.testing.capture_logs() as logs:
-            result = _session_log_dir(cwd)
-        info_entries = [e for e in logs if e.get("log_level") == "info"]
-        assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
-        computed_entry = next(
-            e for e in info_entries if e.get("event") == "session_log_dir_computed"
-        )
-        assert computed_entry.get("path") == str(result)
-        assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
-
-    def test_session_log_dir_logs_path_when_dir_missing(self, tmp_path, monkeypatch):
-        from autoskillit.execution.headless import _session_log_dir
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
-        cwd = str(tmp_path / "my-project")
-        with structlog.testing.capture_logs() as logs:
-            result = _session_log_dir(cwd)
-        info_entries = [e for e in logs if e.get("log_level") == "info"]
-        assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
-        computed_entry = next(
-            e for e in info_entries if e.get("event") == "session_log_dir_computed"
-        )
-        assert computed_entry.get("path") == str(result)
-        assert any(e.get("event") == "session_log_dir_missing" for e in logs)
-
 
 class TestPromptSchemas:
     """Prompt descriptions must be accurate, current, and cooking-themed."""
@@ -454,6 +398,39 @@ class TestOpenKitchenVersionReporting:
         assert tool_ctx.gate.enabled is True
 
 
+class TestOpenKitchenSousChef:
+    """sous-chef/SKILL.md content is injected at open_kitchen activation time."""
+
+    @pytest.fixture(autouse=True)
+    def _close_kitchen(self, tool_ctx):
+        tool_ctx.gate = DefaultGateState(enabled=False)
+
+    @staticmethod
+    def _prompt_text(result) -> str:
+        content = result.messages[0].content
+        return content.text if hasattr(content, "text") else str(content)
+
+    def test_sous_chef_rules_injected_at_open_kitchen(self):
+        """open_kitchen must include sous-chef global orchestration rules."""
+        from autoskillit.server.prompts import open_kitchen
+
+        result = open_kitchen()
+        text = self._prompt_text(result)
+        assert "MULTI-PART PLAN SEQUENCING" in text
+        assert "retry-worktree" in text.lower()
+
+    def test_open_kitchen_degrades_gracefully_without_sous_chef(self, monkeypatch, tmp_path):
+        """open_kitchen must not raise when sous-chef/SKILL.md is absent."""
+        import autoskillit.server.prompts as prompts_mod
+        from autoskillit.server.prompts import open_kitchen
+
+        monkeypatch.setattr(prompts_mod, "pkg_root", lambda: tmp_path)
+        result = open_kitchen()  # must not raise
+        text = self._prompt_text(result)
+        assert "Kitchen is open" in text
+        assert "kitchen_status" in text
+
+
 class TestServerLazyInit:
     """Tests for the _ctx / _initialize() / _get_ctx() / _get_config() pattern."""
 
@@ -474,19 +451,19 @@ class TestServerLazyInit:
 
     def test_get_ctx_raises_before_initialize(self, monkeypatch):
         """_get_ctx() raises RuntimeError when _ctx is None."""
-        import autoskillit.server as srv
+        from autoskillit.server import _state
 
-        monkeypatch.setattr(srv, "_ctx", None)
+        monkeypatch.setattr(_state, "_ctx", None)
         with pytest.raises(RuntimeError, match="serve\\(\\) must be called"):
-            srv._get_ctx()
+            _state._get_ctx()
 
     def test_get_config_raises_before_initialize(self, monkeypatch):
         """_get_config() raises RuntimeError when _ctx is None."""
-        import autoskillit.server as srv
+        from autoskillit.server import _state
 
-        monkeypatch.setattr(srv, "_ctx", None)
+        monkeypatch.setattr(_state, "_ctx", None)
         with pytest.raises(RuntimeError, match="serve\\(\\) must be called"):
-            srv._get_config()
+            _state._get_config()
 
 
 class TestConfigDrivenBehavior:

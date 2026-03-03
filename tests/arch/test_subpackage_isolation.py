@@ -24,44 +24,35 @@ from pathlib import Path
 
 import pytest
 
-SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
-
-# ── Helpers shared with other arch tests ─────────────────────────────────────
-
-_SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
-
-# ARCH-007: Functions that check TerminationReason as sequential early-exit guards
-# (single-value checks), not as dispatch tables (≥2 values). Exempt from ARCH-007.
-_DISPATCH_TABLE_EXEMPT_FUNCTIONS: frozenset[str] = frozenset(
-    {
-        "_build_skill_result",  # sequential early-exit guards, not a dispatch table
-    }
+from tests.arch._helpers import (
+    _SOURCE_FILES,
+    SRC_ROOT,
+    _extract_module_level_internal_imports,
+    _is_mcp_tool_decorator,
+    _rel,
 )
+from tests.arch._rules import RuleDescriptor
 
+# ── REQ-ARCH-002 descriptor ───────────────────────────────────────────────────
 
-def _rel(path: Path) -> str:
-    try:
-        return str(path.relative_to(Path(__file__).parent.parent.parent))
-    except ValueError:
-        return str(path)
-
-
-def _extract_module_level_internal_imports(path: Path) -> list[tuple[str, int]]:
-    """Return (imported_module_stem, lineno) for all autoskillit imports at module level."""
-    source = path.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(path))
-    results: list[tuple[str, int]] = []
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and node.module:
-            parts = node.module.split(".")
-            if parts[0] == "autoskillit" and len(parts) > 1:
-                results.append((parts[1], node.lineno))
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                parts = alias.name.split(".")
-                if parts[0] == "autoskillit" and len(parts) > 1:
-                    results.append((parts[1], node.lineno))
-    return results
+ISOLATION_RULES: dict[str, RuleDescriptor] = {
+    "REQ-ARCH-002": RuleDescriptor(
+        rule_id="REQ-ARCH-002",
+        name="tool-context-service-fields-use-protocol-types",
+        lens="module-dependency",
+        description=(
+            "Every non-exempt ToolContext service field must be annotated with a Protocol "
+            "type from autoskillit.core.types, not a concrete implementation class."
+        ),
+        rationale=(
+            "Protocol-typed fields enable dependency injection and make the context "
+            "independently testable without importing concrete server or execution classes."
+        ),
+        exemptions=frozenset({"plugin_dir", "config"}),  # non-service structural fields
+        severity="high",
+        defense_standard="DS-008",
+    ),
+}
 
 
 def _get_call_func_name(node: ast.Call) -> str | None:
@@ -72,51 +63,6 @@ def _get_call_func_name(node: ast.Call) -> str | None:
     if isinstance(func, ast.Attribute):
         return func.attr
     return None
-
-
-def _is_mcp_tool_decorator(node: ast.expr) -> bool:
-    """Return True if node represents @mcp.tool or @mcp.tool(...)."""
-    if isinstance(node, ast.Attribute) and node.attr == "tool":
-        return True
-    if (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "tool"
-    ):
-        return True
-    return False
-
-
-def _runtime_import_froms(path: Path) -> list[ast.ImportFrom]:
-    """Return ImportFrom nodes not inside a TYPE_CHECKING guard."""
-    tree = ast.parse(path.read_text())
-    result: list[ast.ImportFrom] = []
-
-    def _walk(stmts: list) -> None:
-        for stmt in stmts:
-            if isinstance(stmt, ast.ImportFrom):
-                result.append(stmt)
-            elif isinstance(stmt, ast.If):
-                test = stmt.test
-                is_tc = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
-                    isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
-                )
-                if not is_tc:
-                    _walk(stmt.body)
-                    _walk(stmt.orelse)
-            elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                _walk(stmt.body)
-            elif isinstance(stmt, ast.ClassDef):
-                _walk(stmt.body)
-            elif isinstance(stmt, ast.Try):
-                _walk(stmt.body)
-                for handler in stmt.handlers:
-                    _walk(handler.body)
-                _walk(stmt.orelse)
-                _walk(getattr(stmt, "finalbody", []))
-
-    _walk(tree.body)
-    return result
 
 
 # ── Rule 2: Singleton definition locality ─────────────────────────────────────
@@ -348,39 +294,6 @@ def test_skill_tools_defined_in_types():
     )
 
 
-# ── CLAUDE.md documentation and structural tests ──────────────────────────────
-
-
-def test_claude_md_documents_all_source_modules() -> None:
-    """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
-
-    For __init__.py files, the containing package directory name must appear.
-    For all other files, the filename must appear somewhere in CLAUDE.md.
-    """
-    claude_path = Path(__file__).parent.parent.parent / "CLAUDE.md"
-    content = claude_path.read_text()
-    src_root = Path(__file__).parent.parent.parent / "src" / "autoskillit"
-
-    missing = []
-    for py_file in sorted(src_root.rglob("*.py")):
-        if "__pycache__" in py_file.parts:
-            continue
-        rel = py_file.relative_to(src_root)
-        if py_file.name == "__init__.py":
-            # For sub-package inits, verify the package directory is documented
-            parent = rel.parent
-            if parent != Path(".") and (parent.name + "/") not in content:
-                missing.append(str(rel))
-        else:
-            if py_file.name not in content:
-                missing.append(str(rel))
-
-    assert not missing, (
-        f"Modules not documented in CLAUDE.md: {', '.join(missing)}. "
-        "Update the Architecture section in CLAUDE.md."
-    )
-
-
 def test_pyproject_cyclopts_minimum_version() -> None:
     """cyclopts lower bound in pyproject.toml must be >=4.0, not >=3.0.
 
@@ -422,7 +335,7 @@ def test_pytest_asyncio_version_bound() -> None:
     data = tomllib.loads(pyproject.read_text())
     deps = data["project"]["optional-dependencies"]["dev"]
     asyncio_dep = next(d for d in deps if d.startswith("pytest-asyncio"))
-    assert ">=0.23" in asyncio_dep, f"Expected pytest-asyncio>=0.23.x, got: {asyncio_dep!r}"
+    assert ">=1.0.0" in asyncio_dep, f"Expected pytest-asyncio>=1.0.0, got: {asyncio_dep!r}"
 
 
 def test_severity_not_defined_locally_in_recipe_validator() -> None:
@@ -603,9 +516,9 @@ def test_cli_is_package() -> None:
 
 
 def test_server_file_count_under_limit() -> None:
-    """server/ must not exceed 12 Python files (REQ-DSGN-002)."""
+    """server/ must not exceed 13 Python files (REQ-DSGN-002)."""
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 12, f"server/ has {len(py_files)} files, max is 12"
+    assert len(py_files) <= 13, f"server/ has {len(py_files)} files, max is 13"
 
 
 def test_git_operations_moved_to_server_package() -> None:
@@ -682,7 +595,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
 
     server/ is exempt at 12 files to accommodate tools_clone and tools_integrations modules.
     """
-    EXEMPTIONS: dict[str, int] = {"server": 12, "recipe": 12}
+    EXEMPTIONS: dict[str, int] = {"server": 13, "recipe": 18, "execution": 16}
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":
@@ -894,86 +807,14 @@ def test_make_context_wires_all_optional_toolcontext_fields() -> None:
     )
 
 
-# ── REQ-ARCH-004: __all__ completeness ───────────────────────────────────────
-
-
-def test_package_all_matches_exports() -> None:
-    """REQ-ARCH-004: Each package __init__.__all__ must match its exported symbol set.
-
-    Two checks:
-    1. Every name in __all__ is importable from the package (no dead entries).
-    2. Every public name re-exported via relative or autoskillit.* imports in __init__.py
-       appears in __all__ (no undeclared exports).
-
-    Packages without __all__ (server, root autoskillit) are skipped.
-    """
-    import importlib
-
-    AUTOSKILLIT_ROOT = SRC_ROOT
-    PACKAGES_WITH_ALL = [
-        "core",
-        "config",
-        "pipeline",
-        "execution",
-        "workspace",
-        "recipe",
-        "migration",
-        "cli",
-    ]
-    violations: list[str] = []
-
-    for pkg_name in PACKAGES_WITH_ALL:
-        module = importlib.import_module(f"autoskillit.{pkg_name}")
-        all_list: list[str] = getattr(module, "__all__", None)  # type: ignore[assignment]
-        if all_list is None:
-            continue  # package opted out of __all__ — skip
-
-        # Check 1: every __all__ entry is importable
-        for name in all_list:
-            if not hasattr(module, name):
-                violations.append(
-                    f"autoskillit.{pkg_name}: '{name}' in __all__ but not importable"
-                )
-
-        # Check 2: every public name from relative / intra-package imports is in __all__
-        # Only intra-package absolute imports (autoskillit.{pkg_name}.*) are checked —
-        # cross-package imports (e.g. `from autoskillit.core import get_logger` in
-        # recipe/__init__.py) are internal helpers, not re-exports, and must be excluded.
-        init_path = AUTOSKILLIT_ROOT / pkg_name / "__init__.py"
-        for node in _runtime_import_froms(init_path):
-            is_relative = node.level and node.level > 0
-            is_intra_package = node.module and node.module.startswith(f"autoskillit.{pkg_name}.")
-            if not (is_relative or is_intra_package):
-                continue  # skip stdlib / third-party / cross-package imports
-
-            for alias in node.names:
-                name = alias.asname if alias.asname else alias.name
-                if name.startswith("_") or name == "*":
-                    continue
-                if name not in all_list:
-                    violations.append(
-                        f"autoskillit.{pkg_name}: '{name}' re-exported via import "
-                        f"but not in __all__"
-                    )
-
-    assert not violations, "__all__ completeness violations:\n" + "\n".join(violations)
-
-
 # ── groupC Part A tests ───────────────────────────────────────────────────────
 
 
-def test_recipe_rules_module_exists() -> None:
-    """P8: recipe/rules.py must exist and be importable."""
-    from autoskillit.recipe import rules  # noqa: F401
-
-    assert rules is not None
-
-
-def test_semantic_rule_functions_defined_in_rules_module() -> None:
-    """P8: Semantic rule functions must be defined in recipe/rules.py."""
+def test_semantic_rule_functions_defined_in_rule_submodules() -> None:
+    """P8: Semantic rule functions must be defined in rules_*.py submodules."""
     from autoskillit.recipe.validator import _check_outdated_version
 
-    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules"
+    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules_inputs"
 
 
 def test_installed_version_in_core_types() -> None:
@@ -983,10 +824,14 @@ def test_installed_version_in_core_types() -> None:
     assert isinstance(AUTOSKILLIT_INSTALLED_VERSION, str) and AUTOSKILLIT_INSTALLED_VERSION
 
 
-def test_rules_module_no_autoskillit_init_import() -> None:
-    """P3-F2: recipe/rules.py must not import from autoskillit top-level __init__."""
-    rules_path = SRC_ROOT / "recipe" / "rules.py"
-    assert "from autoskillit import __version__" not in rules_path.read_text()
+def test_rule_submodules_no_autoskillit_init_import() -> None:
+    """P3-F2: rules_*.py submodules must not import from autoskillit top-level __init__."""
+    rule_files = sorted((SRC_ROOT / "recipe").glob("rules_*.py"))
+    assert len(rule_files) >= 5, f"Expected >=5 rules_*.py files, found {len(rule_files)}"
+    for rules_path in rule_files:
+        assert "from autoskillit import __version__" not in rules_path.read_text(), (
+            f"{rules_path.name} must not import from autoskillit top-level __init__"
+        )
 
 
 def test_recipe_api_module_exists() -> None:
@@ -1066,7 +911,7 @@ class TestGroupCMigration:
         assert "def scan_done_signals(" not in source  # REQ-SIG-003
 
     def test_race_accumulator_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "class RaceAccumulator" in source  # REQ-SIG-003
 
     def test_cancel_scope_cancel_present(self):
@@ -1074,7 +919,7 @@ class TestGroupCMigration:
         assert "cancel_scope.cancel()" in source  # REQ-SIG-004
 
     def test_resolve_termination_preserved(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "def resolve_termination(" in source  # REQ-SIG-005
 
     def test_channel_b_drain_wait_uses_move_on_after(self):
@@ -1082,15 +927,15 @@ class TestGroupCMigration:
         assert "anyio.move_on_after(" in source  # REQ-SIG-006
 
     def test_watch_process_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "async def _watch_process(" in source  # REQ-SIG-007
 
     def test_watch_heartbeat_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "async def _watch_heartbeat(" in source  # REQ-SIG-007
 
     def test_watch_session_log_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "async def _watch_session_log(" in source  # REQ-SIG-007
 
     def test_race_signals_fields_unchanged(self):

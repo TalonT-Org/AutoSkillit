@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastmcp.prompts import Message, PromptResult
 
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, pkg_root
 from autoskillit.server import mcp
 
 
@@ -57,6 +57,11 @@ def open_kitchen() -> PromptResult:
         "tool access. Do NOT use native tools to investigate failures — "
         "route to on_failure and let the downstream skill handle diagnosis."
     )
+
+    # Inject sous-chef global orchestration rules (graceful degradation if absent)
+    _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
+    if _sous_chef_path.exists():
+        text += "\n\n" + _sous_chef_path.read_text()
 
     # Check if the project needs an upgrade
     scripts_dir = Path.cwd() / ".autoskillit" / "scripts"

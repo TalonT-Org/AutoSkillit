@@ -14,6 +14,7 @@ from autoskillit.recipe.contracts import (
     load_recipe_card,
     validate_recipe_cards,
 )
+from autoskillit.workspace import bundled_skills_dir
 
 # ---------------------------------------------------------------------------
 # Bundled manifest tests
@@ -23,7 +24,7 @@ from autoskillit.recipe.contracts import (
 def test_load_bundled_manifest() -> None:
     manifest = load_bundled_manifest()
     assert manifest["version"] == "0.1.0"
-    assert len(manifest["skills"]) == 17
+    assert len(manifest["skills"]) == 19
     assert "implement-worktree" in manifest["skills"]
     assert "investigate" in manifest["skills"]
     assert "write-recipe" in manifest["skills"]
@@ -243,8 +244,8 @@ def test_load_recipe_card(tmp_path: Path) -> None:
     assert contract["bundled_manifest_version"] == "0.1.0"
 
 
-def test_load_recipe_card_missing() -> None:
-    contract = load_recipe_card("nonexistent", Path("/tmp/no-scripts"))
+def test_load_recipe_card_missing(tmp_path: Path) -> None:
+    contract = load_recipe_card("nonexistent", tmp_path / "no-scripts")
     assert contract is None
 
 
@@ -256,7 +257,9 @@ def test_load_recipe_card_missing() -> None:
 def test_check_staleness_clean() -> None:
     contract = {
         "bundled_manifest_version": "0.1.0",
-        "skill_hashes": {"investigate": compute_skill_hash("investigate")},
+        "skill_hashes": {
+            "investigate": compute_skill_hash("investigate", skills_dir=bundled_skills_dir())
+        },
     }
     stale = check_contract_staleness(contract)
     assert len(stale) == 0
@@ -275,6 +278,108 @@ def test_check_staleness_hash_mismatch() -> None:
     }
     stale = check_contract_staleness(contract)
     assert any(s.skill == "investigate" and s.reason == "hash_mismatch" for s in stale)
+
+
+def test_check_staleness_preserves_triage_result_on_repeated_stale_hit(
+    tmp_path: Path,
+) -> None:
+    """When hash+version are unchanged and is_stale=True, triage_result is carried forward."""
+    from datetime import UTC, datetime
+
+    from autoskillit.recipe.staleness_cache import (
+        StalenessEntry,
+        read_staleness_cache,
+        write_staleness_cache,
+    )
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    recipe_path = recipes_dir / "my-recipe.yaml"
+    recipe_path.write_text("name: my-recipe\n")
+    cache_path = tmp_path / "cache.json"
+
+    contract = {
+        "bundled_manifest_version": "0.1.0",
+        "skill_hashes": {"investigate": "sha256:stale_hash"},
+    }
+
+    # First call: populates cache with triage_result=None
+    check_contract_staleness(contract, recipe_path=recipe_path, cache_path=cache_path)
+
+    # Manually set triage_result="cosmetic" (as _apply_triage_gate would)
+    existing = read_staleness_cache(cache_path, "my-recipe")
+    assert existing is not None
+    write_staleness_cache(
+        cache_path,
+        "my-recipe",
+        StalenessEntry(
+            recipe_hash=existing.recipe_hash,
+            manifest_version=existing.manifest_version,
+            is_stale=True,
+            triage_result="cosmetic",
+            checked_at=datetime.now(UTC).isoformat(),
+        ),
+    )
+
+    # Second call: must NOT destroy triage_result
+    check_contract_staleness(contract, recipe_path=recipe_path, cache_path=cache_path)
+
+    after = read_staleness_cache(cache_path, "my-recipe")
+    assert after is not None
+    assert after.triage_result == "cosmetic", (
+        f"triage_result was destroyed. Expected 'cosmetic', got {after.triage_result!r}"
+    )
+
+
+def test_check_staleness_resets_triage_result_when_content_changes(
+    tmp_path: Path,
+) -> None:
+    """When recipe content changes (hash mismatch), triage_result must be reset to None."""
+    from datetime import UTC, datetime
+
+    from autoskillit.recipe.staleness_cache import (
+        StalenessEntry,
+        read_staleness_cache,
+        write_staleness_cache,
+    )
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    recipe_path = recipes_dir / "my-recipe.yaml"
+    recipe_path.write_text("name: my-recipe\nversion: 1\n")
+    cache_path = tmp_path / "cache.json"
+
+    contract = {
+        "bundled_manifest_version": "0.1.0",
+        "skill_hashes": {"investigate": "sha256:stale_hash"},
+    }
+
+    # First call with old content
+    check_contract_staleness(contract, recipe_path=recipe_path, cache_path=cache_path)
+    existing = read_staleness_cache(cache_path, "my-recipe")
+    assert existing is not None
+    write_staleness_cache(
+        cache_path,
+        "my-recipe",
+        StalenessEntry(
+            recipe_hash=existing.recipe_hash,
+            manifest_version=existing.manifest_version,
+            is_stale=True,
+            triage_result="cosmetic",
+            checked_at=datetime.now(UTC).isoformat(),
+        ),
+    )
+
+    # Mutate recipe file → hash changes
+    recipe_path.write_text("name: my-recipe\nversion: 2\n")
+
+    # Second call must reset triage_result
+    check_contract_staleness(contract, recipe_path=recipe_path, cache_path=cache_path)
+    after = read_staleness_cache(cache_path, "my-recipe")
+    assert after is not None
+    assert after.triage_result is None, (
+        f"triage_result must be reset on content change. Got {after.triage_result!r}"
+    )
 
 
 # ---------------------------------------------------------------------------

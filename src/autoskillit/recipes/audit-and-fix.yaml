@@ -1,6 +1,6 @@
 name: audit-and-fix
 description: Audit codebase, investigate findings, plan fixes, and implement.
-autoskillit_version: "0.2.0"
+autoskillit_version: "0.3.0"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,

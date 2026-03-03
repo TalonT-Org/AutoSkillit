@@ -55,8 +55,9 @@ def configure_logging(
 ) -> None:
     """Configure structlog and stdlib logging for application/server use.
 
-    Call ONCE from the CLI's serve command before FastMCP starts. Never
-    call from library code paths.
+    Call at CLI startup; may be called again after config load for two-phase
+    boot (early init at INFO, then reconfigure with config-derived level).
+    Never call from library code paths.
 
     Args:
         level: Minimum log level (e.g. logging.INFO, logging.DEBUG).

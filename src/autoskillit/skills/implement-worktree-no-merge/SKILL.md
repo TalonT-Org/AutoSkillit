@@ -185,6 +185,13 @@ worktree_path=${WORKTREE_PATH}
 branch_name=${WORKTREE_NAME}
 ```
 
+**If this is a `_part_` plan file:** The orchestrator MUST merge this worktree
+(`merge_worktree`) into the base branch BEFORE invoking
+`implement-worktree-no-merge` for the next part. Part N+1's worktree must be
+created from the post-merge state of the base branch, not from Part N's base
+commit. This is a global sequencing rule — it applies even when operating
+off-recipe.
+
 ### Step 6.5: Reset Code Index to Original Project (REQUIRED)
 
 **CRITICAL:** After completion, you **MUST** reset the MCP code-index project path back to the original project directory:

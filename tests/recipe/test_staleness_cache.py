@@ -142,7 +142,7 @@ def test_check_staleness_writes_cache_on_miss(monkeypatch, tmp_path):
 
     compute_called: list[str] = []
 
-    def tracking_compute(skill_name: str) -> str:
+    def tracking_compute(skill_name: str, *, skills_dir) -> str:
         compute_called.append(skill_name)
         return "sha256:" + "b" * 64
 
@@ -158,6 +158,7 @@ def test_check_staleness_writes_cache_on_miss(monkeypatch, tmp_path):
         contract,
         recipe_path=recipe_file,
         cache_path=cache_path,
+        skills_dir=tmp_path,
     )
 
     assert "make-plan" in compute_called
@@ -190,7 +191,7 @@ def test_check_staleness_stale_hit_still_returns_items(monkeypatch, tmp_path):
 
     monkeypatch.setattr(
         "autoskillit.recipe.contracts.compute_skill_hash",
-        lambda skill_name: "sha256:" + "b" * 64,
+        lambda skill_name, *, skills_dir: "sha256:" + "b" * 64,
     )
 
     contract = {
@@ -202,6 +203,7 @@ def test_check_staleness_stale_hit_still_returns_items(monkeypatch, tmp_path):
         contract,
         recipe_path=recipe_file,
         cache_path=cache_path,
+        skills_dir=tmp_path,
     )
 
     # Despite cache hit with is_stale=True, should return StaleItem details

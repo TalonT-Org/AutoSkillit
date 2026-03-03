@@ -92,20 +92,6 @@ def test_reset_token_log_autouse_removed():
     )
 
 
-def test_flush_logger_proxy_caches_removed_from_conftest():
-    """_flush_logger_proxy_caches must not be defined in conftest.
-
-    The conftest.py copy was only used by the removed _reset_structlog fixture.
-    test_logging.py maintains its own copy for TestConfigureLogging.
-    """
-    import tests.conftest as conftest_module
-
-    assert not hasattr(conftest_module, "_flush_logger_proxy_caches"), (
-        "_flush_logger_proxy_caches must be removed from conftest.py; "
-        "it was only used by the removed _reset_structlog fixture"
-    )
-
-
 def test_structlog_does_not_write_to_stdout_in_tests(capsys):
     """Structlog log calls must never pollute stdout, even in default state.
 
@@ -121,8 +107,12 @@ def test_structlog_does_not_write_to_stdout_in_tests(capsys):
 
 
 def test_parse_stdout_json_fixture_is_available(parse_stdout_json):
-    """The parse_stdout_json fixture must exist and be importable from conftest."""
-    assert callable(parse_stdout_json)
+    """parse_stdout_json fixture correctly parses captured stdout JSON."""
+    import json
+
+    print(json.dumps({"result": "ok", "count": 3}))
+    data = parse_stdout_json()
+    assert data == {"result": "ok", "count": 3}
 
 
 def test_pytest_timeout_is_configured(pytestconfig):

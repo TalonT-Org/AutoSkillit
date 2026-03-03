@@ -15,6 +15,9 @@ class SkillInfo:
     path: Path
 
 
+_INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
+
+
 class SkillResolver:
     """List bundled skills from the package directory."""
 
@@ -45,5 +48,5 @@ def _scan_directory(source: SkillSource, directory: Path) -> list[SkillInfo]:
     return [
         SkillInfo(name=d.name, source=source, path=d / "SKILL.md")
         for d in sorted(directory.iterdir())
-        if d.is_dir() and (d / "SKILL.md").is_file()
+        if d.is_dir() and (d / "SKILL.md").is_file() and d.name not in _INTERNAL_SKILLS
     ]

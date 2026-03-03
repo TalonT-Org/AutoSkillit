@@ -221,13 +221,13 @@ def tool_ctx(monkeypatch, tmp_path):
     All service fields (executor, tester, db_reader, workspace_mgr, recipes,
     migrations) are wired via make_context() so routing tests work correctly.
     """
-    from autoskillit import server as _server
     from autoskillit.config import AutomationConfig
     from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.server import _state
     from autoskillit.server._factory import make_context
 
     mock_runner = MockSubprocessRunner()
     ctx = make_context(AutomationConfig(), runner=mock_runner, plugin_dir=str(tmp_path))
     ctx.gate = DefaultGateState(enabled=True)
-    monkeypatch.setattr(_server, "_ctx", ctx)
+    monkeypatch.setattr(_state, "_ctx", ctx)
     return ctx

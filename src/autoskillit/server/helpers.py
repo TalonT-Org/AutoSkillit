@@ -61,15 +61,15 @@ async def _notify(
 
 
 def _get_ctx():  # type: ignore[return]
-    """Deferred import of _get_ctx from server package to avoid circular imports."""
-    from autoskillit.server import _get_ctx as _ctx_fn
+    """Deferred import of _get_ctx from _state to avoid circular imports."""
+    from autoskillit.server._state import _get_ctx as _ctx_fn
 
     return _ctx_fn()
 
 
 def _get_config():  # type: ignore[return]
-    """Deferred import of _get_config from server package to avoid circular imports."""
-    from autoskillit.server import _get_config as _cfg_fn
+    """Deferred import of _get_config from _state to avoid circular imports."""
+    from autoskillit.server._state import _get_config as _cfg_fn
 
     return _cfg_fn()
 
@@ -88,16 +88,21 @@ def _require_enabled() -> str | None:
     return None
 
 
-async def _apply_triage_gate(result: dict[str, Any], name: str) -> dict[str, Any]:
+async def _apply_triage_gate(
+    result: dict[str, Any], name: str, recipe_info: Any = None
+) -> dict[str, Any]:
     """Apply LLM triage to stale-contract suggestions, suppressing cosmetic ones.
 
     Checks the staleness cache for a cached triage result. If not cached,
     runs triage_staleness() (a 30s Haiku call) for hash_mismatch items only.
     version_mismatch items are always treated as meaningful and never suppressed.
 
+    When ``recipe_info`` is provided by the caller, the internal find() call is
+    skipped, eliminating the duplicate YAML directory scan.
+
     Modifies ``result`` in-place and returns it.
     """
-    from autoskillit.server import _ctx
+    from autoskillit.server._state import _ctx
 
     if _ctx is None or _ctx.recipes is None:
         return result
@@ -106,7 +111,8 @@ async def _apply_triage_gate(result: dict[str, Any], name: str) -> dict[str, Any
     if not stale_suggs:
         return result
 
-    recipe_info = _ctx.recipes.find(name, Path.cwd())
+    if recipe_info is None:
+        recipe_info = _ctx.recipes.find(name, Path.cwd())
     if recipe_info is None:
         return result
 

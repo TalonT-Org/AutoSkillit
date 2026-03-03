@@ -19,6 +19,7 @@ from autoskillit.core import (
     load_yaml,
     pkg_root,
 )
+from autoskillit.recipe.io import _parse_recipe
 from autoskillit.recipe.staleness_cache import (
     StalenessEntry,
     compute_recipe_hash,
@@ -138,9 +139,9 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     return SkillContract(inputs=inputs, outputs=outputs)
 
 
-def compute_skill_hash(skill_name: str) -> str:
+def compute_skill_hash(skill_name: str, *, skills_dir: Path) -> str:
     """Compute SHA256 hash of a skill's SKILL.md file."""
-    skill_md = bundled_skills_dir() / skill_name / "SKILL.md"
+    skill_md = skills_dir / skill_name / "SKILL.md"
     if not skill_md.is_file():
         return ""
     content = skill_md.read_bytes()
@@ -189,20 +190,25 @@ def count_positional_args(skill_command: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-def generate_recipe_card(pipeline_path: Path | str, recipes_dir: Path | str) -> dict:
+def generate_recipe_card(
+    pipeline_path: Path | str,
+    recipes_dir: Path | str,
+    *,
+    skills_dir: Path | None = None,
+) -> dict:
     """Generate a recipe card file for a recipe.
 
     Walks each step, resolves skill names, looks up contracts in the manifest,
     computes SKILL.md hashes, and builds dataflow entries. Writes the recipe card
     to ``recipes_dir / "contracts" / "{pipeline_stem}.yaml"``.
 
+    When ``skills_dir`` is None, skill hashes are not computed and ``skill_hashes``
+    in the generated card will be empty.
+
     Returns the contract data dict directly (no disk re-read required by callers).
     """
     pipeline_path = Path(pipeline_path)
     recipes_dir = Path(recipes_dir)
-    import datetime
-
-    from autoskillit.recipe.io import _parse_recipe
 
     data = load_yaml(pipeline_path)
     recipe = _parse_recipe(data)
@@ -249,8 +255,10 @@ def generate_recipe_card(pipeline_path: Path | str, recipes_dir: Path | str) -> 
                             for i in contract.inputs
                             if i.required and i.name not in referenced
                         ]
-                    if skill_name not in skill_hashes:
-                        skill_hashes[skill_name] = compute_skill_hash(skill_name)
+                    if skill_name not in skill_hashes and skills_dir is not None:
+                        skill_hashes[skill_name] = compute_skill_hash(
+                            skill_name, skills_dir=skills_dir
+                        )
 
         produced = list(step.capture.keys())
         entry["produced"] = produced
@@ -258,7 +266,7 @@ def generate_recipe_card(pipeline_path: Path | str, recipes_dir: Path | str) -> 
         dataflow.append(entry)
 
     contract_data = {
-        "generated_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "bundled_manifest_version": manifest["version"],
         "skill_hashes": skill_hashes,
         "skills": skills,
@@ -335,6 +343,7 @@ def check_contract_staleness(
     *,
     recipe_path: Path | None = None,
     cache_path: Path | None = None,
+    skills_dir: Path | None = None,
 ) -> list[StaleItem]:
     """Check a pipeline contract for staleness against the current manifest.
 
@@ -344,10 +353,14 @@ def check_contract_staleness(
     any SKILL.md files. Stale cache hits fall through to re-compute StaleItem
     details. The result is written back to the cache on every cache miss.
 
+    When ``skills_dir`` is None, the bundled skills directory is used for hash
+    comparison.
+
     Returns a list of StaleItem entries indicating what changed.
     """
     manifest = load_bundled_manifest()
     current_version = manifest["version"]
+    cached: StalenessEntry | None = None
 
     if recipe_path is not None and cache_path is not None:
         cached = read_staleness_cache(cache_path, recipe_path.stem)
@@ -371,8 +384,9 @@ def check_contract_staleness(
             )
         )
 
+    effective_skills_dir = skills_dir if skills_dir is not None else bundled_skills_dir()
     for skill_name, stored_hash in contract.get("skill_hashes", {}).items():
-        current_hash = compute_skill_hash(skill_name)
+        current_hash = compute_skill_hash(skill_name, skills_dir=effective_skills_dir)
         if current_hash and stored_hash != current_hash:
             stale.append(
                 StaleItem(
@@ -385,6 +399,15 @@ def check_contract_staleness(
 
     if recipe_path is not None and cache_path is not None:
         file_hash = compute_recipe_hash(recipe_path)
+        # Preserve triage_result when content is unchanged (same hash+version).
+        # When content changes, the prior triage is invalid and must be cleared.
+        prior_triage: str | None = None
+        if (
+            cached is not None
+            and cached.recipe_hash == file_hash
+            and cached.manifest_version == current_version
+        ):
+            prior_triage = cached.triage_result
         write_staleness_cache(
             cache_path,
             recipe_path.stem,
@@ -392,7 +415,7 @@ def check_contract_staleness(
                 recipe_hash=file_hash,
                 manifest_version=current_version,
                 is_stale=bool(stale),
-                triage_result=None,
+                triage_result=prior_triage,
                 checked_at=datetime.now(UTC).isoformat(),
             ),
         )

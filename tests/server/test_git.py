@@ -130,27 +130,75 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
 
 
 @pytest.mark.anyio
-async def test_perform_merge_both_gates_run_on_full_success(
-    default_config, conftest_mock_runner, tmp_path
-):
-    """On full success, both pre-rebase and post-rebase test gates execute."""
+async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_runner, tmp_path):
+    """The merge command must include --no-edit for headless automation."""
     from autoskillit.server.git import perform_merge
 
-    tester = StatefulMockTester(results=[(True, "= 10 passed ="), (True, "= 10 passed =")])
-    # Full queue (tester is injected; no test-check in subprocess queue)
-    conftest_mock_runner.push(_make_result(0, f"{str(tmp_path)}/.git/worktrees/feat", ""))
-    conftest_mock_runner.push(_make_result(0, "feat\n", ""))
+    fake_wt = str(tmp_path)
+    tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
+    # Queue all 9 steps for success path
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
-    conftest_mock_runner.push(_make_result(0, "", ""))  # ref check (5.5)
+    conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
-    conftest_mock_runner.push(_make_result(0, f"worktree {str(tmp_path)}\n", ""))  # wt-list
+    conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
-    conftest_mock_runner.push(_make_result(0, "", ""))  # wt-remove
+    conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
     result = await perform_merge(
-        str(tmp_path), "main", config=default_config, runner=conftest_mock_runner, tester=tester
+        fake_wt,
+        "main",
+        config=default_config,
+        runner=conftest_mock_runner,
+        tester=tester,
+    )
+    assert result.get("merge_succeeded") is True
+
+    # Find the merge command in call_args_list
+    merge_cmds = [
+        args[0]
+        for args in conftest_mock_runner.call_args_list
+        if "merge" in args[0] and "--abort" not in args[0]
+    ]
+    assert len(merge_cmds) == 1
+    assert "--no-edit" in merge_cmds[0], (
+        f"Expected --no-edit in merge command, got: {merge_cmds[0]}"
     )
 
-    assert result.get("merge_succeeded") is True
-    assert tester.call_count == 2
+
+@pytest.mark.anyio
+async def test_perform_merge_blocks_on_missing_remote_tracking_ref(
+    conftest_mock_runner, default_config, tmp_path
+):
+    """perform_merge() returns PRE_REBASE_CHECK failure when base branch
+    has no remote tracking ref after fetch."""
+    from autoskillit.core.types import MergeFailedStep, MergeState
+    from autoskillit.server.git import perform_merge
+
+    worktree_dir = tmp_path / "wt"
+    worktree_dir.mkdir()
+    tester = StatefulMockTester(results=[(True, "= 10 passed =")])
+    # Step 2: worktree verified (needs /worktrees/ in git-dir path)
+    conftest_mock_runner.push(_make_result(0, str(tmp_path / ".git/worktrees/wt"), ""))
+    # Step 3: branch name found
+    conftest_mock_runner.push(_make_result(0, "feat/my-feature\n", ""))
+    # Step 4: test gate handled by tester (not runner)
+    # Step 5: fetch succeeds
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    # Step 5.5: remote tracking ref MISSING
+    conftest_mock_runner.push(_make_result(128, "", "fatal: Needed a single revision"))
+
+    result = await perform_merge(
+        str(worktree_dir),
+        "feature/local-only",
+        config=default_config,
+        runner=conftest_mock_runner,
+        tester=tester,
+    )
+
+    assert result["failed_step"] == MergeFailedStep.PRE_REBASE_CHECK  # not REBASE
+    assert result["state"] == MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED
+    assert "feature/local-only" in result["error"]
+    assert "push" in result["error"].lower()

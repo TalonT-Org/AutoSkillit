@@ -32,7 +32,12 @@ BUNDLED_SKILLS = [
     "review-approach",
     "setup-project",
     "smoke-task",
+    "sous-chef",
 ]
+
+# Internal-only skill documents: injected programmatically, never invocable as slash commands.
+# They have no YAML frontmatter and do not follow the user-facing SKILL.md structural contract.
+INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
 
 BUNDLED_SKILL_NAMES = set(BUNDLED_SKILLS)
 
@@ -72,11 +77,6 @@ class TestSkillResolver:
         assert "make-plan" in names
         sources = {s.source for s in skills}
         assert sources == {SkillSource.BUNDLED}
-
-    def test_pipeline_summary_skill_exists(self) -> None:
-        resolver = SkillResolver()
-        names = [s.name for s in resolver.list_all()]
-        assert "pipeline-summary" in names
 
     def test_skill_md_cross_references_are_namespaced(self) -> None:
         """All /skill-name references in SKILL.md files use /autoskillit: prefix."""
@@ -130,11 +130,13 @@ class TestSkillResolver:
                 )
 
     def test_skill_md_has_critical_constraints(self) -> None:
-        """Every SKILL.md must have Critical Constraints with NEVER and ALWAYS blocks."""
+        """Every user-invocable SKILL.md must have Critical Constraints (NEVER/ALWAYS blocks)."""
         bd = bundled_skills_dir()
         failures: list[str] = []
         for skill_md in bd.rglob("SKILL.md"):
             skill_name = skill_md.parent.name
+            if skill_name in INTERNAL_SKILLS:
+                continue
             content = skill_md.read_text()
             missing: list[str] = []
             if not re.search(r"^##\s+.*Critical Constraints", content, re.MULTILINE):
@@ -182,6 +184,8 @@ class TestSkillResolver:
         failures: list[str] = []
         for skill_md in bd.rglob("SKILL.md"):
             skill_name = skill_md.parent.name
+            if skill_name in INTERNAL_SKILLS:
+                continue
             content = skill_md.read_text()
             # Parse YAML frontmatter between --- delimiters
             fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
@@ -244,3 +248,22 @@ class TestSkillResolver:
             f"  Listed:  {listed_skills}\n"
             f"  On disk: {actual_skills}"
         )
+
+    def test_pipeline_summary_skill_exists(self) -> None:
+        """pipeline-summary must be in the bundled skills list."""
+        resolver = SkillResolver()
+        all_names = {s.name for s in resolver.list_all()}
+        assert "pipeline-summary" in all_names
+
+    def test_internal_skills_excluded_from_list_all(self) -> None:
+        """sous-chef must NOT appear in list_all (internal-only skill)."""
+        resolver = SkillResolver()
+        all_names = {s.name for s in resolver.list_all()}
+        assert "sous-chef" not in all_names
+
+    def test_list_all_returns_user_invocable_skills_only(self) -> None:
+        """list_all returns bundled skills minus internal skills."""
+        resolver = SkillResolver()
+        all_names = {s.name for s in resolver.list_all()}
+        expected = set(BUNDLED_SKILLS) - INTERNAL_SKILLS
+        assert all_names == expected

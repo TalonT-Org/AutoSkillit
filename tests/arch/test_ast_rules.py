@@ -21,335 +21,19 @@ from __future__ import annotations
 
 import ast
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
 
 import pytest
 
-SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
-
-_SENSITIVE_KEYWORDS = frozenset({"token", "secret", "password", "key", "api_key", "auth"})
-_LOGGER_METHODS = frozenset({"debug", "info", "warning", "error", "critical", "exception"})
-_PRINT_EXEMPT = frozenset(
-    {
-        "app.py",
-        "_doctor.py",
-        "quota_check.py",
-        "remove_clone_guard.py",
-        "skill_cmd_check.py",
-        "skill_command_guard.py",
-    }
+from tests.arch._helpers import (
+    _SOURCE_FILES,
+    SRC_ROOT,
+    _scan,
 )
-_BROAD_EXCEPTION_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"})
-# Standalone hook scripts: fail-open design requires silent broad excepts and print() for JSON
-_BROAD_EXCEPT_EXEMPT = frozenset(
-    {
-        "quota_check.py",
-        "remove_clone_guard.py",
-        "skill_cmd_check.py",
-        "skill_command_guard.py",
-    }
+from tests.arch._rules import (
+    _DISPATCH_TABLE_EXEMPT_FUNCTIONS,
+    _rel,
 )
-
-# ARCH-007: Functions that check TerminationReason as sequential early-exit guards
-# (single-value checks), not as dispatch tables (≥2 values). Exempt from ARCH-007.
-_DISPATCH_TABLE_EXEMPT_FUNCTIONS: frozenset[str] = frozenset(
-    {
-        "_build_skill_result",  # sequential early-exit guards, not a dispatch table
-    }
-)
-
-
-def _has_log_call(body: list[ast.stmt]) -> bool:
-    """Return True if body contains any logger.<method>(…) call."""
-    for node in ast.walk(ast.Module(body=body, type_ignores=[])):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr in _LOGGER_METHODS
-        ):
-            return True
-    return False
-
-
-def _has_reraise(body: list[ast.stmt]) -> bool:
-    """Return True if body contains any raise statement (re-raise pattern)."""
-    for node in ast.walk(ast.Module(body=body, type_ignores=[])):
-        if isinstance(node, ast.Raise):
-            return True
-    return False
-
-
-def _rel(path: Path) -> str:
-    try:
-        return str(path.relative_to(Path(__file__).parent.parent.parent))
-    except ValueError:
-        return str(path)
-
-
-class Violation(NamedTuple):
-    file: Path
-    line: int
-    col: int
-    message: str
-    rule_id: str = ""
-    lens: str = ""
-
-    def __str__(self) -> str:
-        if not self.rule_id:
-            return f"{_rel(self.file)}:{self.line}:{self.col}: {self.message}"
-        rule = next((r for r in RULES if r.rule_id == self.rule_id), None)
-        ds_part = f" / {rule.defense_standard}" if rule and rule.defense_standard else ""
-        loc = f"{_rel(self.file)}:{self.line}:{self.col}"
-        return f"[{self.rule_id} / {self.lens}{ds_part}] {loc}: {self.message}"
-
-
-@dataclass(frozen=True)
-class RuleDescriptor:
-    """Metadata for a single AST-enforced architecture rule."""
-
-    rule_id: str
-    name: str
-    lens: str
-    description: str
-    rationale: str
-    exemptions: frozenset[str]
-    severity: str
-    defense_standard: str | None = None
-    adr_ref: str | None = None
-
-
-RULES: tuple[RuleDescriptor, ...] = (
-    RuleDescriptor(
-        rule_id="ARCH-001",
-        name="no-print",
-        lens="operational",
-        description="Production modules must not call print(); use structured logger instead.",
-        rationale=(
-            "AutoSkillit routes all output through MCP tool results and Claude CLI stdout. "
-            "print() calls emit directly to stdout, polluting the JSON stream that headless "
-            "sessions depend on for structured result parsing. The operational lens governs "
-            "observability contracts; uncontrolled stdout corrupts the MCP communication protocol."
-        ),
-        exemptions=frozenset({"app.py", "_doctor.py"}),
-        severity="error",
-        defense_standard="DS-003",
-    ),
-    RuleDescriptor(
-        rule_id="ARCH-002",
-        name="no-sensitive-logger-kwargs",
-        lens="security",
-        description="Sensitive values must not be passed as keyword arguments to logger calls.",
-        rationale=(
-            "Structured logging with sensitive kwargs (token, secret, password, key) persists "
-            "credentials in log files, structlog output, or monitoring systems. AutoSkillit tools "
-            "handle API keys and auth tokens for headless Claude sessions; accidental logging of "
-            "these values via structlog kwargs creates audit-trail and credential-leak risks."
-        ),
-        exemptions=frozenset(),
-        severity="error",
-        defense_standard="DS-006",
-    ),
-    RuleDescriptor(
-        rule_id="ARCH-003",
-        name="no-silent-broad-except",
-        lens="error-resilience",
-        description=(
-            "Broad except clauses must log the error or re-raise; silent swallowing is forbidden."
-        ),
-        rationale=(
-            "AutoSkillit orchestrates multi-step pipelines where silent failure "
-            "propagates corrupt state across recipe steps, worktrees, and headless "
-            "sessions. Silent broad-except in "
-            "the execution or merge path causes spurious PASS results to be reported upstream. "
-            "The error-resilience lens mandates observable failures at all levels of the stack."
-        ),
-        exemptions=frozenset(),
-        severity="error",
-        defense_standard="DS-001",
-    ),
-    RuleDescriptor(
-        rule_id="ARCH-004",
-        name="no-asyncio-PIPE",
-        lens="process-flow",
-        description=(
-            "asyncio.PIPE must not be used directly; "
-            "route subprocess I/O through create_temp_io() from process_lifecycle instead."
-        ),
-        rationale=(
-            "asyncio.PIPE causes OS pipe-buffer blocking when subprocess output exceeds 64 KB — "
-            "a common occurrence with Claude CLI stdout containing full session JSON. "
-            "create_temp_io() redirects to RAM-backed temp files, eliminating buffer deadlock in "
-            "the process-flow path. Direct asyncio.PIPE usage outside process_lifecycle.py "
-            "bypasses this protection."
-        ),
-        exemptions=frozenset({"process.py"}),
-        severity="error",
-        defense_standard="DS-002",
-    ),
-    RuleDescriptor(
-        rule_id="ARCH-005",
-        name="get-logger-name",
-        lens="operational",
-        description=(
-            "get_logger() must always be called with __name__ to ensure correct logger hierarchy."
-        ),
-        rationale=(
-            "AutoSkillit uses structlog routed through a package-level NullHandler for stdlib "
-            "compatibility. Logger hierarchy relies on __name__ for correct propagation through "
-            "autoskillit.*. Literal or computed names break filtering, sampling, and structured "
-            "log context. The operational lens requires that observability infrastructure is "
-            "self-consistent."
-        ),
-        exemptions=frozenset(),
-        severity="error",
-        defense_standard="DS-005",
-    ),
-    RuleDescriptor(
-        rule_id="ARCH-006",
-        name="no-fstring-secrets",
-        lens="security",
-        description=(
-            "Sensitive variable names must not be interpolated into "
-            "f-string logger positional arguments."
-        ),
-        rationale=(
-            "f-string interpolation of sensitive variables in logger messages embeds the value in "
-            "the rendered string before structlog can apply masking or filtering. AutoSkillit's "
-            "headless sessions handle API keys and auth tokens; accidental f-string log "
-            "interpolation creates credential-exposure vectors in Claude CLI stdout, structured "
-            "session output, and any downstream log aggregation."
-        ),
-        exemptions=frozenset(),
-        severity="error",
-        defense_standard="DS-006",
-    ),
-)
-
-_RULE: dict[str, RuleDescriptor] = {r.rule_id: r for r in RULES}
-
-# ── Rule 5 (visitor): asyncio.PIPE ban ────────────────────────────────────────
-_ASYNCIO_PIPE_EXEMPT: frozenset[str] = frozenset({"process.py"})
-
-
-class ArchitectureViolationVisitor(ast.NodeVisitor):
-    def __init__(self, filepath: Path) -> None:
-        self.filepath = filepath
-        self.violations: list[Violation] = []
-        self._print_exempt = filepath.name in _PRINT_EXEMPT
-        self._asyncio_pipe_exempt = filepath.name in _ASYNCIO_PIPE_EXEMPT
-        self._broad_except_exempt = filepath.name in _BROAD_EXCEPT_EXEMPT
-
-    def _add(self, node: ast.AST, rule: RuleDescriptor, message: str) -> None:
-        self.violations.append(
-            Violation(
-                self.filepath,
-                node.lineno,  # type: ignore[attr-defined]
-                node.col_offset,  # type: ignore[attr-defined]
-                message,
-                rule.rule_id,
-                rule.lens,
-            )
-        )
-
-    def visit_Attribute(self, node: ast.Attribute) -> None:
-        """Rule ARCH-004 (visitor): asyncio.PIPE is banned outside process.py."""
-        if (
-            not self._asyncio_pipe_exempt
-            and node.attr == "PIPE"
-            and isinstance(node.value, ast.Name)
-            and node.value.id == "asyncio"
-        ):
-            self._add(
-                node,
-                _RULE["ARCH-004"],
-                "asyncio.PIPE is banned; use create_temp_io() from process_lifecycle",
-            )
-        self.generic_visit(node)
-
-    def visit_Call(self, node: ast.Call) -> None:
-        # Rule ARCH-001 (visitor): no print() — ruff cannot enforce this in production-only files
-        if not self._print_exempt and isinstance(node.func, ast.Name) and node.func.id == "print":
-            self._add(node, _RULE["ARCH-001"], "print() call — use logger instead")
-
-        # Rule ARCH-002 (visitor): no sensitive kwargs in logger calls — not expressible in ruff
-        if isinstance(node.func, ast.Attribute) and node.func.attr in _LOGGER_METHODS:
-            for kw in node.keywords:
-                if kw.arg and any(s in kw.arg.lower() for s in _SENSITIVE_KEYWORDS):
-                    self._add(
-                        node, _RULE["ARCH-002"], f"sensitive kwarg '{kw.arg}' passed to logger"
-                    )
-
-        # Rule ARCH-005 (visitor): get_logger must be called with __name__
-        func = node.func
-        func_name = func.id if isinstance(func, ast.Name) else None
-        if func_name == "get_logger" and node.args:
-            first_arg = node.args[0]
-            if not (isinstance(first_arg, ast.Name) and first_arg.id == "__name__"):
-                self._add(
-                    node,
-                    _RULE["ARCH-005"],
-                    "get_logger() must be called with __name__, not a literal or other value",
-                )
-
-        # Rule ARCH-006 (visitor): no f-string with sensitive variable names in logger args
-        if isinstance(func, ast.Attribute) and func.attr in _LOGGER_METHODS:
-            for arg in node.args:
-                if isinstance(arg, ast.JoinedStr):  # f-string
-                    for fv in ast.walk(arg):
-                        if isinstance(fv, ast.FormattedValue):
-                            val = fv.value
-                            var_name = None
-                            if isinstance(val, ast.Name):
-                                var_name = val.id
-                            elif isinstance(val, ast.Attribute):
-                                var_name = val.attr
-                            if var_name and any(
-                                kw in var_name.lower() for kw in _SENSITIVE_KEYWORDS
-                            ):
-                                self._add(
-                                    node,
-                                    _RULE["ARCH-006"],
-                                    f"f-string log message interpolates sensitive variable "
-                                    f"'{var_name}' — use structlog kwargs instead",
-                                )
-
-        self.generic_visit(node)
-
-    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
-        """Rule ARCH-003 (visitor): broad except without logger or re-raise → silent swallow."""
-        is_broad = node.type is None or (
-            isinstance(node.type, ast.Name) and node.type.id in _BROAD_EXCEPTION_TYPES
-        )
-        if (
-            is_broad
-            and not self._broad_except_exempt
-            and not _has_log_call(node.body)
-            and not _has_reraise(node.body)
-        ):
-            type_label = ast.unparse(node.type) if node.type else "bare except"
-            self._add(
-                node,
-                _RULE["ARCH-003"],
-                f"broad except ({type_label}) without any logger call"
-                " — add logger.warning/error with exc_info=True",
-            )
-        self.generic_visit(node)
-
-
-def _scan(path: Path) -> list[Violation]:
-    source = path.read_text(encoding="utf-8")
-    try:
-        tree = ast.parse(source, filename=str(path))
-    except SyntaxError as exc:
-        return [Violation(path, exc.lineno or 0, 0, f"SyntaxError: {exc.msg}")]
-    visitor = ArchitectureViolationVisitor(filepath=path)
-    visitor.visit(tree)
-    return visitor.violations
-
-
-_SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
 
 
 def _check_termination_dispatch_exhaustive(src_dir: Path) -> list[str]:
@@ -358,7 +42,7 @@ def _check_termination_dispatch_exhaustive(src_dir: Path) -> list[str]:
     chains (dispatch tables) rather than exhaustive match/case + assert_never.
 
     A "dispatch table" is detected when a single FunctionDef contains comparisons
-    to ≥2 distinct TerminationReason.* values (including values inside tuple
+    to >=2 distinct TerminationReason.* values (including values inside tuple
     membership tests like `termination in (TerminationReason.X, TerminationReason.Y)`).
     A single comparison (guard) is exempt. Functions in
     _DISPATCH_TABLE_EXEMPT_FUNCTIONS are also exempt.
@@ -407,11 +91,11 @@ def _check_termination_dispatch_exhaustive(src_dir: Path) -> list[str]:
                     and child.func.id == "assert_never"
                 ):
                     has_assert_never = True
-            # Dispatch table = ≥2 distinct TerminationReason values checked
+            # Dispatch table = >=2 distinct TerminationReason values checked
             if len(tr_values) >= 2 and not (has_match and has_assert_never):
                 violations.append(
                     f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
-                    f"{node.name}() dispatches on {tr_values} via if/elif — "
+                    f"{node.name}() dispatches on {tr_values} via if/elif -- "
                     f"use match/case + assert_never"
                 )
     return violations
@@ -463,7 +147,7 @@ def test_no_direct_write_text_in_src() -> None:
 def test_tmp_path_is_ram_backed(tmp_path: Path) -> None:
     """On Linux/WSL2, tmp_path must resolve to /dev/shm (RAM-backed tmpfs).
 
-    On macOS no assertion is made — disk-backed /tmp is acceptable there.
+    On macOS no assertion is made -- disk-backed /tmp is acceptable there.
     Fails intentionally on Linux when pytest is invoked directly without --basetemp.
     Always run tests via 'task test-all', not pytest directly.
     """
@@ -613,7 +297,7 @@ def test_fstring_secret_safe_for_nonsensitive(tmp_path: Path) -> None:
 
 def test_arch007_termination_dispatch_tables_use_exhaustive_match() -> None:
     """
-    ARCH-007: Any function in execution/ that dispatches on ≥2 distinct
+    ARCH-007: Any function in execution/ that dispatches on >=2 distinct
     TerminationReason values via if/elif must use match/case with assert_never.
     Single-value guard checks (e.g., `if termination == TIMED_OUT:`) are exempt.
     """
@@ -629,7 +313,7 @@ def _check_channel_confirmation_dispatch_exhaustive(src_dir: Path) -> list[str]:
     via if/elif chains rather than exhaustive match/case + assert_never.
 
     A "dispatch table" is detected when a single FunctionDef contains comparisons
-    to ≥2 distinct ChannelConfirmation.* values (CHANNEL_A, CHANNEL_B, UNMONITORED).
+    to >=2 distinct ChannelConfirmation.* values (CHANNEL_A, CHANNEL_B, UNMONITORED).
     A single-value guard is exempt.
 
     Returns a list of violation strings for failing tests.
@@ -671,7 +355,7 @@ def _check_channel_confirmation_dispatch_exhaustive(src_dir: Path) -> list[str]:
             if len(cc_values) >= 2 and not (has_match and has_assert_never):
                 violations.append(
                     f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
-                    f"{node.name}() dispatches on {cc_values} via if/elif — "
+                    f"{node.name}() dispatches on {cc_values} via if/elif -- "
                     f"use match/case + assert_never"
                 )
     return violations
@@ -679,7 +363,7 @@ def _check_channel_confirmation_dispatch_exhaustive(src_dir: Path) -> list[str]:
 
 def test_arch007_channel_confirmation_dispatch_uses_match_case() -> None:
     """
-    T7 / ARCH-007 extension: Any function in execution/ that dispatches on ≥2
+    T7 / ARCH-007 extension: Any function in execution/ that dispatches on >=2
     distinct ChannelConfirmation values via if/elif must use match/case with
     assert_never. Single-value guard checks are exempt.
     """
@@ -697,8 +381,8 @@ def test_no_raw_claude_list_construction() -> None:
     that bypasses established safety flags.
     """
     ALLOWED = {
-        ("app.py", "install"),
-        ("_llm_triage.py", "triage_staleness"),
+        ("_marketplace.py", "install"),
+        ("_llm_triage.py", "_triage_batch"),
         ("commands.py", "build_interactive_cmd"),
         ("commands.py", "build_headless_cmd"),
     }
@@ -736,7 +420,7 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
     that re-exports 'name' FROM that exact submodule, are wrong and must be corrected.
 
     Note: patching autoskillit.X.B.name where X imports 'name' from a DIFFERENT submodule
-    (not B) is correct — it targets the local binding in B, which is the namespace that
+    (not B) is correct -- it targets the local binding in B, which is the namespace that
     module B's own functions resolve.
     """
     import importlib
@@ -773,13 +457,13 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
             # Refine: only flag if the parent pkg actually imports 'name' FROM this
             # exact submodule. If it imports 'name' from a different module (e.g.
             # autoskillit.migration imports applicable_migrations from .loader, not
-            # .engine), then the patch targets a local binding in 'submod' — which
+            # .engine), then the patch targets a local binding in 'submod' -- which
             # is the correct mock target for module-level imports in that submodule.
             try:
                 parent_source = inspect.getsource(parent_mod)
                 tree = ast.parse(parent_source)
             except Exception:
-                # Can't inspect source — conservatively flag as violation.
+                # Can't inspect source -- conservatively flag as violation.
                 imports_from_this_submod = True
             else:
                 imports_from_this_submod = False
@@ -810,84 +494,30 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
     )
 
 
-class TestNoAsyncioRuntimePrimitives:
-    """REQ-MIG-001: asyncio primitives are removed from execution/process.py call sites."""
-
-    def test_no_asyncio_sleep_calls(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "asyncio.sleep(" not in source
-
-    def test_no_asyncio_to_thread_calls(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "asyncio.to_thread(" not in source
-
-    def test_no_asyncio_create_subprocess_exec(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "asyncio.create_subprocess_exec(" not in source
-
-    def test_no_asyncio_event_instantiation(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "asyncio.Event()" not in source
-
-    def test_no_asyncio_wait_for_calls(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "asyncio.wait_for(" not in source
-
-    def test_no_asyncio_get_event_loop_time(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "asyncio.get_event_loop()" not in source
-
-    def test_no_asyncio_get_running_loop_run_in_executor(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "asyncio.get_running_loop()" not in source
-
-    def test_no_asyncio_cancelled_error_reference(self):
-        """REQ-BEH-010: asyncio.CancelledError must not appear in process.py.
-
-        anyio raises anyio.get_cancelled_exc_class() (trio.Cancelled on the trio
-        backend), not asyncio.CancelledError. Catching asyncio.CancelledError in
-        a finally/except block would silently miss cancellations on trio, breaking
-        the anyio backend contract.
-        """
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "asyncio.CancelledError" not in source
+# ── P14-2: Sub-package __init__.py facade enforcement ─────────────────────────
 
 
-class TestAnyioPrimitivesUsed:
-    """REQ-MIG-002..004: anyio primitives replace the removed asyncio calls."""
+def test_init_files_are_pure_facades() -> None:
+    """P14-2: Sub-package __init__.py files must not define FunctionDef or AsyncFunctionDef
+    at module scope. They must be pure re-export facades.
 
-    def test_anyio_to_thread_run_sync_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "anyio.to_thread.run_sync(" in source
+    After groupE (P14-1), server/__init__.py is a pure facade. This test enforces the
+    same constraint across all immediate sub-package __init__.py files.
 
-    def test_anyio_sleep_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "anyio.sleep(" in source
+    Exempt: src/autoskillit/__init__.py (package root, defines __version__ at module scope).
+    """
+    violations: list[str] = []
 
-    def test_time_monotonic_replaces_event_loop_time(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert ".monotonic()" in source
+    for init_file in SRC_ROOT.glob("*/__init__.py"):
+        source = init_file.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(init_file))
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                violations.append(
+                    f"  {_rel(init_file)}:{node.lineno}: defines {node.name!r} at module scope"
+                )
 
-    def test_anyio_open_process_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "anyio.open_process(" in source
-
-    def test_anyio_event_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "anyio.Event()" in source
-
-    def test_anyio_move_on_after_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "anyio.move_on_after(" in source
-
-
-class TestProcTypeAnnotationUpdated:
-    """REQ-MIG-005/scan_done_signals: proc annotation is anyio.abc.Process, not asyncio."""
-
-    def test_scan_done_signals_proc_annotation_not_asyncio_subprocess(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "asyncio.subprocess.Process" not in source
-
-    def test_scan_done_signals_proc_annotation_is_anyio(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
-        assert "anyio.abc.Process" in source
+    assert not violations, (
+        "Sub-package __init__.py files must not define functions at module scope "
+        "(pure re-export facades only):\n" + "\n".join(violations)
+    )

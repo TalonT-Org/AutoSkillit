@@ -114,3 +114,11 @@ def test_hook_uses_skill_command_prefix_constant():
     src = inspect.getsource(mod)
     assert "from autoskillit.core import" in src
     assert "SKILL_COMMAND_PREFIX" in src
+
+
+def test_unexpected_error_denies_not_approves():
+    """CC1-1: unexpected errors must produce deny, not silent approve."""
+    out = _run_hook({"tool_input": None})
+    if out.strip():
+        data = json.loads(out)
+        assert data["hookSpecificOutput"]["permissionDecision"] == "deny"

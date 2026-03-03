@@ -1,214 +1,193 @@
-version: "0.1.0"
+version: 0.1.0
 skills:
   resolve-failures:
     inputs:
-      - name: worktree_path
-        type: directory_path
-        required: true
-      - name: plan_path
-        type: file_path
-        required: true
-      - name: base_branch
-        type: string
-        required: true
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
     outputs: []
-
   dry-walkthrough:
     inputs:
-      - name: plan_path
-        type: file_path
-        required: true
+    - name: plan_path
+      type: file_path
+      required: true
     outputs: []
-
   implement-worktree:
     inputs:
-      - name: plan_path
-        type: file_path
-        required: true
+    - name: plan_path
+      type: file_path
+      required: true
     outputs:
-      - name: worktree_path
-        type: directory_path
-      - name: branch_name
-        type: string
-
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
   implement-worktree-no-merge:
     inputs:
-      - name: plan_path
-        type: file_path
-        required: true
+    - name: plan_path
+      type: file_path
+      required: true
     outputs:
-      - name: worktree_path
-        type: directory_path
-      - name: branch_name
-        type: string
-
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
   investigate:
     inputs:
-      - name: topic
-        type: string
-        required: true
+    - name: topic
+      type: string
+      required: true
     outputs: []
-
   make-groups:
     inputs:
-      - name: source_doc
-        type: file_path
-        required: true
+    - name: source_doc
+      type: file_path
+      required: true
     outputs:
-      - name: groups_path
-        type: file_path
-      - name: manifest_path
-        type: file_path
-      - name: group_files
-        type: file_path_list
-
+    - name: groups_path
+      type: file_path
+    - name: manifest_path
+      type: file_path
+    - name: group_files
+      type: file_path_list
   make-plan:
     inputs:
-      - name: task
-        type: string
-        required: true
+    - name: task
+      type: string
+      required: true
     outputs:
-      - name: plan_path
-        type: file_path
-      - name: plan_parts
-        type: file_path_list
-
+    - name: plan_path
+      type: file_path
+    - name: plan_parts
+      type: file_path_list
   write-recipe:
     inputs: []
     outputs:
-      - name: recipe_path
-        type: file_path
-
+    - name: recipe_path
+      type: file_path
   mermaid:
     inputs: []
     outputs: []
-
   pipeline-summary:
     inputs:
-      - name: bug_report_path
-        type: file_path
-        required: true
-      - name: feature_branch
-        type: string
-        required: true
-      - name: target_branch
-        type: string
-        required: true
-      - name: workspace
-        type: directory_path
-        required: true
+    - name: bug_report_path
+      type: file_path
+      required: true
+    - name: feature_branch
+      type: string
+      required: true
+    - name: target_branch
+      type: string
+      required: true
+    - name: workspace
+      type: directory_path
+      required: true
     outputs: []
-
   rectify:
     inputs:
-      - name: investigation_path
-        type: file_path
-        required: false
+    - name: investigation_path
+      type: file_path
+      required: false
     outputs:
-      - name: plan_path
-        type: file_path
-      - name: plan_parts
-        type: file_path_list
-
+    - name: plan_path
+      type: file_path
+    - name: plan_parts
+      type: file_path_list
   retry-worktree:
     inputs:
-      - name: plan_path
-        type: file_path
-        required: true
-      - name: worktree_path
-        type: directory_path
-        required: true
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: worktree_path
+      type: directory_path
+      required: true
     outputs:
-      - name: worktree_path
-        type: directory_path
-      - name: branch_name
-        type: string
-
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
   review-approach:
     inputs:
-      - name: plan_path
-        type: file_path
-        required: false
+    - name: plan_path
+      type: file_path
+      required: false
     outputs:
-      - name: review_path
-        type: file_path
-
+    - name: review_path
+      type: file_path
   setup-project:
     inputs:
-      - name: project_dir
-        type: directory_path
-        required: true
+    - name: project_dir
+      type: directory_path
+      required: true
     outputs:
-      - name: analysis_path
-        type: file_path
-      - name: config_path
-        type: file_path
-
+    - name: analysis_path
+      type: file_path
+    - name: config_path
+      type: file_path
   audit-friction:
     inputs: []
     outputs: []
-
   audit-impl:
     inputs:
-      - name: plan_path
-        type: string
-        required: true
-      - name: branch_name
-        type: string
-        required: false
-      - name: base_branch
-        type: string
-        required: false
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: branch_name
+      type: string
+      required: false
+    - name: base_branch
+      type: string
+      required: false
     outputs:
-      - name: verdict
-        type: string
-      - name: remediation_path
-        type: file_path
-
+    - name: verdict
+      type: string
+    - name: remediation_path
+      type: file_path
   migrate-recipes:
     inputs: []
     outputs: []
-
   analyze-prs:
-    inputs: []
+    inputs:
+    - name: base_branch
+      type: string
+      required: true
     outputs:
-      - name: pr_order_file
-        type: file_path
-        required: true
-      - name: integration_branch
-        type: string
-        required: true
-      - name: pr_count
-        type: string
-        required: true
-      - name: simple_count
-        type: string
-        required: true
-      - name: needs_check_count
-        type: string
-        required: true
-      - name: analysis_file
-        type: file_path
-        required: true
-
+    - name: pr_order_file
+      type: file_path
+    - name: analysis_file
+      type: file_path
+    - name: integration_branch
+      type: string
+    - name: pr_count
+      type: string
+    - name: simple_count
+      type: string
+    - name: needs_check_count
+      type: string
   merge-pr:
-    inputs: []
+    inputs:
+    - name: pr_number
+      type: string
+      required: true
+    - name: complexity
+      type: string
+      required: true
     outputs:
-      - name: merged
-        type: string
-        required: true
-      - name: needs_plan
-        type: string
-        required: true
-      - name: pr_number
-        type: string
-        required: true
-      - name: pr_branch
-        type: string
-        required: true
-      - name: pr_title
-        type: string
-        required: true
-      - name: conflict_report_path
-        type: file_path
-        required: true
+    - name: merged
+      type: string
+    - name: needs_plan
+      type: string
+    - name: pr_number
+      type: string
+    - name: pr_branch
+      type: string
+    - name: pr_title
+      type: string
+    - name: conflict_report_path
+      type: file_path

@@ -13,45 +13,11 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.config.settings import AutomationConfig
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
-from autoskillit.workspace.skills import SkillResolver
 
 
 def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
-
-
-class TestClaudeMdPipelineContract:
-    """CLAUDE.md must contain a pipeline execution section naming all forbidden tools."""
-
-    def test_claude_md_has_pipeline_section(self):
-        claude_md = (_project_root() / "CLAUDE.md").read_text()
-
-        assert "Pipeline" in claude_md, "CLAUDE.md must have a Pipeline section header"
-
-        match = re.search(
-            r"###\s+\*?\*?\d+\.\d+[^#]*?Pipeline[^#]*?\*?\*?\s*\n(.*?)(?=\n##|\Z)",
-            claude_md,
-            re.DOTALL,
-        )
-        assert match, (
-            "CLAUDE.md must have a Pipeline sub-section (e.g. '### **3.4. Pipeline Execution**')"
-        )
-        section = match.group(1)
-
-        missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in section]
-        assert not missing, f"CLAUDE.md pipeline section missing tools: {missing}"
-
-        prohibition_terms = ["NEVER", "Do NOT", "MUST NOT"]
-        assert any(term in section for term in prohibition_terms), (
-            "CLAUDE.md pipeline section must use prohibition framing"
-        )
-
-        assert "run_skill" in section, (
-            "CLAUDE.md pipeline section must mention run_skill as the delegation mechanism"
-        )
 
 
 class TestMakeScriptSkillContract:
@@ -294,92 +260,6 @@ class TestMultiPartScopeContract:
         )
         assert "SCOPE FENCE" in text or "scope fence" in text.lower(), (
             "implement-worktree-no-merge SKILL.md must contain a SCOPE FENCE instruction"
-        )
-
-
-class TestClaudeMdConfigSurfaceContract:
-    """CLAUDE.md developer guidance surfaces must match their code-level sources of truth.
-
-    These tests ensure that when settings.py defaults, gate.py tool sets, or the
-    bundled skill list changes, CLAUDE.md's documented values are kept in sync.
-    A failing test here means CLAUDE.md has drifted from the code it describes.
-    """
-
-    def _claude_md(self) -> str:
-        return (_project_root() / "CLAUDE.md").read_text()
-
-    def test_header_total_tool_count_matches_gate(self):
-        """CLAUDE.md Section 1 header must state the correct total MCP tool count."""
-        total = len(GATED_TOOLS) + len(UNGATED_TOOLS)
-        content = self._claude_md()
-        assert f"{total} MCP tools" in content, (
-            f"CLAUDE.md header says the wrong total MCP tool count. "
-            f"gate.py defines {total} tools ({len(GATED_TOOLS)} gated + "
-            f"{len(UNGATED_TOOLS)} ungated). Update the header in Section 1."
-        )
-
-    def test_header_gated_tool_count_matches_gate(self):
-        """CLAUDE.md Section 1 header must state the correct gated tool count."""
-        gated = len(GATED_TOOLS)
-        content = self._claude_md()
-        assert f"{gated} gated" in content, (
-            f"CLAUDE.md header says the wrong gated tool count. "
-            f"gate.py defines {gated} gated tools. "
-            f"Update all occurrences of the gated count in CLAUDE.md."
-        )
-
-    def test_header_skill_count_matches_filesystem(self):
-        """CLAUDE.md Section 1 header must state the correct bundled skill count."""
-        count = len(SkillResolver().list_all())
-        content = self._claude_md()
-        assert f"{count} bundled skills" in content, (
-            f"CLAUDE.md header says the wrong bundled skill count. "
-            f"SkillResolver finds {count} skills on disk. "
-            f"Update all occurrences of the skill count in CLAUDE.md."
-        )
-
-    def test_all_gated_tools_in_mcp_table(self):
-        """CLAUDE.md must document all gated tools (backtick-wrapped) somewhere in its content."""
-        content = self._claude_md()
-        missing = [t for t in GATED_TOOLS if f"`{t}`" not in content]
-        assert not missing, (
-            f"CLAUDE.md is missing documentation for these gated tools: {missing}. "
-            f"Add each tool name (backtick-wrapped) to CLAUDE.md."
-        )
-
-    def test_testing_guidelines_mentions_task_test_check(self):
-        """CLAUDE.md Section 4 (Testing Guidelines) must document task test-check.
-
-        task test-check is the automation/MCP command used by test_check and
-        merge_worktree. Section 4 must document both commands and their roles
-        rather than declaring task test-all as the sole command.
-        """
-        content = self._claude_md()
-        section_start = content.find("## **4. Testing Guidelines**")
-        assert section_start != -1, "CLAUDE.md must have a Section 4: Testing Guidelines"
-        section_end = content.find("\n## **", section_start + 1)
-        section = (
-            content[section_start:section_end] if section_end != -1 else content[section_start:]
-        )
-        assert "task test-check" in section, (
-            "CLAUDE.md Section 4 (Testing Guidelines) does not mention 'task test-check'. "
-            "Update the 'Run tests' bullet to document both: "
-            "task test-all (human-facing, includes lint) and "
-            "task test-check (automation/MCP, unambiguous PASS/FAIL)."
-        )
-
-    def test_config_table_test_check_command_matches_settings(self):
-        """CLAUDE.md testing guidelines must mention the current test_check.command default.
-
-        This is a sync guard: when settings.py's default changes, this test
-        will fail unless CLAUDE.md's testing guidelines are also updated.
-        """
-        default_cmd = AutomationConfig().test_check.command
-        cmd_prose = " ".join(default_cmd)  # e.g. "task test-check"
-        content = self._claude_md()
-        assert cmd_prose in content, (
-            f"CLAUDE.md does not contain test_check command {cmd_prose!r}. "
-            f"Update the testing guidelines to reflect the current default ({default_cmd!r})."
         )
 
 

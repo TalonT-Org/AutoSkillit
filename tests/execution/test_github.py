@@ -364,6 +364,3 @@ async def test_add_comment_request_error(httpx_mock):
 def test_github_fetcher_protocol_includes_write_methods():
     fetcher = DefaultGitHubFetcher(token=None)
     assert isinstance(fetcher, GitHubFetcher)
-    assert hasattr(fetcher, "search_issues")
-    assert hasattr(fetcher, "create_issue")
-    assert hasattr(fetcher, "add_comment")

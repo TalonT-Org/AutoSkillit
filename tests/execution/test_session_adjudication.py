@@ -609,15 +609,11 @@ def test_is_kill_anomaly_returns_true_for_interrupted_subtype():
 
 
 class TestAdjudicationConsistency:
-    """Document what _compute_success and _compute_retry produce at the raw function level.
+    """Contract documentation for known-impossible adjudication states.
 
-    These tests assert the actual outputs of the individual functions, including
-    the known impossible states (dead end, contradiction). Composition guards that
-    enforce the valid state space operate at the _build_skill_result boundary
-    (tested in TestAdjudicationGuards in test_process_lifecycle.py).
-
-    These tests pass both before and after the fix because the individual functions
-    are not changed — only the composition boundary in _build_skill_result is patched.
+    These tests intentionally cover (returncode, termination) combinations that
+    cannot occur in production. They serve as specification — documenting that the
+    adjudicator is deterministic and exhaustive, not that these paths are reachable.
     """
 
     @pytest.mark.parametrize(

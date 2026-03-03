@@ -83,7 +83,7 @@ class TestClaudeSessionResult:
             "type": "result",
             "subtype": "success",
             "is_error": True,
-            "result": "Prompt is too long",
+            "result": CONTEXT_EXHAUSTION_MARKER.capitalize(),
             "session_id": "abc-123",
         }
         parsed = parse_session_result(json.dumps(raw))

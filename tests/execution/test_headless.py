@@ -522,6 +522,12 @@ class TestRunHeadlessCore:
         assert result.success is True
         assert result.needs_retry is False
         assert result.result == "Task completed."
+        # Assert the runner was called exactly once with a command containing the skill
+        assert len(tool_ctx.runner.call_args_list) == 1
+        cmd, _cwd, _timeout, _kwargs = tool_ctx.runner.call_args_list[0]
+        # The command list must include the "-p" flag and the skill invocation
+        assert any("-p" in part for part in cmd)
+        assert any("/investigate" in part for part in cmd)
 
 
 class TestEnsureSkillPrefix:

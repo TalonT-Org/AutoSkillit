@@ -28,16 +28,11 @@ import pytest
 from tests.arch._helpers import (
     _SOURCE_FILES,
     SRC_ROOT,
-    _rel,
     _scan,
 )
-
-# ARCH-007: Functions that check TerminationReason as sequential early-exit guards
-# (single-value checks), not as dispatch tables (≥2 values). Exempt from ARCH-007.
-_DISPATCH_TABLE_EXEMPT_FUNCTIONS: frozenset[str] = frozenset(
-    {
-        "_build_skill_result",  # sequential early-exit guards, not a dispatch table
-    }
+from tests.arch._rules import (
+    _DISPATCH_TABLE_EXEMPT_FUNCTIONS,
+    _rel,
 )
 
 
@@ -47,7 +42,7 @@ def _check_termination_dispatch_exhaustive(src_dir: Path) -> list[str]:
     chains (dispatch tables) rather than exhaustive match/case + assert_never.
 
     A "dispatch table" is detected when a single FunctionDef contains comparisons
-    to ≥2 distinct TerminationReason.* values (including values inside tuple
+    to >=2 distinct TerminationReason.* values (including values inside tuple
     membership tests like `termination in (TerminationReason.X, TerminationReason.Y)`).
     A single comparison (guard) is exempt. Functions in
     _DISPATCH_TABLE_EXEMPT_FUNCTIONS are also exempt.
@@ -96,11 +91,11 @@ def _check_termination_dispatch_exhaustive(src_dir: Path) -> list[str]:
                     and child.func.id == "assert_never"
                 ):
                     has_assert_never = True
-            # Dispatch table = ≥2 distinct TerminationReason values checked
+            # Dispatch table = >=2 distinct TerminationReason values checked
             if len(tr_values) >= 2 and not (has_match and has_assert_never):
                 violations.append(
                     f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
-                    f"{node.name}() dispatches on {tr_values} via if/elif — "
+                    f"{node.name}() dispatches on {tr_values} via if/elif -- "
                     f"use match/case + assert_never"
                 )
     return violations
@@ -152,7 +147,7 @@ def test_no_direct_write_text_in_src() -> None:
 def test_tmp_path_is_ram_backed(tmp_path: Path) -> None:
     """On Linux/WSL2, tmp_path must resolve to /dev/shm (RAM-backed tmpfs).
 
-    On macOS no assertion is made — disk-backed /tmp is acceptable there.
+    On macOS no assertion is made -- disk-backed /tmp is acceptable there.
     Fails intentionally on Linux when pytest is invoked directly without --basetemp.
     Always run tests via 'task test-all', not pytest directly.
     """
@@ -302,7 +297,7 @@ def test_fstring_secret_safe_for_nonsensitive(tmp_path: Path) -> None:
 
 def test_arch007_termination_dispatch_tables_use_exhaustive_match() -> None:
     """
-    ARCH-007: Any function in execution/ that dispatches on ≥2 distinct
+    ARCH-007: Any function in execution/ that dispatches on >=2 distinct
     TerminationReason values via if/elif must use match/case with assert_never.
     Single-value guard checks (e.g., `if termination == TIMED_OUT:`) are exempt.
     """
@@ -318,7 +313,7 @@ def _check_channel_confirmation_dispatch_exhaustive(src_dir: Path) -> list[str]:
     via if/elif chains rather than exhaustive match/case + assert_never.
 
     A "dispatch table" is detected when a single FunctionDef contains comparisons
-    to ≥2 distinct ChannelConfirmation.* values (CHANNEL_A, CHANNEL_B, UNMONITORED).
+    to >=2 distinct ChannelConfirmation.* values (CHANNEL_A, CHANNEL_B, UNMONITORED).
     A single-value guard is exempt.
 
     Returns a list of violation strings for failing tests.
@@ -360,7 +355,7 @@ def _check_channel_confirmation_dispatch_exhaustive(src_dir: Path) -> list[str]:
             if len(cc_values) >= 2 and not (has_match and has_assert_never):
                 violations.append(
                     f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
-                    f"{node.name}() dispatches on {cc_values} via if/elif — "
+                    f"{node.name}() dispatches on {cc_values} via if/elif -- "
                     f"use match/case + assert_never"
                 )
     return violations
@@ -368,7 +363,7 @@ def _check_channel_confirmation_dispatch_exhaustive(src_dir: Path) -> list[str]:
 
 def test_arch007_channel_confirmation_dispatch_uses_match_case() -> None:
     """
-    T7 / ARCH-007 extension: Any function in execution/ that dispatches on ≥2
+    T7 / ARCH-007 extension: Any function in execution/ that dispatches on >=2
     distinct ChannelConfirmation values via if/elif must use match/case with
     assert_never. Single-value guard checks are exempt.
     """
@@ -386,7 +381,7 @@ def test_no_raw_claude_list_construction() -> None:
     that bypasses established safety flags.
     """
     ALLOWED = {
-        ("app.py", "install"),
+        ("_marketplace.py", "install"),
         ("_llm_triage.py", "_triage_batch"),
         ("commands.py", "build_interactive_cmd"),
         ("commands.py", "build_headless_cmd"),
@@ -425,7 +420,7 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
     that re-exports 'name' FROM that exact submodule, are wrong and must be corrected.
 
     Note: patching autoskillit.X.B.name where X imports 'name' from a DIFFERENT submodule
-    (not B) is correct — it targets the local binding in B, which is the namespace that
+    (not B) is correct -- it targets the local binding in B, which is the namespace that
     module B's own functions resolve.
     """
     import importlib
@@ -462,13 +457,13 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
             # Refine: only flag if the parent pkg actually imports 'name' FROM this
             # exact submodule. If it imports 'name' from a different module (e.g.
             # autoskillit.migration imports applicable_migrations from .loader, not
-            # .engine), then the patch targets a local binding in 'submod' — which
+            # .engine), then the patch targets a local binding in 'submod' -- which
             # is the correct mock target for module-level imports in that submodule.
             try:
                 parent_source = inspect.getsource(parent_mod)
                 tree = ast.parse(parent_source)
             except Exception:
-                # Can't inspect source — conservatively flag as violation.
+                # Can't inspect source -- conservatively flag as violation.
                 imports_from_this_submod = True
             else:
                 imports_from_this_submod = False
@@ -496,4 +491,110 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
 
     assert not violations, "Monkeypatch paths bypass package re-exports:\n" + "\n".join(
         f"  {v}" for v in violations
+    )
+
+
+class TestNoAsyncioRuntimePrimitives:
+    """REQ-MIG-001: asyncio primitives are removed from execution/process.py call sites."""
+
+    def test_no_asyncio_sleep_calls(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.sleep(" not in source
+
+    def test_no_asyncio_to_thread_calls(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.to_thread(" not in source
+
+    def test_no_asyncio_create_subprocess_exec(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.create_subprocess_exec(" not in source
+
+    def test_no_asyncio_event_instantiation(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.Event()" not in source
+
+    def test_no_asyncio_wait_for_calls(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.wait_for(" not in source
+
+    def test_no_asyncio_get_event_loop_time(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.get_event_loop()" not in source
+
+    def test_no_asyncio_get_running_loop_run_in_executor(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.get_running_loop()" not in source
+
+    def test_no_asyncio_cancelled_error_reference(self):
+        """REQ-BEH-010: asyncio.CancelledError must not appear in process.py."""
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.CancelledError" not in source
+
+
+class TestAnyioPrimitivesUsed:
+    """REQ-MIG-002..004: anyio primitives replace the removed asyncio calls."""
+
+    def test_anyio_to_thread_run_sync_present(self):
+        source = Path("src/autoskillit/execution/_process_kill.py").read_text()
+        assert "anyio.to_thread.run_sync(" in source
+
+    def test_anyio_sleep_present(self):
+        source = Path("src/autoskillit/execution/_process_monitor.py").read_text()
+        assert "anyio.sleep(" in source
+
+    def test_time_monotonic_replaces_event_loop_time(self):
+        source = Path("src/autoskillit/execution/_process_monitor.py").read_text()
+        assert ".monotonic()" in source
+
+    def test_anyio_open_process_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.open_process(" in source
+
+    def test_anyio_event_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.Event()" in source
+
+    def test_anyio_move_on_after_present(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "anyio.move_on_after(" in source
+
+
+class TestProcTypeAnnotationUpdated:
+    """REQ-MIG-005/scan_done_signals: proc annotation is anyio.abc.Process, not asyncio."""
+
+    def test_scan_done_signals_proc_annotation_not_asyncio_subprocess(self):
+        source = Path("src/autoskillit/execution/process.py").read_text()
+        assert "asyncio.subprocess.Process" not in source
+
+    def test_scan_done_signals_proc_annotation_is_anyio(self):
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
+        assert "anyio.abc.Process" in source
+
+
+# ── P14-2: Sub-package __init__.py facade enforcement ─────────────────────────
+
+
+def test_init_files_are_pure_facades() -> None:
+    """P14-2: Sub-package __init__.py files must not define FunctionDef or AsyncFunctionDef
+    at module scope. They must be pure re-export facades.
+
+    After groupE (P14-1), server/__init__.py is a pure facade. This test enforces the
+    same constraint across all immediate sub-package __init__.py files.
+
+    Exempt: src/autoskillit/__init__.py (package root, defines __version__ at module scope).
+    """
+    violations: list[str] = []
+
+    for init_file in SRC_ROOT.glob("*/__init__.py"):
+        source = init_file.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(init_file))
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                violations.append(
+                    f"  {_rel(init_file)}:{node.lineno}: defines {node.name!r} at module scope"
+                )
+
+    assert not violations, (
+        "Sub-package __init__.py files must not define functions at module scope "
+        "(pure re-export facades only):\n" + "\n".join(violations)
     )

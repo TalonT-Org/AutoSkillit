@@ -11,11 +11,13 @@ from pathlib import Path
 
 import pytest
 
-from tests.arch._helpers import (
+from tests.arch._helpers import _scan
+from tests.arch._rules import (
+    _BROAD_EXCEPT_EXEMPT,
+    _PRINT_EXEMPT,
     RULES,
     RuleDescriptor,
     Violation,
-    _scan,
 )
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -76,14 +78,14 @@ def test_rule_registry_completeness() -> None:
         )
 
     # (c) count equals the number of distinct rules enforced by ArchitectureViolationVisitor
-    assert len(RULES) == 6, (
-        f"RULES has {len(RULES)} entries but visitor enforces 6 rules. "
+    assert len(RULES) == 7, (
+        f"RULES has {len(RULES)} entries but visitor enforces 7 rules. "
         "Add a RuleDescriptor for every new visitor rule."
     )
 
     # (c cont.) exact set of IDs must match the visitor's rule set
     expected_ids = frozenset(
-        {"ARCH-001", "ARCH-002", "ARCH-003", "ARCH-004", "ARCH-005", "ARCH-006"}
+        {"ARCH-001", "ARCH-002", "ARCH-003", "ARCH-004", "ARCH-005", "ARCH-006", "ARCH-007"}
     )
     actual_ids = frozenset(rule_ids)
     assert actual_ids == expected_ids, (
@@ -169,13 +171,9 @@ def test_violation_str_includes_defense_standard_when_present(tmp_path: Path) ->
     assert "DS-003" in s, f"Expected 'DS-003' in violation string, got: {s!r}"
 
 
-def test_violation_str_omits_defense_standard_when_absent(tmp_path: Path) -> None:
-    """REQ-SYMB-005: defense_standard is absent from str(Violation) when rule has none.
-
-    Uses a Violation with a rule_id not present in RULES so that the rule lookup
-    returns None and ds_part evaluates to "".
-    """
-    f = tmp_path / "bad.py"
+def test_violation_str_omits_defense_standard_when_absent() -> None:
+    """REQ-SYMB-005: defense_standard is absent from str(Violation) when rule has none."""
+    f = Path("bad.py")
     v = Violation(
         file=f,
         line=1,
@@ -209,3 +207,51 @@ def test_violation_str_no_prefix_without_rule_id() -> None:
     s = str(v)
     assert not s.startswith("["), f"Expected no prefix for rule_id='', got: {s!r}"
     assert "some issue" in s
+
+
+# ── P13-7: Shared canonical source verification ───────────────────────────────
+
+
+def test_ast_rules_and_registry_share_rules_object() -> None:
+    """P13-7: Both test_ast_rules and test_registry must import RULES from the same _rules module."""
+    import tests.arch._rules as shared
+    import tests.arch.test_registry as reg_mod
+
+    assert reg_mod.RULES is shared.RULES, "test_registry.RULES must be the shared _rules.RULES"
+
+
+# ── P13-1: ARCH-001 exemptions sync ──────────────────────────────────────────
+
+
+def test_arch001_exemptions_match_print_exempt_set() -> None:
+    """P13-1: ARCH-001 RuleDescriptor.exemptions must cover all _PRINT_EXEMPT files."""
+    arch001 = next(r for r in RULES if r.rule_id == "ARCH-001")
+    assert arch001.exemptions == _PRINT_EXEMPT
+
+
+# ── P13-2: ARCH-003 exemptions sync ──────────────────────────────────────────
+
+
+def test_arch003_exemptions_match_broad_except_set() -> None:
+    """P13-2: ARCH-003 RuleDescriptor.exemptions must cover all _BROAD_EXCEPT_EXEMPT files."""
+    arch003 = next(r for r in RULES if r.rule_id == "ARCH-003")
+    assert arch003.exemptions == _BROAD_EXCEPT_EXEMPT
+
+
+# ── P13-5: REQ-ARCH-001/002/003 descriptors exist ────────────────────────────
+
+
+def test_req_arch_rules_have_descriptors() -> None:
+    """P13-5: REQ-ARCH-001, 002, 003 must have RuleDescriptor constants in their respective files."""
+    import tests.arch.test_layer_enforcement as le_mod
+    import tests.arch.test_subpackage_isolation as si_mod
+
+    assert hasattr(le_mod, "LAYER_RULES"), "test_layer_enforcement must export LAYER_RULES"
+    assert hasattr(si_mod, "ISOLATION_RULES"), (
+        "test_subpackage_isolation must export ISOLATION_RULES"
+    )
+    layer_ids = {r.rule_id for r in le_mod.LAYER_RULES.values()}
+    isolation_ids = {r.rule_id for r in si_mod.ISOLATION_RULES.values()}
+    assert "REQ-ARCH-001" in layer_ids
+    assert "REQ-ARCH-003" in layer_ids
+    assert "REQ-ARCH-002" in isolation_ids

@@ -31,6 +31,28 @@ from tests.arch._helpers import (
     _is_mcp_tool_decorator,
     _rel,
 )
+from tests.arch._rules import RuleDescriptor
+
+# ── REQ-ARCH-002 descriptor ───────────────────────────────────────────────────
+
+ISOLATION_RULES: dict[str, RuleDescriptor] = {
+    "REQ-ARCH-002": RuleDescriptor(
+        rule_id="REQ-ARCH-002",
+        name="tool-context-service-fields-use-protocol-types",
+        lens="module-dependency",
+        description=(
+            "Every non-exempt ToolContext service field must be annotated with a Protocol "
+            "type from autoskillit.core.types, not a concrete implementation class."
+        ),
+        rationale=(
+            "Protocol-typed fields enable dependency injection and make the context "
+            "independently testable without importing concrete server or execution classes."
+        ),
+        exemptions=frozenset({"plugin_dir", "config"}),  # non-service structural fields
+        severity="high",
+        defense_standard="DS-008",
+    ),
+}
 
 
 def _get_call_func_name(node: ast.Call) -> str | None:
@@ -313,7 +335,7 @@ def test_pytest_asyncio_version_bound() -> None:
     data = tomllib.loads(pyproject.read_text())
     deps = data["project"]["optional-dependencies"]["dev"]
     asyncio_dep = next(d for d in deps if d.startswith("pytest-asyncio"))
-    assert ">=0.23" in asyncio_dep, f"Expected pytest-asyncio>=0.23.x, got: {asyncio_dep!r}"
+    assert ">=1.0.0" in asyncio_dep, f"Expected pytest-asyncio>=1.0.0, got: {asyncio_dep!r}"
 
 
 def test_severity_not_defined_locally_in_recipe_validator() -> None:
@@ -494,9 +516,9 @@ def test_cli_is_package() -> None:
 
 
 def test_server_file_count_under_limit() -> None:
-    """server/ must not exceed 12 Python files (REQ-DSGN-002)."""
+    """server/ must not exceed 13 Python files (REQ-DSGN-002)."""
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 12, f"server/ has {len(py_files)} files, max is 12"
+    assert len(py_files) <= 13, f"server/ has {len(py_files)} files, max is 13"
 
 
 def test_git_operations_moved_to_server_package() -> None:
@@ -573,7 +595,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
 
     server/ is exempt at 12 files to accommodate tools_clone and tools_integrations modules.
     """
-    EXEMPTIONS: dict[str, int] = {"server": 12, "recipe": 12}
+    EXEMPTIONS: dict[str, int] = {"server": 13, "recipe": 18, "execution": 15}
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":
@@ -788,18 +810,11 @@ def test_make_context_wires_all_optional_toolcontext_fields() -> None:
 # ── groupC Part A tests ───────────────────────────────────────────────────────
 
 
-def test_recipe_rules_module_exists() -> None:
-    """P8: recipe/rules.py must exist and be importable."""
-    from autoskillit.recipe import rules  # noqa: F401
-
-    assert rules is not None
-
-
-def test_semantic_rule_functions_defined_in_rules_module() -> None:
-    """P8: Semantic rule functions must be defined in recipe/rules.py."""
+def test_semantic_rule_functions_defined_in_rule_submodules() -> None:
+    """P8: Semantic rule functions must be defined in rules_*.py submodules."""
     from autoskillit.recipe.validator import _check_outdated_version
 
-    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules"
+    assert _check_outdated_version.__module__ == "autoskillit.recipe.rules_inputs"
 
 
 def test_installed_version_in_core_types() -> None:
@@ -809,10 +824,14 @@ def test_installed_version_in_core_types() -> None:
     assert isinstance(AUTOSKILLIT_INSTALLED_VERSION, str) and AUTOSKILLIT_INSTALLED_VERSION
 
 
-def test_rules_module_no_autoskillit_init_import() -> None:
-    """P3-F2: recipe/rules.py must not import from autoskillit top-level __init__."""
-    rules_path = SRC_ROOT / "recipe" / "rules.py"
-    assert "from autoskillit import __version__" not in rules_path.read_text()
+def test_rule_submodules_no_autoskillit_init_import() -> None:
+    """P3-F2: rules_*.py submodules must not import from autoskillit top-level __init__."""
+    rule_files = sorted((SRC_ROOT / "recipe").glob("rules_*.py"))
+    assert len(rule_files) >= 5, f"Expected >=5 rules_*.py files, found {len(rule_files)}"
+    for rules_path in rule_files:
+        assert "from autoskillit import __version__" not in rules_path.read_text(), (
+            f"{rules_path.name} must not import from autoskillit top-level __init__"
+        )
 
 
 def test_recipe_api_module_exists() -> None:
@@ -892,7 +911,7 @@ class TestGroupCMigration:
         assert "def scan_done_signals(" not in source  # REQ-SIG-003
 
     def test_race_accumulator_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "class RaceAccumulator" in source  # REQ-SIG-003
 
     def test_cancel_scope_cancel_present(self):
@@ -900,7 +919,7 @@ class TestGroupCMigration:
         assert "cancel_scope.cancel()" in source  # REQ-SIG-004
 
     def test_resolve_termination_preserved(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "def resolve_termination(" in source  # REQ-SIG-005
 
     def test_channel_b_drain_wait_uses_move_on_after(self):
@@ -908,15 +927,15 @@ class TestGroupCMigration:
         assert "anyio.move_on_after(" in source  # REQ-SIG-006
 
     def test_watch_process_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "async def _watch_process(" in source  # REQ-SIG-007
 
     def test_watch_heartbeat_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "async def _watch_heartbeat(" in source  # REQ-SIG-007
 
     def test_watch_session_log_present(self):
-        source = Path("src/autoskillit/execution/process.py").read_text()
+        source = Path("src/autoskillit/execution/_process_race.py").read_text()
         assert "async def _watch_session_log(" in source  # REQ-SIG-007
 
     def test_race_signals_fields_unchanged(self):

@@ -257,7 +257,9 @@ def test_load_recipe_card_missing(tmp_path: Path) -> None:
 def test_check_staleness_clean() -> None:
     contract = {
         "bundled_manifest_version": "0.1.0",
-        "skill_hashes": {"investigate": compute_skill_hash("investigate", skills_dir=bundled_skills_dir())},
+        "skill_hashes": {
+            "investigate": compute_skill_hash("investigate", skills_dir=bundled_skills_dir())
+        },
     }
     stale = check_contract_staleness(contract)
     assert len(stale) == 0

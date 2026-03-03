@@ -213,7 +213,7 @@ def test_violation_str_no_prefix_without_rule_id() -> None:
 
 
 def test_ast_rules_and_registry_share_rules_object() -> None:
-    """P13-7: Both test_ast_rules and test_registry must import RULES from the same _rules module."""
+    """P13-7: test_ast_rules and test_registry import RULES from same _rules module."""
     import tests.arch._rules as shared
     import tests.arch.test_registry as reg_mod
 
@@ -242,7 +242,7 @@ def test_arch003_exemptions_match_broad_except_set() -> None:
 
 
 def test_req_arch_rules_have_descriptors() -> None:
-    """P13-5: REQ-ARCH-001, 002, 003 must have RuleDescriptor constants in their respective files."""
+    """P13-5: REQ-ARCH rules must have RuleDescriptor constants in their test files."""
     import tests.arch.test_layer_enforcement as le_mod
     import tests.arch.test_subpackage_isolation as si_mod
 

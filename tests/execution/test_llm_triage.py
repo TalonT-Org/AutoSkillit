@@ -31,7 +31,6 @@ async def test_triage_staleness_reads_skill_md_once_per_unique_skill(
     from unittest.mock import AsyncMock
 
     from autoskillit._llm_triage import triage_staleness
-
     from autoskillit.execution.process import SubprocessResult, TerminationReason
 
     skill_dir = tmp_path / "implement-worktree"
@@ -97,7 +96,6 @@ class TestTriageStaleness:
         from unittest.mock import AsyncMock
 
         from autoskillit._llm_triage import triage_staleness
-
         from autoskillit.execution.process import SubprocessResult, TerminationReason
 
         skill_dir = tmp_path / "test-skill"
@@ -138,8 +136,8 @@ class TestTriageStaleness:
         from unittest.mock import AsyncMock
 
         import structlog
-        from autoskillit._llm_triage import triage_staleness
 
+        from autoskillit._llm_triage import triage_staleness
         from autoskillit.execution.process import SubprocessResult, TerminationReason
 
         skill_dir = tmp_path / "test-skill"
@@ -186,8 +184,8 @@ class TestTriageStaleness:
         from unittest.mock import AsyncMock
 
         import structlog
-        from autoskillit._llm_triage import triage_staleness
 
+        from autoskillit._llm_triage import triage_staleness
         from autoskillit.execution.process import SubprocessResult, TerminationReason
 
         skill_dir = tmp_path / "test-skill"
@@ -230,7 +228,6 @@ class TestTriageStaleness:
         from unittest.mock import AsyncMock
 
         from autoskillit._llm_triage import triage_staleness
-
         from autoskillit.core.types import TerminationReason
         from autoskillit.execution.process import SubprocessResult
 
@@ -323,7 +320,6 @@ class TestTriageStaleness:
         from unittest.mock import AsyncMock
 
         from autoskillit._llm_triage import triage_staleness
-
         from autoskillit.core.types import TerminationReason
         from autoskillit.execution.process import SubprocessResult
 
@@ -403,7 +399,6 @@ async def test_triage_staleness_concurrent_calls(
     import asyncio
 
     from autoskillit._llm_triage import BATCH_SIZE, triage_staleness
-
     from autoskillit.core.types import TerminationReason
     from autoskillit.execution.process import SubprocessResult
 
@@ -471,7 +466,6 @@ async def test_triage_staleness_batches_five_skills(
     from unittest.mock import AsyncMock
 
     from autoskillit._llm_triage import triage_staleness
-
     from autoskillit.core.types import TerminationReason
     from autoskillit.execution.process import SubprocessResult
 
@@ -538,7 +532,6 @@ async def test_triage_staleness_batch_fallback_on_malformed_response(
     from unittest.mock import AsyncMock
 
     from autoskillit._llm_triage import triage_staleness
-
     from autoskillit.core.types import TerminationReason
     from autoskillit.execution.process import SubprocessResult
 

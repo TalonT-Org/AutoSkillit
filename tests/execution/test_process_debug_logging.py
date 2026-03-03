@@ -7,10 +7,8 @@ import textwrap
 import pytest
 import structlog.testing
 
-from autoskillit.core.types import (
-    RaceSignals,
-    TerminationReason,
-)
+from autoskillit.core.types import TerminationReason
+from autoskillit.execution.process import RaceSignals
 
 
 @pytest.mark.anyio

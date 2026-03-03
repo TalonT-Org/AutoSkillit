@@ -10,6 +10,7 @@ Resolution order (low → high priority):
 
 from __future__ import annotations
 
+import dataclasses
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -136,6 +137,17 @@ class LinuxTracingConfig:
     proc_interval: float = 5.0
 
 
+def _field_defaults(cls: type) -> dict[str, Any]:
+    """Extract default values from dataclass fields into a dict keyed by field name."""
+    defaults: dict[str, Any] = {}
+    for f in dataclasses.fields(cls):  # type: ignore[arg-type]
+        if f.default is not dataclasses.MISSING:
+            defaults[f.name] = f.default
+        elif f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
+            defaults[f.name] = f.default_factory()  # type: ignore[call-arg]
+    return defaults
+
+
 @dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
@@ -189,93 +201,108 @@ class AutomationConfig:
         lg = sec("logging")
         lt = sec("linux_tracing")
 
+        _tc = _field_defaults(TestCheckConfig)
+        _cf = _field_defaults(ClassifyFixConfig)
+        _rw = _field_defaults(ResetWorkspaceConfig)
+        _ig = _field_defaults(ImplementGateConfig)
+        _sf = _field_defaults(SafetyConfig)
+        _rd = _field_defaults(ReadDbConfig)
+        _rs = _field_defaults(RunSkillConfig)
+        _rsr = _field_defaults(RunSkillRetryConfig)
+        _mc = _field_defaults(ModelConfig)
+        _ws = _field_defaults(WorktreeSetupConfig)
+        _mi = _field_defaults(MigrationConfig)
+        _tu = _field_defaults(TokenUsageConfig)
+        _qg = _field_defaults(QuotaGuardConfig)
+        _gh = _field_defaults(GitHubConfig)
+        _rb = _field_defaults(ReportBugConfig)
+        _lg = _field_defaults(LoggingConfig)
+        _lt = _field_defaults(LinuxTracingConfig)
+
         return cls(
             test_check=TestCheckConfig(
-                command=list(val(tc, "command", ["task", "test-check"])),
-                timeout=int(val(tc, "timeout", 600)),
+                command=list(val(tc, "command", _tc["command"])),
+                timeout=int(val(tc, "timeout", _tc["timeout"])),
             ),
             classify_fix=ClassifyFixConfig(
-                path_prefixes=list(val(cf, "path_prefixes", [])),
+                path_prefixes=list(val(cf, "path_prefixes", _cf["path_prefixes"])),
             ),
             reset_workspace=ResetWorkspaceConfig(
-                command=_to_optional_list(val(rw, "command", None)),
-                preserve_dirs=set(val(rw, "preserve_dirs", [])),
+                command=_to_optional_list(val(rw, "command", _rw["command"])),
+                preserve_dirs=set(val(rw, "preserve_dirs", _rw["preserve_dirs"])),
             ),
             implement_gate=ImplementGateConfig(
-                marker=str(val(ig, "marker", "Dry-walkthrough verified = TRUE")),
-                skill_names=set(
-                    val(
-                        ig,
-                        "skill_names",
-                        [
-                            "/autoskillit:implement-worktree",
-                            "/autoskillit:implement-worktree-no-merge",
-                        ],
-                    )
-                ),
+                marker=str(val(ig, "marker", _ig["marker"])),
+                skill_names=set(val(ig, "skill_names", _ig["skill_names"])),
             ),
             safety=SafetyConfig(
-                reset_guard_marker=str(val(sf, "reset_guard_marker", ".autoskillit-workspace")),
-                require_dry_walkthrough=bool(val(sf, "require_dry_walkthrough", True)),
-                test_gate_on_merge=bool(val(sf, "test_gate_on_merge", True)),
+                reset_guard_marker=str(val(sf, "reset_guard_marker", _sf["reset_guard_marker"])),
+                require_dry_walkthrough=bool(
+                    val(sf, "require_dry_walkthrough", _sf["require_dry_walkthrough"])
+                ),
+                test_gate_on_merge=bool(val(sf, "test_gate_on_merge", _sf["test_gate_on_merge"])),
             ),
             read_db=ReadDbConfig(
-                timeout=int(val(rd, "timeout", 30)),
-                max_rows=int(val(rd, "max_rows", 10000)),
+                timeout=int(val(rd, "timeout", _rd["timeout"])),
+                max_rows=int(val(rd, "max_rows", _rd["max_rows"])),
             ),
             run_skill=RunSkillConfig(
-                timeout=int(val(rs, "timeout", 3600)),
-                heartbeat_marker=str(val(rs, "heartbeat_marker", '"type":"result"')),
-                stale_threshold=int(val(rs, "stale_threshold", 1200)),
-                completion_marker=str(val(rs, "completion_marker", "%%ORDER_UP%%")),
-                completion_drain_timeout=float(val(rs, "completion_drain_timeout", 5.0)),
-                exit_after_stop_delay_ms=int(val(rs, "exit_after_stop_delay_ms", 120000)),
+                timeout=int(val(rs, "timeout", _rs["timeout"])),
+                heartbeat_marker=str(val(rs, "heartbeat_marker", _rs["heartbeat_marker"])),
+                stale_threshold=int(val(rs, "stale_threshold", _rs["stale_threshold"])),
+                completion_marker=str(val(rs, "completion_marker", _rs["completion_marker"])),
+                completion_drain_timeout=float(
+                    val(rs, "completion_drain_timeout", _rs["completion_drain_timeout"])
+                ),
+                exit_after_stop_delay_ms=int(
+                    val(rs, "exit_after_stop_delay_ms", _rs["exit_after_stop_delay_ms"])
+                ),
             ),
             run_skill_retry=RunSkillRetryConfig(
-                timeout=int(val(rsr, "timeout", 7200)),
-                stale_threshold=int(val(rsr, "stale_threshold", 1200)),
+                timeout=int(val(rsr, "timeout", _rsr["timeout"])),
+                stale_threshold=int(val(rsr, "stale_threshold", _rsr["stale_threshold"])),
             ),
             model=ModelConfig(
-                default=val(mc, "default", None) or None,
-                override=val(mc, "override", None) or None,
+                default=val(mc, "default", _mc["default"]) or None,
+                override=val(mc, "override", _mc["override"]) or None,
             ),
             worktree_setup=WorktreeSetupConfig(
-                command=_to_optional_list(val(ws, "command", None)),
+                command=_to_optional_list(val(ws, "command", _ws["command"])),
             ),
             migration=MigrationConfig(
-                suppressed=list(val(mi, "suppressed", [])),
+                suppressed=list(val(mi, "suppressed", _mi["suppressed"])),
             ),
             token_usage=TokenUsageConfig(
-                verbosity=str(val(tu, "verbosity", "summary")),
+                verbosity=str(val(tu, "verbosity", _tu["verbosity"])),
             ),
             quota_guard=QuotaGuardConfig(
-                enabled=bool(val(qg, "enabled", True)),
-                threshold=float(val(qg, "threshold", 90.0)),
-                buffer_seconds=int(val(qg, "buffer_seconds", 60)),
-                cache_max_age=int(val(qg, "cache_max_age", 60)),
-                credentials_path=str(val(qg, "credentials_path", "~/.claude/.credentials.json")),
-                cache_path=str(val(qg, "cache_path", "~/.claude/autoskillit_quota_cache.json")),
+                enabled=bool(val(qg, "enabled", _qg["enabled"])),
+                threshold=float(val(qg, "threshold", _qg["threshold"])),
+                buffer_seconds=int(val(qg, "buffer_seconds", _qg["buffer_seconds"])),
+                cache_max_age=int(val(qg, "cache_max_age", _qg["cache_max_age"])),
+                credentials_path=str(val(qg, "credentials_path", _qg["credentials_path"])),
+                cache_path=str(val(qg, "cache_path", _qg["cache_path"])),
             ),
             github=GitHubConfig(
-                token=val(gh, "token", None) or None,
-                default_repo=val(gh, "default_repo", None) or None,
+                token=val(gh, "token", _gh["token"]) or None,
+                default_repo=val(gh, "default_repo", _gh["default_repo"]) or None,
             ),
             report_bug=ReportBugConfig(
-                timeout=int(val(rb, "timeout", 600)),
-                model=val(rb, "model", None) or None,
-                report_dir=val(rb, "report_dir", None) or None,
-                github_filing=bool(val(rb, "github_filing", True)),
-                github_labels=list(val(rb, "github_labels", ["autoreported", "bug"])),
+                timeout=int(val(rb, "timeout", _rb["timeout"])),
+                model=val(rb, "model", _rb["model"]) or None,
+                report_dir=val(rb, "report_dir", _rb["report_dir"]) or None,
+                github_filing=bool(val(rb, "github_filing", _rb["github_filing"])),
+                github_labels=list(val(rb, "github_labels", _rb["github_labels"])),
             ),
             logging=LoggingConfig(
-                level=str(val(lg, "level", "INFO")).upper(),
+                level=str(val(lg, "level", _lg["level"])).upper(),
                 json_output=(
-                    bool(_jo) if (_jo := val(lg, "json_output", None)) is not None else None
+                    bool(_jo) if (_jo := val(lg, "json_output", _lg["json_output"])) is not None else None
                 ),
             ),
             linux_tracing=LinuxTracingConfig(
-                enabled=bool(val(lt, "enabled", False)),
-                proc_interval=float(val(lt, "proc_interval", 5.0)),
+                enabled=bool(val(lt, "enabled", _lt["enabled"])),
+                proc_interval=float(val(lt, "proc_interval", _lt["proc_interval"])),
             ),
         )
 

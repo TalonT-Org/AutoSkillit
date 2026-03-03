@@ -433,6 +433,43 @@ class TestLoggingConfig:
         assert names == {"level", "json_output"}
 
 
+class TestLinuxTracingConfig:
+    """LinuxTracingConfig dataclass and YAML loading."""
+
+    def test_linux_tracing_config_defaults(self):
+        """LT_C1: LinuxTracingConfig defaults: disabled, 5s interval."""
+        cfg = load_config(None)
+        assert cfg.linux_tracing.enabled is False
+        assert cfg.linux_tracing.proc_interval == 5.0
+
+    def test_linux_tracing_config_from_yaml(self, tmp_path):
+        """LT_C2: LinuxTracingConfig reads from project config."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            "linux_tracing:\n  enabled: true\n  proc_interval: 2.0\n"
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.linux_tracing.enabled is True
+        assert cfg.linux_tracing.proc_interval == 2.0
+
+    def test_automation_config_has_linux_tracing_field(self):
+        """LT_C3: AutomationConfig has linux_tracing sub-config."""
+        cfg = AutomationConfig()
+        assert hasattr(cfg, "linux_tracing")
+        assert cfg.linux_tracing.enabled is False
+        assert cfg.linux_tracing.proc_interval == 5.0
+
+    def test_linux_tracing_config_fields(self):
+        """LT_C4: LinuxTracingConfig has exactly the expected fields."""
+        from dataclasses import fields as dc_fields
+
+        from autoskillit.config.settings import LinuxTracingConfig
+
+        names = {f.name for f in dc_fields(LinuxTracingConfig)}
+        assert names == {"enabled", "proc_interval"}
+
+
 class TestDynaconfIntegration:
     def test_env_var_overrides_nested_github_token(self, tmp_path, monkeypatch):
         """ENV-1: AUTOSKILLIT_GITHUB__TOKEN env var sets config.github.token."""

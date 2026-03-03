@@ -109,6 +109,7 @@ src/autoskillit/
 │   ├── commands.py          #   ClaudeInteractiveCmd/ClaudeHeadlessCmd builders
 │   ├── db.py                #   Read-only SQLite execution with defence-in-depth
 │   ├── headless.py          #   Headless Claude session orchestration (L3 service)
+│   ├── linux_tracing.py     #   Linux-only /proc + psutil process tracing (Tier 2 debug)
 │   ├── process.py           #   Subprocess management (kill trees, temp I/O, timeouts)
 │   ├── quota.py             #   Quota-aware check: QuotaStatus, cache, fetch, check_and_sleep_if_needed
 │   ├── session.py           #   ClaudeSessionResult, SkillResult, extract_token_usage
@@ -220,6 +221,7 @@ tests/
 │   ├── test_db.py
 │   ├── test_github.py
 │   ├── test_headless.py
+│   ├── test_linux_tracing.py
 │   ├── test_process_channel_b.py
 │   ├── test_process_jsonl.py
 │   ├── test_process_kill.py
@@ -301,6 +303,7 @@ temp/                        # Temporary/working files (gitignored)
   * **pipeline/tokens.py**: Pipeline token usage tracking. `TokenLog` accumulates token counts keyed by YAML step name. `_token_log` is the module-level singleton used by `server/__init__.py`. `get_token_summary` retrieves the accumulated per-step totals.
   * **execution/commands.py**: Claude CLI command builders. `ClaudeInteractiveCmd` and `ClaudeHeadlessCmd` frozen dataclasses. `build_interactive_cmd(*, model)` builds an interactive session command with `--allow-dangerous-permissions` and `AUTOSKILLIT_KITCHEN_OPEN=1` env. `build_headless_cmd(prompt, *, model)` builds a headless session command with `-p` and `--dangerously-skip-permissions`. Zero autoskillit imports.
   * **execution/headless.py**: L3 service module for headless Claude Code session orchestration. `run_headless_core(skill_command, cwd, ctx, *, model, step_name, add_dir, timeout, stale_threshold)` is the single public entry point shared by `run_skill` and `run_skill_retry`. Contains `_build_skill_result`, `_resolve_model`, `_ensure_skill_prefix`, `_inject_completion_directive`, `_session_log_dir`, and `_capture_failure`.
+  * **execution/linux_tracing.py**: Linux-only process tracing via psutil and `/proc` filesystem. Tier 2 debug instrumentation gated behind `sys.platform == "linux"`, `config.linux_tracing.enabled`, and DEBUG log level. `ProcSnapshot` frozen dataclass captures psutil-sourced fields (state, memory, threads, fd count, context switches) and hand-rolled `/proc` fields (signal masks, oom_score, wchan). `read_proc_snapshot(pid)` takes a point-in-time snapshot. `proc_monitor(pid, interval)` is an async generator yielding periodic snapshots until process death. `LinuxTracingHandle` provides an opaque stop handle. `start_linux_tracing(pid, config, tg)` spawns the monitor as a task group member. Depends on `core/logging`, psutil, anyio.
   * **execution/session.py**: Data extraction layer for Claude CLI output. `ClaudeSessionResult` dataclass. `SkillResult` typed result. `_compute_success`, `_compute_retry` policy functions. `extract_token_usage(stdout)` prefers `type=result` record totals. Depends on `core/types.py`, `core/logging.py`.
   * **execution/process.py**: Subprocess utilities for process tree cleanup, temp file I/O to avoid pipe blocking, and configurable timeouts. Uses `get_logger()` from `core/logging.py`.
   * **execution/testing.py**: L3 service module for pytest output parsing and pass/fail adjudication. `parse_pytest_summary(stdout)` extracts structured outcome counts from `=`-delimited summary lines. `check_test_passed(returncode, stdout)` cross-validates exit code against output for defense against PIPESTATUS bugs. Depends only on `core/logging`.
@@ -395,3 +398,5 @@ All tool behavior is configurable via `.autoskillit/config.yaml`. No config file
 | `model` | `default` | `null` | Default model for run_skill/run_skill_retry when step has no model field |
 | `model` | `override` | `null` | Force all run_skill/run_skill_retry to use this model (overrides step YAML) |
 | `token_usage` | `verbosity` | `"summary"` | Token table behavior: `"summary"` = render once at pipeline end; `"none"` = suppress entirely |
+| `linux_tracing` | `enabled` | `false` | Enable Linux-only /proc + psutil process tracing (Tier 2 debug) |
+| `linux_tracing` | `proc_interval` | `5.0` | Seconds between /proc snapshots |

@@ -131,6 +131,12 @@ class LoggingConfig:
 
 
 @dataclass
+class LinuxTracingConfig:
+    enabled: bool = False
+    proc_interval: float = 5.0
+
+
+@dataclass
 class AutomationConfig:
     test_check: TestCheckConfig = field(default_factory=TestCheckConfig)
     classify_fix: ClassifyFixConfig = field(default_factory=ClassifyFixConfig)
@@ -148,6 +154,7 @@ class AutomationConfig:
     github: GitHubConfig = field(default_factory=GitHubConfig)
     report_bug: ReportBugConfig = field(default_factory=ReportBugConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    linux_tracing: LinuxTracingConfig = field(default_factory=LinuxTracingConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -180,6 +187,7 @@ class AutomationConfig:
         gh = sec("github")
         rb = sec("report_bug")
         lg = sec("logging")
+        lt = sec("linux_tracing")
 
         return cls(
             test_check=TestCheckConfig(
@@ -264,6 +272,10 @@ class AutomationConfig:
                 json_output=(
                     bool(_jo) if (_jo := val(lg, "json_output", None)) is not None else None
                 ),
+            ),
+            linux_tracing=LinuxTracingConfig(
+                enabled=bool(val(lt, "enabled", False)),
+                proc_interval=float(val(lt, "proc_interval", 5.0)),
             ),
         )
 

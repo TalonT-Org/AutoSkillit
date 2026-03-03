@@ -348,6 +348,11 @@ async def run_headless_core(
 
         runner = ctx.runner
         assert runner is not None, "No subprocess runner configured"
+
+        linux_tracing_cfg = None
+        if ctx.config.logging.level == "DEBUG":
+            linux_tracing_cfg = ctx.config.linux_tracing
+
         result = await runner(
             cmd,
             cwd=Path(cwd),
@@ -358,6 +363,7 @@ async def run_headless_core(
             completion_marker=cfg.completion_marker,
             stale_threshold=effective_stale,
             completion_drain_timeout=cfg.completion_drain_timeout,
+            linux_tracing_config=linux_tracing_cfg,
         )
 
         skill_result = _build_skill_result(

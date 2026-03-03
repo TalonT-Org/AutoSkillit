@@ -11,6 +11,7 @@ Two composed functions wire the utilities together correctly:
 
 from __future__ import annotations
 
+import dataclasses
 import shlex
 import shutil
 import signal
@@ -22,13 +23,16 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO
+from typing import IO, TYPE_CHECKING
 
 import anyio
 import anyio.abc
 import psutil
 
 from autoskillit.core import ChannelConfirmation, SubprocessResult, TerminationReason, get_logger
+
+if TYPE_CHECKING:
+    from autoskillit.config import LinuxTracingConfig
 
 logger = get_logger(__name__)
 
@@ -655,6 +659,7 @@ async def run_managed_async(
     stale_threshold: float = 1200,
     session_record_types: frozenset[str] = frozenset({"assistant"}),
     completion_drain_timeout: float = 5.0,
+    linux_tracing_config: LinuxTracingConfig | None = None,
     _phase1_poll: float = 1.0,
     _phase2_poll: float = 2.0,
     _heartbeat_poll: float = 0.5,
@@ -768,6 +773,15 @@ async def run_managed_async(
                         _phase2_poll,
                         _phase1_timeout,
                     )
+                tracing_handle = None
+                if linux_tracing_config is not None:
+                    from autoskillit.execution.linux_tracing import start_linux_tracing
+
+                    tracing_handle = start_linux_tracing(
+                        pid=proc.pid,
+                        config=linux_tracing_config,
+                        tg=tg,
+                    )
                 with anyio.move_on_after(timeout) as timeout_scope:
                     await trigger.wait()
                 # Symmetric drain: if the process exited before Channel B deposited,
@@ -794,6 +808,17 @@ async def run_managed_async(
 
             signals = acc.to_race_signals()
             termination, _channel_confirmation = resolve_termination(signals)
+
+            if tracing_handle is not None:
+                from autoskillit.execution.linux_tracing import read_proc_snapshot
+
+                final_snap = read_proc_snapshot(proc.pid)
+                if final_snap:
+                    proc_log.debug(
+                        "linux_tracing_final_snapshot",
+                        **dataclasses.asdict(final_snap),
+                    )
+                await tracing_handle.stop()
 
             if timeout_scope.cancelled_caught:
                 termination = TerminationReason.TIMED_OUT
@@ -952,6 +977,7 @@ class DefaultSubprocessRunner:
         pty_mode: bool = False,
         input_data: str | None = None,
         completion_drain_timeout: float = 5.0,
+        linux_tracing_config: LinuxTracingConfig | None = None,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -964,4 +990,5 @@ class DefaultSubprocessRunner:
             pty_mode=pty_mode,
             input_data=input_data,
             completion_drain_timeout=completion_drain_timeout,
+            linux_tracing_config=linux_tracing_config,
         )

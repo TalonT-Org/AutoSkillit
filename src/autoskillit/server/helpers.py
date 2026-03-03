@@ -61,15 +61,15 @@ async def _notify(
 
 
 def _get_ctx():  # type: ignore[return]
-    """Deferred import of _get_ctx from server package to avoid circular imports."""
-    from autoskillit.server import _get_ctx as _ctx_fn
+    """Deferred import of _get_ctx from _state to avoid circular imports."""
+    from autoskillit.server._state import _get_ctx as _ctx_fn
 
     return _ctx_fn()
 
 
 def _get_config():  # type: ignore[return]
-    """Deferred import of _get_config from server package to avoid circular imports."""
-    from autoskillit.server import _get_config as _cfg_fn
+    """Deferred import of _get_config from _state to avoid circular imports."""
+    from autoskillit.server._state import _get_config as _cfg_fn
 
     return _cfg_fn()
 
@@ -102,7 +102,7 @@ async def _apply_triage_gate(
 
     Modifies ``result`` in-place and returns it.
     """
-    from autoskillit.server import _ctx
+    from autoskillit.server._state import _ctx
 
     if _ctx is None or _ctx.recipes is None:
         return result

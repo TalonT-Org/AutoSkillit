@@ -19,6 +19,9 @@ ingredients:
   audit:
     description: Run /autoskillit:audit-impl after all PRs are merged to check coherency (true/false)
     default: "true"
+  plans_dir:
+    description: Directory where collected plan files are stored for audit-impl
+    default: "temp/pr-merge-pipeline"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -120,6 +123,10 @@ steps:
         "true": plan
         "false": next_part_or_next_pr
     on_failure: cleanup_failure
+    retry:
+      max_attempts: 5
+      on: needs_retry
+      on_exhausted: cleanup_failure
     note: >
       The agent reads context.pr_order_file at context.current_pr_index to get the
       current PR's number and complexity. Appends them to skill_command:
@@ -156,6 +163,10 @@ steps:
       step_name: "verify"
     on_success: implement
     on_failure: cleanup_failure
+    retry:
+      max_attempts: 5
+      on: needs_retry
+      on_exhausted: cleanup_failure
     note: >
       SEQUENTIAL: For each plan_part, run the full cycle
       (verify → implement → test → merge_to_integration) before advancing.
@@ -262,7 +273,7 @@ steps:
   collect_artifacts:
     tool: run_cmd
     with:
-      cmd: "find temp/make-plan/ -name '*_plan_*.md' -exec cp {} temp/pr-merge-pipeline/ \\; 2>/dev/null || true"
+      cmd: "mkdir -p ${{ inputs.plans_dir }} && find temp/make-plan/ -name '*_plan_*.md' -exec cp {} ${{ inputs.plans_dir }}/ \\; 2>/dev/null || true"
       cwd: "${{ context.work_dir }}"
     on_success: audit_impl
     on_failure: audit_impl
@@ -275,7 +286,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl temp/pr-merge-pipeline ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl ${{ inputs.plans_dir }} ${{ context.integration_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:

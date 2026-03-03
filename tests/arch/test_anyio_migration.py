@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.arch._helpers import PROCESS_PY
+from tests.arch._helpers import PROCESS_KILL_PY, PROCESS_MONITOR_PY, PROCESS_PY, PROCESS_RACE_PY
 
 
 class TestNoAsyncioRuntimePrimitives:
@@ -52,15 +52,15 @@ class TestAnyioPrimitivesUsed:
     """REQ-MIG-002..004: anyio primitives replace the removed asyncio calls."""
 
     def test_anyio_to_thread_run_sync_present(self):
-        source = PROCESS_PY.read_text()
+        source = PROCESS_KILL_PY.read_text()
         assert "anyio.to_thread.run_sync(" in source
 
     def test_anyio_sleep_present(self):
-        source = PROCESS_PY.read_text()
+        source = PROCESS_MONITOR_PY.read_text()
         assert "anyio.sleep(" in source
 
     def test_time_monotonic_replaces_event_loop_time(self):
-        source = PROCESS_PY.read_text()
+        source = PROCESS_MONITOR_PY.read_text()
         assert ".monotonic()" in source
 
     def test_anyio_open_process_present(self):
@@ -84,5 +84,5 @@ class TestProcTypeAnnotationUpdated:
         assert "asyncio.subprocess.Process" not in source
 
     def test_scan_done_signals_proc_annotation_is_anyio(self):
-        source = PROCESS_PY.read_text()
+        source = PROCESS_RACE_PY.read_text()
         assert "anyio.abc.Process" in source

@@ -698,7 +698,7 @@ def test_no_raw_claude_list_construction() -> None:
     """
     ALLOWED = {
         ("app.py", "install"),
-        ("_llm_triage.py", "triage_staleness"),
+        ("_llm_triage.py", "_triage_batch"),
         ("commands.py", "build_interactive_cmd"),
         ("commands.py", "build_headless_cmd"),
     }

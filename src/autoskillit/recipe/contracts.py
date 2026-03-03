@@ -348,6 +348,7 @@ def check_contract_staleness(
     """
     manifest = load_bundled_manifest()
     current_version = manifest["version"]
+    cached: StalenessEntry | None = None
 
     if recipe_path is not None and cache_path is not None:
         cached = read_staleness_cache(cache_path, recipe_path.stem)
@@ -385,6 +386,15 @@ def check_contract_staleness(
 
     if recipe_path is not None and cache_path is not None:
         file_hash = compute_recipe_hash(recipe_path)
+        # Preserve triage_result when content is unchanged (same hash+version).
+        # When content changes, the prior triage is invalid and must be cleared.
+        prior_triage: str | None = None
+        if (
+            cached is not None
+            and cached.recipe_hash == file_hash
+            and cached.manifest_version == current_version
+        ):
+            prior_triage = cached.triage_result
         write_staleness_cache(
             cache_path,
             recipe_path.stem,
@@ -392,7 +402,7 @@ def check_contract_staleness(
                 recipe_hash=file_hash,
                 manifest_version=current_version,
                 is_stale=bool(stale),
-                triage_result=None,
+                triage_result=prior_triage,
                 checked_at=datetime.now(UTC).isoformat(),
             ),
         )

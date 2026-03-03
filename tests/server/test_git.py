@@ -154,3 +154,39 @@ async def test_perform_merge_both_gates_run_on_full_success(
 
     assert result.get("merge_succeeded") is True
     assert tester.call_count == 2
+
+
+@pytest.mark.anyio
+async def test_perform_merge_blocks_on_missing_remote_tracking_ref(
+    conftest_mock_runner, default_config, tmp_path
+):
+    """perform_merge() returns PRE_REBASE_CHECK failure when base branch
+    has no remote tracking ref after fetch."""
+    from autoskillit.core.types import MergeFailedStep, MergeState
+    from autoskillit.server.git import perform_merge
+
+    worktree_dir = tmp_path / "wt"
+    worktree_dir.mkdir()
+    tester = StatefulMockTester(results=[(True, "= 10 passed =")])
+    # Step 2: worktree verified (needs /worktrees/ in git-dir path)
+    conftest_mock_runner.push(_make_result(0, str(tmp_path / ".git/worktrees/wt"), ""))
+    # Step 3: branch name found
+    conftest_mock_runner.push(_make_result(0, "feat/my-feature\n", ""))
+    # Step 4: test gate handled by tester (not runner)
+    # Step 5: fetch succeeds
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    # Step 5.5: remote tracking ref MISSING
+    conftest_mock_runner.push(_make_result(128, "", "fatal: Needed a single revision"))
+
+    result = await perform_merge(
+        str(worktree_dir),
+        "feature/local-only",
+        config=default_config,
+        runner=conftest_mock_runner,
+        tester=tester,
+    )
+
+    assert result["failed_step"] == MergeFailedStep.PRE_REBASE_CHECK  # not REBASE
+    assert result["state"] == MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED
+    assert "feature/local-only" in result["error"]
+    assert "push" in result["error"].lower()

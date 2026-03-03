@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from autoskillit.core import (
     AUTOSKILLIT_INSTALLED_VERSION,
     PIPELINE_FORBIDDEN_TOOLS,
@@ -1003,3 +1005,109 @@ def _check_push_missing_explicit_remote_url(recipe: Recipe) -> list[RuleFinding]
         for n, step in recipe.steps.items()
         if step.tool == "push_to_remote" and "remote_url" not in (step.with_args or {})
     ]
+
+
+_CONTEXT_VAR_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
+
+
+def _extract_context_var(value: str) -> str | None:
+    """Return the context variable name from '${{ context.X }}', or None."""
+    m = _CONTEXT_VAR_RE.fullmatch(value.strip())
+    return m.group(1) if m else None
+
+
+@semantic_rule(
+    name="merge-base-unpublished",
+    description=(
+        "merge_worktree base_branch is a context variable without a preceding "
+        "push_to_remote on all structural paths"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_merge_base_unpublished(recipe: Recipe) -> list[RuleFinding]:
+    """Fire when a merge_worktree step uses a context variable as base_branch
+    and no push_to_remote step that pushes the same variable precedes it on
+    all reachable paths in the raw structural routing graph.
+
+    Uses the raw routing graph (without skip_when_false bypass edges) to avoid
+    false positives when paired optional steps share the same skip_when_false
+    condition (e.g., create_branch and push_merge_target both guarded by open_pr).
+
+    Algorithm:
+    1. Find all merge_worktree steps whose base_branch arg is ${{ context.X }}.
+    2. For each, build a raw step graph (routing fields only, no bypass edges).
+    3. Find push_to_remote steps whose branch arg references the same context.X.
+    4. BFS from the recipe entry point treating push steps as barriers.
+    5. If the merge step is reachable in this BFS, at least one path to it
+       lacks a push barrier — fire the rule.
+    """
+    findings = []
+    entry = next(iter(recipe.steps))
+    step_names = set(recipe.steps.keys())
+
+    # Build raw routing graph (no skip_when_false bypass edges).
+    graph: dict[str, set[str]] = {name: set() for name in step_names}
+    for name, step in recipe.steps.items():
+        for target in (step.on_success, step.on_failure, step.on_retry):
+            if target and target in step_names:
+                graph[name].add(target)
+        if step.on_result:
+            for t in step.on_result.routes.values():
+                if t in step_names:
+                    graph[name].add(t)
+            for cond in step.on_result.conditions:
+                if cond.route in step_names:
+                    graph[name].add(cond.route)
+        if step.retry and step.retry.on_exhausted in step_names:
+            graph[name].add(step.retry.on_exhausted)
+
+    for step_name, step in recipe.steps.items():
+        if step.tool != "merge_worktree":
+            continue
+        base_branch_arg = (step.with_args or {}).get("base_branch", "")
+        context_var = _extract_context_var(base_branch_arg)
+        if context_var is None:
+            continue  # literal branch name — always published, no check needed
+
+        # Collect push_to_remote steps that push this exact context variable.
+        push_steps = {
+            name
+            for name, s in recipe.steps.items()
+            if s.tool == "push_to_remote"
+            and _extract_context_var((s.with_args or {}).get("branch", "")) == context_var
+        }
+
+        # BFS from entry treating push_steps as barriers.
+        # If step_name is reachable, some path lacks a push — fire the rule.
+        visited: set[str] = set()
+        queue = [entry]
+        reachable_without_push = False
+        while queue:
+            node = queue.pop()
+            if node in visited:
+                continue
+            visited.add(node)
+            if node == step_name:
+                reachable_without_push = True
+                break
+            if node in push_steps:
+                continue  # barrier: do not expand through push
+            queue.extend(graph.get(node, set()))
+
+        if reachable_without_push:
+            findings.append(
+                RuleFinding(
+                    rule="merge-base-unpublished",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' uses context.{context_var} as base_branch "
+                        f"for merge_worktree, but no push_to_remote step that pushes "
+                        f"context.{context_var} precedes it on all reachable paths. "
+                        f"A locally-created branch must be published (push_to_remote) "
+                        f"before merge_worktree can rebase against it."
+                    ),
+                )
+            )
+
+    return findings

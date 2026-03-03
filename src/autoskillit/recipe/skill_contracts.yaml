@@ -151,7 +151,7 @@ skills:
   audit-impl:
     inputs:
       - name: plan_path
-        type: file_path
+        type: string
         required: true
       - name: branch_name
         type: string
@@ -168,3 +168,47 @@ skills:
   migrate-recipes:
     inputs: []
     outputs: []
+
+  analyze-prs:
+    inputs: []
+    outputs:
+      - name: pr_order_file
+        type: file_path
+        required: true
+      - name: integration_branch
+        type: string
+        required: true
+      - name: pr_count
+        type: string
+        required: true
+      - name: simple_count
+        type: string
+        required: true
+      - name: needs_check_count
+        type: string
+        required: true
+      - name: analysis_file
+        type: file_path
+        required: true
+
+  merge-pr:
+    inputs: []
+    outputs:
+      - name: merged
+        type: string
+        required: true
+      - name: needs_plan
+        type: string
+        required: true
+      - name: pr_number
+        type: string
+        required: true
+      - name: pr_branch
+        type: string
+        required: true
+      - name: pr_title
+        type: string
+        required: true
+      - name: conflict_report_path
+        type: file_path
+        required: true

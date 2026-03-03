@@ -177,7 +177,7 @@ async def perform_merge(
                 f"push it to origin before running this pipeline: "
                 f"git push -u origin {base_branch}"
             ),
-            "failed_step": MergeFailedStep.REBASE,
+            "failed_step": MergeFailedStep.PRE_REBASE_CHECK,
             "state": MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED,
             "base_branch": base_branch,
             "worktree_path": worktree_path,

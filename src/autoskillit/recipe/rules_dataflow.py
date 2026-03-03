@@ -254,9 +254,7 @@ def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
     next_or_done = wf.steps.get("next_or_done")
     if next_or_done is not None and next_or_done.on_result is not None:
         # Legacy format: field/routes dict with explicit "more_parts" → "verify"
-        has_more_parts_to_verify = (
-            next_or_done.on_result.routes.get("more_parts") == "verify"
-        )
+        has_more_parts_to_verify = next_or_done.on_result.routes.get("more_parts") == "verify"
         # Predicate format: condition with "more_parts" in the when clause routing to "verify"
         if not has_more_parts_to_verify:
             has_more_parts_to_verify = any(

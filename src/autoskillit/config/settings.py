@@ -297,7 +297,9 @@ class AutomationConfig:
             logging=LoggingConfig(
                 level=str(val(lg, "level", _lg["level"])).upper(),
                 json_output=(
-                    bool(_jo) if (_jo := val(lg, "json_output", _lg["json_output"])) is not None else None
+                    bool(_jo)
+                    if (_jo := val(lg, "json_output", _lg["json_output"])) is not None
+                    else None
                 ),
             ),
             linux_tracing=LinuxTracingConfig(

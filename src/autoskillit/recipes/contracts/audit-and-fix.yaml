@@ -1,11 +1,6 @@
-generated_at: '2026-03-02T02:12:41.231712+00:00'
+generated_at: '2026-03-03T23:39:44.695764+00:00'
 bundled_manifest_version: 0.1.0
-skill_hashes:
-  investigate: sha256:e2ddaaaeff4ae44ebb40271ef06ce3101a75dbc9dcbfa02c06aa768019f780e4
-  rectify: sha256:3586bc4000a194178c85ec1202f4c1edb75a723650b0c7f0640acb92fec6adb2
-  implement-worktree-no-merge: sha256:86515d79175468eb205e964d033ad48598812e7997014f7c0e6b52d80a7c002d
-  retry-worktree: sha256:c66703245d49df7f94a71456a4f76da62c3527652f03bec62b71cc344d5028b9
-  resolve-failures: sha256:81ee708f6c8f1e75edb27a5f68dde6d1eac7db229fd5e18690f4c74185de8b45
+skill_hashes: {}
 skills:
   investigate:
     inputs:
@@ -63,16 +58,56 @@ dataflow:
   available:
   - audit_type
   - base_branch
+  - open_pr
   - run_name
   - source_dir
   required: []
   produced:
   - work_dir
   - remote_url
+- step: set_merge_target
+  available:
+  - audit_type
+  - base_branch
+  - open_pr
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - merge_target
+- step: create_branch
+  available:
+  - audit_type
+  - base_branch
+  - merge_target
+  - open_pr
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - merge_target
+- step: push_merge_target
+  available:
+  - audit_type
+  - base_branch
+  - merge_target
+  - open_pr
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
 - step: audit
   available:
   - audit_type
   - base_branch
+  - merge_target
+  - open_pr
   - remote_url
   - run_name
   - source_dir
@@ -83,6 +118,8 @@ dataflow:
   available:
   - audit_type
   - base_branch
+  - merge_target
+  - open_pr
   - remote_url
   - run_name
   - source_dir
@@ -93,6 +130,8 @@ dataflow:
   available:
   - audit_type
   - base_branch
+  - merge_target
+  - open_pr
   - remote_url
   - run_name
   - source_dir
@@ -104,6 +143,8 @@ dataflow:
   available:
   - audit_type
   - base_branch
+  - merge_target
+  - open_pr
   - plan_path
   - remote_url
   - run_name
@@ -116,6 +157,8 @@ dataflow:
   available:
   - audit_type
   - base_branch
+  - merge_target
+  - open_pr
   - plan_path
   - remote_url
   - run_name
@@ -129,6 +172,8 @@ dataflow:
   available:
   - audit_type
   - base_branch
+  - merge_target
+  - open_pr
   - plan_path
   - remote_url
   - run_name
@@ -141,6 +186,8 @@ dataflow:
   available:
   - audit_type
   - base_branch
+  - merge_target
+  - open_pr
   - plan_path
   - remote_url
   - run_name
@@ -153,6 +200,8 @@ dataflow:
   available:
   - audit_type
   - base_branch
+  - merge_target
+  - open_pr
   - plan_path
   - remote_url
   - run_name
@@ -167,6 +216,23 @@ dataflow:
   - audit_type
   - base_branch
   - cleanup_succeeded
+  - merge_target
+  - open_pr
+  - plan_path
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: open_pr_step
+  available:
+  - audit_type
+  - base_branch
+  - cleanup_succeeded
+  - merge_target
+  - open_pr
   - plan_path
   - remote_url
   - run_name
@@ -180,6 +246,8 @@ dataflow:
   - audit_type
   - base_branch
   - cleanup_succeeded
+  - merge_target
+  - open_pr
   - plan_path
   - remote_url
   - run_name
@@ -193,6 +261,8 @@ dataflow:
   - audit_type
   - base_branch
   - cleanup_succeeded
+  - merge_target
+  - open_pr
   - plan_path
   - remote_url
   - run_name
@@ -206,6 +276,8 @@ dataflow:
   - audit_type
   - base_branch
   - cleanup_succeeded
+  - merge_target
+  - open_pr
   - plan_path
   - remote_url
   - run_name
@@ -219,6 +291,8 @@ dataflow:
   - audit_type
   - base_branch
   - cleanup_succeeded
+  - merge_target
+  - open_pr
   - plan_path
   - remote_url
   - run_name

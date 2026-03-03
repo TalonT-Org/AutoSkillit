@@ -1,5 +1,5 @@
 name: audit-and-fix
-description: Audit codebase, investigate findings, plan fixes, and implement.
+description: Audit codebase, investigate findings, plan fixes, implement in a feature branch, and open a PR.
 autoskillit_version: "0.3.0"
 
 kitchen_rules:
@@ -10,6 +10,14 @@ kitchen_rules:
   - "Route to on_failure when a step fails — the downstream skill (e.g.,
     resolve-failures) has diagnostic access that the orchestrator does not.
     Do not investigate or attempt to fix failures directly."
+  - "SEQUENTIAL EXECUTION: complete full cycle per part before advancing.
+    For each plan_part, run the full cycle (implement → test → merge) before
+    starting the next part. Do NOT batch-implement all parts upfront."
+  - "By default (open_pr=true), a feature branch named from inputs.run_name is created.
+    All worktree merges target the feature branch (context.merge_target), not base_branch
+    directly. The push step publishes the feature branch, then open_pr_step opens a PR to
+    base_branch. When open_pr=false, merges target base_branch directly and open_pr_step
+    is skipped."
   - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
     off-limits. Never run any command in source_dir — no git checkout, git
     fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
@@ -25,14 +33,17 @@ ingredients:
     required: false
     default: ""
   run_name:
-    description: Name prefix for this pipeline run (used in clone directory name)
+    description: Name prefix for this pipeline run (used in clone directory name and feature branch name)
     default: "audit-fix"
   base_branch:
-    description: Branch to merge fixes into
+    description: Branch to branch off of and PR target
     default: main
   audit_type:
     description: Type of audit to run (arch, tests, cohesion, defense-standards)
     default: arch
+  open_pr:
+    description: Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false)
+    default: "true"
 
 steps:
   clone:
@@ -44,12 +55,61 @@ steps:
     capture:
       work_dir: "${{ result.clone_path }}"
       remote_url: "${{ result.remote_url }}"
-    on_success: audit
+    on_success: set_merge_target
     on_failure: escalate_stop
     note: >
       Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
       Captures work_dir context used by all subsequent steps as cwd.
       On failure, escalate_stop is reached immediately (no clone to remove).
+
+  set_merge_target:
+    tool: run_cmd
+    with:
+      cmd: "printf '%s' '${{ inputs.base_branch }}'"
+      cwd: "${{ context.work_dir }}"
+    capture:
+      merge_target: "${{ result.stdout }}"
+    on_success: create_branch
+    on_failure: escalate_stop
+    note: >
+      Unconditionally sets merge_target to inputs.base_branch as a fallback.
+      In the standard flow (open_pr=true), the subsequent create_branch step
+      overrides merge_target with the feature branch name. When open_pr=false,
+      create_branch is skipped and this fallback stands.
+
+  create_branch:
+    tool: run_cmd
+    with:
+      cmd: "git checkout -b ${{ inputs.run_name }} && echo ${{ inputs.run_name }}"
+      cwd: "${{ context.work_dir }}"
+    capture:
+      merge_target: "${{ result.stdout }}"
+    on_success: push_merge_target
+    on_failure: cleanup_failure
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Runs by default (open_pr=true). Skipped when open_pr=false.
+      Creates the feature branch (git checkout -b {run_name}) and captures the branch name
+      as context.merge_target, overriding the fallback set by set_merge_target.
+      All subsequent merge/push steps target this feature branch.
+
+  push_merge_target:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.merge_target }}"
+    on_success: audit
+    on_failure: cleanup_failure
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Runs by default (open_pr=true). Skipped when open_pr=false.
+      Publishes the feature branch to origin before any merge_worktree call.
+      merge_worktree requires refs/remotes/origin/{branch} to exist after fetch.
+      Without this step, merge_worktree fails with WORKTREE_INTACT_BASE_NOT_PUBLISHED.
+      Uses the pre-resolved remote_url from the clone step to preserve clone isolation.
 
   audit:
     tool: run_skill
@@ -135,7 +195,7 @@ steps:
     tool: merge_worktree
     with:
       worktree_path: "${{ context.worktree_path }}"
-      base_branch: "${{ inputs.base_branch }}"
+      base_branch: "${{ context.merge_target }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
     on_success: push
@@ -146,13 +206,30 @@ steps:
     with:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
-      branch: "${{ inputs.base_branch }}"
-    on_success: cleanup_success
+      branch: "${{ context.merge_target }}"
+    on_success: open_pr_step
     on_failure: cleanup_failure
     note: >
-      Pushes the merged base_branch directly from the clone to the upstream remote.
+      Pushes merge_target branch from the clone to the upstream remote.
+      By default (open_pr=true), this pushes the feature branch; when open_pr=false, pushes base_branch.
       Uses the pre-resolved remote_url captured at clone time, preserving clone isolation.
-      On failure, cleanup_failure still removes the clone.
+      On success, routes to open_pr_step (which opens the PR by default; skipped when open_pr=false).
+
+  open_pr_step:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:open-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "open_pr"
+    on_success: cleanup_success
+    on_failure: cleanup_failure
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Runs by default (open_pr=true). Skipped when open_pr=false.
+      The feature branch is already published by the push step that precedes this step.
+      Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
+      and runs gh pr create. The skill gracefully degrades if gh is unavailable.
 
   cleanup_success:
     tool: remove_clone
@@ -180,7 +257,7 @@ steps:
 
   done:
     action: stop
-    message: "Audit findings addressed. Changes ready for review."
+    message: "Audit findings addressed. Changes merged via PR."
 
   escalate_stop:
     action: stop

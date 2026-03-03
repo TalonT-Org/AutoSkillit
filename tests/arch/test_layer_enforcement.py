@@ -408,7 +408,7 @@ def test_only_pipeline_context_imports_config() -> None:
 
 
 def test_recipe_no_forbidden_imports() -> None:
-    """T5: REQ-COMP-009 — recipe/ modules import only from core/ and workspace/."""
+    """T5: REQ-COMP-009 — recipe/ modules import only from core/, workspace/, and sibling recipe/ modules."""
     recipe_pkg = SRC_ROOT / "recipe"
     assert recipe_pkg.exists(), "recipe/ package must exist"
     violations: list[str] = []

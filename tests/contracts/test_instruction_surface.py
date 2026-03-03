@@ -88,13 +88,10 @@ class TestServerToolSurfaceContract:
     """Server tool docstrings and prompts must name all forbidden tools."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
+    def _close_kitchen(self, tool_ctx, monkeypatch):
         from autoskillit.pipeline.gate import DefaultGateState
 
-        original_gate = tool_ctx.gate
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        yield
-        tool_ctx.gate = original_gate
+        monkeypatch.setattr(tool_ctx, "gate", DefaultGateState(enabled=False))
 
     def test_open_kitchen_prompt_names_all_forbidden_tools(self):
         """open_kitchen prompt text must name every forbidden tool with prohibition framing."""

@@ -120,5 +120,22 @@ class TestDeleteDirectoryContents:
 
     def test_empty_directory_succeeds(self, tmp_path):
         result = _delete_directory_contents(tmp_path)
-        assert result.success
+        assert result.success is True
         assert result.deleted == []
+
+
+class TestDefaultWorkspaceManager:
+    def test_delete_contents_delegates_to_implementation(self, tmp_path):
+        """DefaultWorkspaceManager.delete_contents delegates to _delete_directory_contents."""
+        from autoskillit.workspace.cleanup import DefaultWorkspaceManager
+
+        target = tmp_path / "testdir"
+        target.mkdir()
+        (target / "file.txt").touch()
+
+        mgr = DefaultWorkspaceManager()
+        result = mgr.delete_contents(target)
+
+        assert result.success is True
+        assert "file.txt" in result.deleted
+        assert not (target / "file.txt").exists()

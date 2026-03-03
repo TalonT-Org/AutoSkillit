@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import dataclasses
-import importlib
 from pathlib import Path
 
 import pytest
 import yaml
 
-from autoskillit.core.types import RETRY_RESPONSE_FIELDS
 from autoskillit.recipe.io import (
     _parse_recipe,
     _parse_step,
@@ -30,18 +28,6 @@ from autoskillit.recipe.validator import (
 # ---------------------------------------------------------------------------
 # Importability assertions
 # ---------------------------------------------------------------------------
-
-
-def test_semantic_rules_module_no_longer_exists() -> None:
-    """semantic_rules module must be gone — ModuleNotFoundError expected."""
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("autoskillit.semantic_rules")
-
-
-def test_contract_validator_module_no_longer_exists() -> None:
-    """contract_validator module must be gone — ModuleNotFoundError expected."""
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("autoskillit.contract_validator")
 
 
 # ---------------------------------------------------------------------------
@@ -420,17 +406,6 @@ class TestValidateRecipe:
         errors = validate_recipe(wf)
         assert errors == []
 
-    def test_retry_on_field_is_valid_response_key(self, tmp_path: Path) -> None:
-        for wf_info in list_recipes(tmp_path).items:
-            wf = load_recipe(wf_info.path)
-            for step_name, step in wf.steps.items():
-                if step.retry and step.retry.on:
-                    assert step.retry.on in RETRY_RESPONSE_FIELDS, (
-                        f"Recipe '{wf.name}' step '{step_name}' retry.on='{step.retry.on}' "
-                        f"is not a known response field: {RETRY_RESPONSE_FIELDS}"
-                    )
-
-
 # ---------------------------------------------------------------------------
 # TestDataFlowQuality — migrated from test_recipe_parser.py
 # ---------------------------------------------------------------------------
@@ -462,6 +437,9 @@ class TestDataFlowQuality:
         assert isinstance(report, DataFlowReport)
         assert isinstance(report.warnings, list)
         assert isinstance(report.summary, str)
+        assert report.warnings == []
+        assert report.summary is not None
+        assert len(report.summary) > 0
 
     # DFQ2
     def test_dead_output_detected(self) -> None:

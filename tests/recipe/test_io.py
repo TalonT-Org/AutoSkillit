@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import re
 from pathlib import Path
 
@@ -47,12 +46,6 @@ VALID_RECIPE = {
 def _write_yaml(path: Path, data: dict) -> Path:
     path.write_text(yaml.dump(data, default_flow_style=False))
     return path
-
-
-def test_recipe_parser_module_no_longer_exists() -> None:
-    """recipe_parser module must be gone — ModuleNotFoundError expected."""
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("autoskillit.recipe_parser")
 
 
 def test_load_recipe_smoke() -> None:

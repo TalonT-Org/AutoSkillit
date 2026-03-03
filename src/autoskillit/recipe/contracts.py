@@ -26,6 +26,7 @@ from autoskillit.recipe.staleness_cache import (
     read_staleness_cache,
     write_staleness_cache,
 )
+from autoskillit.workspace import bundled_skills_dir
 
 logger = get_logger(__name__)
 
@@ -352,8 +353,8 @@ def check_contract_staleness(
     any SKILL.md files. Stale cache hits fall through to re-compute StaleItem
     details. The result is written back to the cache on every cache miss.
 
-    When ``skills_dir`` is None, skill hash comparison is skipped (only manifest
-    version staleness is checked).
+    When ``skills_dir`` is None, the bundled skills directory is used for hash
+    comparison.
 
     Returns a list of StaleItem entries indicating what changed.
     """
@@ -383,18 +384,18 @@ def check_contract_staleness(
             )
         )
 
-    if skills_dir is not None:
-        for skill_name, stored_hash in contract.get("skill_hashes", {}).items():
-            current_hash = compute_skill_hash(skill_name, skills_dir=skills_dir)
-            if current_hash and stored_hash != current_hash:
-                stale.append(
-                    StaleItem(
-                        skill=skill_name,
-                        reason="hash_mismatch",
-                        stored_value=stored_hash,
-                        current_value=current_hash,
-                    )
+    effective_skills_dir = skills_dir if skills_dir is not None else bundled_skills_dir()
+    for skill_name, stored_hash in contract.get("skill_hashes", {}).items():
+        current_hash = compute_skill_hash(skill_name, skills_dir=effective_skills_dir)
+        if current_hash and stored_hash != current_hash:
+            stale.append(
+                StaleItem(
+                    skill=skill_name,
+                    reason="hash_mismatch",
+                    stored_value=stored_hash,
+                    current_value=current_hash,
                 )
+            )
 
     if recipe_path is not None and cache_path is not None:
         file_hash = compute_recipe_hash(recipe_path)

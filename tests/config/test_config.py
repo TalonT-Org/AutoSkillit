@@ -346,7 +346,7 @@ class TestQuotaGuardConfig:
 
         config = AutomationConfig()
         assert config.quota_guard.enabled is True
-        assert config.quota_guard.threshold == pytest.approx(80.0)
+        assert config.quota_guard.threshold == pytest.approx(90.0)
         assert config.quota_guard.buffer_seconds == 60
         assert config.quota_guard.cache_max_age == 60
 

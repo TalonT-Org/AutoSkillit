@@ -171,7 +171,7 @@ Tests placed in the wrong directory relative to the intended sub-package hierarc
 
 ### Category 9: Oversized Files (MEDIUM)
 
-Test files or supporting files exceeding 1000 lines. Flag files approaching the threshold (800+) as warnings.
+Test files or supporting files exceeding 750 lines. Flag files approaching the threshold (800+) as warnings.
 
 ### Category 10: xdist Safety Violations (HIGH)
 

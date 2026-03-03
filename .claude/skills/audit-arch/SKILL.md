@@ -156,11 +156,11 @@ infrastructure -> depends on nothing project-specific
 
 ### Principle 8: No Monolithic Files
 
-**Rule:** No file should exceed 1000 lines. Large files should be decomposed.
+**Rule:** No file should exceed 750 lines. Large files should be decomposed.
 
 **Audit Strategy:**
-- Find files exceeding 1000 lines (exclude generated/vendored)
-- Flag files approaching threshold (800+ lines) as warnings
+- Find files exceeding 750 lines (exclude generated/vendored)
+- Flag files approaching threshold (700+ lines) as warnings
 
 ---
 

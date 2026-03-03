@@ -30,8 +30,9 @@ class TestGetLogger:
         assert logs, "Expected at least one log record"
         assert logs[0]["logger"] == "autoskillit.server"
 
+class TestNullHandlerContract:
     def test_no_output_before_configure(self, capsys: pytest.CaptureFixture[str]):
-        """NullHandler prevents stdlib lastResort from writing to stderr before configure().
+        """NullHandler in autoskillit/__init__.py prevents stdlib lastResort output.
 
         Python 3.2+ invokes a lastResort handler that writes WARNING+ records to
         sys.stderr when no handlers are found anywhere in the logger hierarchy.
@@ -72,10 +73,7 @@ def _flush_logger_proxy_caches() -> None:
         mod = sys.modules.get(mod_name)
         if mod is None:
             continue
-        for attr_name in ("logger", "_logger"):
-            lg = getattr(mod, attr_name, None)
-            if lg is None:
-                continue
+        for lg in vars(mod).values():
             if isinstance(lg, _sc.BoundLoggerLazyProxy):
                 lg.__dict__.pop("bind", None)
             elif hasattr(lg, "_processors"):
@@ -135,6 +133,7 @@ class TestConfigureLogging:
         get_logger("autoskillit.test").info("stdout_check")
         captured = capsys.readouterr()
         assert captured.out == ""
+        assert "stdout_check" in captured.err
 
 
 class TestContextVarBinding:

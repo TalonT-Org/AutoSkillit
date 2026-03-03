@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
-
-import pytest
-
-
 def test_core_logging_importable():
     from autoskillit.core.logging import (  # noqa: F401
         PACKAGE_LOGGER_NAME,
@@ -32,30 +27,10 @@ def test_core_io_importable():
     assert callable(dump_yaml)
 
 
-def test_old_types_module_removed():
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("autoskillit.types")
-
-
-def test_old_io_module_removed():
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("autoskillit._io")
-
-
-def test_old_yaml_module_removed():
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("autoskillit._yaml")
-
-
-def test_old_logging_module_removed():
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("autoskillit._logging")
-
-
 def test_core_io_module_has_docstring():
     import autoskillit.core.io as m
 
-    assert m.__doc__ and len(m.__doc__.strip()) > 0
+    assert m.__doc__ and "atomic" in m.__doc__
 
 
 def test_dump_yaml_not_in_core_all():

@@ -104,6 +104,12 @@ async def check_and_sleep_if_needed(config: Any) -> dict:
 
     Does NOT sleep. The caller is responsible for sleeping (e.g. via run_cmd).
 
+    Cache is treated as authoritative when fresh (within config.cache_max_age seconds).
+    A fresh cache hit skips the live Anthropic API call entirely — intentional, since quota
+    status changes slowly and avoiding unnecessary API calls is preferable to marginal freshness.
+    Live fetch only occurs on cache miss, expiry, or when utilization exceeds the threshold
+    (where accurate resets_at is needed for sleep duration).
+
     Args:
         config: QuotaGuardConfig instance.
 
@@ -181,7 +187,14 @@ async def check_and_sleep_if_needed(config: Any) -> dict:
             "resets_at": status.resets_at.isoformat(),
         }
 
-    except Exception as exc:  # noqa: BLE001
+    except (
+        TimeoutError,
+        OSError,
+        KeyError,
+        ValueError,
+        json.JSONDecodeError,
+        httpx.HTTPError,
+    ) as exc:
         _log.warning("quota check failed — continuing without sleep", error=str(exc))
         return {
             "should_sleep": False,

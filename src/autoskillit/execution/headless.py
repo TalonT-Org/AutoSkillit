@@ -1,6 +1,6 @@
 """Headless Claude Code session orchestration.
 
-execution/ module. Owns the full lifecycle of a headless claude CLI session:
+L1 module (execution/). Owns the full lifecycle of a headless claude CLI session:
 command preparation, subprocess invocation via the injected runner, and
 SkillResult construction.
 
@@ -36,9 +36,13 @@ from autoskillit.execution.session import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.config import AutomationConfig
+    from autoskillit.config import (
+        AutomationConfig,  # noqa: cross-l1-import — TYPE_CHECKING only, no runtime coupling
+    )
     from autoskillit.core import AuditStore, SubprocessResult
-    from autoskillit.pipeline.context import ToolContext
+    from autoskillit.pipeline.context import (
+        ToolContext,  # noqa: cross-l1-import — TYPE_CHECKING only, no runtime coupling
+    )
 
 logger = get_logger(__name__)
 

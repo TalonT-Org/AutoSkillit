@@ -61,7 +61,7 @@ def test_tool_context_audit_isolation():
 
 
 def test_gate_state_replacement():
-    """DefaultGateState (slots=True) can be replaced on a mutable ToolContext."""
+    """ToolContext allows gate field replacement via plain assignment."""
     ctx = ToolContext(
         config=AutomationConfig(),
         audit=DefaultAuditLog(),
@@ -93,26 +93,6 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
     assert ctx.workspace_mgr is None
     assert ctx.clone_mgr is None
     assert ctx.github_client is None
-
-
-def test_toolcontext_service_fields_annotated_with_protocols():
-    """Service fields reference Protocol type names, not concrete class names."""
-    fields = ToolContext.__dataclass_fields__
-    assert "AuditStore" in str(fields["audit"].type)
-    assert "GatePolicy" in str(fields["gate"].type)
-    assert "TokenStore" in str(fields["token_log"].type)
-    assert "HeadlessExecutor" in str(fields["executor"].type)
-    assert "TestRunner" in str(fields["tester"].type)
-    assert "RecipeRepository" in str(fields["recipes"].type)
-    assert "MigrationService" in str(fields["migrations"].type)
-    assert "DatabaseReader" in str(fields["db_reader"].type)
-    assert "WorkspaceManager" in str(fields["workspace_mgr"].type)
-    assert "CloneManager" in str(fields["clone_mgr"].type)
-    assert "GitHubFetcher" in str(fields["github_client"].type)
-    # Verify concrete class names are NOT used for service fields
-    assert "DefaultAuditLog" not in str(fields["audit"].type)
-    assert "DefaultGateState" not in str(fields["gate"].type)
-    assert "DefaultTokenLog" not in str(fields["token_log"].type)
 
 
 def test_toolcontext_optional_fields_all_have_protocol_annotations() -> None:

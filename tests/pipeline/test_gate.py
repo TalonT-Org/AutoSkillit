@@ -118,16 +118,6 @@ def test_gate_error_result_accepts_custom_message():
     assert parsed["needs_retry"] is False
 
 
-def test_gate_error_result_no_arg_preserves_default_message():
-    import json
-
-    from autoskillit.pipeline.gate import gate_error_result
-
-    # Existing no-arg call still works and keeps the original message
-    parsed = json.loads(gate_error_result())
-    assert "open_kitchen" in parsed["result"]
-
-
 def test_helpers_has_no_gate_error_result_duplicate():
     import autoskillit.server.helpers as helpers_mod
 

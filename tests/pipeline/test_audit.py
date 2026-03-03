@@ -67,10 +67,25 @@ class TestDefaultAuditLog:
         long_stderr = "x" * 1000
         log = DefaultAuditLog()
         log.record_failure(_make_record(stderr=long_stderr))
-        assert len(log.get_report()[0].stderr) <= 500
+        assert len(log.get_report()[0].stderr) == 500
 
     def test_skill_command_truncated_to_200_chars(self):
         long_cmd = "/autoskillit:implement-worktree " + "a" * 300
         log = DefaultAuditLog()
         log.record_failure(_make_record(skill_command=long_cmd))
-        assert len(log.get_report()[0].skill_command) <= 200
+        assert len(log.get_report()[0].skill_command) == 200
+
+    def test_get_report_as_dicts_empty(self):
+        log = DefaultAuditLog()
+        assert log.get_report_as_dicts() == []
+
+    def test_get_report_as_dicts_populated(self):
+        log = DefaultAuditLog()
+        log.record_failure(_make_record(skill_command="cmd", exit_code=1))
+        dicts = log.get_report_as_dicts()
+        assert len(dicts) == 1
+        d = dicts[0]
+        assert d["skill_command"] == "cmd"
+        assert d["exit_code"] == 1
+        assert "timestamp" in d
+        assert "stderr" in d

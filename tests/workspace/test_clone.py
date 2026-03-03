@@ -288,7 +288,14 @@ class TestCloneOriginContract:
         (source / "README.md").write_text("hello")
         subprocess.run(["git", "-C", str(source), "add", "."], check=True)
         subprocess.run(["git", "-C", str(source), "commit", "-m", "init"], check=True)
-        subprocess.run(["git", "-C", str(source), "push", "origin", "main"], check=True)
+        # Detect the actual branch name (varies by git config: main vs master)
+        branch = subprocess.run(
+            ["git", "-C", str(source), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        subprocess.run(["git", "-C", str(source), "push", "origin", branch], check=True)
 
         result = clone_repo(str(source), "contract-test")
         clone_path = Path(result["clone_path"])

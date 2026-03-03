@@ -1,7 +1,6 @@
 """Tests for shared type contracts — enum exhaustiveness."""
 
 import json
-from dataclasses import fields
 
 from autoskillit.core.types import (
     RETRY_RESPONSE_FIELDS,
@@ -100,20 +99,6 @@ def test_retry_response_fields_matches_to_json_output():
     )
 
 
-def test_retry_response_fields_derived_from_skillresult_fields():
-    """RETRY_RESPONSE_FIELDS must equal the field names of SkillResult dataclass.
-
-    After I9, this is structurally enforced — but this test makes the
-    derivation contract explicit and catches any divergence.
-    """
-    dataclass_fields = frozenset(f.name for f in fields(SkillResult))
-    assert RETRY_RESPONSE_FIELDS == dataclass_fields, (
-        f"RETRY_RESPONSE_FIELDS not derived from SkillResult fields.\n"
-        f"Missing: {dataclass_fields - RETRY_RESPONSE_FIELDS}\n"
-        f"Extra: {RETRY_RESPONSE_FIELDS - dataclass_fields}"
-    )
-
-
 def test_skill_command_prefix_constant_exists():
     """SKILL_COMMAND_PREFIX is the canonical slash prefix for skill invocations."""
     from autoskillit.core.types import SKILL_COMMAND_PREFIX
@@ -133,24 +118,16 @@ def test_autoskillit_skill_prefix_constant_exists():
 # ---------------------------------------------------------------------------
 
 
-def test_session_outcome_values():
-    """SessionOutcome has exactly three members with lowercase string values."""
+def test_session_outcome_is_str_enum_with_expected_values():
+    """SessionOutcome inherits from StrEnum and has exactly three expected members."""
+    from enum import StrEnum
+
+    assert issubclass(SessionOutcome, StrEnum)
     assert set(SessionOutcome) == {
         SessionOutcome.SUCCEEDED,
         SessionOutcome.RETRIABLE,
         SessionOutcome.FAILED,
     }
-    assert SessionOutcome.SUCCEEDED.value == "succeeded"
-    assert SessionOutcome.RETRIABLE.value == "retriable"
-    assert SessionOutcome.FAILED.value == "failed"
-
-
-def test_session_outcome_is_str_enum():
-    """SessionOutcome inherits from StrEnum."""
-    from enum import StrEnum
-
-    assert issubclass(SessionOutcome, StrEnum)
-    # String comparison works directly
     assert SessionOutcome.SUCCEEDED == "succeeded"
     assert SessionOutcome.RETRIABLE == "retriable"
     assert SessionOutcome.FAILED == "failed"
@@ -241,3 +218,11 @@ def test_session_outcome_in_core_all():
     import autoskillit.core as core_pkg
 
     assert "SessionOutcome" in core_pkg.__all__
+
+
+def test_severity_has_ok_member():
+    from autoskillit.core.types import Severity
+
+    assert Severity.OK == "ok"
+    assert Severity.ERROR == "error"
+    assert Severity.WARNING == "warning"

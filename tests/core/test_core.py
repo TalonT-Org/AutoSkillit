@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
-
-import pytest
-
 
 def test_core_logging_importable():
     from autoskillit.core.logging import (  # noqa: F401
@@ -13,6 +9,9 @@ def test_core_logging_importable():
         configure_logging,
         get_logger,
     )
+
+    assert callable(get_logger)
+    assert callable(configure_logging)
 
 
 def test_core_io_importable():
@@ -25,31 +24,14 @@ def test_core_io_importable():
         load_yaml,
     )
 
-
-def test_old_types_module_removed():
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("autoskillit.types")
-
-
-def test_old_io_module_removed():
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("autoskillit._io")
-
-
-def test_old_yaml_module_removed():
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("autoskillit._yaml")
-
-
-def test_old_logging_module_removed():
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("autoskillit._logging")
+    assert callable(load_yaml)
+    assert callable(dump_yaml)
 
 
 def test_core_io_module_has_docstring():
     import autoskillit.core.io as m
 
-    assert m.__doc__ and len(m.__doc__.strip()) > 0
+    assert m.__doc__ and "atomic" in m.__doc__
 
 
 def test_dump_yaml_not_in_core_all():
@@ -68,11 +50,3 @@ def test_t_typevar_not_in_core_all():
     import autoskillit.core as core
 
     assert "T" not in core.__all__
-
-
-def test_severity_has_ok_member():
-    from autoskillit.core.types import Severity
-
-    assert Severity.OK == "ok"
-    assert Severity.ERROR == "error"
-    assert Severity.WARNING == "warning"

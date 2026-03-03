@@ -111,6 +111,7 @@ src/autoskillit/
 │   ├── linux_tracing.py     #   Linux-only /proc + psutil process tracing (Tier 2 debug)
 │   ├── process.py           #   Subprocess management (kill trees, temp I/O, timeouts)
 │   ├── quota.py             #   Quota-aware check: QuotaStatus, cache, fetch, check_and_sleep_if_needed
+│   ├── github.py            #   GitHub issue fetcher (L1, httpx-based, never raises)
 │   ├── session.py           #   ClaudeSessionResult, SkillResult, extract_token_usage
 │   └── testing.py           #   Pytest output parsing and pass/fail adjudication
 ├── workspace/               # L1 workspace sub-package
@@ -123,7 +124,10 @@ src/autoskillit/
 │   ├── contracts.py         #   Contract card generation and staleness triage utilities
 │   ├── io.py                #   load_recipe, list_recipes, iter_steps_with_context, find_recipe_by_name
 │   ├── loader.py            #   Path-based recipe metadata utilities (parse_recipe_metadata, RecipeInfo)
+│   ├── _api.py              #   Recipe orchestration API: load/validate pipelines, format responses
 │   ├── registry.py          #   RuleFinding, RuleSpec, _RULE_REGISTRY, semantic_rule, run_semantic_rules
+│   ├── repository.py        #   Concrete RecipeRepository implementation
+│   ├── rules.py             #   Semantic validation rules for the recipe schema
 │   ├── rules_bypass.py      #   Semantic rules for skip_when_false bypass routing contracts
 │   ├── schema.py            #   Recipe, RecipeStep, DataFlowWarning, AUTOSKILLIT_VERSION_KEY
 │   ├── staleness_cache.py   #   Disk-backed staleness check cache (StalenessEntry, load_cache, save_cache)
@@ -131,6 +135,7 @@ src/autoskillit/
 ├── migration/               # L2 migration sub-package
 │   ├── __init__.py          #   Re-exports MigrationEngine, applicable_migrations, FailureStore
 │   ├── engine.py            #   MigrationEngine, adapter ABC hierarchy, default_migration_engine()
+│   ├── _api.py              #   Top-level check_and_migrate convenience function
 │   ├── loader.py            #   Migration note discovery and version chaining
 │   └── store.py             #   FailureStore: migration failure persistence (JSON, atomic writes)
 ├── server/                  # L3 FastMCP server sub-package
@@ -143,6 +148,7 @@ src/autoskillit/
 │   ├── tools_git.py         #   merge_worktree, classify_fix tool handlers
 │   ├── tools_recipe.py      #   migrate_recipe, load_recipe, list_recipes, validate_recipe tool handlers
 │   ├── tools_status.py      #   kitchen_status, get_pipeline_report, get_token_summary tool handlers
+│   ├── tools_integrations.py #  fetch_github_issue, report_bug tool handlers
 │   ├── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace, read_db tool handlers
 │   └── _factory.py              #   Composition Root: make_context() wires ToolContext
 ├── cli/                     # L3 CLI sub-package

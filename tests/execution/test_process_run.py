@@ -212,7 +212,7 @@ class TestReadTempOutputLogging:
     """OSError during temp file read should produce a warning log."""
 
     @pytest.fixture(autouse=True)
-    def _sync_process_logger(self):
+    def _reset_structlog_config(self):
         """Sync only process.logger._processors with the current structlog config.
 
         Scoped to this test class only — no cross-module mutation.
@@ -248,9 +248,11 @@ class TestReadTempOutputLogging:
 class TestSubprocessResultAndRunnerTypes:
     """Tests for SubprocessResult in types.py and SubprocessRunner protocol."""
 
-    def test_subprocess_result_still_importable_from_process_lifecycle(self):
-        """SubprocessResult remains importable from process_lifecycle for backward compat."""
-        from autoskillit.execution.process import SubprocessResult  # noqa: F401
+    def test_subprocess_result_importable_from_execution_process(self):
+        """SubprocessResult is importable from autoskillit.execution.process."""
+        from autoskillit.execution.process import SubprocessResult
+
+        assert hasattr(SubprocessResult, "__dataclass_fields__")
 
     def test_real_subprocess_runner_default_pty_mode_is_false(self):
         """DefaultSubprocessRunner must default pty_mode=False.

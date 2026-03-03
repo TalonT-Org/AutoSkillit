@@ -218,15 +218,6 @@ class TestTokenUsageConfig:
         cfg = load_config(tmp_path)
         assert cfg.token_usage.verbosity == "none"
 
-    def test_yaml_loads_verbosity_summary(self, tmp_path):
-        """TU_C3: token_usage.verbosity loads 'summary' from project YAML."""
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        config_data = {"token_usage": {"verbosity": "summary"}}
-        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
-        cfg = load_config(tmp_path)
-        assert cfg.token_usage.verbosity == "summary"
-
     def test_partial_config_preserves_token_usage_default(self, tmp_path):
         """TU_C4: Unrelated YAML section leaves token_usage at default."""
         config_dir = tmp_path / ".autoskillit"
@@ -234,12 +225,6 @@ class TestTokenUsageConfig:
         config_data = {"test_check": {"timeout": 120}}
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)
-        assert cfg.token_usage.verbosity == "summary"
-
-    def test_automation_config_has_token_usage_field(self):
-        """TU_C5: AutomationConfig has token_usage sub-config."""
-        cfg = AutomationConfig()
-        assert hasattr(cfg, "token_usage")
         assert cfg.token_usage.verbosity == "summary"
 
 
@@ -262,12 +247,6 @@ class TestMigrationConfig:
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)
         assert cfg.migration.suppressed == ["script-a", "script-b"]
-
-    def test_automation_config_has_migration_field_with_defaults(self):
-        """MC3: AutomationConfig.migration exists with correct defaults."""
-        cfg = AutomationConfig()
-        assert hasattr(cfg, "migration")
-        assert cfg.migration.suppressed == []
 
 
 class TestEnsureProjectTempAbsent:

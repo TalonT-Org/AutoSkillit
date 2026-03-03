@@ -563,6 +563,7 @@ class TestRecipesCLI:
         _app_mod.recipes_list()
         captured = capsys.readouterr()
         assert captured.out.strip(), "Expected at least one recipe in output"
+        assert "implementation-pipeline" in captured.out
 
     def test_recipes_show_prints_content(self, capsys: pytest.CaptureFixture) -> None:
         """recipes show prints the YAML content of a known bundled recipe."""
@@ -575,6 +576,7 @@ class TestRecipesCLI:
         _app_mod.recipes_show("smoke-test")
         captured = capsys.readouterr()
         assert captured.out.strip(), "Expected YAML content in output"
+        assert "smoke-test" in captured.out
 
     def test_recipes_show_unknown_exits(self, capsys: pytest.CaptureFixture) -> None:
         """recipes show exits 1 for an unknown recipe name."""

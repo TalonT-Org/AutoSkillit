@@ -54,13 +54,10 @@ class TestServerToolSurfaceContract:
     """Server tool docstrings and prompts must name all forbidden tools."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
+    def _close_kitchen(self, tool_ctx, monkeypatch):
         from autoskillit.pipeline.gate import DefaultGateState
 
-        original_gate = tool_ctx.gate
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        yield
-        tool_ctx.gate = original_gate
+        monkeypatch.setattr(tool_ctx, "gate", DefaultGateState(enabled=False))
 
     def test_open_kitchen_prompt_names_all_forbidden_tools(self):
         """open_kitchen prompt text must name every forbidden tool with prohibition framing."""
@@ -371,3 +368,33 @@ class TestPathArgSkillsContract:
             f"These SKILL.md files lack path-detection instructions "
             f"(missing '{self.SENTINEL}'): {missing}"
         )
+
+
+def test_claude_md_documents_all_source_modules() -> None:
+    """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
+
+    For __init__.py files, the containing package directory name must appear.
+    For all other files, the filename must appear somewhere in CLAUDE.md.
+    """
+    claude_path = Path(__file__).parent.parent.parent / "CLAUDE.md"
+    content = claude_path.read_text()
+    src_root = Path(__file__).parent.parent.parent / "src" / "autoskillit"
+
+    missing = []
+    for py_file in sorted(src_root.rglob("*.py")):
+        if "__pycache__" in py_file.parts:
+            continue
+        rel = py_file.relative_to(src_root)
+        if py_file.name == "__init__.py":
+            # For sub-package inits, verify the package directory is documented
+            parent = rel.parent
+            if parent != Path(".") and (parent.name + "/") not in content:
+                missing.append(str(rel))
+        else:
+            if py_file.name not in content:
+                missing.append(str(rel))
+
+    assert not missing, (
+        f"Modules not documented in CLAUDE.md: {', '.join(missing)}. "
+        "Update the Architecture section in CLAUDE.md."
+    )

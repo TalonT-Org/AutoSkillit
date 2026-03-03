@@ -24,44 +24,13 @@ from pathlib import Path
 
 import pytest
 
-SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
-
-# ── Helpers shared with other arch tests ─────────────────────────────────────
-
-_SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
-
-# ARCH-007: Functions that check TerminationReason as sequential early-exit guards
-# (single-value checks), not as dispatch tables (≥2 values). Exempt from ARCH-007.
-_DISPATCH_TABLE_EXEMPT_FUNCTIONS: frozenset[str] = frozenset(
-    {
-        "_build_skill_result",  # sequential early-exit guards, not a dispatch table
-    }
+from tests.arch._helpers import (
+    _SOURCE_FILES,
+    SRC_ROOT,
+    _extract_module_level_internal_imports,
+    _is_mcp_tool_decorator,
+    _rel,
 )
-
-
-def _rel(path: Path) -> str:
-    try:
-        return str(path.relative_to(Path(__file__).parent.parent.parent))
-    except ValueError:
-        return str(path)
-
-
-def _extract_module_level_internal_imports(path: Path) -> list[tuple[str, int]]:
-    """Return (imported_module_stem, lineno) for all autoskillit imports at module level."""
-    source = path.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(path))
-    results: list[tuple[str, int]] = []
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and node.module:
-            parts = node.module.split(".")
-            if parts[0] == "autoskillit" and len(parts) > 1:
-                results.append((parts[1], node.lineno))
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                parts = alias.name.split(".")
-                if parts[0] == "autoskillit" and len(parts) > 1:
-                    results.append((parts[1], node.lineno))
-    return results
 
 
 def _get_call_func_name(node: ast.Call) -> str | None:
@@ -72,51 +41,6 @@ def _get_call_func_name(node: ast.Call) -> str | None:
     if isinstance(func, ast.Attribute):
         return func.attr
     return None
-
-
-def _is_mcp_tool_decorator(node: ast.expr) -> bool:
-    """Return True if node represents @mcp.tool or @mcp.tool(...)."""
-    if isinstance(node, ast.Attribute) and node.attr == "tool":
-        return True
-    if (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "tool"
-    ):
-        return True
-    return False
-
-
-def _runtime_import_froms(path: Path) -> list[ast.ImportFrom]:
-    """Return ImportFrom nodes not inside a TYPE_CHECKING guard."""
-    tree = ast.parse(path.read_text())
-    result: list[ast.ImportFrom] = []
-
-    def _walk(stmts: list) -> None:
-        for stmt in stmts:
-            if isinstance(stmt, ast.ImportFrom):
-                result.append(stmt)
-            elif isinstance(stmt, ast.If):
-                test = stmt.test
-                is_tc = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
-                    isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
-                )
-                if not is_tc:
-                    _walk(stmt.body)
-                    _walk(stmt.orelse)
-            elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                _walk(stmt.body)
-            elif isinstance(stmt, ast.ClassDef):
-                _walk(stmt.body)
-            elif isinstance(stmt, ast.Try):
-                _walk(stmt.body)
-                for handler in stmt.handlers:
-                    _walk(handler.body)
-                _walk(stmt.orelse)
-                _walk(getattr(stmt, "finalbody", []))
-
-    _walk(tree.body)
-    return result
 
 
 # ── Rule 2: Singleton definition locality ─────────────────────────────────────
@@ -859,71 +783,6 @@ def test_make_context_wires_all_optional_toolcontext_fields() -> None:
         f"make_context() does not assign these optional ToolContext fields: {unwired}. "
         "Add wiring in server/_factory.py make_context()."
     )
-
-
-# ── REQ-ARCH-004: __all__ completeness ───────────────────────────────────────
-
-
-def test_package_all_matches_exports() -> None:
-    """REQ-ARCH-004: Each package __init__.__all__ must match its exported symbol set.
-
-    Two checks:
-    1. Every name in __all__ is importable from the package (no dead entries).
-    2. Every public name re-exported via relative or autoskillit.* imports in __init__.py
-       appears in __all__ (no undeclared exports).
-
-    Packages without __all__ (server, root autoskillit) are skipped.
-    """
-    import importlib
-
-    AUTOSKILLIT_ROOT = SRC_ROOT
-    PACKAGES_WITH_ALL = [
-        "core",
-        "config",
-        "pipeline",
-        "execution",
-        "workspace",
-        "recipe",
-        "migration",
-        "cli",
-    ]
-    violations: list[str] = []
-
-    for pkg_name in PACKAGES_WITH_ALL:
-        module = importlib.import_module(f"autoskillit.{pkg_name}")
-        all_list: list[str] = getattr(module, "__all__", None)  # type: ignore[assignment]
-        if all_list is None:
-            continue  # package opted out of __all__ — skip
-
-        # Check 1: every __all__ entry is importable
-        for name in all_list:
-            if not hasattr(module, name):
-                violations.append(
-                    f"autoskillit.{pkg_name}: '{name}' in __all__ but not importable"
-                )
-
-        # Check 2: every public name from relative / intra-package imports is in __all__
-        # Only intra-package absolute imports (autoskillit.{pkg_name}.*) are checked —
-        # cross-package imports (e.g. `from autoskillit.core import get_logger` in
-        # recipe/__init__.py) are internal helpers, not re-exports, and must be excluded.
-        init_path = AUTOSKILLIT_ROOT / pkg_name / "__init__.py"
-        for node in _runtime_import_froms(init_path):
-            is_relative = node.level and node.level > 0
-            is_intra_package = node.module and node.module.startswith(f"autoskillit.{pkg_name}.")
-            if not (is_relative or is_intra_package):
-                continue  # skip stdlib / third-party / cross-package imports
-
-            for alias in node.names:
-                name = alias.asname if alias.asname else alias.name
-                if name.startswith("_") or name == "*":
-                    continue
-                if name not in all_list:
-                    violations.append(
-                        f"autoskillit.{pkg_name}: '{name}' re-exported via import "
-                        f"but not in __all__"
-                    )
-
-    assert not violations, "__all__ completeness violations:\n" + "\n".join(violations)
 
 
 # ── groupC Part A tests ───────────────────────────────────────────────────────

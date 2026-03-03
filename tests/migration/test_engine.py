@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import textwrap
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -60,20 +60,6 @@ def _make_migration_note(
             )
         ],
         path=Path("/fake/migration.yaml"),
-    )
-
-
-def _minimal_recipe_yaml(name: str = "test-recipe") -> str:
-    return (
-        f"name: {name}\n"
-        "kitchen_rules:\n"
-        "  - follow the rules\n"
-        "steps:\n"
-        "  - tool: run_skill\n"
-        "    with:\n"
-        "      skill_command: /autoskillit:investigate\n"
-        "    on_success: done\n"
-        "    on_failure: done\n"
     )
 
 
@@ -139,7 +125,7 @@ class TestRecipeMigrationAdapter:
         assert adapter.needs_migration(file) is False
 
     # ME5
-    def test_recipe_adapter_no_migration_when_no_version(
+    def test_recipe_adapter_needs_migration_when_no_version(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # current_version=None is treated as 0.0.0 by applicable_migrations;
@@ -223,6 +209,9 @@ class TestRecipeMigrationAdapter:
 
         assert is_valid is False
         assert len(error) > 0
+        assert (
+            "dict" in error.lower() or "expected" in error.lower() or "attribute" in error.lower()
+        )
 
     # ME9b
     def test_recipe_adapter_validate_errors_non_empty_branch(self, tmp_path: Path) -> None:
@@ -244,6 +233,7 @@ class TestRecipeMigrationAdapter:
 
         assert is_valid is False
         assert len(error) > 0
+        assert "kitchen_rules" in error.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -275,64 +265,50 @@ class TestContractMigrationAdapter:
         assert files == []
 
     # ME12
-    def test_contract_adapter_needs_migration_calls_staleness_check(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        contracts_dir = tmp_path / ".autoskillit" / "recipes" / "contracts"
+    def test_contract_adapter_needs_migration_stale_contract_on_disk(self, tmp_path: Path) -> None:
+        """ME12: needs_migration returns True for an on-disk contract with empty skill_hashes."""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        contracts_dir = recipes_dir / "contracts"
         contracts_dir.mkdir(parents=True)
+        # A contract with empty skill_hashes is stale because bundled skills have real hashes.
         contract_path = contracts_dir / "test.yaml"
-        contract_path.write_text("skill_hashes: {}")
-
-        mock_contract = {"skill_hashes": {}}
-        stale_item = Mock()
-        monkeypatch.setattr(
-            "autoskillit.recipe.load_recipe_card",
-            lambda *a, **kw: mock_contract,
-        )
-        monkeypatch.setattr(
-            "autoskillit.recipe.check_contract_staleness",
-            lambda *a, **kw: [stale_item],
-        )
+        contract_path.write_text("skill_hashes: {}\nbundled_manifest_version: '0.0.1'\n")
 
         file = MigrationFile(
             name="test", path=contract_path, file_type="contract", current_version=None
         )
         adapter = ContractMigrationAdapter()
+        # Should be True: stale contract or load_recipe_card returns None → needs migration
         assert adapter.needs_migration(file) is True
 
     # ME13
     @pytest.mark.anyio
-    async def test_contract_adapter_migrate_regenerates_card(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        recipe_path = recipes_dir / "test.yaml"
-        recipe_path.write_text("name: test\n")
-        contracts_dir = recipes_dir / "contracts"
-        contracts_dir.mkdir()
-        contract_path = contracts_dir / "test.yaml"
-        contract_path.write_text("skill_hashes: {}")
+    async def test_contract_adapter_migrate_regenerates_card_on_disk(self, tmp_path: Path) -> None:
+        """ME13: migrate() runs generate_recipe_card and writes a contract file to disk."""
+        import shutil
 
-        monkeypatch.setattr(
-            "autoskillit.recipe.generate_recipe_card",
-            lambda *a, **kw: {
-                "generated_at": "2026-01-01T00:00:00+00:00",
-                "bundled_manifest_version": "0.1.0",
-                "skill_hashes": {},
-                "skills": {},
-                "dataflow": [],
-            },
-        )
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        contracts_dir = recipes_dir / "contracts"
+        contracts_dir.mkdir(parents=True)
+
+        # Copy a real bundled recipe so generate_recipe_card has valid input
+        src_recipe = pkg_root() / "recipes" / "smoke-test.yaml"
+        shutil.copy2(src_recipe, recipes_dir / "smoke-test.yaml")
+
+        contract_path = contracts_dir / "smoke-test.yaml"
+        contract_path.write_text("skill_hashes: {}\n")  # stale placeholder
 
         file = MigrationFile(
-            name="test", path=contract_path, file_type="contract", current_version=None
+            name="smoke-test", path=contract_path, file_type="contract", current_version=None
         )
         adapter = ContractMigrationAdapter()
         result = await adapter.migrate(file, temp_dir=tmp_path / "temp")
 
         assert result.success is True
-        assert result.name == "test"
+        assert result.name == "smoke-test"
+        # generate_recipe_card writes a real contract file; verify it exists and is non-trivial
+        written = contract_path.read_text()
+        assert "skill_hashes" in written
 
     # ME14
     @pytest.mark.anyio

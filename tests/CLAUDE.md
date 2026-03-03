@@ -18,7 +18,7 @@ All tests run under `-n 4 --dist worksteal`. Every test must be safe for paralle
   tool handler calls use the test context without global state leakage.
 - To test with the kitchen closed, set `tool_ctx.gate = DefaultGateState(enabled=False)` at
   the start of the test or in a class-level autouse fixture (see `_close_kitchen` in
-  `test_instruction_surface_contract.py` for an example).
+  `test_instruction_surface.py` for an example).
 - Never use bare assignment or `try/finally` to restore server state — use `monkeypatch` or
   rely on `tool_ctx`'s fixture teardown.
 
@@ -31,7 +31,7 @@ All tests run under `-n 4 --dist worksteal`. Every test must be safe for paralle
 - `TMPDIR` is set to the platform path via Taskfile — all `tempfile` calls are routed there
 - `--basetemp` is passed to pytest — `tmp_path` fixtures resolve to the platform path
 - `cache_dir` is redirected to the platform cache path — no stray pytest cache writes
-- `test_tmp_path_is_ram_backed` in `test_architecture.py` enforces the `/dev/shm` prefix
+- `test_tmp_path_is_ram_backed` in `tests/arch/test_ast_rules.py` enforces the `/dev/shm` prefix
   on Linux; on macOS it is a no-op (disk temp is acceptable there)
 
 ```
@@ -40,10 +40,11 @@ tests/
 ├── __init__.py
 ├── conftest.py                          # Shared fixtures: MockSubprocessRunner, _make_result, _make_timeout_result
 ├── test_conftest.py                     # Tests for conftest fixtures
-├── test_llm_triage.py                   # LLM triage tests
-├── test_smoke_utils.py                  # Smoke utility tests
+├── test_version.py                      # Version health tests
 ├── arch/                                # AST enforcement + sub-package layer contracts
 │   ├── __init__.py
+│   ├── _helpers.py                      # Shared AST visitor infrastructure
+│   ├── test_anyio_migration.py          # Anyio migration guards
 │   ├── test_ast_rules.py
 │   ├── test_import_paths.py
 │   ├── test_layer_enforcement.py
@@ -51,10 +52,11 @@ tests/
 │   └── test_subpackage_isolation.py
 ├── cli/                                 # CLI command tests
 │   ├── __init__.py
-│   ├── test_cli_cook.py
-│   ├── test_cli_doctor.py
-│   ├── test_cli_init.py
-│   └── test_cli_install.py
+│   ├── test_cli_serve_logging.py
+│   ├── test_cook.py
+│   ├── test_doctor.py
+│   ├── test_init.py
+│   └── test_install.py
 ├── config/                              # Config loading tests
 │   ├── __init__.py
 │   └── test_config.py
@@ -70,28 +72,38 @@ tests/
 │   ├── test_core.py
 │   ├── test_io.py
 │   ├── test_logging.py
-│   ├── test_types.py
-│   └── test_version.py
+│   ├── test_paths.py
+│   └── test_types.py
 ├── execution/                           # Subprocess integration + session tests
 │   ├── __init__.py
 │   ├── test_commands.py
 │   ├── test_db.py
 │   ├── test_github.py
 │   ├── test_headless.py
+│   ├── test_headless_debug_logging.py
 │   ├── test_linux_tracing.py
+│   ├── test_llm_triage.py
 │   ├── test_process_channel_b.py
+│   ├── test_process_debug_logging.py
 │   ├── test_process_jsonl.py
 │   ├── test_process_kill.py
+│   ├── test_process_monitor.py
 │   ├── test_process_pty.py
 │   ├── test_process_run.py
 │   ├── test_quota.py
 │   ├── test_session.py
+│   ├── test_session_adjudication.py
+│   ├── test_session_debug_logging.py
 │   └── test_testing.py
 ├── infra/                               # CI/CD and security configuration tests
 │   ├── __init__.py
+│   ├── test_anyio_infra.py
 │   ├── test_ci_dev_config.py
+│   ├── test_quota_check.py
 │   ├── test_remove_clone_guard.py
 │   ├── test_security_config.py
+│   ├── test_skill_cmd_check.py
+│   ├── test_skill_command_guard.py
 │   └── test_taskfile.py
 ├── migration/                           # Migration engine and store tests
 │   ├── __init__.py
@@ -106,13 +118,18 @@ tests/
 │   └── test_tokens.py
 ├── recipe/                              # Recipe I/O, validation, schema tests
 │   ├── __init__.py
+│   ├── test_bundled_recipes.py
 │   ├── test_contracts.py
 │   ├── test_io.py
 │   ├── test_loader.py
-│   ├── test_recipe_structures.py
+│   ├── test_rules_bypass.py
+│   ├── test_rules_dataflow.py
+│   ├── test_rules_structure.py
+│   ├── test_rules_worktree.py
 │   ├── test_schema.py
-│   ├── test_semantic_rules.py
 │   ├── test_smoke_pipeline.py
+│   ├── test_smoke_utils.py
+│   ├── test_staleness_cache.py
 │   └── test_validator.py
 ├── server/                              # Server unit tests (tool handlers)
 │   ├── __init__.py
@@ -120,12 +137,14 @@ tests/
 │   ├── test_factory.py
 │   ├── test_git.py
 │   ├── test_server_init.py
-│   ├── test_service_wrappers.py         # REQ-ARCH-006/007: DefaultRecipeRepository and DefaultMigrationService
+│   ├── test_service_wrappers.py
 │   ├── test_tools_clone.py
 │   ├── test_tools_execution.py
 │   ├── test_tools_git.py
 │   ├── test_tools_integrations.py
 │   ├── test_tools_recipe.py
+│   ├── test_tools_run_cmd.py
+│   ├── test_tools_run_skill_retry.py
 │   ├── test_tools_status.py
 │   └── test_tools_workspace.py
 └── workspace/                           # Workspace and clone tests

@@ -56,7 +56,6 @@ def test_check_quota_not_in_ungated_tools():
     from autoskillit.pipeline.gate import UNGATED_TOOLS
 
     assert "check_quota" not in UNGATED_TOOLS
-    assert len(UNGATED_TOOLS) == 7
 
 
 def test_ungated_tools_contains_expected_names():
@@ -74,18 +73,15 @@ def test_ungated_tools_contains_expected_names():
     assert UNGATED_TOOLS == expected
 
 
-def test_gate_state_default_disabled():
+def test_gate_state_enable_disable_transitions():
     from autoskillit.pipeline.gate import DefaultGateState
 
     gs = DefaultGateState()
     assert gs.enabled is False
-
-
-def test_gate_state_can_be_enabled():
-    from autoskillit.pipeline.gate import DefaultGateState
-
-    gs = DefaultGateState(enabled=True)
+    gs.enable()
     assert gs.enabled is True
+    gs.disable()
+    assert gs.enabled is False
 
 
 def test_gate_error_result_fields():
@@ -120,16 +116,6 @@ def test_gate_error_result_accepts_custom_message():
     assert parsed["is_error"] is True
     assert parsed["exit_code"] == -1
     assert parsed["needs_retry"] is False
-
-
-def test_gate_error_result_no_arg_preserves_default_message():
-    import json
-
-    from autoskillit.pipeline.gate import gate_error_result
-
-    # Existing no-arg call still works and keeps the original message
-    parsed = json.loads(gate_error_result())
-    assert "open_kitchen" in parsed["result"]
 
 
 def test_helpers_has_no_gate_error_result_duplicate():

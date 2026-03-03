@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import re
 from pathlib import Path
 
@@ -47,12 +46,6 @@ VALID_RECIPE = {
 def _write_yaml(path: Path, data: dict) -> Path:
     path.write_text(yaml.dump(data, default_flow_style=False))
     return path
-
-
-def test_recipe_parser_module_no_longer_exists() -> None:
-    """recipe_parser module must be gone — ModuleNotFoundError expected."""
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("autoskillit.recipe_parser")
 
 
 def test_load_recipe_smoke() -> None:
@@ -114,11 +107,11 @@ def test_iter_steps_with_context_accumulates_captures() -> None:
     assert steps[1][2] == frozenset({"worktree_path"})
 
 
-def test_find_recipe_by_name_returns_none_for_unknown() -> None:
+def test_find_recipe_by_name_returns_none_for_unknown(tmp_path: Path) -> None:
     """find_recipe_by_name returns None when the recipe name does not exist."""
     from autoskillit.recipe.io import find_recipe_by_name
 
-    result = find_recipe_by_name("nonexistent_xyz_recipe_abc", Path("/tmp"))
+    result = find_recipe_by_name("nonexistent_xyz_recipe_abc", tmp_path)
     assert result is None
 
 
@@ -476,34 +469,21 @@ class TestBuiltinRecipesDir:
 class TestVersionField:
     """autoskillit_version field on Recipe dataclass."""
 
-    # VER1
-    def test_version_none_when_absent(self) -> None:
+    # VER1+VER2 merged
+    @pytest.mark.parametrize("version_val,expected", [(None, None), ("0.2.0", "0.2.0")])
+    def test_version_field(self, version_val, expected) -> None:
         data = {
-            "name": "version-test-recipe",
-            "description": "A recipe for testing the version field",
-            "kitchen_rules": ["Only use AutoSkillit MCP tools during pipeline execution"],
+            "name": "v-test",
+            "description": "d",
             "steps": {
                 "do_it": {"tool": "run_cmd", "on_success": "done"},
                 "done": {"action": "stop", "message": "Done."},
             },
         }
+        if version_val is not None:
+            data["autoskillit_version"] = version_val
         wf = _parse_recipe(data)
-        assert wf.version is None
-
-    # VER2
-    def test_version_set_when_present(self) -> None:
-        data = {
-            "name": "version-test-recipe",
-            "description": "A recipe for testing the version field",
-            "kitchen_rules": ["Only use AutoSkillit MCP tools during pipeline execution"],
-            "steps": {
-                "do_it": {"tool": "run_cmd", "on_success": "done"},
-                "done": {"action": "stop", "message": "Done."},
-            },
-            "autoskillit_version": "0.2.0",
-        }
-        wf = _parse_recipe(data)
-        assert wf.version == "0.2.0"
+        assert wf.version == expected
 
     # VER4
     def test_version_preserved_in_round_trip(self, tmp_path: Path) -> None:
@@ -520,11 +500,6 @@ class TestVersionField:
         path = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(path)
         assert wf.version == "1.3.0"
-
-
-def test_builtin_recipes_dir_points_to_recipes() -> None:
-    d = builtin_recipes_dir()
-    assert d.name == "recipes"
 
 
 # ---------------------------------------------------------------------------

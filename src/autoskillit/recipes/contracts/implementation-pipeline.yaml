@@ -1,14 +1,6 @@
-generated_at: '2026-03-02T00:02:11.259493+00:00'
+generated_at: '2026-03-03T23:35:18.371293+00:00'
 bundled_manifest_version: 0.1.0
-skill_hashes:
-  make-groups: sha256:f92caf72b4fbe044b3af7ad9f5a51fd07563f7faec2d6362750b9aeecb9ab94e
-  make-plan: sha256:4d33f1e86f9ffb91d29924a65b968d056887c271a73249f4472b874126291e0c
-  review-approach: sha256:44f8aaf2fdb9ad79c65150e470695573535bde5eb56a43d771ab9cfb1203f46c
-  dry-walkthrough: sha256:a479c92bcf9afe200fb84fdbe8cd46b7b376e63d9e3b134a1caab2fe5611e095
-  implement-worktree-no-merge: sha256:86515d79175468eb205e964d033ad48598812e7997014f7c0e6b52d80a7c002d
-  retry-worktree: sha256:c66703245d49df7f94a71456a4f76da62c3527652f03bec62b71cc344d5028b9
-  resolve-failures: sha256:81ee708f6c8f1e75edb27a5f68dde6d1eac7db229fd5e18690f4c74185de8b45
-  audit-impl: sha256:d8fca36db95f0de3ca32c1d1201d6b913f0dbcd541dfa12c7f868f04c8f4c411
+skill_hashes: {}
 skills:
   make-groups:
     inputs:
@@ -164,6 +156,23 @@ dataflow:
   required: []
   produced:
   - merge_target
+- step: push_merge_target
+  available:
+  - audit
+  - base_branch
+  - base_sha
+  - make_groups
+  - merge_target
+  - open_pr
+  - remote_url
+  - review_approach
+  - run_name
+  - source_dir
+  - source_doc
+  - task
+  - work_dir
+  required: []
+  produced: []
 - step: group
   available:
   - audit
@@ -416,7 +425,6 @@ dataflow:
   - worktree_path
   required: []
   produced:
-  - verdict
   - remediation_path
 - step: remediate
   available:
@@ -437,7 +445,6 @@ dataflow:
   - source_dir
   - source_doc
   - task
-  - verdict
   - work_dir
   - worktree_path
   required: []
@@ -461,7 +468,6 @@ dataflow:
   - source_dir
   - source_doc
   - task
-  - verdict
   - work_dir
   - worktree_path
   required: []
@@ -485,7 +491,6 @@ dataflow:
   - source_dir
   - source_doc
   - task
-  - verdict
   - work_dir
   - worktree_path
   required: []
@@ -509,7 +514,6 @@ dataflow:
   - source_dir
   - source_doc
   - task
-  - verdict
   - work_dir
   - worktree_path
   required: []
@@ -533,7 +537,6 @@ dataflow:
   - source_dir
   - source_doc
   - task
-  - verdict
   - work_dir
   - worktree_path
   required: []
@@ -557,7 +560,6 @@ dataflow:
   - source_dir
   - source_doc
   - task
-  - verdict
   - work_dir
   - worktree_path
   required: []

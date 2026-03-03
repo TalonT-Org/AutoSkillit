@@ -32,8 +32,8 @@ ingredients:
     description: Run /autoskillit:audit-impl once after all groups/parts have been merged, to check overall implementation quality and optionally trigger a remediation round (true/false)
     default: "true"
   open_pr:
-    description: Create a feature branch and open a GitHub PR instead of merging directly into base_branch. When true, worktrees are merged into a branch named from run_name, then /autoskillit:open-pr is invoked to create the PR. (true/false)
-    default: "false"
+    description: Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false)
+    default: "true"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -43,7 +43,7 @@ kitchen_rules:
   - "When make_groups is false, task input is required."
   - "When make_groups is true, source_doc input is required."
   - "Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront."
-  - "When open_pr is true, feature branch is named from inputs.run_name. All worktree merges target the feature branch (context.merge_target), not base_branch directly. The push step always runs before open_pr_step; open_pr_step is skipped when open_pr=false."
+  - "By default (open_pr=true), a feature branch named from inputs.run_name is created. All worktree merges target the feature branch (context.merge_target), not base_branch directly. The push step publishes the feature branch, then open_pr_step opens a PR to base_branch. When open_pr=false, merges target base_branch directly and open_pr_step is skipped."
   - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
     off-limits. Never run any command in source_dir — no git checkout, git
     fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
@@ -93,10 +93,10 @@ steps:
     on_success: create_branch
     on_failure: escalate_stop
     note: >
-      Unconditionally sets merge_target to inputs.base_branch as the default.
-      When open_pr=true, the subsequent create_branch step overrides merge_target
-      by capturing the newly-created feature branch name. When open_pr=false,
-      create_branch is skipped and this default stands. This eliminates the
+      Unconditionally sets merge_target to inputs.base_branch as a fallback.
+      In the standard flow (open_pr=true), the subsequent create_branch step
+      overrides merge_target with the feature branch name. When open_pr=false,
+      create_branch is skipped and this fallback stands. This eliminates the
       undefined-context-variable gap that existed when create_branch was optional.
 
   create_branch:
@@ -111,13 +111,12 @@ steps:
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Only execute if open_pr is 'true'.
-      When open_pr='true': runs git checkout -b {run_name} and captures stdout (the branch name)
-      as context.merge_target, overriding the default set by set_merge_target.
+      Runs by default (open_pr=true). Skipped when open_pr=false.
+      Creates the feature branch (git checkout -b {run_name}) and captures the branch name
+      as context.merge_target, overriding the fallback set by set_merge_target.
       All subsequent merge/push steps target this feature branch.
-      When open_pr='false': skip this step; context.merge_target retains the value set by
-      set_merge_target (inputs.base_branch), so merge_worktree and push_to_remote continue
-      to target base_branch directly.
+      When open_pr='false': this step is skipped; context.merge_target retains base_branch,
+      so merge_worktree and push_to_remote target base_branch directly.
 
   push_merge_target:
     tool: push_to_remote
@@ -130,7 +129,7 @@ steps:
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Only execute if open_pr is 'true'.
+      Runs by default (open_pr=true). Skipped when open_pr=false.
       Publishes the feature branch to origin before any merge_worktree call.
       merge_worktree requires refs/remotes/origin/{branch} to exist after fetch (step 5.5).
       Without this step, merge_worktree fails with WORKTREE_INTACT_BASE_NOT_PUBLISHED.
@@ -258,8 +257,8 @@ steps:
       GROUPS MODE: When all plan_parts for the current group are merged, advance to the
       next group (back to plan step with the next group's description). When all groups
       are complete, go to audit_impl (via next_or_done).
-      In PR mode (open_pr=true), merge_target is the feature branch named from run_name.
-      In direct mode (open_pr=false), merge_target equals base_branch — behavior unchanged.
+      By default (open_pr=true), merge_target is the feature branch named from run_name.
+      When open_pr=false, merge_target equals base_branch — merges go directly to base.
       test_gate failures route to fix (resolve-failures) for recovery;
       all other failures route to cleanup_failure.
 
@@ -274,9 +273,9 @@ steps:
     note: >
       Runs once at the end, after audit_impl passes.
       Pushes merge_target branch from the clone to the upstream remote.
-      In PR mode, this pushes the feature branch; in direct mode, pushes base_branch.
+      By default (open_pr=true), this pushes the feature branch; when open_pr=false, pushes base_branch.
       Uses the pre-resolved remote_url captured at clone time, preserving clone isolation.
-      On success, routes to open_pr_step (which is skipped when open_pr=false via skip_when_false).
+      On success, routes to open_pr_step (which opens the PR by default; skipped when open_pr=false).
       On failure, cleanup_failure still removes the clone.
 
   fix:
@@ -348,7 +347,7 @@ steps:
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Only execute if open_pr is 'true'. If open_pr is 'false', skip directly to cleanup_success.
+      Runs by default (open_pr=true). Skipped when open_pr=false.
       The feature branch is already published by the push step that precedes this step.
       Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
       and runs gh pr create. Captures pr_url from the skill's output for final reporting.

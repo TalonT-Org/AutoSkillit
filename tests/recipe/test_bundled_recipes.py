@@ -32,12 +32,20 @@ class TestImplementationPipelineStructure:
         self,
         recipe,
     ) -> None:
-        """T_IP3: audit_impl captures verdict+remediation_path and routes via on_result."""
+        """T_IP3: audit_impl captures remediation_path and routes via on_result using verdict.
+
+        Uses predicate format (v0.3.0): verdict is read directly from result.verdict in predicate
+        conditions — it is not captured as context.verdict (which would create a dead output).
+        """
         step = recipe.steps["audit_impl"]
-        assert "verdict" in step.capture
         assert "remediation_path" in step.capture
         assert step.on_result is not None
-        assert step.on_result.field == "verdict"
+        # Predicate format: conditions list (not legacy field+routes dict)
+        conds = step.on_result.conditions
+        assert len(conds) > 0, "audit_impl on_result must have predicate conditions"
+        assert any("result.verdict" in (c.when or "") for c in conds), (
+            "audit_impl on_result must have a condition checking result.verdict"
+        )
 
     def test_ip4_verify_step_references_context_review_path(self, recipe) -> None:
         """T_IP4: verify step with_args contains a reference to context.review_path."""
@@ -45,16 +53,22 @@ class TestImplementationPipelineStructure:
         assert any("context.review_path" in str(v) for v in verify_with.values())
 
     def test_ip5_audit_impl_has_on_failure(self, recipe) -> None:
-        """T_IP5: audit_impl must declare on_failure for tool-failure routing.
-        The old assertion (on_failure is None) was wrong: on_result only fires
-        when run_skill succeeds and returns a verdict. Tool-level failures
-        require on_failure as a separate escape hatch.
+        """T_IP5: audit_impl uses predicate on_result exclusively for all routing.
+
+        In predicate format (v0.3.0), on_result handles all routing paths including
+        tool-level failures via the 'when: result.error' condition. on_failure must
+        be absent (mutually exclusive with predicate on_result per schema validator).
         """
         step = recipe.steps["audit_impl"]
         assert step.on_success is None  # on_result is used; on_success remains absent
-        assert step.on_failure is not None, (
-            "audit_impl must declare on_failure. "
-            "on_result routing does not handle run_skill tool failures."
+        assert step.on_failure is None, (
+            "audit_impl must NOT declare on_failure in predicate format. "
+            "Predicate conditions handle all routing including failures via 'when: result.error'."
+        )
+        conds = step.on_result.conditions if step.on_result else []
+        assert any("result.error" in (c.when or "") for c in conds), (
+            "audit_impl predicate on_result must include a 'when: result.error' condition "
+            "to handle tool-level run_skill failures."
         )
 
     def test_ip6_plan_step_note_contains_glob_pattern(self, recipe) -> None:
@@ -74,18 +88,29 @@ class TestImplementationPipelineStructure:
         )
 
     def test_ip8_next_or_done_routes_more_parts_to_verify(self, recipe) -> None:
-        """T_IP8: next_or_done routes more_parts back to verify for sequential processing."""
+        """T_IP8: next_or_done routes more_parts back to verify for sequential processing.
+
+        Uses predicate format (v0.3.0): when-condition checks result.next == more_parts.
+        """
         step = recipe.steps["next_or_done"]
         assert step.on_result is not None
-        assert step.on_result.routes.get("more_parts") == "verify", (
-            "next_or_done must route more_parts back to verify for sequential part processing"
-        )
+        conds = step.on_result.conditions
+        assert any(
+            c.route == "verify" and c.when is not None and "more_parts" in c.when for c in conds
+        ), "next_or_done must have a predicate routing more_parts → verify"
 
     def test_ip9_next_or_done_routes_all_done_to_audit_impl(self, recipe) -> None:
-        """T_IP9: next_or_done must route all_done to audit_impl."""
+        """T_IP9: next_or_done must route all_done to audit_impl.
+
+        Uses predicate format (v0.3.0): fallthrough condition (when=None) routes to audit_impl.
+        """
         step = recipe.steps["next_or_done"]
         assert step.on_result is not None
-        assert step.on_result.routes.get("all_done") == "audit_impl"
+        conds = step.on_result.conditions
+        # The fallthrough condition (when=None) is the default route to audit_impl
+        assert any(c.route == "audit_impl" for c in conds), (
+            "next_or_done must have a condition routing to audit_impl"
+        )
 
     def test_ip_audit_impl_uses_base_sha_as_ref(self, recipe) -> None:
         """T_IP_B2: audit_impl must use context.base_sha (not context.branch_name).
@@ -290,12 +315,19 @@ class TestBugfixLoopStructure:
         self,
         recipe,
     ) -> None:
-        """T_BL1: audit_impl captures verdict+remediation_path and routes via on_result."""
+        """T_BL1: audit_impl captures remediation_path and routes via on_result using verdict.
+
+        Uses predicate format (v0.3.0): verdict is read directly from result.verdict in predicate
+        conditions — not captured as context.verdict (which would create a dead output).
+        """
         step = recipe.steps["audit_impl"]
-        assert "verdict" in step.capture
         assert "remediation_path" in step.capture
         assert step.on_result is not None
-        assert step.on_result.field == "verdict"
+        conds = step.on_result.conditions
+        assert len(conds) > 0, "audit_impl on_result must have predicate conditions"
+        assert any("result.verdict" in (c.when or "") for c in conds), (
+            "audit_impl on_result must have a condition checking result.verdict"
+        )
 
     def test_bl2_remediate_step_exists_with_on_success_plan(self, recipe) -> None:
         """T_BL2: a step named remediate exists with on_success == 'plan'."""
@@ -342,12 +374,19 @@ class TestInvestigateFirstStructure:
         self,
         recipe,
     ) -> None:
-        """T_IF1: audit_impl captures verdict+remediation_path and routes via on_result."""
+        """T_IF1: audit_impl captures remediation_path and routes via on_result using verdict.
+
+        Uses predicate format (v0.3.0): verdict is read directly from result.verdict in predicate
+        conditions — it is not captured as context.verdict (which would create a dead output).
+        """
         step = recipe.steps["audit_impl"]
-        assert "verdict" in step.capture
         assert "remediation_path" in step.capture
         assert step.on_result is not None
-        assert step.on_result.field == "verdict"
+        conds = step.on_result.conditions
+        assert len(conds) > 0, "audit_impl on_result must have predicate conditions"
+        assert any("result.verdict" in (c.when or "") for c in conds), (
+            "audit_impl on_result must have a condition checking result.verdict"
+        )
 
     def test_if2_remediate_step_routes_to_make_plan(self, recipe) -> None:
         """T_IF2: remediate step exists and routes to make_plan (not rectify)."""
@@ -509,11 +548,19 @@ class TestSmokeTestStructure:
 
     # T_ST4
     def test_check_summary_on_result_routes(self, smoke_yaml: dict) -> None:
-        """check_summary step has on_result with field non_empty and routes true/false."""
+        """check_summary step has on_result with predicate conditions for non_empty.
+
+        v0.3.0 predicate format: on_result is a list of {when, route} dicts.
+        """
         on_result = smoke_yaml["steps"]["check_summary"]["on_result"]
-        assert on_result["field"] == "non_empty"
-        assert "true" in on_result["routes"]
-        assert "false" in on_result["routes"]
+        assert isinstance(on_result, list), "on_result must be a predicate conditions list"
+        routes = {c.get("route") for c in on_result}
+        whens = [c.get("when", "") or "" for c in on_result]
+        assert any("non_empty" in w for w in whens), (
+            "check_summary on_result must check result.non_empty"
+        )
+        assert "create_summary" in routes, "check_summary must route to create_summary"
+        assert "done" in routes, "check_summary must have a fallthrough route to done"
 
     # T_ST5
     def test_merge_references_context_feature_branch(self, smoke_yaml: dict) -> None:

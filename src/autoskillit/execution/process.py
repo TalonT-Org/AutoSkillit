@@ -327,6 +327,15 @@ async def _session_log_monitor(
             ]
             if candidates:
                 session_file = max(candidates, key=lambda f: f.stat().st_ctime)
+                _chosen_ctime = session_file.stat().st_ctime
+                logger.debug(
+                    "session_log_phase1_discovered",
+                    candidate_count=len(candidates),
+                    chosen_file=str(session_file),
+                    ctime=_chosen_ctime,
+                    spawn_time=spawn_time,
+                    ctime_delta=_chosen_ctime - spawn_time,
+                )
             os_error_count = 0
         except OSError:
             os_error_count += 1
@@ -365,6 +374,12 @@ async def _session_log_monitor(
                 new_content = content[scan_pos:]
                 scan_pos = len(content)
                 if _jsonl_contains_marker(new_content, completion_marker, record_types):
+                    logger.debug(
+                        "session_log_phase2_marker_found",
+                        file=str(session_file),
+                        file_size=current_size,
+                        scan_pos=scan_pos,
+                    )
                     return "completion"
             except OSError:
                 pass
@@ -508,6 +523,7 @@ async def _watch_process(
 ) -> None:
     """Wait for the subprocess to exit and deposit the process-exit signal."""
     await proc.wait()
+    logger.debug("process_exited", pid=proc.pid, returncode=proc.returncode)
     acc.process_exited = True
     acc.process_returncode = proc.returncode
     trigger.set()
@@ -524,6 +540,11 @@ async def _watch_heartbeat(
     """Poll stdout NDJSON for a result record and deposit the Channel A signal."""
     await _heartbeat(
         stdout_path, heartbeat_marker, heartbeat_record_types, _poll_interval=_poll_interval
+    )
+    logger.debug(
+        "channel_a_confirmed",
+        stdout_path=str(stdout_path),
+        record_types=list(heartbeat_record_types),
     )
     acc.channel_a_confirmed = True
     trigger.set()
@@ -566,6 +587,8 @@ async def _watch_session_log(
         # move_on_after absorbs timeout; trigger may already be set if A fired.
         with anyio.move_on_after(completion_drain_timeout):
             await trigger.wait()
+        logger.debug("channel_b_drain_complete", trigger_was_set=trigger.is_set())
+    logger.debug("channel_b_result", status=result, drain_window=result == "completion")
     # These writes execute atomically before any cancellation delivery:
     # there is no await between them and the function return.
     acc.channel_b_status = result
@@ -605,6 +628,15 @@ def resolve_termination(
     else:
         termination = TerminationReason.NATURAL_EXIT  # fallback
 
+    logger.debug(
+        "resolve_termination",
+        process_exited=signals.process_exited,
+        process_returncode=signals.process_returncode,
+        channel_a_confirmed=signals.channel_a_confirmed,
+        channel_b_status=signals.channel_b_status,
+        resolved_termination=str(termination),
+        resolved_channel=str(channel),
+    )
     return termination, channel
 
 
@@ -690,6 +722,18 @@ async def run_managed_async(
             termination = TerminationReason.NATURAL_EXIT
             _channel_confirmation = ChannelConfirmation.UNMONITORED
 
+            proc_log = logger.bind(pid=proc.pid)
+            proc_log.debug(
+                "run_managed_async_entry",
+                cmd_summary=cmd[0] if cmd else "<empty>",
+                cwd=str(cwd),
+                timeout=timeout,
+                stale_threshold=stale_threshold,
+                session_log_dir=str(session_log_dir) if session_log_dir else None,
+                heartbeat_enabled=bool(heartbeat_marker),
+                session_monitor_enabled=session_log_dir is not None,
+            )
+
             acc = RaceAccumulator()
             trigger = anyio.Event()
             channel_b_ready = anyio.Event()
@@ -734,8 +778,18 @@ async def run_managed_async(
                     and acc.channel_b_status is None
                     and session_log_dir is not None
                 ):
+                    proc_log.debug(
+                        "symmetric_drain_started",
+                        reason="process_exited_before_channel_b",
+                        drain_timeout=completion_drain_timeout,
+                    )
                     with anyio.move_on_after(completion_drain_timeout):
                         await channel_b_ready.wait()
+                    proc_log.debug(
+                        "symmetric_drain_complete",
+                        channel_b_status=acc.channel_b_status,
+                        channel_b_deposited=acc.channel_b_status is not None,
+                    )
                 tg.cancel_scope.cancel()
 
             signals = acc.to_race_signals()
@@ -743,14 +797,26 @@ async def run_managed_async(
 
             if timeout_scope.cancelled_caught:
                 termination = TerminationReason.TIMED_OUT
+                proc_log.debug("kill_decision", reason="timeout", timeout=timeout)
                 logger.warning("Process %d timed out after %ss, killing tree", proc.pid, timeout)
                 await async_kill_process_tree(proc.pid)
             elif signals.process_exited:
-                pass  # process already exited — no kill needed
+                proc_log.debug(
+                    "kill_decision",
+                    reason="natural_exit",
+                    returncode=signals.process_returncode,
+                )
             elif termination == TerminationReason.STALE:
+                proc_log.debug("kill_decision", reason="stale", stale_threshold=stale_threshold)
                 logger.warning("Session stale for %ss, killing tree", stale_threshold)
                 await async_kill_process_tree(proc.pid)
             else:
+                proc_log.debug(
+                    "kill_decision",
+                    reason="channel_won",
+                    channel_a=signals.channel_a_confirmed,
+                    channel_b=signals.channel_b_status,
+                )
                 # Channel A or B won; process still alive — kill immediately.
                 await async_kill_process_tree(proc.pid)
 
@@ -760,7 +826,7 @@ async def run_managed_async(
 
             stdout, stderr = read_temp_output(stdout_path, stderr_path)
 
-            return SubprocessResult(
+            sub_result = SubprocessResult(
                 returncode=proc.returncode if proc.returncode is not None else -1,
                 stdout=stdout,
                 stderr=stderr,
@@ -768,6 +834,15 @@ async def run_managed_async(
                 pid=proc.pid,
                 channel_confirmation=_channel_confirmation,
             )
+            proc_log.debug(
+                "run_managed_async_result",
+                returncode=sub_result.returncode,
+                termination=str(sub_result.termination),
+                channel=str(sub_result.channel_confirmation),
+                stdout_len=len(sub_result.stdout),
+                stderr_len=len(sub_result.stderr),
+            )
+            return sub_result
         except BaseException:
             # Ensure cleanup on unexpected errors (including CancelledError)
             if "proc" in locals() and proc.returncode is None:

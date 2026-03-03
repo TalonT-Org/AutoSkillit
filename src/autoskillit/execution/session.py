@@ -290,18 +290,28 @@ def _check_session_content(
 ) -> bool:
     """Validate session content fields after termination-specific gates pass."""
     if session.is_error:
+        logger.debug("content_check_failed", reason="is_error", is_error=True)
         return False
     if not session.result.strip():
+        logger.debug("content_check_failed", reason="empty_result")
         return False
     if session.subtype in _FAILURE_SUBTYPES:
+        logger.debug("content_check_failed", reason="failure_subtype", subtype=session.subtype)
         return False
     if completion_marker:
         result_text = session.result.strip()
         marker_stripped = result_text.replace(completion_marker, "").strip()
         if not marker_stripped:
+            logger.debug("content_check_failed", reason="result_is_only_marker")
             return False
         if completion_marker not in result_text:
+            logger.debug(
+                "content_check_failed",
+                reason="completion_marker_absent",
+                result_tail=result_text[-200:] if len(result_text) > 200 else result_text,
+            )
             return False
+    logger.debug("content_check_passed")
     return True
 
 
@@ -324,6 +334,7 @@ def _compute_success(
     # Gate 0.5: Channel B provenance bypass — session JSONL is authoritative.
     match channel_confirmation:
         case ChannelConfirmation.CHANNEL_B:
+            logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
             return True
         case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
             pass  # fall through to termination dispatch
@@ -343,14 +354,28 @@ def _compute_success(
             # trustworthy when the session envelope says "success".
             if returncode != 0 and not (session.subtype == "success" and session.result.strip()):
                 return False
-            return _check_session_content(session, completion_marker)
+            content_ok = _check_session_content(session, completion_marker)
+            logger.debug(
+                "compute_success_termination",
+                termination="COMPLETED",
+                returncode=returncode,
+                content_check=content_ok,
+            )
+            return content_ok
 
         case TerminationReason.NATURAL_EXIT:
             # The process exited on its own. A non-zero returncode is treated
             # as authoritative evidence of failure — no asymmetric bypass.
             if returncode != 0:
                 return False
-            return _check_session_content(session, completion_marker)
+            content_ok = _check_session_content(session, completion_marker)
+            logger.debug(
+                "compute_success_termination",
+                termination="NATURAL_EXIT",
+                returncode=returncode,
+                content_check=content_ok,
+            )
+            return content_ok
 
         case _ as unreachable:
             assert_never(unreachable)
@@ -406,6 +431,7 @@ def _compute_retry(
     """
     # Phase 1: API-level retry signals (context exhaustion, max_turns)
     if session.needs_retry:
+        logger.debug("compute_retry_api_signal", needs_retry=True, reason="resume")
         return True, RetryReason.RESUME
 
     # Phase 2: Exhaustive termination dispatch
@@ -421,9 +447,28 @@ def _compute_retry(
                 ChannelConfirmation.CHANNEL_A,
                 ChannelConfirmation.CHANNEL_B,
             ):
+                logger.debug(
+                    "compute_retry_result",
+                    termination="NATURAL_EXIT",
+                    channel=str(channel_confirmation),
+                    needs_retry=False,
+                )
                 return False, RetryReason.NONE
             if returncode == 0 and _is_kill_anomaly(session):
+                logger.debug(
+                    "compute_retry_result",
+                    termination="NATURAL_EXIT",
+                    channel=str(channel_confirmation),
+                    needs_retry=True,
+                    kill_anomaly=True,
+                )
                 return True, RetryReason.RESUME
+            logger.debug(
+                "compute_retry_result",
+                termination="NATURAL_EXIT",
+                channel=str(channel_confirmation),
+                needs_retry=False,
+            )
             return False, RetryReason.NONE
 
         case TerminationReason.COMPLETED:
@@ -434,9 +479,23 @@ def _compute_retry(
                 case ChannelConfirmation.CHANNEL_B:
                     # Channel B is authoritative — kill-anomaly appearance is
                     # a drain-race artifact, not a real incomplete flush.
+                    logger.debug(
+                        "compute_retry_result",
+                        termination="COMPLETED",
+                        channel="CHANNEL_B",
+                        needs_retry=False,
+                    )
                     return False, RetryReason.NONE
                 case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
-                    if _is_kill_anomaly(session):
+                    is_anomaly = _is_kill_anomaly(session)
+                    logger.debug(
+                        "compute_retry_result",
+                        termination="COMPLETED",
+                        channel=str(channel_confirmation),
+                        needs_retry=is_anomaly,
+                        kill_anomaly=is_anomaly,
+                    )
+                    if is_anomaly:
                         return True, RetryReason.RESUME
                     return False, RetryReason.NONE
                 case _ as _unreachable_cc:
@@ -445,10 +504,12 @@ def _compute_retry(
         case TerminationReason.STALE:
             # _build_skill_result intercepts STALE before calling _compute_retry.
             # Explicit arm exists for exhaustiveness; unreachable in production.
+            logger.debug("compute_retry_result", termination="STALE", needs_retry=False)
             return False, RetryReason.NONE
 
         case TerminationReason.TIMED_OUT:
             # Wall-clock timeout: non-retriable (permanent infrastructure limit).
+            logger.debug("compute_retry_result", termination="TIMED_OUT", needs_retry=False)
             return False, RetryReason.NONE
 
         case _ as unreachable:
@@ -482,9 +543,27 @@ def _compute_outcome(
         session, returncode, termination, channel_confirmation
     )
 
+    logger.debug(
+        "compute_outcome_inputs",
+        success=success,
+        needs_retry=needs_retry,
+        retry_reason=str(retry_reason),
+        returncode=returncode,
+        termination=str(termination),
+        channel=str(channel_confirmation),
+        subtype=session.subtype,
+        is_error=session.is_error,
+        result_empty=not session.result.strip(),
+    )
+
     # Contradiction guard: retry signal is authoritative over the channel bypass.
     if success and needs_retry:
         success = False
+        logger.debug(
+            "contradiction_guard",
+            action="demoted_success",
+            reason="retry_signal_authoritative",
+        )
 
     # Dead-end guard: channel confirmation means the session reached a natural end;
     # failure to parse content is a data-availability issue, not a terminal failure.
@@ -493,13 +572,26 @@ def _compute_outcome(
             case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.CHANNEL_B:
                 needs_retry = True
                 retry_reason = RetryReason.RESUME
+                logger.debug(
+                    "dead_end_guard",
+                    action="promoted_to_retriable",
+                    channel=str(channel_confirmation),
+                )
             case ChannelConfirmation.UNMONITORED:
                 pass  # legitimate terminal failure — no channel confirmed completion
             case _ as unreachable_cc:
                 assert_never(unreachable_cc)
 
     if success:
-        return SessionOutcome.SUCCEEDED, retry_reason
-    if needs_retry:
-        return SessionOutcome.RETRIABLE, retry_reason
-    return SessionOutcome.FAILED, retry_reason
+        outcome = SessionOutcome.SUCCEEDED
+    elif needs_retry:
+        outcome = SessionOutcome.RETRIABLE
+    else:
+        outcome = SessionOutcome.FAILED
+
+    logger.debug(
+        "compute_outcome_result",
+        outcome=str(outcome),
+        retry_reason=str(retry_reason),
+    )
+    return outcome, retry_reason

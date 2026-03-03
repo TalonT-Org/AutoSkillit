@@ -79,3 +79,7 @@ report_bug:
   github_labels:
     - "autoreported"
     - "bug"
+
+logging:
+  level: "INFO"
+  json_output: null

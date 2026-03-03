@@ -365,6 +365,74 @@ class TestQuotaGuardConfig:
         assert config.quota_guard.buffer_seconds == 60
 
 
+class TestLoggingConfig:
+    """LoggingConfig dataclass and YAML loading."""
+
+    def test_logging_config_defaults(self):
+        """LOG_C1: LoggingConfig has correct defaults from defaults.yaml."""
+        cfg = load_config(None)  # package defaults only (nonexistent project)
+        assert cfg.logging.level == "INFO"
+        assert cfg.logging.json_output is None
+
+    def test_logging_config_from_yaml(self, tmp_path):
+        """LOG_C2: LoggingConfig reads level from project config."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("logging:\n  level: DEBUG\n")
+        cfg = load_config(tmp_path)
+        assert cfg.logging.level == "DEBUG"
+
+    def test_logging_config_json_output_from_yaml(self, tmp_path):
+        """LOG_C3: LoggingConfig reads json_output from project config."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("logging:\n  json_output: true\n")
+        cfg = load_config(tmp_path)
+        assert cfg.logging.json_output is True
+
+    def test_logging_config_env_var(self, monkeypatch, tmp_path):
+        """LOG_C4: AUTOSKILLIT_LOGGING__LEVEL env var overrides config file."""
+        monkeypatch.setenv("AUTOSKILLIT_LOGGING__LEVEL", "WARNING")
+        cfg = load_config(tmp_path)
+        assert cfg.logging.level == "WARNING"
+
+    def test_logging_config_level_uppercased(self, tmp_path):
+        """LOG_C5: Level is uppercased regardless of input casing."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("logging:\n  level: debug\n")
+        cfg = load_config(tmp_path)
+        assert cfg.logging.level == "DEBUG"
+
+    def test_partial_config_preserves_logging_default(self, tmp_path):
+        """LOG_C6: Unrelated YAML section leaves logging at default."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"test_check": {"timeout": 120}}
+        import yaml
+
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.logging.level == "INFO"
+        assert cfg.logging.json_output is None
+
+    def test_automation_config_has_logging_field(self):
+        """LOG_C7: AutomationConfig has logging sub-config."""
+        cfg = AutomationConfig()
+        assert hasattr(cfg, "logging")
+        assert cfg.logging.level == "INFO"
+        assert cfg.logging.json_output is None
+
+    def test_logging_config_fields(self):
+        """LOG_C8: LoggingConfig has exactly the expected fields."""
+        from dataclasses import fields as dc_fields
+
+        from autoskillit.config.settings import LoggingConfig
+
+        names = {f.name for f in dc_fields(LoggingConfig)}
+        assert names == {"level", "json_output"}
+
+
 class TestDynaconfIntegration:
     def test_env_var_overrides_nested_github_token(self, tmp_path, monkeypatch):
         """ENV-1: AUTOSKILLIT_GITHUB__TOKEN env var sets config.github.token."""

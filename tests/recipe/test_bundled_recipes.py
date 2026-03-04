@@ -639,7 +639,7 @@ def test_rectify_contract_declares_plan_parts_output() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Bundled diagram tests (DG-21)
+# Bundled diagram tests (DG-21, DG-29)
 # ---------------------------------------------------------------------------
 
 
@@ -654,4 +654,19 @@ def test_bundled_recipes_have_diagrams() -> None:
     assert recipe_names == diagram_names, (
         f"Missing diagrams for: {recipe_names - diagram_names}. "
         f"Run 'autoskillit recipes render' to regenerate."
+    )
+
+
+def test_bundled_diagrams_are_not_stale() -> None:
+    """DG-29: every bundled recipe diagram is up to date with its YAML."""
+    from autoskillit.core.paths import pkg_root
+    from autoskillit.recipe.diagrams import check_diagram_staleness
+
+    recipes_dir = pkg_root() / "recipes"
+    stale: list[str] = []
+    for recipe_path in sorted(recipes_dir.glob("*.yaml")):
+        if check_diagram_staleness(recipe_path.stem, recipes_dir, recipe_path):
+            stale.append(recipe_path.stem)
+    assert not stale, (
+        f"Stale diagrams for: {stale}. Run 'autoskillit recipes render' to regenerate."
     )

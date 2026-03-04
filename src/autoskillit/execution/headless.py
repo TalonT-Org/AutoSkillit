@@ -365,17 +365,42 @@ async def run_headless_core(
         linux_tracing_cfg = ctx.config.linux_tracing
         _start_ts = datetime.now(UTC).isoformat()
 
-        result = await runner(
-            cmd,
-            cwd=Path(cwd),
-            timeout=effective_timeout,
-            pty_mode=True,
-            session_log_dir=_session_log_dir(cwd),
-            completion_marker=cfg.completion_marker,
-            stale_threshold=effective_stale,
-            completion_drain_timeout=cfg.completion_drain_timeout,
-            linux_tracing_config=linux_tracing_cfg,
-        )
+        _result: SubprocessResult | None = None
+        try:
+            _result = await runner(
+                cmd,
+                cwd=Path(cwd),
+                timeout=effective_timeout,
+                pty_mode=True,
+                session_log_dir=_session_log_dir(cwd),
+                completion_marker=cfg.completion_marker,
+                stale_threshold=effective_stale,
+                completion_drain_timeout=cfg.completion_drain_timeout,
+                linux_tracing_config=linux_tracing_cfg,
+            )
+        finally:
+            if _result is None:
+                # Runner raised — write a crash entry so sessions.jsonl stays consistent
+                _log_dir = ctx.config.linux_tracing.log_dir
+                try:
+                    from autoskillit.execution import flush_session_log
+
+                    flush_session_log(
+                        log_dir=_log_dir,
+                        cwd=str(cwd),
+                        session_id="",
+                        pid=0,
+                        skill_command=skill_command,
+                        success=False,
+                        subtype="crashed",
+                        exit_code=-1,
+                        start_ts=_start_ts,
+                        proc_snapshots=None,
+                        termination_reason="CRASHED",
+                    )
+                except Exception:
+                    logger.debug("flush_session_log during crash failed", exc_info=True)
+        result = _result  # type: ignore[assignment]  # not None past this point
 
         skill_result = _build_skill_result(
             result,

@@ -218,7 +218,7 @@ async def run_managed_async(
             if tracing_handle is not None:
                 from autoskillit.execution.linux_tracing import read_proc_snapshot
 
-                accumulated = await tracing_handle.stop()
+                accumulated = tracing_handle.stop()
                 final_snap = read_proc_snapshot(proc.pid)
                 if final_snap:
                     accumulated.append(final_snap)
@@ -276,6 +276,8 @@ async def run_managed_async(
             return sub_result
         except BaseException:
             # Ensure cleanup on unexpected errors (including CancelledError)
+            if "tracing_handle" in locals() and tracing_handle is not None:
+                tracing_handle.stop()  # idempotent: flushes and closes trace file
             if "proc" in locals() and proc.returncode is None:
                 kill_process_tree(proc.pid)
             raise

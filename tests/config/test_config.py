@@ -454,7 +454,7 @@ class TestLinuxTracingConfig:
         from autoskillit.config.settings import LinuxTracingConfig
 
         names = {f.name for f in dc_fields(LinuxTracingConfig)}
-        assert names == {"enabled", "proc_interval", "log_dir"}
+        assert names == {"enabled", "proc_interval", "log_dir", "tmpfs_path"}
 
 
 class TestDynaconfIntegration:

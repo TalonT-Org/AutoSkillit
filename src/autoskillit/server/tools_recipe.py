@@ -52,6 +52,18 @@ async def load_recipe(name: str) -> str:
     on_success/on_failure routing, retry blocks). The agent should interpret
     the YAML and execute the steps using the appropriate MCP tools.
 
+    CRITICAL — PIPELINE DISCIPLINE:
+    NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash,
+    Agent, WebFetch, WebSearch, NotebookEdit) during pipeline execution.
+    All investigation and code changes happen inside headless sessions
+    launched by run_skill/run_skill_retry. Shell commands use run_cmd.
+    The task description is INPUT to the recipe steps — pass it through
+    as an ingredient value, do not act on it yourself.
+
+    After collecting ingredient values from the user, IMMEDIATELY proceed
+    to the first recipe step. Do not investigate, research, or explore the
+    task — the recipe steps handle all investigation through delegated sessions.
+
     After loading:
     1. Present the recipe to the user using the preview format below
     2. If the user requests changes, use the /autoskillit:write-recipe skill
@@ -112,15 +124,6 @@ async def load_recipe(name: str) -> str:
         If present, list all kitchen_rules strings.
         If absent, note: "No kitchen rules defined"
 
-    NEVER use native Claude Code tools from the orchestrator during pipeline
-    execution. The following are prohibited: Read, Grep, Glob, Edit, Write,
-    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit.
-    - Code investigation happens inside headless sessions launched by
-      run_skill/run_skill_retry, which have full tool access.
-    - Code modification is delegated through run_skill/run_skill_retry.
-    - Shell commands use run_cmd, not the native Bash tool.
-    - Research and multi-step work are delegated via run_skill.
-
     Allowed during pipeline execution:
     - AutoSkillit MCP tools (call directly, not via subagents)
     - AskUserQuestion (user interaction)
@@ -159,10 +162,8 @@ async def load_recipe(name: str) -> str:
 
     ROUTING RULES — MANDATORY:
     - When a tool returns a failure result, you MUST follow the step's on_failure route.
-    - When a step fails, route to on_failure — do not use Read, Grep, Glob, Edit,
-      Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit or any native
-      tool to investigate. The on_failure step (e.g., resolve-failures) has
-      diagnostic access that the orchestrator does not.
+    - When a step fails, route to on_failure — the downstream skill has diagnostic
+      access that the orchestrator does not.
     - Your ONLY job is to route to the correct next step and pass the
       required arguments. The downstream skill does the actual work.
 

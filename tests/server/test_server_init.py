@@ -929,7 +929,11 @@ class TestToolSchemas:
         )
 
     def test_pipeline_forbidden_tools_constant_is_complete(self):
-        """PIPELINE_FORBIDDEN_TOOLS must contain all 11 native Claude Code tools."""
+        """PIPELINE_FORBIDDEN_TOOLS must contain all 10 native Claude Code tools.
+
+        "Agent" replaces the stale "Task" and "Explore" names — Agent is the
+        actual tool name; Explore is a subagent_type parameter, not a tool name.
+        """
         from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
 
         expected = {
@@ -939,8 +943,7 @@ class TestToolSchemas:
             "Edit",
             "Write",
             "Bash",
-            "Task",
-            "Explore",
+            "Agent",
             "WebFetch",
             "WebSearch",
             "NotebookEdit",

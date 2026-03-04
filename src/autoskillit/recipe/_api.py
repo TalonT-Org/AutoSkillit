@@ -136,6 +136,7 @@ def load_and_validate(
     raw = match.content if match.content is not None else match.path.read_text()
     suggestions: list[dict[str, Any]] = []
     valid = True
+    recipe = None
 
     try:
         data = load_yaml(raw)
@@ -197,4 +198,11 @@ def load_and_validate(
         )
         valid = False
 
+    if recipe is not None and recipe.kitchen_rules:
+        return {
+            "content": raw,
+            "suggestions": suggestions,
+            "valid": valid,
+            "kitchen_rules": recipe.kitchen_rules,
+        }
     return {"content": raw, "suggestions": suggestions, "valid": valid}

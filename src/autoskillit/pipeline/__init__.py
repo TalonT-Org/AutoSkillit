@@ -17,6 +17,8 @@ from autoskillit.pipeline.gate import (
     UNGATED_TOOLS,
     DefaultGateState,
     gate_error_result,
+    remove_gate_file,
+    write_gate_file,
 )
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
 
@@ -34,6 +36,8 @@ __all__ = [
     "GATED_TOOLS",
     "UNGATED_TOOLS",
     "gate_error_result",
+    "write_gate_file",
+    "remove_gate_file",
     # context
     "ToolContext",
 ]

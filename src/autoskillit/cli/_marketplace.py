@@ -12,6 +12,7 @@ from pathlib import Path
 
 import autoskillit.cli._hooks as _hooks_mod
 from autoskillit.cli._hooks import (
+    _register_native_tool_guard_hook,
     _register_quota_hook,
     _register_remove_clone_guard_hook,
     _register_skill_command_guard_hook,
@@ -169,6 +170,7 @@ def install(*, scope: str = "user"):
     _register_quota_hook(settings_path)
     _register_remove_clone_guard_hook(settings_path)
     _register_skill_command_guard_hook(settings_path)
+    _register_native_tool_guard_hook(settings_path)
     _print_next_steps()
 
 

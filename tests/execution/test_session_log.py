@@ -234,8 +234,7 @@ def test_proc_trace_timestamps_are_per_snapshot_not_session_start(tmp_path):
 
     session_dir = tmp_path / "sessions" / "test-session-001"
     records = [
-        json.loads(line)
-        for line in (session_dir / "proc_trace.jsonl").read_text().splitlines()
+        json.loads(line) for line in (session_dir / "proc_trace.jsonl").read_text().splitlines()
     ]
     assert records[0]["ts"] == ts1
     assert records[1]["ts"] == ts2

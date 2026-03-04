@@ -371,6 +371,39 @@ def recipes_show(name: str):
     print(match.path.read_text())
 
 
+@recipes_app.command(name="render")
+def recipes_render(name: str | None = None) -> None:
+    """Pre-generate flow diagram(s) for recipe(s).
+
+    Parameters
+    ----------
+    name
+        Name of a single recipe to render. Renders all recipes if omitted.
+    """
+    from autoskillit.core import RecipeSource
+    from autoskillit.recipe import find_recipe_by_name, generate_recipe_diagram, list_recipes
+
+    project_dir = Path.cwd()
+
+    def _recipes_dir(info: object) -> Path:
+        if getattr(info, "source", None) == RecipeSource.BUILTIN:
+            return pkg_root() / "recipes"
+        return project_dir / ".autoskillit" / "recipes"
+
+    if name is not None:
+        match = find_recipe_by_name(name, project_dir)
+        if match is None:
+            print(f"Recipe '{name}' not found.", file=sys.stderr)
+            sys.exit(1)
+        generate_recipe_diagram(match.path, _recipes_dir(match))
+        print(f"Rendered: {name}")
+    else:
+        result = list_recipes(project_dir)
+        for info in result.items:
+            generate_recipe_diagram(info.path, _recipes_dir(info))
+            print(f"Rendered: {info.name}")
+
+
 @app.command
 def cook(recipe: str | None = None):
     """Launch an interactive Claude Code session to execute a recipe.

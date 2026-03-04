@@ -6,6 +6,11 @@ execution/headless.py has TYPE_CHECKING-only references to pipeline/.
 """
 
 from autoskillit.core import SkillResult
+from autoskillit.execution.anomaly_detection import (
+    AnomalyKind,
+    AnomalySeverity,
+    detect_anomalies,
+)
 from autoskillit.execution.commands import (
     ClaudeHeadlessCmd,
     ClaudeInteractiveCmd,
@@ -32,6 +37,7 @@ from autoskillit.execution.session import (
     extract_token_usage,
     parse_session_result,
 )
+from autoskillit.execution.session_log import flush_session_log, resolve_log_dir
 from autoskillit.execution.testing import (
     DefaultTestRunner,
     check_test_passed,
@@ -75,4 +81,11 @@ __all__ = [
     "LinuxTracingHandle",
     "ProcSnapshot",
     "start_linux_tracing",
+    # anomaly_detection
+    "detect_anomalies",
+    "AnomalyKind",
+    "AnomalySeverity",
+    # session_log
+    "flush_session_log",
+    "resolve_log_dir",
 ]

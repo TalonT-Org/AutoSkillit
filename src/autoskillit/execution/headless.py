@@ -358,9 +358,8 @@ async def run_headless_core(
         runner = ctx.runner
         assert runner is not None, "No subprocess runner configured"
 
-        linux_tracing_cfg = None
-        if ctx.config.logging.level == "DEBUG":
-            linux_tracing_cfg = ctx.config.linux_tracing
+        linux_tracing_cfg = ctx.config.linux_tracing
+        _start_ts = datetime.now(UTC).isoformat()
 
         result = await runner(
             cmd,
@@ -380,6 +379,25 @@ async def run_headless_core(
             skill_command=original_skill_command,
             audit=ctx.audit,
         )
+
+        if result.proc_snapshots is not None or not skill_result.success:
+            from autoskillit.execution.session_log import flush_session_log
+
+            try:
+                flush_session_log(
+                    log_dir=ctx.config.linux_tracing.log_dir,
+                    cwd=cwd,
+                    session_id=skill_result.session_id,
+                    pid=result.pid,
+                    skill_command=original_skill_command,
+                    success=skill_result.success,
+                    subtype=skill_result.subtype,
+                    exit_code=skill_result.exit_code,
+                    start_ts=_start_ts,
+                    proc_snapshots=result.proc_snapshots,
+                )
+            except Exception:
+                logger.debug("session_log_flush_failed", exc_info=True)
 
         logger.debug(
             "run_headless_core_exit",

@@ -1,0 +1,192 @@
+"""Post-hoc anomaly detection over accumulated ProcSnapshot data.
+
+Runs over the complete snapshot series at flush time, enabling multi-snapshot
+pattern detection (e.g., sustained RSS growth, persistent zombies).
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import StrEnum
+
+
+class AnomalyKind(StrEnum):
+    OOM_SPIKE = "oom_spike"
+    OOM_CRITICAL = "oom_critical"
+    ZOMBIE_DETECTED = "zombie_detected"
+    ZOMBIE_PERSISTENT = "zombie_persistent"
+    SIGNALS_PENDING = "signals_pending"
+    RSS_GROWTH = "rss_growth"
+    FD_HIGH = "fd_high"
+
+
+class AnomalySeverity(StrEnum):
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
+def _anomaly(
+    kind: AnomalyKind,
+    severity: AnomalySeverity,
+    detail: dict[str, object],
+    snapshot: dict[str, object],
+    seq: int,
+    pid: int,
+) -> dict[str, object]:
+    return {
+        "ts": datetime.now().isoformat(),
+        "seq": seq,
+        "event": "anomaly",
+        "kind": str(kind),
+        "severity": str(severity),
+        "pid": pid,
+        "detail": detail,
+        "snapshot": snapshot,
+    }
+
+
+def detect_anomalies(
+    snapshots: list[dict[str, object]],
+    pid: int,
+) -> list[dict[str, object]]:
+    """Detect anomalies in a series of ProcSnapshot dicts.
+
+    Returns a list of anomaly records, each with ts, seq, event, kind,
+    severity, pid, detail, and snapshot fields.
+    """
+    anomalies: list[dict[str, object]] = []
+    if not snapshots:
+        return anomalies
+
+    consecutive_zombie = 0
+    prev_sig_pnd: str | None = None
+    initial_rss: int | None = None
+
+    for seq, snap in enumerate(snapshots):
+        oom_score = snap.get("oom_score", -1)
+        state = snap.get("state", "")
+        sig_pnd = snap.get("sig_pnd", "")
+        vm_rss_kb = snap.get("vm_rss_kb", 0)
+        fd_count = snap.get("fd_count", 0)
+        fd_soft_limit = snap.get("fd_soft_limit", 0)
+
+        # OOM spike: delta > 200 between consecutive snapshots
+        if seq > 0:
+            prev_oom = snapshots[seq - 1].get("oom_score", -1)
+            if isinstance(oom_score, int) and isinstance(prev_oom, int):
+                delta = oom_score - prev_oom
+                if delta > 200:
+                    anomalies.append(
+                        _anomaly(
+                            AnomalyKind.OOM_SPIKE,
+                            AnomalySeverity.WARNING,
+                            {"from": prev_oom, "to": oom_score, "delta": delta},
+                            snap,
+                            seq,
+                            pid,
+                        )
+                    )
+
+        # OOM critical: oom_score >= 800
+        if isinstance(oom_score, int) and oom_score >= 800:
+            anomalies.append(
+                _anomaly(
+                    AnomalyKind.OOM_CRITICAL,
+                    AnomalySeverity.CRITICAL,
+                    {"oom_score": oom_score},
+                    snap,
+                    seq,
+                    pid,
+                )
+            )
+
+        # Zombie detection
+        if state == "zombie":
+            consecutive_zombie += 1
+            if consecutive_zombie == 1:
+                anomalies.append(
+                    _anomaly(
+                        AnomalyKind.ZOMBIE_DETECTED,
+                        AnomalySeverity.WARNING,
+                        {"state": state},
+                        snap,
+                        seq,
+                        pid,
+                    )
+                )
+            if consecutive_zombie >= 3:
+                anomalies.append(
+                    _anomaly(
+                        AnomalyKind.ZOMBIE_PERSISTENT,
+                        AnomalySeverity.CRITICAL,
+                        {"consecutive_count": consecutive_zombie},
+                        snap,
+                        seq,
+                        pid,
+                    )
+                )
+        else:
+            consecutive_zombie = 0
+
+        # Signals pending: transition from all-zeros to non-zero
+        _all_zeros = "0000000000000000"
+        if isinstance(sig_pnd, str) and isinstance(prev_sig_pnd, str):
+            if prev_sig_pnd == _all_zeros and sig_pnd != _all_zeros:
+                anomalies.append(
+                    _anomaly(
+                        AnomalyKind.SIGNALS_PENDING,
+                        AnomalySeverity.WARNING,
+                        {"from": prev_sig_pnd, "to": sig_pnd},
+                        snap,
+                        seq,
+                        pid,
+                    )
+                )
+        prev_sig_pnd = str(sig_pnd) if sig_pnd else prev_sig_pnd
+
+        # RSS growth tracking
+        if isinstance(vm_rss_kb, int) and vm_rss_kb > 0:
+            if initial_rss is None:
+                initial_rss = vm_rss_kb
+
+        # FD high ratio: fd_count / fd_soft_limit > 0.80
+        if isinstance(fd_count, int) and isinstance(fd_soft_limit, int) and fd_soft_limit > 0:
+            ratio = fd_count / fd_soft_limit
+            if ratio > 0.80:
+                anomalies.append(
+                    _anomaly(
+                        AnomalyKind.FD_HIGH,
+                        AnomalySeverity.WARNING,
+                        {
+                            "fd_count": fd_count,
+                            "fd_soft_limit": fd_soft_limit,
+                            "ratio": round(ratio, 3),
+                        },
+                        snap,
+                        seq,
+                        pid,
+                    )
+                )
+
+    # RSS growth: total growth exceeds 2x initial over 5+ snapshots
+    if initial_rss is not None and initial_rss > 0 and len(snapshots) >= 5:
+        last_rss = snapshots[-1].get("vm_rss_kb", 0)
+        if isinstance(last_rss, int) and last_rss > 2 * initial_rss:
+            anomalies.append(
+                _anomaly(
+                    AnomalyKind.RSS_GROWTH,
+                    AnomalySeverity.WARNING,
+                    {
+                        "initial_rss_kb": initial_rss,
+                        "final_rss_kb": last_rss,
+                        "growth_factor": round(last_rss / initial_rss, 2),
+                        "snapshot_count": len(snapshots),
+                    },
+                    snapshots[-1],
+                    len(snapshots) - 1,
+                    pid,
+                )
+            )
+
+    return anomalies

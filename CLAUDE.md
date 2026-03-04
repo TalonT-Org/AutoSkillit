@@ -108,7 +108,9 @@ src/autoskillit/
 │   ├── commands.py          #   ClaudeInteractiveCmd/ClaudeHeadlessCmd builders
 │   ├── db.py                #   Read-only SQLite execution with defence-in-depth
 │   ├── headless.py          #   Headless Claude session orchestration (L1 service)
-│   ├── linux_tracing.py     #   Linux-only /proc + psutil process tracing (Tier 2 debug)
+│   ├── linux_tracing.py     #   Linux-only /proc + psutil process tracing (accumulate snapshots)
+│   ├── anomaly_detection.py #   Post-hoc anomaly detection over ProcSnapshot series
+│   ├── session_log.py       #   File-based session diagnostics log writer (XDG-aware)
 │   ├── process.py           #   Subprocess management facade (re-exports from _process_*.py)
 │   ├── _process_io.py       #   create_temp_io, read_temp_output
 │   ├── _process_jsonl.py    #   _jsonl_contains_marker, _jsonl_has_record_type, _marker_is_standalone
@@ -200,5 +202,7 @@ src/autoskillit/
     ├── smoke-task/           ├── sous-chef/
     └── write-recipe/
 ```
+
+**Session diagnostics logs** are stored globally at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir` in config. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
 
 **CRITICAL**: When using subagents, invoke with "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000" to ensure subagents exit when finished.

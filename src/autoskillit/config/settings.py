@@ -137,8 +137,9 @@ class LoggingConfig:
 
 @dataclass
 class LinuxTracingConfig:
-    enabled: bool = False
+    enabled: bool = True
     proc_interval: float = 5.0
+    log_dir: str = ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)
 
 
 def _field_defaults(cls: type) -> dict[str, Any]:
@@ -308,6 +309,7 @@ class AutomationConfig:
             linux_tracing=LinuxTracingConfig(
                 enabled=bool(val(lt, "enabled", _lt["enabled"])),
                 proc_interval=float(val(lt, "proc_interval", _lt["proc_interval"])),
+                log_dir=str(val(lt, "log_dir", _lt["log_dir"])),
             ),
         )
 

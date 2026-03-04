@@ -146,7 +146,7 @@ def _make_result(
     stdout: str = "",
     stderr: str = "",
     termination_reason: TerminationReason = TerminationReason.NATURAL_EXIT,
-    channel_confirmation: ChannelConfirmation = ChannelConfirmation.CHANNEL_B,
+    channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
 ) -> SubprocessResult:
     """Create a SubprocessResult for mocking run_managed_async."""
     return SubprocessResult(

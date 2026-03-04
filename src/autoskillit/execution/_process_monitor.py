@@ -16,7 +16,6 @@ logger = get_logger(__name__)
 
 async def _heartbeat(
     stdout_path: Path,
-    marker: str = "",
     record_types: frozenset[str] = frozenset({"result"}),
     _poll_interval: float = 0.5,
     _on_poll: Callable[[], None] | None = None,
@@ -26,8 +25,7 @@ async def _heartbeat(
     Fires when a JSONL record whose ``"type"`` field is in *record_types* appears
     in stdout AND, for ``type=result`` records, the ``result`` field is non-empty.
     This guards against confirming on empty-result envelopes flushed before content
-    is populated (drain-race false negative). The *marker* parameter is accepted
-    for API compatibility but is not used.
+    is populated (drain-race false negative).
 
     *_on_poll* is a test-only callback invoked after each sleep iteration. Pass
     ``None`` (the default) in production — zero overhead.

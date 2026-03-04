@@ -345,7 +345,6 @@ class TestHeartbeatDetectsCompletion:
             [sys.executable, str(script)],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
         )
         elapsed = time.monotonic() - start
 
@@ -365,7 +364,6 @@ class TestHeartbeatDetectsCompletion:
             [sys.executable, str(script)],
             cwd=tmp_path,
             timeout=3,
-            heartbeat_marker='"type":"result"',
         )
 
         assert result.termination == TerminationReason.TIMED_OUT, (
@@ -394,7 +392,6 @@ class TestNoHeartbeatPreservesExistingBehavior:
             [sys.executable, str(script)],
             cwd=tmp_path,
             timeout=3,
-            heartbeat_marker=None,
         )
 
         assert result.termination == TerminationReason.TIMED_OUT
@@ -480,7 +477,6 @@ class TestHeartbeatTerminationReason:
             [sys.executable, str(script)],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
             _heartbeat_poll=0.05,
         )
 

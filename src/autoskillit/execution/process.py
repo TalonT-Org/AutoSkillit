@@ -86,7 +86,6 @@ async def run_managed_async(
     input_data: str | None = None,
     env: dict[str, str] | None = None,
     pty_mode: bool = False,
-    heartbeat_marker: str | None = None,
     heartbeat_record_types: frozenset[str] = frozenset({"result"}),
     session_log_dir: Path | None = None,
     completion_marker: str = "",
@@ -145,7 +144,6 @@ async def run_managed_async(
                 timeout=timeout,
                 stale_threshold=stale_threshold,
                 session_log_dir=str(session_log_dir) if session_log_dir else None,
-                heartbeat_enabled=bool(heartbeat_marker),
                 session_monitor_enabled=session_log_dir is not None,
             )
 
@@ -156,16 +154,14 @@ async def run_managed_async(
 
             async with anyio.create_task_group() as tg:
                 tg.start_soon(_watch_process, proc, acc, trigger)
-                if heartbeat_marker:
-                    tg.start_soon(
-                        _watch_heartbeat,
-                        stdout_path,
-                        heartbeat_marker,
-                        heartbeat_record_types,
-                        acc,
-                        trigger,
-                        _heartbeat_poll,
-                    )
+                tg.start_soon(
+                    _watch_heartbeat,
+                    stdout_path,
+                    heartbeat_record_types,
+                    acc,
+                    trigger,
+                    _heartbeat_poll,
+                )
                 if session_log_dir is not None:
                     tg.start_soon(
                         _watch_session_log,
@@ -373,7 +369,6 @@ class DefaultSubprocessRunner:
         *,
         cwd: Path,
         timeout: float,
-        heartbeat_marker: str = "",
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,
@@ -386,7 +381,6 @@ class DefaultSubprocessRunner:
             cmd,
             cwd=cwd,
             timeout=timeout,
-            heartbeat_marker=heartbeat_marker if heartbeat_marker else None,
             stale_threshold=stale_threshold,
             completion_marker=completion_marker,
             session_log_dir=session_log_dir,

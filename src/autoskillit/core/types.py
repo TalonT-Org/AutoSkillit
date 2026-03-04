@@ -58,6 +58,37 @@ class RecipeSource(StrEnum):
     BUILTIN = "builtin"
 
 
+class OutputFormat(StrEnum):
+    """Claude CLI output format with declared data capabilities.
+
+    STREAM_JSON emits per-turn NDJSON records (type=assistant, type=result),
+    providing assistant_messages and model_breakdown.
+    JSON emits a single result envelope — no assistant records.
+    """
+
+    JSON = "json"
+    STREAM_JSON = "stream-json"
+
+    @property
+    def supports_assistant_messages(self) -> bool:
+        return self == OutputFormat.STREAM_JSON
+
+    @property
+    def supports_model_breakdown(self) -> bool:
+        return self == OutputFormat.STREAM_JSON
+
+    @classmethod
+    def derive(cls, *, completion_marker: str) -> OutputFormat:
+        """Derive the required format from feature configuration.
+
+        If completion_marker is set, recovery requires assistant_messages,
+        which requires STREAM_JSON format.
+        """
+        if completion_marker:
+            return cls.STREAM_JSON
+        return cls.JSON
+
+
 class Severity(StrEnum):
     OK = "ok"
     ERROR = "error"
@@ -186,7 +217,6 @@ class SubprocessRunner(Protocol):
         *,
         cwd: Path,
         timeout: float,
-        heartbeat_marker: str = "",
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,

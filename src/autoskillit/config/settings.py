@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import dump_yaml_str, load_yaml, pkg_root
+from autoskillit.core import OutputFormat, dump_yaml_str, load_yaml, pkg_root
 
 if TYPE_CHECKING:
     from dynaconf import Dynaconf
@@ -66,11 +66,15 @@ class ReadDbConfig:
 @dataclass
 class RunSkillConfig:
     timeout: int = 3600
-    heartbeat_marker: str = '"type":"result"'
     stale_threshold: int = 1200  # 20 minutes
     completion_marker: str = "%%ORDER_UP%%"
     completion_drain_timeout: float = 5.0
     exit_after_stop_delay_ms: int = 120000
+
+    @property
+    def output_format(self) -> OutputFormat:
+        """Derived from feature requirements — not independently configurable."""
+        return OutputFormat.derive(completion_marker=self.completion_marker)
 
 
 @dataclass
@@ -248,7 +252,6 @@ class AutomationConfig:
             ),
             run_skill=RunSkillConfig(
                 timeout=int(val(rs, "timeout", _rs["timeout"])),
-                heartbeat_marker=str(val(rs, "heartbeat_marker", _rs["heartbeat_marker"])),
                 stale_threshold=int(val(rs, "stale_threshold", _rs["stale_threshold"])),
                 completion_marker=str(val(rs, "completion_marker", _rs["completion_marker"])),
                 completion_drain_timeout=float(

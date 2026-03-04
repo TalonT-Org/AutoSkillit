@@ -259,7 +259,6 @@ class TestSTOPDelayPipelineAdjudication:
             [sys.executable, str(script)],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
             _heartbeat_poll=0.05,
         )
 
@@ -294,7 +293,6 @@ class TestSTOPDelayPipelineAdjudication:
             [sys.executable, str(script)],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
             _heartbeat_poll=0.05,
         )
 
@@ -328,7 +326,6 @@ class TestSTOPDelayPipelineAdjudication:
             [sys.executable, str(script)],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
             _heartbeat_poll=0.05,
         )
 

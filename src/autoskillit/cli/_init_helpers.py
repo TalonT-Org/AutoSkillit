@@ -60,7 +60,6 @@ safety:
 #
 # run_skill:
 #   timeout: 3600
-#   heartbeat_marker: '"type":"result"'
 #   stale_threshold: 1200
 #   completion_marker: "%%ORDER_UP%%"
 #

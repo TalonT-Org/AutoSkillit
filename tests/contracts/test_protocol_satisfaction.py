@@ -252,7 +252,6 @@ class TestGroupDApiContractPreservation:
             "input_data",
             "env",
             "pty_mode",
-            "heartbeat_marker",
             "heartbeat_record_types",
             "session_log_dir",
             "completion_marker",
@@ -279,7 +278,6 @@ class TestGroupDApiContractPreservation:
         sig = inspect.signature(run_managed_async)
         p = sig.parameters
         assert p["pty_mode"].default is False
-        assert p["heartbeat_marker"].default is None
         assert p["session_log_dir"].default is None
         assert p["input_data"].default is None
         assert p["env"].default is None
@@ -312,7 +310,6 @@ class TestGroupDApiContractPreservation:
             "cmd",
             "cwd",
             "timeout",
-            "heartbeat_marker",
             "stale_threshold",
             "completion_marker",
             "session_log_dir",

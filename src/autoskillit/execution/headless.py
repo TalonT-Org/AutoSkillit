@@ -329,7 +329,12 @@ async def run_headless_core(
         effective_plugin_dir = ctx.plugin_dir
         resolved_model = _resolve_model(model, ctx.config)
         spec = build_headless_cmd(skill_command, model=resolved_model)
-        cmd = spec.cmd + ["--plugin-dir", effective_plugin_dir, "--output-format", "json"]
+        cmd = spec.cmd + [
+            "--plugin-dir",
+            effective_plugin_dir,
+            "--output-format",
+            cfg.output_format.value,
+        ]
         if add_dir:
             cmd.extend(["--add-dir", add_dir])
 
@@ -362,7 +367,6 @@ async def run_headless_core(
             cwd=Path(cwd),
             timeout=effective_timeout,
             pty_mode=True,
-            heartbeat_marker=cfg.heartbeat_marker,
             session_log_dir=_session_log_dir(cwd),
             completion_marker=cfg.completion_marker,
             stale_threshold=effective_stale,

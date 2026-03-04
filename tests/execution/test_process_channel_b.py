@@ -141,7 +141,6 @@ class TestChannelBDrainWait:
             [sys.executable, str(script), str(session_dir), "0.15"],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=5.0,
@@ -173,7 +172,6 @@ class TestChannelBDrainWait:
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
@@ -201,7 +199,6 @@ class TestChannelBDrainWait:
             [sys.executable, str(script)],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
             # No session_log_dir: Channel B cannot fire
             _heartbeat_poll=0.05,
         )
@@ -225,7 +222,6 @@ class TestChannelBDrainWait:
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.1,
@@ -250,7 +246,6 @@ class TestChannelBDrainWait:
             [sys.executable, str(script)],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
             # No session_log_dir: Channel B cannot fire
             _heartbeat_poll=0.05,
         )
@@ -275,7 +270,6 @@ class TestChannelBDrainWait:
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=2.0,
@@ -310,7 +304,6 @@ class TestChannelBFullPipelineAdjudication:
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=2.0,
@@ -354,7 +347,6 @@ class TestChannelBDrainRacePipelineAdjudication:
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
             timeout=30,
-            heartbeat_marker='"type":"result"',
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,

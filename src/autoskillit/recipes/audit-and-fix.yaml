@@ -182,7 +182,6 @@ steps:
 
   fix:
     tool: run_skill
-    model: sonnet
     with:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"

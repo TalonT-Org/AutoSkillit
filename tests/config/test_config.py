@@ -171,14 +171,19 @@ class TestLoadConfig:
         assert cfg.model.override is None
 
     def test_partial_model_config(self, tmp_path):
-        """MOD_C3: YAML with only model.override preserves model.default as None."""
+        """MOD_C3: YAML with only model.override preserves model.default from package defaults."""
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_data = {"model": {"override": "haiku"}}
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)
         assert cfg.model.override == "haiku"
-        assert cfg.model.default is None
+        assert cfg.model.default == "sonnet"
+
+    def test_loaded_config_has_sonnet_default(self, tmp_path):
+        """MOD_C4: load_config produces model.default='sonnet'."""
+        cfg = load_config(tmp_path)
+        assert cfg.model.default == "sonnet"
 
     def test_yaml_loads_worktree_setup_config(self, tmp_path):
         """WS_C2: YAML with worktree_setup section populates WorktreeSetupConfig."""

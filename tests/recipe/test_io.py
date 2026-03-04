@@ -420,7 +420,7 @@ class TestRecipeParser:
         assert step.model is None
 
     # MOD4
-    def test_bundled_resolve_failures_steps_use_sonnet(self) -> None:
+    def test_bundled_resolve_failures_steps_use_config_default(self) -> None:
         bd = builtin_recipes_dir()
         for f in bd.glob("*.yaml"):
             wf = load_recipe(f)
@@ -429,8 +429,9 @@ class TestRecipeParser:
                     step.with_args.get("skill_command")
                     and "resolve-failures" in step.with_args["skill_command"]
                 ):
-                    assert step.model == "sonnet", (
-                        f"{f.name} step '{step_name}' should have model='sonnet'"
+                    assert step.model is None, (
+                        f"{f.name} step '{step_name}' should not have explicit model "
+                        "(sonnet is the config default)"
                     )
 
 

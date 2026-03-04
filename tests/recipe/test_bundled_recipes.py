@@ -300,6 +300,23 @@ class TestImplementationPipelineStructure:
             queue.extend(graph.get(node, []))
         assert "push" in reachable
 
+    def test_ip_plan_step_captures_all_plan_paths(self, recipe) -> None:
+        """plan step must capture all_plan_paths for multi-group accumulation."""
+        assert "all_plan_paths" in recipe.steps["plan"].capture
+        assert "result.plan_path" in recipe.steps["plan"].capture["all_plan_paths"]
+
+    def test_ip_open_pr_step_references_all_plan_paths(self, recipe) -> None:
+        """open_pr_step must pass all accumulated plan paths, not just the last."""
+        cmd = recipe.steps["open_pr_step"].with_args.get("skill_command", "")
+        assert "context.all_plan_paths" in cmd
+        assert "context.plan_path" not in cmd
+
+    def test_ip_plan_step_note_contains_accumulation_instruction(self, recipe) -> None:
+        """plan step note must instruct agent to accumulate plan paths across groups."""
+        note = recipe.steps["plan"].note or ""
+        assert "ACCUMULATION" in note
+        assert "all_plan_paths" in note
+
 
 # ---------------------------------------------------------------------------
 # TestBugfixLoopStructure

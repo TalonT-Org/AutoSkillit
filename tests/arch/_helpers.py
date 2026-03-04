@@ -12,7 +12,6 @@ from tests.arch._rules import (
     _PRINT_EXEMPT,
     _RULE,
     _SENSITIVE_KEYWORDS,
-    _rel,
     RuleDescriptor,
     Violation,
 )

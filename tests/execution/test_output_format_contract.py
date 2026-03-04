@@ -153,9 +153,10 @@ class TestRecoveryIntegrationWithFormat:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         skill_result = _build_skill_result(sub_result, "%%ORDER_UP%%", "/test", None)
-        # With JSON format, result is only the marker — stripped to empty — fails content check
+        # With JSON format, result is only the marker — stripped to empty — fails content check.
+        # With UNMONITORED channel, dead-end guard does not promote to retriable.
         assert skill_result.success is False
-        assert skill_result.needs_retry is True
+        assert skill_result.needs_retry is False
 
 
 class TestOutputFormatDerivation:

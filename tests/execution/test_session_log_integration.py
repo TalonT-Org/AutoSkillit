@@ -16,7 +16,8 @@ pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux only")
 @pytest.mark.anyio
 async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
     """End-to-end: snapshot accumulation + flush produces unique ts per record."""
-    from autoskillit.execution.linux_tracing import LinuxTracingConfig, start_linux_tracing
+    from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.linux_tracing import start_linux_tracing
     from autoskillit.execution.session_log import flush_session_log
 
     config = LinuxTracingConfig(proc_interval=0.05)
@@ -48,8 +49,7 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
 
     session_dir = tmp_path / "sessions" / "integration-test-001"
     records = [
-        json.loads(line)
-        for line in (session_dir / "proc_trace.jsonl").read_text().splitlines()
+        json.loads(line) for line in (session_dir / "proc_trace.jsonl").read_text().splitlines()
     ]
     timestamps = [r["ts"] for r in records]
     assert len(set(timestamps)) == len(timestamps), "All ts must be unique per snapshot"

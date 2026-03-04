@@ -155,7 +155,9 @@ For each phase:
 1. Announce phase objective and files to modify
 2. Implement changes guided by understanding from Step 2
 3. Run per-phase verification if plan specifies it
-4. Commit per phase with descriptive messages
+4. Commit per phase with descriptive messages. If the project has pre-commit
+   hooks, run `pre-commit run --all-files` and stage any auto-fixed files
+   before each commit.
 5. Report phase completion
 
 Where practical, delegate test updates to subagents to keep main conversation context lean.

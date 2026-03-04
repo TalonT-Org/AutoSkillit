@@ -270,6 +270,8 @@ steps:
     on_result:
       - when: "result.failed_step == 'test_gate'"
         route: assess
+      - when: "result.failed_step == 'rebase'"
+        route: assess
       - when: "result.error"
         route: cleanup_failure
       - route: push

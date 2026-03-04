@@ -256,6 +256,8 @@ steps:
     on_result:
       - when: "result.failed_step == 'test_gate'"
         route: fix
+      - when: "result.failed_step == 'rebase'"
+        route: fix
       - when: "result.error"
         route: cleanup_failure
       - route: next_or_done

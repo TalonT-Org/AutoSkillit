@@ -58,7 +58,8 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 ### Step 3: Fix Loop (max 3 iterations)
 1. Analyze test failures against the plan to understand root cause
 2. Apply targeted fixes
-3. Commit each fix: `fix: {what was wrong and why}`
+3. If the project has pre-commit hooks, run `pre-commit run --all-files` and
+   stage any auto-fixed files before committing. Commit each fix: `fix: {what was wrong and why}`
 4. Re-run: `cd {worktree_path} && task test-all`
 5. Green → Step 4; Red and < 3 iterations → repeat; Red and >= 3 → Step 5
 

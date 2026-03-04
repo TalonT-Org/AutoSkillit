@@ -8,7 +8,9 @@ the canonical error response for a closed gate.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(slots=True)
@@ -65,6 +67,22 @@ _DEFAULT_GATE_MESSAGE = (
     "User must type the open_kitchen prompt to activate. "
     "Check the MCP prompt list for the exact name."
 )
+
+
+GATE_STATE_FILENAME = ".kitchen_gate"
+
+
+def write_gate_file(temp_dir: Path) -> None:
+    """Write the gate state file to signal kitchen is open."""
+    gate_path = temp_dir / GATE_STATE_FILENAME
+    gate_path.parent.mkdir(parents=True, exist_ok=True)
+    gate_path.write_text(str(os.getpid()))
+
+
+def remove_gate_file(temp_dir: Path) -> None:
+    """Remove the gate state file. No-op if absent."""
+    gate_path = temp_dir / GATE_STATE_FILENAME
+    gate_path.unlink(missing_ok=True)
 
 
 def gate_error_result(message: str | None = None) -> str:

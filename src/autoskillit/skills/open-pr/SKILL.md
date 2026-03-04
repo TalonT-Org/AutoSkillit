@@ -12,9 +12,11 @@ relevant arch-lens lenses, and open a GitHub Pull Request.
 
 ## Arguments
 
-`/autoskillit:open-pr {plan_path} {feature_branch} {base_branch}`
+`/autoskillit:open-pr {plan_paths} {feature_branch} {base_branch}`
 
-- **plan_path** — Absolute path to the implementation plan markdown file
+- **plan_paths** — Comma-separated list of absolute paths to implementation plan
+  markdown files. Single path for non-groups runs; multiple comma-separated paths
+  for multi-group runs.
 - **feature_branch** — Branch containing all merged implementation changes
 - **base_branch** — Branch to open the PR against (e.g., "main")
 
@@ -42,12 +44,18 @@ relevant arch-lens lenses, and open a GitHub Pull Request.
 
 ### Step 1: Parse Arguments
 
-Parse three positional arguments: `plan_path`, `feature_branch`, `base_branch`.
+Parse three positional arguments: `plan_paths`, `feature_branch`, `base_branch`.
+Split `plan_paths` by comma to get a list of plan file paths.
 
 ### Step 2: Extract PR Title from Plan
 
-Read the plan file at `{plan_path}`. Extract the title from the first `# ` heading line.
-Strip the `# ` prefix. Use as `{task_title}`.
+Read all plan files. For each, extract the first `# ` heading line and strip the `# ` prefix.
+
+- **Single plan:** Use the heading directly as `{task_title}` (current behavior).
+- **Multiple plans:** Spawn a subagent (Task tool, model: haiku) with all extracted
+  headings. Instruct it to synthesize a single concise PR title (under 70 characters)
+  that captures the overall scope. The title should NOT enumerate every group — it
+  should describe the aggregate change.
 
 ### Step 3: Get Changed Files
 
@@ -97,7 +105,11 @@ runs, read the generated markdown file and extract the mermaid code block(s).
 
 ### Step 6: Compose PR Body
 
-Write the PR body to `temp/open-pr/pr_body_{timestamp}.md`:
+Write the PR body to `temp/open-pr/pr_body_{timestamp}.md`.
+
+Read `## Summary` from each plan file.
+
+#### Single plan (one path):
 
 ```markdown
 ## Summary
@@ -117,6 +129,44 @@ Write the PR body to `temp/open-pr/pr_body_{timestamp}.md`:
 ## Implementation Plan
 
 Plan file: `{plan_path}`
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code) via AutoSkillit
+```
+
+#### Multiple plans (comma-separated paths):
+
+```markdown
+## Summary
+
+{Synthesized overall summary — 2-3 sentences covering the aggregate change.
+ Use a haiku subagent to produce this from all individual summaries.}
+
+<details>
+<summary>Individual Group Plans</summary>
+
+### Group 1: {heading from plan 1}
+{Summary from plan 1}
+
+### Group 2: {heading from plan 2}
+{Summary from plan 2}
+
+</details>
+
+## Architecture Impact
+
+{Same as single plan — lens diagrams are based on full diff, not plan count}
+
+### {Lens Name} Diagram
+
+` ` `mermaid
+{diagram content}
+` ` `
+
+## Implementation Plan
+
+Plan files:
+- `{plan_path_1}`
+- `{plan_path_2}`
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code) via AutoSkillit
 ```

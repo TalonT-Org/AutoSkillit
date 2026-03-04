@@ -93,15 +93,12 @@ def generate_recipe_diagram(pipeline_path: Path, recipes_dir: Path) -> str:
 
         failure_col = _route(step.on_failure, idx)
 
-        table_lines.append(
-            f"{step_name:<22} {tool_val:<22} {success_col:<22} {failure_col}"
-        )
+        table_lines.append(f"{step_name:<22} {tool_val:<22} {success_col:<22} {failure_col}")
 
         # Retry continuation line
         if step.retries > 0:
             table_lines.append(
-                f"  {'↺ ×' + str(step.retries) + ' (failure)':<20}"
-                f"  → {step.on_exhausted}"
+                f"  {'↺ ×' + str(step.retries) + ' (failure)':<20}  → {step.on_exhausted}"
             )
 
         # on_result continuation lines
@@ -137,9 +134,7 @@ def generate_recipe_diagram(pipeline_path: Path, recipes_dir: Path) -> str:
     for ing_name, ing in recipe.ingredients.items():
         required = "yes" if ing.required else "no"
         default = ing.default if ing.default is not None else ""
-        ingredient_rows.append(
-            f"| {ing_name} | {ing.description} | {required} | {default} |"
-        )
+        ingredient_rows.append(f"| {ing_name} | {ing.description} | {required} | {default} |")
     ingredients_table = "\n".join(ingredient_rows)
 
     # Build kitchen rules section

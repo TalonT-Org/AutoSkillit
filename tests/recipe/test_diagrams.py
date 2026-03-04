@@ -124,7 +124,9 @@ def test_check_staleness_fresh(tmp_path: Path, sample_recipe_yaml: Path) -> None
     """DG-8: check_diagram_staleness returns False when hash matches."""
     recipes_dir = tmp_path / "recipes"
     generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
-    assert check_diagram_staleness(sample_recipe_yaml.stem, recipes_dir, sample_recipe_yaml) is False
+    assert (
+        check_diagram_staleness(sample_recipe_yaml.stem, recipes_dir, sample_recipe_yaml) is False
+    )
 
 
 def test_check_staleness_modified_recipe(tmp_path: Path, sample_recipe_yaml: Path) -> None:
@@ -133,15 +135,15 @@ def test_check_staleness_modified_recipe(tmp_path: Path, sample_recipe_yaml: Pat
     generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
     # Mutate recipe file after generation
     sample_recipe_yaml.write_text(sample_recipe_yaml.read_text() + "\n# modified\n")
-    assert check_diagram_staleness(sample_recipe_yaml.stem, recipes_dir, sample_recipe_yaml) is True
+    assert (
+        check_diagram_staleness(sample_recipe_yaml.stem, recipes_dir, sample_recipe_yaml) is True
+    )
 
 
 def test_check_staleness_missing_diagram(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """DG-10: check_diagram_staleness returns True when diagram file missing."""
     assert (
-        check_diagram_staleness(
-            sample_recipe_yaml.stem, tmp_path / "recipes", sample_recipe_yaml
-        )
+        check_diagram_staleness(sample_recipe_yaml.stem, tmp_path / "recipes", sample_recipe_yaml)
         is True
     )
 

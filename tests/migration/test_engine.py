@@ -545,9 +545,7 @@ class TestDiagramMigrationAdapter:
         """DG-16: DiagramMigrationAdapter.discover() finds .md files in diagrams/."""
         diag_dir = tmp_path / ".autoskillit" / "recipes" / "diagrams"
         diag_dir.mkdir(parents=True)
-        (diag_dir / "my-recipe.md").write_text(
-            "<!-- autoskillit-recipe-hash: sha256:abc -->"
-        )
+        (diag_dir / "my-recipe.md").write_text("<!-- autoskillit-recipe-hash: sha256:abc -->")
         adapter = DiagramMigrationAdapter()
         files = adapter.discover(tmp_path)
         assert len(files) == 1
@@ -555,9 +553,7 @@ class TestDiagramMigrationAdapter:
         assert files[0].file_type == "diagram"
 
     # DG-17
-    def test_diagram_adapter_discover_returns_empty_when_dir_missing(
-        self, tmp_path: Path
-    ) -> None:
+    def test_diagram_adapter_discover_returns_empty_when_dir_missing(self, tmp_path: Path) -> None:
         """DG-17: DiagramMigrationAdapter.discover() returns [] when dir missing."""
         adapter = DiagramMigrationAdapter()
         assert adapter.discover(tmp_path) == []
@@ -609,22 +605,16 @@ class TestDiagramMigrationAdapter:
         assert (diagrams_dir / "my-recipe.md").exists()
 
     # DG-20
-    def test_diagram_adapter_validate_passes_when_hash_present(
-        self, tmp_path: Path
-    ) -> None:
+    def test_diagram_adapter_validate_passes_when_hash_present(self, tmp_path: Path) -> None:
         """DG-20: DiagramMigrationAdapter.validate() passes when hash comment present."""
         md = tmp_path / "test.md"
-        md.write_text(
-            "<!-- autoskillit-recipe-hash: sha256:abc123def456 -->\n## My Recipe\n"
-        )
+        md.write_text("<!-- autoskillit-recipe-hash: sha256:abc123def456 -->\n## My Recipe\n")
         adapter = DiagramMigrationAdapter()
         valid, msg = adapter.validate(md)
         assert valid is True
         assert msg == ""
 
-    def test_diagram_adapter_validate_fails_when_hash_absent(
-        self, tmp_path: Path
-    ) -> None:
+    def test_diagram_adapter_validate_fails_when_hash_absent(self, tmp_path: Path) -> None:
         """validate() fails when hash comment missing."""
         md = tmp_path / "test.md"
         md.write_text("## My Recipe\nNo hash here.\n")

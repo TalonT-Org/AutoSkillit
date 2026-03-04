@@ -529,6 +529,30 @@ class TestRunHeadlessCore:
         assert any("-p" in part for part in cmd)
         assert any("/investigate" in part for part in cmd)
 
+    @pytest.mark.anyio
+    async def test_assembled_cmd_contains_format_required_flags(self, tool_ctx):
+        """Assembled command must include all flags required by the output format."""
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        payload = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": f"Done. {marker}",
+                "session_id": "sess-1",
+            }
+        )
+        tool_ctx.runner.push(
+            SubprocessResult(0, payload, "", TerminationReason.NATURAL_EXIT, pid=1)
+        )
+        await run_headless_core("/investigate bar", cwd="/tmp", ctx=tool_ctx)
+        cmd, _cwd, _timeout, _kwargs = tool_ctx.runner.call_args_list[0]
+        fmt = tool_ctx.config.run_skill.output_format
+        for flag in fmt.required_cli_flags:
+            assert flag in cmd, f"Missing required flag {flag!r} in assembled command: {cmd}"
+
 
 class TestEnsureSkillPrefix:
     """Unit tests for _ensure_skill_prefix helper."""

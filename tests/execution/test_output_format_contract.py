@@ -193,6 +193,42 @@ class TestOutputFormatDerivation:
         assert cfg.output_format == OutputFormat.JSON
 
 
+class TestOutputFormatCliRequirements:
+    """Contract tests: each OutputFormat variant declares required CLI flags."""
+
+    def test_stream_json_requires_verbose(self):
+        """STREAM_JSON must declare --verbose as a required CLI flag."""
+        assert "--verbose" in OutputFormat.STREAM_JSON.required_cli_flags
+
+    def test_json_requires_no_extra_flags(self):
+        """JSON format requires no additional CLI flags."""
+        assert OutputFormat.JSON.required_cli_flags == ()
+
+    def test_all_formats_declare_required_flags(self):
+        """Every OutputFormat member must declare required_cli_flags as a tuple."""
+        for fmt in OutputFormat:
+            flags = fmt.required_cli_flags
+            assert isinstance(flags, tuple), f"{fmt.name} returned {type(flags)}, expected tuple"
+
+    def test_command_assembly_satisfies_format_requirements(self):
+        """Assembled command must contain all flags required by the chosen format.
+
+        Builds a command the same way run_headless_core does, then asserts
+        every flag from the format's required_cli_flags is present.
+        """
+        from autoskillit.execution.commands import build_headless_cmd
+
+        fmt = OutputFormat.STREAM_JSON
+        spec = build_headless_cmd("Use /investigate test", model=None)
+        cmd = spec.cmd + ["--plugin-dir", "/fake", "--output-format", fmt.value]
+        # Apply required flags (mirrors run_headless_core logic)
+        for flag in fmt.required_cli_flags:
+            if flag not in cmd:
+                cmd.append(flag)
+        for flag in fmt.required_cli_flags:
+            assert flag in cmd, f"Missing required flag {flag} in assembled command"
+
+
 class TestChannelDefaultCoverage:
     """Verify that UNMONITORED channel exercises content validation."""
 

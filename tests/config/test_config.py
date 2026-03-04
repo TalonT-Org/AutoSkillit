@@ -181,7 +181,7 @@ class TestLoadConfig:
         assert cfg.model.default == "sonnet"
 
     def test_loaded_config_has_sonnet_default(self, tmp_path):
-        """MOD_C4: load_config with no user YAML produces model.default='sonnet' from defaults.yaml."""
+        """MOD_C4: load_config produces model.default='sonnet'."""
         cfg = load_config(tmp_path)
         assert cfg.model.default == "sonnet"
 

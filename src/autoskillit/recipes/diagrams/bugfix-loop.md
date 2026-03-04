@@ -1,44 +1,74 @@
 <!-- autoskillit-recipe-hash: sha256:353cd3eab98857fbb70e4f79cb0b6661312bd63d27ebd58c0ad1db51f41087f2 -->
+<!-- autoskillit-diagram-format: v2 -->
 ## bugfix-loop
 End-to-end test with automatic bug fixing in isolated worktrees.
 
 **Flow:** 
 
 ### Graph
-Step                   Tool                   ✓ success              ✗ failure
-───────────────────────────────────────────────────────────────────────
-reset                  reset_test_dir         → test                 → escalate
-  ↺ ×3 (failure)        → escalate
-test                   test_check             → done                 → investigate
-  ↺ ×3 (failure)        → escalate
-investigate            run_skill              → plan                 → escalate
-  ↺ ×3 (failure)        → escalate
-plan                   run_skill              → implement            → escalate
-  ↺ ×3 (failure)        → escalate
-implement              run_skill              → verify               → escalate
-retry_worktree         run_skill              → verify               → escalate
-  ↺ ×3 (failure)        → escalate
-verify                 test_check             → audit_impl           → assess
-  ↺ ×3 (failure)        → escalate
-assess                 run_skill              → verify↑              → classify
-  ↺ ×3 (failure)        → classify
-classify               classify_fix                                  
-  ↺ ×3 (failure)        → escalate
-  ${{ result.restart_scope }} == full_restart  → investigate↑
-  result.error          → escalate
-  (default)             → implement↑
-audit_impl             run_skill                                     
-  ↺ ×3 (failure)        → escalate
-  ${{ result.verdict }} == GO  → merge
-  result.error          → escalate
-  (default)             → remediate
-remediate              route                  → plan↑                
-  ↺ ×3 (failure)        → escalate
-merge                  merge_worktree         → done                 → escalate
-  ↺ ×3 (failure)        → escalate
-───────────────────────────────────────────────────────────────────────
-done  "All tests passing. Fix merged successfully."
-escalate  "Human intervention needed. Review the latest output for details."
+┌─ reset  [reset_test_dir]
+│  ✓ success  → test
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ test  [test_check]
+│  ✓ success  → done
+│  ✗ failure  → investigate
+│  ↺ ×3  → escalate
+│
+┌─ investigate  [run_skill]
+│  ✓ success  → plan
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ plan  [run_skill]
+│  ✓ success  → implement
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ implement  [run_skill]
+│  ✓ success  → verify
+│  ✗ failure  → escalate
+│
+┌─ retry_worktree  [run_skill]
+│  ✓ success  → verify
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ verify  [test_check]
+│  ✓ success  → audit_impl
+│  ✗ failure  → assess
+│  ↺ ×3  → escalate
+│
+┌─ assess  [run_skill]
+│  ✓ success  → verify ↑
+│  ✗ failure  → classify
+│  ↺ ×3  → classify
+│
+┌─ classify  [classify_fix]
+│  ├─ ${{ result.restart_scope }} == full_restart  → investigate ↑
+│  ├─ result.error  → escalate
+│  ├─ (default)  → implement ↑
+│  ↺ ×3  → escalate
+│
+┌─ audit_impl  [run_skill]
+│  ├─ ${{ result.verdict }} == GO  → merge
+│  ├─ result.error  → escalate
+│  ├─ (default)  → remediate
+│  ↺ ×3  → escalate
+│
+┌─ remediate  [route]
+│  ✓ success  → plan ↑
+│  ↺ ×3  → escalate
+│
+┌─ merge  [merge_worktree]
+│  ✓ success  → done
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+───────────────────────────────────────
+⏹ done  "All tests passing. Fix merged successfully."
+⏹ escalate  "Human intervention needed. Review the latest output for details."
 
 ### Ingredients
 | Name | Description | Required | Default |

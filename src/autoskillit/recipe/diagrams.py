@@ -3,27 +3,207 @@
 Diagrams are stored in ``recipes/diagrams/{name}.md``, parallel to contract
 cards in ``recipes/contracts/{name}.yaml``.  Staleness is detected by an HTML
 comment ``<!-- autoskillit-recipe-hash: sha256:... -->`` embedded at the top
-of each diagram file.
+of each diagram file, plus a format version marker to detect rendering logic
+changes.
 """
 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from autoskillit.core import _atomic_write
 from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
-# Width of the separator rule in the route table.
-_RULE = "─" * 71
+# Diagram format version — bump when rendering logic changes so that
+# existing diagrams are flagged stale even if the recipe YAML hasn't changed.
+_DIAGRAM_FORMAT_VERSION = "v2"
+
+
+# ---------------------------------------------------------------------------
+# Layout data structures
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _LayoutStep:
+    """A positioned step in the visual flow layout."""
+
+    name: str
+    tool: str
+    is_terminal: bool = False
+    message: str = ""
+    on_success: str | None = None
+    on_failure: str | None = None
+    retries: int = 0
+    on_exhausted: str = "escalate"
+    is_back_edge_success: bool = False
+    is_back_edge_failure: bool = False
+    on_result_conditions: list[tuple[str, str, bool]] = field(default_factory=list)
+    skip_when_false: str | None = None
+
+
+@dataclass
+class _LayoutResult:
+    """Complete layout for visual rendering."""
+
+    steps: list[_LayoutStep]
+    back_edges: list[tuple[str, str]]  # (from_step, to_step)
+
+
+# ---------------------------------------------------------------------------
+# Layout computation
+# ---------------------------------------------------------------------------
+
+
+def _compute_layout(recipe: Any) -> _LayoutResult:
+    """Compute visual layout from a Recipe dataclass."""
+    step_names = list(recipe.steps.keys())
+    step_index: dict[str, int] = {name: i for i, name in enumerate(step_names)}
+
+    def _is_back_edge(target: str | None, current_idx: int) -> bool:
+        if target is None:
+            return False
+        idx = step_index.get(target)
+        return idx is not None and idx < current_idx
+
+    layout_steps: list[_LayoutStep] = []
+    back_edges: list[tuple[str, str]] = []
+
+    for step_name, step in recipe.steps.items():
+        idx = step_index[step_name]
+
+        # Determine tool column value
+        if step.tool is not None:
+            tool_val = step.tool
+        elif step.python is not None:
+            tool_val = step.python
+        elif step.action is not None:
+            tool_val = step.action
+        else:
+            tool_val = "—"
+        if step.model:
+            tool_val = f"{tool_val} [{step.model}]"
+
+        is_terminal = step.action == "stop"
+
+        ls = _LayoutStep(
+            name=step_name,
+            tool=tool_val,
+            is_terminal=is_terminal,
+            message=step.message or "",
+            on_success=step.on_success,
+            on_failure=step.on_failure,
+            retries=step.retries if not is_terminal else 0,
+            on_exhausted=step.on_exhausted if not is_terminal else "escalate",
+            skip_when_false=step.skip_when_false,
+        )
+
+        # Check for back-edges on success/failure
+        if _is_back_edge(step.on_success, idx):
+            ls.is_back_edge_success = True
+            back_edges.append((step_name, step.on_success))  # type: ignore[arg-type]
+        if _is_back_edge(step.on_failure, idx):
+            ls.is_back_edge_failure = True
+            back_edges.append((step_name, step.on_failure))  # type: ignore[arg-type]
+
+        # Handle on_result conditions
+        if step.on_result is not None:
+            sr = step.on_result
+            if sr.conditions:
+                for cond in sr.conditions:
+                    when_str = cond.when if cond.when else "(default)"
+                    is_back = _is_back_edge(cond.route, idx)
+                    ls.on_result_conditions.append((when_str, cond.route, is_back))
+                    if is_back:
+                        back_edges.append((step_name, cond.route))
+            elif sr.routes:
+                for key, target in sr.routes.items():
+                    is_back = _is_back_edge(target, idx)
+                    ls.on_result_conditions.append((key, target, is_back))
+                    if is_back:
+                        back_edges.append((step_name, target))
+
+        layout_steps.append(ls)
+
+    return _LayoutResult(steps=layout_steps, back_edges=back_edges)
+
+
+# ---------------------------------------------------------------------------
+# Visual ASCII flow renderer
+# ---------------------------------------------------------------------------
+
+
+def _render_visual_flow(layout: _LayoutResult) -> str:
+    """Render the layout as a visual ASCII flow diagram using box-drawing characters.
+
+    Format:
+    - Steps connected by │ on the main vertical spine
+    - Success/failure routes shown inline
+    - Back-edges marked with ↑
+    - Optional steps annotated with their condition
+    - Retry info shown as sub-lines
+    - Terminal steps shown at the bottom
+    """
+    lines: list[str] = []
+
+    non_terminal = [s for s in layout.steps if not s.is_terminal]
+    terminal = [s for s in layout.steps if s.is_terminal]
+
+    for i, step in enumerate(non_terminal):
+        # Optional step annotation
+        if step.skip_when_false:
+            lines.append(f"│  ⟨skip if {step.skip_when_false} is false⟩")
+
+        # Step box
+        lines.append(f"┌─ {step.name}  [{step.tool}]")
+
+        # Routes
+        if step.on_result_conditions:
+            # on_result routing — multiple conditions
+            for when_str, target, is_back in step.on_result_conditions:
+                suffix = " ↑" if is_back else ""
+                lines.append(f"│  ├─ {when_str}  → {target}{suffix}")
+            if step.on_failure:
+                suffix = " ↑" if step.is_back_edge_failure else ""
+                lines.append(f"│  ✗ failure  → {step.on_failure}{suffix}")
+        else:
+            # Normal success/failure routing
+            if step.on_success:
+                suffix = " ↑" if step.is_back_edge_success else ""
+                lines.append(f"│  ✓ success  → {step.on_success}{suffix}")
+            if step.on_failure:
+                suffix = " ↑" if step.is_back_edge_failure else ""
+                lines.append(f"│  ✗ failure  → {step.on_failure}{suffix}")
+
+        # Retry info
+        if step.retries > 0:
+            lines.append(f"│  ↺ ×{step.retries}  → {step.on_exhausted}")
+
+        # Connector to next step (unless last non-terminal)
+        if i < len(non_terminal) - 1:
+            lines.append("│")
+
+    # Terminal steps section
+    if terminal:
+        lines.append("│")
+        lines.append("───────────────────────────────────────")
+        for term in terminal:
+            if term.message:
+                lines.append(f'⏹ {term.name}  "{term.message}"')
+            else:
+                lines.append(f"⏹ {term.name}")
+
+    return "\n".join(lines)
 
 
 def generate_recipe_diagram(pipeline_path: Path, recipes_dir: Path) -> str:
-    """Generate a flow diagram for the recipe at *pipeline_path*.
+    """Generate a visual flow diagram for the recipe at *pipeline_path*.
 
-    Reads the recipe YAML, builds a Markdown route table and ingredients
-    table, embeds a SHA-256 hash comment for staleness detection, and
+    Reads the recipe YAML, builds a visual ASCII flow diagram and ingredients
+    table, embeds SHA-256 hash and format version for staleness detection, and
     writes the result atomically to ``recipes_dir/diagrams/{stem}.md``.
 
     Args:
@@ -39,93 +219,9 @@ def generate_recipe_diagram(pipeline_path: Path, recipes_dir: Path) -> str:
     recipe = load_recipe(pipeline_path)
     recipe_hash = compute_recipe_hash(pipeline_path)
 
-    # Determine step order for back-edge detection
-    step_names = list(recipe.steps.keys())
-    step_index: dict[str, int] = {name: i for i, name in enumerate(step_names)}
-
-    def _is_back_edge(target: str | None, current_idx: int) -> bool:
-        if target is None:
-            return False
-        idx = step_index.get(target)
-        return idx is not None and idx < current_idx
-
-    def _route(target: str | None, current_idx: int) -> str:
-        if target is None:
-            return ""
-        suffix = "↑" if _is_back_edge(target, current_idx) else ""
-        return f"→ {target}{suffix}"
-
-    # Separate terminal and non-terminal steps
-    terminal_steps: list[tuple[str, str]] = []
-    non_terminal: list[tuple[str, Any]] = []
-    for step_name, step in recipe.steps.items():
-        if step.action == "stop":
-            terminal_steps.append((step_name, step.message or ""))
-        else:
-            non_terminal.append((step_name, step))
-
-    # Build route table rows
-    table_lines: list[str] = []
-    header = f"{'Step':<22} {'Tool':<22} {'✓ success':<22} {'✗ failure'}"
-    table_lines.append(header)
-    table_lines.append(_RULE)
-
-    for step_name, step in non_terminal:
-        idx = step_index[step_name]
-
-        # Determine tool column value
-        if step.tool is not None:
-            tool_val = step.tool
-        elif step.python is not None:
-            tool_val = step.python
-        elif step.action is not None:
-            tool_val = step.action
-        else:
-            tool_val = "—"
-        if step.model:
-            tool_val = f"{tool_val} [{step.model}]"
-
-        if step.on_result is not None:
-            # on_result steps: leave ✓ success blank
-            success_col = ""
-        else:
-            success_col = _route(step.on_success, idx)
-
-        failure_col = _route(step.on_failure, idx)
-
-        table_lines.append(f"{step_name:<22} {tool_val:<22} {success_col:<22} {failure_col}")
-
-        # Retry continuation line
-        if step.retries > 0:
-            table_lines.append(
-                f"  {'↺ ×' + str(step.retries) + ' (failure)':<20}  → {step.on_exhausted}"
-            )
-
-        # on_result continuation lines
-        if step.on_result is not None:
-            sr = step.on_result
-            if sr.conditions:
-                # Predicate format
-                for cond in sr.conditions:
-                    when_str = cond.when if cond.when else "(default)"
-                    suffix = "↑" if _is_back_edge(cond.route, idx) else ""
-                    table_lines.append(f"  {when_str:<20}  → {cond.route}{suffix}")
-            elif sr.routes:
-                # Legacy format
-                for key, target in sr.routes.items():
-                    suffix = "↑" if _is_back_edge(target, idx) else ""
-                    table_lines.append(f"  {key:<20}  → {target}{suffix}")
-
-    table_lines.append(_RULE)
-
-    # Terminal step lines below rule
-    for term_name, term_msg in terminal_steps:
-        if term_msg:
-            table_lines.append(f'{term_name}  "{term_msg}"')
-        else:
-            table_lines.append(term_name)
-
-    route_table = "\n".join(table_lines)
+    # Compute layout and render
+    layout = _compute_layout(recipe)
+    flow_diagram = _render_visual_flow(layout)
 
     # Build ingredients table
     ingredient_rows: list[str] = []
@@ -148,13 +244,14 @@ def generate_recipe_diagram(pipeline_path: Path, recipes_dir: Path) -> str:
     # Assemble full diagram
     diagram = (
         f"<!-- autoskillit-recipe-hash: {recipe_hash} -->\n"
+        f"<!-- autoskillit-diagram-format: {_DIAGRAM_FORMAT_VERSION} -->\n"
         f"## {recipe.name}\n"
         f"{recipe.description}\n"
         f"\n"
         f"**Flow:** {recipe.summary}\n"
         f"\n"
         f"### Graph\n"
-        f"{route_table}\n"
+        f"{flow_diagram}\n"
         f"\n"
         f"### Ingredients\n"
         f"{ingredients_table}"
@@ -187,6 +284,7 @@ def load_recipe_diagram(recipe_name: str, recipes_dir: Path) -> str | None:
 
 
 _HASH_RE = re.compile(r"<!-- autoskillit-recipe-hash: (sha256:[0-9a-f]+) -->")
+_FORMAT_RE = re.compile(r"<!-- autoskillit-diagram-format: (\S+) -->")
 
 
 def check_diagram_staleness(
@@ -196,8 +294,9 @@ def check_diagram_staleness(
 ) -> bool:
     """Return True if the diagram for *recipe_name* is missing or out of date.
 
-    Staleness is determined by comparing the SHA-256 hash embedded in the
-    diagram file against the current hash of the recipe YAML.
+    Staleness is determined by comparing:
+    1. The SHA-256 hash embedded in the diagram against the current recipe YAML.
+    2. The format version embedded in the diagram against the current renderer version.
 
     Args:
         recipe_name: Recipe name without extension.
@@ -211,13 +310,22 @@ def check_diagram_staleness(
     if content is None:
         return True
 
-    match = _HASH_RE.search(content)
-    if not match:
+    hash_match = _HASH_RE.search(content)
+    if not hash_match:
         return True
 
-    stored_hash = match.group(1)
+    stored_hash = hash_match.group(1)
     current_hash = compute_recipe_hash(recipe_path)
-    return stored_hash != current_hash
+    if stored_hash != current_hash:
+        return True
+
+    # Check format version
+    format_match = _FORMAT_RE.search(content)
+    if not format_match:
+        return True  # No format version = pre-v2 diagram, stale
+
+    stored_format = format_match.group(1)
+    return stored_format != _DIAGRAM_FORMAT_VERSION
 
 
 def diagram_stale_to_suggestions(recipe_name: str) -> list[dict[str, str]]:

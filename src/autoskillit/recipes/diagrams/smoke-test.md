@@ -1,52 +1,98 @@
 <!-- autoskillit-recipe-hash: sha256:c2d42ab2bc8546d77ec5507b07bc3b6797f2aa600271c309b14124dda0044c0b -->
+<!-- autoskillit-diagram-format: v2 -->
 ## smoke-test
 End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
 
 **Flow:** setup > seed_task > set_feature_branch > create_branch? > investigate > rectify > implement > set_worktree_path > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
 
 ### Graph
-Step                   Tool                   ✓ success              ✗ failure
-───────────────────────────────────────────────────────────────────────
-setup                  run_cmd                → setup_remote         → escalate
-  ↺ ×3 (failure)        → escalate
-setup_remote           run_cmd                → seed_task            → escalate
-  ↺ ×3 (failure)        → escalate
-seed_task              run_cmd                → set_feature_branch   → escalate
-  ↺ ×3 (failure)        → escalate
-set_feature_branch     run_cmd                → create_branch        → escalate
-  ↺ ×3 (failure)        → escalate
-create_branch          run_cmd                → investigate          → escalate
-  ↺ ×3 (failure)        → escalate
-investigate            run_skill              → rectify              → escalate
-  ↺ ×3 (failure)        → escalate
-rectify                run_skill              → implement            → escalate
-  ↺ ×3 (failure)        → escalate
-implement              run_skill              → set_worktree_path    → escalate
-  ↺ ×2 (failure)        → escalate
-set_worktree_path      run_cmd                → test                 → escalate
-  ↺ ×3 (failure)        → escalate
-test                   test_check             → push_feature_branch  → assess
-  ↺ ×3 (failure)        → escalate
-push_feature_branch    push_to_remote         → merge                → escalate
-  ↺ ×3 (failure)        → escalate
-assess                 run_skill              → test↑                → classify
-  ↺ ×2 (failure)        → classify
-classify               classify_fix                                  
-  ↺ ×3 (failure)        → escalate
-  ${{ result.restart_scope }} == full_restart  → investigate↑
-  result.error          → escalate
-  (default)             → implement↑
-merge                  merge_worktree         → check_summary        → escalate
-  ↺ ×3 (failure)        → escalate
-check_summary          autoskillit.smoke_utils.check_bug_report_non_empty                        
-  ↺ ×3 (failure)        → escalate
-  ${{ result.non_empty }} == true  → create_summary
-  (default)             → done
-create_summary         run_skill              → done                 → escalate
-  ↺ ×3 (failure)        → escalate
-───────────────────────────────────────────────────────────────────────
-done  "Smoke pipeline completed successfully."
-escalate  "Smoke pipeline failed — check step output for details."
+┌─ setup  [run_cmd]
+│  ✓ success  → setup_remote
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ setup_remote  [run_cmd]
+│  ✓ success  → seed_task
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ seed_task  [run_cmd]
+│  ✓ success  → set_feature_branch
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ set_feature_branch  [run_cmd]
+│  ✓ success  → create_branch
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+│  ⟨skip if inputs.collect_on_branch is false⟩
+┌─ create_branch  [run_cmd]
+│  ✓ success  → investigate
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ investigate  [run_skill]
+│  ✓ success  → rectify
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ rectify  [run_skill]
+│  ✓ success  → implement
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ implement  [run_skill]
+│  ✓ success  → set_worktree_path
+│  ✗ failure  → escalate
+│  ↺ ×2  → escalate
+│
+┌─ set_worktree_path  [run_cmd]
+│  ✓ success  → test
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ test  [test_check]
+│  ✓ success  → push_feature_branch
+│  ✗ failure  → assess
+│  ↺ ×3  → escalate
+│
+│  ⟨skip if inputs.collect_on_branch is false⟩
+┌─ push_feature_branch  [push_to_remote]
+│  ✓ success  → merge
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ assess  [run_skill]
+│  ✓ success  → test ↑
+│  ✗ failure  → classify
+│  ↺ ×2  → classify
+│
+┌─ classify  [classify_fix]
+│  ├─ ${{ result.restart_scope }} == full_restart  → investigate ↑
+│  ├─ result.error  → escalate
+│  ├─ (default)  → implement ↑
+│  ↺ ×3  → escalate
+│
+┌─ merge  [merge_worktree]
+│  ✓ success  → check_summary
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+┌─ check_summary  [autoskillit.smoke_utils.check_bug_report_non_empty]
+│  ├─ ${{ result.non_empty }} == true  → create_summary
+│  ├─ (default)  → done
+│  ↺ ×3  → escalate
+│
+│  ⟨skip if inputs.collect_on_branch is false⟩
+┌─ create_summary  [run_skill]
+│  ✓ success  → done
+│  ✗ failure  → escalate
+│  ↺ ×3  → escalate
+│
+───────────────────────────────────────
+⏹ done  "Smoke pipeline completed successfully."
+⏹ escalate  "Smoke pipeline failed — check step output for details."
 
 ### Ingredients
 | Name | Description | Required | Default |

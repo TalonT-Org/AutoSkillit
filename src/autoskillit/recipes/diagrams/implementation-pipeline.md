@@ -1,66 +1,131 @@
-<!-- autoskillit-recipe-hash: sha256:36908a854e3d95a435e1e16b3bfea6d5edab531e267d83bdcfe6962b6ced41c5 -->
+<!-- autoskillit-recipe-hash: sha256:cf54bcd8cb5b56bebf4440744919ba476a0ee5d750e398bfe6a31b74a7a09186 -->
+<!-- autoskillit-diagram-format: v2 -->
 ## implementation-pipeline
 Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
 
 **Flow:** clone > capture_base_sha > set_merge_target > (create_branch?) > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part) > (audit-impl?) > (open_pr?) > push > cleanup
 
 ### Graph
-Step                   Tool                   ✓ success              ✗ failure
-───────────────────────────────────────────────────────────────────────
-clone                  clone_repo             → capture_base_sha     → escalate_stop
-  ↺ ×3 (failure)        → escalate
-capture_base_sha       run_cmd                → set_merge_target     → escalate_stop
-  ↺ ×3 (failure)        → escalate
-set_merge_target       run_cmd                → create_branch        → escalate_stop
-  ↺ ×3 (failure)        → escalate
-create_branch          run_cmd                → push_merge_target    → cleanup_failure
-  ↺ ×3 (failure)        → escalate
-push_merge_target      push_to_remote         → group                → cleanup_failure
-  ↺ ×3 (failure)        → escalate
-group                  run_skill              → plan                 → cleanup_failure
-  ↺ ×3 (failure)        → escalate
-plan                   run_skill              → review               → cleanup_failure
-  ↺ ×3 (failure)        → escalate
-review                 run_skill              → verify               → cleanup_failure
-  ↺ ×3 (failure)        → escalate
-verify                 run_skill              → implement            → cleanup_failure
-  ↺ ×3 (failure)        → escalate
-implement              run_skill              → test                 → cleanup_failure
-retry_worktree         run_skill              → test                 → cleanup_failure
-  ↺ ×3 (failure)        → cleanup_failure
-test                   test_check             → merge                → fix
-  ↺ ×3 (failure)        → escalate
-merge                  merge_worktree                                
-  ↺ ×3 (failure)        → escalate
-  result.failed_step == 'test_gate'  → fix
-  result.failed_step == 'rebase'  → fix
-  result.error          → cleanup_failure
-  (default)             → next_or_done
-push                   push_to_remote         → open_pr_step         → cleanup_failure
-  ↺ ×3 (failure)        → escalate
-fix                    run_skill              → test↑                → cleanup_failure
-  ↺ ×3 (failure)        → escalate
-next_or_done           route                                         
-  ↺ ×3 (failure)        → escalate
-  ${{ result.next }} == more_parts  → verify↑
-  ${{ result.next }} == more_groups  → plan↑
-  (default)             → audit_impl
-audit_impl             run_skill                                     
-  ↺ ×3 (failure)        → escalate
-  ${{ result.verdict }} == GO  → push↑
-  result.error          → escalate_stop
-  (default)             → remediate
-remediate              route                  → plan↑                
-  ↺ ×3 (failure)        → escalate
-open_pr_step           run_skill              → cleanup_success      → cleanup_failure
-  ↺ ×3 (failure)        → escalate
-cleanup_success        remove_clone           → done                 → done
-  ↺ ×3 (failure)        → escalate
-cleanup_failure        remove_clone           → escalate_stop        → escalate_stop
-  ↺ ×3 (failure)        → escalate
-───────────────────────────────────────────────────────────────────────
-done  "Implementation pipeline complete. All groups/tasks have been planned, implemented, tested, and merged."
-escalate_stop  "Pipeline failed — human intervention needed. Check the worktree and plan for details."
+┌─ clone  [clone_repo]
+│  ✓ success  → capture_base_sha
+│  ✗ failure  → escalate_stop
+│  ↺ ×3  → escalate
+│
+┌─ capture_base_sha  [run_cmd]
+│  ✓ success  → set_merge_target
+│  ✗ failure  → escalate_stop
+│  ↺ ×3  → escalate
+│
+┌─ set_merge_target  [run_cmd]
+│  ✓ success  → fetch_issue
+│  ✗ failure  → escalate_stop
+│  ↺ ×3  → escalate
+│
+│  ⟨skip if inputs.issue_url is false⟩
+┌─ fetch_issue  [fetch_github_issue]
+│  ✓ success  → create_branch
+│  ✗ failure  → escalate_stop
+│  ↺ ×3  → escalate
+│
+│  ⟨skip if inputs.open_pr is false⟩
+┌─ create_branch  [run_cmd]
+│  ✓ success  → push_merge_target
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → escalate
+│
+│  ⟨skip if inputs.open_pr is false⟩
+┌─ push_merge_target  [push_to_remote]
+│  ✓ success  → group
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → escalate
+│
+┌─ group  [run_skill]
+│  ✓ success  → plan
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → escalate
+│
+┌─ plan  [run_skill]
+│  ✓ success  → review
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → escalate
+│
+┌─ review  [run_skill]
+│  ✓ success  → verify
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → escalate
+│
+┌─ verify  [run_skill]
+│  ✓ success  → implement
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → escalate
+│
+┌─ implement  [run_skill]
+│  ✓ success  → test
+│  ✗ failure  → cleanup_failure
+│
+┌─ retry_worktree  [run_skill]
+│  ✓ success  → test
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → cleanup_failure
+│
+┌─ test  [test_check]
+│  ✓ success  → merge
+│  ✗ failure  → fix
+│  ↺ ×3  → escalate
+│
+┌─ merge  [merge_worktree]
+│  ├─ result.failed_step == 'test_gate'  → fix
+│  ├─ result.failed_step == 'rebase'  → fix
+│  ├─ result.error  → cleanup_failure
+│  ├─ (default)  → next_or_done
+│  ↺ ×3  → escalate
+│
+┌─ push  [push_to_remote]
+│  ✓ success  → open_pr_step
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → escalate
+│
+┌─ fix  [run_skill]
+│  ✓ success  → test ↑
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → escalate
+│
+┌─ next_or_done  [route]
+│  ├─ ${{ result.next }} == more_parts  → verify ↑
+│  ├─ ${{ result.next }} == more_groups  → plan ↑
+│  ├─ (default)  → audit_impl
+│  ↺ ×3  → escalate
+│
+│  ⟨skip if inputs.audit is false⟩
+┌─ audit_impl  [run_skill]
+│  ├─ ${{ result.verdict }} == GO  → push ↑
+│  ├─ result.error  → escalate_stop
+│  ├─ (default)  → remediate
+│  ↺ ×3  → escalate
+│
+┌─ remediate  [route]
+│  ✓ success  → plan ↑
+│  ↺ ×3  → escalate
+│
+│  ⟨skip if inputs.open_pr is false⟩
+┌─ open_pr_step  [run_skill]
+│  ✓ success  → cleanup_success
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → escalate
+│
+┌─ cleanup_success  [remove_clone]
+│  ✓ success  → done
+│  ✗ failure  → done
+│  ↺ ×3  → escalate
+│
+┌─ cleanup_failure  [remove_clone]
+│  ✓ success  → escalate_stop
+│  ✗ failure  → escalate_stop
+│  ↺ ×3  → escalate
+│
+───────────────────────────────────────
+⏹ done  "Implementation pipeline complete. All groups/tasks have been planned, implemented, tested, and merged."
+⏹ escalate_stop  "Pipeline failed — human intervention needed. Check the worktree and plan for details."
 
 ### Ingredients
 | Name | Description | Required | Default |
@@ -75,6 +140,8 @@ escalate_stop  "Pipeline failed — human intervention needed. Check the worktre
 | review_approach | Run /review-approach before implementation? (true/false) | no | false |
 | audit | Run /autoskillit:audit-impl once after all groups/parts have been merged, to check overall implementation quality and optionally trigger a remediation round (true/false) | no | true |
 | open_pr | Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false) | no | true |
+| issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched and used to enrich planning, and the resulting PR will include "Closes #N" to auto-close the issue on merge.
+ | no |  |
 ### Kitchen Rules
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill.
 - Route to on_failure — never investigate or fix directly from the orchestrator.

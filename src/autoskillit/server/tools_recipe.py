@@ -83,9 +83,16 @@ async def load_recipe(name: str) -> str:
         **Flow:** {summary}
 
         ### Graph
-        Render a route table: Step / Tool / ✓ success / ✗ failure columns.
-        Append ↑ to back-edge targets. List terminal steps below the rule.
-        Add retry and on_result continuation lines as sub-rows.
+        Render a visual ASCII flow diagram using box-drawing characters:
+        - Each non-terminal step: ┌─ step_name  [tool_name]
+        - Steps connected by │ on the vertical spine
+        - Success route: │  ✓ success  → target_step
+        - Failure route: │  ✗ failure  → target_step
+        - Back-edges (loops): append ↑ to the target name
+        - Optional steps: │  ⟨skip if condition is false⟩ before the step
+        - on_result conditions: │  ├─ when_expr  → target_step
+        - Retry info: │  ↺ ×N  → on_exhausted_target
+        - Terminal steps below a ─── rule: ⏹ step_name  "message"
 
         ### Ingredients
         For each ingredient: name, description, required/optional, default value.

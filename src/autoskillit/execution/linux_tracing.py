@@ -16,11 +16,13 @@ On non-Linux platforms, all public functions are safe no-ops.
 
 from __future__ import annotations
 
+import json
 import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING
 
 import anyio
 import anyio.abc
@@ -50,6 +52,8 @@ class ProcSnapshot:
     sig_cgt: str
     oom_score: int
     wchan: str
+    # timestamp stamped at capture time
+    captured_at: str = ""
 
 
 def _parse_proc_status(content: str) -> dict[str, str]:
@@ -119,6 +123,7 @@ def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
         sig_cgt=sig_fields.get("sig_cgt", ""),
         oom_score=oom,
         wchan=wchan,
+        captured_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -138,11 +143,20 @@ class LinuxTracingHandle:
 
     _monitor_cancel_scope: anyio.CancelScope | None = None
     _snapshots: list[ProcSnapshot] = field(default_factory=list)
+    _trace_path: Path | None = field(default=None)
+    _trace_file: IO[str] | None = field(default=None)
 
-    async def stop(self) -> list[ProcSnapshot]:
-        """Stop tracing and return accumulated snapshots."""
+    def stop(self) -> list[ProcSnapshot]:
+        """Stop tracing, flush and close the trace file, return accumulated snapshots."""
         if self._monitor_cancel_scope is not None:
             self._monitor_cancel_scope.cancel()
+        if self._trace_file is not None:
+            try:
+                self._trace_file.flush()
+                self._trace_file.close()
+            except OSError:
+                pass
+            self._trace_file = None
         return list(self._snapshots)
 
 
@@ -160,10 +174,31 @@ def start_linux_tracing(
     handle = LinuxTracingHandle()
     scope = anyio.CancelScope()
 
+    # Open tmpfs trace file for crash-resilient streaming (line-buffered)
+    tmpfs = Path(config.tmpfs_path)
+    if tmpfs.is_dir():
+        trace_path = tmpfs / f"autoskillit_trace_{pid}.jsonl"
+        try:
+            handle._trace_path = trace_path
+            handle._trace_file = trace_path.open("w", buffering=1)
+        except OSError:
+            handle._trace_path = None
+            handle._trace_file = None
+
     async def _run_monitor() -> None:
         with scope:
             async for snap in proc_monitor(pid, config.proc_interval):
                 handle._snapshots.append(snap)
+                if handle._trace_file is not None:
+                    try:
+                        handle._trace_file.write(json.dumps(snap.__dict__) + "\n")
+                    except OSError:
+                        # Close broken file; degrade to in-memory only
+                        try:
+                            handle._trace_file.close()
+                        except OSError:
+                            pass
+                        handle._trace_file = None
 
     handle._monitor_cancel_scope = scope
     tg.start_soon(_run_monitor)

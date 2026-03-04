@@ -8,7 +8,6 @@ from pathlib import Path
 from fastmcp.prompts import Message, PromptResult
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, pkg_root
-from autoskillit.pipeline import remove_gate_file, write_gate_file
 from autoskillit.server import mcp
 
 
@@ -17,7 +16,6 @@ def _open_kitchen_handler() -> None:
     from autoskillit.server import _get_ctx, logger
 
     _get_ctx().gate.enable()
-    write_gate_file(Path.cwd() / "temp")
     logger.info("open_kitchen", gate_state="open")
 
 
@@ -26,7 +24,6 @@ def _close_kitchen_handler() -> None:
     from autoskillit.server import _get_ctx, logger
 
     _get_ctx().gate.disable()
-    remove_gate_file(Path.cwd() / "temp")
     logger.info("close_kitchen", gate_state="closed")
 
 
@@ -55,10 +52,9 @@ def open_kitchen() -> PromptResult:
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "
-        "investigation MUST be delegated through run_skill or "
-        "run_skill_retry, which launch headless sessions with full "
-        "tool access. Do NOT use native tools to investigate failures — "
-        "route to on_failure and let the downstream skill handle diagnosis."
+        "investigation MUST be delegated through run_skill, which launches "
+        "headless sessions with full tool access. Do NOT use native tools to "
+        "investigate failures — route to on_failure and let the downstream skill handle diagnosis."
     )
 
     # Inject sous-chef global orchestration rules (graceful degradation if absent)

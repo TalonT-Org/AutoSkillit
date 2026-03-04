@@ -84,7 +84,7 @@ async def classify_fix(
     - full_restart: The fix touches critical paths. Re-run investigation and
       plan creation (e.g. call /autoskillit:investigate via run_skill).
     - partial_restart: The fix is localized. Re-run implementation only
-      (e.g. call /autoskillit:implement-worktree-no-merge via run_skill_retry).
+      (e.g. call /autoskillit:implement-worktree-no-merge via run_skill).
 
     Args:
         worktree_path: Path to the git worktree with the implemented fix.

@@ -14,7 +14,7 @@ from tests.arch._rules import (
     _SENSITIVE_KEYWORDS,
     RuleDescriptor,
     Violation,
-    _rel,  # noqa: F401  -- re-exported for test_layer_enforcement and test_subpackage_isolation
+    _rel,  # noqa: F401  # re-exported for test_layer_enforcement, test_subpackage_isolation
 )
 
 # ── Path constants ────────────────────────────────────────────────────────────

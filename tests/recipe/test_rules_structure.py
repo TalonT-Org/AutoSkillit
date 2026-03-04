@@ -15,7 +15,6 @@ from autoskillit.recipe.schema import (
     RecipeIngredient,
     RecipeStep,
     StepResultRoute,
-    StepRetry,
 )
 from autoskillit.recipe.validator import (
     RuleFinding,
@@ -60,14 +59,15 @@ def test_unsatisfied_input_replaces_worktree_path_check() -> None:
                     ),
                 },
                 "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                "retries": 0,
+                "on_context_limit": "retry_step",
                 "on_success": "retry_step",
             },
             "retry_step": {
-                "tool": "run_skill_retry",
+                "tool": "run_skill",
                 "with": {
                     "skill_command": "/autoskillit:retry-worktree ${{ context.plan_path }}",
                 },
-                "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
                 "on_success": "done",
             },
             "done": {"action": "stop", "message": "Done."},
@@ -89,17 +89,18 @@ def test_unsatisfied_input_clean_when_provided() -> None:
                     ),
                 },
                 "capture": {"worktree_path": "${{ result.worktree_path }}"},
+                "retries": 0,
+                "on_context_limit": "retry_step",
                 "on_success": "retry_step",
             },
             "retry_step": {
-                "tool": "run_skill_retry",
+                "tool": "run_skill",
                 "with": {
                     "skill_command": (
                         "/autoskillit:retry-worktree "
                         "${{ context.plan_path }} ${{ context.worktree_path }}"
                     ),
                 },
-                "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
                 "on_success": "done",
             },
             "done": {"action": "stop", "message": "Done."},
@@ -113,9 +114,8 @@ def test_unsatisfied_input_not_available() -> None:
     wf = _make_workflow(
         {
             "retry_step": {
-                "tool": "run_skill_retry",
+                "tool": "run_skill",
                 "with": {"skill_command": "/autoskillit:retry-worktree ${{ context.plan_path }}"},
-                "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
                 "on_success": "done",
             },
             "done": {"action": "stop", "message": "Done."},
@@ -154,14 +154,13 @@ def test_unsatisfied_input_from_pipeline_inputs() -> None:
         steps={
             "retry_step": _parse_step(
                 {
-                    "tool": "run_skill_retry",
+                    "tool": "run_skill",
                     "with": {
                         "skill_command": (
                             "/autoskillit:retry-worktree "
                             "${{ inputs.plan_path }} ${{ inputs.worktree_path }}"
                         ),
                     },
-                    "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
                     "on_success": "done",
                 }
             ),
@@ -231,49 +230,6 @@ def test_model_on_non_skill_clean() -> None:
     )
     findings = run_semantic_rules(wf)
     assert not any(f.rule == "model-on-non-skill-step" for f in findings)
-
-
-def test_retry_without_capture_triggers() -> None:
-    wf = _make_workflow(
-        {
-            "impl": {
-                "tool": "run_skill_retry",
-                "with": {"skill_command": "/implement"},
-                "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
-                "on_success": "test",
-            },
-            "test": {
-                "tool": "test_check",
-                "with": {"worktree_path": "${{ context.worktree_path }}"},
-                "on_success": "done",
-            },
-            "done": {"action": "stop", "message": "Done."},
-        }
-    )
-    findings = run_semantic_rules(wf)
-    assert any(f.rule == "retry-without-capture" for f in findings)
-
-
-def test_retry_without_capture_clean_with_capture() -> None:
-    wf = _make_workflow(
-        {
-            "impl": {
-                "tool": "run_skill_retry",
-                "with": {"skill_command": "/implement"},
-                "retry": {"on": "needs_retry", "max_attempts": 3, "on_exhausted": "done"},
-                "capture": {"worktree_path": "${{ result.worktree_path }}"},
-                "on_success": "test",
-            },
-            "test": {
-                "tool": "test_check",
-                "with": {"worktree_path": "${{ context.worktree_path }}"},
-                "on_success": "done",
-            },
-            "done": {"action": "stop", "message": "Done."},
-        }
-    )
-    findings = run_semantic_rules(wf)
-    assert not any(f.rule == "retry-without-capture" for f in findings)
 
 
 def test_rule_finding_to_dict() -> None:
@@ -408,7 +364,7 @@ class TestMultipartIterationRule:
             ingredients={},
             steps={
                 "plan": RecipeStep(
-                    tool="run_skill_retry",
+                    tool="run_skill",
                     with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
                     on_success="verify",
                     note="Produces a plan file.",
@@ -434,7 +390,7 @@ class TestMultipartIterationRule:
             ingredients={},
             steps={
                 "plan": RecipeStep(
-                    tool="run_skill_retry",
+                    tool="run_skill",
                     with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
                     on_success="verify",
                     note="Glob plan_dir for *_part_*.md or single plan file.",
@@ -475,7 +431,7 @@ def compliant_multipart_recipe_no_list() -> Recipe:
         ingredients={},
         steps={
             "plan": RecipeStep(
-                tool="run_skill_retry",
+                tool="run_skill",
                 with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
                 capture={"plan_path": "${{ result.plan_path }}"},
                 note="Glob plan_dir for *_part_*.md or single plan file. Sort into plan_parts[].",
@@ -496,7 +452,7 @@ def compliant_multipart_recipe_with_list() -> Recipe:
         ingredients={},
         steps={
             "plan": RecipeStep(
-                tool="run_skill_retry",
+                tool="run_skill",
                 with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
                 capture={"plan_path": "${{ result.plan_path }}"},
                 capture_list={"plan_parts": "${{ result.plan_parts }}"},
@@ -636,15 +592,15 @@ class TestOnResultMissingFailureRoute:
 
 
 # ---------------------------------------------------------------------------
-# TestOnRetryField
+# TestOnContextLimitField
 # ---------------------------------------------------------------------------
 
 
-class TestOnRetryField:
-    """Tests for on_retry as a first-class routing field and cycle detection."""
+class TestOnContextLimitField:
+    """Tests for on_context_limit as a routing field and cycle detection."""
 
-    def test_on_retry_invalid_target_raises_validation_error(self) -> None:
-        """on_retry must reference a declared step name."""
+    def test_on_context_limit_invalid_target_raises_validation_error(self) -> None:
+        """on_context_limit must reference a declared step name."""
         from autoskillit.recipe.validator import validate_recipe
 
         recipe = Recipe(
@@ -658,7 +614,7 @@ class TestOnRetryField:
                     tool="run_skill",
                     on_success="done",
                     on_failure="cleanup",
-                    on_retry="nonexistent_step",
+                    on_context_limit="nonexistent_step",
                     with_args={"skill_command": "x", "cwd": "/tmp"},
                 ),
                 "cleanup": RecipeStep(action="stop", message="done"),
@@ -666,11 +622,11 @@ class TestOnRetryField:
             },
         )
         errors = validate_recipe(recipe)
-        assert errors, "Expected validation errors for unknown on_retry target"
-        assert any("on_retry" in e for e in errors)
+        assert errors, "Expected validation errors for unknown on_context_limit target"
+        assert any("on_context_limit" in e for e in errors)
 
-    def test_on_retry_valid_target_passes_validation(self) -> None:
-        """on_retry referencing a valid step passes validation."""
+    def test_on_context_limit_valid_target_passes_validation(self) -> None:
+        """on_context_limit referencing a valid step passes validation."""
         from autoskillit.recipe.validator import validate_recipe
 
         recipe = Recipe(
@@ -680,18 +636,19 @@ class TestOnRetryField:
             ingredients={},
             kitchen_rules=["test"],
             steps={
-                "fix": RecipeStep(
+                "implement": RecipeStep(
                     tool="run_skill",
                     on_success="done",
                     on_failure="cleanup",
-                    on_retry="verify",
-                    with_args={"skill_command": "x", "cwd": "/tmp"},
+                    on_context_limit="retry_worktree",
+                    retries=0,
+                    with_args={"skill_command": "/autoskillit:implement-worktree-no-merge x"},
                 ),
-                "verify": RecipeStep(
-                    tool="test_check",
+                "retry_worktree": RecipeStep(
+                    tool="run_skill",
                     on_success="done",
                     on_failure="cleanup",
-                    with_args={"worktree_path": "/tmp"},
+                    with_args={"skill_command": "/autoskillit:retry-worktree x y"},
                 ),
                 "cleanup": RecipeStep(action="stop", message="done"),
                 "done": RecipeStep(action="stop", message="done"),
@@ -700,8 +657,8 @@ class TestOnRetryField:
         errors = validate_recipe(recipe)
         assert not errors, f"Expected no errors but got: {errors}"
 
-    def test_on_retry_and_retry_on_needs_retry_is_mutually_exclusive(self) -> None:
-        """A step with both on_retry and retry.on='needs_retry' must be a validation error."""
+    def test_on_exhausted_invalid_target_raises_validation_error(self) -> None:
+        """on_exhausted must reference a declared step name or be a reserved terminal."""
         from autoskillit.recipe.validator import validate_recipe
 
         recipe = Recipe(
@@ -715,20 +672,42 @@ class TestOnRetryField:
                     tool="run_skill",
                     on_success="done",
                     on_failure="cleanup",
-                    on_retry="verify",
+                    on_exhausted="nonexistent_step",
                     with_args={"skill_command": "x", "cwd": "/tmp"},
-                    retry=StepRetry(max_attempts=3, on="needs_retry", on_exhausted="cleanup"),
                 ),
-                "verify": RecipeStep(action="stop", message="done"),
                 "cleanup": RecipeStep(action="stop", message="done"),
                 "done": RecipeStep(action="stop", message="done"),
             },
         )
         errors = validate_recipe(recipe)
-        assert any("on_retry" in e and "retry" in e for e in errors)
+        assert errors, "Expected validation errors for unknown on_exhausted target"
 
-    def test_unbounded_cycle_without_retry_block_produces_warning(self) -> None:
-        """verify → assess → verify cycle without retry.max_attempts must produce a warning."""
+    def test_on_exhausted_escalate_reserved_passes_validation(self) -> None:
+        """on_exhausted: 'escalate' is reserved — passes validation without an escalate step."""
+        from autoskillit.recipe.validator import validate_recipe
+
+        recipe = Recipe(
+            name="test",
+            description="test",
+            summary="test",
+            ingredients={},
+            kitchen_rules=["test"],
+            steps={
+                "fix": RecipeStep(
+                    tool="run_skill",
+                    on_success="done",
+                    on_failure="done",
+                    on_exhausted="escalate",
+                    with_args={"skill_command": "/autoskillit:investigate x"},
+                ),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        errors = validate_recipe(recipe)
+        assert not errors, f"Expected no errors but got: {errors}"
+
+    def test_unbounded_cycle_without_retries_produces_warning(self) -> None:
+        """verify → assess → verify cycle with retries=0 must produce a warning."""
         recipe = Recipe(
             name="test",
             description="test",
@@ -740,6 +719,7 @@ class TestOnRetryField:
                     tool="run_skill",
                     on_success="verify",
                     on_failure="cleanup",
+                    retries=0,
                     with_args={"skill_command": "x", "cwd": "/tmp"},
                 ),
                 "verify": RecipeStep(
@@ -758,8 +738,8 @@ class TestOnRetryField:
             "unbounded" in f.message.lower() or "cycle" in f.message.lower() for f in warnings
         )
 
-    def test_bounded_cycle_with_retry_block_does_not_warn(self) -> None:
-        """A cycle with retry.max_attempts on the cycling step should NOT warn."""
+    def test_bounded_cycle_with_retries_does_not_warn(self) -> None:
+        """A cycle with retries > 0 on the cycling step should NOT warn."""
         recipe = Recipe(
             name="test",
             description="test",
@@ -771,8 +751,9 @@ class TestOnRetryField:
                     tool="run_skill",
                     on_success="test",
                     on_failure="cleanup",
+                    retries=3,
+                    on_exhausted="cleanup",
                     with_args={"skill_command": "x", "cwd": "/tmp"},
-                    retry=StepRetry(max_attempts=3, on="needs_retry", on_exhausted="cleanup"),
                 ),
                 "test": RecipeStep(
                     tool="test_check",
@@ -803,6 +784,7 @@ class TestOnRetryField:
                     tool="run_skill",
                     on_success="verify",
                     on_failure="verify",
+                    retries=0,
                     with_args={"skill_command": "x", "cwd": "/tmp"},
                 ),
                 "verify": RecipeStep(
@@ -846,12 +828,12 @@ class TestSkillCommandMissingPrefixRule:
             for f in findings
         ), "Expected skill-command-missing-prefix WARNING for prose skill_command"
 
-    def test_scp2_prose_run_skill_retry_warns(self) -> None:
-        """SCP2: run_skill_retry with prose skill_command → WARNING finding."""
+    def test_scp2_prose_run_skill_warns(self) -> None:
+        """SCP2: run_skill with prose skill_command → WARNING finding."""
         wf = _make_workflow(
             {
                 "step": {
-                    "tool": "run_skill_retry",
+                    "tool": "run_skill",
                     "with": {"skill_command": "Investigate the bug", "cwd": "/tmp"},
                     "on_success": "done",
                     "on_failure": "done",

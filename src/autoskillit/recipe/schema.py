@@ -20,13 +20,6 @@ class RecipeIngredient:
 
 
 @dataclass
-class StepRetry:
-    max_attempts: int = 3
-    on: str | None = None
-    on_exhausted: str = "escalate"
-
-
-@dataclass
 class StepResultCondition:
     """A single conditional route in a predicate-based on_result block.
 
@@ -65,9 +58,10 @@ class RecipeStep:
     with_args: dict[str, str] = field(default_factory=dict)
     on_success: str | None = None
     on_failure: str | None = None
-    on_retry: str | None = None
+    on_context_limit: str | None = None
     on_result: StepResultRoute | None = None
-    retry: StepRetry | None = None
+    retries: int = 3
+    on_exhausted: str = "escalate"
     message: str | None = None
     note: str | None = None
     capture: dict[str, str] = field(default_factory=dict)

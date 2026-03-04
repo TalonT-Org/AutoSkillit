@@ -82,15 +82,6 @@ class TestServerToolSurfaceContract:
         missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in doc]
         assert not missing, f"run_skill docstring missing tools: {missing}"
 
-    def test_run_skill_retry_docstring_names_all_forbidden_tools(self):
-        """run_skill_retry docstring must name every forbidden tool."""
-        from autoskillit.server.tools_execution import run_skill_retry
-
-        doc = run_skill_retry.__doc__
-        assert doc, "run_skill_retry has no docstring"
-        missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in doc]
-        assert not missing, f"run_skill_retry docstring missing tools: {missing}"
-
     def test_load_recipe_docstring_names_all_forbidden_tools(self):
         """load_recipe docstring must name every forbidden tool."""
         from autoskillit.server.tools_recipe import load_recipe

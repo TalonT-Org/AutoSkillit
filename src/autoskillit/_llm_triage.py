@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import anyio
+
 from autoskillit.core import OutputFormat, SubprocessResult, TerminationReason, get_logger
 from autoskillit.execution import parse_session_result, run_managed_async
 from autoskillit.recipe import StaleItem, load_bundled_manifest
@@ -18,6 +20,8 @@ from autoskillit.workspace import bundled_skills_dir
 
 logger = get_logger(__name__)
 
+# Number of skills to send in a single Haiku batch call.
+BATCH_SIZE = 5
 # Characters of SKILL.md content included per skill in a batched prompt.
 _SKILL_MD_TRUNCATE = 1500
 
@@ -26,8 +30,9 @@ async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]
     """Use Haiku to determine if stale contracts changed meaningfully.
 
     For each stale item with reason="hash_mismatch", reads the current
-    SKILL.md and asks Haiku whether the inputs or outputs changed. All
-    hash_mismatch items are sent in a single Haiku call via _triage_batch.
+    SKILL.md and asks Haiku whether the inputs or outputs changed. Up to
+    BATCH_SIZE skills are sent per Haiku call and all batches run concurrently
+    via an anyio task group capped at 5 concurrent calls.
 
     Returns a list of dicts with keys: skill, meaningful (bool), summary (str).
     """
@@ -62,7 +67,22 @@ async def triage_staleness(stale_items: list[StaleItem]) -> list[dict[str, Any]]
             if skill_md_path.is_file():
                 skill_md_cache[item.skill] = skill_md_path.read_text()
 
-    results.extend(await _triage_batch(hash_items, skill_md_cache))
+    # Split hash_mismatch items into batches of BATCH_SIZE.
+    batches = [hash_items[i : i + BATCH_SIZE] for i in range(0, len(hash_items), BATCH_SIZE)]
+    batch_results: list[list[dict[str, Any]]] = [[] for _ in batches]
+
+    limiter = anyio.CapacityLimiter(5)
+
+    async def _run_batch(idx: int, batch: list[StaleItem]) -> None:
+        async with limiter:
+            batch_results[idx] = await _triage_batch(batch, skill_md_cache)
+
+    async with anyio.create_task_group() as tg:
+        for idx, batch in enumerate(batches):
+            tg.start_soon(_run_batch, idx, batch)
+
+    for br in batch_results:
+        results.extend(br)
 
     return results
 

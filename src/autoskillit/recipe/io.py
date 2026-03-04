@@ -15,7 +15,6 @@ from autoskillit.recipe.schema import (
     RecipeStep,
     StepResultCondition,
     StepResultRoute,
-    StepRetry,
 )
 
 logger = get_logger(__name__)
@@ -109,16 +108,10 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
 
 
 def _parse_step(data: dict[str, Any]) -> RecipeStep:
-    retry = None
-    retry_data = data.get("retry")
-    if isinstance(retry_data, dict):
-        # YAML 1.1 parsers (yaml.safe_load) interpret bare 'on' as boolean True.
-        # Normalise: prefer string key "on", fall back to boolean True key.
-        on_value = retry_data.get("on") if "on" in retry_data else retry_data.get(True)
-        retry = StepRetry(
-            max_attempts=retry_data.get("max_attempts", 3),
-            on=on_value,
-            on_exhausted=retry_data.get("on_exhausted", "escalate"),
+    if "retry" in data:
+        raise ValueError(
+            "The 'retry:' block is no longer supported. "
+            "Use flat step-level fields: 'retries', 'on_exhausted', 'on_context_limit'."
         )
 
     on_result = None
@@ -148,9 +141,10 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         with_args=data.get("with", {}),
         on_success=data.get("on_success"),
         on_failure=data.get("on_failure"),
-        on_retry=data.get("on_retry"),
+        on_context_limit=data.get("on_context_limit"),
         on_result=on_result,
-        retry=retry,
+        retries=data.get("retries", 3),
+        on_exhausted=data.get("on_exhausted", "escalate"),
         message=data.get("message"),
         note=data.get("note"),
         capture=data.get("capture", {}),

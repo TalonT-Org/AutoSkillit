@@ -197,7 +197,7 @@ def _check_unreachable_steps(wf: Recipe) -> list[RuleFinding]:
 
     referenced: set[str] = set()
     for step in wf.steps.values():
-        for field in ("on_success", "on_failure", "on_retry"):
+        for field in ("on_success", "on_failure", "on_context_limit"):
             target = getattr(step, field, None)
             if target:
                 referenced.add(target)
@@ -205,9 +205,10 @@ def _check_unreachable_steps(wf: Recipe) -> list[RuleFinding]:
             referenced.update(step.on_result.routes.values())
             for cond in step.on_result.conditions:
                 referenced.add(cond.route)
-        if step.retry and step.retry.on_exhausted:
-            referenced.add(step.retry.on_exhausted)
+        if step.on_exhausted:
+            referenced.add(step.on_exhausted)
     referenced.discard("done")
+    referenced.discard("escalate")
 
     first_step = next(iter(wf.steps))
     findings: list[RuleFinding] = []

@@ -108,7 +108,7 @@ class TestCaptureOutputCoverageRule:
             description: test
             steps:
               implement:
-                tool: run_skill_retry
+                tool: run_skill
                 with:
                   skill_command: /autoskillit:implement-worktree-no-merge ${{ inputs.plan }}
                 capture:

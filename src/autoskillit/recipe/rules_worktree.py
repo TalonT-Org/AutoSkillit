@@ -23,7 +23,7 @@ _WORKTREE_CREATING_SKILLS = frozenset(
 
 @semantic_rule(
     name="model-on-non-skill-step",
-    description="The 'model' field only affects run_skill/run_skill_retry steps.",
+    description="The 'model' field only affects run_skill steps.",
     severity=Severity.WARNING,
 )
 def _check_model_on_non_skill(wf: Recipe) -> list[RuleFinding]:
@@ -38,7 +38,7 @@ def _check_model_on_non_skill(wf: Recipe) -> list[RuleFinding]:
                     message=(
                         f"Step '{step_name}' has 'model: {step.model}' but uses "
                         f"tool '{step.tool}'. The model field only affects "
-                        f"run_skill and run_skill_retry. Remove it to avoid confusion."
+                        f"run_skill. Remove it to avoid confusion."
                     ),
                 )
             )
@@ -46,111 +46,30 @@ def _check_model_on_non_skill(wf: Recipe) -> list[RuleFinding]:
 
 
 @semantic_rule(
-    name="retry-without-capture",
-    description="run_skill_retry with retry must have capture if downstream uses context.",
-    severity=Severity.WARNING,
-)
-def _check_retry_without_capture(wf: Recipe) -> list[RuleFinding]:
-    findings: list[RuleFinding] = []
-    step_names = list(wf.steps.keys())
-
-    for idx, (step_name, step) in enumerate(wf.steps.items()):
-        if step.tool == "run_skill_retry" and step.retry and not step.capture:
-            downstream_needs_context = False
-            for later_name in step_names[idx + 1 :]:
-                later_step = wf.steps[later_name]
-                for val in later_step.with_args.values():
-                    if "context." in str(val):
-                        downstream_needs_context = True
-                        break
-                if downstream_needs_context:
-                    break
-
-            if downstream_needs_context:
-                findings.append(
-                    RuleFinding(
-                        rule="retry-without-capture",
-                        severity=Severity.WARNING,
-                        step_name=step_name,
-                        message=(
-                            f"Step '{step_name}' uses run_skill_retry with retry "
-                            f"routing but has no capture block. A downstream step "
-                            f"references context values — add a capture block to "
-                            f"thread outputs (e.g., worktree_path, plan_path) forward."
-                        ),
-                    )
-                )
-    return findings
-
-
-@semantic_rule(
-    name="worktree-retry-creates-new",
-    description="Worktree-creating skills must not have retry max_attempts > 1.",
+    name="retries-on-worktree-creating-skill",
+    description="Worktree-creating skills must not have retries > 0.",
     severity=Severity.ERROR,
 )
-def _check_worktree_retry_creates_new(
-    wf: Recipe,
-) -> list[RuleFinding]:
+def _check_retries_on_worktree_creating_skill(wf: Recipe) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
         if step.tool not in SKILL_TOOLS:
             continue
-        if not step.retry or step.retry.max_attempts <= 1:
+        if step.retries <= 0:
             continue
-
         skill_cmd = step.with_args.get("skill_command", "")
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name and skill_name in _WORKTREE_CREATING_SKILLS:
             findings.append(
                 RuleFinding(
-                    rule="worktree-retry-creates-new",
+                    rule="retries-on-worktree-creating-skill",
                     severity=Severity.ERROR,
                     step_name=step_name,
                     message=(
-                        f"Step '{step_name}' retries {skill_name} "
-                        f"with max_attempts="
-                        f"{step.retry.max_attempts}. Each retry "
-                        f"creates a new worktree, orphaning partial "
-                        f"progress. Set max_attempts: 1 and route "
-                        f"on_exhausted to a retry-worktree step that "
-                        f"resumes in the existing worktree."
-                    ),
-                )
-            )
-    return findings
-
-
-@semantic_rule(
-    name="needs-retry-no-restart",
-    description="Worktree-creating skills must not retry on needs_retry with max_attempts >= 1.",
-    severity=Severity.ERROR,
-)
-def _check_needs_retry_no_restart(wf: Recipe) -> list[RuleFinding]:
-    findings: list[RuleFinding] = []
-    for step_name, step in wf.steps.items():
-        if step.tool not in SKILL_TOOLS:
-            continue
-        if not step.retry:
-            continue
-        if step.retry.on != "needs_retry":
-            continue
-        if step.retry.max_attempts < 1:
-            continue  # max_attempts: 0 is the correct pattern — escalates immediately
-        skill_cmd = step.with_args.get("skill_command", "")
-        skill_name = resolve_skill_name(skill_cmd)
-        if skill_name and skill_name in _WORKTREE_CREATING_SKILLS:
-            findings.append(
-                RuleFinding(
-                    rule="needs-retry-no-restart",
-                    severity=Severity.ERROR,
-                    step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' retries worktree-creating skill "
-                        f"'{skill_name}' on needs_retry "
-                        f"(max_attempts={step.retry.max_attempts}). "
-                        f"needs_retry signals partial progress exists — the skill "
-                        f"must not restart. "
-                        f"Set max_attempts: 0 to immediately escalate to on_exhausted."
+                        f"Step '{step_name}' creates a worktree but has "
+                        f"`retries: {step.retries}`. Each retry creates a new orphaned "
+                        f"worktree. Set `retries: 0` and use "
+                        f"`on_context_limit: <resume-step>` to resume in the existing worktree."
                     ),
                 )
             )

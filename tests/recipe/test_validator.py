@@ -156,17 +156,20 @@ class TestValidateRecipe:
         errors = validate_recipe(wf)
         assert any("missing_input" in e for e in errors)
 
-    def test_retry_on_unknown_field_fails_validation(self, tmp_path: Path) -> None:
+    def test_retry_block_raises_on_load(self, tmp_path: Path) -> None:
+        """The old retry: block is no longer supported — loading raises ValueError."""
+        import pytest
+
         data = {
-            "name": "bad-retry-on",
-            "description": "Unknown retry.on field",
+            "name": "bad-retry-block",
+            "description": "Old retry block is unsupported",
             "kitchen_rules": ["test"],
             "steps": {
                 "impl": {
-                    "tool": "run_skill_retry",
+                    "tool": "run_skill",
                     "retry": {
                         "max_attempts": 3,
-                        "on": "nonexistent_field",
+                        "on": "needs_retry",
                         "on_exhausted": "fail",
                     },
                 },
@@ -174,9 +177,8 @@ class TestValidateRecipe:
             },
         }
         f = _write_yaml(tmp_path / "recipe.yaml", data)
-        wf = load_recipe(f)
-        errors = validate_recipe(wf)
-        assert any("nonexistent_field" in e for e in errors)
+        with pytest.raises(ValueError, match="retry.*no longer supported"):
+            load_recipe(f)
 
     def test_step_rejects_both_python_and_tool(self, tmp_path: Path) -> None:
         data = {

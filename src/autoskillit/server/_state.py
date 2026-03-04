@@ -14,8 +14,6 @@ This module is the authoritative location for:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from autoskillit.config import AutomationConfig
 from autoskillit.core import get_logger
 from autoskillit.pipeline import ToolContext
@@ -42,14 +40,6 @@ def _initialize(ctx: ToolContext) -> None:
             logger.info("Recovered %d crashed session trace(s) from tmpfs", n)
     except Exception:
         logger.debug("recover_crashed_sessions at startup failed", exc_info=True)
-
-    # Clean up any stale gate file from a previous crashed server session.
-    try:
-        from autoskillit.pipeline import remove_gate_file
-
-        remove_gate_file(Path.cwd() / "temp")
-    except Exception:
-        logger.debug("remove_gate_file at startup failed", exc_info=True)
 
 
 def _get_ctx() -> ToolContext:

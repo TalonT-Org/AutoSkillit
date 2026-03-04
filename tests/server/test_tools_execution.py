@@ -24,7 +24,7 @@ from autoskillit.execution.headless import (
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
 )
-from autoskillit.server.tools_execution import run_cmd, run_python, run_skill, run_skill_retry
+from autoskillit.server.tools_execution import run_cmd, run_python, run_skill
 from tests.conftest import _make_result
 
 _SUCCESS_JSON = (
@@ -58,25 +58,12 @@ class TestRunSkillPluginDir:
         assert cmd[cmd.index("--output-format") + 1] == "stream-json"
 
     @pytest.mark.anyio
-    async def test_run_skill_retry_passes_plugin_dir(self, tool_ctx):
-        """run_skill_retry includes --plugin-dir from tool_ctx in the command."""
-        tool_ctx.runner.push(
-            _make_result(
-                0,
-                '{"type": "result", "subtype": "success", "is_error": false,'
-                ' "result": "done", "session_id": "s1"}',
-                "",
-            )
-        )
-        await run_skill_retry("/investigate some-error", "/tmp")
+    async def test_run_skill_uses_two_hour_timeout(self, tool_ctx):
+        """run_skill uses 7200s timeout (merged from former run_skill_retry)."""
+        from autoskillit.config import AutomationConfig
 
-        cmd = tool_ctx.runner.call_args_list[0][0]
-        assert "--plugin-dir" in cmd
-        plugin_dir_idx = cmd.index("--plugin-dir")
-        assert cmd[plugin_dir_idx + 1] == tool_ctx.plugin_dir
-        # --output-format and stream-json must be present
-        assert "--output-format" in cmd
-        assert cmd[cmd.index("--output-format") + 1] == "stream-json"
+        cfg = AutomationConfig()
+        assert cfg.run_skill.timeout == 7200
 
 
 class TestCheckDryWalkthrough:
@@ -320,12 +307,12 @@ class TestRunSkillEnvPrefix:
         assert cmd[1] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=60000"
 
     @pytest.mark.anyio
-    async def test_run_skill_retry_also_gets_env_prefix(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
-        await run_skill_retry("/investigate something", "/tmp")
-        cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[0] == "env"
-        assert cmd[1] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000"
+    async def test_run_skill_retry_not_registered(self, tool_ctx):
+        """run_skill_retry is removed — merged into run_skill (same tool, unified timeout)."""
+
+        import autoskillit.server.tools_execution as mod
+
+        assert not hasattr(mod, "run_skill_retry")
 
 
 class TestRunSkillPassesSessionLogDir:
@@ -465,15 +452,6 @@ class TestRunSkillModel:
         assert "--model" in cmd
         assert cmd[cmd.index("--model") + 1] == "sonnet"
 
-    # MOD_S2
-    @pytest.mark.anyio
-    async def test_run_skill_retry_passes_model_flag(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
-        await run_skill_retry("/investigate error", "/tmp", model="sonnet")
-        cmd = tool_ctx.runner.call_args_list[0][0]
-        assert "--model" in cmd
-        assert cmd[cmd.index("--model") + 1] == "sonnet"
-
     # MOD_S3
     @pytest.mark.anyio
     async def test_run_skill_no_model_flag_when_empty(self, tool_ctx):
@@ -540,9 +518,10 @@ class TestRunSkillStepName:
         assert tool_ctx.token_log.get_report() == []
 
     @pytest.mark.anyio
-    async def test_step_name_run_skill_retry(self, tool_ctx):
+    async def test_step_name_run_skill_long_running(self, tool_ctx):
+        """run_skill accumulates token usage by step_name (run_skill_retry test replacement)."""
         tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson()))
-        await run_skill_retry(
+        await run_skill(
             skill_command="/autoskillit:investigate the test failures",
             cwd="/tmp",
             step_name="implement",
@@ -630,42 +609,11 @@ class TestGatedToolObservability:
         assert result["success"] is False
 
     @pytest.mark.anyio
-    async def test_run_skill_retry_binds_tool_contextvar_and_calls_ctx_info(
-        self, tool_ctx, mock_ctx
-    ):
-        """run_skill_retry binds tool='run_skill_retry' contextvar and calls ctx.info."""
-        tool_ctx.runner.push(
-            _make_result(
-                0,
-                '{"type": "result", "subtype": "success", "is_error": false,'
-                ' "result": "done", "session_id": "s1"}',
-                "",
-            )
-        )
-        with structlog.testing.capture_logs(
-            processors=[structlog.contextvars.merge_contextvars]
-        ) as logs:
-            await run_skill_retry("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
-        assert any(entry.get("tool") == "run_skill_retry" for entry in logs)
+    async def test_run_skill_retry_not_registered(self, tool_ctx, mock_ctx):
+        """run_skill_retry is removed — only run_skill exists."""
+        import autoskillit.server.tools_execution as mod
 
-    @pytest.mark.anyio
-    async def test_run_skill_retry_returns_failure_result_on_error_output(
-        self, tool_ctx, mock_ctx
-    ):
-        """run_skill_retry reports failure (success=false) when headless session fails."""
-        tool_ctx.runner.push(
-            _make_result(
-                1,
-                '{"type": "result", "subtype": "error", "is_error": true,'
-                ' "result": "failed", "session_id": "s1"}',
-                "",
-                channel_confirmation=ChannelConfirmation.UNMONITORED,
-            )
-        )
-        result = json.loads(
-            await run_skill_retry("/autoskillit:investigate task", "/tmp", ctx=mock_ctx)
-        )
-        assert result["success"] is False
+        assert not hasattr(mod, "run_skill_retry")
 
 
 class TestNotifyHelper:
@@ -844,7 +792,7 @@ class TestResponseFieldsAreTypeSafe:
             }
         )
         tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
 
     @pytest.mark.anyio
@@ -860,5 +808,5 @@ class TestResponseFieldsAreTypeSafe:
             }
         )
         tool_ctx.runner.push(_make_result(0, stdout, ""))
-        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}

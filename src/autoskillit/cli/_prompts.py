@@ -50,10 +50,9 @@ Preview format:
 
 During pipeline execution, only use AutoSkillit MCP tools:
 - Read, Grep, Glob (code investigation) — not used here because investigation
-  happens inside headless sessions launched by run_skill/run_skill_retry,
-  which have full tool access.
+  happens inside headless sessions launched by run_skill, which has full tool access.
 - Edit, Write (code modification) — not used here because all code changes
-  are delegated through run_skill/run_skill_retry.
+  are delegated through run_skill.
 - Bash (shell commands) — not used here; use run_cmd if shell access is needed.
 - Agent subagents, WebFetch, WebSearch — not used here; delegate via
   run_skill for any research or multi-step work.
@@ -78,7 +77,7 @@ FAILURE PREDICATES — when to follow on_failure:
 - test_check: {{"passed": false}}
 - merge_worktree: "error" key present in response
 - run_cmd: {{"success": false}}
-- run_skill / run_skill_retry: {{"success": false}}
+- run_skill: {{"success": false}}
 - classify_fix: "error" key present in response
 {sous_chef_content}
 --- RECIPE ---

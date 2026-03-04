@@ -11,9 +11,11 @@ import pytest
 
 from autoskillit.core.types import TerminationReason
 from autoskillit.execution.process import (
+    RaceAccumulator,
     _has_active_api_connection,
     _heartbeat,
     _session_log_monitor,
+    _watch_session_log,
     run_managed_async,
 )
 
@@ -89,7 +91,8 @@ class TestSessionLogMonitor:
             tg.start_soon(append_marker)
             tg.start_soon(_run_monitor)
 
-        assert monitor_result[0] == "completion"
+        assert monitor_result[0].status == "completion"
+        assert monitor_result[0].session_id == "abc123"
 
     @pytest.mark.anyio
     async def test_session_log_monitor_detects_staleness(self, tmp_path):
@@ -117,7 +120,8 @@ class TestSessionLogMonitor:
         )
         elapsed = time.monotonic() - start
 
-        assert result == "stale"
+        assert result.status == "stale"
+        assert result.session_id == "abc123"
         assert elapsed < 1.0, f"Staleness should fire after ~0.2s, took {elapsed:.1f}s"
 
     @pytest.mark.anyio
@@ -172,7 +176,7 @@ class TestSessionLogMonitor:
             tg.start_soon(_run_monitor)
 
         # Staleness should have fired AFTER the writing stopped, not during
-        assert monitor_result[0] == "stale"
+        assert monitor_result[0].status == "stale"
 
     @pytest.mark.anyio
     async def test_monitor_ignores_marker_in_non_assistant_records(self, tmp_path):
@@ -244,7 +248,7 @@ class TestSessionLogMonitor:
                 f.write(assistant_record + "\n")
             # task group awaits _run_monitor to detect assistant record and complete
 
-        assert monitor_result[0] == "completion"
+        assert monitor_result[0].status == "completion"
 
     @pytest.mark.anyio
     async def test_monitor_realistic_jsonl_sequence(self, tmp_path):
@@ -328,7 +332,7 @@ class TestSessionLogMonitor:
                 f.write(assistant_record + "\n")
             # task group awaits _run_monitor to detect assistant record and complete
 
-        assert monitor_result[0] == "completion"
+        assert monitor_result[0].status == "completion"
 
 
 class TestHeartbeatDetectsCompletion:
@@ -626,7 +630,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     _phase1_poll=0.01,
                     _phase2_poll=0.05,
                 )
-        assert result == "stale"
+        assert result.status == "stale"
         assert call_count["n"] == 2
 
     @pytest.mark.anyio
@@ -645,7 +649,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                 _phase1_poll=0.01,
                 _phase2_poll=0.05,
             )
-        assert result == "stale"
+        assert result.status == "stale"
 
     @pytest.mark.anyio
     async def test_fires_stale_when_pid_is_none_regardless_of_tcp(self, tmp_path):
@@ -667,7 +671,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                     _phase1_poll=0.01,
                     _phase2_poll=0.05,
                 )
-        assert result == "stale"
+        assert result.status == "stale"
         mock_tcp.assert_not_called()
 
     @pytest.mark.anyio
@@ -748,3 +752,124 @@ class TestHeartbeatScanPosition:
         with anyio.fail_after(10):
             result = await _heartbeat(stdout_path, '"type":"result"')
         assert result == "completion"
+
+
+class TestSessionLogMonitorSessionId:
+    """_session_log_monitor returns SessionMonitorResult with session ID from filename."""
+
+    @pytest.mark.anyio
+    async def test_session_log_monitor_returns_session_id_from_filename(self, tmp_path):
+        """_session_log_monitor returns the JSONL filename stem as session_id."""
+        import json
+
+        session_uuid = "d9adcc78-3098-4c3e-8720-ddcf3da35fff"
+        jsonl_file = tmp_path / f"{session_uuid}.jsonl"
+        jsonl_file.write_text(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": "done COMPLETION_MARKER"},
+                }
+            )
+            + "\n"
+        )
+
+        result = await _session_log_monitor(
+            tmp_path,
+            "COMPLETION_MARKER",
+            stale_threshold=10.0,
+            spawn_time=time.time() - 1,
+        )
+
+        assert result.status == "completion"
+        assert result.session_id == session_uuid
+
+    @pytest.mark.anyio
+    async def test_session_log_monitor_returns_session_id_on_stale(self, tmp_path):
+        """Even stale sessions capture the session ID from the discovered file."""
+        import json
+
+        session_uuid = "abc12345-dead-beef-cafe-123456789abc"
+        jsonl_file = tmp_path / f"{session_uuid}.jsonl"
+        jsonl_file.write_text(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": "no marker"},
+                }
+            )
+            + "\n"
+        )
+
+        result = await _session_log_monitor(
+            tmp_path,
+            "MARKER",
+            stale_threshold=0.1,
+            spawn_time=time.time() - 1,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
+        )
+
+        assert result.status == "stale"
+        assert result.session_id == session_uuid
+
+    @pytest.mark.anyio
+    async def test_session_log_monitor_empty_session_id_when_no_file_found(self, tmp_path):
+        """When no JSONL file is discovered (phase1 timeout), session_id is empty."""
+        result = await _session_log_monitor(
+            tmp_path,
+            "MARKER",
+            stale_threshold=10.0,
+            spawn_time=time.time() - 1,
+            _phase1_timeout=0.1,
+        )
+
+        assert result.status == "stale"
+        assert result.session_id == ""
+
+
+class TestWatchSessionLogSessionId:
+    """_watch_session_log deposits session ID from monitor into accumulator."""
+
+    @pytest.mark.anyio
+    async def test_watch_session_log_deposits_session_id(self, tmp_path):
+        """_watch_session_log writes channel_b_session_id to the accumulator."""
+        import json
+
+        acc = RaceAccumulator()
+        trigger = anyio.Event()
+        channel_b_ready = anyio.Event()
+
+        session_uuid = "test-uuid-from-channel-b"
+        jsonl_file = tmp_path / f"{session_uuid}.jsonl"
+        jsonl_file.write_text(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": "done MARKER"},
+                }
+            )
+            + "\n"
+        )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(
+                _watch_session_log,
+                tmp_path,
+                "MARKER",
+                10.0,
+                time.time() - 1,
+                frozenset({"assistant"}),
+                12345,
+                5.0,
+                acc,
+                trigger,
+                channel_b_ready,
+                0.1,
+                0.1,
+                30.0,
+            )
+            await channel_b_ready.wait()
+            tg.cancel_scope.cancel()
+
+        assert acc.channel_b_session_id == session_uuid

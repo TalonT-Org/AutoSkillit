@@ -8,7 +8,7 @@ import pytest
 import structlog.testing
 
 from autoskillit.core.types import TerminationReason
-from autoskillit.execution.process import RaceSignals
+from autoskillit.execution.process import RaceAccumulator, RaceSignals
 
 
 @pytest.mark.anyio
@@ -56,6 +56,7 @@ def test_resolve_termination_logs_signals():
         process_returncode=0,
         channel_a_confirmed=False,
         channel_b_status=None,
+        channel_b_session_id="",
     )
     with structlog.testing.capture_logs() as logs:
         termination, channel = resolve_termination(signals)
@@ -69,6 +70,27 @@ def test_resolve_termination_logs_signals():
     assert r["process_returncode"] == 0
     assert "resolved_termination" in r
     assert "resolved_channel" in r
+
+
+def test_race_signals_includes_channel_b_session_id():
+    """RaceSignals carries the session ID discovered by Channel B."""
+    signals = RaceSignals(
+        process_exited=True,
+        process_returncode=0,
+        channel_a_confirmed=False,
+        channel_b_status="completion",
+        channel_b_session_id="abc-123",
+    )
+    assert signals.channel_b_session_id == "abc-123"
+
+
+def test_race_accumulator_threads_session_id():
+    """RaceAccumulator.to_race_signals() preserves channel_b_session_id."""
+    acc = RaceAccumulator()
+    acc.channel_b_status = "completion"
+    acc.channel_b_session_id = "def-456"
+    signals = acc.to_race_signals()
+    assert signals.channel_b_session_id == "def-456"
 
 
 @pytest.mark.anyio

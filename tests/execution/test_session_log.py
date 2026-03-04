@@ -122,12 +122,23 @@ def test_flush_session_log_appends_to_index(tmp_path):
 
 
 def test_flush_session_log_fallback_dirname_when_no_session_id(tmp_path):
-    """Empty session_id falls back to pid_{pid}_{timestamp} directory name."""
-    _flush(tmp_path, session_id="", pid=99999, start_ts="2026-03-03T12:00:00")
+    """Empty session_id falls back to no_session_ prefix with timestamp."""
+    _flush(tmp_path, session_id="", pid=99999, start_ts="2026-03-03T12:00:00+00:00")
     sessions_dir = tmp_path / "sessions"
     dirs = list(sessions_dir.iterdir())
     assert len(dirs) == 1
-    assert dirs[0].name.startswith("pid_99999_")
+    dir_name = dirs[0].name
+    assert dir_name.startswith("no_session_")
+    assert "2026" in dir_name
+
+
+def test_flush_session_log_uses_resolved_session_id(tmp_path):
+    """flush_session_log uses the caller-resolved session_id for dir name."""
+    _flush(tmp_path, session_id="chan-b-uuid-123")
+    session_dir = tmp_path / "sessions" / "chan-b-uuid-123"
+    assert session_dir.is_dir()
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["session_id"] == "chan-b-uuid-123"
 
 
 def test_flush_session_log_handles_empty_snapshots(tmp_path):

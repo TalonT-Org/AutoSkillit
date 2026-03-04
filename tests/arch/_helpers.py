@@ -12,9 +12,9 @@ from tests.arch._rules import (
     _PRINT_EXEMPT,
     _RULE,
     _SENSITIVE_KEYWORDS,
-    _rel,  # noqa: F401  -- re-exported for test_layer_enforcement and test_subpackage_isolation
     RuleDescriptor,
     Violation,
+    _rel,  # noqa: F401  -- re-exported for test_layer_enforcement and test_subpackage_isolation
 )
 
 # ── Path constants ────────────────────────────────────────────────────────────

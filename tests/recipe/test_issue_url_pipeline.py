@@ -14,8 +14,8 @@ def _recipe_path(name: str) -> Path:
 
 class TestImplementationPipelineIssueUrl:
     def test_recipe_validates_clean(self):
-        """implementation-pipeline must validate with no errors after adding issue_url."""
-        result = validate_from_path(_recipe_path("implementation-pipeline"))
+        """implementation must validate with no errors after adding issue_url."""
+        result = validate_from_path(_recipe_path("implementation"))
         assert result["valid"] is True
         errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
         assert errors == [], f"Unexpected errors: {errors}"
@@ -24,7 +24,7 @@ class TestImplementationPipelineIssueUrl:
         """issue_url ingredient must be declared as optional with default empty string."""
         import yaml
 
-        data = yaml.safe_load(_recipe_path("implementation-pipeline").read_text())
+        data = yaml.safe_load(_recipe_path("implementation").read_text())
         assert "issue_url" in data["ingredients"]
         ing = data["ingredients"]["issue_url"]
         assert ing.get("required", False) is False
@@ -34,7 +34,7 @@ class TestImplementationPipelineIssueUrl:
         """fetch_issue step must exist with correct structure."""
         import yaml
 
-        data = yaml.safe_load(_recipe_path("implementation-pipeline").read_text())
+        data = yaml.safe_load(_recipe_path("implementation").read_text())
         assert "fetch_issue" in data["steps"]
         step = data["steps"]["fetch_issue"]
         assert step["tool"] == "fetch_github_issue"
@@ -47,7 +47,7 @@ class TestImplementationPipelineIssueUrl:
         """fetch_issue must be positioned after set_merge_target and before create_branch."""
         import yaml
 
-        data = yaml.safe_load(_recipe_path("implementation-pipeline").read_text())
+        data = yaml.safe_load(_recipe_path("implementation").read_text())
         assert data["steps"]["set_merge_target"]["on_success"] == "fetch_issue"
         assert data["steps"]["fetch_issue"]["on_success"] == "create_branch"
 
@@ -55,7 +55,7 @@ class TestImplementationPipelineIssueUrl:
         """plan step must reference context.issue_content in with: for dataflow tracking."""
         import yaml
 
-        data = yaml.safe_load(_recipe_path("implementation-pipeline").read_text())
+        data = yaml.safe_load(_recipe_path("implementation").read_text())
         plan_with = data["steps"]["plan"].get("with", {})
         assert any("issue_content" in str(v) for v in plan_with.values())
 
@@ -63,7 +63,7 @@ class TestImplementationPipelineIssueUrl:
         """open_pr_step must reference context.issue_number in with: for dataflow tracking."""
         import yaml
 
-        data = yaml.safe_load(_recipe_path("implementation-pipeline").read_text())
+        data = yaml.safe_load(_recipe_path("implementation").read_text())
         openpr_with = data["steps"]["open_pr_step"].get("with", {})
         assert any("issue_number" in str(v) for v in openpr_with.values())
 
@@ -71,7 +71,7 @@ class TestImplementationPipelineIssueUrl:
         """issue_number and issue_content captured by fetch_issue must not be dead outputs."""
         from autoskillit.recipe.validator import analyze_dataflow
 
-        recipe = load_recipe(_recipe_path("implementation-pipeline"))
+        recipe = load_recipe(_recipe_path("implementation"))
         report = analyze_dataflow(recipe)
         dead = [
             w
@@ -83,7 +83,7 @@ class TestImplementationPipelineIssueUrl:
 
 class TestInvestigateFirstIssueUrl:
     def test_recipe_validates_clean(self):
-        result = validate_from_path(_recipe_path("investigate-first"))
+        result = validate_from_path(_recipe_path("remediation"))
         assert result["valid"] is True
         errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
         assert errors == [], f"Unexpected errors: {errors}"
@@ -91,7 +91,7 @@ class TestInvestigateFirstIssueUrl:
     def test_issue_url_ingredient_declared(self):
         import yaml
 
-        data = yaml.safe_load(_recipe_path("investigate-first").read_text())
+        data = yaml.safe_load(_recipe_path("remediation").read_text())
         assert "issue_url" in data["ingredients"]
         ing = data["ingredients"]["issue_url"]
         assert ing.get("required", False) is False
@@ -100,7 +100,7 @@ class TestInvestigateFirstIssueUrl:
     def test_fetch_issue_step_present(self):
         import yaml
 
-        data = yaml.safe_load(_recipe_path("investigate-first").read_text())
+        data = yaml.safe_load(_recipe_path("remediation").read_text())
         assert "fetch_issue" in data["steps"]
         step = data["steps"]["fetch_issue"]
         assert step["tool"] == "fetch_github_issue"
@@ -112,28 +112,28 @@ class TestInvestigateFirstIssueUrl:
     def test_fetch_issue_between_set_merge_target_and_create_branch(self):
         import yaml
 
-        data = yaml.safe_load(_recipe_path("investigate-first").read_text())
+        data = yaml.safe_load(_recipe_path("remediation").read_text())
         assert data["steps"]["set_merge_target"]["on_success"] == "fetch_issue"
         assert data["steps"]["fetch_issue"]["on_success"] == "create_branch"
 
     def test_issue_content_referenced_in_investigate_step(self):
         import yaml
 
-        data = yaml.safe_load(_recipe_path("investigate-first").read_text())
+        data = yaml.safe_load(_recipe_path("remediation").read_text())
         inv_with = data["steps"]["investigate"].get("with", {})
         assert any("issue_content" in str(v) for v in inv_with.values())
 
     def test_issue_number_referenced_in_open_pr_step(self):
         import yaml
 
-        data = yaml.safe_load(_recipe_path("investigate-first").read_text())
+        data = yaml.safe_load(_recipe_path("remediation").read_text())
         openpr_with = data["steps"]["open_pr_step"].get("with", {})
         assert any("issue_number" in str(v) for v in openpr_with.values())
 
     def test_no_dead_output_for_issue_captures(self):
         from autoskillit.recipe.validator import analyze_dataflow
 
-        recipe = load_recipe(_recipe_path("investigate-first"))
+        recipe = load_recipe(_recipe_path("remediation"))
         report = analyze_dataflow(recipe)
         dead = [
             w

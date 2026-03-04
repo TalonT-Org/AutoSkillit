@@ -254,9 +254,9 @@ Declarative YAML pipeline definitions stored in `.autoskillit/recipes/` that gui
 
 | Recipe | Description |
 |--------|-------------|
-| `implementation-pipeline` | Clone > plan > verify > implement > test > merge > push > cleanup (supports group decomposition) |
+| `implementation` | Clone > plan > verify > implement > test > merge > push > cleanup (supports group decomposition) |
 | `bugfix-loop` | Reset > test > investigate > rectify > implement > verify > audit > merge |
-| `investigate-first` | Clone > investigate > rectify > dry-walkthrough > implement > test > merge > push > cleanup |
+| `remediation` | Clone > investigate > rectify > dry-walkthrough > implement > test > merge > push > cleanup |
 | `audit-and-fix` | Clone > audit > investigate > rectify > implement > test > merge > push > cleanup |
 | `smoke-test` | Self-contained integration test exercising the full orchestration path |
 

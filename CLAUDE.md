@@ -187,8 +187,8 @@ src/autoskillit/
 ├── recipes/                 # Bundled recipe YAML definitions
 │   ├── audit-and-fix.yaml
 │   ├── bugfix-loop.yaml
-│   ├── implementation-pipeline.yaml
-│   ├── investigate-first.yaml
+│   ├── implementation.yaml
+│   ├── remediation.yaml
 │   └── smoke-test.yaml
 └── skills/                  # 23 bundled skills (SKILL.md per skill)
     ├── analyze-prs/          ├── audit-friction/

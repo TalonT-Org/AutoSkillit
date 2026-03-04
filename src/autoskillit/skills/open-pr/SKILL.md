@@ -27,7 +27,7 @@ relevant arch-lens lenses, and open a GitHub Pull Request.
 
 ## When to Use
 
-- Called by `implementation-pipeline` when `open_pr=true`, after all groups/parts are merged
+- Called by `implementation` when `open_pr=true`, after all groups/parts are merged
 - Can be invoked standalone after any implementation that used a feature branch
 
 ## Critical Constraints

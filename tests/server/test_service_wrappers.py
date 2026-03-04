@@ -30,14 +30,14 @@ class TestDefaultRecipeRepository:
 
     def test_load_and_validate_returns_content_and_valid(self, tmp_path: Path) -> None:
         """load_and_validate() for a bundled recipe returns 'content' and 'valid' keys."""
-        result = self.repo.load_and_validate("implementation-pipeline", tmp_path)
+        result = self.repo.load_and_validate("implementation", tmp_path)
         assert isinstance(result, dict), "load_and_validate() must return a dict"
         assert "content" in result, f"Expected 'content' key in result, got: {list(result)}"
         assert "valid" in result, f"Expected 'valid' key in result, got: {list(result)}"
 
     def test_validate_from_path_returns_findings(self) -> None:
         """validate_from_path() returns a dict with 'valid' and 'findings' keys."""
-        recipe_path = self._recipes_dir / "implementation-pipeline.yaml"
+        recipe_path = self._recipes_dir / "implementation.yaml"
         assert recipe_path.exists(), f"Bundled recipe not found: {recipe_path}"
 
         result = self.repo.validate_from_path(recipe_path)

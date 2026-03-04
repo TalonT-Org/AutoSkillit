@@ -17,7 +17,7 @@ from autoskillit.recipe.validator import analyze_dataflow
 class TestImplementationPipelineStructure:
     @pytest.fixture(scope="class")
     def recipe(self):
-        return load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+        return load_recipe(builtin_recipes_dir() / "implementation.yaml")
 
     def test_ip1_group_step_captures_group_files(self, recipe) -> None:
         """T_IP1: group step has capture containing key group_files (not groups_path)."""
@@ -385,7 +385,7 @@ class TestBugfixLoopStructure:
 class TestInvestigateFirstStructure:
     @pytest.fixture(scope="class")
     def recipe(self):
-        return load_recipe(builtin_recipes_dir() / "investigate-first.yaml")
+        return load_recipe(builtin_recipes_dir() / "remediation.yaml")
 
     def test_if1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
         self,

@@ -1,4 +1,4 @@
-name: investigate-first
+name: remediation
 description: Investigate a problem deeply, plan architectural fix, implement in a feature branch, and open a PR.
 autoskillit_version: "0.3.0"
 

@@ -167,7 +167,7 @@ class TestCLICook:
         captured = capsys.readouterr()
         assert "Recipe not found: 'anything'" in captured.out
         assert "Available recipes:" in captured.out
-        assert "implementation-pipeline" in captured.out
+        assert "implementation" in captured.out
 
     def test_cook_available_scripts_listed(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -563,7 +563,7 @@ class TestRecipesCLI:
         _app_mod.recipes_list()
         captured = capsys.readouterr()
         assert captured.out.strip(), "Expected at least one recipe in output"
-        assert "implementation-pipeline" in captured.out
+        assert "implementation" in captured.out
 
     def test_recipes_show_prints_content(self, capsys: pytest.CaptureFixture) -> None:
         """recipes show prints the YAML content of a known bundled recipe."""

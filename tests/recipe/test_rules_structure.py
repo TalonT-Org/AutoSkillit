@@ -1109,9 +1109,9 @@ class TestMergeBaseUnpublishedRule:
         assert not any(f.rule == "merge-base-unpublished" for f in findings)
 
     def test_implementation_pipeline_satisfies_push_before_merge_contract(self) -> None:
-        """implementation-pipeline.yaml must pass the merge-base-unpublished
+        """implementation.yaml must pass the merge-base-unpublished
         rule after the push_merge_target step is added."""
-        recipe = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+        recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
         findings = run_semantic_rules(recipe)
         assert not any(f.rule == "merge-base-unpublished" for f in findings)
 
@@ -1371,11 +1371,11 @@ class TestRecipeIntegrationPredicateRouting:
     """Integration tests: bundled recipes with predicate on_result validate correctly."""
 
     def setup_method(self) -> None:
-        self.if_recipe = load_recipe(builtin_recipes_dir() / "investigate-first.yaml")
-        self.ip_recipe = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+        self.if_recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+        self.ip_recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
 
     def test_investigate_first_merge_step_has_predicate_on_result(self) -> None:
-        """The merge step in investigate-first.yaml has predicate on_result."""
+        """The merge step in remediation.yaml has predicate on_result."""
         step = self.if_recipe.steps["merge"]
         assert step.on_result is not None
         assert step.on_result.conditions, "merge step must have predicate conditions"
@@ -1404,7 +1404,7 @@ class TestRecipeIntegrationPredicateRouting:
         assert "result.worktree_path" in step.capture["worktree_path"]
 
     def test_implementation_pipeline_merge_step_has_predicate_on_result(self) -> None:
-        """The merge step in implementation-pipeline.yaml has predicate on_result."""
+        """The merge step in implementation.yaml has predicate on_result."""
         step = self.ip_recipe.steps["merge"]
         assert step.on_result is not None
         assert step.on_result.conditions, "merge step must have predicate conditions"
@@ -1427,7 +1427,7 @@ class TestRecipeIntegrationPredicateRouting:
         assert cond3.route == "next_or_done"
 
     def test_implementation_pipeline_merge_step_captures_worktree_path(self) -> None:
-        """The merge step in implementation-pipeline.yaml captures worktree_path."""
+        """The merge step in implementation.yaml captures worktree_path."""
         step = self.ip_recipe.steps["merge"]
         assert "worktree_path" in step.capture
         assert "result.worktree_path" in step.capture["worktree_path"]
@@ -1437,16 +1437,16 @@ class TestRecipeIntegrationPredicateRouting:
         from autoskillit.recipe.validator import validate_recipe
 
         if_errors = validate_recipe(self.if_recipe)
-        assert if_errors == [], f"investigate-first.yaml has validation errors: {if_errors}"
+        assert if_errors == [], f"remediation.yaml has validation errors: {if_errors}"
 
         ip_errors = validate_recipe(self.ip_recipe)
-        assert ip_errors == [], f"implementation-pipeline.yaml has validation errors: {ip_errors}"
+        assert ip_errors == [], f"implementation.yaml has validation errors: {ip_errors}"
 
     def test_both_recipes_no_error_semantic_findings(self) -> None:
         """Both recipes pass semantic rules with no ERROR-severity findings."""
         for recipe, name in [
-            (self.if_recipe, "investigate-first"),
-            (self.ip_recipe, "implementation-pipeline"),
+            (self.if_recipe, "remediation"),
+            (self.ip_recipe, "implementation"),
         ]:
             findings = run_semantic_rules(recipe)
             errors = [f for f in findings if f.severity == Severity.ERROR]

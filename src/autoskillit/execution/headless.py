@@ -335,6 +335,10 @@ async def run_headless_core(
             "--output-format",
             cfg.output_format.value,
         ]
+        # Apply any CLI flags required by the chosen output format.
+        for flag in cfg.output_format.required_cli_flags:
+            if flag not in cmd:
+                cmd.append(flag)
         if add_dir:
             cmd.extend(["--add-dir", add_dir])
 

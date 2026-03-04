@@ -77,6 +77,13 @@ class OutputFormat(StrEnum):
     def supports_model_breakdown(self) -> bool:
         return self == OutputFormat.STREAM_JSON
 
+    @property
+    def required_cli_flags(self) -> tuple[str, ...]:
+        """CLI flags required when this format is used with -p (headless) mode."""
+        if self == OutputFormat.STREAM_JSON:
+            return ("--verbose",)
+        return ()
+
     @classmethod
     def derive(cls, *, completion_marker: str) -> OutputFormat:
         """Derive the required format from feature configuration.

@@ -13,7 +13,7 @@ from typing import Any
 
 import anyio
 
-from autoskillit.core import SubprocessResult, TerminationReason, get_logger
+from autoskillit.core import OutputFormat, SubprocessResult, TerminationReason, get_logger
 from autoskillit.execution import parse_session_result, run_managed_async
 from autoskillit.recipe import StaleItem, load_bundled_manifest
 from autoskillit.workspace import bundled_skills_dir
@@ -117,8 +117,13 @@ async def _triage_batch(
     prompt = _build_batch_prompt(triageable, skill_md_cache)
 
     try:
+        fmt = OutputFormat.JSON
+        triage_cmd = ["claude", "-p", prompt, "--model", "haiku", "--output-format", fmt.value]
+        for flag in fmt.required_cli_flags:
+            if flag not in triage_cmd:
+                triage_cmd.append(flag)
         result: SubprocessResult = await run_managed_async(
-            cmd=["claude", "-p", prompt, "--model", "haiku", "--output-format", "json"],
+            cmd=triage_cmd,
             cwd=Path.cwd(),
             timeout=30.0,
             pty_mode=True,

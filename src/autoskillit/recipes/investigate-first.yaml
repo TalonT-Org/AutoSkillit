@@ -64,27 +64,12 @@ steps:
     capture:
       work_dir: "${{ result.clone_path }}"
       remote_url: "${{ result.remote_url }}"
-    on_success: capture_base_sha
+    on_success: set_merge_target
     on_failure: escalate_stop
     note: >
       Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
       Captures work_dir context used by all subsequent steps as cwd.
       On failure, escalate_stop is reached immediately (no clone to remove).
-
-  capture_base_sha:
-    tool: run_cmd
-    with:
-      cmd: "git -C ${{ context.work_dir }} rev-parse ${{ inputs.base_branch }}"
-      cwd: "${{ context.work_dir }}"
-    capture:
-      base_sha: "${{ result.stdout | trim }}"
-    on_success: set_merge_target
-    on_failure: escalate_stop
-    note: >
-      Capture the SHA of base_branch before any merge begins. A commit SHA names
-      a git object (not a ref), so it survives git branch -D unconditionally. This
-      SHA is passed to audit_impl as implementation_ref to diff the full
-      implementation against the pre-implementation state.
 
   set_merge_target:
     tool: run_cmd
@@ -194,6 +179,7 @@ steps:
     capture:
       implementation_ref: "${{ result.worktree_path }}"
       worktree_path: "${{ result.worktree_path }}"
+      branch_name: "${{ result.branch_name }}"
     retry:
       max_attempts: 0
       on: needs_retry
@@ -210,6 +196,7 @@ steps:
     capture:
       implementation_ref: "${{ result.worktree_path }}"
       worktree_path: "${{ result.worktree_path }}"
+      branch_name: "${{ result.branch_name }}"
     retry:
       max_attempts: 3
       on: needs_retry
@@ -241,7 +228,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.base_sha }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.branch_name }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:

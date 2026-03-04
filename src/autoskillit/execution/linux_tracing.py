@@ -1,9 +1,11 @@
 """Linux-only process tracing via psutil and /proc filesystem.
 
-Tier 2 debug instrumentation. Gated behind:
+Accumulates ProcSnapshot objects in memory during the session, then flushes
+them to structured JSON log files post-session (via session_log.py).
+
+Gated behind:
 - sys.platform == "linux"
 - config.linux_tracing.enabled == True
-- logging level == DEBUG
 
 Uses psutil (already a project dependency) for fields it handles well,
 and hand-rolls /proc parsing only for fields psutil doesn't expose
@@ -14,10 +16,9 @@ On non-Linux platforms, all public functions are safe no-ops.
 
 from __future__ import annotations
 
-import dataclasses
 import sys
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,12 +26,8 @@ import anyio
 import anyio.abc
 import psutil
 
-from autoskillit.core import get_logger
-
 if TYPE_CHECKING:
     from autoskillit.config import LinuxTracingConfig
-
-logger = get_logger(__name__)
 
 LINUX_TRACING_AVAILABLE = sys.platform == "linux"
 
@@ -44,6 +41,7 @@ class ProcSnapshot:
     vm_rss_kb: int
     threads: int
     fd_count: int
+    fd_soft_limit: int
     ctx_switches_voluntary: int
     ctx_switches_involuntary: int
     # hand-rolled /proc fields (psutil doesn't expose these)
@@ -86,6 +84,7 @@ def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
             mem = p.memory_info()
             num_threads = p.num_threads()
             num_fds = p.num_fds()
+            fd_soft_limit = p.rlimit(psutil.RLIMIT_NOFILE)[0]
             ctx = p.num_ctx_switches()
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         return None
@@ -112,6 +111,7 @@ def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
         vm_rss_kb=mem.rss // 1024,
         threads=num_threads,
         fd_count=num_fds,
+        fd_soft_limit=fd_soft_limit,
         ctx_switches_voluntary=ctx.voluntary,
         ctx_switches_involuntary=ctx.involuntary,
         sig_pnd=sig_fields.get("sig_pnd", ""),
@@ -122,32 +122,13 @@ def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
     )
 
 
-def log_snapshot_delta(prev: ProcSnapshot, curr: ProcSnapshot, pid: int) -> None:
-    """Log only fields that changed between consecutive snapshots."""
-    changes: dict[str, dict[str, object]] = {}
-    for f in dataclasses.fields(ProcSnapshot):
-        old_val = getattr(prev, f.name)
-        new_val = getattr(curr, f.name)
-        if old_val != new_val:
-            changes[f.name] = {"from": old_val, "to": new_val}
-    if changes:
-        logger.debug("proc_snapshot_delta", pid=pid, changes=changes)
-
-
 async def proc_monitor(pid: int, interval: float = 5.0) -> AsyncIterator[ProcSnapshot]:
     """Async generator: yields ProcSnapshot at interval until process dies."""
-    prev: ProcSnapshot | None = None
     while True:
         snap = read_proc_snapshot(pid)
         if snap is None:
-            logger.debug("proc_monitor_target_gone", pid=pid)
             return
-        if prev is not None:
-            log_snapshot_delta(prev, snap, pid)
-        else:
-            logger.debug("proc_monitor_initial_snapshot", pid=pid, **dataclasses.asdict(snap))
         yield snap
-        prev = snap
         await anyio.sleep(interval)
 
 
@@ -156,11 +137,13 @@ class LinuxTracingHandle:
     """Opaque handle returned by start_linux_tracing. Call stop() when done."""
 
     _monitor_cancel_scope: anyio.CancelScope | None = None
+    _snapshots: list[ProcSnapshot] = field(default_factory=list)
 
-    async def stop(self) -> None:
-        """Stop tracing. Best-effort, never raises."""
+    async def stop(self) -> list[ProcSnapshot]:
+        """Stop tracing and return accumulated snapshots."""
         if self._monitor_cancel_scope is not None:
             self._monitor_cancel_scope.cancel()
+        return list(self._snapshots)
 
 
 def start_linux_tracing(
@@ -179,8 +162,8 @@ def start_linux_tracing(
 
     async def _run_monitor() -> None:
         with scope:
-            async for _snap in proc_monitor(pid, config.proc_interval):
-                pass  # Snapshots are logged by proc_monitor itself
+            async for snap in proc_monitor(pid, config.proc_interval):
+                handle._snapshots.append(snap)
 
     handle._monitor_cancel_scope = scope
     tg.start_soon(_run_monitor)

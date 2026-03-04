@@ -11,7 +11,6 @@ Two composed functions wire the utilities together correctly:
 
 from __future__ import annotations
 
-import dataclasses
 import subprocess
 import time
 from pathlib import Path
@@ -215,16 +214,15 @@ async def run_managed_async(
             signals = acc.to_race_signals()
             termination, _channel_confirmation = resolve_termination(signals)
 
+            snapshots_data: list[dict[str, object]] | None = None
             if tracing_handle is not None:
                 from autoskillit.execution.linux_tracing import read_proc_snapshot
 
+                accumulated = await tracing_handle.stop()
                 final_snap = read_proc_snapshot(proc.pid)
                 if final_snap:
-                    proc_log.debug(
-                        "linux_tracing_final_snapshot",
-                        **dataclasses.asdict(final_snap),
-                    )
-                await tracing_handle.stop()
+                    accumulated.append(final_snap)
+                snapshots_data = [s.__dict__ for s in accumulated]
 
             if timeout_scope.cancelled_caught:
                 termination = TerminationReason.TIMED_OUT
@@ -264,6 +262,7 @@ async def run_managed_async(
                 termination=termination,
                 pid=proc.pid,
                 channel_confirmation=_channel_confirmation,
+                proc_snapshots=snapshots_data,
             )
             proc_log.debug(
                 "run_managed_async_result",

@@ -414,11 +414,19 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_005_subprocess_result_field_names(self):
-        """SubprocessResult must have exactly the 6 canonical fields."""
+        """SubprocessResult must have exactly the 7 canonical fields."""
         from autoskillit.core.types import SubprocessResult
 
         fields = {f.name for f in dataclasses.fields(SubprocessResult)}
-        expected = {"returncode", "stdout", "stderr", "termination", "pid", "channel_confirmation"}
+        expected = {
+            "returncode",
+            "stdout",
+            "stderr",
+            "termination",
+            "pid",
+            "channel_confirmation",
+            "proc_snapshots",
+        }
         assert fields == expected, (
             f"SubprocessResult fields changed.\n"
             f"  Missing: {expected - fields}\n"

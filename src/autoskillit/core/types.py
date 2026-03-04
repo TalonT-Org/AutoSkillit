@@ -205,6 +205,7 @@ class SubprocessResult:
                stdout may be empty — callers must trust JSONL signal, not stdout content.
     UNMONITORED: no channel monitoring active (NATURAL_EXIT, STALE, TIMED_OUT, sync path).
     """
+    proc_snapshots: list[dict[str, object]] | None = None
 
 
 @runtime_checkable

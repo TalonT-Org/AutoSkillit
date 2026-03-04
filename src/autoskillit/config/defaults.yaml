@@ -84,5 +84,6 @@ logging:
   json_output: null
 
 linux_tracing:
-  enabled: false
+  enabled: true
   proc_interval: 5.0
+  log_dir: ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)

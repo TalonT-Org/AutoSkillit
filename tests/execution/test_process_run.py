@@ -315,6 +315,7 @@ class TestTracingStopOnException:
             with anyio.move_on_after(0.2):
                 await run_managed_async(
                     cmd=["sleep", "2"],
+                    cwd=tmp_path,
                     timeout=10.0,
                     linux_tracing_config=cfg,
                 )

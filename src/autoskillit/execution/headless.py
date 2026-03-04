@@ -383,7 +383,7 @@ async def run_headless_core(
                 # Runner raised — write a crash entry so sessions.jsonl stays consistent
                 _log_dir = ctx.config.linux_tracing.log_dir
                 try:
-                    from autoskillit.execution.session_log import flush_session_log
+                    from autoskillit.execution import flush_session_log
 
                     flush_session_log(
                         log_dir=_log_dir,
@@ -399,7 +399,7 @@ async def run_headless_core(
                         termination_reason="CRASHED",
                     )
                 except Exception:
-                    pass
+                    logger.debug("flush_session_log during crash failed", exc_info=True)
         result = _result  # type: ignore[assignment]  # not None past this point
 
         skill_result = _build_skill_result(

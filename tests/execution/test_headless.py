@@ -1605,7 +1605,7 @@ class TestCrashSessionLog:
         def fake_flush(**kwargs: object) -> None:
             flushed.append(dict(kwargs))
 
-        monkeypatch.setattr("autoskillit.execution.session_log.flush_session_log", fake_flush)
+        monkeypatch.setattr("autoskillit.execution.flush_session_log", fake_flush)
 
         async def raising_runner(*args: object, **kwargs: object) -> None:
             raise RuntimeError("simulated crash")

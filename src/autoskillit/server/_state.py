@@ -29,7 +29,7 @@ def _initialize(ctx: ToolContext) -> None:
     _ctx = ctx
     # Recovery sweep: finalize any orphaned tmpfs trace files from crashed sessions.
     try:
-        from autoskillit.execution.session_log import recover_crashed_sessions
+        from autoskillit.execution import recover_crashed_sessions
 
         cfg = ctx.config.linux_tracing
         n = recover_crashed_sessions(

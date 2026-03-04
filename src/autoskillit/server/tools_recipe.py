@@ -65,15 +65,17 @@ async def load_recipe(name: str) -> str:
     task — the recipe steps handle all investigation through delegated sessions.
 
     After loading:
-    1. Present the recipe to the user using the preview format below
-    2. If the user requests changes, use the /autoskillit:write-recipe skill
+    1. If `diagram` is not None: show the `diagram` field content to the user directly.
+    2. If `diagram` is None: render the recipe from `content` using the abbreviated spec
+       below, and suggest running `autoskillit recipes render {name}` to pre-generate it.
+    3. If the user requests changes, use the /autoskillit:write-recipe skill
        to apply modifications. That skill has the complete schema, validation rules,
        and formatting constraints needed for correct changes. Do NOT edit the YAML
        file directly — always delegate modifications to write-recipe.
-    3. Prompt for input values using AskUserQuestion
-    4. Execute the pipeline steps by calling MCP tools directly
+    4. Prompt for input values using AskUserQuestion
+    5. Execute the pipeline steps by calling MCP tools directly
 
-    Preview format for step 1:
+    Abbreviated render spec (used only when diagram is None):
 
         ## {name}
         {description}
@@ -81,44 +83,12 @@ async def load_recipe(name: str) -> str:
         **Flow:** {summary}
 
         ### Graph
-        Render a route table showing the full execution flow. Use this exact
-        column layout (align columns with spaces):
-
-          Step               Tool                  ✓ success           ✗ failure
-          ───────────────────────────────────────────────────────────────────────
-          {step}             {tool/action/python}  → {on_success}      → {on_failure}
-
-        Rules:
-        - List steps in YAML declaration order.
-        - For the Tool column: use the tool/action/python value. Append
-          [model] if a model is set, e.g. "run_skill [sonnet]".
-        - If on_success routes back to an earlier step, append ↑ to the name.
-        - If on_failure routes back to an earlier step, append ↑ to the name.
-        - If a step has retry: add an indented continuation line below it:
-              ↺ ×{max_attempts} ({on} condition)  → {on_exhausted}
-        - If a step uses on_result instead of on_success: leave the ✓ success
-          cell empty and add indented continuation lines for each route:
-              {route_key}  → {route_target}
-          Append ↑ to any target that is an earlier step.
-        - Terminal steps (action: stop) are excluded from the table and
-          listed below the closing rule, one per line:
-              {name}  "{message}"
-        - Close the table with the same ─── rule used to open it.
+        Render a route table: Step / Tool / ✓ success / ✗ failure columns.
+        Append ↑ to back-edge targets. List terminal steps below the rule.
+        Add retry and on_result continuation lines as sub-rows.
 
         ### Ingredients
-        For each ingredient show: name, description, required/optional, default value.
-        Distinguish user-supplied ingredients (required=true or meaningful defaults)
-        from agent-managed state (default="" or default=null with description
-        indicating it is set by a prior step or the agent).
-
-        ### Steps
-        For each non-terminal step show:
-        - Step name and tool/action/python discriminator
-        - If optional: true, mark as "[Optional]" and show the note
-        - If retry block exists: retries Nx on {condition}, then → {on_exhausted}
-        - If note exists, show it (notes contain critical agent instructions)
-        - If capture exists, show what values are extracted
-        - If model: show the model value (e.g., "Model: sonnet")
+        For each ingredient: name, description, required/optional, default value.
 
         ### Kitchen Rules
         If present, list all kitchen_rules strings.
@@ -190,7 +160,8 @@ async def load_recipe(name: str) -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
 
-    Response format: always JSON with ``content`` (raw YAML string) and
+    Response format: always JSON with ``content`` (raw YAML string),
+    ``diagram`` (pre-generated Markdown string or null), and
     ``suggestions`` (list of semantic findings, possibly empty) keys.
     On error: JSON with ``error`` key.
     """

@@ -3,7 +3,6 @@
 import json
 
 from autoskillit.core.types import (
-    RETRY_RESPONSE_FIELDS,
     ChannelConfirmation,
     MergeFailedStep,
     MergeState,
@@ -70,33 +69,6 @@ def test_channel_confirmation_values():
     assert ChannelConfirmation.CHANNEL_A.value == "channel_a"
     assert ChannelConfirmation.CHANNEL_B.value == "channel_b"
     assert ChannelConfirmation.UNMONITORED.value == "unmonitored"
-
-
-# T6: RETRY_RESPONSE_FIELDS structural guard
-def test_retry_response_fields_matches_to_json_output():
-    """RETRY_RESPONSE_FIELDS must match the keys emitted by SkillResult.to_json().
-
-    Structural guard: if a field is added to SkillResult without updating
-    RETRY_RESPONSE_FIELDS, this test fails immediately, preventing silent
-    drift in recipe step `retry.on` validation.
-    """
-    sr = SkillResult(
-        success=True,
-        result="",
-        session_id="",
-        subtype="success",
-        is_error=False,
-        exit_code=0,
-        needs_retry=False,
-        retry_reason=RetryReason.NONE,
-        stderr="",
-    )
-    json_keys = frozenset(json.loads(sr.to_json()).keys())
-    assert RETRY_RESPONSE_FIELDS == json_keys, (
-        f"RETRY_RESPONSE_FIELDS out of sync with SkillResult.to_json().\n"
-        f"Missing: {json_keys - RETRY_RESPONSE_FIELDS}\n"
-        f"Extra: {RETRY_RESPONSE_FIELDS - json_keys}"
-    )
 
 
 def test_skill_command_prefix_constant_exists():
@@ -199,11 +171,6 @@ def test_skill_result_to_json_excludes_outcome():
     )
     parsed = json.loads(sr.to_json())
     assert "outcome" not in parsed
-
-
-def test_retry_response_fields_excludes_outcome():
-    """RETRY_RESPONSE_FIELDS must not include 'outcome' after adding the @property."""
-    assert "outcome" not in RETRY_RESPONSE_FIELDS
 
 
 def test_session_outcome_accessible_from_core():

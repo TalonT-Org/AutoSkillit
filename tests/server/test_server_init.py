@@ -146,7 +146,6 @@ class TestToolRegistration:
             "run_cmd",
             "run_python",
             "run_skill",
-            "run_skill_retry",
             "test_check",
             "reset_test_dir",
             "classify_fix",
@@ -743,8 +742,8 @@ class TestSafetyConfigWiring:
 
     @pytest.mark.anyio
     async def test_run_skill_retry_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
-        """2e: require_dry_walkthrough=False bypasses dry-walkthrough gate."""
-        from autoskillit.server.tools_execution import run_skill_retry
+        """2e: require_dry_walkthrough=False bypasses dry-walkthrough gate (using run_skill)."""
+        from autoskillit.server.tools_execution import run_skill
         from tests.conftest import _make_result
 
         tool_ctx.config = AutomationConfig(safety=SafetyConfig(require_dry_walkthrough=False))
@@ -754,7 +753,7 @@ class TestSafetyConfigWiring:
 
         tool_ctx.runner.push(_make_result(0, '{"result": "done"}', ""))
         result = json.loads(
-            await run_skill_retry(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
+            await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
         )
         assert result["subtype"] != "gate_error"
         assert result["exit_code"] == 0
@@ -826,7 +825,6 @@ class TestToolSchemas:
 
     PIPELINE_TOOLS_WITH_GUIDANCE: dict[str, list[str]] = {
         "run_skill": ["MCP tool", "delegate"],
-        "run_skill_retry": ["MCP tool", "delegate"],
     }
 
     def test_tool_descriptions_contain_no_legacy_terms(self):
@@ -929,7 +927,10 @@ class TestToolSchemas:
         )
 
     def test_pipeline_forbidden_tools_constant_is_complete(self):
-        """PIPELINE_FORBIDDEN_TOOLS must contain all 11 native Claude Code tools."""
+        """PIPELINE_FORBIDDEN_TOOLS must contain all 10 native Claude Code tools.
+
+        "Agent" replaces the stale "Task" and "Explore" names — Agent is the
+        actual tool name; Explore is a subagent_type parameter, not a tool name.."""
         from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
 
         expected = {
@@ -939,8 +940,7 @@ class TestToolSchemas:
             "Edit",
             "Write",
             "Bash",
-            "Task",
-            "Explore",
+            "Agent",
             "WebFetch",
             "WebSearch",
             "NotebookEdit",
@@ -959,7 +959,7 @@ class TestToolSchemas:
         tools = {
             c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
         }
-        for tool_name in ("run_skill", "run_skill_retry"):
+        for tool_name in ("run_skill",):
             desc = tools[tool_name].description or ""
             missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in desc]
             assert not missing, (

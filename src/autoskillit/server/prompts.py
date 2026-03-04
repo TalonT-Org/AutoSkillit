@@ -52,10 +52,9 @@ def open_kitchen() -> PromptResult:
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "
-        "investigation MUST be delegated through run_skill or "
-        "run_skill_retry, which launch headless sessions with full "
-        "tool access. Do NOT use native tools to investigate failures — "
-        "route to on_failure and let the downstream skill handle diagnosis."
+        "investigation MUST be delegated through run_skill, which launches "
+        "headless sessions with full tool access. Do NOT use native tools to "
+        "investigate failures — route to on_failure and let the downstream skill handle diagnosis."
     )
 
     # Inject sous-chef global orchestration rules (graceful degradation if absent)

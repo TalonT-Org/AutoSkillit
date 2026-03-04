@@ -8,7 +8,6 @@ import pytest
 from autoskillit.config import AutomationConfig, ModelConfig
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
-    RETRY_RESPONSE_FIELDS,
     ChannelConfirmation,
     RetryReason,
     SubprocessResult,
@@ -819,16 +818,6 @@ class TestBuildSkillResultStderr:
         assert response["stderr"] == ""
 
 
-class TestRetryResponseFieldsIncludesStderr:
-    """RETRY_RESPONSE_FIELDS schema includes stderr."""
-
-    def test_stderr_in_fields(self):
-        assert "stderr" in RETRY_RESPONSE_FIELDS
-
-    def test_field_count(self):
-        assert len(RETRY_RESPONSE_FIELDS) == 10
-
-
 class TestContextExhaustionStructured:
     """_is_context_exhausted uses structured detection, not substring on result."""
 
@@ -1370,13 +1359,6 @@ class TestBuildSkillResultTokenUsage:
         timeout_result = _make_timeout_result(stdout="", stderr="")
         response = json.loads(_build_skill_result(timeout_result).to_json())
         assert response["token_usage"] is None
-
-
-class TestRetryResponseFieldsTokenUsage:
-    """RETRY_RESPONSE_FIELDS includes token_usage."""
-
-    def test_token_usage_in_fields(self):
-        assert "token_usage" in RETRY_RESPONSE_FIELDS
 
 
 class TestFailureCaptureInBuildSkillResult:

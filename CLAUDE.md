@@ -176,6 +176,7 @@ src/autoskillit/
 ├── hooks/                   # Claude Code PreToolUse hook scripts
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration (auto-discovered by Claude Code)
+│   ├── native_tool_guard.py #   PreToolUse hook — blocks native tools when kitchen gate file exists
 │   ├── quota_check.py       #   Quota guard hook — blocks run_skill when threshold exceeded
 │   ├── remove_clone_guard.py #  Remove-clone guard — denies remove_clone calls with keep != "true"
 │   ├── skill_cmd_check.py   #   PreToolUse hook — validates skill_command path argument format

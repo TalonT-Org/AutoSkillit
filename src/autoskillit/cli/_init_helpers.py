@@ -59,11 +59,7 @@ safety:
 #   skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
 #
 # run_skill:
-#   timeout: 3600
-#   stale_threshold: 1200
-#   completion_marker: "%%ORDER_UP%%"
-#
-# run_skill_retry:
 #   timeout: 7200
 #   stale_threshold: 1200
+#   completion_marker: "%%ORDER_UP%%"
 """

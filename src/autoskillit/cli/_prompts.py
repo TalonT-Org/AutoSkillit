@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from autoskillit.core import pkg_root
+
 
 def _build_orchestrator_prompt(script_yaml: str) -> str:
     """Build the --append-system-prompt content for a cook session."""
+    # Inject sous-chef global orchestration rules (graceful degradation if absent)
+    sous_chef_content = ""
+    _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
+    if _sous_chef_path.exists():
+        sous_chef_content = "\n\n" + _sous_chef_path.read_text()
+
     return f"""\
 You are a pipeline orchestrator. Execute the recipe below step-by-step.
 
@@ -42,12 +50,11 @@ Preview format:
 
 During pipeline execution, only use AutoSkillit MCP tools:
 - Read, Grep, Glob (code investigation) — not used here because investigation
-  happens inside headless sessions launched by run_skill/run_skill_retry,
-  which have full tool access.
+  happens inside headless sessions launched by run_skill, which has full tool access.
 - Edit, Write (code modification) — not used here because all code changes
-  are delegated through run_skill/run_skill_retry.
+  are delegated through run_skill.
 - Bash (shell commands) — not used here; use run_cmd if shell access is needed.
-- Task/Explore subagents, WebFetch, WebSearch — not used here; delegate via
+- Agent subagents, WebFetch, WebSearch — not used here; delegate via
   run_skill for any research or multi-step work.
 
 Allowed during pipeline execution:
@@ -61,9 +68,8 @@ Allowed during pipeline execution:
 
 ROUTING RULES — MANDATORY:
 - When a tool returns a failure result, you MUST follow the step's on_failure route.
-- When a step fails, route to on_failure — do not use Read, Grep, Glob, Edit,
-  Write, Bash, or Explore subagents to investigate. The on_failure step (e.g.,
-  resolve-failures) has diagnostic access that the orchestrator does not.
+- When a step fails, route to on_failure — the downstream skill has diagnostic
+  access that the orchestrator does not.
 - Your ONLY job is to route to the correct next step and pass the
   required arguments. The downstream skill does the actual work.
 
@@ -71,9 +77,9 @@ FAILURE PREDICATES — when to follow on_failure:
 - test_check: {{"passed": false}}
 - merge_worktree: "error" key present in response
 - run_cmd: {{"success": false}}
-- run_skill / run_skill_retry: {{"success": false}}
+- run_skill: {{"success": false}}
 - classify_fix: "error" key present in response
-
+{sous_chef_content}
 --- RECIPE ---
 {script_yaml}
 --- END RECIPE ---

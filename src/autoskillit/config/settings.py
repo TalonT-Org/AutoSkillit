@@ -65,7 +65,7 @@ class ReadDbConfig:
 
 @dataclass
 class RunSkillConfig:
-    timeout: int = 3600
+    timeout: int = 7200
     stale_threshold: int = 1200  # 20 minutes
     completion_marker: str = "%%ORDER_UP%%"
     completion_drain_timeout: float = 5.0
@@ -75,12 +75,6 @@ class RunSkillConfig:
     def output_format(self) -> OutputFormat:
         """Derived from feature requirements — not independently configurable."""
         return OutputFormat.derive(completion_marker=self.completion_marker)
-
-
-@dataclass
-class RunSkillRetryConfig:
-    timeout: int = 7200
-    stale_threshold: int = 1200
 
 
 @dataclass
@@ -163,7 +157,6 @@ class AutomationConfig:
     safety: SafetyConfig = field(default_factory=SafetyConfig)
     read_db: ReadDbConfig = field(default_factory=ReadDbConfig)
     run_skill: RunSkillConfig = field(default_factory=RunSkillConfig)
-    run_skill_retry: RunSkillRetryConfig = field(default_factory=RunSkillRetryConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     worktree_setup: WorktreeSetupConfig = field(default_factory=WorktreeSetupConfig)
     migration: MigrationConfig = field(default_factory=MigrationConfig)
@@ -196,7 +189,6 @@ class AutomationConfig:
         sf = sec("safety")
         rd = sec("read_db")
         rs = sec("run_skill")
-        rsr = sec("run_skill_retry")
         mc = sec("model")
         ws = sec("worktree_setup")
         mi = sec("migration")
@@ -214,7 +206,6 @@ class AutomationConfig:
         _sf = _field_defaults(SafetyConfig)
         _rd = _field_defaults(ReadDbConfig)
         _rs = _field_defaults(RunSkillConfig)
-        _rsr = _field_defaults(RunSkillRetryConfig)
         _mc = _field_defaults(ModelConfig)
         _ws = _field_defaults(WorktreeSetupConfig)
         _mi = _field_defaults(MigrationConfig)
@@ -262,10 +253,6 @@ class AutomationConfig:
                 exit_after_stop_delay_ms=int(
                     val(rs, "exit_after_stop_delay_ms", _rs["exit_after_stop_delay_ms"])
                 ),
-            ),
-            run_skill_retry=RunSkillRetryConfig(
-                timeout=int(val(rsr, "timeout", _rsr["timeout"])),
-                stale_threshold=int(val(rsr, "stale_threshold", _rsr["stale_threshold"])),
             ),
             model=ModelConfig(
                 default=val(mc, "default", _mc["default"]) or None,

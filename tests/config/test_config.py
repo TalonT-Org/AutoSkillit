@@ -4,7 +4,7 @@ from dataclasses import fields as dc_fields
 
 import yaml
 
-from autoskillit.config import AutomationConfig, RunSkillConfig, RunSkillRetryConfig, load_config
+from autoskillit.config import AutomationConfig, RunSkillConfig, load_config
 
 
 class TestDefaultConfig:
@@ -285,11 +285,10 @@ class TestSyncConfigRemoval:
 
 
 class TestRunSkillRetryConfigFields:
-    def test_has_only_timeout_and_stale_threshold(self):
-        field_names = {f.name for f in dc_fields(RunSkillRetryConfig)}
-        assert field_names == {"timeout", "stale_threshold"}, (
-            f"Unexpected fields: {field_names - {'timeout', 'stale_threshold'}}"
-        )
+    def test_run_skill_retry_config_removed(self):
+        """run_skill_retry config section was merged into run_skill (timeout now 7200s)."""
+        cfg = AutomationConfig()
+        assert cfg.run_skill.timeout == 7200
 
 
 class TestRunSkillConfigExitAfterStopDelay:

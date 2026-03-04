@@ -7,7 +7,6 @@ to break the circular import between validator.py and the rule modules.
 from __future__ import annotations
 
 from autoskillit.core import (
-    RETRY_RESPONSE_FIELDS,
     get_logger,
 )
 from autoskillit.recipe._analysis import _build_step_graph, analyze_dataflow  # noqa: F401
@@ -48,6 +47,9 @@ __all__ = [
     "semantic_rule",
 ]
 
+# Reserved terminal target names accepted by on_success/on_failure/on_context_limit/on_exhausted.
+_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
+
 
 # ---------------------------------------------------------------------------
 # Structural validation
@@ -81,28 +83,27 @@ def validate_recipe(recipe: Recipe) -> list[str]:
             )
         if step.action == "stop" and not step.message:
             errors.append(f"Terminal step '{step_name}' (action: stop) must have a 'message'.")
-        for goto_field in ("on_success", "on_failure", "on_retry"):
+
+        # Routing target validation
+        for goto_field in ("on_success", "on_failure", "on_context_limit"):
             target = getattr(step, goto_field)
             if target and target not in step_names and target != "done":
                 errors.append(
                     f"Step '{step_name}'.{goto_field} references unknown step '{target}'."
                 )
-        if step.on_retry is not None and step.retry is not None and step.retry.on == "needs_retry":
+
+        # on_exhausted: may be a step name OR one of the reserved terminal targets
+        if step.on_exhausted not in step_names and step.on_exhausted not in _TERMINAL_TARGETS:
             errors.append(
-                f"Step '{step_name}' has both 'on_retry' and 'retry.on=\"needs_retry\"'; "
-                f"they are mutually exclusive. Use 'on_retry' to route to a different step "
-                f"on needs_retry=True, or 'retry' to re-run the same step — not both."
+                f"Step '{step_name}'.on_exhausted references unknown step '{step.on_exhausted}'."
             )
-        if step.retry and step.retry.on_exhausted not in step_names:
+
+        # retries must be a non-negative integer
+        if not isinstance(step.retries, int) or step.retries < 0:
             errors.append(
-                f"Step '{step_name}'.retry.on_exhausted references "
-                f"unknown step '{step.retry.on_exhausted}'."
+                f"Step '{step_name}'.retries must be a non-negative integer, got {step.retries!r}."
             )
-        if step.retry and step.retry.on and step.retry.on not in RETRY_RESPONSE_FIELDS:
-            errors.append(
-                f"Step '{step_name}'.retry.on references unknown response field "
-                f"'{step.retry.on}'. Valid fields: {sorted(RETRY_RESPONSE_FIELDS)}"
-            )
+
         if step.on_result is not None:
             if step.on_success is not None:
                 errors.append(

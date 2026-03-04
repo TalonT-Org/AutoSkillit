@@ -4,9 +4,9 @@ autoskillit_version: "0.3.0"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
-    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
     orchestrator. All code changes and investigation happen through
-    headless sessions via run_skill/run_skill_retry."
+    headless sessions via run_skill."
   - "Route to on_failure when a step fails — the downstream skill (e.g.,
     resolve-failures) has diagnostic access that the orchestrator does not.
     Do not investigate or attempt to fix failures directly."
@@ -171,7 +171,7 @@ steps:
     note: If walkthrough finds issues, re-plan via rectify.
 
   implement:
-    tool: run_skill_retry
+    tool: run_skill
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
@@ -180,15 +180,13 @@ steps:
       implementation_ref: "${{ result.worktree_path }}"
       worktree_path: "${{ result.worktree_path }}"
       branch_name: "${{ result.branch_name }}"
-    retry:
-      max_attempts: 0
-      on: needs_retry
-      on_exhausted: retry_worktree
+    retries: 0
+    on_context_limit: retry_worktree
     on_success: verify
     on_failure: cleanup_failure
 
   retry_worktree:
-    tool: run_skill_retry
+    tool: run_skill
     with:
       skill_command: "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}"
       cwd: "${{ context.worktree_path }}"
@@ -197,10 +195,7 @@ steps:
       implementation_ref: "${{ result.worktree_path }}"
       worktree_path: "${{ result.worktree_path }}"
       branch_name: "${{ result.branch_name }}"
-    retry:
-      max_attempts: 3
-      on: needs_retry
-      on_exhausted: cleanup_failure
+    on_exhausted: cleanup_failure
     on_success: verify
     on_failure: cleanup_failure
 
@@ -219,10 +214,7 @@ steps:
       step_name: "assess"
     on_success: verify
     on_failure: cleanup_failure
-    retry:
-      max_attempts: 3
-      on: needs_retry
-      on_exhausted: cleanup_failure
+    on_exhausted: cleanup_failure
 
   audit_impl:
     tool: run_skill

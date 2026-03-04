@@ -311,7 +311,7 @@ async def run_headless_core(
     timeout: float | None = None,
     stale_threshold: float | None = None,
 ) -> SkillResult:
-    """Shared headless runner used by run_skill and run_skill_retry.
+    """Shared headless runner used by run_skill.
 
     Does NOT check open_kitchen gate — callers in server.py are responsible.
     Accepts explicit ToolContext so this module has no server.py dependency.

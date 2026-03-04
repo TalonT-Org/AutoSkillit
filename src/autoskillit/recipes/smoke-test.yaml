@@ -19,8 +19,8 @@ ingredients:
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
-    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
-    orchestrator. All work is delegated through run_skill/run_skill_retry."
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
+    orchestrator. All work is delegated through run_skill."
   - "Route to on_failure — never investigate or fix directly from the orchestrator."
 
 steps:
@@ -111,16 +111,13 @@ steps:
     on_failure: escalate
 
   implement:
-    tool: run_skill_retry
+    tool: run_skill
     with:
       skill_command: "/autoskillit:smoke-task In the git repo at ${{ inputs.workspace }}, run: git worktree add ${{ inputs.workspace }}/.claude/worktrees/smoke-impl -b smoke-impl. Then in that worktree directory, write ok.txt with content OK. Run git add ok.txt && git commit -m 'smoke: add ok.txt'."
       cwd: "${{ inputs.workspace }}"
+    retries: 2
     on_success: set_worktree_path
     on_failure: escalate
-    retry:
-      max_attempts: 2
-      on: needs_retry
-      on_exhausted: escalate
 
   set_worktree_path:
     tool: run_cmd
@@ -159,12 +156,10 @@ steps:
     with:
       skill_command: "/autoskillit:smoke-task In the git worktree at ${{ context.worktree_path }}, check what file is expected by the test and create/fix it. Commit any changes. After fixing, append a JSON object to ${{ inputs.workspace }}/bug_report.json with keys: step (string 'test'), error (what failed), fix (what you did), iteration (number). The file contains a JSON array — read it, append your entry, write it back. Then output: fixed=true"
       cwd: "${{ context.worktree_path }}"
+    retries: 2
     on_success: test
     on_failure: classify
-    retry:
-      max_attempts: 2
-      on: needs_retry
-      on_exhausted: classify
+    on_exhausted: classify
 
   classify:
     tool: classify_fix

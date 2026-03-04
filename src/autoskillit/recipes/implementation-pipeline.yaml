@@ -37,8 +37,8 @@ ingredients:
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
-    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
-    orchestrator. All work is delegated through run_skill/run_skill_retry."
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
+    orchestrator. All work is delegated through run_skill."
   - "Route to on_failure — never investigate or fix directly from the orchestrator."
   - "When make_groups is false, task input is required."
   - "When make_groups is true, source_doc input is required."
@@ -208,35 +208,30 @@ steps:
     note: "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify → implement → test → merge — for that part before advancing to the next part. Never run verify for all parts first. If review produced a report, context.review_path is available — pass it as an additional arg to dry-walkthrough."
 
   implement:
-    tool: run_skill_retry
+    tool: run_skill
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "implement"
     capture:
       worktree_path: "${{ result.worktree_path }}"
+    retries: 0
+    on_context_limit: retry_worktree
     on_success: test
     on_failure: cleanup_failure
-    retry:
-      max_attempts: 0
-      on: needs_retry
-      on_exhausted: retry_worktree
     note: "Extracts worktree_path from result for use in subsequent steps."
 
   retry_worktree:
-    tool: run_skill_retry
+    tool: run_skill
     with:
       skill_command: "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}"
       cwd: "${{ context.worktree_path }}"
       step_name: "retry_worktree"
     capture:
       worktree_path: "${{ result.worktree_path }}"
+    on_exhausted: cleanup_failure
     on_success: test
     on_failure: cleanup_failure
-    retry:
-      max_attempts: 3
-      on: needs_retry
-      on_exhausted: cleanup_failure
 
   test:
     tool: test_check
@@ -295,8 +290,8 @@ steps:
       step_name: "fix"
     on_success: test
     on_failure: cleanup_failure
-    on_retry: test
-    note: "Fixes test failures without merging. Routes back to test for re-validation before merge_worktree. on_retry routes needs_retry=True to test (worktree may already be green) instead of re-running fix blindly."
+    on_context_limit: test
+    note: "Fixes test failures without merging. Routes back to test for re-validation before merge_worktree. on_context_limit routes needs_retry=True to test (worktree may already be green) instead of re-running fix blindly."
 
   next_or_done:
     action: route

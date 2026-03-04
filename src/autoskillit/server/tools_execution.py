@@ -1,4 +1,4 @@
-"""MCP tool handlers: run_cmd, run_python, run_skill, run_skill_retry."""
+"""MCP tool handlers: run_cmd, run_python, run_skill."""
 
 from __future__ import annotations
 
@@ -117,9 +117,14 @@ async def run_skill(
 
     This is the correct MCP tool to delegate work to a headless session during
     pipeline execution. NEVER use native tools (Read, Grep, Glob, Edit, Write,
-    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the orchestrator.
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator.
     All code changes, investigation, and research happen through the headless
     session launched by this tool.
+
+    Use this for all skill sessions, including long-running ones that may hit the
+    context limit. The 2-hour timeout is the default. When needs_retry is true,
+    route to the appropriate resume step (e.g., retry-worktree) rather than
+    re-running this step from scratch.
 
     Args:
         skill_command: The full prompt including skill invocation (e.g. "/investigate ...").
@@ -165,89 +170,9 @@ async def run_skill(
     return skill_result.to_json()
 
 
-@mcp.tool(tags={"automation"})
-async def run_skill_retry(
-    skill_command: str,
-    cwd: str,
-    add_dir: str = "",
-    model: str = "",
-    step_name: str = "",
-    ctx: Context = CurrentContext(),
-) -> str:
-    """Run a Claude Code headless session with retry detection.
-
-    Use this for long-running skill sessions that may hit the context limit.
-    Returns JSON with: success, result, session_id, subtype, is_error, exit_code,
-    needs_retry, retry_reason. The needs_retry field indicates whether the session
-    didn't finish. When needs_retry is true, retry_reason is "resume" — the session
-    should be retried to continue from where it left off.
-
-    IMPORTANT: When needs_retry is true, the result field contains an actionable
-    summary, not the raw CLI error. Do NOT interpret the result text as indicating
-    the input was too large — it means the session's context window filled during
-    execution. The correct action is always to resume the session.
-
-    This is the correct MCP tool for long-running delegated work during pipeline
-    execution. NEVER use native tools (Read, Grep, Glob, Edit, Write, Bash, Task,
-    Explore, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All code
-    changes, investigation, and research happen through the headless session
-    launched by this tool.
-
-    Args:
-        skill_command: The full prompt including skill invocation.
-        cwd: Working directory for the claude session.
-        add_dir: Optional additional directory to add to the session context.
-        model: Model to use (e.g. "sonnet", "opus"). Empty string = use config default.
-        step_name: Optional YAML step key (e.g. "implement"). When set, token usage is
-            accumulated in the server-side token log, grouped by this name.
-    """
-    if (gate := _require_enabled()) is not None:
-        return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="run_skill_retry", cwd=cwd)
-    logger.info("run_skill_retry", command=skill_command[:80], cwd=cwd)
-    await _notify(
-        ctx,
-        "info",
-        f"run_skill_retry: {skill_command[:80]}",
-        "autoskillit.run_skill_retry",
-        extra={"cwd": cwd, "model": model or "default"},
-    )
-
-    from autoskillit.server import _get_config, _get_ctx
-
-    if _get_config().safety.require_dry_walkthrough:
-        if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
-            return gate_error
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.executor is None:
-        return json.dumps({"success": False, "error": "Executor not configured"})
-    cfg = _get_config().run_skill_retry
-    skill_result = await tool_ctx.executor.run(
-        skill_command,
-        cwd,
-        model=model,
-        add_dir=add_dir,
-        step_name=step_name,
-        timeout=cfg.timeout,
-        stale_threshold=cfg.stale_threshold,
-    )
-    if not skill_result.success:
-        await _notify(
-            ctx,
-            "error",
-            "run_skill_retry failed",
-            "autoskillit.run_skill_retry",
-            extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
-        )
-    return skill_result.to_json()
-
-
 __all__ = [
     "PIPELINE_FORBIDDEN_TOOLS",
     "run_cmd",
     "run_python",
     "run_skill",
-    "run_skill_retry",
 ]

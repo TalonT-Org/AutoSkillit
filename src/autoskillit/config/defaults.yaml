@@ -46,7 +46,7 @@ run_skill_retry:
   stale_threshold: 1200
 
 model:
-  default: null
+  default: sonnet
   override: null
 
 worktree_setup:

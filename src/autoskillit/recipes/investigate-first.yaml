@@ -310,13 +310,13 @@ steps:
     tool: remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
-      keep: "true"
+      keep: "false"
     on_success: done
     on_failure: done
     note: >
-      Clone preservation step — keep=true means the clone is never
-      auto-removed. Remove manually when done: rm -rf {clone_path}.
-      Routes to done regardless — this step is intentionally a no-op.
+      Removes the clone after a successful pipeline run. The sync-check hook
+      gates deletion — removal is approved only when the branch is pushed.
+      Routes to done regardless of whether removal succeeds.
 
   cleanup_failure:
     tool: remove_clone

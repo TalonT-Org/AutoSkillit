@@ -323,27 +323,28 @@ steps:
     on_failure: cleanup_failure
 
   cleanup_success:
-    python: autoskillit.workspace.clone.remove_clone
+    tool: remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
       keep: "false"
     on_success: done
     on_failure: done
     note: >
-      Removes the clone directory after a successful pipeline run.
-      Routes to done regardless of whether removal succeeds — a cleanup
-      failure should not mask a successful pipeline.
+      Removes the clone after a successful pipeline run. The sync-check hook
+      gates deletion — removal is approved only when the branch is pushed.
+      Routes to done regardless of whether removal succeeds.
 
   cleanup_failure:
-    python: autoskillit.workspace.clone.remove_clone
+    tool: remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
       keep: "${{ inputs.keep_clone_on_failure }}"
     on_success: escalate_stop
     on_failure: escalate_stop
     note: >
-      Called on any pipeline failure where the clone was created.
-      Respects keep_clone_on_failure for debugging. Always routes to escalate_stop.
+      Called on pipeline failure. Respects keep_clone_on_failure ingredient.
+      When keep=false, the sync-check hook gates deletion. Always routes
+      to escalate_stop.
 
   done:
     action: stop

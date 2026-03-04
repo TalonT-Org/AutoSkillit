@@ -37,7 +37,11 @@ from autoskillit.execution.session import (
     extract_token_usage,
     parse_session_result,
 )
-from autoskillit.execution.session_log import flush_session_log, resolve_log_dir
+from autoskillit.execution.session_log import (
+    flush_session_log,
+    recover_crashed_sessions,
+    resolve_log_dir,
+)
 from autoskillit.execution.testing import (
     DefaultTestRunner,
     check_test_passed,
@@ -87,5 +91,6 @@ __all__ = [
     "AnomalySeverity",
     # session_log
     "flush_session_log",
+    "recover_crashed_sessions",
     "resolve_log_dir",
 ]

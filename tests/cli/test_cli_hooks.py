@@ -128,11 +128,9 @@ def test_register_native_tool_guard_hook(tmp_path):
     entries = data["hooks"]["PreToolUse"]
 
     guard_entries = [
-        e for e in entries
-        if any(
-            "native_tool_guard" in h.get("command", "")
-            for h in e.get("hooks", [])
-        )
+        e
+        for e in entries
+        if any("native_tool_guard" in h.get("command", "") for h in e.get("hooks", []))
     ]
     assert guard_entries, "native_tool_guard hook entry not found in settings.json"
 
@@ -140,5 +138,6 @@ def test_register_native_tool_guard_hook(tmp_path):
     matcher = entry.get("matcher", "")
     # Matcher should cover the main native tools
     import re
+
     for tool in ("Read", "Write", "Edit", "Bash", "Glob", "Grep", "Agent"):
         assert re.match(matcher, tool), f"Matcher {matcher!r} should match {tool!r}"

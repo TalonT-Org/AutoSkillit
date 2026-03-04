@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 # Minimal recipe YAML with kitchen_rules
 _RECIPE_WITH_RULES = """\
 name: test-recipe-with-rules

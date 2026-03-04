@@ -146,11 +146,9 @@ def test_hooks_json_has_native_tool_guard():
     pretooluse_entries = data.get("hooks", {}).get("PreToolUse", [])
 
     native_guard_entries = [
-        e for e in pretooluse_entries
-        if any(
-            h.get("command", "").endswith("native_tool_guard")
-            for h in e.get("hooks", [])
-        )
+        e
+        for e in pretooluse_entries
+        if any(h.get("command", "").endswith("native_tool_guard") for h in e.get("hooks", []))
     ]
     assert native_guard_entries, "No native_tool_guard entry found in hooks.json PreToolUse"
 
@@ -159,4 +157,5 @@ def test_hooks_json_has_native_tool_guard():
     matcher = entry.get("matcher", "")
     for tool in ("Read", "Write", "Edit", "Bash", "Glob", "Grep", "Agent"):
         import re
+
         assert re.match(matcher, tool), f"Matcher {matcher!r} should match {tool!r}"

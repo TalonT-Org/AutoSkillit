@@ -303,7 +303,7 @@ PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
     "Edit",
     "Write",
     "Bash",
-    "Agent",       # actual tool name; "Explore" is a subagent_type parameter, blocked via Agent
+    "Agent",  # actual tool name; "Explore" is a subagent_type parameter, blocked via Agent
     "WebFetch",
     "WebSearch",
     "NotebookEdit",

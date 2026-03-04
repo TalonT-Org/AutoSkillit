@@ -199,5 +199,10 @@ def load_and_validate(
         valid = False
 
     if recipe is not None and recipe.kitchen_rules:
-        return {"content": raw, "suggestions": suggestions, "valid": valid, "kitchen_rules": recipe.kitchen_rules}
+        return {
+            "content": raw,
+            "suggestions": suggestions,
+            "valid": valid,
+            "kitchen_rules": recipe.kitchen_rules,
+        }
     return {"content": raw, "suggestions": suggestions, "valid": valid}

@@ -25,7 +25,7 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
     async with anyio.create_task_group() as tg:
         handle = start_linux_tracing(os.getpid(), config, tg)
         await anyio.sleep(0.3)
-        snaps = await handle.stop()
+        snaps = handle.stop()
         tg.cancel_scope.cancel()
     end_ts = datetime.now(UTC).isoformat()
     assert len(snaps) >= 2, "Need at least 2 snapshots for timestamp variance test"
@@ -42,7 +42,7 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
         exit_code=0,
         start_ts=start_ts,
         end_ts=end_ts,
-        termination="natural_exit",
+        termination_reason="natural_exit",
         snapshot_interval_seconds=0.05,
         proc_snapshots=snap_dicts,
     )

@@ -282,3 +282,48 @@ class TestSubprocessResultAndRunnerTypes:
             f"Current default: {default!r}. Only callers that need PTY (Claude CLI) "
             f"should pass pty_mode=True explicitly."
         )
+
+
+class TestTracingStopOnException:
+    """Verify tracing_handle.stop() is called on BaseException in run_managed_async."""
+
+    @pytest.mark.anyio
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only tracing")
+    async def test_tracing_stop_called_on_task_group_exception(self, monkeypatch, tmp_path):
+        """tracing_handle.stop() is called in except BaseException even when task group raises."""
+        import subprocess
+
+        from autoskillit.config import LinuxTracingConfig
+        from autoskillit.execution.linux_tracing import LinuxTracingHandle
+
+        stop_called: list[bool] = []
+        original_stop = LinuxTracingHandle.stop
+
+        def patched_stop(self_handle: LinuxTracingHandle) -> list:
+            stop_called.append(True)
+            return original_stop(self_handle)
+
+        monkeypatch.setattr(LinuxTracingHandle, "stop", patched_stop)
+
+        # Use a real process with tracing enabled; cancel mid-run to trigger BaseException path
+        proc = subprocess.Popen(["sleep", "2"])
+        cfg = LinuxTracingConfig(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
+
+        import anyio
+
+        try:
+            with anyio.move_on_after(0.2):
+                await run_managed_async(
+                    cmd=["sleep", "2"],
+                    cwd=tmp_path,
+                    timeout=10.0,
+                    linux_tracing_config=cfg,
+                )
+        except Exception:
+            pass
+        finally:
+            proc.kill()
+            proc.wait()
+
+        # stop() should have been called (via happy path or exception path)
+        assert len(stop_called) >= 1

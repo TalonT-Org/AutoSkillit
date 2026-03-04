@@ -140,6 +140,7 @@ class LinuxTracingConfig:
     enabled: bool = True
     proc_interval: float = 5.0
     log_dir: str = ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)
+    tmpfs_path: str = "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
 
 
 def _field_defaults(cls: type) -> dict[str, Any]:
@@ -310,6 +311,7 @@ class AutomationConfig:
                 enabled=bool(val(lt, "enabled", _lt["enabled"])),
                 proc_interval=float(val(lt, "proc_interval", _lt["proc_interval"])),
                 log_dir=str(val(lt, "log_dir", _lt["log_dir"])),
+                tmpfs_path=str(val(lt, "tmpfs_path", _lt["tmpfs_path"])),
             ),
         )
 

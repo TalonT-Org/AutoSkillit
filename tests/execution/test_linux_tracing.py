@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import os
 import sys
+from datetime import datetime
 
+import anyio
 import pytest
 
 pytestmark = pytest.mark.skipif(
@@ -87,7 +91,7 @@ async def test_tracing_handle_accumulates_snapshots():
         handle = start_linux_tracing(pid=proc.pid, config=cfg, tg=tg)
         assert handle is not None
         await anyio.sleep(0.5)
-        snapshots = await handle.stop()
+        snapshots = handle.stop()
         tg.cancel_scope.cancel()
 
     assert len(snapshots) >= 1
@@ -112,7 +116,7 @@ async def test_tracing_handle_stop_returns_snapshots():
         handle = start_linux_tracing(pid=os.getpid(), config=cfg, tg=tg)
         assert handle is not None
         await anyio.sleep(0.3)
-        result = await handle.stop()
+        result = handle.stop()
         tg.cancel_scope.cancel()
 
     assert isinstance(result, list)
@@ -153,6 +157,133 @@ async def test_proc_monitor_detects_death():
     async for snap in proc_monitor(proc.pid, interval=0.1):
         snapshots.append(snap)
 
+
+# --- captured_at tests ---
+
+
+def test_proc_snapshot_has_captured_at():
+    """read_proc_snapshot stamps captured_at on the returned snapshot."""
+    from autoskillit.execution.linux_tracing import read_proc_snapshot
+
+    snap = read_proc_snapshot(os.getpid())
+    assert snap is not None
+    assert snap.captured_at != ""
+    # Must be a valid ISO-8601 UTC timestamp
+    datetime.fromisoformat(snap.captured_at)
+
+
+@pytest.mark.anyio
+async def test_proc_monitor_stamps_unique_captured_at():
+    """Each snapshot from proc_monitor has a distinct captured_at."""
+    from autoskillit.execution.linux_tracing import proc_monitor
+
+    snaps = []
+    async for snap in proc_monitor(os.getpid(), 0.01):
+        snaps.append(snap)
+        if len(snaps) >= 2:
+            break
+    assert snaps[0].captured_at != snaps[1].captured_at
+
+
+# --- streaming writer tests ---
+
+
+@pytest.mark.anyio
+async def test_start_linux_tracing_creates_trace_file(tmp_path):
+    """When tmpfs_path is configured, start_linux_tracing opens a trace file."""
+    from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.linux_tracing import start_linux_tracing
+
+    config = LinuxTracingConfig(enabled=True, proc_interval=0.01, tmpfs_path=str(tmp_path))
+    async with anyio.create_task_group() as tg:
+        handle = start_linux_tracing(os.getpid(), config, tg)
+        assert handle is not None
+        await anyio.sleep(0.05)
+        tg.cancel_scope.cancel()
+
+    assert handle._trace_path is not None
+    assert handle._trace_path.exists()
+    handle.stop()
+
+
+@pytest.mark.anyio
+async def test_streaming_writes_each_snapshot_as_jsonl(tmp_path):
+    """Each yielded snapshot appears as a JSONL line in the trace file."""
+    import subprocess
+
+    from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.linux_tracing import start_linux_tracing
+
+    proc = subprocess.Popen(["sleep", "2"])
+    config = LinuxTracingConfig(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
+
+    async with anyio.create_task_group() as tg:
+        handle = start_linux_tracing(proc.pid, config, tg)
+        assert handle is not None
+        await anyio.sleep(0.2)
+        tg.cancel_scope.cancel()
+
+    snapshots = handle.stop()
+    assert handle._trace_path is not None
+    lines = handle._trace_path.read_text().strip().split("\n")
+    assert len(lines) >= 1
+    for line in lines:
+        record = json.loads(line)
+        assert "vm_rss_kb" in record
+    assert len(lines) == len(snapshots)
+
+    proc.kill()
+    proc.wait()
+
+
+def test_stop_closes_trace_file(tmp_path):
+    """handle.stop() closes the file handle; _trace_file is None after."""
+
+    from autoskillit.execution.linux_tracing import LinuxTracingHandle
+
+    handle = LinuxTracingHandle()
+    trace_path = tmp_path / "test_trace.jsonl"
+    handle._trace_path = trace_path
+    handle._trace_file = trace_path.open("w", buffering=1)
+
+    handle.stop()
+    assert handle._trace_file is None
+
+
+def test_stop_idempotent(tmp_path):
+    """Calling stop() twice does not raise."""
+    from autoskillit.execution.linux_tracing import LinuxTracingHandle
+
+    handle = LinuxTracingHandle()
+    trace_path = tmp_path / "test_trace.jsonl"
+    handle._trace_path = trace_path
+    handle._trace_file = trace_path.open("w", buffering=1)
+
+    handle.stop()
+    handle.stop()  # second call must not raise
+
+
+@pytest.mark.anyio
+async def test_streaming_graceful_when_tmpfs_missing(tmp_path):
+    """If tmpfs_path does not exist, tracing still works in-memory."""
+    from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.linux_tracing import start_linux_tracing
+
+    config = LinuxTracingConfig(
+        enabled=True,
+        proc_interval=0.01,
+        tmpfs_path=str(tmp_path / "nonexistent"),
+    )
+    async with anyio.create_task_group() as tg:
+        handle = start_linux_tracing(os.getpid(), config, tg)
+        assert handle is not None
+        await anyio.sleep(0.05)
+        tg.cancel_scope.cancel()
+
+    assert handle._trace_path is None
+    assert handle._trace_file is None
+    snapshots = handle.stop()
+    assert isinstance(snapshots, list)
     assert len(snapshots) >= 1
 
 
@@ -186,7 +317,7 @@ async def test_proc_monitor_snapshots_have_distinct_timestamps():
     async with anyio.create_task_group() as tg:
         handle = start_linux_tracing(os.getpid(), config, tg)
         await anyio.sleep(0.2)
-        result = await handle.stop()
+        result = handle.stop()
         tg.cancel_scope.cancel()
     assert len(result) >= 2
     timestamps = [s.captured_at for s in result]

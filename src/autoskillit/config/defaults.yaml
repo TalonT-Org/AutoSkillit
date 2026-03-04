@@ -87,3 +87,4 @@ linux_tracing:
   enabled: true
   proc_interval: 5.0
   log_dir: ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)
+  tmpfs_path: "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming

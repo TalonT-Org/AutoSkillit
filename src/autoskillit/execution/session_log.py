@@ -12,7 +12,8 @@ import json
 import os
 import shutil
 import sys
-from datetime import datetime
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from autoskillit.core import _atomic_write, get_logger
@@ -47,7 +48,7 @@ def flush_session_log(
     start_ts: str,
     proc_snapshots: list[dict[str, object]] | None,
     end_ts: str = "",
-    termination: str = "",
+    termination_reason: str = "",
     snapshot_interval_seconds: float = 0.0,
 ) -> None:
     """Flush session diagnostics to disk.
@@ -74,7 +75,7 @@ def flush_session_log(
         with trace_path.open("w") as f:
             for seq, snap in enumerate(proc_snapshots):
                 record = {
-                    "ts": snap.get("captured_at", start_ts),
+                    "ts": snap.get("captured_at") or start_ts,
                     "seq": seq,
                     "event": "snapshot",
                     "pid": pid,
@@ -130,13 +131,13 @@ def flush_session_log(
         "start_ts": start_ts,
         "end_ts": end_ts,
         "duration_seconds": duration_seconds,
-        "termination_reason": termination,
         "snapshot_interval_seconds": snapshot_interval_seconds,
         "snapshot_count": snapshot_count,
         "anomaly_count": anomaly_count,
         "peak_rss_kb": peak_rss_kb,
         "peak_oom_score": peak_oom_score,
         "peak_fd_ratio": round(peak_fd_ratio, 3),
+        "termination_reason": termination_reason,
     }
     summary_path = session_dir / "summary.json"
     _atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
@@ -195,3 +196,73 @@ def _enforce_retention(log_root: Path) -> None:
             except json.JSONDecodeError:
                 continue
         _atomic_write(index_path, "\n".join(kept) + "\n" if kept else "")
+
+
+def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") -> int:
+    """Scan tmpfs for orphaned trace files from SIGKILL'd sessions and finalize them.
+
+    Returns the number of sessions recovered.
+    """
+    tmpfs = Path(tmpfs_path)
+    if not tmpfs.is_dir():
+        return 0
+
+    count = 0
+    for trace_file in sorted(tmpfs.glob("autoskillit_trace_*.jsonl")):
+        # Skip files modified within the last 30 seconds — may be active
+        try:
+            age_seconds = time.time() - trace_file.stat().st_mtime
+        except OSError:
+            continue
+        if age_seconds < 30:
+            continue
+
+        # Read snapshots
+        snapshots: list[dict[str, object]] = []
+        try:
+            for line in trace_file.read_text().splitlines():
+                try:
+                    snapshots.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        except OSError:
+            continue
+
+        # Extract PID from filename: autoskillit_trace_{pid}.jsonl
+        try:
+            pid = int(trace_file.stem.split("_")[-1])
+        except (ValueError, IndexError):
+            pid = 0
+
+        # Compute start_ts from file mtime
+        try:
+            mtime_ts = datetime.fromtimestamp(trace_file.stat().st_mtime, tz=UTC).isoformat()
+        except OSError:
+            continue
+
+        try:
+            flush_session_log(
+                log_dir=log_dir,
+                cwd="",
+                session_id=f"crashed_{pid}_{mtime_ts.replace(':', '-')}",
+                pid=pid,
+                skill_command="",
+                success=False,
+                subtype="crashed",
+                exit_code=-1,
+                start_ts=mtime_ts,
+                proc_snapshots=snapshots if snapshots else None,
+                termination_reason="CRASHED",
+            )
+        except Exception:
+            logger.debug("recover_crashed_sessions: failed to finalize %s", trace_file)
+            continue
+
+        try:
+            trace_file.unlink()
+        except OSError:
+            pass
+
+        count += 1
+
+    return count

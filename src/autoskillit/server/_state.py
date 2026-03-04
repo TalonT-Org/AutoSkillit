@@ -27,6 +27,19 @@ def _initialize(ctx: ToolContext) -> None:
     """Set the server's ToolContext. Called by cli/app.py serve() before mcp.run()."""
     global _ctx
     _ctx = ctx
+    # Recovery sweep: finalize any orphaned tmpfs trace files from crashed sessions.
+    try:
+        from autoskillit.execution import recover_crashed_sessions
+
+        cfg = ctx.config.linux_tracing
+        n = recover_crashed_sessions(
+            tmpfs_path=cfg.tmpfs_path,
+            log_dir=cfg.log_dir,
+        )
+        if n > 0:
+            logger.info("Recovered %d crashed session trace(s) from tmpfs", n)
+    except Exception:
+        logger.debug("recover_crashed_sessions at startup failed", exc_info=True)
 
 
 def _get_ctx() -> ToolContext:

@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.execution.session_log import flush_session_log, resolve_log_dir
+from autoskillit.execution.session_log import (
+    flush_session_log,
+    recover_crashed_sessions,
+    resolve_log_dir,
+)
 
 
 def _snap(
@@ -249,7 +253,7 @@ def test_summary_contains_temporal_completion_fields(tmp_path):
         tmp_path,
         start_ts="2026-03-03T12:00:00+00:00",
         end_ts="2026-03-03T12:05:00+00:00",
-        termination="completed",
+        termination_reason="completed",
         snapshot_interval_seconds=5.0,
     )
     session_dir = tmp_path / "sessions" / "test-session-001"
@@ -259,3 +263,145 @@ def test_summary_contains_temporal_completion_fields(tmp_path):
     assert summary["duration_seconds"] == pytest.approx(300.0)
     assert summary["termination_reason"] == "completed"
     assert summary["snapshot_interval_seconds"] == 5.0
+
+
+# --- termination_reason tests ---
+
+
+def test_flush_includes_termination_reason(tmp_path):
+    """summary.json includes termination_reason when provided."""
+    _flush(tmp_path, session_id="crash-session", termination_reason="CRASHED")
+    session_dir = tmp_path / "sessions" / "crash-session"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["termination_reason"] == "CRASHED"
+
+
+def test_flush_termination_reason_defaults_to_empty(tmp_path):
+    """summary.json has termination_reason = '' when not provided."""
+    _flush(tmp_path, session_id="normal-session")
+    session_dir = tmp_path / "sessions" / "normal-session"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["termination_reason"] == ""
+
+
+def test_proc_trace_uses_snapshot_captured_at(tmp_path):
+    """proc_trace.jsonl ts field equals snapshot captured_at, not start_ts."""
+    snap = dict(_snap(), captured_at="2026-03-03T10:00:00+00:00")
+    _flush(
+        tmp_path,
+        session_id="ts-test",
+        proc_snapshots=[snap],
+        start_ts="2026-03-03T09:00:00+00:00",
+    )
+    trace_path = tmp_path / "sessions" / "ts-test" / "proc_trace.jsonl"
+    records = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    assert records[0]["ts"] == "2026-03-03T10:00:00+00:00"
+
+
+def test_proc_trace_falls_back_to_start_ts_when_no_captured_at(tmp_path):
+    """proc_trace.jsonl ts falls back to start_ts when captured_at is absent."""
+    snap = {k: v for k, v in _snap().items() if k != "captured_at"}  # no captured_at key
+    _flush(
+        tmp_path,
+        session_id="fallback-ts",
+        proc_snapshots=[snap],
+        start_ts="2026-03-03T09:00:00+00:00",
+    )
+    trace_path = tmp_path / "sessions" / "fallback-ts" / "proc_trace.jsonl"
+    records = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    assert records[0]["ts"] == "2026-03-03T09:00:00+00:00"
+
+
+# --- recover_crashed_sessions tests ---
+
+
+def test_recover_crashed_sessions_noop_when_no_orphans(tmp_path):
+    """Returns 0 when tmpfs is empty."""
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs"))
+    assert count == 0
+
+
+def test_recover_crashed_sessions_noop_when_tmpfs_missing(tmp_path):
+    """Returns 0 when tmpfs_path does not exist."""
+    count = recover_crashed_sessions(
+        tmpfs_path=str(tmp_path / "nonexistent"), log_dir=str(tmp_path / "logs")
+    )
+    assert count == 0
+
+
+def test_recover_crashed_sessions_skips_recent_files(tmp_path):
+    """Files modified within the last 30 seconds are skipped (may be active)."""
+
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    trace = tmpfs / "autoskillit_trace_12345.jsonl"
+    trace.write_text(
+        json.dumps({"vm_rss_kb": 500, "captured_at": "2026-03-03T10:00:00+00:00"}) + "\n"
+    )
+    # Leave the file fresh (mtime = now)
+    count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs"))
+    assert count == 0
+
+
+def _write_old_trace(tmpfs: Path, filename: str, content: str) -> Path:
+    """Write a trace file and backdate its mtime to 60 seconds ago."""
+    import time
+
+    trace = tmpfs / filename
+    trace.write_text(content)
+    old_mtime = time.time() - 60
+    import os
+
+    os.utime(trace, (old_mtime, old_mtime))
+    return trace
+
+
+def test_recover_crashed_sessions_finalizes_orphaned_file(tmp_path):
+    """recover_crashed_sessions reads tmpfs file and writes permanent session dir."""
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    _write_old_trace(
+        tmpfs,
+        "autoskillit_trace_12345.jsonl",
+        json.dumps({"vm_rss_kb": 500, "captured_at": "2026-03-03T10:00:00+00:00"}) + "\n",
+    )
+    count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs"))
+    assert count == 1
+    sessions = list((tmp_path / "logs" / "sessions").iterdir())
+    assert len(sessions) == 1
+    assert "crashed" in sessions[0].name
+    assert (sessions[0] / "summary.json").exists()
+    summary = json.loads((sessions[0] / "summary.json").read_text())
+    assert summary["termination_reason"] == "CRASHED"
+    assert summary["success"] is False
+
+
+def test_recover_crashed_sessions_deletes_tmpfs_file(tmp_path):
+    """Trace file is removed from tmpfs after recovery."""
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    trace = _write_old_trace(
+        tmpfs,
+        "autoskillit_trace_99999.jsonl",
+        json.dumps({"vm_rss_kb": 300, "captured_at": "2026-03-03T10:00:00+00:00"}) + "\n",
+    )
+    recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs"))
+    assert not trace.exists()
+
+
+def test_recover_crashed_sessions_handles_multiple_files(tmp_path):
+    """Multiple orphaned trace files are all recovered."""
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    for pid in [111, 222, 333]:
+        _write_old_trace(
+            tmpfs,
+            f"autoskillit_trace_{pid}.jsonl",
+            json.dumps({"vm_rss_kb": 100, "captured_at": "2026-03-03T10:00:00+00:00"}) + "\n",
+        )
+    count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs"))
+    assert count == 3
+    sessions = list((tmp_path / "logs" / "sessions").iterdir())
+    assert len(sessions) == 3

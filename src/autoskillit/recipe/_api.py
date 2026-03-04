@@ -6,12 +6,17 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import LoadResult, YAMLError, get_logger, load_yaml
+from autoskillit.core import LoadResult, RecipeSource, YAMLError, get_logger, load_yaml, pkg_root
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
     load_recipe_card,
     stale_to_suggestions,
     validate_recipe_cards,
+)
+from autoskillit.recipe.diagrams import (
+    check_diagram_staleness,
+    diagram_stale_to_suggestions,
+    load_recipe_diagram,
 )
 from autoskillit.recipe.io import (
     RecipeInfo,
@@ -138,6 +143,12 @@ def load_and_validate(
     valid = True
     recipe = None
 
+    # Determine recipes_dir from source
+    if match.source == RecipeSource.BUILTIN:
+        recipes_dir = pkg_root() / "recipes"
+    else:
+        recipes_dir = _pdir / ".autoskillit" / "recipes"
+
     try:
         data = load_yaml(raw)
         if isinstance(data, dict) and "steps" in data:
@@ -151,7 +162,6 @@ def load_and_validate(
                 semantic_suggestions = filter_version_rule(semantic_suggestions)
             suggestions.extend(semantic_suggestions)
 
-            recipes_dir = _pdir / ".autoskillit" / "recipes"
             contract = load_recipe_card(name, recipes_dir)
             contract_findings: list[dict[str, Any]] = []
             if contract:
@@ -162,6 +172,10 @@ def load_and_validate(
                     contract, recipe_path=match.path, cache_path=cache_path
                 )
                 suggestions.extend(stale_to_suggestions(stale))
+
+            # Check diagram staleness
+            if check_diagram_staleness(name, recipes_dir, match.path):
+                suggestions.extend(diagram_stale_to_suggestions(name))
 
             valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
     except YAMLError as exc:
@@ -198,11 +212,15 @@ def load_and_validate(
         )
         valid = False
 
+    # Load pre-generated diagram
+    diagram: str | None = load_recipe_diagram(name, recipes_dir)
+
     if recipe is not None and recipe.kitchen_rules:
         return {
             "content": raw,
+            "diagram": diagram,
             "suggestions": suggestions,
             "valid": valid,
             "kitchen_rules": recipe.kitchen_rules,
         }
-    return {"content": raw, "suggestions": suggestions, "valid": valid}
+    return {"content": raw, "diagram": diagram, "suggestions": suggestions, "valid": valid}

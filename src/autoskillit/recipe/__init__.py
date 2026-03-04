@@ -33,6 +33,12 @@ from autoskillit.recipe.io import (  # noqa: E402
     list_recipes,
     load_recipe,
 )
+from autoskillit.recipe.diagrams import (  # noqa: E402
+    check_diagram_staleness,
+    diagram_stale_to_suggestions,
+    generate_recipe_diagram,
+    load_recipe_diagram,
+)
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
 from autoskillit.recipe.schema import Recipe, RecipeStep  # noqa: E402
@@ -76,4 +82,8 @@ __all__ = [
     "validate_from_path",
     "list_all",
     "format_recipe_list_response",
+    "generate_recipe_diagram",
+    "load_recipe_diagram",
+    "check_diagram_staleness",
+    "diagram_stale_to_suggestions",
 ]

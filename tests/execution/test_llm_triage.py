@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -582,3 +583,53 @@ async def test_triage_staleness_batch_fallback_on_malformed_response(
     assert all(r["meaningful"] is True for r in results), (
         f"All skills must be meaningful=True on length mismatch. Got: {results!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# CLI flag co-dependency: triage command respects OutputFormat.required_cli_flags
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_triage_command_includes_format_required_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """The triage command must include all flags required by its OutputFormat."""
+    from unittest.mock import AsyncMock
+
+    from autoskillit._llm_triage import triage_staleness
+    from autoskillit.core.types import OutputFormat, SubprocessResult, TerminationReason
+
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("# test skill")
+    monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+
+    result_payload = json.dumps([{"skill": "test-skill", "meaningful": False, "summary": "ok"}])
+    ndjson = (
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": result_payload,
+                "session_id": "s1",
+            }
+        )
+        + "\n"
+    )
+    mock_run = AsyncMock(
+        return_value=SubprocessResult(0, ndjson, "", TerminationReason.NATURAL_EXIT, pid=1)
+    )
+    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+
+    item = StaleItem(
+        skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
+    )
+    await triage_staleness([item])
+
+    # Verify the command passed to run_managed_async includes format-required flags
+    cmd = mock_run.call_args.kwargs["cmd"]
+    fmt = OutputFormat.JSON
+    for flag in fmt.required_cli_flags:
+        assert flag in cmd, f"Missing required flag {flag!r} in triage command: {cmd}"

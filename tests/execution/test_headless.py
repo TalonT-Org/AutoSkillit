@@ -1590,3 +1590,31 @@ def test_context_exhaustion_marker_is_used_in_detection():
         session_id="s1",
     )
     assert session._is_context_exhausted() is True
+
+
+class TestCrashSessionLog:
+    """flush_session_log is called with success=False when runner raises."""
+
+    @pytest.mark.anyio
+    async def test_crash_session_log_written_when_runner_raises(self, monkeypatch, tool_ctx):
+        """flush_session_log is called with CRASHED termination_reason when runner raises."""
+        from autoskillit.execution.headless import run_headless_core
+
+        flushed: list[dict] = []
+
+        def fake_flush(**kwargs: object) -> None:
+            flushed.append(dict(kwargs))
+
+        monkeypatch.setattr("autoskillit.execution.session_log.flush_session_log", fake_flush)
+
+        async def raising_runner(*args: object, **kwargs: object) -> None:
+            raise RuntimeError("simulated crash")
+
+        tool_ctx.runner = raising_runner  # type: ignore[assignment]
+
+        with pytest.raises(RuntimeError, match="simulated crash"):
+            await run_headless_core("/investigate test", cwd="/tmp", ctx=tool_ctx)
+
+        crash_calls = [f for f in flushed if f.get("termination_reason") == "CRASHED"]
+        assert len(crash_calls) >= 1
+        assert crash_calls[0]["success"] is False

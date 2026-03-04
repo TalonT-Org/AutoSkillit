@@ -162,6 +162,7 @@ steps:
       group_files: "${{ context.group_files }}"
     capture:
       plan_path: "${{ result.plan_path }}"
+      all_plan_paths: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
     on_success: review
@@ -176,6 +177,12 @@ steps:
       REMEDIATION MODE: context.remediation_path is available when the orchestrator
       re-enters plan from the remediate step; pass it inline in the skill_command
       rather than as a named with: key.
+      ACCUMULATION: After each plan step execution in groups mode, the agent MUST
+      append the captured plan_path to context.all_plan_paths using a comma separator
+      instead of letting the capture block overwrite the accumulated value. For
+      single-task runs (no groups), all_plan_paths equals plan_path (the capture
+      block handles this automatically). For multi-group runs, the accumulated value
+      looks like "/path/groupA_plan.md,/path/groupB_plan.md".
 
   review:
     tool: run_skill
@@ -339,7 +346,7 @@ steps:
   open_pr_step:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:open-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:open-pr ${{ context.all_plan_paths }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "open_pr"
     on_success: cleanup_success
@@ -352,6 +359,9 @@ steps:
       Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
       and runs gh pr create. Captures pr_url from the skill's output for final reporting.
       The skill gracefully degrades if gh is unavailable (outputs empty pr_url, exits 0).
+      MULTI-GROUP: context.all_plan_paths may contain comma-separated plan paths
+      accumulated across group iterations. The open-pr skill splits and synthesizes
+      PR content from all plans.
 
   cleanup_success:
     tool: remove_clone

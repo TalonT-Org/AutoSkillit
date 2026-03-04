@@ -133,6 +133,7 @@ src/autoskillit/
 │   ├── io.py                #   load_recipe, list_recipes, iter_steps_with_context, find_recipe_by_name
 │   ├── loader.py            #   Path-based recipe metadata utilities (parse_recipe_metadata, RecipeInfo)
 │   ├── _api.py              #   Recipe orchestration API: load/validate pipelines, format responses
+│   ├── diagrams.py          #   Recipe flow diagram generation, loading, and staleness detection
 │   ├── registry.py          #   RuleFinding, RuleSpec, _RULE_REGISTRY, semantic_rule, run_semantic_rules
 │   ├── repository.py        #   Concrete RecipeRepository implementation
 │   ├── _analysis.py         #   Step graph building and dataflow analysis

@@ -320,7 +320,7 @@ class DiagramMigrationAdapter(DeterministicMigrationAdapter):
         ]
 
     def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.recipe.diagrams import check_diagram_staleness
+        from autoskillit.recipe import check_diagram_staleness
 
         recipes_dir = file.path.parent.parent  # diagrams/ -> recipes/
         recipe_path = recipes_dir / f"{file.name}.yaml"
@@ -334,7 +334,7 @@ class DiagramMigrationAdapter(DeterministicMigrationAdapter):
         *,
         temp_dir: Path,
     ) -> MigrationResult:
-        from autoskillit.recipe.diagrams import generate_recipe_diagram
+        from autoskillit.recipe import generate_recipe_diagram
 
         recipes_dir = file.path.parent.parent
         recipe_path = recipes_dir / f"{file.name}.yaml"
@@ -348,6 +348,7 @@ class DiagramMigrationAdapter(DeterministicMigrationAdapter):
             generate_recipe_diagram(recipe_path, recipes_dir)
             return MigrationResult(success=True, name=file.name)
         except Exception as exc:
+            logger.warning("diagram.generate_failed", name=file.name, error=str(exc), exc_info=True)
             return MigrationResult(success=False, name=file.name, error=str(exc))
 
     def validate(self, path: Path) -> tuple[bool, str]:

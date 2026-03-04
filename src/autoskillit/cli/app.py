@@ -381,8 +381,7 @@ def recipes_render(name: str | None = None) -> None:
         Name of a single recipe to render. Renders all recipes if omitted.
     """
     from autoskillit.core import RecipeSource
-    from autoskillit.recipe.diagrams import generate_recipe_diagram
-    from autoskillit.recipe.io import find_recipe_by_name, list_recipes
+    from autoskillit.recipe import find_recipe_by_name, generate_recipe_diagram, list_recipes
 
     project_dir = Path.cwd()
 

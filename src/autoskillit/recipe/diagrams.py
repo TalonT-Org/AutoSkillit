@@ -178,6 +178,8 @@ def load_recipe_diagram(recipe_name: str, recipes_dir: Path) -> str | None:
         Diagram Markdown string, or ``None`` if the file is missing or unreadable.
     """
     path = recipes_dir / "diagrams" / f"{recipe_name}.md"
+    if not path.exists():
+        return None
     try:
         return path.read_text(encoding="utf-8")
     except OSError:

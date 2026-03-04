@@ -22,7 +22,7 @@ def test_tool_sets_are_disjoint():
 def test_tool_sets_total_count():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    assert len(GATED_TOOLS) == 15
+    assert len(GATED_TOOLS) == 14
     assert len(UNGATED_TOOLS) == 7
 
 
@@ -34,7 +34,6 @@ def test_gated_tools_contains_expected_names():
         "run_python",
         "read_db",
         "run_skill",
-        "run_skill_retry",
         "test_check",
         "merge_worktree",
         "reset_test_dir",

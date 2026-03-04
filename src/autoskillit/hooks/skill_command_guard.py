@@ -1,4 +1,4 @@
-"""PreToolUse hook: block run_skill/run_skill_retry calls with non-slash skill_command.
+"""PreToolUse hook: block run_skill calls with non-slash skill_command.
 
 Protocol: read PreToolUse JSON event from stdin, write decision JSON to stdout, exit 0.
 Expected errors (malformed JSON): fail-open (approve). Unexpected errors: fail-closed (deny).

@@ -51,12 +51,14 @@ def _check_unbounded_cycles(recipe: Recipe) -> list[RuleFinding]:
                 reported_cycles.add(cycle_key)
                 cycle_set = set(cycle_steps)
 
-                # Structural exit: retry.max_attempts > 0 with on_exhausted outside cycle
-                # (a retry block with max_attempts is a structural bound — no finding)
+                # Structural exit: retries > 0 with on_exhausted outside cycle
+                # (a step with retries is a structural bound — no finding)
+                # Only run_skill steps can actually trigger needs_retry, so
+                # retries on non-skill steps (test_check, run_cmd, etc.) are ignored.
                 has_retry_exit = any(
-                    (r := recipe.steps[s].retry) is not None
-                    and r.max_attempts > 0
-                    and r.on_exhausted not in cycle_set
+                    recipe.steps[s].retries > 0
+                    and recipe.steps[s].tool in SKILL_TOOLS
+                    and recipe.steps[s].on_exhausted not in cycle_set
                     for s in cycle_steps
                     if s in recipe.steps
                 )
@@ -78,7 +80,7 @@ def _check_unbounded_cycles(recipe: Recipe) -> list[RuleFinding]:
                     message = (
                         f"Routing cycle detected: {' → '.join(cycle_steps)} → {neighbor}. "
                         f"The cycle has a conditional exit path but no structural bound on "
-                        f"iterations. Add retry.max_attempts to at least one cycling step "
+                        f"iterations. Add 'retries: N' to at least one cycling step "
                         f"to enforce a maximum iteration count."
                     )
                 else:
@@ -86,7 +88,7 @@ def _check_unbounded_cycles(recipe: Recipe) -> list[RuleFinding]:
                     message = (
                         f"Routing cycle detected: {' → '.join(cycle_steps)} → {neighbor}. "
                         f"No step in this cycle has an exit edge — this cycle has no "
-                        f"termination guarantee and will loop forever. Add retry.max_attempts "
+                        f"termination guarantee and will loop forever. Add 'retries: N' "
                         f"with on_exhausted outside the cycle, or route on_failure to a step "
                         f"outside the cycle."
                     )
@@ -280,7 +282,7 @@ def _check_merge_base_unpublished(recipe: Recipe) -> list[RuleFinding]:
     # Build raw routing graph (no skip_when_false bypass edges).
     graph: dict[str, set[str]] = {name: set() for name in step_names}
     for name, step in recipe.steps.items():
-        for target in (step.on_success, step.on_failure, step.on_retry):
+        for target in (step.on_success, step.on_failure, step.on_context_limit):
             if target and target in step_names:
                 graph[name].add(target)
         if step.on_result:
@@ -290,8 +292,8 @@ def _check_merge_base_unpublished(recipe: Recipe) -> list[RuleFinding]:
             for cond in step.on_result.conditions:
                 if cond.route in step_names:
                     graph[name].add(cond.route)
-        if step.retry and step.retry.on_exhausted in step_names:
-            graph[name].add(step.retry.on_exhausted)
+        if step.action is None and step.on_exhausted in step_names:
+            graph[name].add(step.on_exhausted)
 
     for step_name, step in recipe.steps.items():
         if step.tool != "merge_worktree":

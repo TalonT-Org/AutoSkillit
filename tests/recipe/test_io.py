@@ -150,25 +150,83 @@ class TestRecipeParser:
         assert match.description == "Custom override"
 
     # WF9
-    def test_step_with_retry_parsed(self, tmp_path: Path) -> None:
+    def test_step_with_retries_parsed(self, tmp_path: Path) -> None:
         data = {
             "name": "retry-recipe",
             "description": "Has retry",
             "kitchen_rules": ["test"],
             "steps": {
                 "impl": {
-                    "tool": "run_skill_retry",
-                    "retry": {"max_attempts": 5, "on": "needs_retry", "on_exhausted": "fail"},
+                    "tool": "run_skill",
+                    "retries": 5,
+                    "on_exhausted": "fail",
+                    "on_success": "done",
                 },
                 "fail": {"action": "stop", "message": "Failed."},
+                "done": {"action": "stop", "message": "Done."},
             },
         }
         f = _write_yaml(tmp_path / "recipe.yaml", data)
         wf = load_recipe(f)
-        assert wf.steps["impl"].retry is not None
-        assert wf.steps["impl"].retry.max_attempts == 5
-        assert wf.steps["impl"].retry.on == "needs_retry"
-        assert wf.steps["impl"].retry.on_exhausted == "fail"
+        assert wf.steps["impl"].retries == 5
+        assert wf.steps["impl"].on_exhausted == "fail"
+
+    def test_step_retries_default(self, tmp_path: Path) -> None:
+        """Steps without retries/on_exhausted/on_context_limit get defaults."""
+        data = {
+            "name": "defaults-recipe",
+            "description": "test",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "impl": {"tool": "run_skill", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            },
+        }
+        f = _write_yaml(tmp_path / "recipe.yaml", data)
+        wf = load_recipe(f)
+        assert wf.steps["impl"].retries == 3
+        assert wf.steps["impl"].on_exhausted == "escalate"
+        assert wf.steps["impl"].on_context_limit is None
+
+    def test_step_on_context_limit_parsed(self, tmp_path: Path) -> None:
+        """on_context_limit is parsed from YAML step."""
+        data = {
+            "name": "ctx-limit-recipe",
+            "description": "test",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "impl": {
+                    "tool": "run_skill",
+                    "retries": 0,
+                    "on_context_limit": "retry_worktree",
+                    "on_success": "done",
+                },
+                "retry_worktree": {"tool": "run_skill", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            },
+        }
+        f = _write_yaml(tmp_path / "recipe.yaml", data)
+        wf = load_recipe(f)
+        assert wf.steps["impl"].on_context_limit == "retry_worktree"
+
+    def test_no_retry_block_in_yaml(self, tmp_path: Path) -> None:
+        """Old retry: block must raise — unrecognised field."""
+        data = {
+            "name": "old-retry",
+            "description": "test",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "impl": {
+                    "tool": "run_skill",
+                    "retry": {"max_attempts": 3, "on": "needs_retry"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            },
+        }
+        f = _write_yaml(tmp_path / "recipe.yaml", data)
+        with pytest.raises(Exception):
+            load_recipe(f)
 
     def test_load_recipe_rejects_non_dict(self, tmp_path: Path) -> None:
         """YAML that parses to a non-dict must raise ValueError."""

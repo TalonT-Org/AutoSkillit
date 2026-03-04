@@ -294,18 +294,23 @@ steps:
     on_success: implement
     on_failure: escalate
   implement:
-    tool: run_skill_retry
+    tool: run_skill
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
       cwd: "${{ inputs.work_dir }}"
     capture:
       worktree_path: "${{ result.worktree_path }}"
+    retries: 0
+    on_context_limit: retry_worktree
     on_success: test
     on_failure: escalate
-    retry:
-      max_attempts: 3
-      on: needs_retry
-      on_exhausted: escalate
+  retry_worktree:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}"
+      cwd: "${{ context.worktree_path }}"
+    on_success: test
+    on_failure: escalate
   test:
     tool: test_check
     with:
@@ -326,10 +331,6 @@ steps:
       cwd: "${{ inputs.work_dir }}"
     on_success: done
     on_failure: escalate
-    retry:
-      max_attempts: 3
-      on: needs_retry
-      on_exhausted: escalate
   done:
     action: stop
     message: "Implementation complete."
@@ -350,7 +351,7 @@ summary: test > investigate > plan > implement > verify > merge
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
     Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
-    orchestrator. All work is delegated through run_skill/run_skill_retry."
+    orchestrator. All work is delegated through run_skill."
   - "Route to on_failure when a step fails — do not investigate directly."
 
 ingredients:
@@ -391,14 +392,12 @@ steps:
     on_failure: escalate
 
   implement:
-    tool: run_skill_retry
+    tool: run_skill
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
       cwd: "${{ inputs.helper_dir }}"
-    retry:
-      max_attempts: 3
-      on: needs_retry
-      on_exhausted: escalate
+    retries: 0
+    on_context_limit: escalate
     on_success: verify
     on_failure: escalate
 

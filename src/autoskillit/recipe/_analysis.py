@@ -34,7 +34,7 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
     graph: dict[str, set[str]] = {name: set() for name in step_names}
 
     for name, step in recipe.steps.items():
-        for target in (step.on_success, step.on_failure, step.on_retry):
+        for target in (step.on_success, step.on_failure, step.on_context_limit):
             if target and target in step_names:
                 graph[name].add(target)
         if step.on_result:
@@ -45,8 +45,8 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
             for condition in step.on_result.conditions:
                 if condition.route in step_names:
                     graph[name].add(condition.route)
-        if step.retry and step.retry.on_exhausted in step_names:
-            graph[name].add(step.retry.on_exhausted)
+        if step.action is None and step.on_exhausted in step_names:
+            graph[name].add(step.on_exhausted)
 
     # Build predecessor map for bypass edge injection below.
     predecessors: dict[str, set[str]] = {name: set() for name in step_names}

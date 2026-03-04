@@ -123,19 +123,20 @@ steps:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ inputs.plan_path }}"
     capture:
       worktree_path: "${{ result.worktree_path }}"
-    on_success: retry
+    retries: 0
+    on_context_limit: retry
+    on_success: done
+    on_failure: done
   retry:
-    tool: run_skill_retry
+    tool: run_skill
     with:
       skill_command: >-
         /autoskillit:retry-worktree
         ${{ inputs.plan_path }}
         ${{ context.worktree_path }}
-    retry:
-      on: needs_retry
-      max_attempts: 3
-      on_exhausted: done
+      cwd: "${{ context.worktree_path }}"
     on_success: done
+    on_failure: done
   done:
     action: stop
     message: "Done."
@@ -158,16 +159,16 @@ steps:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ inputs.plan_path }}"
     capture:
       worktree_path: "${{ result.worktree_path }}"
-    on_success: retry
+    retries: 0
+    on_context_limit: retry
+    on_success: done
+    on_failure: done
   retry:
-    tool: run_skill_retry
+    tool: run_skill
     with:
       skill_command: "/autoskillit:retry-worktree ${{ inputs.plan_path }}"
-    retry:
-      on: needs_retry
-      max_attempts: 3
-      on_exhausted: done
     on_success: done
+    on_failure: done
   done:
     action: stop
     message: "Done."

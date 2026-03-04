@@ -21,7 +21,7 @@ from autoskillit.execution.session import (
     extract_token_usage,
     parse_session_result,
 )
-from autoskillit.server.tools_execution import run_skill_retry
+from autoskillit.server.tools_execution import run_skill
 
 
 def _make_result(
@@ -269,7 +269,7 @@ class TestResponseFieldsAreTypeSafe:
             }
         )
         tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
 
     @pytest.mark.anyio
@@ -285,7 +285,7 @@ class TestResponseFieldsAreTypeSafe:
             }
         )
         tool_ctx.runner.push(_make_result(0, stdout, ""))
-        result = json.loads(await run_skill_retry("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
 
 

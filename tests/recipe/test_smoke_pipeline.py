@@ -28,7 +28,7 @@ import yaml
 from autoskillit import server
 from autoskillit.config import AutomationConfig, TestCheckConfig
 from autoskillit.recipe.io import builtin_recipes_dir
-from autoskillit.server.tools_execution import run_cmd, run_python, run_skill, run_skill_retry
+from autoskillit.server.tools_execution import run_cmd, run_python, run_skill
 from autoskillit.server.tools_git import classify_fix, merge_worktree
 from autoskillit.server.tools_recipe import list_recipes, load_recipe, validate_recipe
 from autoskillit.server.tools_workspace import test_check
@@ -41,7 +41,6 @@ SMOKE_SCRIPT = builtin_recipes_dir() / "smoke-test.yaml"
 _TOOL_MAP = {
     "run_cmd": run_cmd,
     "run_skill": run_skill,
-    "run_skill_retry": run_skill_retry,
     "test_check": test_check,
     "merge_worktree": merge_worktree,
     "classify_fix": classify_fix,
@@ -295,7 +294,7 @@ class TestSmokeScriptValidation:
         assert set(pipeline["steps"].keys()) == expected_steps
         assert pipeline["steps"]["setup"]["tool"] == "run_cmd"
         assert pipeline["steps"]["investigate"]["tool"] == "run_skill"
-        assert pipeline["steps"]["implement"]["tool"] == "run_skill_retry"
+        assert pipeline["steps"]["implement"]["tool"] == "run_skill"
         assert pipeline["steps"]["test"]["tool"] == "test_check"
         assert pipeline["steps"]["merge"]["tool"] == "merge_worktree"
         assert pipeline["steps"]["classify"]["tool"] == "classify_fix"
@@ -346,7 +345,7 @@ class TestSmokeScriptValidation:
     async def test_executor_retry_logic(self) -> None:
         call_count = 0
 
-        async def mock_run_skill_retry(**kwargs: object) -> str:
+        async def mock_run_skill(**kwargs: object) -> str:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -358,12 +357,12 @@ class TestSmokeScriptValidation:
             )
 
         step_def = {
-            "tool": "run_skill_retry",
+            "tool": "run_skill",
             "with": {"skill_command": "test", "cwd": "/tmp"},
             "retry": {"max_attempts": 3, "on": "needs_retry", "on_exhausted": "escalate"},
         }
         executor = SmokeExecutor(steps={}, inputs={})
-        with patch.dict(_TOOL_MAP, {"run_skill_retry": mock_run_skill_retry}):
+        with patch.dict(_TOOL_MAP, {"run_skill": mock_run_skill}):
             result = await executor._execute(step_def)
         assert call_count == 2
         assert result["success"] is True
@@ -372,7 +371,7 @@ class TestSmokeScriptValidation:
         """With max_attempts=0, the first needs_retry result must route to on_exhausted."""
         steps = {
             "implement": {
-                "tool": "run_skill_retry",
+                "tool": "run_skill",
                 "with": {"skill_command": "/autoskillit:implement-worktree-no-merge plan.md"},
                 "retry": {"max_attempts": 0, "on": "needs_retry", "on_exhausted": "retry_wt"},
                 "capture": {"worktree_path": "${{ result.worktree_path }}"},
@@ -384,7 +383,7 @@ class TestSmokeScriptValidation:
         }
         call_log: list[dict] = []
 
-        async def mock_run_skill_retry(**kwargs: object) -> str:
+        async def mock_run_skill(**kwargs: object) -> str:
             call_log.append(dict(kwargs))
             return json.dumps(
                 {
@@ -401,7 +400,7 @@ class TestSmokeScriptValidation:
                 }
             )
 
-        with patch.dict(_TOOL_MAP, {"run_skill_retry": mock_run_skill_retry}):
+        with patch.dict(_TOOL_MAP, {"run_skill": mock_run_skill}):
             executor = SmokeExecutor(steps, inputs={})
             terminal_step, message = await executor.run(start="implement")
 

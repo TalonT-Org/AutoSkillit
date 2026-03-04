@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PreToolUse hook: validate skill_command path argument format.
 
-Denies run_skill / run_skill_retry calls where a path-argument skill is
+Denies run_skill calls where a path-argument skill is
 invoked with extra descriptive text before the actual file path, e.g.:
 
     /autoskillit:implement-worktree-no-merge the verified plan temp/plan.md

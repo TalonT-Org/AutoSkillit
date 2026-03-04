@@ -49,7 +49,7 @@ def _check_plan_parts_captured(wf: Recipe) -> list[RuleFinding]:
 
 @semantic_rule(
     "skill-command-missing-prefix",
-    "run_skill/run_skill_retry step has a skill_command that does not start with '/'",
+    "run_skill step has a skill_command that does not start with '/'",
     severity=Severity.WARNING,
 )
 def _check_skill_command_prefix(wf: Recipe) -> list[RuleFinding]:

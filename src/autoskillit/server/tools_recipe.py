@@ -82,8 +82,10 @@ async def load_recipe(name: str) -> str:
           [model] if a model is set, e.g. "run_skill [sonnet]".
         - If on_success routes back to an earlier step, append ↑ to the name.
         - If on_failure routes back to an earlier step, append ↑ to the name.
-        - If a step has retry: add an indented continuation line below it:
-              ↺ ×{max_attempts} ({on} condition)  → {on_exhausted}
+        - If retries > 0 (default 3): add an indented continuation line below the step:
+              ↺ ×{retries} (needs_retry=True)  → {on_exhausted} (default: escalate)
+          If on_context_limit is set, add an additional indented line:
+              📵 context limit  → {on_context_limit}
         - If a step uses on_result instead of on_success: leave the ✓ success
           cell empty and add indented continuation lines for each route:
               {route_key}  → {route_target}
@@ -103,7 +105,9 @@ async def load_recipe(name: str) -> str:
         For each non-terminal step show:
         - Step name and tool/action/python discriminator
         - If optional: true, mark as "[Optional]" and show the note
-        - If retry block exists: retries Nx on {condition}, then → {on_exhausted}
+        - If retries > 0 (default 3): retries step up to N times when needs_retry=True,
+          then → on_exhausted (default: escalate)
+        - If on_context_limit is set: routes to the specified step when context is exhausted
         - If note exists, show it (notes contain critical agent instructions)
         - If capture exists, show what values are extracted
         - If model: show the model value (e.g., "Model: sonnet")
@@ -116,8 +120,8 @@ async def load_recipe(name: str) -> str:
     execution. The following are prohibited: Read, Grep, Glob, Edit, Write,
     Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit.
     - Code investigation happens inside headless sessions launched by
-      run_skill/run_skill_retry, which have full tool access.
-    - Code modification is delegated through run_skill/run_skill_retry.
+      run_skill, which have full tool access.
+    - Code modification is delegated through run_skill.
     - Shell commands use run_cmd, not the native Bash tool.
     - Research and multi-step work are delegated via run_skill.
 
@@ -129,7 +133,7 @@ async def load_recipe(name: str) -> str:
       ${{ context.var_name }} in `with:` arguments.
     - Thread outputs from each step into the next (e.g. worktree_path from
       implement into test_check).
-    - Steps with a `model:` field: when calling `run_skill` or `run_skill_retry`,
+    - Steps with a `model:` field: when calling `run_skill`,
       pass the step's `model` value as the `model` parameter to the tool.
 
     TOKEN USAGE TRACKING:
@@ -142,7 +146,7 @@ async def load_recipe(name: str) -> str:
       Only one call to get_token_summary is permitted per pipeline run,
       at the very end. Intermediate rendering is prohibited.
     - Pass step_name (the YAML step key, e.g. "implement") in the with: block
-      when calling run_skill or run_skill_retry. The server accumulates token
+      when calling run_skill. The server accumulates token
       usage server-side, grouped by step name.
     - When verbosity is "summary", call get_token_summary(clear=True) at pipeline
       completion and render as:
@@ -171,7 +175,7 @@ async def load_recipe(name: str) -> str:
     - merge_worktree: "error" key present in response
       (cleanup_succeeded=false means orphaned worktree/branch — the merge itself succeeded)
     - run_cmd: {"success": false}
-    - run_skill / run_skill_retry: {"success": false}
+    - run_skill: {"success": false}
     - classify_fix: "error" key present in response
 
     To CREATE a new recipe, use the /autoskillit:write-recipe skill.

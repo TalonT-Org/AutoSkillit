@@ -32,7 +32,6 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "run_python",
         "read_db",
         "run_skill",
-        "run_skill_retry",
         "test_check",
         "merge_worktree",
         "reset_test_dir",

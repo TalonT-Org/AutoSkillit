@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Sequence
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field
 from enum import Enum, StrEnum
 from importlib.metadata import version
 from pathlib import Path
@@ -312,9 +312,9 @@ PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
 
 # Skill tools that route headless Claude sessions — canonical constant used by
 # recipe_validator.py.
-SKILL_TOOLS: frozenset[str] = frozenset({"run_skill", "run_skill_retry"})
+SKILL_TOOLS: frozenset[str] = frozenset({"run_skill"})
 
-# Canonical prefix required for all skill_command values passed to run_skill / run_skill_retry.
+# Canonical prefix required for all skill_command values passed to run_skill.
 # Enforced at the Claude Code hook boundary by skill_command_guard.py.
 SKILL_COMMAND_PREFIX: str = "/"
 
@@ -324,7 +324,7 @@ AUTOSKILLIT_SKILL_PREFIX: str = "/autoskillit:"
 
 @dataclass
 class FailureRecord:
-    """Structured record of a single run_skill / run_skill_retry failure.
+    """Structured record of a single run_skill failure.
 
     Pure-stdlib dataclass — no autoskillit imports required.
     Shared between pipeline/audit.py (DefaultAuditLog store) and
@@ -394,11 +394,6 @@ class SkillResult:
         if self.needs_retry:
             return SessionOutcome.RETRIABLE
         return SessionOutcome.FAILED
-
-
-# Structurally derived from SkillResult — cannot drift as fields are added/removed.
-# Used by recipe step `retry.on` validation to ensure field names are valid.
-RETRY_RESPONSE_FIELDS: frozenset[str] = frozenset(f.name for f in fields(SkillResult))
 
 
 @dataclass

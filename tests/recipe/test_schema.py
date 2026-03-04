@@ -68,18 +68,63 @@ def test_recipe_step_has_expected_fields() -> None:
     } <= fields
 
 
-def test_recipe_step_has_on_retry_field() -> None:
-    """RecipeStep must support on_retry as a first-class routing field."""
+def test_recipe_step_has_retries_field() -> None:
+    """RecipeStep must have a retries field defaulting to 3."""
     from autoskillit.recipe.schema import RecipeStep
 
-    step = RecipeStep(
-        tool="run_skill",
-        on_success="done",
-        on_failure="cleanup",
-        on_retry="verify",
-        with_args={"skill_command": "test", "cwd": "/tmp"},
-    )
-    assert step.on_retry == "verify"
+    step = RecipeStep()
+    assert step.retries == 3
+
+
+def test_recipe_step_retries_zero() -> None:
+    """RecipeStep supports retries=0 to disable retry."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep(retries=0)
+    assert step.retries == 0
+
+
+def test_recipe_step_has_on_exhausted_field() -> None:
+    """RecipeStep must have an on_exhausted field defaulting to 'escalate'."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep()
+    assert step.on_exhausted == "escalate"
+
+
+def test_recipe_step_has_on_context_limit_field() -> None:
+    """RecipeStep must have an on_context_limit field defaulting to None."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep()
+    assert step.on_context_limit is None
+
+
+def test_recipe_step_has_no_retry_block() -> None:
+    """RecipeStep must not have a 'retry' field (replaced by flat fields)."""
+    import dataclasses
+
+    from autoskillit.recipe.schema import RecipeStep
+
+    field_names = {f.name for f in dataclasses.fields(RecipeStep)}
+    assert "retry" not in field_names
+
+
+def test_recipe_step_has_no_on_retry_field() -> None:
+    """RecipeStep must not have an 'on_retry' field (replaced by on_context_limit)."""
+    import dataclasses
+
+    from autoskillit.recipe.schema import RecipeStep
+
+    field_names = {f.name for f in dataclasses.fields(RecipeStep)}
+    assert "on_retry" not in field_names
+
+
+def test_step_retry_dataclass_removed() -> None:
+    """StepRetry dataclass must not exist in recipe.schema."""
+    import autoskillit.recipe.schema as schema
+
+    assert not hasattr(schema, "StepRetry")
 
 
 def test_step_result_condition_dataclass_exists() -> None:

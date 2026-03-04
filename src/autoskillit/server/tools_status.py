@@ -57,7 +57,7 @@ async def kitchen_status() -> str:
 
 @mcp.tool(tags={"automation"})
 async def get_pipeline_report(clear: bool = False) -> str:
-    """Return accumulated run_skill / run_skill_retry failures since last clear.
+    """Return accumulated run_skill failures since last clear.
 
     Orchestrators should call this at the end of a pipeline run to retrieve
     a structured summary of every non-success result. Pass clear=True to

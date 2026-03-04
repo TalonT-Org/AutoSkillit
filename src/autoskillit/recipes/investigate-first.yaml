@@ -53,6 +53,13 @@ ingredients:
   open_pr:
     description: Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false)
     default: "true"
+  issue_url:
+    description: >
+      Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42).
+      When provided, the issue content is fetched and used to enrich investigation,
+      and the resulting PR will include "Closes #N" to auto-close the issue on merge.
+    required: false
+    default: ""
 
 steps:
   clone:
@@ -78,7 +85,7 @@ steps:
       cwd: "${{ context.work_dir }}"
     capture:
       merge_target: "${{ result.stdout }}"
-    on_success: create_branch
+    on_success: fetch_issue
     on_failure: escalate_stop
     note: >
       Unconditionally sets merge_target to inputs.base_branch as a fallback.
@@ -86,6 +93,24 @@ steps:
       overrides merge_target with the feature branch name. When open_pr=false,
       create_branch is skipped and this fallback stands. This eliminates the
       undefined-context-variable gap that existed when create_branch was optional.
+
+  fetch_issue:
+    tool: fetch_github_issue
+    with:
+      issue_url: "${{ inputs.issue_url }}"
+    capture:
+      issue_number: "${{ result.issue_number }}"
+      issue_content: "${{ result.content }}"
+    on_success: create_branch
+    on_failure: escalate_stop
+    optional: true
+    skip_when_false: "inputs.issue_url"
+    note: >
+      Runs when inputs.issue_url is non-empty. Skipped otherwise.
+      Fetches the GitHub issue to extract its number (for PR auto-close) and
+      content (to enrich investigation context). fetch_github_issue is ungated.
+      issue_number is threaded to open_pr_step as the closing_issue argument.
+      issue_content is passed to the investigate step for context enrichment.
 
   create_branch:
     tool: run_cmd
@@ -129,8 +154,13 @@ steps:
       skill_command: "/autoskillit:investigate ${{ inputs.topic }}"
       cwd: "${{ context.work_dir }}"
       step_name: "investigate"
+      issue_content: "${{ context.issue_content }}"
     on_success: rectify
     on_failure: cleanup_failure
+    note: >
+      ISSUE CONTEXT: If context.issue_content is a non-empty string (set by fetch_issue),
+      append the issue content to the skill_command:
+      "/autoskillit:investigate {topic}\n\n{context.issue_content}"
 
   rectify:
     tool: run_skill
@@ -298,6 +328,7 @@ steps:
       skill_command: "/autoskillit:open-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "open_pr"
+      issue_number: "${{ context.issue_number }}"
     on_success: cleanup_success
     on_failure: cleanup_failure
     optional: true
@@ -313,6 +344,8 @@ steps:
          cache_create, cache_read. Include a bold Total row.
       3. Write the formatted table to temp/open-pr/token_summary.md via run_cmd.
       4. Append the file path as a 4th positional argument to the skill_command.
+      5. If context.issue_number is a non-empty string, append it as a 5th positional
+         argument so the open-pr skill inserts "Closes #{issue_number}" into the PR body.
 
   cleanup_success:
     tool: remove_clone

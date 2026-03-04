@@ -53,6 +53,9 @@ class TestRunSkillPluginDir:
         assert "--plugin-dir" in cmd
         plugin_dir_idx = cmd.index("--plugin-dir")
         assert cmd[plugin_dir_idx + 1] == tool_ctx.plugin_dir
+        # --output-format and stream-json must be present
+        assert "--output-format" in cmd
+        assert cmd[cmd.index("--output-format") + 1] == "stream-json"
 
     @pytest.mark.anyio
     async def test_run_skill_retry_passes_plugin_dir(self, tool_ctx):
@@ -71,6 +74,9 @@ class TestRunSkillPluginDir:
         assert "--plugin-dir" in cmd
         plugin_dir_idx = cmd.index("--plugin-dir")
         assert cmd[plugin_dir_idx + 1] == tool_ctx.plugin_dir
+        # --output-format and stream-json must be present
+        assert "--output-format" in cmd
+        assert cmd[cmd.index("--output-format") + 1] == "stream-json"
 
 
 class TestCheckDryWalkthrough:

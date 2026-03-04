@@ -528,6 +528,10 @@ class TestRunHeadlessCore:
         # The command list must include the "-p" flag and the skill invocation
         assert any("-p" in part for part in cmd)
         assert any("/investigate" in part for part in cmd)
+        # The command must include --output-format and the format value
+        assert "--output-format" in cmd
+        fmt_idx = cmd.index("--output-format")
+        assert cmd[fmt_idx + 1] == "stream-json"
 
     @pytest.mark.anyio
     async def test_assembled_cmd_contains_format_required_flags(self, tool_ctx):

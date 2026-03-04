@@ -45,7 +45,7 @@ def _initialize(ctx: ToolContext) -> None:
 
     # Clean up any stale gate file from a previous crashed server session.
     try:
-        from autoskillit.pipeline.gate import remove_gate_file
+        from autoskillit.pipeline import remove_gate_file
 
         remove_gate_file(Path.cwd() / "temp")
     except Exception:

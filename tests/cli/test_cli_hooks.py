@@ -114,3 +114,31 @@ def test_claude_settings_path_project_scope(tmp_path, monkeypatch):
 
     p = _claude_settings_path("project")
     assert p == tmp_path / ".claude" / "settings.json"
+
+
+# T6b
+def test_register_native_tool_guard_hook(tmp_path):
+    """Registration creates the correct matcher and command entry in settings.json."""
+    from autoskillit.cli._hooks import _register_native_tool_guard_hook
+
+    settings = tmp_path / "settings.json"
+    _register_native_tool_guard_hook(settings)
+
+    data = json.loads(settings.read_text())
+    entries = data["hooks"]["PreToolUse"]
+
+    guard_entries = [
+        e for e in entries
+        if any(
+            "native_tool_guard" in h.get("command", "")
+            for h in e.get("hooks", [])
+        )
+    ]
+    assert guard_entries, "native_tool_guard hook entry not found in settings.json"
+
+    entry = guard_entries[0]
+    matcher = entry.get("matcher", "")
+    # Matcher should cover the main native tools
+    import re
+    for tool in ("Read", "Write", "Edit", "Bash", "Glob", "Grep", "Agent"):
+        assert re.match(matcher, tool), f"Matcher {matcher!r} should match {tool!r}"

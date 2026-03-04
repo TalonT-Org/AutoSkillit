@@ -117,7 +117,7 @@ async def run_skill(
 
     This is the correct MCP tool to delegate work to a headless session during
     pipeline execution. NEVER use native tools (Read, Grep, Glob, Edit, Write,
-    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the orchestrator.
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator.
     All code changes, investigation, and research happen through the headless
     session launched by this tool.
 
@@ -188,8 +188,8 @@ async def run_skill_retry(
     execution. The correct action is always to resume the session.
 
     This is the correct MCP tool for long-running delegated work during pipeline
-    execution. NEVER use native tools (Read, Grep, Glob, Edit, Write, Bash, Task,
-    Explore, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All code
+    execution. NEVER use native tools (Read, Grep, Glob, Edit, Write, Bash, Agent,
+    WebFetch, WebSearch, NotebookEdit) from the orchestrator. All code
     changes, investigation, and research happen through the headless session
     launched by this tool.
 

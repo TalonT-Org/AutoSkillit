@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -76,7 +77,18 @@ def write_gate_file(temp_dir: Path) -> None:
     """Write the gate state file to signal kitchen is open."""
     gate_path = temp_dir / GATE_STATE_FILENAME
     gate_path.parent.mkdir(parents=True, exist_ok=True)
-    gate_path.write_text(str(os.getpid()))
+    content = str(os.getpid())
+    fd, tmp = tempfile.mkstemp(dir=gate_path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, gate_path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def remove_gate_file(temp_dir: Path) -> None:

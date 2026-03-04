@@ -4,7 +4,7 @@ autoskillit_version: "0.3.0"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
-    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
     orchestrator. All code changes and investigation happen through
     headless sessions via run_skill/run_skill_retry."
   - "Route to on_failure when a step fails — the downstream skill (e.g.,

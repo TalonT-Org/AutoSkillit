@@ -37,7 +37,7 @@ ingredients:
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
-    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
     orchestrator. All work is delegated through run_skill/run_skill_retry."
   - "Route to on_failure — never investigate or fix directly from the orchestrator."
   - "When make_groups is false, task input is required."

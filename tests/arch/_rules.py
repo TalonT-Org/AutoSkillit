@@ -61,6 +61,7 @@ _PRINT_EXEMPT = frozenset(
         "_doctor.py",
         "_marketplace.py",
         "_prompts.py",
+        "native_tool_guard.py",
         "quota_check.py",
         "remove_clone_guard.py",
         "skill_cmd_check.py",
@@ -71,6 +72,7 @@ _PRINT_EXEMPT = frozenset(
 # Standalone hook scripts: fail-open design requires silent broad excepts and print() for JSON
 _BROAD_EXCEPT_EXEMPT = frozenset(
     {
+        "native_tool_guard.py",
         "quota_check.py",
         "remove_clone_guard.py",
         "skill_cmd_check.py",

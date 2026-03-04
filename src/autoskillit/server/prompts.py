@@ -8,7 +8,7 @@ from pathlib import Path
 from fastmcp.prompts import Message, PromptResult
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, pkg_root
-from autoskillit.pipeline.gate import remove_gate_file, write_gate_file
+from autoskillit.pipeline import remove_gate_file, write_gate_file
 from autoskillit.server import mcp
 
 

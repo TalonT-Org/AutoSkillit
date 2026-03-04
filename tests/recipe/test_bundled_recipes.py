@@ -636,3 +636,22 @@ def test_rectify_contract_declares_plan_parts_output() -> None:
     rectify = manifest.get("skills", {}).get("rectify", {})
     output_names = [o["name"] for o in rectify.get("outputs", [])]
     assert "plan_parts" in output_names
+
+
+# ---------------------------------------------------------------------------
+# Bundled diagram tests (DG-21)
+# ---------------------------------------------------------------------------
+
+
+def test_bundled_recipes_have_diagrams() -> None:
+    """DG-21: every bundled recipe has a pre-generated diagram."""
+    from autoskillit.core.paths import pkg_root
+
+    diagrams_dir = pkg_root() / "recipes" / "diagrams"
+    recipes_dir = pkg_root() / "recipes"
+    recipe_names = {p.stem for p in recipes_dir.glob("*.yaml")}
+    diagram_names = {p.stem for p in diagrams_dir.glob("*.md")}
+    assert recipe_names == diagram_names, (
+        f"Missing diagrams for: {recipe_names - diagram_names}. "
+        f"Run 'autoskillit recipes render' to regenerate."
+    )

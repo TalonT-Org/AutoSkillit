@@ -15,6 +15,7 @@ from autoskillit.migration.engine import (
     MIGRATE_RECIPES_MAX_RETRIES,
     ContractMigrationAdapter,
     DeterministicMigrationAdapter,
+    DiagramMigrationAdapter,
     HeadlessMigrationAdapter,
     MigrationAdapter,
     MigrationFile,
@@ -498,6 +499,144 @@ class TestAdapterHierarchy:
 
         with pytest.raises(TypeError):
             BrokenAdapter()
+
+
+# ---------------------------------------------------------------------------
+# DiagramMigrationAdapter tests (DG-16 through DG-20)
+# ---------------------------------------------------------------------------
+
+_SAMPLE_RECIPE_YAML_FOR_DIAG = """\
+name: my-recipe
+description: A test recipe
+summary: step1 -> done
+ingredients:
+  task:
+    description: What to do
+    required: true
+steps:
+  step1:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:investigate ${{ inputs.task }}"
+      cwd: "."
+    on_success: done
+    on_failure: escalate
+  done:
+    action: stop
+    message: "Done."
+  escalate:
+    action: stop
+    message: "Failed."
+kitchen_rules:
+  - "Use AutoSkillit tools only"
+"""
+
+
+@pytest.fixture
+def sample_recipe_yaml_for_diagram(tmp_path: Path) -> Path:
+    path = tmp_path / "my-recipe.yaml"
+    path.write_text(_SAMPLE_RECIPE_YAML_FOR_DIAG)
+    return path
+
+
+class TestDiagramMigrationAdapter:
+    # DG-16
+    def test_diagram_adapter_discover_finds_md_files(self, tmp_path: Path) -> None:
+        """DG-16: DiagramMigrationAdapter.discover() finds .md files in diagrams/."""
+        diag_dir = tmp_path / ".autoskillit" / "recipes" / "diagrams"
+        diag_dir.mkdir(parents=True)
+        (diag_dir / "my-recipe.md").write_text(
+            "<!-- autoskillit-recipe-hash: sha256:abc -->"
+        )
+        adapter = DiagramMigrationAdapter()
+        files = adapter.discover(tmp_path)
+        assert len(files) == 1
+        assert files[0].name == "my-recipe"
+        assert files[0].file_type == "diagram"
+
+    # DG-17
+    def test_diagram_adapter_discover_returns_empty_when_dir_missing(
+        self, tmp_path: Path
+    ) -> None:
+        """DG-17: DiagramMigrationAdapter.discover() returns [] when dir missing."""
+        adapter = DiagramMigrationAdapter()
+        assert adapter.discover(tmp_path) == []
+
+    # DG-18
+    def test_diagram_adapter_needs_migration_stale(
+        self, tmp_path: Path, sample_recipe_yaml_for_diagram: Path
+    ) -> None:
+        """DG-18: DiagramMigrationAdapter.needs_migration() True when diagram stale."""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        diagrams_dir = recipes_dir / "diagrams"
+        diagrams_dir.mkdir(parents=True)
+        import shutil
+
+        shutil.copy2(sample_recipe_yaml_for_diagram, recipes_dir / "my-recipe.yaml")
+        # Write diagram with a wrong hash (stale)
+        (diagrams_dir / "my-recipe.md").write_text(
+            "<!-- autoskillit-recipe-hash: sha256:wronghashvalue -->\n## my-recipe\n"
+        )
+        file = MigrationFile(
+            name="my-recipe",
+            path=diagrams_dir / "my-recipe.md",
+            file_type="diagram",
+            current_version=None,
+        )
+        assert DiagramMigrationAdapter().needs_migration(file) is True
+
+    # DG-19
+    @pytest.mark.anyio
+    async def test_diagram_adapter_migrate_writes_file(
+        self, tmp_path: Path, sample_recipe_yaml_for_diagram: Path
+    ) -> None:
+        """DG-19: DiagramMigrationAdapter.migrate() writes diagram file."""
+        import shutil
+
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        diagrams_dir = recipes_dir / "diagrams"
+        diagrams_dir.mkdir(parents=True)
+        shutil.copy2(sample_recipe_yaml_for_diagram, recipes_dir / "my-recipe.yaml")
+
+        file = MigrationFile(
+            name="my-recipe",
+            path=diagrams_dir / "my-recipe.md",
+            file_type="diagram",
+            current_version=None,
+        )
+        result = await DiagramMigrationAdapter().migrate(file, temp_dir=tmp_path / "temp")
+        assert result.success is True
+        assert (diagrams_dir / "my-recipe.md").exists()
+
+    # DG-20
+    def test_diagram_adapter_validate_passes_when_hash_present(
+        self, tmp_path: Path
+    ) -> None:
+        """DG-20: DiagramMigrationAdapter.validate() passes when hash comment present."""
+        md = tmp_path / "test.md"
+        md.write_text(
+            "<!-- autoskillit-recipe-hash: sha256:abc123def456 -->\n## My Recipe\n"
+        )
+        adapter = DiagramMigrationAdapter()
+        valid, msg = adapter.validate(md)
+        assert valid is True
+        assert msg == ""
+
+    def test_diagram_adapter_validate_fails_when_hash_absent(
+        self, tmp_path: Path
+    ) -> None:
+        """validate() fails when hash comment missing."""
+        md = tmp_path / "test.md"
+        md.write_text("## My Recipe\nNo hash here.\n")
+        adapter = DiagramMigrationAdapter()
+        valid, msg = adapter.validate(md)
+        assert valid is False
+        assert "missing" in msg
+
+    def test_default_engine_includes_diagram_adapter(self) -> None:
+        """default_migration_engine() registers the DiagramMigrationAdapter."""
+        engine = default_migration_engine()
+        assert isinstance(engine.get_adapter("diagram"), DiagramMigrationAdapter)
 
 
 class TestMigrateRecipesConstant:

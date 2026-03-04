@@ -589,3 +589,18 @@ class TestRecipesCLI:
         with pytest.raises(SystemExit) as exc_info:
             _app_mod.recipes_show("nonexistent-recipe-xyz")
         assert exc_info.value.code == 1
+
+    # DG-22
+    def test_recipes_render_renders_bundled(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """DG-22: `autoskillit recipes render` subcommand is registered and callable."""
+        from autoskillit import cli
+
+        monkeypatch.chdir(tmp_path)
+        cli.recipes_render(None)  # render all bundled
+        captured = capsys.readouterr()
+        assert "Rendered:" in captured.out

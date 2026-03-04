@@ -1,9 +1,9 @@
 """Tests for open-pr skill SKILL.md closing_issue argument handling."""
+
 from pathlib import Path
 
 SKILL_PATH = (
-    Path(__file__).parent.parent.parent
-    / "src" / "autoskillit" / "skills" / "open-pr" / "SKILL.md"
+    Path(__file__).parent.parent.parent / "src" / "autoskillit" / "skills" / "open-pr" / "SKILL.md"
 )
 
 

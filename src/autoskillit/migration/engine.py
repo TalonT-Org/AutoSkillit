@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
@@ -304,9 +305,66 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
             return False, str(exc)
 
 
+class DiagramMigrationAdapter(DeterministicMigrationAdapter):
+    """Adapter that regenerates stale recipe flow diagram Markdown files."""
+
+    file_type = "diagram"
+
+    def discover(self, project_dir: Path) -> list[MigrationFile]:
+        diagrams_dir = project_dir / ".autoskillit" / "recipes" / "diagrams"
+        if not diagrams_dir.is_dir():
+            return []
+        return [
+            MigrationFile(name=p.stem, path=p, file_type="diagram", current_version=None)
+            for p in sorted(diagrams_dir.glob("*.md"))
+        ]
+
+    def needs_migration(self, file: MigrationFile) -> bool:
+        from autoskillit.recipe.diagrams import check_diagram_staleness
+
+        recipes_dir = file.path.parent.parent  # diagrams/ -> recipes/
+        recipe_path = recipes_dir / f"{file.name}.yaml"
+        if not recipe_path.exists():
+            return False
+        return check_diagram_staleness(file.name, recipes_dir, recipe_path)
+
+    async def migrate(
+        self,
+        file: MigrationFile,
+        *,
+        temp_dir: Path,
+    ) -> MigrationResult:
+        from autoskillit.recipe.diagrams import generate_recipe_diagram
+
+        recipes_dir = file.path.parent.parent
+        recipe_path = recipes_dir / f"{file.name}.yaml"
+        if not recipe_path.exists():
+            return MigrationResult(
+                success=False,
+                name=file.name,
+                error=f"Source recipe not found: {recipe_path}",
+            )
+        try:
+            generate_recipe_diagram(recipe_path, recipes_dir)
+            return MigrationResult(success=True, name=file.name)
+        except Exception as exc:
+            return MigrationResult(success=False, name=file.name, error=str(exc))
+
+    def validate(self, path: Path) -> tuple[bool, str]:
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            return False, str(exc)
+        if not re.search(r"<!-- autoskillit-recipe-hash: sha256:[0-9a-f]+ -->", content):
+            return False, "missing autoskillit-recipe-hash comment"
+        return True, ""
+
+
 def default_migration_engine() -> MigrationEngine:
     """Create a MigrationEngine with all bundled adapters registered."""
-    return MigrationEngine([RecipeMigrationAdapter(), ContractMigrationAdapter()])
+    return MigrationEngine(
+        [RecipeMigrationAdapter(), ContractMigrationAdapter(), DiagramMigrationAdapter()]
+    )
 
 
 class DefaultMigrationService:
@@ -423,6 +481,27 @@ class DefaultMigrationService:
                         "contract.migration_failed",
                         name=name,
                         error=contract_result.error,
+                    )
+
+        diagram_adapter = self._engine.get_adapter("diagram")
+        if diagram_adapter is not None:
+            diagram_file = MigrationFile(
+                name=name,
+                path=recipes_dir / "diagrams" / f"{name}.md",
+                file_type="diagram",
+                current_version=None,
+            )
+            if diagram_adapter.needs_migration(diagram_file):
+                diagram_result = await self._engine.migrate_file(
+                    diagram_file,
+                    run_headless=run_headless,
+                    temp_dir=temp_dir,
+                )
+                if not diagram_result.success:
+                    logger.warning(
+                        "diagram.migration_failed",
+                        name=name,
+                        error=diagram_result.error,
                     )
 
         if did_version_migrate or contracts_regenerated:

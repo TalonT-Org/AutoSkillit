@@ -39,7 +39,7 @@ relevant arch-lens lenses, and open a GitHub Pull Request.
 - Check `gh auth status` before attempting GitHub operations
 - ALWAYS assume the feature branch is already on the remote (the recipe pushes before invoking this skill)
 - Output `pr_url=<url>` on the last output line (empty string if GitHub unavailable)
-- Select 2–3 arch-lens lenses, no more
+- Select 1–3 arch-lens lenses based on relevance — only include a lens if the changed files map to that lens's concern
 
 ## Workflow
 
@@ -82,7 +82,7 @@ error-resilience, module-dependency, operational, process-flow,
 repository-access, scenarios, security, state-lifecycle
 ```
 
-Instruct the subagent to return exactly 2–3 lens names most relevant to the changed paths.
+Instruct the subagent to return 1–3 lens names. Only include a lens if at least one changed file maps to that lens's concern — if no files clearly map to a given lens, omit it. Choose as few as are genuinely relevant; more is not better.
 Selection criteria:
 - `module-dependency` → changes span multiple packages or add new dependencies
 - `process-flow` → changes affect workflow routing, state transitions, or control flow

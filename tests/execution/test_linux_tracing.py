@@ -60,6 +60,7 @@ def test_read_proc_snapshot_has_all_fields():
     assert snap.vm_rss_kb > 0
     assert snap.threads >= 1
     assert snap.fd_count > 0
+    assert snap.fd_soft_limit > 0
     # hand-rolled fields
     assert isinstance(snap.sig_pnd, str) and len(snap.sig_pnd) > 0
     assert isinstance(snap.oom_score, int)
@@ -69,53 +70,53 @@ def test_read_proc_snapshot_has_all_fields():
     assert snap.ctx_switches_involuntary >= 0
 
 
-def test_log_snapshot_delta_only_changed():
-    """log_snapshot_delta logs only fields that changed between snapshots."""
-    import structlog.testing
+@pytest.mark.anyio
+async def test_tracing_handle_accumulates_snapshots():
+    """LinuxTracingHandle accumulates snapshots during monitoring."""
+    import subprocess
 
-    from autoskillit.execution.linux_tracing import ProcSnapshot, log_snapshot_delta
+    import anyio
 
-    prev = ProcSnapshot(
-        state="S (sleeping)",
-        vm_rss_kb=100000,
-        oom_score=50,
-        fd_count=10,
-        sig_pnd="0" * 16,
-        sig_blk="0" * 16,
-        sig_cgt="0" * 16,
-        threads=4,
-        wchan="",
-        ctx_switches_voluntary=500,
-        ctx_switches_involuntary=20,
-    )
-    curr = ProcSnapshot(
-        state="S (sleeping)",
-        vm_rss_kb=150000,
-        oom_score=80,
-        fd_count=10,
-        sig_pnd="0" * 16,
-        sig_blk="0" * 16,
-        sig_cgt="0" * 16,
-        threads=4,
-        wchan="",
-        ctx_switches_voluntary=510,
-        ctx_switches_involuntary=35,
-    )
+    from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.linux_tracing import start_linux_tracing
 
-    with structlog.testing.capture_logs() as logs:
-        log_snapshot_delta(prev, curr, pid=12345)
+    proc = subprocess.Popen(["sleep", "2"])
+    cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1)
 
-    delta_logs = [r for r in logs if r.get("event") == "proc_snapshot_delta"]
-    assert delta_logs, (
-        f"Expected proc_snapshot_delta log, got events: {[r.get('event') for r in logs]}"
-    )
-    changes = delta_logs[0]["changes"]
-    # Should include vm_rss change and oom_score change, but not state or fd_count
-    assert "vm_rss_kb" in changes
-    assert "oom_score" in changes
-    assert "ctx_switches_involuntary" in changes
-    assert "state" not in changes
-    assert "fd_count" not in changes
+    async with anyio.create_task_group() as tg:
+        handle = start_linux_tracing(pid=proc.pid, config=cfg, tg=tg)
+        assert handle is not None
+        await anyio.sleep(0.5)
+        snapshots = await handle.stop()
+        tg.cancel_scope.cancel()
+
+    assert len(snapshots) >= 1
+    assert snapshots[0].state != ""
+    proc.kill()
+    proc.wait()
+
+
+@pytest.mark.anyio
+async def test_tracing_handle_stop_returns_snapshots():
+    """stop() returns the accumulated snapshot list."""
+    import os
+
+    import anyio
+
+    from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.linux_tracing import start_linux_tracing
+
+    cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1)
+
+    async with anyio.create_task_group() as tg:
+        handle = start_linux_tracing(pid=os.getpid(), config=cfg, tg=tg)
+        assert handle is not None
+        await anyio.sleep(0.3)
+        result = await handle.stop()
+        tg.cancel_scope.cancel()
+
+    assert isinstance(result, list)
+    assert len(result) >= 1
 
 
 def test_linux_tracing_available_flag():

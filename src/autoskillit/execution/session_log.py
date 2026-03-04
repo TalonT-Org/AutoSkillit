@@ -14,7 +14,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from autoskillit.core import get_logger
+from autoskillit.core import _atomic_write, get_logger
 from autoskillit.execution.anomaly_detection import detect_anomalies
 
 logger = get_logger(__name__)
@@ -122,7 +122,7 @@ def flush_session_log(
         "peak_fd_ratio": round(peak_fd_ratio, 3),
     }
     summary_path = session_dir / "summary.json"
-    summary_path.write_text(json.dumps(summary, sort_keys=True, indent=2) + "\n")
+    _atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
 
     # Append to sessions.jsonl index
     index_entry = {
@@ -177,4 +177,4 @@ def _enforce_retention(log_root: Path) -> None:
                     kept.append(line)
             except json.JSONDecodeError:
                 continue
-        index_path.write_text("\n".join(kept) + "\n" if kept else "")
+        _atomic_write(index_path, "\n".join(kept) + "\n" if kept else "")

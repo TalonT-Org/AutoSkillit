@@ -123,10 +123,9 @@ steps:
         "true": plan
         "false": next_part_or_next_pr
     on_failure: cleanup_failure
-    retry:
-      max_attempts: 5
-      on: needs_retry
-      on_exhausted: cleanup_failure
+    retries: 5
+    on_exhausted: cleanup_failure
+    on_context_limit: cleanup_failure
     note: >
       The agent reads context.pr_order_file at context.current_pr_index to get the
       current PR's number and complexity. Appends them to skill_command:
@@ -163,10 +162,9 @@ steps:
       step_name: "verify"
     on_success: implement
     on_failure: cleanup_failure
-    retry:
-      max_attempts: 5
-      on: needs_retry
-      on_exhausted: cleanup_failure
+    retries: 5
+    on_exhausted: cleanup_failure
+    on_context_limit: cleanup_failure
     note: >
       SEQUENTIAL: For each plan_part, run the full cycle
       (verify → implement → test → merge_to_integration) before advancing.
@@ -181,10 +179,9 @@ steps:
       worktree_path: "${{ result.worktree_path }}"
     on_success: test
     on_failure: cleanup_failure
-    retry:
-      max_attempts: 0
-      on: needs_retry
-      on_exhausted: retry_worktree
+    retries: 0
+    on_exhausted: retry_worktree
+    on_context_limit: retry_worktree
 
   retry_worktree:
     tool: run_skill_retry
@@ -196,10 +193,9 @@ steps:
       worktree_path: "${{ result.worktree_path }}"
     on_success: test
     on_failure: cleanup_failure
-    retry:
-      max_attempts: 3
-      on: needs_retry
-      on_exhausted: cleanup_failure
+    retries: 3
+    on_exhausted: cleanup_failure
+    on_context_limit: cleanup_failure
 
   test:
     tool: test_check
@@ -233,10 +229,9 @@ steps:
       base_branch: "${{ inputs.base_branch }}"
     on_success: test
     on_failure: cleanup_failure
-    retry:
-      max_attempts: 3
-      on: needs_retry
-      on_exhausted: cleanup_failure
+    retries: 3
+    on_exhausted: cleanup_failure
+    on_context_limit: cleanup_failure
     note: >
       Fixes test failures without merging. Routes back to test for
       re-validation before merge_to_integration. The base_branch with: key is

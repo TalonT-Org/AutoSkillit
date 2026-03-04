@@ -31,9 +31,7 @@ def _run_hook_mocked(event: dict, side_effects: list) -> str:
         return buf.getvalue()
 
 
-def _run_hook_with_git(
-    event: dict, git_responses: list[tuple[int, str]]
-) -> str:
+def _run_hook_with_git(event: dict, git_responses: list[tuple[int, str]]) -> str:
     """Convenience wrapper: converts (rc, stdout) tuples to mock CompletedProcess objects."""
     side_effects = [_make_proc(rc, out) for rc, out in git_responses]
     return _run_hook_mocked(event, side_effects)
@@ -85,9 +83,9 @@ def test_approve_when_synced():
     out = _run_hook_with_git(
         event,
         git_responses=[
-            (0, ".git"),   # rev-parse --git-dir
-            (0, "main"),   # rev-parse --abbrev-ref HEAD
-            (0, "0"),      # rev-list --count @{upstream}..HEAD
+            (0, ".git"),  # rev-parse --git-dir
+            (0, "main"),  # rev-parse --abbrev-ref HEAD
+            (0, "0"),  # rev-list --count @{upstream}..HEAD
         ],
     )
     assert out.strip() == ""
@@ -99,9 +97,9 @@ def test_deny_when_unpushed_commits():
     out = _run_hook_with_git(
         event,
         git_responses=[
-            (0, ".git"),                        # rev-parse --git-dir
-            (0, "feat/thing"),                  # rev-parse --abbrev-ref HEAD
-            (0, "2"),                           # rev-list --count @{upstream}..HEAD
+            (0, ".git"),  # rev-parse --git-dir
+            (0, "feat/thing"),  # rev-parse --abbrev-ref HEAD
+            (0, "2"),  # rev-list --count @{upstream}..HEAD
             (0, "abc123 Add X\ndef456 Add Y"),  # log --oneline @{upstream}..HEAD
         ],
     )
@@ -118,14 +116,15 @@ def test_deny_when_no_tracking_branch():
     out = _run_hook_with_git(
         event,
         git_responses=[
-            (0, ".git"),       # rev-parse --git-dir
-            (0, "feat/thing"), # rev-parse --abbrev-ref HEAD
-            (128, ""),         # rev-list --count (no upstream)
+            (0, ".git"),  # rev-parse --git-dir
+            (0, "feat/thing"),  # rev-parse --abbrev-ref HEAD
+            (128, ""),  # rev-list --count (no upstream)
         ],
     )
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "no remote tracking branch" in data["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    reason = data["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert "no remote tracking branch" in reason
 
 
 def test_deny_when_detached_head():
@@ -176,7 +175,7 @@ def test_approve_when_keep_false_string_and_synced():
         git_responses=[
             (0, ".git"),  # rev-parse --git-dir
             (0, "main"),  # rev-parse --abbrev-ref HEAD
-            (0, "0"),     # rev-list --count @{upstream}..HEAD
+            (0, "0"),  # rev-list --count @{upstream}..HEAD
         ],
     )
     assert out.strip() == ""

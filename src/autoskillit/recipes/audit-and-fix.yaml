@@ -229,6 +229,12 @@ steps:
       The feature branch is already published by the push step that precedes this step.
       Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
       and runs gh pr create. The skill gracefully degrades if gh is unavailable.
+      TOKEN SUMMARY: Before invoking this step, the orchestrator MUST:
+      1. Call get_token_summary(clear=false) to retrieve accumulated token usage.
+      2. Format the JSON result as a markdown table with columns: Step, input, output,
+         cache_create, cache_read. Include a bold Total row.
+      3. Write the formatted table to temp/open-pr/token_summary.md via run_cmd.
+      4. Append the file path as a 4th positional argument to the skill_command.
 
   cleanup_success:
     tool: remove_clone

@@ -154,3 +154,40 @@ async def test_proc_monitor_detects_death():
         snapshots.append(snap)
 
     assert len(snapshots) >= 1
+
+
+def test_proc_snapshot_has_captured_at_field():
+    """ProcSnapshot must have a captured_at field populated at creation time."""
+    import os
+    from datetime import datetime
+
+    from autoskillit.execution.linux_tracing import read_proc_snapshot
+
+    snap = read_proc_snapshot(os.getpid())
+    assert snap is not None
+    assert hasattr(snap, "captured_at")
+    assert snap.captured_at  # non-empty
+    # Must be UTC-aware ISO 8601
+    dt = datetime.fromisoformat(snap.captured_at)
+    assert dt.tzinfo is not None
+
+
+@pytest.mark.anyio
+async def test_proc_monitor_snapshots_have_distinct_timestamps():
+    """Consecutive snapshots from proc_monitor must have distinct captured_at values."""
+    import os
+
+    import anyio
+
+    from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.linux_tracing import start_linux_tracing
+
+    config = LinuxTracingConfig(proc_interval=0.05)
+    async with anyio.create_task_group() as tg:
+        handle = start_linux_tracing(os.getpid(), config, tg)
+        await anyio.sleep(0.2)
+        result = await handle.stop()
+        tg.cancel_scope.cancel()
+    assert len(result) >= 2
+    timestamps = [s.captured_at for s in result]
+    assert len(set(timestamps)) == len(timestamps), "All captured_at must be unique"

@@ -122,3 +122,14 @@ def test_pytest_timeout_is_configured(pytestconfig):
         "pytest-timeout is not configured. "
         "Install pytest-timeout and add timeout = 60 to [tool.pytest.ini_options]."
     )
+
+
+def test_tool_ctx_log_dir_is_isolated_from_production(tool_ctx):
+    """tool_ctx must override log_dir to a tmp path, never the production XDG dir."""
+    import os
+
+    log_dir = tool_ctx.config.linux_tracing.log_dir
+    assert log_dir != ""
+    xdg = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    production_path = os.path.join(xdg, "autoskillit", "logs")
+    assert not os.path.abspath(log_dir).startswith(production_path)

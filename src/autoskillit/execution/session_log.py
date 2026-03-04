@@ -53,7 +53,7 @@ def flush_session_log(
     to keep at most 500 session directories.
     """
     log_root = resolve_log_dir(log_dir)
-    dir_name = session_id if session_id else f"pid_{pid}_{start_ts}"
+    dir_name = session_id if session_id else f"no_session_{start_ts.replace(':', '-')}"
     session_dir = log_root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
 

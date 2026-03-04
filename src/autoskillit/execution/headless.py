@@ -384,6 +384,9 @@ async def run_headless_core(
             audit=ctx.audit,
         )
 
+        # Resolve effective session ID: prefer stdout-parsed, fall back to Channel B discovery
+        effective_session_id = skill_result.session_id or result.channel_b_session_id
+
         if result.proc_snapshots is not None or not skill_result.success:
             from autoskillit.execution.session_log import flush_session_log
 
@@ -391,7 +394,7 @@ async def run_headless_core(
                 flush_session_log(
                     log_dir=ctx.config.linux_tracing.log_dir,
                     cwd=cwd,
-                    session_id=skill_result.session_id,
+                    session_id=effective_session_id,
                     pid=result.pid,
                     skill_command=original_skill_command,
                     success=skill_result.success,

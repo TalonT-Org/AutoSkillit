@@ -263,6 +263,7 @@ async def run_managed_async(
                 pid=proc.pid,
                 channel_confirmation=_channel_confirmation,
                 proc_snapshots=snapshots_data,
+                channel_b_session_id=signals.channel_b_session_id,
             )
             proc_log.debug(
                 "run_managed_async_result",

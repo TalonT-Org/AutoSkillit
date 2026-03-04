@@ -27,6 +27,7 @@ class RaceSignals:
     process_returncode: int | None
     channel_a_confirmed: bool
     channel_b_status: str | None  # "completion", "stale", or None
+    channel_b_session_id: str  # Claude Code session ID from JSONL filename stem, or ""
 
 
 @dataclass
@@ -43,6 +44,7 @@ class RaceAccumulator:
     process_returncode: int | None = None
     channel_a_confirmed: bool = False
     channel_b_status: str | None = None
+    channel_b_session_id: str = ""
 
     def to_race_signals(self) -> RaceSignals:
         return RaceSignals(
@@ -50,6 +52,7 @@ class RaceAccumulator:
             process_returncode=self.process_returncode,
             channel_a_confirmed=self.channel_a_confirmed,
             channel_b_status=self.channel_b_status,
+            channel_b_session_id=self.channel_b_session_id,
         )
 
 
@@ -105,7 +108,7 @@ async def _watch_session_log(
     is opened via anyio.move_on_after so Channel A can fire first if it
     is about to confirm. The trigger is set after the B signal is deposited.
     """
-    result = await _session_log_monitor(
+    monitor_result = await _session_log_monitor(
         session_log_dir,
         completion_marker,
         stale_threshold,
@@ -116,16 +119,22 @@ async def _watch_session_log(
         _phase2_poll=_phase2_poll,
         _phase1_timeout=_phase1_timeout,
     )
-    if result == "completion":
+    if monitor_result.status == "completion":
         # Drain-wait: give Channel A a window to confirm before Channel B wins.
         # move_on_after absorbs timeout; trigger may already be set if A fired.
         with anyio.move_on_after(completion_drain_timeout):
             await trigger.wait()
         logger.debug("channel_b_drain_complete", trigger_was_set=trigger.is_set())
-    logger.debug("channel_b_result", status=result, drain_window=result == "completion")
+    logger.debug(
+        "channel_b_result",
+        status=monitor_result.status,
+        session_id=monitor_result.session_id,
+        drain_window=monitor_result.status == "completion",
+    )
     # These writes execute atomically before any cancellation delivery:
     # there is no await between them and the function return.
-    acc.channel_b_status = result
+    acc.channel_b_status = monitor_result.status
+    acc.channel_b_session_id = monitor_result.session_id
     channel_b_ready.set()
     trigger.set()
 
@@ -168,6 +177,7 @@ def resolve_termination(
         process_returncode=signals.process_returncode,
         channel_a_confirmed=signals.channel_a_confirmed,
         channel_b_status=signals.channel_b_status,
+        channel_b_session_id=signals.channel_b_session_id,
         resolved_termination=str(termination),
         resolved_channel=str(channel),
     )

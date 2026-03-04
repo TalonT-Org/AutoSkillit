@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import NamedTuple
 
 import anyio
 import psutil
@@ -12,6 +13,13 @@ from autoskillit.core import get_logger
 from autoskillit.execution._process_jsonl import _jsonl_contains_marker, _jsonl_has_record_type
 
 logger = get_logger(__name__)
+
+
+class SessionMonitorResult(NamedTuple):
+    """Result from _session_log_monitor with discovered session identity."""
+
+    status: str  # "completion" or "stale"
+    session_id: str  # Claude Code session ID from JSONL filename stem, or ""
 
 
 async def _heartbeat(
@@ -85,7 +93,7 @@ async def _session_log_monitor(
     _phase2_poll: float = 2.0,
     _phase1_timeout: float = 30.0,
     _on_poll: Callable[[], None] | None = None,
-) -> str:
+) -> SessionMonitorResult:
     """Watch Claude Code session log for completion or staleness.
 
     Finds the session JSONL file (newest in session_log_dir created after
@@ -117,7 +125,7 @@ async def _session_log_monitor(
                 "Session log file not found within phase1_timeout (%.1fs); treating as stale",
                 _phase1_timeout,
             )
-            return "stale"
+            return SessionMonitorResult("stale", "")
         await anyio.sleep(_phase1_poll)
         try:
             candidates = [
@@ -144,6 +152,9 @@ async def _session_log_monitor(
                     "Session monitor: 10 consecutive failures reading %s", session_log_dir
                 )
             continue
+
+    # Extract session ID from the discovered JSONL filename stem
+    _session_id = session_file.stem
 
     # Phase 2: Monitor the session log
     last_size = 0
@@ -180,7 +191,7 @@ async def _session_log_monitor(
                         file_size=current_size,
                         scan_pos=scan_pos,
                     )
-                    return "completion"
+                    return SessionMonitorResult("completion", _session_id)
             except OSError:
                 pass
         else:
@@ -196,4 +207,4 @@ async def _session_log_monitor(
                         pid,
                     )
                 else:
-                    return "stale"
+                    return SessionMonitorResult("stale", _session_id)

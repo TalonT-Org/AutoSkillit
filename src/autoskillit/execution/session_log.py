@@ -47,7 +47,9 @@ def flush_session_log(
     exit_code: int,
     start_ts: str,
     proc_snapshots: list[dict[str, object]] | None,
+    end_ts: str = "",
     termination_reason: str = "",
+    snapshot_interval_seconds: float = 0.0,
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -107,6 +109,15 @@ def flush_session_log(
 
     anomaly_count = len(anomalies)
 
+    duration_seconds: float | None = None
+    if end_ts:
+        try:
+            duration_seconds = (
+                datetime.fromisoformat(end_ts) - datetime.fromisoformat(start_ts)
+            ).total_seconds()
+        except ValueError:
+            pass
+
     # Write summary.json
     summary = {
         "session_id": session_id,
@@ -118,6 +129,9 @@ def flush_session_log(
         "subtype": subtype,
         "exit_code": exit_code,
         "start_ts": start_ts,
+        "end_ts": end_ts,
+        "duration_seconds": duration_seconds,
+        "snapshot_interval_seconds": snapshot_interval_seconds,
         "snapshot_count": snapshot_count,
         "anomaly_count": anomaly_count,
         "peak_rss_kb": peak_rss_kb,

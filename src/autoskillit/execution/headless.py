@@ -400,7 +400,8 @@ async def run_headless_core(
                     )
                 except Exception:
                     logger.debug("flush_session_log during crash failed", exc_info=True)
-        result = _result  # type: ignore[assignment]  # not None past this point
+        _end_ts = datetime.now(UTC).isoformat()
+        result = dataclasses.replace(_result, start_ts=_start_ts, end_ts=_end_ts)  # type: ignore[arg-type]
 
         skill_result = _build_skill_result(
             result,
@@ -425,7 +426,10 @@ async def run_headless_core(
                     success=skill_result.success,
                     subtype=skill_result.subtype,
                     exit_code=skill_result.exit_code,
-                    start_ts=_start_ts,
+                    start_ts=result.start_ts,
+                    end_ts=result.end_ts,
+                    termination_reason=result.termination.value,
+                    snapshot_interval_seconds=ctx.config.linux_tracing.proc_interval,
                     proc_snapshots=result.proc_snapshots,
                 )
             except Exception:

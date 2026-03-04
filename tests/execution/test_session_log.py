@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from autoskillit.execution.session_log import (
     flush_session_log,
     recover_crashed_sessions,
@@ -14,6 +16,7 @@ from autoskillit.execution.session_log import (
 
 def _snap(
     *,
+    captured_at: str = "2026-03-03T12:00:00+00:00",
     vm_rss_kb: int = 100000,
     oom_score: int = 50,
     fd_count: int = 10,
@@ -21,6 +24,7 @@ def _snap(
     state: str = "sleeping",
 ) -> dict[str, object]:
     return {
+        "captured_at": captured_at,
         "state": state,
         "vm_rss_kb": vm_rss_kb,
         "oom_score": oom_score,
@@ -220,6 +224,47 @@ def test_resolve_log_dir_explicit_override():
     assert result == Path("/custom/path")
 
 
+def test_proc_trace_timestamps_are_per_snapshot_not_session_start(tmp_path):
+    """Each snapshot record must carry its own captured_at time, not the session start."""
+    ts1 = "2026-03-03T12:00:00+00:00"
+    ts2 = "2026-03-03T12:00:05+00:00"
+    ts3 = "2026-03-03T12:00:10+00:00"
+    snaps = [
+        _snap(captured_at=ts1),
+        _snap(captured_at=ts2),
+        _snap(captured_at=ts3),
+    ]
+    _flush(tmp_path, proc_snapshots=snaps, start_ts="2026-03-03T12:00:00+00:00")
+
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    records = [
+        json.loads(line) for line in (session_dir / "proc_trace.jsonl").read_text().splitlines()
+    ]
+    assert records[0]["ts"] == ts1
+    assert records[1]["ts"] == ts2
+    assert records[2]["ts"] == ts3
+    # All three must differ — not the session start repeated
+    assert len({r["ts"] for r in records}) == 3
+
+
+def test_summary_contains_temporal_completion_fields(tmp_path):
+    """summary.json must record when the session ended and how long it ran."""
+    _flush(
+        tmp_path,
+        start_ts="2026-03-03T12:00:00+00:00",
+        end_ts="2026-03-03T12:05:00+00:00",
+        termination_reason="completed",
+        snapshot_interval_seconds=5.0,
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    summary = json.loads((session_dir / "summary.json").read_text())
+
+    assert summary["end_ts"] == "2026-03-03T12:05:00+00:00"
+    assert summary["duration_seconds"] == pytest.approx(300.0)
+    assert summary["termination_reason"] == "completed"
+    assert summary["snapshot_interval_seconds"] == 5.0
+
+
 # --- termination_reason tests ---
 
 
@@ -255,7 +300,7 @@ def test_proc_trace_uses_snapshot_captured_at(tmp_path):
 
 def test_proc_trace_falls_back_to_start_ts_when_no_captured_at(tmp_path):
     """proc_trace.jsonl ts falls back to start_ts when captured_at is absent."""
-    snap = _snap()  # no captured_at key
+    snap = {k: v for k, v in _snap().items() if k != "captured_at"}  # no captured_at key
     _flush(
         tmp_path,
         session_id="fallback-ts",

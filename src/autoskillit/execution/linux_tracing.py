@@ -38,6 +38,8 @@ LINUX_TRACING_AVAILABLE = sys.platform == "linux"
 class ProcSnapshot:
     """Point-in-time snapshot of process state."""
 
+    # Temporal anchor — set at capture time, never reassigned
+    captured_at: str
     # psutil-sourced fields
     state: str
     vm_rss_kb: int
@@ -52,8 +54,6 @@ class ProcSnapshot:
     sig_cgt: str
     oom_score: int
     wchan: str
-    # timestamp stamped at capture time
-    captured_at: str = ""
 
 
 def _parse_proc_status(content: str) -> dict[str, str]:
@@ -81,6 +81,7 @@ def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
     """Read a complete snapshot for pid. Returns None if process gone."""
     if not LINUX_TRACING_AVAILABLE:
         return None
+    captured_at = datetime.now(UTC).isoformat()
     try:
         p = psutil.Process(pid)
         with p.oneshot():
@@ -111,6 +112,7 @@ def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
         wchan = ""
 
     return ProcSnapshot(
+        captured_at=captured_at,
         state=state,
         vm_rss_kb=mem.rss // 1024,
         threads=num_threads,
@@ -123,7 +125,6 @@ def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
         sig_cgt=sig_fields.get("sig_cgt", ""),
         oom_score=oom,
         wchan=wchan,
-        captured_at=datetime.now(UTC).isoformat(),
     )
 
 

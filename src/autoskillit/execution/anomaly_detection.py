@@ -6,7 +6,7 @@ pattern detection (e.g., sustained RSS growth, persistent zombies).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
 
@@ -35,7 +35,7 @@ def _anomaly(
     pid: int,
 ) -> dict[str, object]:
     return {
-        "ts": datetime.now().isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "seq": seq,
         "event": "anomaly",
         "kind": str(kind),

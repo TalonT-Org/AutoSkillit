@@ -102,6 +102,15 @@ def _register_skill_command_guard_hook(settings_path: Path) -> None:
     _write_settings_data(settings_path, data)
 
 
+def _register_native_tool_guard_hook(settings_path: Path) -> None:
+    """Idempotently add the native_tool_guard PreToolUse hook to .claude/settings.json."""
+    _register_pretooluse_hook(
+        settings_path,
+        matcher=r"^(Read|Write|Edit|Bash|Glob|Grep|Agent|WebFetch|WebSearch|NotebookEdit)$",
+        command="python3 -m autoskillit.hooks.native_tool_guard",
+    )
+
+
 def _claude_settings_path(scope: str) -> Path:
     """Return the Claude Code settings.json path for the given scope."""
     if scope == "user":

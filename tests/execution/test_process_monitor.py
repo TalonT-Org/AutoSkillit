@@ -768,7 +768,7 @@ class TestSessionLogMonitorSessionId:
             json.dumps(
                 {
                     "type": "assistant",
-                    "message": {"content": "done COMPLETION_MARKER"},
+                    "message": {"content": "done\n\nCOMPLETION_MARKER"},
                 }
             )
             + "\n"

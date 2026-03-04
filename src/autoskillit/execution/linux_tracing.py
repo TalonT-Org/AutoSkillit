@@ -19,6 +19,7 @@ from __future__ import annotations
 import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -36,6 +37,8 @@ LINUX_TRACING_AVAILABLE = sys.platform == "linux"
 class ProcSnapshot:
     """Point-in-time snapshot of process state."""
 
+    # Temporal anchor — set at capture time, never reassigned
+    captured_at: str
     # psutil-sourced fields
     state: str
     vm_rss_kb: int
@@ -77,6 +80,7 @@ def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
     """Read a complete snapshot for pid. Returns None if process gone."""
     if not LINUX_TRACING_AVAILABLE:
         return None
+    captured_at = datetime.now(UTC).isoformat()
     try:
         p = psutil.Process(pid)
         with p.oneshot():
@@ -107,6 +111,7 @@ def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
         wchan = ""
 
     return ProcSnapshot(
+        captured_at=captured_at,
         state=state,
         vm_rss_kb=mem.rss // 1024,
         threads=num_threads,

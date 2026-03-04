@@ -229,5 +229,6 @@ def tool_ctx(monkeypatch, tmp_path):
     mock_runner = MockSubprocessRunner()
     ctx = make_context(AutomationConfig(), runner=mock_runner, plugin_dir=str(tmp_path))
     ctx.gate = DefaultGateState(enabled=True)
+    ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
     monkeypatch.setattr(_state, "_ctx", ctx)
     return ctx

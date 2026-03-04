@@ -214,6 +214,8 @@ class SubprocessResult:
     """
     proc_snapshots: list[dict[str, object]] | None = None
     channel_b_session_id: str = ""
+    start_ts: str = ""
+    end_ts: str = ""
 
 
 @runtime_checkable

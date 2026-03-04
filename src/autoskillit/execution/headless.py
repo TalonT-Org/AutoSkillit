@@ -376,6 +376,8 @@ async def run_headless_core(
             completion_drain_timeout=cfg.completion_drain_timeout,
             linux_tracing_config=linux_tracing_cfg,
         )
+        _end_ts = datetime.now(UTC).isoformat()
+        result = dataclasses.replace(result, start_ts=_start_ts, end_ts=_end_ts)
 
         skill_result = _build_skill_result(
             result,
@@ -400,7 +402,10 @@ async def run_headless_core(
                     success=skill_result.success,
                     subtype=skill_result.subtype,
                     exit_code=skill_result.exit_code,
-                    start_ts=_start_ts,
+                    start_ts=result.start_ts,
+                    end_ts=result.end_ts,
+                    termination=result.termination.value,
+                    snapshot_interval_seconds=ctx.config.linux_tracing.proc_interval,
                     proc_snapshots=result.proc_snapshots,
                 )
             except Exception:

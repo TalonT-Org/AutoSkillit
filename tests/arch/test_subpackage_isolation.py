@@ -949,6 +949,7 @@ class TestGroupCMigration:
             "process_returncode",
             "channel_a_confirmed",
             "channel_b_status",
+            "channel_b_session_id",
         }  # REQ-SIG-008
 
     def test_race_signals_still_frozen(self):
@@ -964,6 +965,7 @@ class TestGroupCMigration:
             process_returncode=None,
             channel_a_confirmed=False,
             channel_b_status=None,
+            channel_b_session_id="",
         )
         with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
             sig.process_exited = True  # REQ-SIG-008: frozen=True preserved

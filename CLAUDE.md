@@ -203,6 +203,6 @@ src/autoskillit/
     └── write-recipe/
 ```
 
-**Session diagnostics logs** are stored globally at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir` in config. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
+**Session diagnostics logs** are stored globally at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir` in config. Session directories are named by Claude Code session UUID when available (preferred: parsed from stdout, fallback: discovered from JSONL filename via Channel B). When no session ID is available from either source, directories use `no_session_{timestamp}` naming. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
 
 **CRITICAL**: When using subagents, invoke with "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000" to ensure subagents exit when finished.

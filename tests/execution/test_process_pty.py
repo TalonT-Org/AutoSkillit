@@ -575,6 +575,7 @@ class TestResolveTerminationMatrix:
             process_returncode=0 if process_exited else None,
             channel_a_confirmed=channel_a_confirmed,
             channel_b_status=channel_b_result,
+            channel_b_session_id="",
         )
         termination, channel = resolve_termination(signals)
         assert termination == expected_term

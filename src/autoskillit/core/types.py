@@ -213,6 +213,7 @@ class SubprocessResult:
     UNMONITORED: no channel monitoring active (NATURAL_EXIT, STALE, TIMED_OUT, sync path).
     """
     proc_snapshots: list[dict[str, object]] | None = None
+    channel_b_session_id: str = ""
 
 
 @runtime_checkable

@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:798b4a146400f7b55bdeca00f8ce12605c65469ab2e542c0e820f1257ed391f2 -->
+<!-- autoskillit-recipe-hash: sha256:6892239d6d74a72b0acd74b3a7ba266c748bab0ef9744a18ff03c53277a70324 -->
 <!-- autoskillit-diagram-format: v2 -->
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
@@ -134,7 +134,8 @@ Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose
 | source_doc | Path to source document for group decomposition (required when make_groups is true) | no |  |
 | source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel.
  | no |  |
-| run_name | Name prefix for this pipeline run (used in clone directory name) | no | impl |
+| run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. impl/124 or impl/20260304) and in the clone directory name.
+ | no | impl |
 | base_branch | Branch to merge into (defaults to current branch) | no | main |
 | make_groups | Run /make-groups to decompose source_doc into sequenced implementation groups? (true/false) | no | false |
 | review_approach | Run /review-approach before implementation? (true/false) | no | false |
@@ -148,5 +149,5 @@ Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose
 - When make_groups is false, task input is required.
 - When make_groups is true, source_doc input is required.
 - Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront.
-- By default (open_pr=true), a feature branch named from inputs.run_name is created. All worktree merges target the feature branch (context.merge_target), not base_branch directly. The push step publishes the feature branch, then open_pr_step opens a PR to base_branch. When open_pr=false, merges target base_branch directly and open_pr_step is skipped.
+- By default (open_pr=true), a feature branch is created with a unique name derived from inputs.run_name and context.issue_number (e.g. impl/124) or a date suffix (e.g. impl/20260304) when no issue is available. All worktree merges target the feature branch (context.merge_target), not base_branch directly. The push step publishes the feature branch, then open_pr_step opens a PR to base_branch. When open_pr=false, merges target base_branch directly and open_pr_step is skipped.
 - SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly off-limits. Never run any command in source_dir — no git checkout, git fetch, git reset, git pull, run_cmd, run_skill, or any other operation. All work — skill invocations, git operations, file reads — happens exclusively in the clone (work_dir). source_dir is used ONLY to read the remote URL inside push_to_remote.

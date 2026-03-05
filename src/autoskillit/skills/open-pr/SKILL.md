@@ -59,7 +59,7 @@ Split `plan_paths` by comma to get a list of plan file paths.
 Read all plan files. For each, extract the first `# ` heading line and strip the `# ` prefix.
 
 - **Single plan:** Use the heading directly as `{task_title}` (current behavior).
-- **Multiple plans:** Spawn a subagent (Task tool, model: haiku) with all extracted
+- **Multiple plans:** Spawn a subagent (Task tool, model: sonnet) with all extracted
   headings. Instruct it to synthesize a single concise PR title (under 70 characters)
   that captures the overall scope. The title should NOT enumerate every group — it
   should describe the aggregate change.
@@ -76,7 +76,7 @@ an empty file list (the PR body will note that no diff was available).
 
 ### Step 4: Select Arch-Lens Lenses
 
-Spawn a subagent (Task tool, model: haiku) with the list of changed file paths and the
+Spawn a subagent (Task tool, model: sonnet) with the list of changed file paths and the
 following lens menu:
 
 ```
@@ -154,7 +154,7 @@ Plan file: `{plan_path}`
 ## Summary
 
 {Synthesized overall summary — 2-3 sentences covering the aggregate change.
- Use a haiku subagent to produce this from all individual summaries.}
+ Use a sonnet subagent to produce this from all individual summaries.}
 
 {If closing_issue is provided and non-empty:}
 Closes #{closing_issue}

@@ -12,7 +12,6 @@ from tests.arch._rules import (
     _PRINT_EXEMPT,
     _RULE,
     _SENSITIVE_KEYWORDS,
-    _rel,  # noqa: F401 -- re-exported for test modules
     RuleDescriptor,
     Violation,
     _rel,  # noqa: F401  # re-exported for test_layer_enforcement, test_subpackage_isolation

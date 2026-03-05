@@ -10,6 +10,7 @@ from autoskillit.core import (
     Severity,
     get_logger,
 )
+from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     count_positional_args,
     extract_context_refs,
@@ -20,7 +21,6 @@ from autoskillit.recipe.contracts import (
 )
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
 
@@ -30,7 +30,8 @@ logger = get_logger(__name__)
     description="Recipe's autoskillit_version is below the installed package version",
     severity=Severity.WARNING,
 )
-def _check_outdated_version(wf: Recipe) -> list[RuleFinding]:
+def _check_outdated_version(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     script_ver = wf.version
     if script_ver is None:
         return [
@@ -68,7 +69,8 @@ def _check_outdated_version(wf: Recipe) -> list[RuleFinding]:
     description="Skill steps must provide all required ingredients via context or recipe inputs.",
     severity=Severity.ERROR,
 )
-def _check_unsatisfied_skill_input(wf: Recipe) -> list[RuleFinding]:
+def _check_unsatisfied_skill_input(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     findings: list[RuleFinding] = []
     manifest = load_bundled_manifest()
     ingredient_names = set(wf.ingredients.keys())
@@ -133,7 +135,8 @@ def _check_unsatisfied_skill_input(wf: Recipe) -> list[RuleFinding]:
     ),
     severity=Severity.ERROR,
 )
-def _check_shadowed_required_inputs(wf: Recipe) -> list[RuleFinding]:
+def _check_shadowed_required_inputs(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     findings: list[RuleFinding] = []
     manifest = load_bundled_manifest()
     ingredient_names = set(wf.ingredients.keys())
@@ -191,7 +194,8 @@ def _check_shadowed_required_inputs(wf: Recipe) -> list[RuleFinding]:
     description="Steps that no other step routes to (and are not the entry point) are dead code.",
     severity=Severity.WARNING,
 )
-def _check_unreachable_steps(wf: Recipe) -> list[RuleFinding]:
+def _check_unreachable_steps(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     if not wf.steps:
         return []
 

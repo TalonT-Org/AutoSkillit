@@ -9,10 +9,9 @@ from autoskillit.core import (
     Severity,
     get_logger,
 )
-from autoskillit.recipe._analysis import _build_step_graph
+from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import _CONTEXT_REF_RE
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
 
@@ -22,8 +21,9 @@ logger = get_logger(__name__)
     description="Routing cycle with no structural termination guarantee",
     severity=Severity.ERROR,
 )
-def _check_unbounded_cycles(recipe: Recipe) -> list[RuleFinding]:
-    graph = _build_step_graph(recipe)
+def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
+    recipe = ctx.recipe
+    graph = ctx.step_graph
     findings: list[RuleFinding] = []
     reported_cycles: set[frozenset[str]] = set()
 
@@ -114,7 +114,8 @@ def _check_unbounded_cycles(recipe: Recipe) -> list[RuleFinding]:
     ),
     severity=Severity.ERROR,
 )
-def _check_on_result_missing_failure_route(wf: Recipe) -> list[RuleFinding]:
+def _check_on_result_missing_failure_route(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
         is_tool_invocation = step.tool is not None or step.python is not None
@@ -144,7 +145,9 @@ def _check_on_result_missing_failure_route(wf: Recipe) -> list[RuleFinding]:
     description="push_to_remote reachable without passing through audit-impl first",
     severity=Severity.WARNING,
 )
-def _check_push_before_audit(wf: Recipe) -> list[RuleFinding]:
+def _check_push_before_audit(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
+    graph = ctx.step_graph
     push_steps = {name for name, step in wf.steps.items() if step.tool == "push_to_remote"}
     if not push_steps:
         return []
@@ -155,7 +158,6 @@ def _check_push_before_audit(wf: Recipe) -> list[RuleFinding]:
         if step.tool in SKILL_TOOLS and "audit-impl" in step.with_args.get("skill_command", "")
     }
 
-    graph = _build_step_graph(wf)
     entry = next(iter(wf.steps))
 
     reachable_without_audit: set[str] = set()
@@ -192,13 +194,14 @@ def _check_push_before_audit(wf: Recipe) -> list[RuleFinding]:
     description="worktree_path must not trace back to result.clone_path (the clone root)",
     severity=Severity.ERROR,
 )
-def _check_clone_root_as_worktree(wf: Recipe) -> list[RuleFinding]:
+def _check_clone_root_as_worktree(ctx: ValidationContext) -> list[RuleFinding]:
     """Error when worktree_path for test_check/merge_worktree originates from clone_path.
 
     Builds a capture map by iterating recipe steps in declaration order.
     For each test_check or merge_worktree step, resolves the context variable
     used for worktree_path and checks whether it was captured from result.clone_path.
     """
+    wf = ctx.recipe
     captures: dict[str, str] = {}  # var_name -> capture expression
     findings: list[RuleFinding] = []
 
@@ -253,7 +256,7 @@ def _extract_context_var(value: str) -> str | None:
     ),
     severity=Severity.ERROR,
 )
-def _check_merge_base_unpublished(recipe: Recipe) -> list[RuleFinding]:
+def _check_merge_base_unpublished(ctx: ValidationContext) -> list[RuleFinding]:
     """Fire when a merge_worktree step uses a context variable as base_branch
     and no push_to_remote step that pushes the same variable precedes it on
     all reachable paths in the raw structural routing graph.
@@ -270,6 +273,7 @@ def _check_merge_base_unpublished(recipe: Recipe) -> list[RuleFinding]:
     5. If the merge step is reachable in this BFS, at least one path to it
        lacks a push barrier — fire the rule.
     """
+    recipe = ctx.recipe
     findings = []
     entry = next(iter(recipe.steps))
     step_names = set(recipe.steps.keys())

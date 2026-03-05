@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from autoskillit.recipe._api import list_all, load_and_validate, validate_from_path
+import autoskillit.recipe._api as _api
 from autoskillit.recipe.io import builtin_recipes_dir, list_recipes
 
 
@@ -54,10 +54,13 @@ class DefaultRecipeRepository:
     def load_and_validate(
         self, name: str, project_dir: Any, *, suppressed: Sequence[str] | None = None
     ) -> dict[str, Any]:
-        return load_and_validate(name, project_dir=project_dir, suppressed=suppressed)
+        recipe_info = self.find(name, project_dir)
+        return _api.load_and_validate(
+            name, project_dir=project_dir, suppressed=suppressed, recipe_info=recipe_info
+        )
 
     def validate_from_path(self, script_path: Any) -> dict[str, Any]:
-        return validate_from_path(script_path)
+        return _api.validate_from_path(script_path)
 
     def list_all(self, project_dir: Any | None = None) -> dict[str, Any]:
-        return list_all(project_dir=project_dir)
+        return _api.list_all(project_dir=project_dir)

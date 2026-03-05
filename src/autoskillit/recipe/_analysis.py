@@ -10,12 +10,27 @@ Neither contracts.py nor io.py imports _analysis.py, so no cycle exists.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from autoskillit.core import SKILL_TOOLS, get_logger
 from autoskillit.recipe.contracts import _CONTEXT_REF_RE, _RESULT_CAPTURE_RE
 from autoskillit.recipe.io import iter_steps_with_context  # noqa: F401 — re-exported for rules
 from autoskillit.recipe.schema import DataFlowReport, DataFlowWarning, Recipe
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class ValidationContext:
+    """Shared computation for a single validation pass.
+
+    Built once per ``run_semantic_rules`` invocation so that rules consuming
+    the step graph or dataflow report do not repeat those expensive builds.
+    """
+
+    recipe: Recipe
+    step_graph: dict[str, set[str]]
+    dataflow: DataFlowReport
 
 
 # ---------------------------------------------------------------------------
@@ -314,9 +329,19 @@ def _detect_implicit_handoffs(recipe: Recipe) -> list[DataFlowWarning]:
 # ---------------------------------------------------------------------------
 
 
-def analyze_dataflow(recipe: Recipe) -> DataFlowReport:
-    """Analyze pipeline data flow quality (non-blocking warnings)."""
-    graph = _build_step_graph(recipe)
+def analyze_dataflow(
+    recipe: Recipe,
+    *,
+    step_graph: dict[str, set[str]] | None = None,
+) -> DataFlowReport:
+    """Analyze pipeline data flow quality (non-blocking warnings).
+
+    Args:
+        recipe: The recipe to analyze.
+        step_graph: Optional pre-built routing graph. When provided, the
+            expensive ``_build_step_graph`` call is skipped.
+    """
+    graph = step_graph if step_graph is not None else _build_step_graph(recipe)
 
     warnings: list[DataFlowWarning] = []
     warnings.extend(_detect_dead_outputs(recipe, graph))
@@ -332,3 +357,14 @@ def analyze_dataflow(recipe: Recipe) -> DataFlowReport:
         )
 
     return DataFlowReport(warnings=warnings, summary=summary)
+
+
+def make_validation_context(recipe: Recipe) -> ValidationContext:
+    """Build a ``ValidationContext`` from a recipe.
+
+    Constructs the step graph and data-flow report once so that semantic
+    rules can share the pre-built objects without redundant computation.
+    """
+    step_graph = _build_step_graph(recipe)
+    dataflow = analyze_dataflow(recipe, step_graph=step_graph)
+    return ValidationContext(recipe=recipe, step_graph=step_graph, dataflow=dataflow)

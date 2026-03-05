@@ -11,6 +11,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from autoskillit.core import Severity
+
+# Imported at module level for type annotations (no circular import: _analysis.py does
+# not import registry.py). The runtime isinstance() check in run_semantic_rules also
+# requires this to be available as a concrete class, not just a TYPE_CHECKING stub.
+from autoskillit.recipe._analysis import ValidationContext  # noqa: E402
 from autoskillit.recipe.schema import DataFlowReport, Recipe
 
 
@@ -39,7 +44,7 @@ class RuleSpec:
     name: str
     description: str
     severity: Severity
-    check: Callable[[Recipe], list[RuleFinding]]
+    check: Callable[[ValidationContext], list[RuleFinding]]
 
 
 _RULE_REGISTRY: list[RuleSpec] = []
@@ -53,8 +58,8 @@ def semantic_rule(
     """Decorator that registers a semantic validation rule."""
 
     def decorator(
-        fn: Callable[[Recipe], list[RuleFinding]],
-    ) -> Callable[[Recipe], list[RuleFinding]]:
+        fn: Callable[[ValidationContext], list[RuleFinding]],
+    ) -> Callable[[ValidationContext], list[RuleFinding]]:
         _RULE_REGISTRY.append(
             RuleSpec(name=name, description=description, severity=severity, check=fn)
         )
@@ -63,11 +68,19 @@ def semantic_rule(
     return decorator
 
 
-def run_semantic_rules(wf: Recipe) -> list[RuleFinding]:
-    """Execute all registered semantic rules against a workflow."""
+def run_semantic_rules(wf: Recipe | ValidationContext) -> list[RuleFinding]:
+    """Execute all registered semantic rules against a workflow.
+
+    Accepts either a bare ``Recipe`` or a pre-built ``ValidationContext``.
+    When a ``Recipe`` is passed, a ``ValidationContext`` is built once and
+    shared across all rules, avoiding redundant graph and dataflow computation.
+    """
+    from autoskillit.recipe._analysis import make_validation_context
+
+    ctx = wf if isinstance(wf, ValidationContext) else make_validation_context(wf)
     findings: list[RuleFinding] = []
     for spec in _RULE_REGISTRY:
-        findings.extend(spec.check(wf))
+        findings.extend(spec.check(ctx))
     return findings
 
 

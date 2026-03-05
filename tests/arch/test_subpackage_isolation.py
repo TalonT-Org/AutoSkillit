@@ -91,6 +91,8 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
         "field",
         "dataclass",
         "get_logger",
+        "getLogger",  # stdlib logging.getLogger — safe module-level logger registration
+        "Lock",  # threading.Lock — safe module-level thread-safety primitive
         "version",
         "compile",
         "object",

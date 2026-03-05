@@ -152,9 +152,7 @@ def test_flush_session_log_uses_resolved_session_id(tmp_path):
 def test_flush_summary_includes_claude_code_log_for_real_session(tmp_path):
     """Flush with a real session_id produces claude_code_log in summary.json."""
     _flush(tmp_path, session_id="real-session-abc", cwd="/home/test/project")
-    summary = json.loads(
-        (tmp_path / "sessions" / "real-session-abc" / "summary.json").read_text()
-    )
+    summary = json.loads((tmp_path / "sessions" / "real-session-abc" / "summary.json").read_text())
     expected = str(
         Path.home() / ".claude" / "projects" / "-home-test-project" / "real-session-abc.jsonl"
     )

@@ -42,7 +42,10 @@ class TestClaudeCodeLogPath:
         from autoskillit.core.paths import claude_code_log_path
 
         result = claude_code_log_path(cwd="/home/user/my_project", session_id="abc-123")
-        assert result == Path.home() / ".claude" / "projects" / "-home-user-my-project" / "abc-123.jsonl"
+        assert (
+            result
+            == Path.home() / ".claude" / "projects" / "-home-user-my-project" / "abc-123.jsonl"
+        )
 
     def test_claude_code_log_path_with_fallback_session_id(self) -> None:
         from autoskillit.core.paths import claude_code_log_path

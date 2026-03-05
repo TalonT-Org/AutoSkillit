@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from autoskillit import cli
+from autoskillit.cli.app import _format_age
 
 _SCRIPT_YAML = """\
 name: test-script
@@ -84,11 +87,14 @@ class TestCLICook:
     def test_workspace_clean_removes_subdirs(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """T_WC1: workspace_clean removes all subdirs of autoskillit-runs/."""
+        """T_WC1: workspace_clean removes stale subdirs of autoskillit-runs/."""
         runs_dir = tmp_path / "autoskillit-runs"
         (runs_dir / "run-a").mkdir(parents=True)
         (runs_dir / "run-b").mkdir(parents=True)
-        cli.workspace_clean(dir=str(tmp_path))
+        old_time = time.time() - 6 * 3600
+        for d in (runs_dir / "run-a", runs_dir / "run-b"):
+            os.utime(d, (old_time, old_time))
+        cli.workspace_clean(dir=str(tmp_path), force=True)
         assert not (runs_dir / "run-a").exists()
         assert not (runs_dir / "run-b").exists()
 
@@ -109,8 +115,116 @@ class TestCLICook:
         monkeypatch.chdir(project_dir)
         runs_dir = tmp_path / "autoskillit-runs"
         (runs_dir / "run-x").mkdir(parents=True)
-        cli.workspace_clean()
+        old_time = time.time() - 6 * 3600
+        os.utime(runs_dir / "run-x", (old_time, old_time))
+        cli.workspace_clean(force=True)
         assert not (runs_dir / "run-x").exists()
+
+    def test_workspace_clean_recent_dirs_skipped(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """T_WC4: recent dirs (<5h) are not deleted, stale dirs (>5h) are."""
+        runs_dir = tmp_path / "autoskillit-runs"
+        (runs_dir / "recent").mkdir(parents=True)
+        (runs_dir / "stale").mkdir(parents=True)
+        old_time = time.time() - 6 * 3600
+        os.utime(runs_dir / "stale", (old_time, old_time))
+        cli.workspace_clean(dir=str(tmp_path), force=True)
+        assert (runs_dir / "recent").exists()
+        assert not (runs_dir / "stale").exists()
+
+    def test_workspace_clean_boundary_5h_is_stale(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """T_WC5: dir with mtime exactly 5h ago is stale (>=5h threshold)."""
+        runs_dir = tmp_path / "autoskillit-runs"
+        (runs_dir / "boundary").mkdir(parents=True)
+        boundary_time = time.time() - 5 * 3600
+        os.utime(runs_dir / "boundary", (boundary_time, boundary_time))
+        cli.workspace_clean(dir=str(tmp_path), force=True)
+        assert not (runs_dir / "boundary").exists()
+
+    def test_workspace_clean_skipped_dirs_printed(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """T_WC6: skipped (recent) dirs are printed with age."""
+        runs_dir = tmp_path / "autoskillit-runs"
+        (runs_dir / "recent-one").mkdir(parents=True)
+        recent_time = time.time() - 3600
+        os.utime(runs_dir / "recent-one", (recent_time, recent_time))
+        cli.workspace_clean(dir=str(tmp_path), force=True)
+        captured = capsys.readouterr()
+        assert "Skipped" in captured.out
+        assert "recent-one" in captured.out
+
+    def test_workspace_clean_will_remove_printed(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """T_WC7: stale dirs are printed as 'Will remove' with age."""
+        runs_dir = tmp_path / "autoskillit-runs"
+        (runs_dir / "old-one").mkdir(parents=True)
+        old_time = time.time() - 10 * 3600
+        os.utime(runs_dir / "old-one", (old_time, old_time))
+        cli.workspace_clean(dir=str(tmp_path), force=True)
+        captured = capsys.readouterr()
+        assert "Will remove" in captured.out
+        assert "old-one" in captured.out
+
+    def test_workspace_clean_confirm_defaults_no(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T_WC8: empty input at confirmation prompt defaults to N (no deletion)."""
+        runs_dir = tmp_path / "autoskillit-runs"
+        (runs_dir / "stale").mkdir(parents=True)
+        old_time = time.time() - 6 * 3600
+        os.utime(runs_dir / "stale", (old_time, old_time))
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        cli.workspace_clean(dir=str(tmp_path))
+        assert (runs_dir / "stale").exists()
+
+    def test_workspace_clean_confirm_accepts_y(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T_WC9: 'y' at confirmation prompt deletes stale dirs."""
+        runs_dir = tmp_path / "autoskillit-runs"
+        (runs_dir / "stale").mkdir(parents=True)
+        old_time = time.time() - 6 * 3600
+        os.utime(runs_dir / "stale", (old_time, old_time))
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "y")
+        cli.workspace_clean(dir=str(tmp_path))
+        assert not (runs_dir / "stale").exists()
+
+    def test_workspace_clean_force_skips_prompt(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T_WC10: --force deletes without calling input()."""
+        runs_dir = tmp_path / "autoskillit-runs"
+        (runs_dir / "stale").mkdir(parents=True)
+        old_time = time.time() - 6 * 3600
+        os.utime(runs_dir / "stale", (old_time, old_time))
+        monkeypatch.setattr(
+            "builtins.input", lambda _prompt="": (_ for _ in ()).throw(AssertionError("input() called"))
+        )
+        cli.workspace_clean(dir=str(tmp_path), force=True)
+        assert not (runs_dir / "stale").exists()
+
+    def test_workspace_clean_no_stale_nothing_to_clean(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """T_WC11: only recent dirs prints nothing-to-clean message."""
+        runs_dir = tmp_path / "autoskillit-runs"
+        (runs_dir / "recent").mkdir(parents=True)
+        cli.workspace_clean(dir=str(tmp_path), force=True)
+        captured = capsys.readouterr()
+        assert "Nothing to clean" in captured.out
+        assert (runs_dir / "recent").exists()
+
+    def test_format_age_various_values(self) -> None:
+        """T_WC14: _format_age returns human-readable age strings."""
+        assert _format_age(30 * 60) == "30m ago"
+        assert _format_age(2 * 3600 + 14 * 60) == "2h 14m ago"
+        assert _format_age(3 * 86400) == "3d ago"
+        assert _format_age(5 * 3600) == "5h ago"
 
     # --- T6: skills list CLI output ---
 

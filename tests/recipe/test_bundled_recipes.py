@@ -256,6 +256,26 @@ class TestImplementationPipelineStructure:
         create_branch = recipe.steps["create_branch"]
         assert create_branch.skip_when_false == "inputs.open_pr"
 
+    def test_create_branch_does_not_use_run_name_verbatim(self, recipe) -> None:
+        """create_branch must not use inputs.run_name as the full branch name."""
+        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        assert "git checkout -b ${{ inputs.run_name }} &&" not in cmd
+
+    def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
+        """create_branch must check remote for existing branches."""
+        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        assert "git ls-remote" in cmd
+
+    def test_create_branch_references_issue_number(self, recipe) -> None:
+        """create_branch cmd must reference context.issue_number for branch naming."""
+        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        assert "context.issue_number" in cmd
+
+    def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
+        """create_branch must use inputs.run_name as a prefix in branch naming."""
+        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        assert "inputs.run_name" in cmd
+
     def test_ip_no_push_to_remote_step_after_open_pr_in_routing_chain(self, recipe) -> None:
         """No push_to_remote step must be reachable from open_pr_step's on_success chain.
         After open_pr_step, we must be in the cleanup/done path only."""
@@ -460,6 +480,26 @@ class TestInvestigateFirstStructure:
             "it must capture branch_name for downstream audit_impl use"
         )
 
+    def test_create_branch_does_not_use_run_name_verbatim(self, recipe) -> None:
+        """create_branch must not use inputs.run_name as the full branch name."""
+        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        assert "git checkout -b ${{ inputs.run_name }} &&" not in cmd
+
+    def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
+        """create_branch must check remote for existing branches."""
+        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        assert "git ls-remote" in cmd
+
+    def test_create_branch_references_issue_number(self, recipe) -> None:
+        """create_branch cmd must reference context.issue_number for branch naming."""
+        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        assert "context.issue_number" in cmd
+
+    def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
+        """create_branch must use inputs.run_name as a prefix in branch naming."""
+        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        assert "inputs.run_name" in cmd
+
     def test_if_c1_implement_uses_no_merge_skill(self, recipe) -> None:
         """T_IF_C1: implement step must use implement-worktree-no-merge.
 
@@ -530,6 +570,26 @@ class TestAuditAndFixStructure:
             "merge step must route to push — the push step propagates the merged branch "
             "from the clone back to the upstream remote"
         )
+
+    def test_create_branch_does_not_use_run_name_verbatim(self, recipe) -> None:
+        """create_branch must not use inputs.run_name as the full branch name."""
+        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        assert "git checkout -b ${{ inputs.run_name }} &&" not in cmd
+
+    def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
+        """create_branch must check remote for existing branches."""
+        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        assert "git ls-remote" in cmd
+
+    def test_create_branch_references_issue_number(self, recipe) -> None:
+        """create_branch cmd must reference context.issue_number for branch naming."""
+        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        assert "context.issue_number" in cmd
+
+    def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
+        """create_branch must use inputs.run_name as a prefix in branch naming."""
+        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        assert "inputs.run_name" in cmd
 
 
 # ---------------------------------------------------------------------------

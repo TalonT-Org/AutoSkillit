@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:6a4e8a43bfa641598ac4dea84978d4e424968b0ac4e5f1738cfa3ea40fc6275d -->
+<!-- autoskillit-recipe-hash: sha256:436fed625e095eaf1c010df865042b0bf2085c24defdb4e98899a7197c77da52 -->
 <!-- autoskillit-diagram-format: v2 -->
 ## audit-and-fix
 Audit codebase, investigate findings, plan fixes, implement in a feature branch, and open a PR.
@@ -103,7 +103,8 @@ Audit codebase, investigate findings, plan fixes, implement in a feature branch,
 |------|-------------|----------|---------|
 | source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel.
  | no |  |
-| run_name | Name prefix for this pipeline run (used in clone directory name and feature branch name) | no | audit-fix |
+| run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. audit-fix/124 or audit-fix/20260304) and in the clone directory name.
+ | no | audit-fix |
 | base_branch | Branch to branch off of and PR target | no | main |
 | audit_type | Type of audit to run (arch, tests, cohesion, defense-standards) | no | arch |
 | open_pr | Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false) | no | true |
@@ -113,5 +114,5 @@ Audit codebase, investigate findings, plan fixes, implement in a feature branch,
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All code changes and investigation happen through headless sessions via run_skill.
 - Route to on_failure when a step fails — the downstream skill (e.g., resolve-failures) has diagnostic access that the orchestrator does not. Do not investigate or attempt to fix failures directly.
 - SEQUENTIAL EXECUTION: complete full cycle per part before advancing. For each plan_part, run the full cycle (implement → test → merge) before starting the next part. Do NOT batch-implement all parts upfront.
-- By default (open_pr=true), a feature branch named from inputs.run_name is created. All worktree merges target the feature branch (context.merge_target), not base_branch directly. The push step publishes the feature branch, then open_pr_step opens a PR to base_branch. When open_pr=false, merges target base_branch directly and open_pr_step is skipped.
+- By default (open_pr=true), a feature branch is created with a unique name derived from inputs.run_name and context.issue_number (e.g. audit-fix/124) or a date suffix (e.g. audit-fix/20260304) when no issue is available. All worktree merges target the feature branch (context.merge_target), not base_branch directly. The push step publishes the feature branch, then open_pr_step opens a PR to base_branch. When open_pr=false, merges target base_branch directly and open_pr_step is skipped.
 - SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly off-limits. Never run any command in source_dir — no git checkout, git fetch, git reset, git pull, run_cmd, run_skill, or any other operation. All work — skill invocations, git operations, file reads — happens exclusively in the clone (work_dir). source_dir is used ONLY to read the remote URL inside push_to_remote.

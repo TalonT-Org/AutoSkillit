@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from datetime import UTC
 from pathlib import Path
 from typing import Annotated
@@ -299,20 +300,35 @@ def workspace_init(path: str):
     print(f"Reset guard marker created: {marker}")
 
 
+def _format_age(seconds: float) -> str:
+    """Convert an age in seconds to a human-readable string."""
+    if seconds < 3600:
+        return f"{int(seconds // 60)}m ago"
+    if seconds < 86400:
+        h = int(seconds // 3600)
+        m = int((seconds % 3600) // 60)
+        return f"{h}h {m}m ago" if m else f"{h}h ago"
+    return f"{int(seconds // 86400)}d ago"
+
+
 @workspace_app.command(name="clean")
 def workspace_clean(
     *,
     dir: Annotated[str | None, Parameter(name=["--dir"])] = None,
+    force: Annotated[bool, Parameter(name=["--force", "-f"])] = False,
 ) -> None:
     """Prune autoskillit-runs/ directories.
 
-    Removes all subdirectories of autoskillit-runs/ under the given path.
-    Defaults to the parent of the current working directory.
+    Partitions subdirectories of autoskillit-runs/ into stale (>=5h old)
+    and recent (<5h), displays both lists with ages, and requires
+    confirmation before deleting stale directories.
 
     Parameters
     ----------
     dir
         Base directory to search for autoskillit-runs/ (default: parent of CWD).
+    force
+        Skip the confirmation prompt and delete stale directories immediately.
     """
     base = Path(dir).resolve() if dir else Path.cwd().parent
     runs_dir = base / "autoskillit-runs"
@@ -321,24 +337,54 @@ def workspace_clean(
         print(f"No autoskillit-runs/ directory found under: {base}")
         return
 
-    count = 0
-    errors = 0
+    now = time.time()
+    threshold = 5 * 3600  # 5 hours in seconds
+    stale: list[tuple[Path, float]] = []
+    recent: list[tuple[Path, float]] = []
     for entry in sorted(runs_dir.iterdir()):
         if entry.is_dir():
-            try:
-                shutil.rmtree(entry)
-                print(f"Removed: {entry}")
-                count += 1
-            except OSError as exc:
-                print(f"Failed to remove {entry}: {exc}", file=sys.stderr)
-                errors += 1
+            age = now - entry.stat().st_mtime
+            if age >= threshold:
+                stale.append((entry, age))
+            else:
+                recent.append((entry, age))
 
-    if count == 0 and errors == 0:
+    if recent:
+        print("Skipped (modified < 5h ago):")
+        for path, age in recent:
+            print(f"  {path.relative_to(runs_dir.parent)}  ({_format_age(age)})")
+        print()
+
+    if not stale:
         print(f"Nothing to clean in {runs_dir}")
-    else:
-        suffix = "ies" if count != 1 else "y"
-        err_note = f" ({errors} error(s))" if errors else ""
-        print(f"\nCleaned {count} director{suffix}{err_note}")
+        return
+
+    print("Will remove:")
+    for path, age in stale:
+        print(f"  {path.relative_to(runs_dir.parent)}  ({_format_age(age)})")
+    print()
+
+    if not force:
+        suffix = "ies" if len(stale) != 1 else "y"
+        answer = input(f"Remove {len(stale)} director{suffix}? [y/N]: ")
+        if answer.strip().lower() != "y":
+            print("Aborted.")
+            return
+
+    count = 0
+    errors = 0
+    for path, _ in stale:
+        try:
+            shutil.rmtree(path)
+            print(f"Removed: {path}")
+            count += 1
+        except OSError as exc:
+            print(f"Failed to remove {path}: {exc}", file=sys.stderr)
+            errors += 1
+
+    suffix = "ies" if count != 1 else "y"
+    err_note = f" ({errors} error(s))" if errors else ""
+    print(f"\nCleaned {count} director{suffix}{err_note}")
 
 
 @recipes_app.command(name="list")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -117,7 +119,14 @@ async def _apply_triage_gate(
         return result
 
     cache_path = Path.cwd() / ".autoskillit" / "temp" / "recipe_staleness_cache.json"
+    t0 = time.perf_counter()
     cached = read_staleness_cache(cache_path, name)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "_apply_triage_gate[%s] cache_read: %.1fms",
+            name,
+            (time.perf_counter() - t0) * 1000,
+        )
 
     if cached is not None and cached.triage_result == "cosmetic":
         result["suggestions"] = [
@@ -141,7 +150,14 @@ async def _apply_triage_gate(
 
             from autoskillit._llm_triage import triage_staleness
 
+            t_llm = time.perf_counter()
             triage = await triage_staleness(hash_items)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "_apply_triage_gate[%s] llm_triage: %.1fms",
+                    name,
+                    (time.perf_counter() - t_llm) * 1000,
+                )
             all_cosmetic = all(not r.get("meaningful", True) for r in triage)
             triage_str = "cosmetic" if all_cosmetic else "meaningful"
             current_hash = compute_recipe_hash(recipe_info.path)

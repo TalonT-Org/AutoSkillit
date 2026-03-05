@@ -7,9 +7,9 @@ from autoskillit.core import (
     Severity,
     get_logger,
 )
+from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
 
@@ -26,7 +26,8 @@ _WORKTREE_CREATING_SKILLS = frozenset(
     description="The 'model' field only affects run_skill steps.",
     severity=Severity.WARNING,
 )
-def _check_model_on_non_skill(wf: Recipe) -> list[RuleFinding]:
+def _check_model_on_non_skill(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
         if step.model and step.tool not in SKILL_TOOLS:
@@ -50,7 +51,8 @@ def _check_model_on_non_skill(wf: Recipe) -> list[RuleFinding]:
     description="Worktree-creating skills must not have retries > 0.",
     severity=Severity.ERROR,
 )
-def _check_retries_on_worktree_creating_skill(wf: Recipe) -> list[RuleFinding]:
+def _check_retries_on_worktree_creating_skill(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
         if step.tool not in SKILL_TOOLS:
@@ -81,7 +83,8 @@ def _check_retries_on_worktree_creating_skill(wf: Recipe) -> list[RuleFinding]:
     description="retry-worktree cwd must use a context variable so git runs inside the worktree.",
     severity=Severity.ERROR,
 )
-def _check_retry_worktree_cwd(wf: Recipe) -> list[RuleFinding]:
+def _check_retry_worktree_cwd(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
         if step.tool not in SKILL_TOOLS:

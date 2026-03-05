@@ -8,7 +8,7 @@ from autoskillit.core import (
     Severity,
     get_logger,
 )
-from autoskillit.recipe._analysis import analyze_dataflow
+from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     _RESULT_CAPTURE_RE,
     get_skill_contract,
@@ -16,7 +16,6 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
 
@@ -26,7 +25,8 @@ logger = get_logger(__name__)
     description="Pipeline constraints must enumerate forbidden native tools by name.",
     severity=Severity.WARNING,
 )
-def _check_weak_constraint_text(wf: Recipe) -> list[RuleFinding]:
+def _check_weak_constraint_text(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     if not wf.kitchen_rules:
         return []
 
@@ -54,7 +54,8 @@ def _check_weak_constraint_text(wf: Recipe) -> list[RuleFinding]:
     description="result.X captures must match skill output keys in skill_contracts.yaml",
     severity=Severity.WARNING,
 )
-def _check_capture_output_coverage(wf: Recipe) -> list[RuleFinding]:
+def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     findings: list[RuleFinding] = []
     manifest = load_bundled_manifest()
 
@@ -128,9 +129,8 @@ def _check_capture_output_coverage(wf: Recipe) -> list[RuleFinding]:
     description="Captured variable never consumed downstream",
     severity=Severity.ERROR,
 )
-def _check_dead_output(wf: Recipe) -> list[RuleFinding]:
+def _check_dead_output(ctx: ValidationContext) -> list[RuleFinding]:
     """Error when any captured context variable is never consumed downstream."""
-    report = analyze_dataflow(wf)
     return [
         RuleFinding(
             rule="dead-output",
@@ -138,7 +138,7 @@ def _check_dead_output(wf: Recipe) -> list[RuleFinding]:
             step_name=w.step_name,
             message=w.message,
         )
-        for w in report.warnings
+        for w in ctx.dataflow.warnings
         if w.code == "DEAD_OUTPUT"
     ]
 
@@ -148,8 +148,9 @@ def _check_dead_output(wf: Recipe) -> list[RuleFinding]:
     description="Skill with declared outputs missing capture block",
     severity=Severity.ERROR,
 )
-def _check_implicit_handoff(wf: Recipe) -> list[RuleFinding]:
+def _check_implicit_handoff(ctx: ValidationContext) -> list[RuleFinding]:
     """Error when a skill step has contract outputs but no capture: block."""
+    wf = ctx.recipe
     try:
         manifest = load_bundled_manifest()
     except Exception:
@@ -193,7 +194,8 @@ def _check_implicit_handoff(wf: Recipe) -> list[RuleFinding]:
     description="Multi-part plan recipes must declare iteration conventions.",
     severity=Severity.ERROR,
 )
-def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
+def _check_multipart_iteration_notes(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     _MULTIPART_SKILLS = {"/autoskillit:make-plan", "/autoskillit:rectify"}
     findings: list[RuleFinding] = []
 
@@ -283,7 +285,8 @@ def _check_multipart_iteration_notes(wf: Recipe) -> list[RuleFinding]:
     description="merge_worktree steps should capture cleanup_succeeded to track orphaned results.",
     severity=Severity.WARNING,
 )
-def _check_merge_cleanup_captured(wf: Recipe) -> list[RuleFinding]:
+def _check_merge_cleanup_captured(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     findings: list[RuleFinding] = []
 
     for step_name, step in wf.steps.items():
@@ -318,8 +321,7 @@ def _check_merge_cleanup_captured(wf: Recipe) -> list[RuleFinding]:
     ),
     severity=Severity.WARNING,
 )
-def _check_stale_ref_after_merge(wf: Recipe) -> list[RuleFinding]:
-    report = analyze_dataflow(wf)
+def _check_stale_ref_after_merge(ctx: ValidationContext) -> list[RuleFinding]:
     return [
         RuleFinding(
             rule="stale-ref-after-merge",
@@ -327,6 +329,6 @@ def _check_stale_ref_after_merge(wf: Recipe) -> list[RuleFinding]:
             step_name=w.step_name,
             message=w.message,
         )
-        for w in report.warnings
+        for w in ctx.dataflow.warnings
         if w.code == "REF_INVALIDATED"
     ]

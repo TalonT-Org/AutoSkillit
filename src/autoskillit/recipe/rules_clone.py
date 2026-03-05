@@ -8,8 +8,8 @@ from autoskillit.core import (
     Severity,
     get_logger,
 )
+from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
 
@@ -19,7 +19,8 @@ logger = get_logger(__name__)
     description="Multi-part plan recipes must capture plan_parts via capture_list.",
     severity=Severity.ERROR,
 )
-def _check_plan_parts_captured(wf: Recipe) -> list[RuleFinding]:
+def _check_plan_parts_captured(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     _MULTIPART_SKILLS = {"/autoskillit:make-plan", "/autoskillit:rectify"}
     findings: list[RuleFinding] = []
 
@@ -52,7 +53,8 @@ def _check_plan_parts_captured(wf: Recipe) -> list[RuleFinding]:
     "run_skill/run_skill_retry step has a skill_command that does not start with '/'",
     severity=Severity.WARNING,
 )
-def _check_skill_command_prefix(wf: Recipe) -> list[RuleFinding]:
+def _check_skill_command_prefix(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     findings = []
     for step_name, step in wf.steps.items():
         if step.tool not in SKILL_TOOLS:
@@ -82,7 +84,8 @@ def _check_skill_command_prefix(wf: Recipe) -> list[RuleFinding]:
     "push_to_remote missing remote_url; implicit lookup fails for non-bare repos",
     severity=Severity.WARNING,
 )
-def _check_push_missing_explicit_remote_url(recipe: Recipe) -> list[RuleFinding]:
+def _check_push_missing_explicit_remote_url(ctx: ValidationContext) -> list[RuleFinding]:
+    recipe = ctx.recipe
     return [
         RuleFinding("push-missing-explicit-remote-url", Severity.WARNING, n, "missing remote_url")
         for n, step in recipe.steps.items()

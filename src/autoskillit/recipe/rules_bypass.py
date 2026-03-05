@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from autoskillit.core import Severity
+from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.recipe.schema import Recipe
 
 
 @semantic_rule(
@@ -15,7 +15,8 @@ from autoskillit.recipe.schema import Recipe
     ),
     severity=Severity.ERROR,
 )
-def _check_optional_without_skip_when(wf: Recipe) -> list[RuleFinding]:
+def _check_optional_without_skip_when(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     findings = []
     for name, step in wf.steps.items():
         if step.optional and not step.skip_when_false:
@@ -42,7 +43,8 @@ def _check_optional_without_skip_when(wf: Recipe) -> list[RuleFinding]:
     ),
     severity=Severity.ERROR,
 )
-def _check_skip_when_false_undeclared(wf: Recipe) -> list[RuleFinding]:
+def _check_skip_when_false_undeclared(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
     findings = []
     declared_ingredients = set(wf.ingredients.keys())
     for name, step in wf.steps.items():

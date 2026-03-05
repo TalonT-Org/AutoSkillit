@@ -54,7 +54,10 @@ class DefaultRecipeRepository:
     def load_and_validate(
         self, name: str, project_dir: Any, *, suppressed: Sequence[str] | None = None
     ) -> dict[str, Any]:
-        return load_and_validate(name, project_dir=project_dir, suppressed=suppressed)
+        recipe_info = self.find(name, project_dir)
+        return load_and_validate(
+            name, project_dir=project_dir, suppressed=suppressed, recipe_info=recipe_info
+        )
 
     def validate_from_path(self, script_path: Any) -> dict[str, Any]:
         return validate_from_path(script_path)

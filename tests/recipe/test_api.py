@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 # Minimal recipe YAML with kitchen_rules
@@ -70,3 +71,168 @@ def test_load_and_validate_omits_kitchen_rules_when_empty(tmp_path):
     result = load_and_validate("test-recipe-no-rules", project_dir=tmp_path)
 
     assert "kitchen_rules" not in result, "kitchen_rules should be absent when recipe has none"
+
+
+# ---------------------------------------------------------------------------
+# Minimal recipe fixture for cache tests
+# ---------------------------------------------------------------------------
+
+MINIMAL_RECIPE_YAML = """\
+name: myrecipe
+description: minimal test recipe
+autoskillit_version: "0.2.0"
+kitchen_rules:
+  - Never use native tools
+steps:
+  stop:
+    action: stop
+    message: done
+"""
+
+
+# ---------------------------------------------------------------------------
+# Cache tests
+# ---------------------------------------------------------------------------
+
+
+def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkeypatch):
+    """Second call for unchanged recipe returns cached result without re-running pipeline."""
+    import autoskillit.recipe._api as api_mod
+
+    api_mod._LOAD_CACHE.clear()
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    recipe_yaml = recipes_dir / "myrecipe.yaml"
+    recipe_yaml.write_text(MINIMAL_RECIPE_YAML)
+
+    calls = []
+    real_validate = api_mod.validate_recipe
+    def counting_validate(recipe):
+        calls.append(1)
+        return real_validate(recipe)
+    monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
+
+    api_mod.load_and_validate("myrecipe", tmp_path)
+    api_mod.load_and_validate("myrecipe", tmp_path)
+
+    assert len(calls) == 1  # validate_recipe called only once across two loads
+
+
+def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, monkeypatch):
+    """Changing the recipe file mtime causes a cache miss."""
+    import autoskillit.recipe._api as api_mod
+
+    api_mod._LOAD_CACHE.clear()
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    recipe_yaml = recipes_dir / "myrecipe.yaml"
+    recipe_yaml.write_text(MINIMAL_RECIPE_YAML)
+
+    calls = []
+    real_validate = api_mod.validate_recipe
+    def counting_validate(recipe):
+        calls.append(1)
+        return real_validate(recipe)
+    monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
+
+    api_mod.load_and_validate("myrecipe", tmp_path)
+    recipe_yaml.touch()
+    api_mod.load_and_validate("myrecipe", tmp_path)
+
+    assert len(calls) == 2  # both calls ran full pipeline
+
+
+def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, monkeypatch):
+    """Package version change invalidates the cache."""
+    import autoskillit.recipe._api as api_mod
+
+    api_mod._LOAD_CACHE.clear()
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
+
+    calls = []
+    real_validate = api_mod.validate_recipe
+    def counting_validate(recipe):
+        calls.append(1)
+        return real_validate(recipe)
+    monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
+
+    api_mod.load_and_validate("myrecipe", tmp_path)
+    monkeypatch.setattr(api_mod, "_get_pkg_version", lambda: "99.99.99")
+    api_mod.load_and_validate("myrecipe", tmp_path)
+
+    assert len(calls) == 2
+
+
+def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monkeypatch):
+    """Adding a new recipe file to the project directory invalidates the cache."""
+    import autoskillit.recipe._api as api_mod
+
+    api_mod._LOAD_CACHE.clear()
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
+
+    calls = []
+    real_validate = api_mod.validate_recipe
+    def counting_validate(recipe):
+        calls.append(1)
+        return real_validate(recipe)
+    monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
+
+    api_mod.load_and_validate("myrecipe", tmp_path)
+    (recipes_dir / "newrecipe.yaml").write_text(MINIMAL_RECIPE_YAML.replace("myrecipe", "newrecipe"))
+    api_mod.load_and_validate("myrecipe", tmp_path)
+
+    assert len(calls) == 2
+
+
+# ---------------------------------------------------------------------------
+# Stage timing test
+# ---------------------------------------------------------------------------
+
+
+def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, caplog):
+    """DEBUG logging emits per-stage timing messages for load_and_validate."""
+    import autoskillit.recipe._api as api_mod
+
+    api_mod._LOAD_CACHE.clear()
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
+
+    with caplog.at_level(logging.DEBUG, logger="autoskillit.recipe._api"):
+        api_mod.load_and_validate("myrecipe", tmp_path)
+
+    timing_messages = [r.message for r in caplog.records if "elapsed" in r.message.lower() or "ms" in r.message]
+    assert len(timing_messages) >= 4  # at least find, parse, validate, semantic rules
+
+
+# ---------------------------------------------------------------------------
+# Repository routing test
+# ---------------------------------------------------------------------------
+
+
+def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
+    """DefaultRecipeRepository.load_and_validate calls self.find() and passes RecipeInfo to _api."""
+    from autoskillit.recipe import _api as api_mod
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    captured = {}
+    real_fn = api_mod.load_and_validate
+    def capturing_fn(name, project_dir, *, suppressed=None, recipe_info=None):
+        captured["recipe_info"] = recipe_info
+        return real_fn(name, project_dir, suppressed=suppressed, recipe_info=recipe_info)
+    monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)
+
+    repo = DefaultRecipeRepository()
+    repo.load_and_validate("smoke-test", Path.cwd())
+
+    assert captured.get("recipe_info") is not None
+    assert captured["recipe_info"].name == "smoke-test"

@@ -9,7 +9,12 @@ from __future__ import annotations
 from autoskillit.core import (
     get_logger,
 )
-from autoskillit.recipe._analysis import _build_step_graph, analyze_dataflow  # noqa: F401
+from autoskillit.recipe._analysis import (  # noqa: F401
+    ValidationContext,
+    _build_step_graph,
+    analyze_dataflow,
+    make_validation_context,
+)
 from autoskillit.recipe.contracts import (
     _CONTEXT_REF_RE,
     _INPUT_REF_RE,
@@ -36,6 +41,7 @@ logger = get_logger(__name__)
 __all__ = [
     "RuleFinding",
     "RuleSpec",
+    "ValidationContext",
     "_RULE_REGISTRY",
     "_build_step_graph",
     "analyze_dataflow",
@@ -43,6 +49,7 @@ __all__ = [
     "compute_recipe_validity",
     "filter_version_rule",
     "findings_to_dicts",
+    "make_validation_context",
     "run_semantic_rules",
     "semantic_rule",
 ]

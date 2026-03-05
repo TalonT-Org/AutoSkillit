@@ -20,6 +20,7 @@ from autoskillit.recipe.schema import (
 )
 from autoskillit.recipe.validator import (
     analyze_dataflow,
+    run_semantic_rules,
     validate_recipe,
 )
 
@@ -767,3 +768,114 @@ class TestPredicateBuildStepGraph:
         assert "assess" in graph["merge"]
         assert "cleanup" in graph["merge"]
         assert "push" in graph["merge"]
+
+
+# ---------------------------------------------------------------------------
+# ValidationContext tests
+# ---------------------------------------------------------------------------
+
+
+def test_run_semantic_rules_builds_step_graph_exactly_once(monkeypatch):
+    """_build_step_graph is called only once regardless of how many rules need it."""
+    from autoskillit.recipe import _analysis
+
+    call_count = []
+    real_fn = _analysis._build_step_graph
+
+    def counting_fn(recipe):
+        call_count.append(1)
+        return real_fn(recipe)
+
+    monkeypatch.setattr(_analysis, "_build_step_graph", counting_fn)
+
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "description": "test",
+            "autoskillit_version": "0.2.0",
+            "kitchen_rules": ["Never use native tools"],
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        }
+    )
+    run_semantic_rules(recipe)
+
+    assert len(call_count) == 1
+
+
+def test_run_semantic_rules_calls_analyze_dataflow_exactly_once(monkeypatch):
+    """analyze_dataflow is called only once regardless of how many rules consume it."""
+    from autoskillit.recipe import _analysis
+
+    call_count = []
+    real_fn = _analysis.analyze_dataflow
+
+    def counting_fn(recipe, **kwargs):
+        call_count.append(1)
+        return real_fn(recipe, **kwargs)
+
+    monkeypatch.setattr(_analysis, "analyze_dataflow", counting_fn)
+
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "description": "test",
+            "autoskillit_version": "0.2.0",
+            "kitchen_rules": ["Never use native tools"],
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        }
+    )
+    run_semantic_rules(recipe)
+
+    assert len(call_count) == 1
+
+
+def test_validation_context_exposes_recipe_step_graph_and_dataflow():
+    """ValidationContext contains recipe, step_graph, and dataflow attributes."""
+    from autoskillit.recipe._analysis import ValidationContext, make_validation_context
+
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "description": "test",
+            "autoskillit_version": "0.2.0",
+            "kitchen_rules": ["Never use native tools"],
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        }
+    )
+    ctx = make_validation_context(recipe)
+
+    assert isinstance(ctx, ValidationContext)
+    assert ctx.recipe is recipe
+    assert isinstance(ctx.step_graph, dict)
+    assert hasattr(ctx.dataflow, "warnings")
+
+
+def test_analyze_dataflow_accepts_prebuilt_step_graph():
+    """analyze_dataflow can reuse a pre-built step_graph to avoid duplicate computation."""
+    from autoskillit.recipe._analysis import _build_step_graph, analyze_dataflow
+
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "description": "test",
+            "autoskillit_version": "0.2.0",
+            "kitchen_rules": ["Never use native tools"],
+            "steps": {
+                "run": {
+                    "tool": "run_skill",
+                    "capture": {"wp": "${{ result.worktree_path }}"},
+                    "on_success": "use_it",
+                },
+                "use_it": {
+                    "tool": "test_check",
+                    "with": {"worktree_path": "${{ context.wp }}"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "done"},
+            },
+        }
+    )
+    graph = _build_step_graph(recipe)
+    report1 = analyze_dataflow(recipe, step_graph=graph)
+    report2 = analyze_dataflow(recipe)
+    assert report1.warnings == report2.warnings

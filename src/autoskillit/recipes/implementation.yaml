@@ -17,7 +17,10 @@ ingredients:
     required: false
     default: ""
   run_name:
-    description: Name prefix for this pipeline run (used in clone directory name)
+    description: >
+      Name prefix for this pipeline run. Used as the first path component
+      of the feature branch name (e.g. impl/124 or impl/20260304) and
+      in the clone directory name.
     default: "impl"
   base_branch:
     description: Branch to merge into (defaults to current branch)
@@ -50,7 +53,13 @@ kitchen_rules:
   - "When make_groups is false, task input is required."
   - "When make_groups is true, source_doc input is required."
   - "Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront."
-  - "By default (open_pr=true), a feature branch named from inputs.run_name is created. All worktree merges target the feature branch (context.merge_target), not base_branch directly. The push step publishes the feature branch, then open_pr_step opens a PR to base_branch. When open_pr=false, merges target base_branch directly and open_pr_step is skipped."
+  - "By default (open_pr=true), a feature branch is created with a unique name
+    derived from inputs.run_name and context.issue_number (e.g. impl/124) or
+    a date suffix (e.g. impl/20260304) when no issue is available. All worktree
+    merges target the feature branch (context.merge_target), not base_branch
+    directly. The push step publishes the feature branch, then open_pr_step
+    opens a PR to base_branch. When open_pr=false, merges target base_branch
+    directly and open_pr_step is skipped."
   - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
     off-limits. Never run any command in source_dir — no git checkout, git
     fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
@@ -131,7 +140,23 @@ steps:
   create_branch:
     tool: run_cmd
     with:
-      cmd: "git checkout -b ${{ inputs.run_name }} && echo ${{ inputs.run_name }}"
+      cmd: >-
+        PREFIX="${{ inputs.run_name }}" &&
+        ISSUE="${{ context.issue_number }}" &&
+        REMOTE="${{ context.remote_url }}" &&
+        if [ -n "$ISSUE" ]; then
+          BRANCH="${PREFIX}/${ISSUE}"
+        else
+          BRANCH="${PREFIX}/$(date +%Y%m%d)"
+        fi &&
+        CANDIDATE="$BRANCH" &&
+        i=1 &&
+        while git ls-remote --heads "$REMOTE" "$CANDIDATE" 2>/dev/null | grep -q .; do
+          CANDIDATE="${BRANCH}-${i}" &&
+          i=$((i + 1))
+        done &&
+        git checkout -b "$CANDIDATE" &&
+        printf '%s' "$CANDIDATE"
       cwd: "${{ context.work_dir }}"
     capture:
       merge_target: "${{ result.stdout }}"
@@ -140,12 +165,15 @@ steps:
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Runs by default (open_pr=true). Skipped when open_pr=false.
-      Creates the feature branch (git checkout -b {run_name}) and captures the branch name
-      as context.merge_target, overriding the fallback set by set_merge_target.
-      All subsequent merge/push steps target this feature branch.
-      When open_pr='false': this step is skipped; context.merge_target retains base_branch,
-      so merge_worktree and push_to_remote target base_branch directly.
+      Computes a unique branch name and checks out the branch.
+      When context.issue_number is available (from fetch_issue), the branch
+      is named {run_name}/{issue_number} (e.g. impl/124). When fetch_issue
+      was skipped (no issue_url), substitute an empty string for
+      context.issue_number — the shell script falls back to
+      {run_name}/{YYYYMMDD} (e.g. impl/20260304). Checks the remote for
+      existing branches with the same name and appends -1, -2, etc. for
+      collision avoidance. Captures the final branch name as merge_target,
+      overriding the fallback set by set_merge_target.
 
   push_merge_target:
     tool: push_to_remote

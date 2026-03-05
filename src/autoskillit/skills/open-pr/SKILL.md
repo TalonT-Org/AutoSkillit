@@ -74,6 +74,21 @@ git diff --name-only {base_branch}..{feature_branch}
 Collect the list of changed file paths. If the command fails or returns empty, proceed with
 an empty file list (the PR body will note that no diff was available).
 
+Then classify changed files by status:
+
+```bash
+# Files added (new)
+git diff --diff-filter=A --name-only {base_branch}..{feature_branch}
+```
+
+```bash
+# Files modified
+git diff --diff-filter=M --name-only {base_branch}..{feature_branch}
+```
+
+Store these as two separate lists: `new_files` (added) and `modified_files`. The existing
+`changed_files` list (all files) is retained for lens selection in Step 4.
+
 ### Step 4: Select Arch-Lens Lenses
 
 Spawn a subagent (Task tool, model: sonnet) with the list of changed file paths and the
@@ -86,10 +101,13 @@ repository-access, scenarios, security, state-lifecycle
 ```
 
 Instruct the subagent to return 1–3 lens names. Only include a lens if at least one changed file maps to that lens's concern — if no files clearly map to a given lens, omit it. Choose as few as are genuinely relevant; more is not better.
+
+**Development lens guard:** The `development` lens must ONLY be selected if at least one changed file matches a build/test configuration pattern: `pyproject.toml`, `Taskfile*`, `conftest.py`, `.github/workflows/*`, `Makefile`, `setup.cfg`, `setup.py`, `tox.ini`, `noxfile.py`, or files under a `ci/` directory. If no changed file matches these patterns, do NOT select the `development` lens regardless of other criteria.
+
 Selection criteria:
 - `module-dependency` → changes span multiple packages or add new dependencies
 - `process-flow` → changes affect workflow routing, state transitions, or control flow
-- `development` → changes affect tests, build config, or quality gates
+- `development` → changes affect build config or quality gates (pyproject.toml, Taskfile*, conftest.py, CI configs) — NOT selected for ordinary test file changes
 - `operational` → changes affect CLI, config, or observability
 - `c4-container` → changes add new services, tools, or integrations
 - `security` → changes affect trust boundaries or validation layers
@@ -106,6 +124,30 @@ For each selected lens (e.g., `module-dependency`), load the corresponding skill
 /arch-lens-process-flow
 # etc.
 ```
+
+After loading each arch-lens skill, **immediately** provide the following context message
+before the skill begins its analysis:
+
+> **PR Context — Changed Files**
+>
+> This diagram is for a Pull Request. Focus the diagram on the areas of the codebase affected by these changes. Do not create a generic whole-project diagram.
+>
+> **New files (use ★ prefix on these nodes):**
+> {list of new_files from Step 3, or "None"}
+>
+> **Modified files (use ● prefix on these nodes):**
+> {list of modified_files from Step 3, or "None"}
+>
+> **Instructions:**
+> - Focus exploration and the diagram on the architectural areas these files belong to
+> - Use `★` prefix on nodes representing new files/components
+> - Use `●` prefix on nodes representing modified files/components
+> - Leave unchanged components unmarked (include them only if needed for context/connectivity)
+> - The diagram should help PR reviewers understand the architectural impact of these specific changes
+
+The key mechanism: after loading the arch-lens skill via the Skill tool, the open-pr agent
+provides this context as a follow-up message in the same conversation turn. The arch-lens
+skill then uses this context to scope its exploration.
 
 The arch-lens skills write their output to `temp/arch-lens-{lens-name}/`. After each skill
 runs, read the generated markdown file and extract the mermaid code block(s).

@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from collections.abc import Sequence
+from dataclasses import dataclass as _dc
 from pathlib import Path
 from typing import Any
 
-import logging
-import threading
-import time
-from dataclasses import dataclass as _dc
-
 from autoskillit.core import LoadResult, RecipeSource, YAMLError, get_logger, load_yaml, pkg_root
-from autoskillit.recipe._analysis import ValidationContext, make_validation_context
+from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
     load_recipe_card,
@@ -41,7 +39,6 @@ from autoskillit.recipe.validator import (
 )
 
 _logger = get_logger(__name__)
-_DEBUG = logging.DEBUG
 
 
 # ---------------------------------------------------------------------------
@@ -50,9 +47,13 @@ _DEBUG = logging.DEBUG
 
 
 def _t(label: str, t0: float, name: str) -> float:
-    """Log elapsed time for a pipeline stage and return current time."""
-    if _logger.isEnabledFor(_DEBUG):
-        _logger.debug("load_recipe[%s] %s: %.1fms", name, label, (time.perf_counter() - t0) * 1000)
+    """Log elapsed time for a pipeline stage and return current time.
+
+    Uses structlog at DEBUG level; structlog's processor chain handles level
+    filtering without requiring an explicit isEnabledFor() guard.
+    """
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    _logger.debug("load_recipe_stage", recipe=name, stage=label, elapsed_ms=round(elapsed_ms, 1))
     return time.perf_counter()
 
 
@@ -223,8 +224,7 @@ def load_and_validate(
             and rm == cached.recipe_mtime
             and rs == cached.recipe_size
         ):
-            if _logger.isEnabledFor(_DEBUG):
-                _logger.debug("load_recipe[%s] result_cache: HIT", name)
+            _logger.debug("load_recipe_cache_hit", recipe=name)
             return cached.result
 
     t0 = time.perf_counter()

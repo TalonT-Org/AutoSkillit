@@ -11,6 +11,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from autoskillit.core import Severity
+
+# Imported at module level for type annotations (no circular import: _analysis.py does
+# not import registry.py). The runtime isinstance() check in run_semantic_rules also
+# requires this to be available as a concrete class, not just a TYPE_CHECKING stub.
+from autoskillit.recipe._analysis import ValidationContext  # noqa: E402
 from autoskillit.recipe.schema import DataFlowReport, Recipe
 
 
@@ -70,7 +75,7 @@ def run_semantic_rules(wf: Recipe | ValidationContext) -> list[RuleFinding]:
     When a ``Recipe`` is passed, a ``ValidationContext`` is built once and
     shared across all rules, avoiding redundant graph and dataflow computation.
     """
-    from autoskillit.recipe._analysis import ValidationContext, make_validation_context
+    from autoskillit.recipe._analysis import make_validation_context
 
     ctx = wf if isinstance(wf, ValidationContext) else make_validation_context(wf)
     findings: list[RuleFinding] = []

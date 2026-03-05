@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 # Minimal recipe YAML with kitchen_rules
@@ -108,9 +107,11 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
 
     calls = []
     real_validate = api_mod.validate_recipe
+
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
+
     monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
@@ -132,9 +133,11 @@ def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, mo
 
     calls = []
     real_validate = api_mod.validate_recipe
+
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
+
     monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
@@ -156,9 +159,11 @@ def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, mon
 
     calls = []
     real_validate = api_mod.validate_recipe
+
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
+
     monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
@@ -180,13 +185,17 @@ def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monke
 
     calls = []
     real_validate = api_mod.validate_recipe
+
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
+
     monkeypatch.setattr(api_mod, "validate_recipe", counting_validate)
 
     api_mod.load_and_validate("myrecipe", tmp_path)
-    (recipes_dir / "newrecipe.yaml").write_text(MINIMAL_RECIPE_YAML.replace("myrecipe", "newrecipe"))
+    (recipes_dir / "newrecipe.yaml").write_text(
+        MINIMAL_RECIPE_YAML.replace("myrecipe", "newrecipe")
+    )
     api_mod.load_and_validate("myrecipe", tmp_path)
 
     assert len(calls) == 2
@@ -197,8 +206,8 @@ def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monke
 # ---------------------------------------------------------------------------
 
 
-def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, caplog):
-    """DEBUG logging emits per-stage timing messages for load_and_validate."""
+def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, monkeypatch):
+    """load_and_validate calls the timing helper for each pipeline stage."""
     import autoskillit.recipe._api as api_mod
 
     api_mod._LOAD_CACHE.clear()
@@ -207,11 +216,22 @@ def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, caplog):
     recipes_dir.mkdir(parents=True)
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
-    with caplog.at_level(logging.DEBUG, logger="autoskillit.recipe._api"):
-        api_mod.load_and_validate("myrecipe", tmp_path)
+    stage_calls: list[str] = []
+    real_t = api_mod._t
 
-    timing_messages = [r.message for r in caplog.records if "elapsed" in r.message.lower() or "ms" in r.message]
-    assert len(timing_messages) >= 4  # at least find, parse, validate, semantic rules
+    def capturing_t(label: str, t0: float, name: str) -> float:
+        stage_calls.append(label)
+        return real_t(label, t0, name)
+
+    monkeypatch.setattr(api_mod, "_t", capturing_t)
+    api_mod.load_and_validate("myrecipe", tmp_path)
+
+    # At minimum: find_recipe, yaml_parse, validate_recipe, semantic_rules
+    assert len(stage_calls) >= 4
+    assert "find_recipe" in stage_calls
+    assert "yaml_parse" in stage_calls
+    assert "validate_recipe" in stage_calls
+    assert "semantic_rules" in stage_calls
 
 
 # ---------------------------------------------------------------------------
@@ -220,15 +240,17 @@ def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, caplog):
 
 
 def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
-    """DefaultRecipeRepository.load_and_validate calls self.find() and passes RecipeInfo to _api."""
+    """DefaultRecipeRepository.load_and_validate passes a pre-resolved RecipeInfo to _api."""
     from autoskillit.recipe import _api as api_mod
     from autoskillit.recipe.repository import DefaultRecipeRepository
 
     captured = {}
     real_fn = api_mod.load_and_validate
+
     def capturing_fn(name, project_dir, *, suppressed=None, recipe_info=None):
         captured["recipe_info"] = recipe_info
         return real_fn(name, project_dir, suppressed=suppressed, recipe_info=recipe_info)
+
     monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)
 
     repo = DefaultRecipeRepository()

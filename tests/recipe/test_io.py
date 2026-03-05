@@ -501,7 +501,7 @@ class TestListRecipes:
         recipes = result.items
         names = {w.name for w in recipes}
         assert "bugfix-loop" in names
-        assert "implementation-pipeline" in names
+        assert "implementation" in names
         assert len(recipes) > 0
         assert all(r.source.value in ("project", "builtin") for r in recipes)
 
@@ -644,12 +644,12 @@ def test_iter_steps_with_context_includes_capture_list_keys() -> None:
 
 # D9
 def test_implementation_pipeline_captures_plan_parts_as_list() -> None:
-    """implementation-pipeline.yaml plan step must capture plan_parts via capture_list."""
-    recipe = load_recipe(builtin_recipes_dir() / "implementation-pipeline.yaml")
+    """implementation.yaml plan step must capture plan_parts via capture_list."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
     step = recipe.steps["plan"]
     assert hasattr(step, "capture_list"), "RecipeStep must have capture_list field"
     assert "plan_parts" in step.capture_list, (
-        "implementation-pipeline plan step must capture plan_parts via capture_list"
+        "implementation plan step must capture plan_parts via capture_list"
     )
 
 

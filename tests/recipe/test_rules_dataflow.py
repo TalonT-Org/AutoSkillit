@@ -668,7 +668,7 @@ class TestPushBeforeAuditRule:
     def test_ip_push_after_audit_now_correctly_has_violation(self) -> None:
         """T_IP_PBA: bypass path via skip_when_false makes push-before-audit fire.
 
-        Uses a synthetic recipe mirroring implementation-pipeline topology:
+        Uses a synthetic recipe mirroring implementation topology:
           start → audit_impl (optional, skip_when_false) → open_pr_step → push
         The skip_when_false bypass allows push to be reached without audit.
 

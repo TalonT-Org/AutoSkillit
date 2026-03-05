@@ -59,7 +59,7 @@ Use a vertical spine with `├──` branches. The structure reads top-to-botto
 8. **Terminal steps** go at the bottom after a separator line.
 9. Do **not** show model annotations (e.g., `[sonnet]`) in the diagram.
 
-**Reference example for implementation-pipeline:**
+**Reference example for implementation:**
 
 ```
     clone

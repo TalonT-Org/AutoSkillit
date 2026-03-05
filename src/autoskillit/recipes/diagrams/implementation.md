@@ -1,6 +1,6 @@
-<!-- autoskillit-recipe-hash: sha256:cf54bcd8cb5b56bebf4440744919ba476a0ee5d750e398bfe6a31b74a7a09186 -->
+<!-- autoskillit-recipe-hash: sha256:798b4a146400f7b55bdeca00f8ce12605c65469ab2e542c0e820f1257ed391f2 -->
 <!-- autoskillit-diagram-format: v2 -->
-## implementation-pipeline
+## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
 
 **Flow:** clone > capture_base_sha > set_merge_target > (create_branch?) > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part) > (audit-impl?) > (open_pr?) > push > cleanup

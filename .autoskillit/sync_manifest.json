@@ -1,5 +1,5 @@
 {
-  "investigate-first": {
+  "remediation": {
     "hash": "sha256:d1154067ee2b2c732d97d72349f7d24cf310ceed512aa291503066853b553b93",
     "written_at": "2026-02-26T02:01:18.532000+00:00"
   },
@@ -11,7 +11,7 @@
     "hash": "sha256:601e2ad4303410656b300ee1a84d262b3c53a47f7dd05b4c47b0a7beeff70de7",
     "written_at": "2026-02-26T02:01:18.533100+00:00"
   },
-  "implementation-pipeline": {
+  "implementation": {
     "hash": "sha256:bc591cfddf8cd9cbd59dfc1b87f9cc7c26185a5c9bd3129e39eedc2d28b710d8",
     "written_at": "2026-02-26T02:01:18.533503+00:00"
   },

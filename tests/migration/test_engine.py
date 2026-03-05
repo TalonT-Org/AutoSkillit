@@ -192,7 +192,7 @@ class TestRecipeMigrationAdapter:
 
     # ME8
     def test_recipe_adapter_validate_valid_bundled_recipe(self) -> None:
-        recipe_path = pkg_root() / "recipes" / "implementation-pipeline.yaml"
+        recipe_path = pkg_root() / "recipes" / "implementation.yaml"
 
         adapter = RecipeMigrationAdapter()
         is_valid, error = adapter.validate(recipe_path)

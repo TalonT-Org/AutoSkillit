@@ -1,6 +1,6 @@
-<!-- autoskillit-recipe-hash: sha256:076502e2c86c0bcc379b83b9c4b81441d6afe496e2b7a5cbcbf9b32e5864c640 -->
+<!-- autoskillit-recipe-hash: sha256:231f9033f5f83d2d4f361d594a390fd86c6115a68a7758ecc9eb469a1a5a8e29 -->
 <!-- autoskillit-diagram-format: v2 -->
-## investigate-first
+## remediation
 Investigate a problem deeply, plan architectural fix, implement in a feature branch, and open a PR.
 
 **Flow:** 

@@ -243,10 +243,10 @@ class TestRecipeTools:
         # No .autoskillit/recipes/ created — simulates a fresh project with no local recipes
         result = json.loads(await list_recipes())
         names = {r["name"] for r in result["recipes"]}
-        assert "implementation-pipeline" in names
+        assert "implementation" in names
         assert "bugfix-loop" in names
         assert "audit-and-fix" in names
-        assert "investigate-first" in names
+        assert "remediation" in names
         assert "smoke-test" in names
 
     # SS9
@@ -256,7 +256,7 @@ class TestRecipeTools:
     ) -> None:
         """load_recipe MCP finds bundled recipes when no project .autoskillit/recipes/ dir."""
         monkeypatch.chdir(tmp_path)
-        result = json.loads(await load_recipe(name="implementation-pipeline"))
+        result = json.loads(await load_recipe(name="implementation"))
         assert "error" not in result, f"Unexpected error: {result.get('error')}"
         assert "content" in result
         assert len(result["content"]) > 0
@@ -971,7 +971,7 @@ class TestLoadRecipeReadOnly:
             patch("autoskillit.execution.headless.run_headless_core") as mock_headless,
             patch("autoskillit.recipe.contracts.generate_recipe_card") as mock_gen,
         ):
-            result = json.loads(await load_recipe(name="implementation-pipeline"))
+            result = json.loads(await load_recipe(name="implementation"))
         assert "error" not in result
         mock_headless.assert_not_called()
         mock_gen.assert_not_called()
@@ -1078,7 +1078,7 @@ class TestMigrateRecipe:
             patch("autoskillit.recipe.load_recipe_card", return_value={"skill_hashes": {}}),
             patch("autoskillit.recipe.check_contract_staleness", return_value=[]),
         ):
-            result = json.loads(await migrate_recipe(name="implementation-pipeline"))
+            result = json.loads(await migrate_recipe(name="implementation"))
         assert result.get("status") == "up_to_date"
 
     # LR1

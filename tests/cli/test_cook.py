@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
-from autoskillit.cli.app import _format_age
+from autoskillit.cli._workspace import _format_age
 
 _SCRIPT_YAML = """\
 name: test-script

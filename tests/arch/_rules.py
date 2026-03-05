@@ -61,6 +61,7 @@ _PRINT_EXEMPT = frozenset(
         "_doctor.py",
         "_marketplace.py",
         "_prompts.py",
+        "_workspace.py",
         "quota_check.py",
         "native_tool_guard.py",
         "remove_clone_guard.py",

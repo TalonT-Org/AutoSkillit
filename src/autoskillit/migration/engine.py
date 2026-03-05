@@ -348,7 +348,9 @@ class DiagramMigrationAdapter(DeterministicMigrationAdapter):
             generate_recipe_diagram(recipe_path, recipes_dir)
             return MigrationResult(success=True, name=file.name)
         except Exception as exc:
-            logger.warning("diagram.generate_failed", name=file.name, error=str(exc), exc_info=True)
+            logger.warning(
+                "diagram.generate_failed", name=file.name, error=str(exc), exc_info=True
+            )
             return MigrationResult(success=False, name=file.name, error=str(exc))
 
     def validate(self, path: Path) -> tuple[bool, str]:

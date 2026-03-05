@@ -27,17 +27,17 @@ from autoskillit.recipe.contracts import (  # noqa: E402
     load_recipe_card,
     validate_recipe_cards,
 )
-from autoskillit.recipe.io import (  # noqa: E402
-    find_recipe_by_name,
-    iter_steps_with_context,
-    list_recipes,
-    load_recipe,
-)
 from autoskillit.recipe.diagrams import (  # noqa: E402
     check_diagram_staleness,
     diagram_stale_to_suggestions,
     generate_recipe_diagram,
     load_recipe_diagram,
+)
+from autoskillit.recipe.io import (  # noqa: E402
+    find_recipe_by_name,
+    iter_steps_with_context,
+    list_recipes,
+    load_recipe,
 )
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402

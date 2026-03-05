@@ -203,7 +203,8 @@ class TestCLICook:
         old_time = time.time() - 6 * 3600
         os.utime(runs_dir / "stale", (old_time, old_time))
         monkeypatch.setattr(
-            "builtins.input", lambda _prompt="": (_ for _ in ()).throw(AssertionError("input() called"))
+            "builtins.input",
+            lambda _prompt="": (_ for _ in ()).throw(AssertionError("input() called")),
         )
         cli.workspace_clean(dir=str(tmp_path), force=True)
         assert not (runs_dir / "stale").exists()

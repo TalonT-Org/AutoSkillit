@@ -30,6 +30,28 @@ def pkg_root() -> Path:
     return Path(str(ir.files("autoskillit")))
 
 
+def claude_code_project_dir(cwd: str) -> Path:
+    """Derive the Claude Code project log directory from a working directory path.
+
+    Encodes the cwd by replacing '/' and '_' with '-', matching Claude Code's
+    internal convention for ~/.claude/projects/<encoded-path>/.
+    """
+    project_hash = cwd.replace("/", "-").replace("_", "-")
+    return Path.home() / ".claude" / "projects" / project_hash
+
+
+def claude_code_log_path(cwd: str, session_id: str) -> Path | None:
+    """Compute the full path to a Claude Code conversation log file.
+
+    Returns None when session_id is empty or is a fallback ID
+    (no_session_* or crashed_*), since these don't correspond to
+    real Claude Code conversation logs.
+    """
+    if not session_id or session_id.startswith("no_session_") or session_id.startswith("crashed_"):
+        return None
+    return claude_code_project_dir(cwd) / f"{session_id}.jsonl"
+
+
 def is_git_worktree(path: Path) -> bool:
     """Return True if path is inside a git linked worktree.
 

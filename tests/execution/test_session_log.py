@@ -149,6 +149,44 @@ def test_flush_session_log_uses_resolved_session_id(tmp_path):
     assert summary["session_id"] == "chan-b-uuid-123"
 
 
+def test_flush_summary_includes_claude_code_log_for_real_session(tmp_path):
+    """Flush with a real session_id produces claude_code_log in summary.json."""
+    _flush(tmp_path, session_id="real-session-abc", cwd="/home/test/project")
+    summary = json.loads((tmp_path / "sessions" / "real-session-abc" / "summary.json").read_text())
+    expected = str(
+        Path.home() / ".claude" / "projects" / "-home-test-project" / "real-session-abc.jsonl"
+    )
+    assert summary["claude_code_log"] == expected
+
+
+def test_flush_summary_claude_code_log_null_for_fallback_session(tmp_path):
+    """Flush with empty session_id produces claude_code_log: null in summary.json."""
+    _flush(tmp_path, session_id="")
+    sessions_dir = tmp_path / "sessions"
+    session_dir = next(sessions_dir.iterdir())
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["claude_code_log"] is None
+
+
+def test_flush_index_includes_claude_code_log(tmp_path):
+    """sessions.jsonl index entry includes claude_code_log for real sessions."""
+    _flush(tmp_path, session_id="idx-session-xyz", cwd="/home/test/project")
+    index_path = tmp_path / "sessions.jsonl"
+    entry = json.loads(index_path.read_text().strip().split("\n")[-1])
+    expected = str(
+        Path.home() / ".claude" / "projects" / "-home-test-project" / "idx-session-xyz.jsonl"
+    )
+    assert entry["claude_code_log"] == expected
+
+
+def test_flush_index_claude_code_log_null_for_fallback(tmp_path):
+    """sessions.jsonl index entry has claude_code_log: null for fallback sessions."""
+    _flush(tmp_path, session_id="")
+    index_path = tmp_path / "sessions.jsonl"
+    entry = json.loads(index_path.read_text().strip().split("\n")[-1])
+    assert entry["claude_code_log"] is None
+
+
 def test_flush_session_log_handles_empty_snapshots(tmp_path):
     """proc_snapshots=None produces no proc_trace.jsonl but summary is still written."""
     _flush(tmp_path, proc_snapshots=None)

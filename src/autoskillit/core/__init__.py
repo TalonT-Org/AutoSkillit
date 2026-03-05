@@ -17,6 +17,8 @@ from .logging import (
     get_logger,
 )
 from .paths import (
+    claude_code_log_path,
+    claude_code_project_dir,
     is_git_worktree,
     pkg_root,
 )
@@ -71,6 +73,8 @@ __all__ = [
     "configure_logging",
     "get_logger",
     # paths
+    "claude_code_log_path",
+    "claude_code_project_dir",
     "is_git_worktree",
     "pkg_root",
     # types

@@ -162,6 +162,13 @@ class TestSessionLogDir:
         assert computed.get("path") == str(result)
         assert any(e.get("event") == "session_log_dir_missing" for e in logs)
 
+    def test_headless_session_log_dir_uses_shared_util(self):
+        from autoskillit.core.paths import claude_code_project_dir
+        from autoskillit.execution.headless import _session_log_dir
+
+        cwd = "/home/user/project"
+        assert _session_log_dir(cwd) == claude_code_project_dir(cwd)
+
 
 class TestBuildSkillResult:
     """Coverage for _build_skill_result — the primary output-routing function."""

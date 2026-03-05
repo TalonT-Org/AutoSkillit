@@ -303,42 +303,24 @@ def workspace_init(path: str):
 def workspace_clean(
     *,
     dir: Annotated[str | None, Parameter(name=["--dir"])] = None,
+    force: Annotated[bool, Parameter(name=["--force", "-f"])] = False,
 ) -> None:
     """Prune autoskillit-runs/ directories.
 
-    Removes all subdirectories of autoskillit-runs/ under the given path.
-    Defaults to the parent of the current working directory.
+    Partitions subdirectories of autoskillit-runs/ into stale (>=5h old)
+    and recent (<5h), displays both lists with ages, and requires
+    confirmation before deleting stale directories.
 
     Parameters
     ----------
     dir
         Base directory to search for autoskillit-runs/ (default: parent of CWD).
+    force
+        Skip the confirmation prompt and delete stale directories immediately.
     """
-    base = Path(dir).resolve() if dir else Path.cwd().parent
-    runs_dir = base / "autoskillit-runs"
+    from autoskillit.cli._workspace import run_workspace_clean
 
-    if not runs_dir.is_dir():
-        print(f"No autoskillit-runs/ directory found under: {base}")
-        return
-
-    count = 0
-    errors = 0
-    for entry in sorted(runs_dir.iterdir()):
-        if entry.is_dir():
-            try:
-                shutil.rmtree(entry)
-                print(f"Removed: {entry}")
-                count += 1
-            except OSError as exc:
-                print(f"Failed to remove {entry}: {exc}", file=sys.stderr)
-                errors += 1
-
-    if count == 0 and errors == 0:
-        print(f"Nothing to clean in {runs_dir}")
-    else:
-        suffix = "ies" if count != 1 else "y"
-        err_note = f" ({errors} error(s))" if errors else ""
-        print(f"\nCleaned {count} director{suffix}{err_note}")
+    run_workspace_clean(dir=dir, force=force)
 
 
 @recipes_app.command(name="list")

@@ -33,6 +33,7 @@ BUNDLED_SKILLS = [
     "setup-project",
     "smoke-task",
     "sous-chef",
+    "triage-issues",
 ]
 
 # Internal-only skill documents: injected programmatically, never invocable as slash commands.
@@ -159,6 +160,7 @@ class TestSkillResolver:
             "rectify": "temp/rectify/",
             "review-approach": "temp/review-approach/",
             "setup-project": "temp/setup-project/",
+            "triage-issues": "temp/triage-issues/",
         }
         bd = bundled_skills_dir()
         failures: list[str] = []

@@ -16,7 +16,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoskillit.core import _atomic_write, get_logger
+from autoskillit.core import _atomic_write, claude_code_log_path, get_logger
 from autoskillit.execution.anomaly_detection import detect_anomalies
 
 logger = get_logger(__name__)
@@ -59,6 +59,13 @@ def flush_session_log(
     """
     log_root = resolve_log_dir(log_dir)
     dir_name = session_id if session_id else f"no_session_{start_ts.replace(':', '-')}"
+
+    cc_log = claude_code_log_path(cwd, session_id)
+    cc_log_str: str | None = str(cc_log) if cc_log else None
+
+    if cc_log and not cc_log.exists():
+        logger.warning("claude_code_log_not_found", path=cc_log_str, session_id=session_id)
+
     session_dir = log_root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
 
@@ -124,6 +131,7 @@ def flush_session_log(
         "dir_name": dir_name,
         "pid": pid,
         "cwd": cwd,
+        "claude_code_log": cc_log_str,
         "skill_command": skill_command,
         "success": success,
         "subtype": subtype,
@@ -148,6 +156,7 @@ def flush_session_log(
         "dir_name": dir_name,
         "timestamp": start_ts,
         "cwd": cwd,
+        "claude_code_log": cc_log_str,
         "skill_command": skill_command[:100],
         "success": success,
         "subtype": subtype,

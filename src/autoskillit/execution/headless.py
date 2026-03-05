@@ -23,6 +23,7 @@ from autoskillit.core import (
     SessionOutcome,
     SkillResult,
     TerminationReason,
+    claude_code_project_dir,
     get_logger,
 )
 from autoskillit.execution.commands import build_headless_cmd
@@ -72,8 +73,7 @@ def _inject_completion_directive(skill_command: str, marker: str) -> str:
 
 def _session_log_dir(cwd: str) -> Path:
     """Derive Claude Code session log directory from project cwd."""
-    project_hash = cwd.replace("/", "-").replace("_", "-")
-    log_dir = Path.home() / ".claude" / "projects" / project_hash
+    log_dir = claude_code_project_dir(cwd)
     logger.info("session_log_dir_computed", path=str(log_dir), cwd=cwd)
     if not log_dir.exists():
         logger.warning("session_log_dir_missing", path=str(log_dir), cwd=cwd)

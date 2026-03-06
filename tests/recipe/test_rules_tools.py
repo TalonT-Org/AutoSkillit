@@ -19,6 +19,7 @@ def _make_recipe(tool: str | None = None, action: str | None = None) -> Recipe:
         step["message"] = "done"
     return Recipe(
         name="test-recipe",
+        description="Test recipe for unknown-tool rule.",
         version="0.2.0",
         kitchen_rules="Use run_skill only.",
         steps={"run": RecipeStep(**step)},

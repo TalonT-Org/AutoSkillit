@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from autoskillit.core import Severity
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
+from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 

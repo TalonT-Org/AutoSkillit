@@ -1,14 +1,19 @@
 """Gate policy constants for AutoSkillit MCP tools.
 
-Layer 0 module — zero internal (autoskillit) imports.
-Declares which tools are gated vs. ungated and provides
+L1 pipeline module. Declares which tools are gated vs. ungated and provides
 the canonical error response for a closed gate.
+
+GATED_TOOLS and UNGATED_TOOLS are sourced from autoskillit.core.types (L0)
+so that L2 modules (recipe, migration) can also reference the tool registry
+without violating layer ordering.
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+
+from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 
 
 @dataclass(slots=True)
@@ -24,39 +29,6 @@ class DefaultGateState:
     def disable(self) -> None:
         """Transition gate to disabled state in-place."""
         self.enabled = False
-
-
-GATED_TOOLS: frozenset[str] = frozenset(
-    {
-        "run_cmd",
-        "run_python",
-        "read_db",
-        "run_skill",
-        "test_check",
-        "merge_worktree",
-        "reset_test_dir",
-        "classify_fix",
-        "reset_workspace",
-        "migrate_recipe",
-        # Clone lifecycle tools (promoted from python: recipe steps)
-        "clone_repo",
-        "remove_clone",
-        "push_to_remote",
-        "report_bug",
-    }
-)
-
-UNGATED_TOOLS: frozenset[str] = frozenset(
-    {
-        "kitchen_status",
-        "get_pipeline_report",
-        "get_token_summary",
-        "list_recipes",
-        "load_recipe",
-        "validate_recipe",
-        "fetch_github_issue",
-    }
-)
 
 
 _DEFAULT_GATE_MESSAGE = (

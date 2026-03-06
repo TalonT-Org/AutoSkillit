@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:cc97c54cb8fe74ce59a0423b2fbd206c61ca6c09f5285d53ec83717d0714d57d -->
+<!-- autoskillit-recipe-hash: sha256:085833c62ea0319f46c09b9fcd3a00d3d1b10076e1b2d8f743a8f1ecf1836811 -->
 <!-- autoskillit-diagram-format: v2 -->
 ## pr-merge-pipeline
 Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
@@ -42,11 +42,11 @@ Analyze open PRs, determine merge order, collapse them sequentially into an inte
 │  ✗ failure  → cleanup_failure
 │  ↺ ×5  → cleanup_failure
 │
-┌─ implement  [run_skill_retry]
+┌─ implement  [run_skill]
 │  ✓ success  → test
 │  ✗ failure  → cleanup_failure
 │
-┌─ retry_worktree  [run_skill_retry]
+┌─ retry_worktree  [run_skill]
 │  ✓ success  → test
 │  ✗ failure  → cleanup_failure
 │  ↺ ×3  → cleanup_failure
@@ -122,7 +122,7 @@ Analyze open PRs, determine merge order, collapse them sequentially into an inte
 | audit | Run /autoskillit:audit-impl after all PRs are merged to check coherency (true/false) | no | true |
 | plans_dir | Directory where collected plan files are stored for audit-impl | no | temp/pr-merge-pipeline |
 ### Kitchen Rules
-- NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill/run_skill_retry and run_cmd.
+- NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill and run_cmd.
 - Route to on_failure when a step fails — do not investigate or fix directly.
 - SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before advancing to the next PR. Never batch-assess all PRs before starting merges.
 - SEQUENTIAL EXECUTION: complete full cycle (verify → implement → test → merge_to_integration) per plan part before advancing to the next part or PR.

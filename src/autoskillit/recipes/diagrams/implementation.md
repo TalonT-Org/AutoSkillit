@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:6892239d6d74a72b0acd74b3a7ba266c748bab0ef9744a18ff03c53277a70324 -->
+<!-- autoskillit-recipe-hash: sha256:0419ab54f70f8addbd119ee92e3e83298c36632d084ede90a135e29cb6d303e6 -->
 <!-- autoskillit-diagram-format: v2 -->
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
@@ -109,7 +109,23 @@ Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose
 │
 │  ⟨skip if inputs.open_pr is false⟩
 ┌─ open_pr_step  [run_skill]
+│  ✓ success  → ci_watch
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → escalate
+│
+│  ⟨skip if inputs.open_pr is false⟩
+┌─ ci_watch  [run_cmd]
 │  ✓ success  → cleanup_success
+│  ✗ failure  → resolve_ci
+│  ↺ ×3  → escalate
+│
+┌─ resolve_ci  [run_skill]
+│  ✓ success  → re_push
+│  ✗ failure  → cleanup_failure
+│  ↺ ×2  → cleanup_failure
+│
+┌─ re_push  [push_to_remote]
+│  ✓ success  → ci_watch ↑
 │  ✗ failure  → cleanup_failure
 │  ↺ ×3  → escalate
 │

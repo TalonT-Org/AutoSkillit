@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:436fed625e095eaf1c010df865042b0bf2085c24defdb4e98899a7197c77da52 -->
+<!-- autoskillit-recipe-hash: sha256:84be577e2ced01993516215413d75ac80187916adb990ab9f72094158a8553b4 -->
 <!-- autoskillit-diagram-format: v2 -->
 ## audit-and-fix
 Audit codebase, investigate findings, plan fixes, implement in a feature branch, and open a PR.
@@ -80,7 +80,23 @@ Audit codebase, investigate findings, plan fixes, implement in a feature branch,
 │
 │  ⟨skip if inputs.open_pr is false⟩
 ┌─ open_pr_step  [run_skill]
+│  ✓ success  → ci_watch
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → escalate
+│
+│  ⟨skip if inputs.open_pr is false⟩
+┌─ ci_watch  [run_cmd]
 │  ✓ success  → cleanup_success
+│  ✗ failure  → resolve_ci
+│  ↺ ×3  → escalate
+│
+┌─ resolve_ci  [run_skill]
+│  ✓ success  → re_push
+│  ✗ failure  → cleanup_failure
+│  ↺ ×2  → cleanup_failure
+│
+┌─ re_push  [push_to_remote]
+│  ✓ success  → ci_watch ↑
 │  ✗ failure  → cleanup_failure
 │  ↺ ×3  → escalate
 │

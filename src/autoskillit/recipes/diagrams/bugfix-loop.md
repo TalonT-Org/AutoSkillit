@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:353cd3eab98857fbb70e4f79cb0b6661312bd63d27ebd58c0ad1db51f41087f2 -->
+<!-- autoskillit-recipe-hash: sha256:dcb61335d65c0cd7fdb56d1803be2d0356905b38236224fbd318939f6e22d013 -->
 <!-- autoskillit-diagram-format: v2 -->
 ## bugfix-loop
 End-to-end test with automatic bug fixing in isolated worktrees.

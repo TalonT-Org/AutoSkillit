@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:436fed625e095eaf1c010df865042b0bf2085c24defdb4e98899a7197c77da52 -->
+<!-- autoskillit-recipe-hash: sha256:3d9269c386bcd545e7ba8ff4f330ad07f8c70cc91b842aef2ab29327985f852b -->
 <!-- autoskillit-diagram-format: v2 -->
 ## audit-and-fix
 Audit codebase, investigate findings, plan fixes, implement in a feature branch, and open a PR.

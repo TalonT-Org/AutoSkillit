@@ -168,6 +168,7 @@ steps:
       - when: "result.error"
         route: escalate
       - route: done
+    on_failure: escalate
 
   done:
     action: stop

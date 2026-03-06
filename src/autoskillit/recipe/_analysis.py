@@ -15,9 +15,75 @@ from dataclasses import dataclass
 from autoskillit.core import SKILL_TOOLS, get_logger
 from autoskillit.recipe.contracts import _CONTEXT_REF_RE, _RESULT_CAPTURE_RE
 from autoskillit.recipe.io import iter_steps_with_context  # noqa: F401 — re-exported for rules
-from autoskillit.recipe.schema import DataFlowReport, DataFlowWarning, Recipe
+from autoskillit.recipe.schema import DataFlowReport, DataFlowWarning, Recipe, RecipeStep
 
 logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Routing edge extraction
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RouteEdge:
+    """A single routing edge from a recipe step to a target step.
+
+    Attributes:
+        edge_type: One of ``"success"``, ``"failure"``, ``"context_limit"``,
+            ``"result_condition"``, ``"exhausted"``.
+        target: The target step name.
+        condition: Populated for ``on_result`` conditions — the ``when`` expression.
+    """
+
+    edge_type: str
+    target: str
+    condition: str | None = None
+
+
+def _extract_routing_edges(step: RecipeStep) -> list[RouteEdge]:
+    """Return all routing edges declared on *step*.
+
+    Covers every routing field on :class:`RecipeStep`:
+    ``on_success``, ``on_failure``, ``on_context_limit``, ``on_exhausted``,
+    ``on_result.conditions[].route``, and ``on_result.routes`` (dict form).
+
+    None targets are skipped. The caller is responsible for filtering by
+    known step names if graph-membership checks are needed.
+    """
+    edges: list[RouteEdge] = []
+
+    if step.on_success:
+        edges.append(RouteEdge(edge_type="success", target=step.on_success))
+    if step.on_failure:
+        edges.append(RouteEdge(edge_type="failure", target=step.on_failure))
+    if step.on_context_limit:
+        edges.append(RouteEdge(edge_type="context_limit", target=step.on_context_limit))
+    if step.on_exhausted:
+        edges.append(RouteEdge(edge_type="exhausted", target=step.on_exhausted))
+
+    if step.on_result:
+        sr = step.on_result
+        if sr.conditions:
+            for cond in sr.conditions:
+                edges.append(
+                    RouteEdge(
+                        edge_type="result_condition",
+                        target=cond.route,
+                        condition=cond.when,
+                    )
+                )
+        elif sr.routes:
+            for key, target in sr.routes.items():
+                edges.append(
+                    RouteEdge(
+                        edge_type="result_condition",
+                        target=target,
+                        condition=key,
+                    )
+                )
+
+    return edges
 
 
 @dataclass
@@ -49,19 +115,12 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
     graph: dict[str, set[str]] = {name: set() for name in step_names}
 
     for name, step in recipe.steps.items():
-        for target in (step.on_success, step.on_failure, step.on_context_limit):
-            if target and target in step_names:
-                graph[name].add(target)
-        if step.on_result:
-            if step.on_result.routes:
-                for target in step.on_result.routes.values():
-                    if target in step_names:
-                        graph[name].add(target)
-            for condition in step.on_result.conditions:
-                if condition.route in step_names:
-                    graph[name].add(condition.route)
-        if step.action is None and step.on_exhausted in step_names:
-            graph[name].add(step.on_exhausted)
+        for edge in _extract_routing_edges(step):
+            # exhausted only applies to non-terminal steps
+            if edge.edge_type == "exhausted" and step.action is not None:
+                continue
+            if edge.target in step_names:
+                graph[name].add(edge.target)
 
     # Build predecessor map for bypass edge injection below.
     predecessors: dict[str, set[str]] = {name: set() for name in step_names}

@@ -66,40 +66,16 @@ async def load_recipe(name: str) -> str:
 
     After loading:
     1. If `diagram` is not None: show the `diagram` field content to the user directly.
-    2. If `diagram` is None: render the recipe from `content` using the abbreviated spec
-       below, and suggest running `autoskillit recipes render {name}` to pre-generate it.
+    2. If `diagram` is None: run `autoskillit recipes render {name}` to generate the
+       diagram, or invoke the /render-recipe skill. The canonical visual grammar is
+       defined in the render-recipe SKILL.md — do not attempt to render inline.
+       (See: .claude/skills/render-recipe/SKILL.md)
     3. If the user requests changes, use the /autoskillit:write-recipe skill
        to apply modifications. That skill has the complete schema, validation rules,
        and formatting constraints needed for correct changes. Do NOT edit the YAML
        file directly — always delegate modifications to write-recipe.
     4. Prompt for input values using AskUserQuestion
     5. Execute the pipeline steps by calling MCP tools directly
-
-    Abbreviated render spec (used only when diagram is None):
-
-        ## {name}
-        {description}
-
-        **Flow:** {summary}
-
-        ### Graph
-        Render a visual ASCII flow diagram using box-drawing characters:
-        - Each non-terminal step: ┌─ step_name  [tool_name]
-        - Steps connected by │ on the vertical spine
-        - Success route: │  ✓ success  → target_step
-        - Failure route: │  ✗ failure  → target_step
-        - Back-edges (loops): append ↑ to the target name
-        - Optional steps: │  ⟨skip if condition is false⟩ before the step
-        - on_result conditions: │  ├─ when_expr  → target_step
-        - Retry info: │  ↺ ×N  → on_exhausted_target
-        - Terminal steps below a ─── rule: ⏹ step_name  "message"
-
-        ### Ingredients
-        For each ingredient: name, description, required/optional, default value.
-
-        ### Kitchen Rules
-        If present, list all kitchen_rules strings.
-        If absent, note: "No kitchen rules defined"
 
     Allowed during pipeline execution:
     - AutoSkillit MCP tools (call directly, not via subagents)

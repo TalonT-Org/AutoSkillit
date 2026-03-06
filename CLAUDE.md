@@ -188,6 +188,7 @@ src/autoskillit/
 │   ├── audit-and-fix.yaml
 │   ├── bugfix-loop.yaml
 │   ├── implementation.yaml
+│   ├── implementation-groups.yaml
 │   ├── remediation.yaml
 │   └── smoke-test.yaml
 └── skills/                  # 23 bundled skills (SKILL.md per skill)

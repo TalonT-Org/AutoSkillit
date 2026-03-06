@@ -1,15 +1,12 @@
 name: implementation
-description: Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
-summary: clone > capture_base_sha > set_merge_target > (create_branch?) > (make-groups?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part) > (audit-impl?) > (open_pr?) > push > cleanup
+description: Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
+summary: clone > capture_base_sha > set_merge_target > (create_branch?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup
 autoskillit_version: "0.3.0"
 
 ingredients:
   task:
-    description: Description of what to implement (required when make_groups is false)
-    required: false
-  source_doc:
-    description: Path to source document for group decomposition (required when make_groups is true)
-    required: false
+    description: Description of what to implement
+    required: true
   source_dir:
     description: >
       Path to the source repository to clone and work in.
@@ -25,14 +22,11 @@ ingredients:
   base_branch:
     description: Branch to merge into (defaults to current branch)
     default: main
-  make_groups:
-    description: Run /make-groups to decompose source_doc into sequenced implementation groups? (true/false)
-    default: "false"
   review_approach:
     description: Run /review-approach before implementation? (true/false)
     default: "false"
   audit:
-    description: Run /autoskillit:audit-impl once after all groups/parts have been merged, to check overall implementation quality and optionally trigger a remediation round (true/false)
+    description: Run /autoskillit:audit-impl once after all parts have been merged, to check overall implementation quality and optionally trigger a remediation round (true/false)
     default: "true"
   open_pr:
     description: Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false)
@@ -50,9 +44,7 @@ kitchen_rules:
     Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
     orchestrator. All work is delegated through run_skill."
   - "Route to on_failure — never investigate or fix directly from the orchestrator."
-  - "When make_groups is false, task input is required."
-  - "When make_groups is true, source_doc input is required."
-  - "Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront."
+  - "Process plan parts sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront."
   - "By default (open_pr=true), a feature branch is created with a unique name
     derived from inputs.run_name and context.issue_number (e.g. impl/124) or
     a date suffix (e.g. impl/20260304) when no issue is available. All worktree
@@ -97,7 +89,7 @@ steps:
       Capture the SHA of base_branch before any merge begins. A commit SHA names
       a git object (not a ref), so it survives git branch -D unconditionally. This
       SHA is passed to audit_impl as implementation_ref to diff the full
-      multi-group implementation against the pre-implementation state.
+      implementation against the pre-implementation state.
 
   set_merge_target:
     tool: run_cmd
@@ -181,7 +173,7 @@ steps:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
-    on_success: group
+    on_success: plan
     on_failure: cleanup_failure
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -192,31 +184,12 @@ steps:
       Without this step, merge_worktree fails with WORKTREE_INTACT_BASE_NOT_PUBLISHED.
       Uses the pre-resolved remote_url from the clone step to preserve clone isolation.
 
-  group:
-    tool: run_skill
-    with:
-      skill_command: "/autoskillit:make-groups ${{ inputs.source_doc }}"
-      cwd: "${{ context.work_dir }}"
-      step_name: "group"
-    capture:
-      group_files: "${{ result.group_files }}"
-    on_success: plan
-    on_failure: cleanup_failure
-    note: >
-      Only execute if make_groups input is 'true'. Otherwise skip directly to plan.
-      Produces group files in temp/make-groups/ containing sequenced groups (groupA, groupB, ...).
-      GROUPS MODE: Pass the file paths (group_files) directly to the plan step via context.group_files
-      — do NOT read the files. The current group's file path becomes the task passed to the plan step.
-      ITERATION: The agent maintains a group queue. For each group, run the full cycle
-      (plan → review → verify → implement → test → merge) before advancing to the next group.
-
   plan:
     tool: run_skill
     with:
       skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
       cwd: "${{ context.work_dir }}"
       step_name: "plan"
-      group_files: "${{ context.group_files }}"
       issue_content: "${{ context.issue_content }}"
     capture:
       plan_path: "${{ result.plan_path }}"
@@ -229,21 +202,12 @@ steps:
       Produces plan in temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
       plan_parts context key contains the full ordered list of part files (sorted alphabetically).
       For a single-part plan, plan_parts has one entry equal to plan_path.
-      GROUPS MODE: When running with groups, replace ${{ inputs.task }} with the current
-      group's file path from context.group_files extracted from the group step's capture
-      — do NOT read the file; pass the path directly to the skill.
       REMEDIATION MODE: context.remediation_path is available when the orchestrator
       re-enters plan from the remediate step; pass it inline in the skill_command
       rather than as a named with: key.
-      ACCUMULATION: After each plan step execution in groups mode, the agent MUST
-      append the captured plan_path to context.all_plan_paths using a comma separator
-      instead of letting the capture block overwrite the accumulated value. For
-      single-task runs (no groups), all_plan_paths equals plan_path (the capture
-      block handles this automatically). For multi-group runs, the accumulated value
-      looks like "/path/groupA_plan.md,/path/groupB_plan.md".
       ISSUE CONTEXT: If context.issue_content is a non-empty string (set by fetch_issue),
       append the issue content to the skill_command as additional context for the plan:
-      "/autoskillit:make-plan {task_or_group_path}\n\n{context.issue_content}"
+      "/autoskillit:make-plan {task}\n\n{context.issue_content}"
 
   review:
     tool: run_skill
@@ -318,10 +282,7 @@ steps:
         route: cleanup_failure
       - route: next_or_done
     note: >
-      After merge, route to next_or_done to process remaining parts/groups before pushing.
-      GROUPS MODE: When all plan_parts for the current group are merged, advance to the
-      next group (back to plan step with the next group's description). When all groups
-      are complete, go to audit_impl (via next_or_done).
+      After merge, route to next_or_done to process remaining parts before pushing.
       By default (open_pr=true), merge_target is the feature branch named from run_name.
       When open_pr=false, merge_target equals base_branch — merges go directly to base.
       test_gate failures route to fix (resolve-failures) for recovery;
@@ -359,14 +320,11 @@ steps:
     on_result:
       - when: "${{ result.next }} == more_parts"
         route: verify
-      - when: "${{ result.next }} == more_groups"
-        route: plan
       - route: audit_impl
     note: >
       Routing step — no tool call. The agent evaluates what comes next:
-      1. If more plan_parts remain for the current group → go to verify with next part.
-      2. If all plan_parts done but more groups remain → go to plan with next group's task.
-      3. If all groups (or single task) complete → go to audit_impl.
+      1. If more plan_parts remain → go to verify with next part.
+      2. If all plan_parts complete → go to audit_impl.
 
   audit_impl:
     tool: run_skill
@@ -388,11 +346,11 @@ steps:
       Only execute if inputs.audit is 'true'. If false, skip directly to push.
       Captures verdict and remediation_path. Routes GO → push, NO GO → remediate
       which re-enters the plan step with the remediation file.
-      All groups and parts have been merged at this point — no worktree exists.
+      All parts have been merged at this point — no worktree exists.
       Uses context.base_sha (a stable commit SHA captured before any merge began)
       as implementation_ref. A SHA names a git object and survives git branch -D
       unconditionally. The diff git diff base_sha..base_branch (two-dot, SHA on the
-      left) covers the full implementation across all plan groups.
+      left) covers the full implementation across all plan parts.
 
   remediate:
     action: route
@@ -417,9 +375,6 @@ steps:
       Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
       and runs gh pr create. Captures pr_url from the skill's output for final reporting.
       The skill gracefully degrades if gh is unavailable (outputs empty pr_url, exits 0).
-      MULTI-GROUP: context.all_plan_paths may contain comma-separated plan paths
-      accumulated across group iterations. The open-pr skill splits and synthesizes
-      PR content from all plans.
       TOKEN SUMMARY: Before invoking this step, the orchestrator MUST:
       1. Call get_token_summary(clear=false) to retrieve accumulated token usage.
       2. Format the JSON result as a markdown table with columns: Step, input, output,
@@ -456,7 +411,7 @@ steps:
 
   done:
     action: stop
-    message: "Implementation pipeline complete. All groups/tasks have been planned, implemented, tested, and merged."
+    message: "Implementation pipeline complete. All tasks have been planned, implemented, tested, and merged."
 
   escalate_stop:
     action: stop

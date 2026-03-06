@@ -444,7 +444,12 @@ async def run_headless_core(
         )
 
         if step_name:
-            ctx.token_log.record(step_name, skill_result.token_usage)
+            ctx.token_log.record(
+                step_name,
+                skill_result.token_usage,
+                start_ts=result.start_ts,
+                end_ts=result.end_ts,
+            )
         return skill_result
 
 

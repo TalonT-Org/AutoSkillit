@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:436fed625e095eaf1c010df865042b0bf2085c24defdb4e98899a7197c77da52 -->
+<!-- autoskillit-recipe-hash: sha256:b2928aa20c175905d48f93b8525254e396c20911fdc467724fc9e76f69b05efa -->
 <!-- autoskillit-diagram-format: v2 -->
 ## audit-and-fix
 Audit codebase, investigate findings, plan fixes, implement in a feature branch, and open a PR.
@@ -12,12 +12,12 @@ Audit codebase, investigate findings, plan fixes, implement in a feature branch,
 │  ↺ ×3  → escalate
 │
 ┌─ set_merge_target  [run_cmd]
-│  ✓ success  → fetch_issue
+│  ✓ success  → parse_issue_number
 │  ✗ failure  → escalate_stop
 │  ↺ ×3  → escalate
 │
 │  ⟨skip if inputs.issue_url is false⟩
-┌─ fetch_issue  [fetch_github_issue]
+┌─ parse_issue_number  [run_cmd]
 │  ✓ success  → create_branch
 │  ✗ failure  → escalate_stop
 │  ↺ ×3  → escalate

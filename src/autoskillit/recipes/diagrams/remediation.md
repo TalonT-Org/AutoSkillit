@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:462cde93063b101e4592a49ef04b7f35c2c278b6ccb40cfe0529d206d12d860f -->
+<!-- autoskillit-recipe-hash: sha256:1cdee8179bfa7efb4dfa0ae4e114d9cdd5c1a09c8f05753ddd0e9434aa82410f -->
 <!-- autoskillit-diagram-format: v2 -->
 ## remediation
 Investigate a problem deeply, plan architectural fix, implement in a feature branch, and open a PR.
@@ -12,12 +12,12 @@ Investigate a problem deeply, plan architectural fix, implement in a feature bra
 │  ↺ ×3  → escalate
 │
 ┌─ set_merge_target  [run_cmd]
-│  ✓ success  → fetch_issue
+│  ✓ success  → parse_issue_number
 │  ✗ failure  → escalate_stop
 │  ↺ ×3  → escalate
 │
 │  ⟨skip if inputs.issue_url is false⟩
-┌─ fetch_issue  [fetch_github_issue]
+┌─ parse_issue_number  [run_cmd]
 │  ✓ success  → create_branch
 │  ✗ failure  → escalate_stop
 │  ↺ ×3  → escalate

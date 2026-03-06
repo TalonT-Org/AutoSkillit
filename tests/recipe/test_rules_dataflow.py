@@ -84,7 +84,7 @@ class TestCaptureOutputCoverageRule:
             description: test
             steps:
               implement:
-                tool: run_skill_retry
+                tool: run_skill
                 with:
                   skill_command: /autoskillit:implement-worktree-no-merge ${{ inputs.plan }}
                 capture:
@@ -399,7 +399,7 @@ def _make_stale_worktree_path_recipe() -> Recipe:
         description="test",
         steps={
             "implement": RecipeStep(
-                tool="run_skill_retry",
+                tool="run_skill",
                 with_args={
                     "skill_command": "/autoskillit:implement-worktree-no-merge plan.md",
                 },
@@ -459,7 +459,7 @@ class TestStaleRefAfterMerge:
             description="test",
             steps={
                 "implement": RecipeStep(
-                    tool="run_skill_retry",
+                    tool="run_skill",
                     with_args={
                         "skill_command": "/autoskillit:implement-worktree-no-merge plan.md",
                     },
@@ -502,7 +502,7 @@ class TestStaleRefAfterMerge:
                     on_success="implement",
                 ),
                 "implement": RecipeStep(
-                    tool="run_skill_retry",
+                    tool="run_skill",
                     with_args={
                         "skill_command": "/autoskillit:implement-worktree-no-merge plan.md",
                     },
@@ -544,7 +544,7 @@ class TestStaleRefAfterMerge:
             description="test",
             steps={
                 "implement": RecipeStep(
-                    tool="run_skill_retry",
+                    tool="run_skill",
                     with_args={
                         "skill_command": "/autoskillit:implement-worktree-no-merge plan.md",
                     },

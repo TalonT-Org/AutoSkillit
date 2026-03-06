@@ -570,7 +570,7 @@ class TestVersionField:
 def test_recipe_step_accepts_capture_list_field() -> None:
     """RecipeStep accepts capture_list field and stores it."""
     step = RecipeStep(
-        tool="run_skill_retry",
+        tool="run_skill",
         with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
         capture={"plan_path": "${{ result.plan_path }}"},
         capture_list={"plan_parts": "${{ result.plan_parts }}"},
@@ -595,7 +595,7 @@ def test_recipe_yaml_with_capture_list_parses(tmp_path: Path) -> None:
         "ingredients": {},
         "steps": {
             "plan": {
-                "tool": "run_skill_retry",
+                "tool": "run_skill",
                 "with": {"skill_command": "/autoskillit:make-plan inputs.task"},
                 "capture": {"plan_path": "${{ result.plan_path }}"},
                 "capture_list": {"plan_parts": "${{ result.plan_parts }}"},
@@ -620,7 +620,7 @@ def test_iter_steps_with_context_includes_capture_list_keys() -> None:
         ingredients={},
         steps={
             "plan": RecipeStep(
-                tool="run_skill_retry",
+                tool="run_skill",
                 with_args={"skill_command": "/autoskillit:make-plan t"},
                 capture={"plan_path": "${{ result.plan_path }}"},
                 capture_list={"plan_parts": "${{ result.plan_parts }}"},
@@ -700,7 +700,7 @@ def test_find_recipe_by_name_returns_info_with_content(tmp_path: Path) -> None:
 
 
 def test_bundled_recipes_all_skill_commands_start_with_slash() -> None:
-    """All run_skill/run_skill_retry steps in bundled recipes must have
+    """All run_skill steps in bundled recipes must have
     skill_command starting with '/' after smoke-task migration."""
     from autoskillit.core.types import SKILL_COMMAND_PREFIX, SKILL_TOOLS
 

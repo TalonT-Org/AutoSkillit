@@ -7,7 +7,7 @@ import yaml
 
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.validator import analyze_dataflow
+from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 
 # ---------------------------------------------------------------------------
 # TestImplementationPipelineStructure
@@ -774,3 +774,51 @@ def test_bundled_diagrams_are_not_stale() -> None:
     assert not stale, (
         f"Stale diagrams for: {stale}. Run 'autoskillit recipes render' to regenerate."
     )
+
+
+# ---------------------------------------------------------------------------
+# SKILL.md emit instruction tests (1b, 1c, 1d)
+# ---------------------------------------------------------------------------
+
+
+def test_audit_impl_skill_md_emits_verdict_and_remediation_path() -> None:
+    """1b: audit-impl SKILL.md must contain verdict= and remediation_path= emit lines."""
+    from autoskillit.core.paths import pkg_root
+
+    content = (pkg_root() / "skills" / "audit-impl" / "SKILL.md").read_text()
+    assert "verdict=" in content, "audit-impl SKILL.md missing 'verdict=' emit line"
+    assert "remediation_path=" in content, (
+        "audit-impl SKILL.md missing 'remediation_path=' emit line"
+    )
+
+
+def test_review_approach_skill_md_emits_review_path() -> None:
+    """1c: review-approach SKILL.md must contain review_path= emit line."""
+    from autoskillit.core.paths import pkg_root
+
+    content = (pkg_root() / "skills" / "review-approach" / "SKILL.md").read_text()
+    assert "review_path=" in content, "review-approach SKILL.md missing 'review_path=' emit line"
+
+
+def test_make_groups_skill_md_emits_group_files() -> None:
+    """1d: make-groups SKILL.md must contain group_files=, groups_path=, manifest_path= emit lines."""
+    from autoskillit.core.paths import pkg_root
+
+    content = (pkg_root() / "skills" / "make-groups" / "SKILL.md").read_text()
+    assert "group_files=" in content, "make-groups SKILL.md missing 'group_files=' emit line"
+    assert "groups_path=" in content, "make-groups SKILL.md missing 'groups_path=' emit line"
+    assert "manifest_path=" in content, "make-groups SKILL.md missing 'manifest_path=' emit line"
+
+
+# ---------------------------------------------------------------------------
+# Bundled recipe uncaptured-handoff-consumer rule (1i)
+# ---------------------------------------------------------------------------
+
+
+def test_bundled_recipes_pass_uncaptured_handoff_consumer() -> None:
+    """1i: all bundled recipes must produce zero uncaptured-handoff-consumer findings."""
+    for yaml_file in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_file)
+        findings = run_semantic_rules(recipe)
+        handoff_findings = [f for f in findings if f.rule == "uncaptured-handoff-consumer"]
+        assert not handoff_findings, f"{yaml_file.name}: {handoff_findings}"

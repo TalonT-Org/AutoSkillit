@@ -29,7 +29,7 @@ responsible for enforcing this regardless of what the plan says.
 
 ## RETRY-WORKTREE VS RE-INVOKE — MANDATORY
 
-When `run_skill_retry` returns `needs_retry=true` for an
+When `run_skill` returns `needs_retry=true` for an
 `implement-worktree-no-merge` call:
 
 - **Use `/autoskillit:retry-worktree`** — pass the existing `worktree_path`

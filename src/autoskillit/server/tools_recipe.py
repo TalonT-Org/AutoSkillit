@@ -56,7 +56,7 @@ async def load_recipe(name: str) -> str:
     NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash,
     Agent, WebFetch, WebSearch, NotebookEdit) during pipeline execution.
     All investigation and code changes happen inside headless sessions
-    launched by run_skill/run_skill_retry. Shell commands use run_cmd.
+    launched by run_skill. Shell commands use run_cmd.
     The task description is INPUT to the recipe steps — pass it through
     as an ingredient value, do not act on it yourself.
 
@@ -109,7 +109,7 @@ async def load_recipe(name: str) -> str:
       ${{ context.var_name }} in `with:` arguments.
     - Thread outputs from each step into the next (e.g. worktree_path from
       implement into test_check).
-    - Steps with a `model:` field: when calling `run_skill` or `run_skill_retry`,
+    - Steps with a `model:` field: when calling `run_skill`,
       pass the step's `model` value as the `model` parameter to the tool.
 
     TOKEN USAGE TRACKING:
@@ -122,7 +122,7 @@ async def load_recipe(name: str) -> str:
       Only one call to get_token_summary is permitted per pipeline run,
       at the very end. Intermediate rendering is prohibited.
     - Pass step_name (the YAML step key, e.g. "implement") in the with: block
-      when calling run_skill or run_skill_retry. The server accumulates token
+      when calling run_skill. The server accumulates token
       usage server-side, grouped by step name.
     - When verbosity is "summary", call get_token_summary(clear=True) at pipeline
       completion and render as:
@@ -149,7 +149,7 @@ async def load_recipe(name: str) -> str:
     - merge_worktree: "error" key present in response
       (cleanup_succeeded=false means orphaned worktree/branch — the merge itself succeeded)
     - run_cmd: {"success": false}
-    - run_skill / run_skill_retry: {"success": false}
+    - run_skill: {"success": false}
     - classify_fix: "error" key present in response
 
     To CREATE a new recipe, use the /autoskillit:write-recipe skill.

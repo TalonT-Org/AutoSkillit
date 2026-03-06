@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 22 MCP tools (run_cmd, run_python, run_skill, run_skill_retry, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, fetch_github_issue, report_bug + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary) with 16 gated behind MCP prompts for user-only activation, and 23 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 21 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, fetch_github_issue) with 14 gated behind MCP prompts for user-only activation, and 23 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -38,7 +38,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
 ### **3.3. Pipeline Execution**
 
   * **Orchestrator Discipline**: When executing a pipeline script (loaded via `load_recipe`), NEVER use native Claude Code tools directly. The following tools are prohibited for the orchestrator: Read, Grep, Glob, Edit, Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit.
-  * **Delegate Through Headless Sessions**: All code reading, searching, editing, and investigation MUST go through `run_skill` or `run_skill_retry`, which launch headless sessions with full tool access.
+  * **Delegate Through Headless Sessions**: All code reading, searching, editing, and investigation MUST go through `run_skill`, which launches headless sessions with full tool access.
   * **Route Failures, Do Not Investigate**: When a pipeline step fails, follow the step's `on_failure` route. Do NOT use native tools to diagnose failures — the downstream skill has diagnostic access that the orchestrator does not.
   * **Use `run_cmd` for Shell Access**: If shell commands are needed during a pipeline, use the `run_cmd` MCP tool, not the native Bash tool.
 
@@ -158,7 +158,7 @@ src/autoskillit/
 │   ├── helpers.py           #   Shared server-layer helpers (worktree setup, path utilities)
 │   ├── prompts.py           #   MCP prompt handlers (open_kitchen, close_kitchen)
 │   ├── tools_clone.py       #   clone_repo, remove_clone, push_to_remote tool handlers
-│   ├── tools_execution.py   #   run_cmd, run_python, run_skill, run_skill_retry tool handlers
+│   ├── tools_execution.py   #   run_cmd, run_python, run_skill tool handlers
 │   ├── tools_git.py         #   merge_worktree, classify_fix tool handlers
 │   ├── tools_recipe.py      #   migrate_recipe, load_recipe, list_recipes, validate_recipe tool handlers
 │   ├── tools_status.py      #   kitchen_status, get_pipeline_report, get_token_summary tool handlers

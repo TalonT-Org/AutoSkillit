@@ -290,7 +290,7 @@ Flag commands registered in code but absent from CLAUDE.md.
 
 **Audit Strategy:**
 
-1. **Skill reference resolution** — for every `run_skill` / `run_skill_retry` step in every recipe, verify the `skill_command` resolves to an existing skill:
+1. **Skill reference resolution** — for every `run_skill` step in every recipe, verify the `skill_command` resolves to an existing skill:
 
 | Recipe | Step Name | Skill Command | Is Dynamic (`${{...}}`)? | Skill Directory Exists? | Has SKILL.md? |
 |---|---|---|---|---|---|

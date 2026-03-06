@@ -17,7 +17,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 
 ## When to Use
 
-- MCP orchestrator calls this via `run_skill_retry`
+- MCP orchestrator calls this via `run_skill`
 - Orchestrator wants to control test/merge gates independently
 
 ## Arguments

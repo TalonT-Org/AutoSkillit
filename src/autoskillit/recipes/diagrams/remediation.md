@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:c41ea07102921f0dd906ee1cde7a16d26a1aad8e0c83475eabaa1a6e4c8ef6ae -->
+<!-- autoskillit-recipe-hash: sha256:ecd0037f05ca714ce13d51d830b1bb8b6797d77708f705f549de281a99c5c519 -->
 <!-- autoskillit-diagram-format: v3 -->
 ## remediation
 Investigate a problem deeply, plan architectural fix, implement in a feature branch, and open a PR.
@@ -7,11 +7,8 @@ Investigate a problem deeply, plan architectural fix, implement in a feature bra
 
 ### Graph
 clone  [clone_repo] (retry ×3)
-│  ↓ success → fetch_issue
+│  ↓ success → push_merge_target
 │  ✗ failure → escalate_stop
-│
-├── [fetch_issue] (retry ×3)  ← only if inputs.issue_url
-│       ✗ failure → escalate_stop
 │
 ├── [push_merge_target] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → cleanup_failure

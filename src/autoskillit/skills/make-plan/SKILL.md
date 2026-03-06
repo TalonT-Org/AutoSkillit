@@ -41,6 +41,28 @@ The ONLY criterion for choosing an approach is **technical quality and correctne
 
 **Existing code is not sacred.** If the existing architecture is flawed, the right answer is to fix it, not preserve it.
 
+## GitHub Issue Input
+
+If the ARGUMENTS contain a GitHub issue reference, call `fetch_github_issue` via the MCP
+tool **before** beginning any analysis. Use the returned `content` field as the task description.
+
+**Detection — scan ARGUMENTS for any of these patterns:**
+- Full URL: `https://github.com/{owner}/{repo}/issues/{N}`
+  (e.g. `https://github.com/acme/project/issues/42`)
+- Shorthand: `{owner}/{repo}#{N}` (e.g. `acme/project#42`)
+- Bare number with default repo: `#N` or `N` when `github.default_repo` is configured
+- Orchestrator hint line: a line containing `GitHub Issue:` followed by a URL or shorthand
+
+**Behavior:**
+- If the entire ARGUMENTS is an issue reference → call `fetch_github_issue` and use the
+  returned `content` as the complete task description.
+- If ARGUMENTS contains a trailing `GitHub Issue: {url}` line (added by the pipeline
+  orchestrator) → call `fetch_github_issue` for that URL and append the returned content
+  as supplementary context appended after the task description.
+- Call with `include_comments: true` for full context.
+- If `fetch_github_issue` returns `success: false`, log the failure and proceed with the
+  raw ARGUMENTS as-is.
+
 ## Planning Steps
 
 1. **Understand related systems and validate details** - Use subagents to study the architecture, how components work together, their purpose, patterns, and standards. Validate any details provided in the task description.

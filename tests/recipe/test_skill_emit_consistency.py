@@ -31,8 +31,9 @@ def test_every_declared_output_has_emit_instruction_in_skill_md() -> None:
             output_name = output["name"]
             if f"{output_name}=" not in content:
                 failures.append(
-                    f"skill '{skill_name}': declares output '{output_name}' in skill_contracts.yaml "
-                    f"but SKILL.md has no emit line '{output_name}=...'"
+                    f"skill '{skill_name}': declares output '{output_name}' "
+                    f"in skill_contracts.yaml but SKILL.md has no emit line "
+                    f"'{output_name}=...'"
                 )
 
     assert not failures, "\n".join(failures)

@@ -27,6 +27,28 @@ Break a large document — architecture proposal, feature spec, migration plan, 
 - **Dependency order is the sequencing rule.** Group A's output is available when Group B starts. Order by what produces foundations first, consumers last.
 - **Source material is unverified input.** Verify claims about the codebase against subagent findings before incorporating them into grouping decisions.
 
+## GitHub Issue Input
+
+If the ARGUMENTS contain a GitHub issue reference, call `fetch_github_issue` via the MCP
+tool **before** beginning any analysis. Use the returned `content` field as the task description.
+
+**Detection — scan ARGUMENTS for any of these patterns:**
+- Full URL: `https://github.com/{owner}/{repo}/issues/{N}`
+  (e.g. `https://github.com/acme/project/issues/42`)
+- Shorthand: `{owner}/{repo}#{N}` (e.g. `acme/project#42`)
+- Bare number with default repo: `#N` or `N` when `github.default_repo` is configured
+- Orchestrator hint line: a line containing `GitHub Issue:` followed by a URL or shorthand
+
+**Behavior:**
+- If the entire ARGUMENTS is an issue reference → call `fetch_github_issue` and use the
+  returned `content` as the complete task description.
+- If ARGUMENTS contains a trailing `GitHub Issue: {url}` line (added by the pipeline
+  orchestrator) → call `fetch_github_issue` for that URL and append the returned content
+  as supplementary context appended after the task description.
+- Call with `include_comments: true` for full context.
+- If `fetch_github_issue` returns `success: false`, log the failure and proceed with the
+  raw ARGUMENTS as-is.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -194,6 +216,21 @@ Before finalizing, check:
 - All per-group files are written to disk
 
 Report to terminal: index file path, manifest file path, per-group file count, and the dependency chain.
+
+After all group files are written and the prose report is printed, emit the following
+structured output tokens as the very last lines of your text output:
+
+```
+groups_path={absolute_path_to_index_file}
+manifest_path={absolute_path_to_manifest_file}
+group_files={absolute_path_to_group_1_file}
+{absolute_path_to_group_2_file}
+{absolute_path_to_group_3_file}
+```
+
+The first path follows the key on the same line; subsequent per-group file paths appear
+on their own lines (this multi-line list format is consumed by `capture_list:` in the
+orchestrating recipe). List every per-group file in implementation order.
 
 ## Output Location
 

@@ -1153,24 +1153,6 @@ class TestPredicateOnResultValidation:
         errors = validate_recipe(wf)
         assert any("on_result" in e and "on_success" in e for e in errors)
 
-    def test_predicate_on_result_on_failure_mutually_exclusive(self) -> None:
-        """Step with predicate on_result (list) + on_failure → validation error."""
-        from autoskillit.recipe.validator import validate_recipe
-
-        wf = self._make_merge_recipe(
-            {
-                "tool": "merge_worktree",
-                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
-                "on_result": [
-                    {"when": "result.error", "route": "cleanup_failure"},
-                    {"route": "push"},
-                ],
-                "on_failure": "cleanup_failure",  # mutually exclusive with predicate format
-            }
-        )
-        errors = validate_recipe(wf)
-        assert any("on_failure" in e and "predicate" in e.lower() for e in errors)
-
     def test_predicate_condition_invalid_route_target_rejected(self) -> None:
         """A condition referencing an unknown step name is a validation error."""
         from autoskillit.recipe.validator import validate_recipe
@@ -1206,25 +1188,6 @@ class TestPredicateOnResultValidation:
         errors = validate_recipe(wf)
         assert errors == []
 
-    def test_predicate_format_no_on_failure_required(self) -> None:
-        """merge_worktree step with predicate on_result and no on_failure passes validation."""
-        from autoskillit.recipe.validator import validate_recipe
-
-        wf = self._make_merge_recipe(
-            {
-                "tool": "merge_worktree",
-                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
-                "on_result": [
-                    {"when": "result.failed_step == 'test_gate'", "route": "assess"},
-                    {"when": "result.error", "route": "cleanup_failure"},
-                    {"route": "push"},
-                ],
-                "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
-            }
-        )
-        errors = validate_recipe(wf)
-        assert errors == []
-
     def test_predicate_on_result_empty_conditions_rejected(self) -> None:
         """on_result with conditions=[] bypasses predicate path; emits field error.
 
@@ -1248,6 +1211,58 @@ class TestPredicateOnResultValidation:
         )
         errors = validate_recipe(recipe)
         assert any("on_result.field must be non-empty" in e for e in errors)
+
+    def test_predicate_format_with_on_failure_allowed(self) -> None:
+        """validator.py must not reject on_failure alongside on_result.conditions."""
+        from autoskillit.recipe.validator import validate_recipe
+
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                "on_failure": "cleanup_failure",
+            }
+        )
+        errors = validate_recipe(wf)
+        assert not any("mutually exclusive" in e for e in errors), errors
+
+    def test_on_result_missing_failure_route_fires_for_predicate_format(self) -> None:
+        """Predicate-format steps with no on_failure must trigger ERROR finding."""
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                # no on_failure — should trigger finding
+            }
+        )
+        findings = run_semantic_rules(wf)
+        names = [f.rule for f in findings]
+        assert "on-result-missing-failure-route" in names
+
+    def test_on_result_missing_failure_route_clear_when_predicate_has_on_failure(self) -> None:
+        """Predicate-format step with on_failure must not trigger the rule."""
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                "on_failure": "cleanup_failure",
+            }
+        )
+        findings = run_semantic_rules(wf)
+        names = [f.rule for f in findings]
+        assert "on-result-missing-failure-route" not in names
 
 
 # ---------------------------------------------------------------------------
@@ -1319,28 +1334,6 @@ class TestPredicateSemanticRules:
         assert "cleanup" not in step_names
         assert "push" not in step_names
 
-    def test_on_result_missing_failure_route_does_not_fire_for_predicate_format(
-        self,
-    ) -> None:
-        """RCA rule does NOT fire for predicate-format on_result (no on_failure needed)."""
-        wf = _make_workflow(
-            {
-                "merge": {
-                    "tool": "merge_worktree",
-                    "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
-                    "on_result": [
-                        {"when": "result.error", "route": "cleanup"},
-                        {"route": "push"},
-                    ],
-                    "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
-                },
-                "cleanup": {"action": "stop", "message": "Cleanup."},
-                "push": {"action": "stop", "message": "Push."},
-            }
-        )
-        findings = run_semantic_rules(wf)
-        assert not any(f.rule == "on-result-missing-failure-route" for f in findings)
-
     def test_on_result_missing_failure_route_still_fires_for_legacy_format(
         self,
     ) -> None:
@@ -1363,6 +1356,128 @@ class TestPredicateSemanticRules:
 
 
 # ---------------------------------------------------------------------------
+# TestMergeRoutingIncompleteRule
+# ---------------------------------------------------------------------------
+
+
+class TestMergeRoutingIncompleteRule:
+    """Tests for the merge-routing-incomplete semantic rule (RMR*)."""
+
+    def _make_merge_step(self, conditions: list[dict]) -> Recipe:
+        """Build a minimal recipe with a merge_worktree step using predicate on_result."""
+        return _make_workflow(
+            {
+                "merge": {
+                    "tool": "merge_worktree",
+                    "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                    "on_result": conditions,
+                    "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+                },
+                "recover": {"action": "stop", "message": "Recover."},
+                "done": {"action": "stop", "message": "Done."},
+                "escalate": {"action": "stop", "message": "Escalate."},
+            }
+        )
+
+    def test_rmr1_fires_when_test_gate_missing(self):
+        """RMR1: ERROR when test_gate is not explicitly routed."""
+        recipe = self._make_merge_step(
+            [
+                {"when": "result.failed_step == 'post_rebase_test_gate'", "route": "recover"},
+                {"when": "result.failed_step == 'rebase'", "route": "recover"},
+                {"when": "result.error", "route": "escalate"},
+                {"route": "done"},
+            ]
+        )
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.rule == "merge-routing-incomplete"]
+        assert len(errors) == 1
+        assert "test_gate" in errors[0].message
+
+    def test_rmr2_fires_when_post_rebase_test_gate_missing(self):
+        """RMR2: ERROR when post_rebase_test_gate is not explicitly routed."""
+        recipe = self._make_merge_step(
+            [
+                {"when": "result.failed_step == 'test_gate'", "route": "recover"},
+                {"when": "result.failed_step == 'rebase'", "route": "recover"},
+                {"when": "result.error", "route": "escalate"},
+                {"route": "done"},
+            ]
+        )
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.rule == "merge-routing-incomplete"]
+        assert len(errors) == 1
+        assert "post_rebase_test_gate" in errors[0].message
+
+    def test_rmr3_fires_when_rebase_missing(self):
+        """RMR3: ERROR when rebase is not explicitly routed."""
+        recipe = self._make_merge_step(
+            [
+                {"when": "result.failed_step == 'test_gate'", "route": "recover"},
+                {"when": "result.failed_step == 'post_rebase_test_gate'", "route": "recover"},
+                {"when": "result.error", "route": "escalate"},
+                {"route": "done"},
+            ]
+        )
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.rule == "merge-routing-incomplete"]
+        assert len(errors) == 1
+        assert "rebase" in errors[0].message
+
+    def test_rmr4_clears_when_all_three_covered(self):
+        """RMR4: No finding when all recoverable values are explicitly routed."""
+        recipe = self._make_merge_step(
+            [
+                {"when": "result.failed_step == 'test_gate'", "route": "recover"},
+                {"when": "result.failed_step == 'post_rebase_test_gate'", "route": "recover"},
+                {"when": "result.failed_step == 'rebase'", "route": "recover"},
+                {"when": "result.error", "route": "escalate"},
+                {"route": "done"},
+            ]
+        )
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.rule == "merge-routing-incomplete"]
+        assert errors == []
+
+    def test_rmr5_does_not_fire_for_non_merge_worktree_step(self):
+        """RMR5: Rule is scoped to merge_worktree steps only."""
+        recipe = _make_workflow(
+            {
+                "run": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:implement-worktree", "cwd": "/tmp"},
+                    "on_result": [
+                        {"when": "result.error", "route": "done"},
+                        {"route": "done"},
+                    ],
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.rule == "merge-routing-incomplete"]
+        assert errors == []
+
+    def test_rmr6_does_not_fire_when_no_on_result(self):
+        """RMR6: Rule is silent for merge_worktree steps without on_result."""
+        recipe = _make_workflow(
+            {
+                "merge": {
+                    "tool": "merge_worktree",
+                    "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                    "on_success": "done",
+                    "on_failure": "escalate",
+                },
+                "done": {"action": "stop", "message": "Done."},
+                "escalate": {"action": "stop", "message": "Escalate."},
+            }
+        )
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.rule == "merge-routing-incomplete"]
+        assert errors == []
+
+
+# ---------------------------------------------------------------------------
 # TestRecipeIntegrationPredicateRouting
 # ---------------------------------------------------------------------------
 
@@ -1379,23 +1494,27 @@ class TestRecipeIntegrationPredicateRouting:
         step = self.if_recipe.steps["merge"]
         assert step.on_result is not None
         assert step.on_result.conditions, "merge step must have predicate conditions"
-        assert len(step.on_result.conditions) == 4
+        assert len(step.on_result.conditions) == 5
 
         cond0 = step.on_result.conditions[0]
         assert cond0.when == "result.failed_step == 'test_gate'"
         assert cond0.route == "assess"
 
         cond1 = step.on_result.conditions[1]
-        assert cond1.when == "result.failed_step == 'rebase'"
+        assert cond1.when == "result.failed_step == 'post_rebase_test_gate'"
         assert cond1.route == "assess"
 
         cond2 = step.on_result.conditions[2]
-        assert cond2.when == "result.error"
-        assert cond2.route == "cleanup_failure"
+        assert cond2.when == "result.failed_step == 'rebase'"
+        assert cond2.route == "assess"
 
         cond3 = step.on_result.conditions[3]
-        assert cond3.when is None
-        assert cond3.route == "push"
+        assert cond3.when == "result.error"
+        assert cond3.route == "cleanup_failure"
+
+        cond4 = step.on_result.conditions[4]
+        assert cond4.when is None
+        assert cond4.route == "push"
 
     def test_investigate_first_merge_step_captures_worktree_path(self) -> None:
         """The merge step captures worktree_path from result.worktree_path."""
@@ -1408,23 +1527,27 @@ class TestRecipeIntegrationPredicateRouting:
         step = self.ip_recipe.steps["merge"]
         assert step.on_result is not None
         assert step.on_result.conditions, "merge step must have predicate conditions"
-        assert len(step.on_result.conditions) == 4
+        assert len(step.on_result.conditions) == 5
 
         cond0 = step.on_result.conditions[0]
         assert cond0.when == "result.failed_step == 'test_gate'"
         assert cond0.route == "fix"
 
         cond1 = step.on_result.conditions[1]
-        assert cond1.when == "result.failed_step == 'rebase'"
+        assert cond1.when == "result.failed_step == 'post_rebase_test_gate'"
         assert cond1.route == "fix"
 
         cond2 = step.on_result.conditions[2]
-        assert cond2.when == "result.error"
-        assert cond2.route == "cleanup_failure"
+        assert cond2.when == "result.failed_step == 'rebase'"
+        assert cond2.route == "fix"
 
         cond3 = step.on_result.conditions[3]
-        assert cond3.when is None
-        assert cond3.route == "next_or_done"
+        assert cond3.when == "result.error"
+        assert cond3.route == "cleanup_failure"
+
+        cond4 = step.on_result.conditions[4]
+        assert cond4.when is None
+        assert cond4.route == "next_or_done"
 
     def test_implementation_pipeline_merge_step_captures_worktree_path(self) -> None:
         """The merge step in implementation.yaml captures worktree_path."""
@@ -1453,3 +1576,31 @@ class TestRecipeIntegrationPredicateRouting:
             assert errors == [], f"{name} has ERROR-severity semantic findings: " + str(
                 [(f.rule, f.step_name, f.message) for f in errors]
             )
+
+    def test_bugfix_loop_merge_step_has_complete_predicate_routing(self) -> None:
+        """The merge step in bugfix-loop.yaml has complete predicate on_result routing."""
+        bf_recipe = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
+        step = bf_recipe.steps["merge"]
+        assert step.on_result is not None
+        assert step.on_result.conditions, "merge step must have predicate conditions"
+        assert len(step.on_result.conditions) == 5
+
+        cond0 = step.on_result.conditions[0]
+        assert cond0.when == "result.failed_step == 'test_gate'"
+        assert cond0.route == "assess"
+
+        cond1 = step.on_result.conditions[1]
+        assert cond1.when == "result.failed_step == 'post_rebase_test_gate'"
+        assert cond1.route == "assess"
+
+        cond2 = step.on_result.conditions[2]
+        assert cond2.when == "result.failed_step == 'rebase'"
+        assert cond2.route == "assess"
+
+        cond3 = step.on_result.conditions[3]
+        assert cond3.when == "result.error"
+        assert cond3.route == "escalate"
+
+        cond4 = step.on_result.conditions[4]
+        assert cond4.when is None
+        assert cond4.route == "done"

@@ -79,6 +79,20 @@ FAILURE PREDICATES — when to follow on_failure:
 - run_cmd: {{"success": false}}
 - run_skill: {{"success": false}}
 - classify_fix: "error" key present in response
+
+TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
+- Tool-level failure (run_skill: {{"success": false}}): Follow on_failure. This fires
+  BEFORE any result object exists. on_result conditions are NOT evaluated.
+- Skill-level error (result.error present): Follow the matching on_result condition.
+  This fires only when run_skill completes and returns a result object with an error field.
+- When a step has no on_failure declared and the tool returns success: false, this is a
+  recipe authoring error. Stop the pipeline and report the missing route.
+
+OPTIONAL STEP SEMANTICS:
+- optional: true means the step is SKIPPED (treated as bypassed) when its
+  skip_when_false ingredient is false. It does NOT mean failures are tolerated.
+- A running optional step that returns success: false MUST follow on_failure.
+  Never route a running optional step's failure to done.
 {sous_chef_content}
 --- RECIPE ---
 {script_yaml}

@@ -49,13 +49,15 @@ steps:
       skill_command: "/autoskillit:investigate the test failures"
       cwd: ${{ inputs.helper_dir }}
       step_name: "investigate"
+    capture:
+      investigation_path: "${{ result.investigation_path }}"
     on_success: plan
     on_failure: escalate
 
   plan:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:rectify the investigation findings"
+      skill_command: "/autoskillit:rectify ${{ context.investigation_path }}"
       cwd: ${{ inputs.helper_dir }}
       step_name: "plan"
     capture:
@@ -124,6 +126,7 @@ steps:
       - when: "result.error"
         route: escalate
       - route: implement
+    on_failure: escalate
 
   audit_impl:
     tool: run_skill
@@ -139,6 +142,9 @@ steps:
       - when: "result.error"
         route: escalate
       - route: remediate
+    on_failure: escalate
+    optional: true
+    skip_when_false: "inputs.audit"
     note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
 
   remediate:
@@ -154,7 +160,16 @@ steps:
       base_branch: ${{ inputs.base_branch }}
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-    on_success: done
+    on_result:
+      - when: "result.failed_step == 'test_gate'"
+        route: assess
+      - when: "result.failed_step == 'post_rebase_test_gate'"
+        route: assess
+      - when: "result.failed_step == 'rebase'"
+        route: assess
+      - when: "result.error"
+        route: escalate
+      - route: done
     on_failure: escalate
 
   done:

@@ -313,6 +313,39 @@ PIPELINE_FORBIDDEN_TOOLS: tuple[str, ...] = (
 # recipe_validator.py.
 SKILL_TOOLS: frozenset[str] = frozenset({"run_skill"})
 
+# Authoritative MCP tool registries. Defined here (L0) so both pipeline/ (L1)
+# and recipe/ (L2) can reference them without cross-layer import violations.
+GATED_TOOLS: frozenset[str] = frozenset(
+    {
+        "run_cmd",
+        "run_python",
+        "read_db",
+        "run_skill",
+        "test_check",
+        "merge_worktree",
+        "reset_test_dir",
+        "classify_fix",
+        "reset_workspace",
+        "migrate_recipe",
+        "clone_repo",
+        "remove_clone",
+        "push_to_remote",
+        "report_bug",
+    }
+)
+
+UNGATED_TOOLS: frozenset[str] = frozenset(
+    {
+        "kitchen_status",
+        "get_pipeline_report",
+        "get_token_summary",
+        "list_recipes",
+        "load_recipe",
+        "validate_recipe",
+        "fetch_github_issue",
+    }
+)
+
 # Canonical prefix required for all skill_command values passed to run_skill.
 # Enforced at the Claude Code hook boundary by skill_command_guard.py.
 SKILL_COMMAND_PREFIX: str = "/"
@@ -443,11 +476,18 @@ class AuditStore(Protocol):
 class TokenStore(Protocol):
     """Protocol for per-step token usage accumulation."""
 
-    def record(self, step_name: str, token_usage: dict[str, Any] | None) -> None: ...
+    def record(
+        self,
+        step_name: str,
+        token_usage: dict[str, Any] | None,
+        *,
+        start_ts: str = "",
+        end_ts: str = "",
+    ) -> None: ...
 
     def get_report(self) -> list[dict[str, Any]]: ...
 
-    def compute_total(self) -> dict[str, int]: ...
+    def compute_total(self) -> dict[str, Any]: ...
 
     def clear(self) -> None: ...
 

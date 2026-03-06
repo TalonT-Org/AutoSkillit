@@ -119,12 +119,6 @@ def validate_recipe(recipe: Recipe) -> list[str]:
                 )
             if step.on_result.conditions:
                 # Predicate format validation
-                if step.on_failure is not None:
-                    errors.append(
-                        f"Step '{step_name}' has both 'on_result' (predicate format) and "
-                        f"'on_failure'; they are mutually exclusive. Predicate conditions "
-                        f"handle all routing paths including failures."
-                    )
                 for i, cond in enumerate(step.on_result.conditions):
                     if not cond.route:
                         errors.append(

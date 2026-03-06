@@ -90,7 +90,7 @@ steps:
       cwd: "${{ context.work_dir }}"
     capture:
       merge_target: "${{ result.stdout }}"
-    on_success: fetch_issue
+    on_success: parse_issue_number
     on_failure: escalate_stop
     note: >
       Unconditionally sets merge_target to inputs.base_branch as a fallback.
@@ -99,23 +99,27 @@ steps:
       create_branch is skipped and this fallback stands. This eliminates the
       undefined-context-variable gap that existed when create_branch was optional.
 
-  fetch_issue:
-    tool: fetch_github_issue
+  parse_issue_number:
+    tool: run_cmd
     with:
-      issue_url: "${{ inputs.issue_url }}"
+      cmd: "printf '%s' '${{ inputs.issue_url }}' | grep -oE '[0-9]+$' || true"
+      cwd: "${{ context.work_dir }}"
     capture:
-      issue_number: "${{ result.issue_number }}"
-      issue_content: "${{ result.content }}"
+      issue_number: "${{ result.stdout | trim }}"
     on_success: create_branch
     on_failure: escalate_stop
     optional: true
     skip_when_false: "inputs.issue_url"
     note: >
       Runs when inputs.issue_url is non-empty. Skipped otherwise.
-      Fetches the GitHub issue to extract its number (for PR auto-close) and
-      content (to enrich investigation context). fetch_github_issue is ungated.
-      issue_number is threaded to open_pr_step as the closing_issue argument.
-      issue_content is passed to the investigate step for context enrichment.
+      Extracts the issue number from the URL or shorthand reference via shell regex
+      (e.g. https://github.com/owner/repo/issues/42 → "42"; owner/repo#42 → "42").
+      No network call — pure string parsing. issue_number is used for
+      feature branch naming ({run_name}/{issue_number}) and threaded to
+      open_pr_step for "Closes #N" in the PR body.
+      The full issue content is NOT fetched here. Downstream skills (make-plan,
+      investigate) detect the issue_url reference in their arguments and call
+      fetch_github_issue themselves inside their headless sessions.
 
   create_branch:
     tool: run_cmd
@@ -146,8 +150,8 @@ steps:
     skip_when_false: "inputs.open_pr"
     note: >
       Computes a unique branch name and checks out the branch.
-      When context.issue_number is available (from fetch_issue), the branch
-      is named {run_name}/{issue_number} (e.g. investigate/42). When fetch_issue
+      When context.issue_number is available (from parse_issue_number), the branch
+      is named {run_name}/{issue_number} (e.g. investigate/42). When parse_issue_number
       was skipped (no issue_url), substitute an empty string for
       context.issue_number — the shell script falls back to
       {run_name}/{YYYYMMDD} (e.g. investigate/20260304). Checks the remote for
@@ -178,18 +182,21 @@ steps:
       skill_command: "/autoskillit:investigate ${{ inputs.topic }}"
       cwd: "${{ context.work_dir }}"
       step_name: "investigate"
-      issue_content: "${{ context.issue_content }}"
+      issue_url: "${{ inputs.issue_url }}"
+    capture:
+      investigation_path: "${{ result.investigation_path }}"
     on_success: rectify
     on_failure: cleanup_failure
     note: >
-      ISSUE CONTEXT: If context.issue_content is a non-empty string (set by fetch_issue),
-      append the issue content to the skill_command:
-      "/autoskillit:investigate {topic}\n\n{context.issue_content}"
+      ISSUE CONTEXT: If inputs.issue_url is a non-empty string, append it to the
+      skill_command so the investigate skill can detect and fetch the issue itself:
+      "/autoskillit:investigate {topic}\n\nGitHub Issue: {inputs.issue_url}"
+      The skill detects the URL pattern and calls fetch_github_issue internally.
 
   rectify:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:rectify"
+      skill_command: "/autoskillit:rectify ${{ context.investigation_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "rectify"
     capture:
@@ -284,6 +291,9 @@ steps:
       - when: "result.error"
         route: escalate_stop
       - route: remediate
+    on_failure: escalate_stop
+    optional: true
+    skip_when_false: "inputs.audit"
     note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
 
   remediate:
@@ -316,11 +326,14 @@ steps:
     on_result:
       - when: "result.failed_step == 'test_gate'"
         route: assess
+      - when: "result.failed_step == 'post_rebase_test_gate'"
+        route: assess
       - when: "result.failed_step == 'rebase'"
         route: assess
       - when: "result.error"
         route: cleanup_failure
       - route: push
+    on_failure: cleanup_failure
 
   push:
     tool: push_to_remote
@@ -345,7 +358,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "open_pr"
       issue_number: "${{ context.issue_number }}"
-    on_success: cleanup_success
+    on_success: ci_watch
     on_failure: cleanup_failure
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -362,6 +375,68 @@ steps:
       4. Append the file path as a 4th positional argument to the skill_command.
       5. If context.issue_number is a non-empty string, append it as a 5th positional
          argument so the open-pr skill inserts "Closes #{issue_number}" into the PR body.
+
+  ci_watch:
+    tool: run_cmd
+    with:
+      cmd: |
+        run_id=""
+        for i in 1 2 3 4 5 6; do
+          run_id=$(gh run list \
+            --branch "${{ context.merge_target }}" \
+            --limit 1 \
+            --json databaseId,status \
+            --jq '.[] | select(.status != "completed") | .databaseId' \
+            2>/dev/null | head -1)
+          [ -n "$run_id" ] && break
+          sleep 5
+        done
+        [ -n "$run_id" ] || { echo "No active CI run found for branch ${{ context.merge_target }}"; exit 1; }
+        gh run watch "$run_id" --exit-status
+      cwd: "${{ context.work_dir }}"
+      timeout: 150
+    on_success: cleanup_success
+    on_failure: resolve_ci
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Polls for an active (non-completed) GitHub Actions run on context.merge_target
+      branch for up to 30 s (6 x 5 s), then watches that run until completion
+      (run_cmd timeout: 150 s). Exits 0 on CI pass, non-zero on CI failure.
+      Skipped when open_pr=false — no remote feature branch is opened in that mode.
+      On success, the pipeline is done — cleanup_success removes the clone.
+      On failure, resolve_ci attempts to fix CI failures directly in the clone.
+
+  resolve_ci:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "resolve_ci"
+    retries: 2
+    on_exhausted: cleanup_failure
+    on_success: re_push
+    on_failure: cleanup_failure
+    note: >
+      Runs when ci_watch reports a CI failure (exit != 0). The clone (context.work_dir)
+      has the feature branch (context.merge_target) checked out — this is the working
+      directory where resolve-failures investigates and fixes failures (lint, type errors,
+      test failures). The skill commits fixes and exits without merging; the orchestrator
+      re-pushes via re_push. Retries up to 2 times (3 total attempts) before exhausting
+      to cleanup_failure.
+
+  re_push:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.merge_target }}"
+    on_success: ci_watch
+    on_failure: cleanup_failure
+    note: >
+      Pushes the CI-fixed feature branch back to the remote after resolve_ci succeeds.
+      Routes back to ci_watch to verify the fix resolves CI. On push failure, escalates
+      via cleanup_failure.
 
   cleanup_success:
     tool: remove_clone

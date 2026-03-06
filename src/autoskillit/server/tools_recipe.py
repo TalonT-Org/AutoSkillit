@@ -56,7 +56,7 @@ async def load_recipe(name: str) -> str:
     NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash,
     Agent, WebFetch, WebSearch, NotebookEdit) during pipeline execution.
     All investigation and code changes happen inside headless sessions
-    launched by run_skill/run_skill_retry. Shell commands use run_cmd.
+    launched by run_skill. Shell commands use run_cmd.
     The task description is INPUT to the recipe steps — pass it through
     as an ingredient value, do not act on it yourself.
 
@@ -66,40 +66,16 @@ async def load_recipe(name: str) -> str:
 
     After loading:
     1. If `diagram` is not None: show the `diagram` field content to the user directly.
-    2. If `diagram` is None: render the recipe from `content` using the abbreviated spec
-       below, and suggest running `autoskillit recipes render {name}` to pre-generate it.
+    2. If `diagram` is None: run `autoskillit recipes render {name}` to generate the
+       diagram, or invoke the /render-recipe skill. The canonical visual grammar is
+       defined in the render-recipe SKILL.md — do not attempt to render inline.
+       (See: .claude/skills/render-recipe/SKILL.md)
     3. If the user requests changes, use the /autoskillit:write-recipe skill
        to apply modifications. That skill has the complete schema, validation rules,
        and formatting constraints needed for correct changes. Do NOT edit the YAML
        file directly — always delegate modifications to write-recipe.
     4. Prompt for input values using AskUserQuestion
     5. Execute the pipeline steps by calling MCP tools directly
-
-    Abbreviated render spec (used only when diagram is None):
-
-        ## {name}
-        {description}
-
-        **Flow:** {summary}
-
-        ### Graph
-        Render a visual ASCII flow diagram using box-drawing characters:
-        - Each non-terminal step: ┌─ step_name  [tool_name]
-        - Steps connected by │ on the vertical spine
-        - Success route: │  ✓ success  → target_step
-        - Failure route: │  ✗ failure  → target_step
-        - Back-edges (loops): append ↑ to the target name
-        - Optional steps: │  ⟨skip if condition is false⟩ before the step
-        - on_result conditions: │  ├─ when_expr  → target_step
-        - Retry info: │  ↺ ×N  → on_exhausted_target
-        - Terminal steps below a ─── rule: ⏹ step_name  "message"
-
-        ### Ingredients
-        For each ingredient: name, description, required/optional, default value.
-
-        ### Kitchen Rules
-        If present, list all kitchen_rules strings.
-        If absent, note: "No kitchen rules defined"
 
     Allowed during pipeline execution:
     - AutoSkillit MCP tools (call directly, not via subagents)
@@ -109,7 +85,7 @@ async def load_recipe(name: str) -> str:
       ${{ context.var_name }} in `with:` arguments.
     - Thread outputs from each step into the next (e.g. worktree_path from
       implement into test_check).
-    - Steps with a `model:` field: when calling `run_skill` or `run_skill_retry`,
+    - Steps with a `model:` field: when calling `run_skill`,
       pass the step's `model` value as the `model` parameter to the tool.
 
     TOKEN USAGE TRACKING:
@@ -122,7 +98,7 @@ async def load_recipe(name: str) -> str:
       Only one call to get_token_summary is permitted per pipeline run,
       at the very end. Intermediate rendering is prohibited.
     - Pass step_name (the YAML step key, e.g. "implement") in the with: block
-      when calling run_skill or run_skill_retry. The server accumulates token
+      when calling run_skill. The server accumulates token
       usage server-side, grouped by step name.
     - When verbosity is "summary", call get_token_summary(clear=True) at pipeline
       completion and render as:
@@ -149,7 +125,7 @@ async def load_recipe(name: str) -> str:
     - merge_worktree: "error" key present in response
       (cleanup_succeeded=false means orphaned worktree/branch — the merge itself succeeded)
     - run_cmd: {"success": false}
-    - run_skill / run_skill_retry: {"success": false}
+    - run_skill: {"success": false}
     - classify_fix: "error" key present in response
 
     To CREATE a new recipe, use the /autoskillit:write-recipe skill.

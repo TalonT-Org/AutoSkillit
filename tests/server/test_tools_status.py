@@ -315,6 +315,34 @@ class TestGetTokenSummary:
             "cache_read_input_tokens",
         } <= total_keys
 
+    @pytest.mark.anyio
+    async def test_step_includes_elapsed_seconds(self, tool_ctx):
+        """Each step dict in the response includes elapsed_seconds."""
+        start = "2026-01-01T00:00:00+00:00"
+        end = "2026-01-01T00:00:30+00:00"
+        tool_ctx.token_log.record("deploy", {"input_tokens": 200}, start_ts=start, end_ts=end)
+        result = json.loads(await get_token_summary())
+        assert result["steps"][0]["elapsed_seconds"] == pytest.approx(30.0)
+
+    @pytest.mark.anyio
+    async def test_total_includes_total_elapsed_seconds(self, tool_ctx):
+        """Total dict includes total_elapsed_seconds summed across all steps."""
+        tool_ctx.token_log.record(
+            "a",
+            {"input_tokens": 10},
+            start_ts="2026-01-01T00:00:00+00:00",
+            end_ts="2026-01-01T00:00:05+00:00",
+        )
+        tool_ctx.token_log.record(
+            "b",
+            {"input_tokens": 20},
+            start_ts="2026-01-01T00:01:00+00:00",
+            end_ts="2026-01-01T00:01:08+00:00",
+        )
+        result = json.loads(await get_token_summary())
+        assert "total_elapsed_seconds" in result["total"]
+        assert result["total"]["total_elapsed_seconds"] == pytest.approx(13.0)
+
 
 def test_check_quota_absent_from_mcp_registry(tool_ctx):
     """check_quota must not appear in the agent-visible tool list.

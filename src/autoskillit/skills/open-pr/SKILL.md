@@ -152,7 +152,20 @@ skill then uses this context to scope its exploration.
 The arch-lens skills write their output to `temp/arch-lens-{lens-name}/`. After each skill
 runs, read the generated markdown file and extract the mermaid code block(s).
 
+After extracting the mermaid block, inspect its content for `★` or `●` characters:
+- If the block contains at least one `★` or `●` → add it to `validated_diagrams`.
+- If the block contains neither → discard this diagram; do not add it to the list.
+
+This ensures the PR body only includes diagrams where at least one component was
+visibly modified or created by the PR.
+
 ### Step 6: Compose PR Body
+
+After generating all diagrams, check `validated_diagrams`:
+- If `validated_diagrams` is non-empty → include the `## Architecture Impact` section
+  as described below, embedding only the validated mermaid blocks.
+- If `validated_diagrams` is empty → omit the `## Architecture Impact` section entirely.
+  Do not include a placeholder or note in the PR body.
 
 Write the PR body to `temp/open-pr/pr_body_{timestamp}.md`.
 
@@ -168,9 +181,10 @@ Read `## Summary` from each plan file.
 {If closing_issue is provided and non-empty:}
 Closes #{closing_issue}
 
+{## Architecture Impact — conditional: include only if validated_diagrams is non-empty}
 ## Architecture Impact
 
-{For each lens diagram: embed the mermaid block with a heading for the lens name}
+{For each validated lens diagram: embed the mermaid block with a heading for the lens name}
 
 ### {Lens Name} Diagram
 
@@ -212,9 +226,10 @@ Closes #{closing_issue}
 
 </details>
 
+{## Architecture Impact — conditional: include only if validated_diagrams is non-empty}
 ## Architecture Impact
 
-{Same as single plan — lens diagrams are based on full diff, not plan count}
+{Same as single plan — validated lens diagrams are based on full diff, not plan count}
 
 ### {Lens Name} Diagram
 

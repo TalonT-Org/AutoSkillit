@@ -164,7 +164,7 @@ Extracts values from tool results into a pipeline-scoped context dict. Subsequen
 ```yaml
 steps:
   implement:
-    tool: run_skill_retry
+    tool: run_skill
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
       cwd: "."
@@ -191,7 +191,7 @@ The system validates scripts against these rules:
 9. `capture` values must contain `${{ result.* }}` expressions
 10. `capture` values must only use the `result.*` namespace
 11. `${{ context.X }}` references must point to a variable captured by a preceding step
-12. `run_skill` / `run_skill_retry` steps should have a `capture:` block to explicitly wire outputs (warning: `IMPLICIT_HANDOFF`)
+12. `run_skill` steps should have a `capture:` block to explicitly wire outputs (warning: `IMPLICIT_HANDOFF`)
 13. All captured variables should be consumed by at least one reachable downstream step via `${{ context.X }}` (warning: `DEAD_OUTPUT`)
 
 ## MCP Tool Reference
@@ -201,7 +201,6 @@ Available tools for use in `tool:` fields:
 | Tool | Arguments (`with:`) | Purpose |
 |------|---------------------|---------|
 | `run_skill` | `skill_command`, `cwd`, `add_dir` (optional) | Run a Claude Code headless session with a skill |
-| `run_skill_retry` | `skill_command`, `cwd` | Run headless with retry detection (`needs_retry` field) |
 | `test_check` | `worktree_path` | Run test suite, returns PASS/FAIL |
 | `merge_worktree` | `worktree_path`, `base_branch` | Merge after test gate |
 | `reset_test_dir` | `test_dir`, `force` (optional, default false) | Clear test directory (requires reset guard marker) |
@@ -447,7 +446,7 @@ When converting old `.claude/commands/` or `.claude/skills/` Markdown recipes to
 | Hardcoded paths in SETUP | `required: true` inputs (never hardcode paths) |
 | `PIPELINE:` numbered steps | `steps:` keyed by descriptive name |
 | `run_skill("/skill-name ...", cwd=...)` | `tool: run_skill` with `with: {skill_command: "...", cwd: "..."}` |
-| `run_skill_retry(...)` | `tool: run_skill_retry` with `retry:` block |
+| `run_skill_retry(...)` | `tool: run_skill` with `retries:` field |
 | `→ ESCALATE` / prose failure routing | `on_failure: escalate` |
 | `PASS → next step` | `on_success: next_step` |
 | `FAIL → fix attempt` | `on_failure: fix` |
@@ -491,10 +490,17 @@ When called directly as `/autoskillit:write-recipe`:
 7. Save to `.autoskillit/recipes/{name}.yaml` (create the directory if needed)
 8. Call `validate_recipe` with the saved file path. If errors are returned, fix them and re-validate until clean. Review the `quality.warnings` in the response:
    - `DEAD_OUTPUT`: A `capture:` key is never referenced by any reachable downstream step via `${{ context.X }}`. Either add a `${{ context.X }}` reference in the downstream step's `with:` block, or remove the unused capture.
-   - `IMPLICIT_HANDOFF`: A `run_skill` or `run_skill_retry` step has no `capture:` block. Add a `capture:` block to explicitly wire outputs to downstream steps via `${{ context.X }}`, or confirm the skill's output is intentionally unused.
+   - `IMPLICIT_HANDOFF`: A `run_skill` step has no `capture:` block. Add a `capture:` block to explicitly wire outputs to downstream steps via `${{ context.X }}`, or confirm the skill's output is intentionally unused.
    - Present the quality summary to the user and fix any warnings that indicate broken wiring.
 9. After validation passes, generate the pipeline contract file by calling `generate_recipe_card` on the saved script. This creates `.autoskillit/recipes/contracts/{name}.yaml` alongside the recipe. Use `run_python` with `autoskillit.recipe.contracts.generate_recipe_card` passing the script path and scripts directory, or rely on `load_recipe` which auto-generates contracts on first load.
 10. Tell the user: "Saved to `.autoskillit/recipes/{name}.yaml`. Load it with `load_recipe("{name}")` via the MCP tool."
+
+After telling the user, emit the structured output token as the very last line of your
+text output:
+
+```
+recipe_path={absolute_path_to_saved_recipe_file}
+```
 
 ## CRITICAL: Scripts Are NOT Skills
 

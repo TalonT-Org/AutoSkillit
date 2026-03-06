@@ -87,7 +87,7 @@ async def get_pipeline_report(clear: bool = False) -> str:
 
 @mcp.tool(tags={"automation"})
 async def get_token_summary(clear: bool = False) -> str:
-    """Return accumulated run_skill/run_skill_retry token usage grouped by step name.
+    """Return accumulated run_skill token usage grouped by step name.
 
     This tool is always available (not gated by open_kitchen).
     This tool sends no MCP progress notifications by design (ungated tools are

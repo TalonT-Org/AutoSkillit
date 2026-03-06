@@ -10,6 +10,7 @@ with a defensive copy getter.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from typing import Any
 
 from autoskillit.core import get_logger
@@ -27,6 +28,7 @@ class TokenEntry:
     cache_creation_input_tokens: int = 0
     cache_read_input_tokens: int = 0
     invocation_count: int = 0
+    elapsed_seconds: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -45,7 +47,14 @@ class DefaultTokenLog:
     def __init__(self) -> None:
         self._entries: dict[str, TokenEntry] = {}
 
-    def record(self, step_name: str, token_usage: dict[str, Any] | None) -> None:
+    def record(
+        self,
+        step_name: str,
+        token_usage: dict[str, Any] | None,
+        *,
+        start_ts: str = "",
+        end_ts: str = "",
+    ) -> None:
         """Accumulate token usage for a step.
 
         No-op if step_name is empty or token_usage is None.
@@ -60,6 +69,14 @@ class DefaultTokenLog:
         e.cache_creation_input_tokens += token_usage.get("cache_creation_input_tokens", 0)
         e.cache_read_input_tokens += token_usage.get("cache_read_input_tokens", 0)
         e.invocation_count += 1
+        if start_ts and end_ts:
+            try:
+                delta = (
+                    datetime.fromisoformat(end_ts) - datetime.fromisoformat(start_ts)
+                ).total_seconds()
+                e.elapsed_seconds += max(0.0, delta)
+            except ValueError:
+                pass
         logger.debug(
             "token_usage_recorded",
             step_name=step_name,
@@ -70,19 +87,21 @@ class DefaultTokenLog:
         """Return a defensive copy of all entries as dicts, in insertion order."""
         return [e.to_dict() for e in self._entries.values()]
 
-    def compute_total(self) -> dict[str, int]:
-        """Compute aggregate token counts across all steps."""
-        total: dict[str, int] = {
+    def compute_total(self) -> dict[str, Any]:
+        """Compute aggregate token counts and elapsed time across all steps."""
+        total: dict[str, Any] = {
             "input_tokens": 0,
             "output_tokens": 0,
             "cache_creation_input_tokens": 0,
             "cache_read_input_tokens": 0,
+            "total_elapsed_seconds": 0.0,
         }
         for entry in self._entries.values():
             total["input_tokens"] += entry.input_tokens
             total["output_tokens"] += entry.output_tokens
             total["cache_creation_input_tokens"] += entry.cache_creation_input_tokens
             total["cache_read_input_tokens"] += entry.cache_read_input_tokens
+            total["total_elapsed_seconds"] += entry.elapsed_seconds
         return total
 
     def clear(self) -> None:

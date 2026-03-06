@@ -207,17 +207,16 @@ temp/pr-merge-pipeline/
 
 ## Output Fields (for recipe capture)
 
-The skill prints a final JSON result block for recipe capture:
+After writing all output files and printing the terminal report, emit the following
+structured output tokens as the very last lines of your text output:
 
-```json
-{
-    "pr_order_file": "temp/pr-merge-pipeline/pr_order_YYYY-MM-DD_HHMMSS.json",
-    "analysis_file": "temp/pr-merge-pipeline/pr_analysis_plan_YYYY-MM-DD_HHMMSS.md",
-    "integration_branch": "integration/pr-merge-YYYYMMDD-HHMMSS",
-    "pr_count": 5,
-    "simple_count": 3,
-    "needs_check_count": 2
-}
+```
+pr_order_file={absolute_path_to_pr_order_json}
+analysis_file={absolute_path_to_pr_analysis_plan_md}
+integration_branch={integration_branch_name}
+pr_count={total_pr_count}
+simple_count={simple_pr_count}
+needs_check_count={needs_check_pr_count}
 ```
 
 ## Related Skills

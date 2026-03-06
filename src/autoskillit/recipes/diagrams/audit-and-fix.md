@@ -1,115 +1,96 @@
-<!-- autoskillit-recipe-hash: sha256:436fed625e095eaf1c010df865042b0bf2085c24defdb4e98899a7197c77da52 -->
-<!-- autoskillit-diagram-format: v2 -->
+<!-- autoskillit-recipe-hash: sha256:2283736ef10a22d06821753a1697e5383487c7b1991ff1df262875ad87325ed7 -->
+<!-- autoskillit-diagram-format: v3 -->
 ## audit-and-fix
 Audit codebase, investigate findings, plan fixes, implement in a feature branch, and open a PR.
 
 **Flow:** 
 
 ### Graph
-┌─ clone  [clone_repo]
-│  ✓ success  → set_merge_target
-│  ✗ failure  → escalate_stop
-│  ↺ ×3  → escalate
+clone  [clone_repo] (retry ×3)
+│  ↓ success → push_merge_target
+│  ✗ failure → escalate_stop
 │
-┌─ set_merge_target  [run_cmd]
-│  ✓ success  → fetch_issue
-│  ✗ failure  → escalate_stop
-│  ↺ ×3  → escalate
+├── [push_merge_target] (retry ×3)  ← only if inputs.open_pr
+│       ✗ failure → cleanup_failure
 │
-│  ⟨skip if inputs.issue_url is false⟩
-┌─ fetch_issue  [fetch_github_issue]
-│  ✓ success  → create_branch
-│  ✗ failure  → escalate_stop
-│  ↺ ×3  → escalate
+audit  [run_skill] (retry ×3)
+│  ↓ success → investigate
+│  ✗ failure → cleanup_failure
 │
-│  ⟨skip if inputs.open_pr is false⟩
-┌─ create_branch  [run_cmd]
-│  ✓ success  → push_merge_target
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+investigate  [run_skill] (retry ×3)
+│  ↓ success → plan
+│  ✗ failure → cleanup_failure
 │
-│  ⟨skip if inputs.open_pr is false⟩
-┌─ push_merge_target  [push_to_remote]
-│  ✓ success  → audit
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+plan  [run_skill] (retry ×3)
+│  ↓ success → implement
+│  ✗ failure → cleanup_failure
 │
-┌─ audit  [run_skill]
-│  ✓ success  → investigate
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+implement  [run_skill] (retry ×∞)
+│  ↓ success → test
+│  ✗ failure → cleanup_failure
+│  ⌛ context limit → retry_worktree
 │
-┌─ investigate  [run_skill]
-│  ✓ success  → plan
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+retry_worktree  [run_skill] (retry ×3)
+│  ↓ success → test
+│  ✗ failure → cleanup_failure
 │
-┌─ plan  [run_skill]
-│  ✓ success  → implement
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+test  [test_check] (retry ×3)
+│  ↓ success → merge
+│  ✗ failure → fix
 │
-┌─ implement  [run_skill]
-│  ✓ success  → test
-│  ✗ failure  → cleanup_failure
+fix  [run_skill] (retry ×3)
+│  ↓ success → test ↑
+│  ✗ failure → cleanup_failure
+│  ⌛ context limit → test
 │
-┌─ retry_worktree  [run_skill]
-│  ✓ success  → test
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → cleanup_failure
+merge  [merge_worktree] (retry ×3)
+│  ↓ success → push
+│  ✗ failure → cleanup_failure
 │
-┌─ test  [test_check]
-│  ✓ success  → merge
-│  ✗ failure  → fix
-│  ↺ ×3  → escalate
+push  [push_to_remote] (retry ×3)
+│  ↓ success → open_pr_step
+│  ✗ failure → cleanup_failure
 │
-┌─ fix  [run_skill]
-│  ✓ success  → test ↑
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+├── [open_pr_step] (retry ×3)  ← only if inputs.open_pr
+│       ✗ failure → cleanup_failure
 │
-┌─ merge  [merge_worktree]
-│  ✓ success  → push
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+┌────┤ FOR EACH:
+│  ├── [ci_watch] (retry ×3)  ← only if inputs.open_pr
+│  │       ✗ failure → resolve_ci
+│  │
+│  resolve_ci  [run_skill] (retry ×2)
+│  │  ↓ success → re_push
+│  │  ✗ failure → cleanup_failure
+│  │
+│  re_push  [push_to_remote] (retry ×3)
+│  │  ↓ success → ci_watch ↑
+│  │  ✗ failure → cleanup_failure
+└────┘
 │
-┌─ push  [push_to_remote]
-│  ✓ success  → open_pr_step
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+cleanup_success  [remove_clone] (retry ×3)
+│  ↓ success → done
+│  ✗ failure → done
 │
-│  ⟨skip if inputs.open_pr is false⟩
-┌─ open_pr_step  [run_skill]
-│  ✓ success  → cleanup_success
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+cleanup_failure  [remove_clone] (retry ×3)
+│  ↓ success → escalate_stop
+│  ✗ failure → escalate_stop
 │
-┌─ cleanup_success  [remove_clone]
-│  ✓ success  → done
-│  ✗ failure  → done
-│  ↺ ×3  → escalate
-│
-┌─ cleanup_failure  [remove_clone]
-│  ✓ success  → escalate_stop
-│  ✗ failure  → escalate_stop
-│  ↺ ×3  → escalate
-│
-───────────────────────────────────────
+─────────────────────────────────────
 ⏹ done  "Audit findings addressed. Changes merged via PR."
 ⏹ escalate_stop  "Human intervention needed."
 
-### Ingredients
-| Name | Description | Required | Default |
-|------|-------------|----------|---------|
+### Inputs
+| Name | Description | Default |
+|------|-------------|---------|
 | source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel.
- | no |  |
+ | auto-detect |
 | run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. audit-fix/124 or audit-fix/20260304) and in the clone directory name.
- | no | audit-fix |
-| base_branch | Branch to branch off of and PR target | no | main |
-| audit_type | Type of audit to run (arch, tests, cohesion, defense-standards) | no | arch |
-| open_pr | Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false) | no | true |
+ | audit-fix |
+| base_branch | Branch to branch off of and PR target | main |
+| audit_type | Type of audit to run (arch, tests, cohesion, defense-standards) | arch |
+| open_pr | Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false) | on |
 | issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched for additional audit context, and the resulting PR will include "Closes #N" to auto-close the issue on merge.
- | no |  |
+ | auto-detect |
 ### Kitchen Rules
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All code changes and investigation happen through headless sessions via run_skill.
 - Route to on_failure when a step fails — the downstream skill (e.g., resolve-failures) has diagnostic access that the orchestrator does not. Do not investigate or attempt to fix failures directly.

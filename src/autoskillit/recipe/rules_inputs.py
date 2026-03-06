@@ -15,6 +15,7 @@ from autoskillit.recipe.contracts import (
     count_positional_args,
     extract_context_refs,
     extract_input_refs,
+    extract_skill_cmd_refs,
     get_skill_contract,
     load_bundled_manifest,
     resolve_skill_name,
@@ -88,6 +89,16 @@ def _check_unsatisfied_skill_input(ctx: ValidationContext) -> list[RuleFinding]:
                     # inputs they satisfy. Skip checking — only check steps
                     # that use explicit ${{ }} references for all arguments.
                     if count_positional_args(skill_cmd) > 0:
+                        continue
+
+                    # If the skill_command has template refs whose variable names
+                    # don't all match named contract inputs, the step is using
+                    # positional-style invocation (e.g., ${{ context.work_dir }}
+                    # mapped positionally to a `worktree_path` input). We cannot
+                    # validate positional mappings by name, so skip the check.
+                    all_input_names = {i.name for i in contract.inputs}
+                    cmd_refs = extract_skill_cmd_refs(skill_cmd)
+                    if cmd_refs and not cmd_refs.issubset(all_input_names):
                         continue
 
                     ctx_refs = extract_context_refs(step)

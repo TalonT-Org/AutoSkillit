@@ -7,7 +7,7 @@ import yaml
 
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.validator import analyze_dataflow
+from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 
 # ---------------------------------------------------------------------------
 # TestImplementationPipelineStructure
@@ -18,11 +18,6 @@ class TestImplementationPipelineStructure:
     @pytest.fixture(scope="class")
     def recipe(self):
         return load_recipe(builtin_recipes_dir() / "implementation.yaml")
-
-    def test_ip1_group_step_captures_group_files(self, recipe) -> None:
-        """T_IP1: group step has capture containing key group_files (not groups_path)."""
-        assert "group_files" in recipe.steps["group"].capture
-        assert "groups_path" not in recipe.steps["group"].capture
 
     def test_ip2_review_step_captures_review_path(self, recipe) -> None:
         """T_IP2: review step has capture containing key review_path."""
@@ -53,22 +48,17 @@ class TestImplementationPipelineStructure:
         assert any("context.review_path" in str(v) for v in verify_with.values())
 
     def test_ip5_audit_impl_has_on_failure(self, recipe) -> None:
-        """T_IP5: audit_impl uses predicate on_result exclusively for all routing.
+        """T_IP5: audit_impl declares on_failure for tool-level failure routing.
 
-        In predicate format (v0.3.0), on_result handles all routing paths including
-        tool-level failures via the 'when: result.error' condition. on_failure must
-        be absent (mutually exclusive with predicate on_result per schema validator).
+        In the two-tier failure model, on_result.conditions fire when run_skill returns
+        success=true with a result object. on_failure fires when run_skill returns
+        success=false (tool-level failure, no result object). Both must be declared.
         """
         step = recipe.steps["audit_impl"]
         assert step.on_success is None  # on_result is used; on_success remains absent
-        assert step.on_failure is None, (
-            "audit_impl must NOT declare on_failure in predicate format. "
-            "Predicate conditions handle all routing including failures via 'when: result.error'."
-        )
-        conds = step.on_result.conditions if step.on_result else []
-        assert any("result.error" in (c.when or "") for c in conds), (
-            "audit_impl predicate on_result must include a 'when: result.error' condition "
-            "to handle tool-level run_skill failures."
+        assert step.on_failure == "escalate_stop", (
+            "audit_impl must declare on_failure: escalate_stop. "
+            "Tool-level failures produce no result object — on_result conditions cannot fire."
         )
 
     def test_ip6_plan_step_note_contains_glob_pattern(self, recipe) -> None:
@@ -157,7 +147,7 @@ class TestImplementationPipelineStructure:
             (
                 i
                 for i, (name, step) in enumerate(steps)
-                if step.tool in {"run_skill", "run_skill_retry"}
+                if step.tool in {"run_skill"}
                 and "implement-worktree" in step.with_args.get("skill_command", "")
             ),
             None,
@@ -232,14 +222,12 @@ class TestImplementationPipelineStructure:
         )
         assert all(v.severity == Severity.WARNING for v in violations)
 
-    def test_ip_open_pr_step_routes_to_cleanup_not_push(self, recipe) -> None:
-        """open_pr_step.on_success must be cleanup_success, never push.
-        The push step already ran before open_pr_step; routing back to push is a double-push."""
+    def test_ip_open_pr_step_routes_to_ci_watch(self, recipe) -> None:
+        """open_pr_step.on_success must be ci_watch — reached via ci_watch now."""
         open_pr_step = recipe.steps["open_pr_step"]
-        assert open_pr_step.on_success != "push", (
-            "open_pr_step.on_success must not be 'push' — that would trigger a double-push"
+        assert open_pr_step.on_success == "ci_watch", (
+            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
         )
-        assert open_pr_step.on_success == "cleanup_success"
 
     def test_ip_open_pr_step_has_skip_when_false(self, recipe) -> None:
         """open_pr_step must declare skip_when_false: inputs.open_pr."""
@@ -276,13 +264,12 @@ class TestImplementationPipelineStructure:
         cmd = recipe.steps["create_branch"].with_args["cmd"]
         assert "inputs.run_name" in cmd
 
-    def test_ip_no_push_to_remote_step_after_open_pr_in_routing_chain(self, recipe) -> None:
-        """No push_to_remote step must be reachable from open_pr_step's on_success chain.
-        After open_pr_step, we must be in the cleanup/done path only."""
+    def test_ip_main_push_step_not_reachable_after_open_pr(self, recipe) -> None:
+        """The main `push` step must not be reachable after open_pr_step —
+        that would be a double-push. The new `re_push` step IS reachable and is correct."""
         from autoskillit.recipe.validator import _build_step_graph
 
         graph = _build_step_graph(recipe)
-        # BFS from open_pr_step.on_success (cleanup_success)
         visited: set[str] = set()
         queue = [recipe.steps["open_pr_step"].on_success]
         while queue:
@@ -291,13 +278,9 @@ class TestImplementationPipelineStructure:
                 continue
             visited.add(current)
             queue.extend(graph.get(current, []))
-        push_to_remote_steps = {
-            name for name, step in recipe.steps.items() if step.tool == "push_to_remote"
-        }
-        reachable_push = push_to_remote_steps & visited
-        assert not reachable_push, (
-            f"push_to_remote step(s) {reachable_push} are reachable "
-            "after open_pr_step — double-push risk"
+        assert "push" not in visited, (
+            "'push' step is reachable after open_pr_step — double-push risk. "
+            "(re_push is allowed; push is not)"
         )
 
     def test_ip_open_pr_false_path_reaches_push_then_cleanup(self, recipe) -> None:
@@ -336,6 +319,180 @@ class TestImplementationPipelineStructure:
         note = recipe.steps["plan"].note or ""
         assert "ACCUMULATION" in note
         assert "all_plan_paths" in note
+
+    def test_ip_no_group_step(self, recipe) -> None:
+        """implementation.yaml must not contain a group step."""
+        assert "group" not in recipe.steps
+
+    def test_ip_task_ingredient_required(self, recipe) -> None:
+        """task ingredient must be required in the direct recipe."""
+        task_ing = recipe.ingredients.get("task")
+        assert task_ing is not None
+        assert task_ing.required is True or task_ing.default is None
+
+    def test_ip_no_make_groups_ingredient(self, recipe) -> None:
+        """make_groups ingredient must not be present."""
+        assert "make_groups" not in recipe.ingredients
+
+    def test_ip_no_source_doc_ingredient(self, recipe) -> None:
+        """source_doc ingredient must not be present."""
+        assert "source_doc" not in recipe.ingredients
+
+    def test_ip_next_or_done_no_more_groups_route(self, recipe) -> None:
+        """next_or_done must not route more_groups — no groups in the direct recipe."""
+        step = recipe.steps["next_or_done"]
+        assert step.on_result is not None
+        conds = step.on_result.conditions
+        assert not any("more_groups" in (c.when or "") for c in conds)
+
+    def test_ip_ci_watch_exists_and_is_gated(self, recipe) -> None:
+        """T_CI1: ci_watch step exists, is run_cmd, has skip_when_false: inputs.open_pr,
+        and specifies timeout: 150."""
+        assert "ci_watch" in recipe.steps
+        step = recipe.steps["ci_watch"]
+        assert step.tool == "run_cmd"
+        assert step.skip_when_false == "inputs.open_pr"
+        assert step.with_args.get("timeout") == 150
+
+    def test_ip_ci_watch_routing(self, recipe) -> None:
+        """T_CI2: ci_watch routes on_success to cleanup_success and on_failure to resolve_ci."""
+        step = recipe.steps["ci_watch"]
+        assert step.on_success == "cleanup_success"
+        assert step.on_failure == "resolve_ci"
+
+    def test_ip_ci_watch_uses_merge_target(self, recipe) -> None:
+        """T_CI3: ci_watch command references context.merge_target for the branch argument."""
+        cmd = recipe.steps["ci_watch"].with_args["cmd"]
+        assert "context.merge_target" in cmd
+        assert "gh run watch" in cmd
+        assert "--exit-status" in cmd
+
+    def test_ip_resolve_ci_structure(self, recipe) -> None:
+        """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
+        and on_exhausted: cleanup_failure."""
+        assert "resolve_ci" in recipe.steps
+        step = recipe.steps["resolve_ci"]
+        assert step.tool == "run_skill"
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "resolve-failures" in skill_cmd
+        assert step.retries == 2
+        assert step.on_exhausted == "cleanup_failure"
+
+    def test_ip_resolve_ci_uses_work_dir(self, recipe) -> None:
+        """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
+        cmd = recipe.steps["resolve_ci"].with_args.get("skill_command", "")
+        assert "context.work_dir" in cmd
+
+    def test_ip_re_push_loops_back_to_ci_watch(self, recipe) -> None:
+        """T_CI6: re_push step exists, is push_to_remote, routes on_success back to ci_watch."""
+        assert "re_push" in recipe.steps
+        step = recipe.steps["re_push"]
+        assert step.tool == "push_to_remote"
+        assert step.on_success == "ci_watch"
+        assert step.on_failure == "cleanup_failure"
+
+    def test_ip_re_push_has_explicit_remote_url(self, recipe) -> None:
+        """T_CI7: re_push uses explicit remote_url (satisfies push-missing-explicit-remote-url)."""
+        with_args = recipe.steps["re_push"].with_args
+        assert "remote_url" in with_args
+        assert "context.remote_url" in with_args["remote_url"]
+
+    def test_ip_open_pr_step_has_skip_when_false_ci(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is now ci_watch (updated from cleanup_success)."""
+        step = recipe.steps["open_pr_step"]
+        assert step.on_success == "ci_watch", (
+            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        )
+
+
+# ---------------------------------------------------------------------------
+# TestImplementationGroupsStructure
+# ---------------------------------------------------------------------------
+
+
+class TestImplementationGroupsStructure:
+    @pytest.fixture(scope="class")
+    def recipe(self):
+        return load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
+
+    def test_ig1_group_step_captures_group_files(self, recipe) -> None:
+        """T_IG1: group step captures group_files, not groups_path."""
+        assert "group_files" in recipe.steps["group"].capture
+        assert "groups_path" not in recipe.steps["group"].capture
+
+    def test_ig2_group_step_is_not_optional(self, recipe) -> None:
+        """T_IG2: group step must always run — no skip_when_false, not conditional."""
+        step = recipe.steps["group"]
+        assert step.skip_when_false is None
+        assert not step.optional
+
+    def test_ig3_source_doc_required(self, recipe) -> None:
+        """T_IG3: source_doc must be a required ingredient in the groups recipe."""
+        src = recipe.ingredients.get("source_doc")
+        assert src is not None
+        assert src.required is True
+
+    def test_ig4_no_make_groups_ingredient(self, recipe) -> None:
+        """T_IG4: make_groups must not be present — groups are always used in this recipe."""
+        assert "make_groups" not in recipe.ingredients
+
+    def test_ig5_next_or_done_routes_more_groups_to_plan(self, recipe) -> None:
+        """T_IG5: next_or_done must route more_groups back to plan for group iteration."""
+        step = recipe.steps["next_or_done"]
+        assert step.on_result is not None
+        conds = step.on_result.conditions
+        assert any(
+            c.route == "plan" and c.when is not None and "more_groups" in c.when for c in conds
+        ), "next_or_done must have a predicate routing more_groups → plan"
+
+    def test_ig6_next_or_done_routes_more_parts_to_verify(self, recipe) -> None:
+        """T_IG6: next_or_done must route more_parts to verify for sequential part processing."""
+        step = recipe.steps["next_or_done"]
+        assert step.on_result is not None
+        conds = step.on_result.conditions
+        assert any(
+            c.route == "verify" and c.when is not None and "more_parts" in c.when for c in conds
+        ), "next_or_done must have a predicate routing more_parts → verify"
+
+    def test_ig7_next_or_done_fallthrough_to_audit_impl(self, recipe) -> None:
+        """T_IG7: next_or_done fallthrough (all done) must route to audit_impl."""
+        step = recipe.steps["next_or_done"]
+        assert step.on_result is not None
+        conds = step.on_result.conditions
+        assert any(c.route == "audit_impl" for c in conds)
+
+    def test_ig8_plan_note_contains_accumulation_instruction(self, recipe) -> None:
+        """T_IG8: plan step note must instruct agent to accumulate plan paths across groups."""
+        note = recipe.steps["plan"].note or ""
+        assert "ACCUMULATION" in note
+        assert "all_plan_paths" in note
+
+    def test_ig_push_merge_target_routes_to_group(self, recipe) -> None:
+        """push_merge_target must route to group, not plan, in the groups recipe."""
+        step = recipe.steps.get("push_merge_target")
+        assert step is not None
+        assert step.on_success == "group"
+
+    def test_ig_audit_impl_uses_base_sha_as_ref(self, recipe) -> None:
+        """audit_impl must use context.base_sha as implementation_ref."""
+        step = recipe.steps["audit_impl"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "context.base_sha" in skill_cmd
+        assert "context.branch_name" not in skill_cmd
+
+    def test_ig_fix_step_routes_on_success_to_test(self, recipe) -> None:
+        """fix step must route on_success to test (resolve-failures does not merge)."""
+        assert recipe.steps["fix"].on_success == "test"
+
+    def test_ig_push_after_audit_warning_fires(self, recipe) -> None:
+        """push-before-audit semantic rule fires as WARNING (audit has skip_when_false)."""
+        from autoskillit.core.types import Severity
+        from autoskillit.recipe.validator import run_semantic_rules
+
+        findings = run_semantic_rules(recipe)
+        violations = [f for f in findings if f.rule == "push-before-audit"]
+        assert len(violations) >= 1
+        assert all(v.severity == Severity.WARNING for v in violations)
 
 
 # ---------------------------------------------------------------------------
@@ -394,6 +551,19 @@ class TestBugfixLoopStructure:
         assert "branch_name" in step.capture, (
             "retry_worktree also updates the active worktree reference; "
             "it must capture branch_name for downstream audit_impl use"
+        )
+
+    def test_bugfix_loop_investigate_captures_investigation_path(self, recipe) -> None:
+        """1e: investigate step must capture investigation_path; plan step must pass it."""
+        investigate_step = recipe.steps["investigate"]
+        assert (
+            investigate_step.capture is not None
+            and "investigation_path" in investigate_step.capture
+        ), "bugfix-loop investigate step must capture investigation_path"
+        plan_step = recipe.steps["plan"]
+        skill_cmd = plan_step.with_args.get("skill_command", "")
+        assert "${{ context.investigation_path }}" in skill_cmd, (
+            "bugfix-loop plan step skill_command must pass ${{ context.investigation_path }}"
         )
 
 
@@ -515,6 +685,83 @@ class TestInvestigateFirstStructure:
             "implement-worktree merges immediately, making verify and assess unreachable"
         )
 
+    def test_remediation_investigate_captures_investigation_path(self, recipe) -> None:
+        """1c: investigate step must have a capture block containing investigation_path."""
+        step = recipe.steps["investigate"]
+        assert step.capture is not None and "investigation_path" in step.capture, (
+            "investigate step must capture investigation_path so rectify receives "
+            "the explicit path rather than scanning the filesystem"
+        )
+        assert step.capture["investigation_path"] == "${{ result.investigation_path }}"
+
+    def test_remediation_rectify_uses_context_investigation_path(self, recipe) -> None:
+        """1d: rectify step must pass ${{ context.investigation_path }} in skill_command."""
+        step = recipe.steps["rectify"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "${{ context.investigation_path }}" in skill_cmd, (
+            "rectify step skill_command must include ${{ context.investigation_path }} "
+            "to pass the explicit path from the capture block"
+        )
+
+    def test_if_ci_watch_exists_and_is_gated(self, recipe) -> None:
+        """T_CI1: ci_watch step exists, is run_cmd, has skip_when_false: inputs.open_pr,
+        and specifies timeout: 150."""
+        assert "ci_watch" in recipe.steps
+        step = recipe.steps["ci_watch"]
+        assert step.tool == "run_cmd"
+        assert step.skip_when_false == "inputs.open_pr"
+        assert step.with_args.get("timeout") == 150
+
+    def test_if_ci_watch_routing(self, recipe) -> None:
+        """T_CI2: ci_watch routes on_success to cleanup_success and on_failure to resolve_ci."""
+        step = recipe.steps["ci_watch"]
+        assert step.on_success == "cleanup_success"
+        assert step.on_failure == "resolve_ci"
+
+    def test_if_ci_watch_uses_merge_target(self, recipe) -> None:
+        """T_CI3: ci_watch command references context.merge_target for the branch argument."""
+        cmd = recipe.steps["ci_watch"].with_args["cmd"]
+        assert "context.merge_target" in cmd
+        assert "gh run watch" in cmd
+        assert "--exit-status" in cmd
+
+    def test_if_resolve_ci_structure(self, recipe) -> None:
+        """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
+        and on_exhausted: cleanup_failure."""
+        assert "resolve_ci" in recipe.steps
+        step = recipe.steps["resolve_ci"]
+        assert step.tool == "run_skill"
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "resolve-failures" in skill_cmd
+        assert step.retries == 2
+        assert step.on_exhausted == "cleanup_failure"
+
+    def test_if_resolve_ci_uses_work_dir(self, recipe) -> None:
+        """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
+        cmd = recipe.steps["resolve_ci"].with_args.get("skill_command", "")
+        assert "context.work_dir" in cmd
+
+    def test_if_re_push_loops_back_to_ci_watch(self, recipe) -> None:
+        """T_CI6: re_push step exists, is push_to_remote, routes on_success back to ci_watch."""
+        assert "re_push" in recipe.steps
+        step = recipe.steps["re_push"]
+        assert step.tool == "push_to_remote"
+        assert step.on_success == "ci_watch"
+        assert step.on_failure == "cleanup_failure"
+
+    def test_if_re_push_has_explicit_remote_url(self, recipe) -> None:
+        """T_CI7: re_push uses explicit remote_url."""
+        with_args = recipe.steps["re_push"].with_args
+        assert "remote_url" in with_args
+        assert "context.remote_url" in with_args["remote_url"]
+
+    def test_if_open_pr_step_routes_to_ci_watch(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is ci_watch (updated from cleanup_success)."""
+        step = recipe.steps["open_pr_step"]
+        assert step.on_success == "ci_watch", (
+            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestAuditAndFixStructure
@@ -590,6 +837,77 @@ class TestAuditAndFixStructure:
         """create_branch must use inputs.run_name as a prefix in branch naming."""
         cmd = recipe.steps["create_branch"].with_args["cmd"]
         assert "inputs.run_name" in cmd
+
+    def test_audit_and_fix_investigate_captures_investigation_path(self, recipe) -> None:
+        """1f: investigate step must capture investigation_path; plan step must pass it."""
+        step = recipe.steps["investigate"]
+        assert step.capture is not None and "investigation_path" in step.capture, (
+            "audit-and-fix investigate step must capture investigation_path"
+        )
+        plan_step = recipe.steps["plan"]
+        skill_cmd = plan_step.with_args.get("skill_command", "")
+        assert "${{ context.investigation_path }}" in skill_cmd, (
+            "audit-and-fix plan step skill_command must pass ${{ context.investigation_path }}"
+        )
+
+    def test_aaf_ci_watch_exists_and_is_gated(self, recipe) -> None:
+        """T_CI1: ci_watch step exists, is run_cmd, has skip_when_false: inputs.open_pr,
+        and specifies timeout: 150."""
+        assert "ci_watch" in recipe.steps
+        step = recipe.steps["ci_watch"]
+        assert step.tool == "run_cmd"
+        assert step.skip_when_false == "inputs.open_pr"
+        assert step.with_args.get("timeout") == 150
+
+    def test_aaf_ci_watch_routing(self, recipe) -> None:
+        """T_CI2: ci_watch routes on_success to cleanup_success and on_failure to resolve_ci."""
+        step = recipe.steps["ci_watch"]
+        assert step.on_success == "cleanup_success"
+        assert step.on_failure == "resolve_ci"
+
+    def test_aaf_ci_watch_uses_merge_target(self, recipe) -> None:
+        """T_CI3: ci_watch command references context.merge_target for the branch argument."""
+        cmd = recipe.steps["ci_watch"].with_args["cmd"]
+        assert "context.merge_target" in cmd
+        assert "gh run watch" in cmd
+        assert "--exit-status" in cmd
+
+    def test_aaf_resolve_ci_structure(self, recipe) -> None:
+        """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
+        and on_exhausted: cleanup_failure."""
+        assert "resolve_ci" in recipe.steps
+        step = recipe.steps["resolve_ci"]
+        assert step.tool == "run_skill"
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "resolve-failures" in skill_cmd
+        assert step.retries == 2
+        assert step.on_exhausted == "cleanup_failure"
+
+    def test_aaf_resolve_ci_uses_work_dir(self, recipe) -> None:
+        """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
+        cmd = recipe.steps["resolve_ci"].with_args.get("skill_command", "")
+        assert "context.work_dir" in cmd
+
+    def test_aaf_re_push_loops_back_to_ci_watch(self, recipe) -> None:
+        """T_CI6: re_push step exists, is push_to_remote, routes on_success back to ci_watch."""
+        assert "re_push" in recipe.steps
+        step = recipe.steps["re_push"]
+        assert step.tool == "push_to_remote"
+        assert step.on_success == "ci_watch"
+        assert step.on_failure == "cleanup_failure"
+
+    def test_aaf_re_push_has_explicit_remote_url(self, recipe) -> None:
+        """T_CI7: re_push uses explicit remote_url."""
+        with_args = recipe.steps["re_push"].with_args
+        assert "remote_url" in with_args
+        assert "context.remote_url" in with_args["remote_url"]
+
+    def test_aaf_open_pr_step_routes_to_ci_watch(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is ci_watch (updated from cleanup_success)."""
+        step = recipe.steps["open_pr_step"]
+        assert step.on_success == "ci_watch", (
+            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -730,3 +1048,93 @@ def test_bundled_diagrams_are_not_stale() -> None:
     assert not stale, (
         f"Stale diagrams for: {stale}. Run 'autoskillit recipes render' to regenerate."
     )
+
+
+# ---------------------------------------------------------------------------
+# Two-tier failure model tests
+# ---------------------------------------------------------------------------
+
+
+def test_all_predicate_steps_have_on_failure() -> None:
+    """Every tool/python step with on_result.conditions must declare on_failure."""
+    for recipe_name in ["implementation", "remediation", "bugfix-loop", "smoke-test"]:
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        for step_name, step in recipe.steps.items():
+            is_tool = step.tool is not None or step.python is not None
+            if is_tool and step.on_result and step.on_result.conditions:
+                assert step.on_failure is not None, (
+                    f"{recipe_name}.{step_name}: predicate step must declare on_failure"
+                )
+
+
+def test_audit_impl_on_failure_routes_to_escalation() -> None:
+    """audit_impl.on_failure must route to an escalation step in each recipe."""
+    impl = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+    rem = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+    bl = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
+    assert impl.steps["audit_impl"].on_failure == "escalate_stop"
+    assert rem.steps["audit_impl"].on_failure == "escalate_stop"
+    assert bl.steps["audit_impl"].on_failure == "escalate"
+
+
+def test_smoke_check_summary_has_error_escalation() -> None:
+    """check_summary must have a result.error condition routing to a non-done step."""
+    recipe = load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
+    step = recipe.steps["check_summary"]
+    error_routes = [
+        c.route
+        for c in step.on_result.conditions
+        if c.when is not None and "result.error" in c.when
+    ]
+    assert error_routes, "check_summary must have a result.error condition"
+    assert all(r != "done" for r in error_routes), (
+        f"check_summary result.error must not route to done; got {error_routes}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# SKILL.md emit instruction tests (1b, 1c, 1d)
+# ---------------------------------------------------------------------------
+
+
+def test_audit_impl_skill_md_emits_verdict_and_remediation_path() -> None:
+    """1b: audit-impl SKILL.md must contain verdict= and remediation_path= emit lines."""
+    from autoskillit.core.paths import pkg_root
+
+    content = (pkg_root() / "skills" / "audit-impl" / "SKILL.md").read_text()
+    assert "verdict=" in content, "audit-impl SKILL.md missing 'verdict=' emit line"
+    assert "remediation_path=" in content, (
+        "audit-impl SKILL.md missing 'remediation_path=' emit line"
+    )
+
+
+def test_review_approach_skill_md_emits_review_path() -> None:
+    """1c: review-approach SKILL.md must contain review_path= emit line."""
+    from autoskillit.core.paths import pkg_root
+
+    content = (pkg_root() / "skills" / "review-approach" / "SKILL.md").read_text()
+    assert "review_path=" in content, "review-approach SKILL.md missing 'review_path=' emit line"
+
+
+def test_make_groups_skill_md_emits_group_files() -> None:
+    """1d: make-groups SKILL.md must contain group_files=, groups_path=, manifest_path= lines."""
+    from autoskillit.core.paths import pkg_root
+
+    content = (pkg_root() / "skills" / "make-groups" / "SKILL.md").read_text()
+    assert "group_files=" in content, "make-groups SKILL.md missing 'group_files=' emit line"
+    assert "groups_path=" in content, "make-groups SKILL.md missing 'groups_path=' emit line"
+    assert "manifest_path=" in content, "make-groups SKILL.md missing 'manifest_path=' emit line"
+
+
+# ---------------------------------------------------------------------------
+# Bundled recipe uncaptured-handoff-consumer rule (1i)
+# ---------------------------------------------------------------------------
+
+
+def test_bundled_recipes_pass_uncaptured_handoff_consumer() -> None:
+    """1i: all bundled recipes must produce zero uncaptured-handoff-consumer findings."""
+    for yaml_file in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_file)
+        findings = run_semantic_rules(recipe)
+        handoff_findings = [f for f in findings if f.rule == "uncaptured-handoff-consumer"]
+        assert not handoff_findings, f"{yaml_file.name}: {handoff_findings}"

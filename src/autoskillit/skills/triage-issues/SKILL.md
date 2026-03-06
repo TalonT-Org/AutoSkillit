@@ -27,7 +27,7 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 - Modify any source code files
 - Create or edit Python, YAML, or config files
 - Guess recipe classification when confidence is low — escalate to user
-- Apply GitHub labels without the `--label` flag
+- Apply GitHub labels when `--no-label` is passed
 - Skip human escalation for ambiguous issues
 - Add useless comments to the codebase — do not use the codebase as a notepad
 - Create files outside `temp/triage-issues/` directory
@@ -47,8 +47,8 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 Parse optional arguments from the user's invocation:
 
 - `--batch-size N` — maximum issues per batch (default: 4)
-- `--label` — apply recipe and batch labels to GitHub issues after triage
-- `--dry-run` — run analysis but skip label application even if `--label` is set
+- `--no-label` — skip GitHub label application after triage
+- `--dry-run` — run analysis but skip label application even if `--no-label` is not set
 
 ### Step 1: Authenticate and Fetch Issues
 
@@ -77,14 +77,15 @@ Use `model: "sonnet"` for all subagents.
 
 ### Step 3: Recipe Classification
 
-Classify each issue into a recipe route using this heuristic:
+Classify each issue into a recipe route using the primary behavioral criterion:
 
-| Signal | Route | Rationale |
-|--------|-------|-----------|
-| Bug with unclear root cause | `remediation` | Needs investigation before implementation |
-| Feature with clear acceptance criteria | `implementation` | Well-defined scope, can proceed directly |
-| Large/ambiguous enhancement | `remediation` | Needs decomposition and analysis first |
-| Well-scoped task with known files | `implementation` | Known changes, predictable scope |
+**Is existing behavior broken?**
+- **Yes** (a runtime bug — something deployed is not working as documented or intended) → `recipe:remediation`
+- **No** (a new feature, enhancement, documentation, refactor, or configuration change) → `recipe:implementation`
+
+Examples that route to `remediation`: a command that crashes, an API that returns wrong data, a file that fails to parse, a test that intermittently panics.
+
+Examples that route to `implementation`: adding a new CLI flag, improving error messages, refactoring a module, writing documentation, adding support for a new file format — regardless of scope or complexity.
 
 For each issue, record:
 - The assigned route (`implementation` or `remediation`)
@@ -188,26 +189,19 @@ The report contains:
 }
 ```
 
-**7c. Optional label application (if `--label` flag):**
+**7c. Label application (unless `--no-label` is passed):**
 
-For each recipe label that doesn't exist yet:
-
-```bash
-gh label create "recipe:implementation" --description "Route through implementation recipe" --color "0E8A16"
-gh label create "recipe:remediation" --description "Route through remediation recipe" --color "D93F0B"
-```
-
-For each batch label:
+Ensure recipe labels exist (idempotent):
 
 ```bash
-gh label create "batch:1" --description "Implementation batch 1" --color "1D76DB"
+gh label create "recipe:implementation" --description "Route through implementation recipe" --color "0E8A16" --force
+gh label create "recipe:remediation" --description "Route through remediation recipe" --color "D93F0B" --force
 ```
 
-For each triaged issue:
+For each triaged issue, apply its recipe label:
 
 ```bash
 gh issue edit {number} --add-label "recipe:{recipe}"
-gh issue edit {number} --add-label "batch:{batch_number}"
 ```
 
 ## Output Location

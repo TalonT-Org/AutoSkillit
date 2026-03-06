@@ -14,11 +14,13 @@ logger = get_logger(__name__)
 # resolve-failures can be applied. Non-recoverable values (PATH_VALIDATION,
 # BRANCH_DETECTION, FETCH, PRE_REBASE_CHECK, MERGE) involve infrastructure or
 # main-repo states where recipe-level recovery routing is not applicable.
-_RECOVERABLE_FAILED_STEPS: frozenset[str] = frozenset({
-    MergeFailedStep.TEST_GATE,              # pre-rebase test failure — worktree intact
-    MergeFailedStep.POST_REBASE_TEST_GATE,  # post-rebase test failure — worktree intact
-    MergeFailedStep.REBASE,                 # rebase conflict, abort succeeded — worktree intact
-})
+_RECOVERABLE_FAILED_STEPS: frozenset[str] = frozenset(
+    {
+        MergeFailedStep.TEST_GATE,  # pre-rebase test failure — worktree intact
+        MergeFailedStep.POST_REBASE_TEST_GATE,  # post-rebase test failure — worktree intact
+        MergeFailedStep.REBASE,  # rebase conflict, abort succeeded — worktree intact
+    }
+)
 
 _FAILED_STEP_PATTERN = re.compile(r"result\.failed_step\s*==\s*['\"](\w+)['\"]")
 

@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:6892239d6d74a72b0acd74b3a7ba266c748bab0ef9744a18ff03c53277a70324 -->
+<!-- autoskillit-recipe-hash: sha256:e491e7d7e04cbe844333ebc812b775f6de16dec2b4bf9ceccbbc26abbfb01c54 -->
 <!-- autoskillit-diagram-format: v2 -->
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
@@ -75,6 +75,7 @@ Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose
 │
 ┌─ merge  [merge_worktree]
 │  ├─ result.failed_step == 'test_gate'  → fix
+│  ├─ result.failed_step == 'post_rebase_test_gate'  → fix
 │  ├─ result.failed_step == 'rebase'  → fix
 │  ├─ result.error  → cleanup_failure
 │  ├─ (default)  → next_or_done

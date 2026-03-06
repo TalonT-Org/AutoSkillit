@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:462cde93063b101e4592a49ef04b7f35c2c278b6ccb40cfe0529d206d12d860f -->
+<!-- autoskillit-recipe-hash: sha256:0b7dcef1260576a4274925a13e7ef0a456c4e4781a7907ef45b0857b59e7f1c9 -->
 <!-- autoskillit-diagram-format: v2 -->
 ## remediation
 Investigate a problem deeply, plan architectural fix, implement in a feature branch, and open a PR.
@@ -90,6 +90,7 @@ Investigate a problem deeply, plan architectural fix, implement in a feature bra
 │
 ┌─ merge  [merge_worktree]
 │  ├─ result.failed_step == 'test_gate'  → assess ↑
+│  ├─ result.failed_step == 'post_rebase_test_gate'  → assess ↑
 │  ├─ result.failed_step == 'rebase'  → assess ↑
 │  ├─ result.error  → cleanup_failure
 │  ├─ (default)  → push

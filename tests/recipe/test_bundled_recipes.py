@@ -759,7 +759,8 @@ def test_smoke_check_summary_has_error_escalation() -> None:
     recipe = load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
     step = recipe.steps["check_summary"]
     error_routes = [
-        c.route for c in step.on_result.conditions
+        c.route
+        for c in step.on_result.conditions
         if c.when is not None and "result.error" in c.when
     ]
     assert error_routes, "check_summary must have a result.error condition"

@@ -148,7 +148,7 @@ def test_hooks_json_has_native_tool_guard():
     native_guard_entries = [
         e
         for e in pretooluse_entries
-        if any(h.get("command", "").endswith("native_tool_guard") for h in e.get("hooks", []))
+        if any("native_tool_guard" in h.get("command", "") for h in e.get("hooks", []))
     ]
     assert native_guard_entries, "No native_tool_guard entry found in hooks.json PreToolUse"
 

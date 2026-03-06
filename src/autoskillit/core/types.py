@@ -443,11 +443,18 @@ class AuditStore(Protocol):
 class TokenStore(Protocol):
     """Protocol for per-step token usage accumulation."""
 
-    def record(self, step_name: str, token_usage: dict[str, Any] | None) -> None: ...
+    def record(
+        self,
+        step_name: str,
+        token_usage: dict[str, Any] | None,
+        *,
+        start_ts: str = "",
+        end_ts: str = "",
+    ) -> None: ...
 
     def get_report(self) -> list[dict[str, Any]]: ...
 
-    def compute_total(self) -> dict[str, int]: ...
+    def compute_total(self) -> dict[str, Any]: ...
 
     def clear(self) -> None: ...
 

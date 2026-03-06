@@ -35,8 +35,8 @@ def test_all_gh_label_creates_include_force() -> None:
         for line in content.splitlines():
             if "gh label create" in line and "--force" not in line:
                 failures.append(f"  {skill_name}: {line.strip()}")
-    assert not failures, (
-        "gh label create calls missing --force (non-idempotent):\n" + "\n".join(failures)
+    assert not failures, "gh label create calls missing --force (non-idempotent):\n" + "\n".join(
+        failures
     )
 
 
@@ -49,9 +49,7 @@ def test_no_internal_batch_labels_on_github_objects() -> None:
     source for batch information.
     """
     failures: list[str] = []
-    pattern = re.compile(
-        r"gh\s+(?:issue|pr)\s+edit[^\n]*--add-label[^\n]*batch:", re.IGNORECASE
-    )
+    pattern = re.compile(r"gh\s+(?:issue|pr)\s+edit[^\n]*--add-label[^\n]*batch:", re.IGNORECASE)
     for skill_name, content in _all_skill_mds():
         for match in pattern.finditer(content):
             failures.append(f"  {skill_name}: {match.group(0).strip()}")

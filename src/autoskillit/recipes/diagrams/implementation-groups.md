@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:b2c2dce6a996ff6125db471182a1cfeef180cc3fff508f90022802648229ff4d -->
+<!-- autoskillit-recipe-hash: sha256:c0a9495c18bf421c50932f42a057e66415c13f80a992eb97f743a07308b53137 -->
 <!-- autoskillit-diagram-format: v2 -->
 ## implementation-groups
 Decompose a source document into sequenced implementation groups, then plan, verify, implement, test, and merge each group end-to-end. Use when you have a large document or roadmap to implement via make-groups.

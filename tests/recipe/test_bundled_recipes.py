@@ -327,11 +327,14 @@ class TestImplementationPipelineStructure:
         assert "context.plan_path" not in cmd
 
     def test_ip_no_group_step(self, recipe) -> None:
-        """implementation.yaml must not contain a group step — group logic lives in implementation-groups.yaml."""
+        """implementation.yaml must not contain a group step.
+
+        Group logic lives in implementation-groups.yaml.
+        """
         assert "group" not in recipe.steps
 
     def test_ip_task_ingredient_required(self, recipe) -> None:
-        """task ingredient must be required in the direct recipe (no make_groups conditional needed)."""
+        """task ingredient must be required in the direct recipe."""
         task_ing = recipe.ingredients.get("task")
         assert task_ing is not None
         assert task_ing.required is True or task_ing.default is None
@@ -345,7 +348,7 @@ class TestImplementationPipelineStructure:
         assert "source_doc" not in recipe.ingredients
 
     def test_ip_next_or_done_no_more_groups_route(self, recipe) -> None:
-        """next_or_done must not route more_groups in the direct recipe — no groups in this flow."""
+        """next_or_done must not route more_groups — no groups in the direct recipe."""
         step = recipe.steps["next_or_done"]
         assert step.on_result is not None
         conds = step.on_result.conditions
@@ -366,7 +369,7 @@ class TestImplementationGroupsStructure:
         return load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
 
     def test_ig1_group_step_captures_group_files(self, recipe) -> None:
-        """T_IG1: group step captures group_files (relocated from TestImplementationPipelineStructure)."""
+        """T_IG1: group step captures group_files, not groups_path."""
         assert "group_files" in recipe.steps["group"].capture
         assert "groups_path" not in recipe.steps["group"].capture
 

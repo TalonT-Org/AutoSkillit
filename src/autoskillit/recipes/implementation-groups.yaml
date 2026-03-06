@@ -206,7 +206,7 @@ steps:
   plan:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:make-plan ${{ inputs.source_doc }}"
+      skill_command: "/autoskillit:make-plan CURRENT_GROUP_FILE"
       cwd: "${{ context.work_dir }}"
       step_name: "plan"
       group_files: "${{ context.group_files }}"

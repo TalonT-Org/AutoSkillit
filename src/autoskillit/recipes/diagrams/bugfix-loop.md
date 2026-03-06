@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:353cd3eab98857fbb70e4f79cb0b6661312bd63d27ebd58c0ad1db51f41087f2 -->
+<!-- autoskillit-recipe-hash: sha256:ce9f547b6d2bc0926dcc9fd9e3a341777efc0fc600b8d59f8ddae00d1769d5fc -->
 <!-- autoskillit-diagram-format: v2 -->
 ## bugfix-loop
 End-to-end test with automatic bug fixing in isolated worktrees.
@@ -49,12 +49,15 @@ End-to-end test with automatic bug fixing in isolated worktrees.
 │  ├─ ${{ result.restart_scope }} == full_restart  → investigate ↑
 │  ├─ result.error  → escalate
 │  ├─ (default)  → implement ↑
+│  ✗ failure  → escalate
 │  ↺ ×3  → escalate
 │
+│  ⟨skip if inputs.audit is false⟩
 ┌─ audit_impl  [run_skill]
 │  ├─ ${{ result.verdict }} == GO  → merge
 │  ├─ result.error  → escalate
 │  ├─ (default)  → remediate
+│  ✗ failure  → escalate
 │  ↺ ×3  → escalate
 │
 ┌─ remediate  [route]

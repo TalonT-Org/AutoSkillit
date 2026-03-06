@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:6892239d6d74a72b0acd74b3a7ba266c748bab0ef9744a18ff03c53277a70324 -->
+<!-- autoskillit-recipe-hash: sha256:4e6f472e54270b43e1122b18993408843a50b7041b34d255695ae61f748a109a -->
 <!-- autoskillit-diagram-format: v2 -->
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose a large document into sequenced groups first. Use when user says "run pipeline", "implement task", or "auto implement".
@@ -78,6 +78,7 @@ Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose
 │  ├─ result.failed_step == 'rebase'  → fix
 │  ├─ result.error  → cleanup_failure
 │  ├─ (default)  → next_or_done
+│  ✗ failure  → cleanup_failure
 │  ↺ ×3  → escalate
 │
 ┌─ push  [push_to_remote]
@@ -101,6 +102,7 @@ Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose
 │  ├─ ${{ result.verdict }} == GO  → push ↑
 │  ├─ result.error  → escalate_stop
 │  ├─ (default)  → remediate
+│  ✗ failure  → escalate_stop
 │  ↺ ×3  → escalate
 │
 ┌─ remediate  [route]

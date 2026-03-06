@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:462cde93063b101e4592a49ef04b7f35c2c278b6ccb40cfe0529d206d12d860f -->
+<!-- autoskillit-recipe-hash: sha256:b4079cf682e8946349da7d57d1d353fe186e8b2bdaeee9b8f849410ff2eb7ce5 -->
 <!-- autoskillit-diagram-format: v2 -->
 ## remediation
 Investigate a problem deeply, plan architectural fix, implement in a feature branch, and open a PR.
@@ -73,10 +73,12 @@ Investigate a problem deeply, plan architectural fix, implement in a feature bra
 │  ✗ failure  → cleanup_failure
 │  ↺ ×3  → cleanup_failure
 │
+│  ⟨skip if inputs.audit is false⟩
 ┌─ audit_impl  [run_skill]
 │  ├─ ${{ result.verdict }} == GO  → merge
 │  ├─ result.error  → escalate_stop
 │  ├─ (default)  → remediate
+│  ✗ failure  → escalate_stop
 │  ↺ ×3  → escalate
 │
 ┌─ remediate  [route]
@@ -93,6 +95,7 @@ Investigate a problem deeply, plan architectural fix, implement in a feature bra
 │  ├─ result.failed_step == 'rebase'  → assess ↑
 │  ├─ result.error  → cleanup_failure
 │  ├─ (default)  → push
+│  ✗ failure  → cleanup_failure
 │  ↺ ×3  → escalate
 │
 ┌─ push  [push_to_remote]

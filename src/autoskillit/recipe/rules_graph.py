@@ -107,10 +107,11 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
 @semantic_rule(
     name="on-result-missing-failure-route",
     description=(
-        "Tool and python steps using on_result must also declare on_failure. "
-        "on_result only fires when the tool succeeds and returns a recognized verdict. "
-        "When the tool call itself fails (success: false), on_result never evaluates "
-        "and the orchestrator has no route without on_failure."
+        "All tool and python steps using on_result must declare on_failure. "
+        "on_result (both legacy and predicate format) only fires when the tool "
+        "succeeds and returns a recognized result. When the tool call itself fails "
+        "(success: false), on_result never evaluates. on_failure is the required "
+        "route for tool-level failures and must be declared on all steps."
     ),
     severity=Severity.ERROR,
 )
@@ -120,10 +121,6 @@ def _check_on_result_missing_failure_route(ctx: ValidationContext) -> list[RuleF
     for step_name, step in wf.steps.items():
         is_tool_invocation = step.tool is not None or step.python is not None
         if not (is_tool_invocation and step.on_result is not None and step.on_failure is None):
-            continue
-        # Predicate format: conditions encode all routing paths including failure.
-        # on_failure is neither required nor expected for predicate-format steps.
-        if step.on_result.conditions:
             continue
         findings.append(
             RuleFinding(

@@ -189,6 +189,7 @@ src/autoskillit/
 ├── recipes/                 # Bundled recipe YAML definitions
 │   ├── audit-and-fix.yaml
 │   ├── bugfix-loop.yaml
+│   ├── implementation-groups.yaml
 │   ├── implementation.yaml
 │   ├── remediation.yaml
 │   └── smoke-test.yaml

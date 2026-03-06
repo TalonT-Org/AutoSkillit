@@ -19,11 +19,6 @@ class TestImplementationPipelineStructure:
     def recipe(self):
         return load_recipe(builtin_recipes_dir() / "implementation.yaml")
 
-    def test_ip1_group_step_captures_group_files(self, recipe) -> None:
-        """T_IP1: group step has capture containing key group_files (not groups_path)."""
-        assert "group_files" in recipe.steps["group"].capture
-        assert "groups_path" not in recipe.steps["group"].capture
-
     def test_ip2_review_step_captures_review_path(self, recipe) -> None:
         """T_IP2: review step has capture containing key review_path."""
         assert "review_path" in recipe.steps["review"].capture
@@ -331,6 +326,121 @@ class TestImplementationPipelineStructure:
         note = recipe.steps["plan"].note or ""
         assert "ACCUMULATION" in note
         assert "all_plan_paths" in note
+
+    def test_ip_no_group_step(self, recipe) -> None:
+        """implementation.yaml must not contain a group step."""
+        assert "group" not in recipe.steps
+
+    def test_ip_task_ingredient_required(self, recipe) -> None:
+        """task ingredient must be required in the direct recipe."""
+        task_ing = recipe.ingredients.get("task")
+        assert task_ing is not None
+        assert task_ing.required is True or task_ing.default is None
+
+    def test_ip_no_make_groups_ingredient(self, recipe) -> None:
+        """make_groups ingredient must not be present."""
+        assert "make_groups" not in recipe.ingredients
+
+    def test_ip_no_source_doc_ingredient(self, recipe) -> None:
+        """source_doc ingredient must not be present."""
+        assert "source_doc" not in recipe.ingredients
+
+    def test_ip_next_or_done_no_more_groups_route(self, recipe) -> None:
+        """next_or_done must not route more_groups — no groups in the direct recipe."""
+        step = recipe.steps["next_or_done"]
+        assert step.on_result is not None
+        conds = step.on_result.conditions
+        assert not any("more_groups" in (c.when or "") for c in conds)
+
+
+# ---------------------------------------------------------------------------
+# TestImplementationGroupsStructure
+# ---------------------------------------------------------------------------
+
+
+class TestImplementationGroupsStructure:
+    @pytest.fixture(scope="class")
+    def recipe(self):
+        return load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
+
+    def test_ig1_group_step_captures_group_files(self, recipe) -> None:
+        """T_IG1: group step captures group_files, not groups_path."""
+        assert "group_files" in recipe.steps["group"].capture
+        assert "groups_path" not in recipe.steps["group"].capture
+
+    def test_ig2_group_step_is_not_optional(self, recipe) -> None:
+        """T_IG2: group step must always run — no skip_when_false, not conditional."""
+        step = recipe.steps["group"]
+        assert step.skip_when_false is None
+        assert not step.optional
+
+    def test_ig3_source_doc_required(self, recipe) -> None:
+        """T_IG3: source_doc must be a required ingredient in the groups recipe."""
+        src = recipe.ingredients.get("source_doc")
+        assert src is not None
+        assert src.required is True
+
+    def test_ig4_no_make_groups_ingredient(self, recipe) -> None:
+        """T_IG4: make_groups must not be present — groups are always used in this recipe."""
+        assert "make_groups" not in recipe.ingredients
+
+    def test_ig5_next_or_done_routes_more_groups_to_plan(self, recipe) -> None:
+        """T_IG5: next_or_done must route more_groups back to plan for group iteration."""
+        step = recipe.steps["next_or_done"]
+        assert step.on_result is not None
+        conds = step.on_result.conditions
+        assert any(
+            c.route == "plan" and c.when is not None and "more_groups" in c.when for c in conds
+        ), "next_or_done must have a predicate routing more_groups → plan"
+
+    def test_ig6_next_or_done_routes_more_parts_to_verify(self, recipe) -> None:
+        """T_IG6: next_or_done must route more_parts to verify for sequential part processing."""
+        step = recipe.steps["next_or_done"]
+        assert step.on_result is not None
+        conds = step.on_result.conditions
+        assert any(
+            c.route == "verify" and c.when is not None and "more_parts" in c.when for c in conds
+        ), "next_or_done must have a predicate routing more_parts → verify"
+
+    def test_ig7_next_or_done_fallthrough_to_audit_impl(self, recipe) -> None:
+        """T_IG7: next_or_done fallthrough (all done) must route to audit_impl."""
+        step = recipe.steps["next_or_done"]
+        assert step.on_result is not None
+        conds = step.on_result.conditions
+        assert any(c.route == "audit_impl" for c in conds)
+
+    def test_ig8_plan_note_contains_accumulation_instruction(self, recipe) -> None:
+        """T_IG8: plan step note must instruct agent to accumulate plan paths across groups."""
+        note = recipe.steps["plan"].note or ""
+        assert "ACCUMULATION" in note
+        assert "all_plan_paths" in note
+
+    def test_ig_push_merge_target_routes_to_group(self, recipe) -> None:
+        """push_merge_target must route to group, not plan, in the groups recipe."""
+        step = recipe.steps.get("push_merge_target")
+        assert step is not None
+        assert step.on_success == "group"
+
+    def test_ig_audit_impl_uses_base_sha_as_ref(self, recipe) -> None:
+        """audit_impl must use context.base_sha as implementation_ref."""
+        step = recipe.steps["audit_impl"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "context.base_sha" in skill_cmd
+        assert "context.branch_name" not in skill_cmd
+
+    def test_ig_fix_step_routes_on_success_to_test(self, recipe) -> None:
+        """fix step must route on_success to test (resolve-failures does not merge)."""
+        assert recipe.steps["fix"].on_success == "test"
+
+    def test_ig_push_after_audit_warning_fires(self, recipe) -> None:
+        """push-before-audit semantic rule fires as WARNING (audit has skip_when_false)."""
+        from autoskillit.core.types import Severity
+        from autoskillit.recipe.validator import run_semantic_rules
+
+        findings = run_semantic_rules(recipe)
+        violations = [f for f in findings if f.rule == "push-before-audit"]
+        assert len(violations) >= 1
+        assert all(v.severity == Severity.WARNING for v in violations)
 
 
 # ---------------------------------------------------------------------------

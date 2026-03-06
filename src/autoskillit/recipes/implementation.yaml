@@ -106,7 +106,7 @@ steps:
       cwd: "${{ context.work_dir }}"
     capture:
       merge_target: "${{ result.stdout }}"
-    on_success: fetch_issue
+    on_success: parse_issue_number
     on_failure: escalate_stop
     note: >
       Unconditionally sets merge_target to inputs.base_branch as a fallback.
@@ -115,27 +115,27 @@ steps:
       create_branch is skipped and this fallback stands. This eliminates the
       undefined-context-variable gap that existed when create_branch was optional.
 
-  fetch_issue:
-    tool: fetch_github_issue
+  parse_issue_number:
+    tool: run_cmd
     with:
-      issue_url: "${{ inputs.issue_url }}"
+      cmd: "printf '%s' '${{ inputs.issue_url }}' | grep -oE '[0-9]+$' || true"
+      cwd: "${{ context.work_dir }}"
     capture:
-      issue_number: "${{ result.issue_number }}"
-      issue_content: "${{ result.content }}"
+      issue_number: "${{ result.stdout | trim }}"
     on_success: create_branch
     on_failure: escalate_stop
     optional: true
     skip_when_false: "inputs.issue_url"
     note: >
       Runs when inputs.issue_url is non-empty. Skipped otherwise.
-      Fetches the GitHub issue to extract its number (for PR auto-close) and
-      content (to enrich planning context). fetch_github_issue is an ungated
-      tool — it does not require the kitchen to be open.
-      issue_number is threaded to open_pr_step as the closing_issue argument.
-      issue_content is passed to the plan step for context enrichment.
-      On failure, escalate_stop immediately (no clone to clean up yet — clone
-      already succeeded and is captured in context.work_dir, but this is an
-      unrecoverable configuration error).
+      Extracts the issue number from the URL or shorthand reference via shell regex
+      (e.g. https://github.com/owner/repo/issues/42 → "42"; owner/repo#42 → "42").
+      No network call — pure string parsing. issue_number is used for
+      feature branch naming ({run_name}/{issue_number}) and threaded to
+      open_pr_step for "Closes #N" in the PR body.
+      The full issue content is NOT fetched here. Downstream skills (make-plan,
+      investigate) detect the issue_url reference in their arguments and call
+      fetch_github_issue themselves inside their headless sessions.
 
   create_branch:
     tool: run_cmd
@@ -166,7 +166,7 @@ steps:
     skip_when_false: "inputs.open_pr"
     note: >
       Computes a unique branch name and checks out the branch.
-      When context.issue_number is available (from fetch_issue), the branch
+      When context.issue_number is available (from parse_issue_number), the branch
       is named {run_name}/{issue_number} (e.g. impl/124). When fetch_issue
       was skipped (no issue_url), substitute an empty string for
       context.issue_number — the shell script falls back to
@@ -217,7 +217,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "plan"
       group_files: "${{ context.group_files }}"
-      issue_content: "${{ context.issue_content }}"
+      issue_url: "${{ inputs.issue_url }}"
     capture:
       plan_path: "${{ result.plan_path }}"
       all_plan_paths: "${{ result.plan_path }}"
@@ -241,9 +241,10 @@ steps:
       single-task runs (no groups), all_plan_paths equals plan_path (the capture
       block handles this automatically). For multi-group runs, the accumulated value
       looks like "/path/groupA_plan.md,/path/groupB_plan.md".
-      ISSUE CONTEXT: If context.issue_content is a non-empty string (set by fetch_issue),
-      append the issue content to the skill_command as additional context for the plan:
-      "/autoskillit:make-plan {task_or_group_path}\n\n{context.issue_content}"
+      ISSUE CONTEXT: If inputs.issue_url is a non-empty string, append it to the
+      skill_command so the make-plan skill can detect and fetch the issue itself:
+      "/autoskillit:make-plan {task_or_group_path}\n\nGitHub Issue: {inputs.issue_url}"
+      The skill detects the URL pattern and calls fetch_github_issue internally.
 
   review:
     tool: run_skill

@@ -5,7 +5,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.core import _atomic_write
+from autoskillit.core import _atomic_write, pkg_root
+
+
+def _hook_command(script_name: str) -> str:
+    """Build an absolute hook command for settings.json registration.
+
+    Uses pkg_root() to resolve the installed package location at registration
+    time, producing absolute paths that work regardless of which Python
+    interpreter Claude Code uses to run the hook.
+    """
+    return f"python3 {pkg_root() / 'hooks' / script_name}"
 
 
 def _load_settings_data(settings_path: Path) -> dict:
@@ -55,7 +65,7 @@ def _register_quota_hook(settings_path: Path) -> None:
     _register_pretooluse_hook(
         settings_path,
         matcher="mcp__.*autoskillit.*__run_skill.*",
-        command="python3 ${CLAUDE_PLUGIN_ROOT}/hooks/quota_check.py",
+        command=_hook_command("quota_check.py"),
     )
 
 
@@ -64,7 +74,7 @@ def _register_remove_clone_guard_hook(settings_path: Path) -> None:
     _register_pretooluse_hook(
         settings_path,
         matcher="mcp__.*autoskillit.*__remove_clone",
-        command="python3 ${CLAUDE_PLUGIN_ROOT}/hooks/remove_clone_guard.py",
+        command=_hook_command("remove_clone_guard.py"),
     )
 
 
@@ -79,7 +89,7 @@ def _register_skill_command_guard_hook(settings_path: Path) -> None:
     pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
 
     MATCHER = "mcp__.*autoskillit.*__run_skill.*"
-    COMMAND = "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/skill_command_guard.py"
+    COMMAND = _hook_command("skill_command_guard.py")
 
     # Idempotency: return if command already present anywhere
     for entry in pretooluse:

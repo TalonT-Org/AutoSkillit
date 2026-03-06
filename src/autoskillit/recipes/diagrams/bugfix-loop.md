@@ -49,12 +49,15 @@ End-to-end test with automatic bug fixing in isolated worktrees.
 │  ├─ ${{ result.restart_scope }} == full_restart  → investigate ↑
 │  ├─ result.error  → escalate
 │  ├─ (default)  → implement ↑
+│  ✗ failure  → escalate
 │  ↺ ×3  → escalate
 │
+│  ⟨skip if inputs.audit is false⟩
 ┌─ audit_impl  [run_skill]
 │  ├─ ${{ result.verdict }} == GO  → merge
 │  ├─ result.error  → escalate
 │  ├─ (default)  → remediate
+│  ✗ failure  → escalate
 │  ↺ ×3  → escalate
 │
 ┌─ remediate  [route]

@@ -172,6 +172,7 @@ steps:
       - when: "result.error"
         route: escalate
       - route: implement
+    on_failure: escalate
 
   merge:
     tool: merge_worktree
@@ -190,7 +191,10 @@ steps:
     on_result:
       - when: "${{ result.non_empty }} == true"
         route: create_summary
+      - when: "result.error"
+        route: escalate
       - route: done
+    on_failure: escalate
     note: >
       Only execute if inputs.collect_on_branch is 'true'. Otherwise skip to done.
       Reads bug_report.json from the workspace. Routes to create_summary when bugs

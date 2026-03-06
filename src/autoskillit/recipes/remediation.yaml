@@ -284,6 +284,9 @@ steps:
       - when: "result.error"
         route: escalate_stop
       - route: remediate
+    on_failure: escalate_stop
+    optional: true
+    skip_when_false: "inputs.audit"
     note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
 
   remediate:
@@ -323,6 +326,7 @@ steps:
       - when: "result.error"
         route: cleanup_failure
       - route: push
+    on_failure: cleanup_failure
 
   push:
     tool: push_to_remote

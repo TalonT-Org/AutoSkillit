@@ -124,6 +124,7 @@ steps:
       - when: "result.error"
         route: escalate
       - route: implement
+    on_failure: escalate
 
   audit_impl:
     tool: run_skill
@@ -139,6 +140,9 @@ steps:
       - when: "result.error"
         route: escalate
       - route: remediate
+    on_failure: escalate
+    optional: true
+    skip_when_false: "inputs.audit"
     note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
 
   remediate:

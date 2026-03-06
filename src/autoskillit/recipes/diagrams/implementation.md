@@ -79,6 +79,7 @@ Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose
 │  ├─ result.failed_step == 'rebase'  → fix
 │  ├─ result.error  → cleanup_failure
 │  ├─ (default)  → next_or_done
+│  ✗ failure  → cleanup_failure
 │  ↺ ×3  → escalate
 │
 ┌─ push  [push_to_remote]
@@ -102,6 +103,7 @@ Plan, verify, implement, test, and merge a task end-to-end. Optionally decompose
 │  ├─ ${{ result.verdict }} == GO  → push ↑
 │  ├─ result.error  → escalate_stop
 │  ├─ (default)  → remediate
+│  ✗ failure  → escalate_stop
 │  ↺ ×3  → escalate
 │
 ┌─ remediate  [route]

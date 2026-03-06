@@ -1153,24 +1153,6 @@ class TestPredicateOnResultValidation:
         errors = validate_recipe(wf)
         assert any("on_result" in e and "on_success" in e for e in errors)
 
-    def test_predicate_on_result_on_failure_mutually_exclusive(self) -> None:
-        """Step with predicate on_result (list) + on_failure → validation error."""
-        from autoskillit.recipe.validator import validate_recipe
-
-        wf = self._make_merge_recipe(
-            {
-                "tool": "merge_worktree",
-                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
-                "on_result": [
-                    {"when": "result.error", "route": "cleanup_failure"},
-                    {"route": "push"},
-                ],
-                "on_failure": "cleanup_failure",  # mutually exclusive with predicate format
-            }
-        )
-        errors = validate_recipe(wf)
-        assert any("on_failure" in e and "predicate" in e.lower() for e in errors)
-
     def test_predicate_condition_invalid_route_target_rejected(self) -> None:
         """A condition referencing an unknown step name is a validation error."""
         from autoskillit.recipe.validator import validate_recipe
@@ -1206,25 +1188,6 @@ class TestPredicateOnResultValidation:
         errors = validate_recipe(wf)
         assert errors == []
 
-    def test_predicate_format_no_on_failure_required(self) -> None:
-        """merge_worktree step with predicate on_result and no on_failure passes validation."""
-        from autoskillit.recipe.validator import validate_recipe
-
-        wf = self._make_merge_recipe(
-            {
-                "tool": "merge_worktree",
-                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
-                "on_result": [
-                    {"when": "result.failed_step == 'test_gate'", "route": "assess"},
-                    {"when": "result.error", "route": "cleanup_failure"},
-                    {"route": "push"},
-                ],
-                "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
-            }
-        )
-        errors = validate_recipe(wf)
-        assert errors == []
-
     def test_predicate_on_result_empty_conditions_rejected(self) -> None:
         """on_result with conditions=[] bypasses predicate path; emits field error.
 
@@ -1248,6 +1211,58 @@ class TestPredicateOnResultValidation:
         )
         errors = validate_recipe(recipe)
         assert any("on_result.field must be non-empty" in e for e in errors)
+
+    def test_predicate_format_with_on_failure_allowed(self) -> None:
+        """validator.py must not reject on_failure alongside on_result.conditions."""
+        from autoskillit.recipe.validator import validate_recipe
+
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                "on_failure": "cleanup_failure",
+            }
+        )
+        errors = validate_recipe(wf)
+        assert not any("mutually exclusive" in e for e in errors), errors
+
+    def test_on_result_missing_failure_route_fires_for_predicate_format(self) -> None:
+        """Predicate-format steps with no on_failure must trigger ERROR finding."""
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                # no on_failure — should trigger finding
+            }
+        )
+        findings = run_semantic_rules(wf)
+        names = [f.rule for f in findings]
+        assert "on-result-missing-failure-route" in names
+
+    def test_on_result_missing_failure_route_clear_when_predicate_has_on_failure(self) -> None:
+        """Predicate-format step with on_failure must not trigger the rule."""
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                "on_failure": "cleanup_failure",
+            }
+        )
+        findings = run_semantic_rules(wf)
+        names = [f.rule for f in findings]
+        assert "on-result-missing-failure-route" not in names
 
 
 # ---------------------------------------------------------------------------
@@ -1318,28 +1333,6 @@ class TestPredicateSemanticRules:
         assert "assess" not in step_names
         assert "cleanup" not in step_names
         assert "push" not in step_names
-
-    def test_on_result_missing_failure_route_does_not_fire_for_predicate_format(
-        self,
-    ) -> None:
-        """RCA rule does NOT fire for predicate-format on_result (no on_failure needed)."""
-        wf = _make_workflow(
-            {
-                "merge": {
-                    "tool": "merge_worktree",
-                    "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
-                    "on_result": [
-                        {"when": "result.error", "route": "cleanup"},
-                        {"route": "push"},
-                    ],
-                    "capture": {"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
-                },
-                "cleanup": {"action": "stop", "message": "Cleanup."},
-                "push": {"action": "stop", "message": "Push."},
-            }
-        )
-        findings = run_semantic_rules(wf)
-        assert not any(f.rule == "on-result-missing-failure-route" for f in findings)
 
     def test_on_result_missing_failure_route_still_fires_for_legacy_format(
         self,

@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:c2d42ab2bc8546d77ec5507b07bc3b6797f2aa600271c309b14124dda0044c0b -->
+<!-- autoskillit-recipe-hash: sha256:02b965e606fd79e5bd327cc611f28a39458c0457e5efa853c149e8e2f100af26 -->
 <!-- autoskillit-diagram-format: v2 -->
 ## smoke-test
 End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
@@ -72,6 +72,7 @@ End-to-end smoke test exercising the full orchestration path — script loading,
 │  ├─ ${{ result.restart_scope }} == full_restart  → investigate ↑
 │  ├─ result.error  → escalate
 │  ├─ (default)  → implement ↑
+│  ✗ failure  → escalate
 │  ↺ ×3  → escalate
 │
 ┌─ merge  [merge_worktree]
@@ -81,7 +82,9 @@ End-to-end smoke test exercising the full orchestration path — script loading,
 │
 ┌─ check_summary  [autoskillit.smoke_utils.check_bug_report_non_empty]
 │  ├─ ${{ result.non_empty }} == true  → create_summary
+│  ├─ result.error  → escalate
 │  ├─ (default)  → done
+│  ✗ failure  → escalate
 │  ↺ ×3  → escalate
 │
 │  ⟨skip if inputs.collect_on_branch is false⟩

@@ -73,10 +73,12 @@ Investigate a problem deeply, plan architectural fix, implement in a feature bra
 │  ✗ failure  → cleanup_failure
 │  ↺ ×3  → cleanup_failure
 │
+│  ⟨skip if inputs.audit is false⟩
 ┌─ audit_impl  [run_skill]
 │  ├─ ${{ result.verdict }} == GO  → merge
 │  ├─ result.error  → escalate_stop
 │  ├─ (default)  → remediate
+│  ✗ failure  → escalate_stop
 │  ↺ ×3  → escalate
 │
 ┌─ remediate  [route]
@@ -94,6 +96,7 @@ Investigate a problem deeply, plan architectural fix, implement in a feature bra
 │  ├─ result.failed_step == 'rebase'  → assess ↑
 │  ├─ result.error  → cleanup_failure
 │  ├─ (default)  → push
+│  ✗ failure  → cleanup_failure
 │  ↺ ×3  → escalate
 │
 ┌─ push  [push_to_remote]

@@ -319,6 +319,7 @@ steps:
       - when: "result.error"
         route: cleanup_failure
       - route: next_or_done
+    on_failure: cleanup_failure
     note: >
       After merge, route to next_or_done to process remaining parts/groups before pushing.
       GROUPS MODE: When all plan_parts for the current group are merged, advance to the
@@ -384,6 +385,7 @@ steps:
       - when: "result.error"
         route: escalate_stop
       - route: remediate
+    on_failure: escalate_stop
     optional: true
     skip_when_false: "inputs.audit"
     note: >

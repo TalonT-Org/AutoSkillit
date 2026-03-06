@@ -19,7 +19,7 @@ from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 # Diagram format version — bump when rendering logic changes so that
 # existing diagrams are flagged stale even if the recipe YAML hasn't changed.
-_DIAGRAM_FORMAT_VERSION = "v2"
+_DIAGRAM_FORMAT_VERSION = "v3"
 
 
 # ---------------------------------------------------------------------------
@@ -34,9 +34,11 @@ class _LayoutStep:
     name: str
     tool: str
     is_terminal: bool = False
+    is_infrastructure: bool = False
     message: str = ""
     on_success: str | None = None
     on_failure: str | None = None
+    on_context_limit: str | None = None
     retries: int = 0
     on_exhausted: str = "escalate"
     is_back_edge_success: bool = False
@@ -51,6 +53,9 @@ class _LayoutResult:
 
     steps: list[_LayoutStep]
     back_edges: list[tuple[str, str]]  # (from_step, to_step)
+    # Indices in the visible (non-infra, non-terminal) step list for the
+    # FOR EACH iteration block, or None if no loop is detected.
+    for_each_range: tuple[int, int] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -58,8 +63,32 @@ class _LayoutResult:
 # ---------------------------------------------------------------------------
 
 
+def _is_infrastructure_step(step: Any) -> bool:
+    """Return True if *step* is a plumbing step that should be hidden from diagrams.
+
+    Infrastructure steps are ``run_cmd`` steps whose sole purpose is capturing
+    or setting a context value (git rev-parse, printf, echo one-liners).
+    They add no user-visible behaviour to the pipeline flow.
+    """
+    if step.tool != "run_cmd":
+        return False
+    note_lower = (step.note or "").lower()
+    cmd = ""
+    if step.with_args and isinstance(step.with_args, dict):
+        cmd = step.with_args.get("cmd", "") or ""
+    return (
+        "capture" in note_lower
+        or "set" in note_lower
+        or "printf" in cmd
+        or "git rev-parse" in cmd
+        or (cmd.strip().startswith("echo") and "\n" not in cmd)
+    )
+
+
 def _compute_layout(recipe: Any) -> _LayoutResult:
     """Compute visual layout from a Recipe dataclass."""
+    from autoskillit.recipe._analysis import _extract_routing_edges
+
     step_names = list(recipe.steps.keys())
     step_index: dict[str, int] = {name: i for i, name in enumerate(step_names)}
 
@@ -75,7 +104,7 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
     for step_name, step in recipe.steps.items():
         idx = step_index[step_name]
 
-        # Determine tool column value
+        # Determine tool label — do NOT include model (per spec)
         if step.tool is not None:
             tool_val = step.tool
         elif step.python is not None:
@@ -84,24 +113,24 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
             tool_val = step.action
         else:
             tool_val = "—"
-        if step.model:
-            tool_val = f"{tool_val} [{step.model}]"
 
         is_terminal = step.action == "stop"
+        infra = _is_infrastructure_step(step)
 
         ls = _LayoutStep(
             name=step_name,
             tool=tool_val,
             is_terminal=is_terminal,
+            is_infrastructure=infra,
             message=step.message or "",
             on_success=step.on_success,
             on_failure=step.on_failure,
+            on_context_limit=step.on_context_limit,
             retries=step.retries if not is_terminal else 0,
             on_exhausted=step.on_exhausted if not is_terminal else "escalate",
             skip_when_false=step.skip_when_false,
         )
 
-        # Check for back-edges on success/failure
         if _is_back_edge(step.on_success, idx):
             ls.is_back_edge_success = True
             back_edges.append((step_name, step.on_success))  # type: ignore[arg-type]
@@ -109,7 +138,6 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
             ls.is_back_edge_failure = True
             back_edges.append((step_name, step.on_failure))  # type: ignore[arg-type]
 
-        # Handle on_result conditions
         if step.on_result is not None:
             sr = step.on_result
             if sr.conditions:
@@ -128,7 +156,37 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
 
         layout_steps.append(ls)
 
-    return _LayoutResult(steps=layout_steps, back_edges=back_edges)
+    # Detect FOR EACH loop group among visible (non-infra, non-terminal) steps.
+    # Find the back-edge with the largest span (most steps in the loop).
+    visible = [s for s in layout_steps if not s.is_infrastructure and not s.is_terminal]
+    vis_index = {s.name: i for i, s in enumerate(visible)}
+
+    for_each_range: tuple[int, int] | None = None
+    best_span = 1  # require loop of at least 3 visible steps (span > 1)
+
+    for vi, vs in enumerate(visible):
+        back_targets: list[str] = []
+        if vs.is_back_edge_success and vs.on_success:
+            back_targets.append(vs.on_success)
+        if vs.is_back_edge_failure and vs.on_failure:
+            back_targets.append(vs.on_failure)
+        for _, target, is_back in vs.on_result_conditions:
+            if is_back:
+                back_targets.append(target)
+
+        for target in back_targets:
+            vj = vis_index.get(target)
+            if vj is not None and vj < vi:
+                span = vi - vj
+                if span > best_span:
+                    best_span = span
+                    for_each_range = (vj, vi)
+
+    return _LayoutResult(
+        steps=layout_steps,
+        back_edges=back_edges,
+        for_each_range=for_each_range,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -136,60 +194,95 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
 # ---------------------------------------------------------------------------
 
 
-def _render_visual_flow(layout: _LayoutResult) -> str:
-    """Render the layout as a visual ASCII flow diagram using box-drawing characters.
+def _append_step(step: _LayoutStep, lines: list[str], prefix: str) -> None:
+    """Append rendering lines for a single step onto *lines*."""
+    if step.skip_when_false:
+        # Optional step: bracket notation with right-side annotation
+        lines.append(f"{prefix}├── [{step.name}]  ← only if {step.skip_when_false}")
+        if step.on_result_conditions:
+            for when_str, target, is_back in step.on_result_conditions:
+                suf = " ↑" if is_back else ""
+                lines.append(f"{prefix}│       {when_str} → {target}{suf}")
+        if step.on_context_limit:
+            lines.append(f"{prefix}│       ⌛ context limit → {step.on_context_limit}")
+        if step.on_failure:
+            suf = " ↑" if step.is_back_edge_failure else ""
+            lines.append(f"{prefix}│       ✗ failure → {step.on_failure}{suf}")
+    else:
+        # Normal step: retry annotation inline on step name
+        if not step.is_terminal:
+            retry_str = " (retry ×∞)" if step.retries == 0 else f" (retry ×{step.retries})"
+        else:
+            retry_str = ""
 
-    Format:
-    - Steps connected by │ on the main vertical spine
-    - Success/failure routes shown inline
-    - Back-edges marked with ↑
-    - Optional steps annotated with their condition
-    - Retry info shown as sub-lines
-    - Terminal steps shown at the bottom
+        lines.append(f"{prefix}{step.name}{retry_str}")
+
+        if step.on_result_conditions:
+            for when_str, target, is_back in step.on_result_conditions:
+                suf = " ↑" if is_back else ""
+                lines.append(f"{prefix}│  {when_str} → {target}{suf}")
+        else:
+            if step.on_success:
+                suf = " ↑" if step.is_back_edge_success else ""
+                lines.append(f"{prefix}│  ↓ success → {step.on_success}{suf}")
+
+        if step.on_failure:
+            suf = " ↑" if step.is_back_edge_failure else ""
+            lines.append(f"{prefix}│  ✗ failure → {step.on_failure}{suf}")
+
+        if step.on_context_limit:
+            lines.append(f"{prefix}│  ⌛ context limit → {step.on_context_limit}")
+
+
+def _render_visual_flow(layout: _LayoutResult) -> str:
+    """Render the layout as a spec-compliant visual ASCII flow diagram.
+
+    Format rules (per SKILL.md visual grammar):
+    - Infrastructure steps are hidden entirely
+    - Optional steps use bracket+arrow notation: ``├── [name]  ← only if cond``
+    - Retry shown parenthetically on step name: ``(retry ×N)`` or ``(retry ×∞)``
+    - ``on_context_limit`` shown as: ``⌛ context limit → target``
+    - Iteration loops wrapped in FOR EACH block using box-drawing
+    - Back-edges use ``↑`` suffix on target name
+    - Terminal steps at bottom after separator line
     """
     lines: list[str] = []
 
-    non_terminal = [s for s in layout.steps if not s.is_terminal]
+    visible = [s for s in layout.steps if not s.is_infrastructure and not s.is_terminal]
     terminal = [s for s in layout.steps if s.is_terminal]
 
-    for i, step in enumerate(non_terminal):
-        # Optional step annotation
-        if step.skip_when_false:
-            lines.append(f"│  ⟨skip if {step.skip_when_false} is false⟩")
+    fe_start: int | None = None
+    fe_end: int | None = None
+    if layout.for_each_range is not None:
+        fe_start, fe_end = layout.for_each_range
 
-        # Step box
-        lines.append(f"┌─ {step.name}  [{step.tool}]")
+    i = 0
+    while i < len(visible):
+        if fe_start is not None and i == fe_start:
+            # Wrap loop group in FOR EACH block
+            lines.append("┌────┤ FOR EACH:")
+            assert fe_end is not None
+            for j in range(fe_start, fe_end + 1):
+                inner = visible[j]
+                _append_step(inner, lines, "│  ")
+                if j < fe_end:
+                    lines.append("│  │")
+            lines.append("└────┘")
+            i = fe_end + 1
+            if i < len(visible):
+                lines.append("│")
+            continue
 
-        # Routes
-        if step.on_result_conditions:
-            # on_result routing — multiple conditions
-            for when_str, target, is_back in step.on_result_conditions:
-                suffix = " ↑" if is_back else ""
-                lines.append(f"│  ├─ {when_str}  → {target}{suffix}")
-            if step.on_failure:
-                suffix = " ↑" if step.is_back_edge_failure else ""
-                lines.append(f"│  ✗ failure  → {step.on_failure}{suffix}")
-        else:
-            # Normal success/failure routing
-            if step.on_success:
-                suffix = " ↑" if step.is_back_edge_success else ""
-                lines.append(f"│  ✓ success  → {step.on_success}{suffix}")
-            if step.on_failure:
-                suffix = " ↑" if step.is_back_edge_failure else ""
-                lines.append(f"│  ✗ failure  → {step.on_failure}{suffix}")
+        _append_step(visible[i], lines, "")
 
-        # Retry info
-        if step.retries > 0:
-            lines.append(f"│  ↺ ×{step.retries}  → {step.on_exhausted}")
-
-        # Connector to next step (unless last non-terminal)
-        if i < len(non_terminal) - 1:
+        if i < len(visible) - 1:
             lines.append("│")
 
-    # Terminal steps section
+        i += 1
+
     if terminal:
         lines.append("│")
-        lines.append("───────────────────────────────────────")
+        lines.append("─────────────────────────────────────")
         for term in terminal:
             if term.message:
                 lines.append(f'⏹ {term.name}  "{term.message}"')
@@ -199,12 +292,26 @@ def _render_visual_flow(layout: _LayoutResult) -> str:
     return "\n".join(lines)
 
 
+def _format_ingredient_default(ing: Any) -> str:
+    """Return the display value for an ingredient's default in the Inputs table."""
+    if ing.default is None:
+        return "—"
+    if ing.default == "":
+        return "auto-detect"
+    if ing.default.lower() == "false":
+        return "off"
+    if ing.default.lower() == "true":
+        return "on"
+    return ing.default
+
+
 def generate_recipe_diagram(pipeline_path: Path, recipes_dir: Path) -> str:
     """Generate a visual flow diagram for the recipe at *pipeline_path*.
 
-    Reads the recipe YAML, builds a visual ASCII flow diagram and ingredients
-    table, embeds SHA-256 hash and format version for staleness detection, and
-    writes the result atomically to ``recipes_dir/diagrams/{stem}.md``.
+    Reads the recipe YAML, builds a spec-compliant visual ASCII flow diagram
+    and 3-column Inputs table, embeds SHA-256 hash and format version for
+    staleness detection, and writes the result atomically to
+    ``recipes_dir/diagrams/{stem}.md``.
 
     Args:
         pipeline_path: Absolute path to the recipe ``.yaml`` file.
@@ -219,19 +326,24 @@ def generate_recipe_diagram(pipeline_path: Path, recipes_dir: Path) -> str:
     recipe = load_recipe(pipeline_path)
     recipe_hash = compute_recipe_hash(pipeline_path)
 
-    # Compute layout and render
+    # Compute layout and render flow diagram
     layout = _compute_layout(recipe)
     flow_diagram = _render_visual_flow(layout)
 
-    # Build ingredients table
-    ingredient_rows: list[str] = []
-    ingredient_rows.append("| Name | Description | Required | Default |")
-    ingredient_rows.append("|------|-------------|----------|---------|")
+    # Build 3-column Inputs table (Name | Description | Default)
+    input_rows: list[str] = ["| Name | Description | Default |", "|------|-------------|---------|"]
+    agent_managed: list[str] = []
     for ing_name, ing in recipe.ingredients.items():
-        required = "yes" if ing.required else "no"
-        default = ing.default if ing.default is not None else ""
-        ingredient_rows.append(f"| {ing_name} | {ing.description} | {required} | {default} |")
-    ingredients_table = "\n".join(ingredient_rows)
+        if ing.default is None and not ing.required:
+            # Agent-managed state captured by pipeline steps — omit from table
+            agent_managed.append(ing_name)
+            continue
+        input_rows.append(
+            f"| {ing_name} | {ing.description} | {_format_ingredient_default(ing)} |"
+        )
+    inputs_table = "\n".join(input_rows)
+    if agent_managed:
+        inputs_table += f"\n\nAgent-managed: {', '.join(agent_managed)}"
 
     # Build kitchen rules section
     rules_section = ""
@@ -253,8 +365,8 @@ def generate_recipe_diagram(pipeline_path: Path, recipes_dir: Path) -> str:
         f"### Graph\n"
         f"{flow_diagram}\n"
         f"\n"
-        f"### Ingredients\n"
-        f"{ingredients_table}"
+        f"### Inputs\n"
+        f"{inputs_table}"
         f"{rules_section}\n"
     )
 

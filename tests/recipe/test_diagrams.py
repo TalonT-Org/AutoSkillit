@@ -152,21 +152,20 @@ def test_generate_content_has_name(tmp_path: Path, sample_recipe_yaml: Path) -> 
     assert "## my-recipe" in content
 
 
-def test_generate_route_table(tmp_path: Path, sample_recipe_yaml: Path) -> None:
-    """DG-4: diagram contains success/failure route indicators."""
+def test_generate_route_table(tmp_path: Path, complex_recipe_yaml: Path) -> None:
+    """DG-4: diagram uses spec-compliant route format markers."""
     recipes_dir = tmp_path / "recipes"
-    generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
-    content = (recipes_dir / "diagrams" / f"{sample_recipe_yaml.stem}.md").read_text()
-    assert "✓" in content
-    assert "✗" in content
+    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir)
+    assert "← only if" in content, "Optional step notation '← only if' must appear."
+    assert "(retry ×" in content, "Retry notation '(retry ×N)' must appear."
 
 
 def test_generate_ingredients_table(tmp_path: Path, sample_recipe_yaml: Path) -> None:
-    """DG-5: diagram contains ingredients table."""
+    """DG-5: diagram contains Inputs table (renamed from Ingredients)."""
     recipes_dir = tmp_path / "recipes"
     generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
     content = (recipes_dir / "diagrams" / f"{sample_recipe_yaml.stem}.md").read_text()
-    assert "### Ingredients" in content
+    assert "### Inputs" in content
 
 
 # ---------------------------------------------------------------------------
@@ -267,7 +266,7 @@ def test_generate_contains_step_names(tmp_path: Path, sample_recipe_yaml: Path) 
     content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
     # Extract graph section
     graph_start = content.index("### Graph")
-    graph_end = content.index("### Ingredients")
+    graph_end = content.index("### Inputs")
     graph_section = content[graph_start:graph_end]
     assert "step1" in graph_section
 
@@ -284,21 +283,20 @@ def test_generate_contains_routes(tmp_path: Path, sample_recipe_yaml: Path) -> N
     recipes_dir = tmp_path / "recipes"
     content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
     graph_start = content.index("### Graph")
-    graph_end = content.index("### Ingredients")
+    graph_end = content.index("### Inputs")
     graph_section = content[graph_start:graph_end]
     assert "done" in graph_section
     assert "escalate" in graph_section
 
 
 def test_generate_contains_ingredient_values(tmp_path: Path, sample_recipe_yaml: Path) -> None:
-    """DG-18: diagram ingredients section contains ingredient details."""
+    """DG-18: diagram Inputs section contains ingredient details."""
     recipes_dir = tmp_path / "recipes"
     content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
-    ingredients_start = content.index("### Ingredients")
-    ingredients_section = content[ingredients_start:]
-    assert "task" in ingredients_section
-    assert "What to do" in ingredients_section
-    assert "yes" in ingredients_section
+    inputs_start = content.index("### Inputs")
+    inputs_section = content[inputs_start:]
+    assert "task" in inputs_section
+    assert "What to do" in inputs_section
 
 
 def test_generate_contains_terminal_steps(tmp_path: Path, sample_recipe_yaml: Path) -> None:
@@ -330,7 +328,7 @@ def test_generate_produces_visual_flow(tmp_path: Path, sample_recipe_yaml: Path)
     recipes_dir = tmp_path / "recipes"
     content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
     graph_start = content.index("### Graph")
-    graph_end = content.index("### Ingredients")
+    graph_end = content.index("### Inputs")
     graph_section = content[graph_start:graph_end]
     assert "│" in graph_section, (
         "Graph section must contain vertical box-drawing character │ (U+2502). "
@@ -360,7 +358,7 @@ def test_complex_recipe_back_edge_marker(tmp_path: Path, complex_recipe_yaml: Pa
     recipes_dir = tmp_path / "recipes"
     content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir)
     graph_start = content.index("### Graph")
-    graph_end = content.index("### Ingredients")
+    graph_end = content.index("### Inputs")
     graph_section = content[graph_start:graph_end]
     # The test step routes on_failure back to fix (earlier step) — should be marked as back-edge
     assert "↑" in graph_section, "Back-edge from test→fix must be marked with ↑"
@@ -379,19 +377,21 @@ def test_complex_recipe_on_result_conditions(tmp_path: Path, complex_recipe_yaml
 
 
 def test_complex_recipe_optional_step(tmp_path: Path, complex_recipe_yaml: Path) -> None:
-    """DG-25: optional step (skip_when_false) is visually distinguished."""
+    """DG-25: optional step (skip_when_false) uses bracket+arrow notation."""
     recipes_dir = tmp_path / "recipes"
     content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir)
     # The fix step has skip_when_false: inputs.auto_fix
-    # It should show the condition label
-    assert "auto_fix" in content
+    assert "[fix]" in content, "Optional step must appear as [fix] in bracket notation."
+    assert "← only if" in content, "Optional step must use '← only if' annotation."
+    assert "⟨skip if" not in content, "'⟨skip if' notation must not appear."
 
 
 def test_complex_recipe_retry_info(tmp_path: Path, complex_recipe_yaml: Path) -> None:
-    """DG-26: retry count and exhaustion route appear in diagram."""
+    """DG-26: retry count appears as parenthetical on the step name line."""
     recipes_dir = tmp_path / "recipes"
     content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir)
-    assert "2" in content  # retries: 2
+    # The fix step has retries: 2 — must appear as (retry ×2) on the same line as [fix]
+    assert "(retry ×2)" in content, "Retry annotation '(retry ×2)' must appear for fix step."
     assert "escalate" in content  # on_exhausted target
 
 

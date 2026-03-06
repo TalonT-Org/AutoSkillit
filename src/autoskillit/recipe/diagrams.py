@@ -156,6 +156,33 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
 
         layout_steps.append(ls)
 
+    # Post-process: redirect routing targets that pass through infrastructure steps
+    # to the first visible (non-infra) successor so they don't appear in the diagram.
+    infra_names = {s.name for s in layout_steps if s.is_infrastructure}
+
+    def _skip_infra(target: str | None) -> str | None:
+        """Follow on_success chain past infrastructure steps to first visible target."""
+        if target is None or target not in infra_names:
+            return target
+        visited: set[str] = set()
+        current: str = target
+        while current in infra_names and current not in visited:
+            visited.add(current)
+            orig = recipe.steps.get(current)
+            if orig is None or orig.on_success is None:
+                break
+            current = orig.on_success
+        return current
+
+    for ls in layout_steps:
+        ls.on_success = _skip_infra(ls.on_success)
+        ls.on_failure = _skip_infra(ls.on_failure)
+        ls.on_context_limit = _skip_infra(ls.on_context_limit)
+        ls.on_result_conditions = [
+            (when_str, _skip_infra(target) or target, is_back)
+            for when_str, target, is_back in ls.on_result_conditions
+        ]
+
     # Detect FOR EACH loop group among visible (non-infra, non-terminal) steps.
     # Find the back-edge with the largest span (most steps in the loop).
     visible = [s for s in layout_steps if not s.is_infrastructure and not s.is_terminal]
@@ -198,7 +225,12 @@ def _append_step(step: _LayoutStep, lines: list[str], prefix: str) -> None:
     """Append rendering lines for a single step onto *lines*."""
     if step.skip_when_false:
         # Optional step: bracket notation with right-side annotation
-        lines.append(f"{prefix}├── [{step.name}]  ← only if {step.skip_when_false}")
+        retry_str = ""
+        if step.retries == 0:
+            retry_str = " (retry ×∞)"
+        elif step.retries > 0:
+            retry_str = f" (retry ×{step.retries})"
+        lines.append(f"{prefix}├── [{step.name}]{retry_str}  ← only if {step.skip_when_false}")
         if step.on_result_conditions:
             for when_str, target, is_back in step.on_result_conditions:
                 suf = " ↑" if is_back else ""
@@ -209,13 +241,14 @@ def _append_step(step: _LayoutStep, lines: list[str], prefix: str) -> None:
             suf = " ↑" if step.is_back_edge_failure else ""
             lines.append(f"{prefix}│       ✗ failure → {step.on_failure}{suf}")
     else:
-        # Normal step: retry annotation inline on step name
+        # Normal step: show tool name and retry annotation inline
         if not step.is_terminal:
             retry_str = " (retry ×∞)" if step.retries == 0 else f" (retry ×{step.retries})"
         else:
             retry_str = ""
 
-        lines.append(f"{prefix}{step.name}{retry_str}")
+        tool_label = f"  [{step.tool}]" if step.tool and step.tool != "—" else ""
+        lines.append(f"{prefix}{step.name}{tool_label}{retry_str}")
 
         if step.on_result_conditions:
             for when_str, target, is_back in step.on_result_conditions:

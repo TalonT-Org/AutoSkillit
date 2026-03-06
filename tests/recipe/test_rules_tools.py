@@ -1,5 +1,7 @@
 """Tests for the unknown-tool semantic rule."""
+
 import pytest
+
 from autoskillit.core import Severity
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 from autoskillit.recipe.registry import run_semantic_rules

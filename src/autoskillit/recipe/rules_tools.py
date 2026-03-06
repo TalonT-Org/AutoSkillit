@@ -1,4 +1,5 @@
 """Semantic rules for MCP tool name validity."""
+
 from __future__ import annotations
 
 from autoskillit.core import Severity

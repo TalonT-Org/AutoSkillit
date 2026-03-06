@@ -407,7 +407,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "open_pr"
       issue_number: "${{ context.issue_number }}"
-    on_success: cleanup_success
+    on_success: ci_watch
     on_failure: cleanup_failure
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -429,6 +429,68 @@ steps:
       5. If context.issue_number is a non-empty string (set by fetch_issue), append it
          as a 5th positional argument to the skill_command. The open-pr skill will insert
          "Closes #{issue_number}" into the PR body to auto-close the issue on merge.
+
+  ci_watch:
+    tool: run_cmd
+    with:
+      cmd: |
+        run_id=""
+        for i in 1 2 3 4 5 6; do
+          run_id=$(gh run list \
+            --branch "${{ context.merge_target }}" \
+            --limit 1 \
+            --json databaseId,status \
+            --jq '.[] | select(.status != "completed") | .databaseId' \
+            2>/dev/null | head -1)
+          [ -n "$run_id" ] && break
+          sleep 5
+        done
+        [ -n "$run_id" ] || { echo "No active CI run found for branch ${{ context.merge_target }}"; exit 1; }
+        gh run watch "$run_id" --exit-status
+      cwd: "${{ context.work_dir }}"
+      timeout: 150
+    on_success: cleanup_success
+    on_failure: resolve_ci
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Polls for an active (non-completed) GitHub Actions run on context.merge_target
+      branch for up to 30 s (6 x 5 s), then watches that run until completion
+      (run_cmd timeout: 150 s). Exits 0 on CI pass, non-zero on CI failure.
+      Skipped when open_pr=false — no remote feature branch is opened in that mode.
+      On success, the pipeline is done — cleanup_success removes the clone.
+      On failure, resolve_ci attempts to fix CI failures directly in the clone.
+
+  resolve_ci:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "resolve_ci"
+    retries: 2
+    on_exhausted: cleanup_failure
+    on_success: re_push
+    on_failure: cleanup_failure
+    note: >
+      Runs when ci_watch reports a CI failure (exit != 0). The clone (context.work_dir)
+      has the feature branch (context.merge_target) checked out — this is the working
+      directory where resolve-failures investigates and fixes failures (lint, type errors,
+      test failures). The skill commits fixes and exits without merging; the orchestrator
+      re-pushes via re_push. Retries up to 2 times (3 total attempts) before exhausting
+      to cleanup_failure.
+
+  re_push:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.merge_target }}"
+    on_success: ci_watch
+    on_failure: cleanup_failure
+    note: >
+      Pushes the CI-fixed feature branch back to the remote after resolve_ci succeeds.
+      Routes back to ci_watch to verify the fix resolves CI. On push failure, escalates
+      via cleanup_failure.
 
   cleanup_success:
     tool: remove_clone

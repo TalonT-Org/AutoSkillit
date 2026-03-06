@@ -322,6 +322,30 @@ class TestImplicitHandoffRule:
         ih = [f for f in findings if f.rule == "implicit-handoff" and f.step_name == "step"]
         assert ih == []
 
+    def test_implicit_handoff_fires_for_investigate_without_capture(self) -> None:
+        """T_IH_1g: implicit-handoff fires for investigate step without capture block.
+
+        After investigate.outputs gains investigation_path in skill_contracts.yaml,
+        a recipe step invoking /autoskillit:investigate without a capture block
+        triggers the implicit-handoff rule. Uses the real bundled manifest.
+        """
+        steps = {
+            "investigate": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:investigate the bug"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        ih = [f for f in findings if f.rule == "implicit-handoff" and f.step_name == "investigate"]
+        assert len(ih) >= 1, (
+            "implicit-handoff must fire for an investigate step with no capture block "
+            "once investigate declares investigation_path in skill_contracts.yaml"
+        )
+        assert any(f.severity == Severity.ERROR for f in ih)
+
 
 # ---------------------------------------------------------------------------
 # merge-cleanup-uncaptured tests

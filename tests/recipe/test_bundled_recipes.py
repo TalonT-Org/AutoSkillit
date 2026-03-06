@@ -396,6 +396,18 @@ class TestBugfixLoopStructure:
             "it must capture branch_name for downstream audit_impl use"
         )
 
+    def test_bugfix_loop_investigate_captures_investigation_path(self, recipe) -> None:
+        """1e: investigate step must capture investigation_path; plan step must pass it."""
+        investigate_step = recipe.steps["investigate"]
+        assert investigate_step.capture is not None and "investigation_path" in investigate_step.capture, (
+            "bugfix-loop investigate step must capture investigation_path"
+        )
+        plan_step = recipe.steps["plan"]
+        skill_cmd = plan_step.with_args.get("skill_command", "")
+        assert "${{ context.investigation_path }}" in skill_cmd, (
+            "bugfix-loop plan step skill_command must pass ${{ context.investigation_path }}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestInvestigateFirstStructure
@@ -515,6 +527,24 @@ class TestInvestigateFirstStructure:
             "implement-worktree merges immediately, making verify and assess unreachable"
         )
 
+    def test_remediation_investigate_captures_investigation_path(self, recipe) -> None:
+        """1c: investigate step must have a capture block containing investigation_path."""
+        step = recipe.steps["investigate"]
+        assert step.capture is not None and "investigation_path" in step.capture, (
+            "investigate step must capture investigation_path so rectify receives "
+            "the explicit path rather than scanning the filesystem"
+        )
+        assert step.capture["investigation_path"] == "${{ result.investigation_path }}"
+
+    def test_remediation_rectify_uses_context_investigation_path(self, recipe) -> None:
+        """1d: rectify step must pass ${{ context.investigation_path }} in skill_command."""
+        step = recipe.steps["rectify"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "${{ context.investigation_path }}" in skill_cmd, (
+            "rectify step skill_command must include ${{ context.investigation_path }} "
+            "to pass the explicit path from the capture block"
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestAuditAndFixStructure
@@ -590,6 +620,18 @@ class TestAuditAndFixStructure:
         """create_branch must use inputs.run_name as a prefix in branch naming."""
         cmd = recipe.steps["create_branch"].with_args["cmd"]
         assert "inputs.run_name" in cmd
+
+    def test_audit_and_fix_investigate_captures_investigation_path(self, recipe) -> None:
+        """1f: investigate step must capture investigation_path; plan step must pass it."""
+        investigate_step = recipe.steps["investigate"]
+        assert investigate_step.capture is not None and "investigation_path" in investigate_step.capture, (
+            "audit-and-fix investigate step must capture investigation_path"
+        )
+        plan_step = recipe.steps["plan"]
+        skill_cmd = plan_step.with_args.get("skill_command", "")
+        assert "${{ context.investigation_path }}" in skill_cmd, (
+            "audit-and-fix plan step skill_command must pass ${{ context.investigation_path }}"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -879,3 +879,43 @@ def test_analyze_dataflow_accepts_prebuilt_step_graph():
     report1 = analyze_dataflow(recipe, step_graph=graph)
     report2 = analyze_dataflow(recipe)
     assert report1.warnings == report2.warnings
+
+
+def test_validate_recipe_catches_rectify_with_missing_investigation_path_capture() -> None:
+    """1h: validate_recipe catches missing investigation_path capture before rectify step.
+
+    When rectify is invoked with ${{ context.investigation_path }} but no preceding step
+    captures investigation_path, the existing undeclared-context-reference validator must
+    return an error — confirming the enforcement layer works for the new context variable.
+    """
+    recipe = _parse_recipe(
+        yaml.safe_load(
+            """\
+name: test-missing-capture
+description: Recipe with investigate→rectify but no capture block
+kitchen_rules:
+  - test
+steps:
+  investigate:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:investigate the bug"
+    on_success: rectify
+    on_failure: done
+  rectify:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:rectify ${{ context.investigation_path }}"
+    on_success: done
+    on_failure: done
+  done:
+    action: stop
+    message: Done.
+"""
+        )
+    )
+    errors = validate_recipe(recipe)
+    assert any("investigation_path" in e for e in errors), (
+        "validate_recipe must report an error about undeclared context reference "
+        "'investigation_path' when the investigate step has no capture block"
+    )

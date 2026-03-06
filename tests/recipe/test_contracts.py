@@ -444,10 +444,29 @@ def test_sc3_dry_walkthrough_has_empty_outputs() -> None:
     assert manifest["skills"]["dry-walkthrough"]["outputs"] == []
 
 
-def test_sc4_investigate_has_empty_outputs() -> None:
-    """T_SC4: investigate has outputs: []."""
+def test_investigate_declares_investigation_path_output() -> None:
+    """T_SC4 (replaced): investigate declares investigation_path in outputs."""
     manifest = load_bundled_manifest()
-    assert manifest["skills"]["investigate"]["outputs"] == []
+    output_names = {o["name"] for o in manifest["skills"]["investigate"]["outputs"]}
+    assert "investigation_path" in output_names, (
+        "investigate skill must declare investigation_path as an output so "
+        "capture: blocks in recipes can reference it and the implicit-handoff "
+        "semantic rule can enforce that the step has a capture block."
+    )
+
+
+def test_rectify_investigation_path_is_required() -> None:
+    """T_SC_NEW: rectify.investigation_path input must be required: true."""
+    manifest = load_bundled_manifest()
+    rectify = manifest["skills"]["rectify"]
+    inv_input = next(
+        (i for i in rectify["inputs"] if i["name"] == "investigation_path"), None
+    )
+    assert inv_input is not None, "rectify must have an investigation_path input"
+    assert inv_input["required"] is True, (
+        "rectify.investigation_path must be required: true — "
+        "the pipeline contract is the only supported input path"
+    )
 
 
 def test_sc5_make_groups_outputs_include_group_files() -> None:

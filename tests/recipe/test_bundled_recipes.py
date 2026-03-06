@@ -232,14 +232,12 @@ class TestImplementationPipelineStructure:
         )
         assert all(v.severity == Severity.WARNING for v in violations)
 
-    def test_ip_open_pr_step_routes_to_cleanup_not_push(self, recipe) -> None:
-        """open_pr_step.on_success must be cleanup_success, never push.
-        The push step already ran before open_pr_step; routing back to push is a double-push."""
+    def test_ip_open_pr_step_routes_to_ci_watch(self, recipe) -> None:
+        """open_pr_step.on_success must be ci_watch — reached via ci_watch now."""
         open_pr_step = recipe.steps["open_pr_step"]
-        assert open_pr_step.on_success != "push", (
-            "open_pr_step.on_success must not be 'push' — that would trigger a double-push"
+        assert open_pr_step.on_success == "ci_watch", (
+            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
         )
-        assert open_pr_step.on_success == "cleanup_success"
 
     def test_ip_open_pr_step_has_skip_when_false(self, recipe) -> None:
         """open_pr_step must declare skip_when_false: inputs.open_pr."""
@@ -276,13 +274,12 @@ class TestImplementationPipelineStructure:
         cmd = recipe.steps["create_branch"].with_args["cmd"]
         assert "inputs.run_name" in cmd
 
-    def test_ip_no_push_to_remote_step_after_open_pr_in_routing_chain(self, recipe) -> None:
-        """No push_to_remote step must be reachable from open_pr_step's on_success chain.
-        After open_pr_step, we must be in the cleanup/done path only."""
+    def test_ip_main_push_step_not_reachable_after_open_pr(self, recipe) -> None:
+        """The main `push` step must not be reachable after open_pr_step —
+        that would be a double-push. The new `re_push` step IS reachable and is correct."""
         from autoskillit.recipe.validator import _build_step_graph
 
         graph = _build_step_graph(recipe)
-        # BFS from open_pr_step.on_success (cleanup_success)
         visited: set[str] = set()
         queue = [recipe.steps["open_pr_step"].on_success]
         while queue:
@@ -291,13 +288,9 @@ class TestImplementationPipelineStructure:
                 continue
             visited.add(current)
             queue.extend(graph.get(current, []))
-        push_to_remote_steps = {
-            name for name, step in recipe.steps.items() if step.tool == "push_to_remote"
-        }
-        reachable_push = push_to_remote_steps & visited
-        assert not reachable_push, (
-            f"push_to_remote step(s) {reachable_push} are reachable "
-            "after open_pr_step — double-push risk"
+        assert "push" not in visited, (
+            "'push' step is reachable after open_pr_step — double-push risk. "
+            "(re_push is allowed; push is not)"
         )
 
     def test_ip_open_pr_false_path_reaches_push_then_cleanup(self, recipe) -> None:
@@ -336,6 +329,65 @@ class TestImplementationPipelineStructure:
         note = recipe.steps["plan"].note or ""
         assert "ACCUMULATION" in note
         assert "all_plan_paths" in note
+
+    def test_ip_ci_watch_exists_and_is_gated(self, recipe) -> None:
+        """T_CI1: ci_watch step exists, is run_cmd, has skip_when_false: inputs.open_pr,
+        and specifies timeout: 150."""
+        assert "ci_watch" in recipe.steps
+        step = recipe.steps["ci_watch"]
+        assert step.tool == "run_cmd"
+        assert step.skip_when_false == "inputs.open_pr"
+        assert step.with_args.get("timeout") == 150
+
+    def test_ip_ci_watch_routing(self, recipe) -> None:
+        """T_CI2: ci_watch routes on_success to cleanup_success and on_failure to resolve_ci."""
+        step = recipe.steps["ci_watch"]
+        assert step.on_success == "cleanup_success"
+        assert step.on_failure == "resolve_ci"
+
+    def test_ip_ci_watch_uses_merge_target(self, recipe) -> None:
+        """T_CI3: ci_watch command references context.merge_target for the branch argument."""
+        cmd = recipe.steps["ci_watch"].with_args["cmd"]
+        assert "context.merge_target" in cmd
+        assert "gh run watch" in cmd
+        assert "--exit-status" in cmd
+
+    def test_ip_resolve_ci_structure(self, recipe) -> None:
+        """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
+        and on_exhausted: cleanup_failure."""
+        assert "resolve_ci" in recipe.steps
+        step = recipe.steps["resolve_ci"]
+        assert step.tool == "run_skill"
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "resolve-failures" in skill_cmd
+        assert step.retries == 2
+        assert step.on_exhausted == "cleanup_failure"
+
+    def test_ip_resolve_ci_uses_work_dir(self, recipe) -> None:
+        """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
+        cmd = recipe.steps["resolve_ci"].with_args.get("skill_command", "")
+        assert "context.work_dir" in cmd
+
+    def test_ip_re_push_loops_back_to_ci_watch(self, recipe) -> None:
+        """T_CI6: re_push step exists, is push_to_remote, routes on_success back to ci_watch."""
+        assert "re_push" in recipe.steps
+        step = recipe.steps["re_push"]
+        assert step.tool == "push_to_remote"
+        assert step.on_success == "ci_watch"
+        assert step.on_failure == "cleanup_failure"
+
+    def test_ip_re_push_has_explicit_remote_url(self, recipe) -> None:
+        """T_CI7: re_push uses explicit remote_url (satisfies push-missing-explicit-remote-url)."""
+        with_args = recipe.steps["re_push"].with_args
+        assert "remote_url" in with_args
+        assert "context.remote_url" in with_args["remote_url"]
+
+    def test_ip_open_pr_step_has_skip_when_false_ci(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is now ci_watch (updated from cleanup_success)."""
+        step = recipe.steps["open_pr_step"]
+        assert step.on_success == "ci_watch", (
+            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -515,6 +567,65 @@ class TestInvestigateFirstStructure:
             "implement-worktree merges immediately, making verify and assess unreachable"
         )
 
+    def test_if_ci_watch_exists_and_is_gated(self, recipe) -> None:
+        """T_CI1: ci_watch step exists, is run_cmd, has skip_when_false: inputs.open_pr,
+        and specifies timeout: 150."""
+        assert "ci_watch" in recipe.steps
+        step = recipe.steps["ci_watch"]
+        assert step.tool == "run_cmd"
+        assert step.skip_when_false == "inputs.open_pr"
+        assert step.with_args.get("timeout") == 150
+
+    def test_if_ci_watch_routing(self, recipe) -> None:
+        """T_CI2: ci_watch routes on_success to cleanup_success and on_failure to resolve_ci."""
+        step = recipe.steps["ci_watch"]
+        assert step.on_success == "cleanup_success"
+        assert step.on_failure == "resolve_ci"
+
+    def test_if_ci_watch_uses_merge_target(self, recipe) -> None:
+        """T_CI3: ci_watch command references context.merge_target for the branch argument."""
+        cmd = recipe.steps["ci_watch"].with_args["cmd"]
+        assert "context.merge_target" in cmd
+        assert "gh run watch" in cmd
+        assert "--exit-status" in cmd
+
+    def test_if_resolve_ci_structure(self, recipe) -> None:
+        """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
+        and on_exhausted: cleanup_failure."""
+        assert "resolve_ci" in recipe.steps
+        step = recipe.steps["resolve_ci"]
+        assert step.tool == "run_skill"
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "resolve-failures" in skill_cmd
+        assert step.retries == 2
+        assert step.on_exhausted == "cleanup_failure"
+
+    def test_if_resolve_ci_uses_work_dir(self, recipe) -> None:
+        """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
+        cmd = recipe.steps["resolve_ci"].with_args.get("skill_command", "")
+        assert "context.work_dir" in cmd
+
+    def test_if_re_push_loops_back_to_ci_watch(self, recipe) -> None:
+        """T_CI6: re_push step exists, is push_to_remote, routes on_success back to ci_watch."""
+        assert "re_push" in recipe.steps
+        step = recipe.steps["re_push"]
+        assert step.tool == "push_to_remote"
+        assert step.on_success == "ci_watch"
+        assert step.on_failure == "cleanup_failure"
+
+    def test_if_re_push_has_explicit_remote_url(self, recipe) -> None:
+        """T_CI7: re_push uses explicit remote_url."""
+        with_args = recipe.steps["re_push"].with_args
+        assert "remote_url" in with_args
+        assert "context.remote_url" in with_args["remote_url"]
+
+    def test_if_open_pr_step_routes_to_ci_watch(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is ci_watch (updated from cleanup_success)."""
+        step = recipe.steps["open_pr_step"]
+        assert step.on_success == "ci_watch", (
+            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestAuditAndFixStructure
@@ -590,6 +701,65 @@ class TestAuditAndFixStructure:
         """create_branch must use inputs.run_name as a prefix in branch naming."""
         cmd = recipe.steps["create_branch"].with_args["cmd"]
         assert "inputs.run_name" in cmd
+
+    def test_aaf_ci_watch_exists_and_is_gated(self, recipe) -> None:
+        """T_CI1: ci_watch step exists, is run_cmd, has skip_when_false: inputs.open_pr,
+        and specifies timeout: 150."""
+        assert "ci_watch" in recipe.steps
+        step = recipe.steps["ci_watch"]
+        assert step.tool == "run_cmd"
+        assert step.skip_when_false == "inputs.open_pr"
+        assert step.with_args.get("timeout") == 150
+
+    def test_aaf_ci_watch_routing(self, recipe) -> None:
+        """T_CI2: ci_watch routes on_success to cleanup_success and on_failure to resolve_ci."""
+        step = recipe.steps["ci_watch"]
+        assert step.on_success == "cleanup_success"
+        assert step.on_failure == "resolve_ci"
+
+    def test_aaf_ci_watch_uses_merge_target(self, recipe) -> None:
+        """T_CI3: ci_watch command references context.merge_target for the branch argument."""
+        cmd = recipe.steps["ci_watch"].with_args["cmd"]
+        assert "context.merge_target" in cmd
+        assert "gh run watch" in cmd
+        assert "--exit-status" in cmd
+
+    def test_aaf_resolve_ci_structure(self, recipe) -> None:
+        """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
+        and on_exhausted: cleanup_failure."""
+        assert "resolve_ci" in recipe.steps
+        step = recipe.steps["resolve_ci"]
+        assert step.tool == "run_skill"
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "resolve-failures" in skill_cmd
+        assert step.retries == 2
+        assert step.on_exhausted == "cleanup_failure"
+
+    def test_aaf_resolve_ci_uses_work_dir(self, recipe) -> None:
+        """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
+        cmd = recipe.steps["resolve_ci"].with_args.get("skill_command", "")
+        assert "context.work_dir" in cmd
+
+    def test_aaf_re_push_loops_back_to_ci_watch(self, recipe) -> None:
+        """T_CI6: re_push step exists, is push_to_remote, routes on_success back to ci_watch."""
+        assert "re_push" in recipe.steps
+        step = recipe.steps["re_push"]
+        assert step.tool == "push_to_remote"
+        assert step.on_success == "ci_watch"
+        assert step.on_failure == "cleanup_failure"
+
+    def test_aaf_re_push_has_explicit_remote_url(self, recipe) -> None:
+        """T_CI7: re_push uses explicit remote_url."""
+        with_args = recipe.steps["re_push"].with_args
+        assert "remote_url" in with_args
+        assert "context.remote_url" in with_args["remote_url"]
+
+    def test_aaf_open_pr_step_routes_to_ci_watch(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is ci_watch (updated from cleanup_success)."""
+        step = recipe.steps["open_pr_step"]
+        assert step.on_success == "ci_watch", (
+            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        )
 
 
 # ---------------------------------------------------------------------------

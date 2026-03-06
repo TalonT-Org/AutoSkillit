@@ -319,8 +319,36 @@ steps:
         --title "Integration: collapsed PRs into ${{ inputs.base_branch }}"
         --body "Auto-generated integration branch collapsing open PRs into a single review. See temp/pr-merge-pipeline/ for analysis and conflict resolution details."
       cwd: "${{ context.work_dir }}"
+    on_success: ci_watch_pr
+    on_failure: cleanup_failure
+
+  ci_watch_pr:
+    tool: run_cmd
+    with:
+      cmd: |
+        run_id=""
+        for i in 1 2 3 4 5 6; do
+          run_id=$(gh run list \
+            --branch "${{ context.integration_branch }}" \
+            --limit 1 \
+            --json databaseId,status \
+            --jq '.[] | select(.status != "completed") | .databaseId' \
+            2>/dev/null | head -1)
+          [ -n "$run_id" ] && break
+          sleep 5
+        done
+        [ -n "$run_id" ] || { echo "No active CI run found for branch ${{ context.integration_branch }}"; exit 1; }
+        gh run watch "$run_id" --exit-status
+      cwd: "${{ context.work_dir }}"
+      timeout: 150
     on_success: cleanup_success
     on_failure: cleanup_failure
+    note: >
+      Polls for an active GitHub Actions run on context.integration_branch for up to 30 s,
+      then watches until completion (timeout: 150 s). The integration branch is opened as a
+      PR for human review — CI failures here indicate the integration branch has problems
+      that the human reviewer should see. No automated remediation; on failure, the clone
+      is preserved via cleanup_failure for manual inspection.
 
   cleanup_success:
     tool: remove_clone

@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:e6842e16c77829d862e9cc0dc4447bf9a4ae0ce9bc8783229682d641987277c6 -->
+<!-- autoskillit-recipe-hash: sha256:0f2108a6beb2408540233665ac51d37be713b4b798bd4cd9773b09d2dae17e37 -->
 <!-- autoskillit-diagram-format: v3 -->
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
@@ -72,6 +72,17 @@ clone  [clone_repo] (retry ×3)
 │
 ├── [open_pr_step] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → cleanup_failure
+│
+├── [ci_watch] (retry ×3)  ← only if inputs.open_pr
+│       ✗ failure → resolve_ci
+│
+resolve_ci  [run_skill] (retry ×2)
+│  ↓ success → re_push
+│  ✗ failure → cleanup_failure
+│
+re_push  [push_to_remote] (retry ×3)
+│  ↓ success → ci_watch ↑
+│  ✗ failure → cleanup_failure
 │
 cleanup_success  [remove_clone] (retry ×3)
 │  ↓ success → done

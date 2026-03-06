@@ -221,6 +221,39 @@ def run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> N
             )
         )
 
+    # Check 8: Hook executability
+    hooks_json_path = pkg_dir / "hooks" / "hooks.json"
+    if hooks_json_path.is_file():
+        hooks_data = json.loads(hooks_json_path.read_text())
+        broken_hooks: list[str] = []
+        for entry in hooks_data.get("hooks", {}).get("PreToolUse", []):
+            for hook in entry.get("hooks", []):
+                cmd = hook.get("command", "")
+                resolved = cmd.replace("${CLAUDE_PLUGIN_ROOT}", str(pkg_dir))
+                parts = resolved.split()
+                if len(parts) >= 2:
+                    script_path = Path(parts[-1])
+                    if not script_path.is_file():
+                        broken_hooks.append(cmd)
+        if broken_hooks:
+            results.append(
+                DoctorResult(
+                    Severity.ERROR,
+                    "hook_health",
+                    f"Hook scripts not found: {', '.join(broken_hooks)}",
+                )
+            )
+        else:
+            results.append(DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible"))
+    else:
+        results.append(
+            DoctorResult(
+                Severity.ERROR,
+                "hook_health",
+                "hooks.json not found — hook registration is broken",
+            )
+        )
+
     # Check 7: Script version health
     from autoskillit import __version__
     from autoskillit.core import RecipeSource

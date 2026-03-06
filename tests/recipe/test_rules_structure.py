@@ -1379,23 +1379,27 @@ class TestRecipeIntegrationPredicateRouting:
         step = self.if_recipe.steps["merge"]
         assert step.on_result is not None
         assert step.on_result.conditions, "merge step must have predicate conditions"
-        assert len(step.on_result.conditions) == 4
+        assert len(step.on_result.conditions) == 5
 
         cond0 = step.on_result.conditions[0]
         assert cond0.when == "result.failed_step == 'test_gate'"
         assert cond0.route == "assess"
 
         cond1 = step.on_result.conditions[1]
-        assert cond1.when == "result.failed_step == 'rebase'"
+        assert cond1.when == "result.failed_step == 'post_rebase_test_gate'"
         assert cond1.route == "assess"
 
         cond2 = step.on_result.conditions[2]
-        assert cond2.when == "result.error"
-        assert cond2.route == "cleanup_failure"
+        assert cond2.when == "result.failed_step == 'rebase'"
+        assert cond2.route == "assess"
 
         cond3 = step.on_result.conditions[3]
-        assert cond3.when is None
-        assert cond3.route == "push"
+        assert cond3.when == "result.error"
+        assert cond3.route == "cleanup_failure"
+
+        cond4 = step.on_result.conditions[4]
+        assert cond4.when is None
+        assert cond4.route == "push"
 
     def test_investigate_first_merge_step_captures_worktree_path(self) -> None:
         """The merge step captures worktree_path from result.worktree_path."""
@@ -1408,23 +1412,27 @@ class TestRecipeIntegrationPredicateRouting:
         step = self.ip_recipe.steps["merge"]
         assert step.on_result is not None
         assert step.on_result.conditions, "merge step must have predicate conditions"
-        assert len(step.on_result.conditions) == 4
+        assert len(step.on_result.conditions) == 5
 
         cond0 = step.on_result.conditions[0]
         assert cond0.when == "result.failed_step == 'test_gate'"
         assert cond0.route == "fix"
 
         cond1 = step.on_result.conditions[1]
-        assert cond1.when == "result.failed_step == 'rebase'"
+        assert cond1.when == "result.failed_step == 'post_rebase_test_gate'"
         assert cond1.route == "fix"
 
         cond2 = step.on_result.conditions[2]
-        assert cond2.when == "result.error"
-        assert cond2.route == "cleanup_failure"
+        assert cond2.when == "result.failed_step == 'rebase'"
+        assert cond2.route == "fix"
 
         cond3 = step.on_result.conditions[3]
-        assert cond3.when is None
-        assert cond3.route == "next_or_done"
+        assert cond3.when == "result.error"
+        assert cond3.route == "cleanup_failure"
+
+        cond4 = step.on_result.conditions[4]
+        assert cond4.when is None
+        assert cond4.route == "next_or_done"
 
     def test_implementation_pipeline_merge_step_captures_worktree_path(self) -> None:
         """The merge step in implementation.yaml captures worktree_path."""

@@ -159,3 +159,21 @@ def test_hooks_json_has_native_tool_guard():
         import re
 
         assert re.match(matcher, tool), f"Matcher {matcher!r} should match {tool!r}"
+
+
+# T6b
+def test_hooks_json_commands_use_plugin_root():
+    """All hook commands must use ${CLAUDE_PLUGIN_ROOT}, not python3 -m."""
+    import json as json_mod
+
+    from autoskillit.core import pkg_root
+
+    hooks_json = pkg_root() / "hooks" / "hooks.json"
+    data = json_mod.loads(hooks_json.read_text())
+    for entry in data.get("hooks", {}).get("PreToolUse", []):
+        for hook in entry.get("hooks", []):
+            cmd = hook["command"]
+            assert "python3 -m" not in cmd, f"Hook uses python3 -m pattern: {cmd}"
+            assert "${CLAUDE_PLUGIN_ROOT}" in cmd, (
+                f"Hook does not use ${{CLAUDE_PLUGIN_ROOT}}: {cmd}"
+            )

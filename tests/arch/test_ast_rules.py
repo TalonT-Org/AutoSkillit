@@ -497,6 +497,31 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
 # ── P14-2: Sub-package __init__.py facade enforcement ─────────────────────────
 
 
+def test_hooks_are_stdlib_only() -> None:
+    """Hook scripts must not import from autoskillit.* — they run outside the venv."""
+    hooks_dir = SRC_ROOT / "hooks"
+    violations: list[str] = []
+    for py_file in sorted(hooks_dir.glob("*.py")):
+        if py_file.name == "__init__.py":
+            continue
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and node.module.startswith("autoskillit")
+            ):
+                violations.append(f"  {py_file.name}:{node.lineno}: imports from {node.module}")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith("autoskillit"):
+                        violations.append(f"  {py_file.name}:{node.lineno}: imports {alias.name}")
+    assert not violations, (
+        "Hook scripts must be stdlib-only (no autoskillit.* imports) — "
+        "they run outside the venv:\n" + "\n".join(violations)
+    )
+
+
 def test_init_files_are_pure_facades() -> None:
     """P14-2: Sub-package __init__.py files must not define FunctionDef or AsyncFunctionDef
     at module scope. They must be pure re-export facades.

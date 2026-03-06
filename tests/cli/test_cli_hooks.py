@@ -114,3 +114,23 @@ def test_claude_settings_path_project_scope(tmp_path, monkeypatch):
 
     p = _claude_settings_path("project")
     assert p == tmp_path / ".claude" / "settings.json"
+
+
+# HK11
+def test_registered_hooks_use_plugin_root(tmp_path):
+    """Hook commands written to settings.json must use CLAUDE_PLUGIN_ROOT, not python3 -m."""
+    from autoskillit.cli._hooks import (
+        _register_quota_hook,
+        _register_remove_clone_guard_hook,
+        _register_skill_command_guard_hook,
+    )
+
+    settings = tmp_path / "settings.json"
+    _register_quota_hook(settings)
+    _register_skill_command_guard_hook(settings)
+    _register_remove_clone_guard_hook(settings)
+    data = json.loads(settings.read_text())
+    for entry in data["hooks"]["PreToolUse"]:
+        for hook in entry.get("hooks", []):
+            cmd = hook["command"]
+            assert "python3 -m" not in cmd, f"Registered hook uses python3 -m: {cmd}"

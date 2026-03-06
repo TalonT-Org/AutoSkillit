@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:353cd3eab98857fbb70e4f79cb0b6661312bd63d27ebd58c0ad1db51f41087f2 -->
+<!-- autoskillit-recipe-hash: sha256:b2b1b3b7eaa852c5d983827a97341f1a86f8dbc49ec07eefcae3bffe23941b39 -->
 <!-- autoskillit-diagram-format: v2 -->
 ## bugfix-loop
 End-to-end test with automatic bug fixing in isolated worktrees.
@@ -62,8 +62,11 @@ End-to-end test with automatic bug fixing in isolated worktrees.
 │  ↺ ×3  → escalate
 │
 ┌─ merge  [merge_worktree]
-│  ✓ success  → done
-│  ✗ failure  → escalate
+│  ├─ result.failed_step == 'test_gate'  → assess ↑
+│  ├─ result.failed_step == 'post_rebase_test_gate'  → assess ↑
+│  ├─ result.failed_step == 'rebase'  → assess ↑
+│  ├─ result.error  → escalate
+│  ├─ (default)  → done
 │  ↺ ×3  → escalate
 │
 ───────────────────────────────────────

@@ -195,6 +195,21 @@ Before finalizing, check:
 
 Report to terminal: index file path, manifest file path, per-group file count, and the dependency chain.
 
+After all group files are written and the prose report is printed, emit the following
+structured output tokens as the very last lines of your text output:
+
+```
+groups_path={absolute_path_to_index_file}
+manifest_path={absolute_path_to_manifest_file}
+group_files={absolute_path_to_group_1_file}
+{absolute_path_to_group_2_file}
+{absolute_path_to_group_3_file}
+```
+
+The first path follows the key on the same line; subsequent per-group file paths appear
+on their own lines (this multi-line list format is consumed by `capture_list:` in the
+orchestrating recipe). List every per-group file in implementation order.
+
 ## Output Location
 
 ```

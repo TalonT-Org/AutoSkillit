@@ -217,6 +217,31 @@ Print a JSON result block to stdout for recipe capture:
 
 Exit 0 in both cases — `needs_plan=true` is not a failure, it is a routing signal.
 
+After printing the result block, emit the following structured output tokens as the
+very last lines of your text output:
+
+**On successful direct merge:**
+```
+merged=true
+needs_plan=false
+pr_number={pr_number}
+pr_branch={pr_branch_name}
+pr_title={pr_title}
+```
+
+**On complex / conflict detected:**
+```
+merged=false
+needs_plan=true
+pr_number={pr_number}
+pr_branch={pr_branch_name}
+pr_title={pr_title}
+conflict_report_path={absolute_path_to_conflict_plan_file}
+```
+
+Emit `conflict_report_path=` only when `needs_plan=true` and a conflict plan file was
+written. Omit the line entirely on a successful direct merge.
+
 ## Output Location
 
 ```

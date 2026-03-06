@@ -7,7 +7,7 @@ import yaml
 
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.validator import analyze_dataflow
+from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 
 # ---------------------------------------------------------------------------
 # TestImplementationPipelineStructure
@@ -391,6 +391,19 @@ class TestBugfixLoopStructure:
             "it must capture branch_name for downstream audit_impl use"
         )
 
+    def test_bugfix_loop_investigate_captures_investigation_path(self, recipe) -> None:
+        """1e: investigate step must capture investigation_path; plan step must pass it."""
+        investigate_step = recipe.steps["investigate"]
+        assert (
+            investigate_step.capture is not None
+            and "investigation_path" in investigate_step.capture
+        ), "bugfix-loop investigate step must capture investigation_path"
+        plan_step = recipe.steps["plan"]
+        skill_cmd = plan_step.with_args.get("skill_command", "")
+        assert "${{ context.investigation_path }}" in skill_cmd, (
+            "bugfix-loop plan step skill_command must pass ${{ context.investigation_path }}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestInvestigateFirstStructure
@@ -510,6 +523,24 @@ class TestInvestigateFirstStructure:
             "implement-worktree merges immediately, making verify and assess unreachable"
         )
 
+    def test_remediation_investigate_captures_investigation_path(self, recipe) -> None:
+        """1c: investigate step must have a capture block containing investigation_path."""
+        step = recipe.steps["investigate"]
+        assert step.capture is not None and "investigation_path" in step.capture, (
+            "investigate step must capture investigation_path so rectify receives "
+            "the explicit path rather than scanning the filesystem"
+        )
+        assert step.capture["investigation_path"] == "${{ result.investigation_path }}"
+
+    def test_remediation_rectify_uses_context_investigation_path(self, recipe) -> None:
+        """1d: rectify step must pass ${{ context.investigation_path }} in skill_command."""
+        step = recipe.steps["rectify"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "${{ context.investigation_path }}" in skill_cmd, (
+            "rectify step skill_command must include ${{ context.investigation_path }} "
+            "to pass the explicit path from the capture block"
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestAuditAndFixStructure
@@ -585,6 +616,18 @@ class TestAuditAndFixStructure:
         """create_branch must use inputs.run_name as a prefix in branch naming."""
         cmd = recipe.steps["create_branch"].with_args["cmd"]
         assert "inputs.run_name" in cmd
+
+    def test_audit_and_fix_investigate_captures_investigation_path(self, recipe) -> None:
+        """1f: investigate step must capture investigation_path; plan step must pass it."""
+        step = recipe.steps["investigate"]
+        assert step.capture is not None and "investigation_path" in step.capture, (
+            "audit-and-fix investigate step must capture investigation_path"
+        )
+        plan_step = recipe.steps["plan"]
+        skill_cmd = plan_step.with_args.get("skill_command", "")
+        assert "${{ context.investigation_path }}" in skill_cmd, (
+            "audit-and-fix plan step skill_command must pass ${{ context.investigation_path }}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -767,3 +810,51 @@ def test_smoke_check_summary_has_error_escalation() -> None:
     assert all(r != "done" for r in error_routes), (
         f"check_summary result.error must not route to done; got {error_routes}"
     )
+
+
+# ---------------------------------------------------------------------------
+# SKILL.md emit instruction tests (1b, 1c, 1d)
+# ---------------------------------------------------------------------------
+
+
+def test_audit_impl_skill_md_emits_verdict_and_remediation_path() -> None:
+    """1b: audit-impl SKILL.md must contain verdict= and remediation_path= emit lines."""
+    from autoskillit.core.paths import pkg_root
+
+    content = (pkg_root() / "skills" / "audit-impl" / "SKILL.md").read_text()
+    assert "verdict=" in content, "audit-impl SKILL.md missing 'verdict=' emit line"
+    assert "remediation_path=" in content, (
+        "audit-impl SKILL.md missing 'remediation_path=' emit line"
+    )
+
+
+def test_review_approach_skill_md_emits_review_path() -> None:
+    """1c: review-approach SKILL.md must contain review_path= emit line."""
+    from autoskillit.core.paths import pkg_root
+
+    content = (pkg_root() / "skills" / "review-approach" / "SKILL.md").read_text()
+    assert "review_path=" in content, "review-approach SKILL.md missing 'review_path=' emit line"
+
+
+def test_make_groups_skill_md_emits_group_files() -> None:
+    """1d: make-groups SKILL.md must contain group_files=, groups_path=, manifest_path= lines."""
+    from autoskillit.core.paths import pkg_root
+
+    content = (pkg_root() / "skills" / "make-groups" / "SKILL.md").read_text()
+    assert "group_files=" in content, "make-groups SKILL.md missing 'group_files=' emit line"
+    assert "groups_path=" in content, "make-groups SKILL.md missing 'groups_path=' emit line"
+    assert "manifest_path=" in content, "make-groups SKILL.md missing 'manifest_path=' emit line"
+
+
+# ---------------------------------------------------------------------------
+# Bundled recipe uncaptured-handoff-consumer rule (1i)
+# ---------------------------------------------------------------------------
+
+
+def test_bundled_recipes_pass_uncaptured_handoff_consumer() -> None:
+    """1i: all bundled recipes must produce zero uncaptured-handoff-consumer findings."""
+    for yaml_file in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_file)
+        findings = run_semantic_rules(recipe)
+        handoff_findings = [f for f in findings if f.rule == "uncaptured-handoff-consumer"]
+        assert not handoff_findings, f"{yaml_file.name}: {handoff_findings}"

@@ -495,6 +495,13 @@ When called directly as `/autoskillit:write-recipe`:
 9. After validation passes, generate the pipeline contract file by calling `generate_recipe_card` on the saved script. This creates `.autoskillit/recipes/contracts/{name}.yaml` alongside the recipe. Use `run_python` with `autoskillit.recipe.contracts.generate_recipe_card` passing the script path and scripts directory, or rely on `load_recipe` which auto-generates contracts on first load.
 10. Tell the user: "Saved to `.autoskillit/recipes/{name}.yaml`. Load it with `load_recipe("{name}")` via the MCP tool."
 
+After telling the user, emit the structured output token as the very last line of your
+text output:
+
+```
+recipe_path={absolute_path_to_saved_recipe_file}
+```
+
 ## CRITICAL: Scripts Are NOT Skills
 
 Recipes are YAML workflow files in `.autoskillit/recipes/`. They are:

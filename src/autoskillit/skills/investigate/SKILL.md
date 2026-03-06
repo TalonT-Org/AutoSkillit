@@ -140,6 +140,13 @@ Report structure:
 {Suggested approaches - NOT code changes}
 ```
 
+After writing the report file, emit the structured output token as the very last line
+of your text output:
+
+```
+investigation_path={absolute_path_to_investigation_report_file}
+```
+
 ## Subagent Prompt Template
 
 Use this template for each Explore subagent:

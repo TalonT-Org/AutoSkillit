@@ -49,13 +49,15 @@ steps:
       skill_command: "/autoskillit:investigate the test failures"
       cwd: ${{ inputs.helper_dir }}
       step_name: "investigate"
+    capture:
+      investigation_path: "${{ result.investigation_path }}"
     on_success: plan
     on_failure: escalate
 
   plan:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:rectify the investigation findings"
+      skill_command: "/autoskillit:rectify ${{ context.investigation_path }}"
       cwd: ${{ inputs.helper_dir }}
       step_name: "plan"
     capture:

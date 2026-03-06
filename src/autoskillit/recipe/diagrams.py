@@ -87,7 +87,6 @@ def _is_infrastructure_step(step: Any) -> bool:
 
 def _compute_layout(recipe: Any) -> _LayoutResult:
     """Compute visual layout from a Recipe dataclass."""
-    from autoskillit.recipe._analysis import _extract_routing_edges
 
     step_names = list(recipe.steps.keys())
     step_index: dict[str, int] = {name: i for i, name in enumerate(step_names)}
@@ -364,7 +363,10 @@ def generate_recipe_diagram(pipeline_path: Path, recipes_dir: Path) -> str:
     flow_diagram = _render_visual_flow(layout)
 
     # Build 3-column Inputs table (Name | Description | Default)
-    input_rows: list[str] = ["| Name | Description | Default |", "|------|-------------|---------|"]
+    input_rows: list[str] = [
+        "| Name | Description | Default |",
+        "|------|-------------|---------|",
+    ]
     agent_managed: list[str] = []
     for ing_name, ing in recipe.ingredients.items():
         if ing.default is None and not ing.required:

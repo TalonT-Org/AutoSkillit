@@ -580,9 +580,7 @@ def bool_ingredient_recipe_yaml(tmp_path: Path) -> Path:
     return path
 
 
-def test_diagram_hides_infrastructure_steps(
-    tmp_path: Path, infra_recipe_yaml: Path
-) -> None:
+def test_diagram_hides_infrastructure_steps(tmp_path: Path, infra_recipe_yaml: Path) -> None:
     """T1: infrastructure run_cmd capture steps are hidden from the graph section."""
     recipes_dir = tmp_path / "recipes"
     content = generate_recipe_diagram(infra_recipe_yaml, recipes_dir)
@@ -638,14 +636,14 @@ def test_diagram_retry_notation_is_parenthetical_on_step_name(
     )
 
 
-def test_diagram_inputs_table_has_three_columns(
-    tmp_path: Path, sample_recipe_yaml: Path
-) -> None:
+def test_diagram_inputs_table_has_three_columns(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """T5: diagram has ### Inputs with 3-column table (Name, Description, Default)."""
     recipes_dir = tmp_path / "recipes"
     content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
     assert "### Inputs" in content, "Section header must be '### Inputs', not '### Ingredients'."
-    assert "### Ingredients" not in content, "'### Ingredients' must be replaced with '### Inputs'."
+    assert "### Ingredients" not in content, (
+        "'### Ingredients' must be replaced with '### Inputs'."
+    )
     assert "| Name | Description | Default |" in content, (
         "Inputs table must have exactly 3 columns: Name, Description, Default."
     )
@@ -684,7 +682,6 @@ def test_diagram_empty_string_default_rendered_as_auto_detect(
 def test_extract_routing_edges_covers_on_context_limit() -> None:
     """T8: _extract_routing_edges returns an edge for on_context_limit."""
     from autoskillit.recipe._analysis import _extract_routing_edges  # noqa: PLC0415
-
     from autoskillit.recipe.schema import RecipeStep
 
     step = RecipeStep(
@@ -703,7 +700,6 @@ def test_extract_routing_edges_covers_on_context_limit() -> None:
 def test_extract_routing_edges_covers_all_routing_fields() -> None:
     """T9: _extract_routing_edges covers all RecipeStep routing fields (completeness invariant)."""
     from autoskillit.recipe._analysis import _extract_routing_edges  # noqa: PLC0415
-
     from autoskillit.recipe.schema import RecipeStep, StepResultCondition, StepResultRoute
 
     step = RecipeStep(

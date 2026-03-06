@@ -158,21 +158,14 @@ Output: `pr_url={url}`
 For recipe authors who want to include token/timing data in the PR body:
 
 1. Call the `get_token_summary` MCP tool to retrieve current pipeline token data.
-2. Write the JSON result to `temp/token_summary_{timestamp}.json` using a `run_python` step:
-
-```python
-import json, pathlib, time
-from autoskillit.pipeline.tokens import _token_log
-
-data = _token_log.get_report()
-out = pathlib.Path("temp") / f"token_summary_{int(time.time())}.json"
-out.write_text(json.dumps({"steps": data, "total": _token_log.compute_total()}))
-print(f"token_summary_path={out}")
-```
-
+2. Write the JSON result to `temp/token_summary_{timestamp}.json` using a `run_python` step.
+   The `run_python` step executes in the MCP server process and has access to the live
+   `ToolContext` via the server context; call `ctx.token_log.get_report()` and
+   `ctx.token_log.compute_total()`, then write `{"steps": ..., "total": ...}` as JSON.
+   Capture the output path via `print(f"token_summary_path={out}")`.
 3. Pass the file path as the fifth positional argument to `run_skill pipeline-summary`.
 
-> Note: `_token_log` is the in-process singleton shared within the MCP server process. The
-> headless session for `pipeline-summary` runs in a separate process with its own (empty) token
-> log, which is why the file-based handoff is required. For MCP-orchestrated pipelines, the
-> orchestrator calls `get_token_summary` directly and writes the result via `run_python`.
+> Note: The headless session for `pipeline-summary` runs in a separate process with its own
+> (empty) token log, which is why the file-based handoff is required. `run_python` steps share
+> the live in-process token log with the MCP server, so they can access accumulated timing data
+> directly without a network call.

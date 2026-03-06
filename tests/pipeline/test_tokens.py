@@ -31,6 +31,7 @@ class TestTokenEntry:
             "cache_creation_input_tokens",
             "cache_read_input_tokens",
             "invocation_count",
+            "elapsed_seconds",
         }
 
     def test_default_counts_are_zero(self):
@@ -56,6 +57,7 @@ class TestTokenEntry:
             "cache_creation_input_tokens",
             "cache_read_input_tokens",
             "invocation_count",
+            "elapsed_seconds",
         }
         assert d["step_name"] == "implement"
         assert d["input_tokens"] == 42
@@ -140,7 +142,73 @@ class TestDefaultTokenLog:
             "output_tokens": 0,
             "cache_creation_input_tokens": 0,
             "cache_read_input_tokens": 0,
+            "total_elapsed_seconds": 0.0,
         }
+
+    def test_token_entry_has_elapsed_seconds_field(self):
+        entry = TokenEntry(step_name="foo")
+        assert entry.elapsed_seconds == 0.0
+
+    def test_token_entry_elapsed_seconds_in_to_dict(self):
+        entry = TokenEntry(step_name="foo")
+        d = entry.to_dict()
+        assert "elapsed_seconds" in d
+        assert d["elapsed_seconds"] == 0.0
+
+    def test_record_accumulates_elapsed_seconds(self):
+        log = DefaultTokenLog()
+        start = "2026-01-01T00:00:00+00:00"
+        end = "2026-01-01T00:00:10+00:00"
+        log.record("step1", {"input_tokens": 100}, start_ts=start, end_ts=end)
+        entries = log.get_report()
+        assert len(entries) == 1
+        assert entries[0]["elapsed_seconds"] == pytest.approx(10.0)
+
+    def test_record_accumulates_elapsed_seconds_across_invocations(self):
+        log = DefaultTokenLog()
+        start1 = "2026-01-01T00:00:00+00:00"
+        end1 = "2026-01-01T00:00:10+00:00"
+        start2 = "2026-01-01T00:01:00+00:00"
+        end2 = "2026-01-01T00:01:05+00:00"
+        log.record("step1", {"input_tokens": 50}, start_ts=start1, end_ts=end1)
+        log.record("step1", {"input_tokens": 50}, start_ts=start2, end_ts=end2)
+        entries = log.get_report()
+        assert entries[0]["elapsed_seconds"] == pytest.approx(15.0)
+
+    def test_record_no_timing_leaves_elapsed_at_zero(self):
+        log = DefaultTokenLog()
+        log.record("step1", {"input_tokens": 100})
+        entries = log.get_report()
+        assert entries[0]["elapsed_seconds"] == 0.0
+
+    def test_record_partial_timing_leaves_elapsed_at_zero(self):
+        log = DefaultTokenLog()
+        log.record("step1", {"input_tokens": 100}, start_ts="2026-01-01T00:00:00+00:00")
+        entries = log.get_report()
+        assert entries[0]["elapsed_seconds"] == 0.0
+
+    def test_compute_total_includes_total_elapsed_seconds(self):
+        log = DefaultTokenLog()
+        log.record(
+            "a",
+            {"input_tokens": 10},
+            start_ts="2026-01-01T00:00:00+00:00",
+            end_ts="2026-01-01T00:00:05+00:00",
+        )
+        log.record(
+            "b",
+            {"input_tokens": 20},
+            start_ts="2026-01-01T00:01:00+00:00",
+            end_ts="2026-01-01T00:01:07+00:00",
+        )
+        total = log.compute_total()
+        assert "total_elapsed_seconds" in total
+        assert total["total_elapsed_seconds"] == pytest.approx(12.0)
+
+    def test_compute_total_elapsed_seconds_empty_log(self):
+        log = DefaultTokenLog()
+        total = log.compute_total()
+        assert total["total_elapsed_seconds"] == 0.0
 
     def test_compute_total_accumulates_all_four_types(self):
         log = DefaultTokenLog()

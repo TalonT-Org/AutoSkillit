@@ -6,15 +6,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -m autoskillit.hooks.skill_cmd_check"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/skill_cmd_check.py"
           },
           {
             "type": "command",
-            "command": "python3 -m autoskillit.hooks.quota_check"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/quota_check.py"
           },
           {
             "type": "command",
-            "command": "python3 -m autoskillit.hooks.skill_command_guard"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/skill_command_guard.py"
           }
         ]
       },
@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -m autoskillit.hooks.remove_clone_guard"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/remove_clone_guard.py"
           }
         ]
       },
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -m autoskillit.hooks.native_tool_guard"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/native_tool_guard.py"
           }
         ]
       }

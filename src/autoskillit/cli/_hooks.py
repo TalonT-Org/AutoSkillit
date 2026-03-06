@@ -55,7 +55,7 @@ def _register_quota_hook(settings_path: Path) -> None:
     _register_pretooluse_hook(
         settings_path,
         matcher="mcp__.*autoskillit.*__run_skill.*",
-        command="python3 -m autoskillit.hooks.quota_check",
+        command="python3 ${CLAUDE_PLUGIN_ROOT}/hooks/quota_check.py",
     )
 
 
@@ -64,7 +64,7 @@ def _register_remove_clone_guard_hook(settings_path: Path) -> None:
     _register_pretooluse_hook(
         settings_path,
         matcher="mcp__.*autoskillit.*__remove_clone",
-        command="python3 -m autoskillit.hooks.remove_clone_guard",
+        command="python3 ${CLAUDE_PLUGIN_ROOT}/hooks/remove_clone_guard.py",
     )
 
 
@@ -79,7 +79,7 @@ def _register_skill_command_guard_hook(settings_path: Path) -> None:
     pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
 
     MATCHER = "mcp__.*autoskillit.*__run_skill.*"
-    COMMAND = "python3 -m autoskillit.hooks.skill_command_guard"
+    COMMAND = "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/skill_command_guard.py"
 
     # Idempotency: return if command already present anywhere
     for entry in pretooluse:

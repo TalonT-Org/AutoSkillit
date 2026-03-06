@@ -106,13 +106,12 @@ def test_approve_when_skill_command_key_missing():
 
 
 def test_hook_uses_skill_command_prefix_constant():
-    """Hook must import SKILL_COMMAND_PREFIX from autoskillit.core, not hardcode '/'."""
+    """Hook must define SKILL_COMMAND_PREFIX, not hardcode '/' inline."""
     import inspect
 
     import autoskillit.hooks.skill_command_guard as mod
 
     src = inspect.getsource(mod)
-    assert "from autoskillit.core import" in src
     assert "SKILL_COMMAND_PREFIX" in src
 
 

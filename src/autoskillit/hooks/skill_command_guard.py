@@ -9,7 +9,8 @@ from __future__ import annotations
 import json
 import sys
 
-from autoskillit.core import AUTOSKILLIT_SKILL_PREFIX, SKILL_COMMAND_PREFIX
+SKILL_COMMAND_PREFIX = "/"
+AUTOSKILLIT_SKILL_PREFIX = "/autoskillit:"
 
 
 def main() -> None:

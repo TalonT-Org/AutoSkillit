@@ -43,7 +43,9 @@ skills:
     - name: topic
       type: string
       required: true
-    outputs: []
+    outputs:
+    - name: investigation_path
+      type: file_path
   make-groups:
     inputs:
     - name: source_doc
@@ -93,7 +95,7 @@ skills:
     inputs:
     - name: investigation_path
       type: file_path
-      required: false
+      required: true
     outputs:
     - name: plan_path
       type: file_path

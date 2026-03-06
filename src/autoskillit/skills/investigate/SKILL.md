@@ -106,6 +106,16 @@ After subagents complete, consolidate into structured findings:
 
 Write findings to: `temp/investigate/investigation_{topic}_{date}.md`
 
+After saving the report, emit the structured output token as the very last line of your text output:
+
+```
+investigation_path={absolute_path_to_the_report_file}
+```
+
+The path must be the absolute path to the file just written. Follow the same convention as the
+`rectify` skill (which emits `plan_path=` and `plan_parts=`) and `implement-worktree-no-merge`
+(which emits `worktree_path=` and `branch_name=`).
+
 Report structure:
 ```markdown
 # Investigation: {Topic}

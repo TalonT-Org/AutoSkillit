@@ -179,6 +179,8 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "investigate"
       issue_content: "${{ context.issue_content }}"
+    capture:
+      investigation_path: "${{ result.investigation_path }}"
     on_success: rectify
     on_failure: cleanup_failure
     note: >
@@ -189,7 +191,7 @@ steps:
   rectify:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:rectify"
+      skill_command: "/autoskillit:rectify ${{ context.investigation_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "rectify"
     capture:

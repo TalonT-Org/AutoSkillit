@@ -51,7 +51,13 @@ Do not change any code.
 
 ### Step 1: Identify the Investigation Context
 
-Locate the most recent investigation report in `temp/investigate/` or from conversation context. Extract:
+Read the investigation report at the path provided as the first argument (`investigation_path`).
+The path is passed as the first positional argument to the skill command
+(e.g., `/autoskillit:rectify /abs/path/to/report.md`). If no path argument is present, halt
+immediately with the following error:
+`investigation_path is required — pass the path returned by the investigate skill`
+
+Extract from the report:
 - The root cause identified
 - Affected components
 - Test gaps noted

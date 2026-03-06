@@ -1,350 +1,135 @@
 # AutoSkillit
 
-Claude Code plugin that orchestrates automated workflows using headless sessions. Provides 22 MCP tools (15 gated behind user-only MCP prompts, 7 ungated) and 19 bundled skills registered as `/autoskillit:*` slash commands.
+A stateless workflow engine that turns your skills into scriptable components. Write simple YAML recipes that chain skills as reusable steps.
 
-## Install
+Skills are focused tasks (planning, implementing, testing, investigating). Recipes are instructions that tell the AI how to chain them together. The YAML format is a convention for consistency and sharing, but there's nothing strict about it. Anything you could tell a person to do, you can put in a recipe. The only limit is whether the AI can understand what you want.
 
-```bash
-uv pip install -e .
-```
+<!-- TODO: banner -->
 
-Requires Python 3.11+.
+<!-- TODO: demo -->
+
+## Prerequisites
+
+- Python 3.11+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and on PATH
 
 ## Quick Start
 
-### 1. Install the package
+### 1. Install
 
 ```bash
-uv pip install -e /path/to/autoskillit
+git clone https://github.com/talontechnologies/autoskillit.git
+cd autoskillit
+uv pip install -e .
+autoskillit install
 ```
 
-### 2. Register the plugin
+`install` registers AutoSkillit as a Claude Code plugin. It loads automatically in every session after this. No per-project wiring needed.
 
-```bash
-autoskillit install              # persistent plugin (recommended)
-```
-
-This registers a local marketplace and installs the plugin via `claude plugin install`. The plugin loads automatically in every Claude Code session. After updating, re-run `autoskillit install` to refresh the cache.
-
-> **Note:** Do **not** also run `claude mcp add autoskillit ...` — the plugin already registers the MCP server. Adding a standalone entry creates a duplicate server process.
-
-For one-off sessions without persistent installation:
-
-```bash
-claude --plugin-dir $(python -c "import autoskillit; print(autoskillit.__path__[0])")
-```
-
-### 3. Configure for your project
+### 2. Set up your project
 
 ```bash
 cd your-project
-autoskillit init                              # prompts for test command
-autoskillit init --test-command "pytest -v"   # non-interactive
+autoskillit init
 ```
 
-This creates `.autoskillit/config.yaml`. Use `--force` to overwrite an existing config.
+This creates `.autoskillit/config.yaml` with your test command, the only setting most projects need. For a guided setup that detects your tools and generates tailored recipes, use `/autoskillit:setup-project` inside Claude Code.
 
-### 4. Open the kitchen
-
-15 tools are gated by default. Activate them by typing the open prompt shown by `autoskillit doctor` or in the MCP tool list. The prompt name depends on how the plugin was loaded:
-
-- Plugin install: `/mcp__plugin_autoskillit_autoskillit__open_kitchen`
-- `--plugin-dir`: `/mcp__autoskillit__open_kitchen`
-
-This uses MCP prompts (user-only, model cannot invoke) and survives `--dangerously-skip-permissions`.
-
-## Running Pipelines
-
-### From the terminal
+### 3. Run your first pipeline
 
 ```bash
-autoskillit cook <recipe-name>
+autoskillit cook
 ```
 
-Launches a Claude Code session to execute the named recipe from `.autoskillit/recipes/`. The recipe YAML is validated before launch.
+This launches Claude Code with the kitchen already open. Select a recipe, provide the inputs, and the orchestrator handles the rest. You can also specify a recipe directly:
 
-### From within Claude Code
-
-Load a recipe via the `load_recipe` MCP tool, then follow the YAML steps:
-
-```
-list_recipes()           -> JSON array of {name, description, summary}
-load_recipe("impl")      -> raw YAML content for agent to interpret
+```bash
+autoskillit cook implementation
 ```
 
-Both tools are ungated — available without calling `open_kitchen`.
+## How It Works
 
-## MCP Tools
+AutoSkillit is a **stateless workflow engine**. The recipe defines the script. The AI is the state manager.
 
-| Tool | Gated | Purpose |
-|------|-------|---------|
-| `run_cmd` | Yes | Execute shell commands with timeout |
-| `run_python` | Yes | Call a Python function by dotted module path (in-process) |
-| `run_skill` | Yes | Run Claude Code headless with a skill command (optional `model` param) |
-| `run_skill_retry` | Yes | Run Claude Code headless with API call limit (optional `model` param) |
-| `test_check` | Yes | Run test suite, returns unambiguous PASS/FAIL |
-| `merge_worktree` | Yes | Merge worktree branch after programmatic test gate |
-| `reset_test_dir` | Yes | Clear test directory (reset guard marker required) |
-| `classify_fix` | Yes | Analyze diff to determine restart scope (full vs partial) |
-| `reset_workspace` | Yes | Reset workspace directory, preserving configured paths |
-| `read_db` | Yes | Run read-only SQL queries against SQLite databases |
-| `migrate_recipe` | Yes | Apply versioned migration notes to a recipe YAML file |
-| `clone_repo` | Yes | Clone a repo into an isolated run directory |
-| `remove_clone` | Yes | Tear down a clone directory (never raises) |
-| `push_to_remote` | Yes | Push from clone to remote without touching source |
-| `fetch_github_issue` | Yes | Fetch a GitHub issue as Markdown |
-| `kitchen_status` | No | Return version health and gate status |
-| `list_recipes` | No | List available recipes from project and bundled sources |
-| `load_recipe` | No | Load a recipe by name as raw YAML |
-| `validate_recipe` | No | Validate a recipe against the schema and semantic rules |
-| `get_pipeline_report` | No | Retrieve accumulated pipeline failure audit log |
-| `get_token_summary` | No | Retrieve per-step token usage totals |
+A **skill** is a focused task: "make a plan", "implement in a worktree", "investigate test failures". Each skill runs in its own headless session with full tool access. On its own, a skill is a one-shot capability.
 
-## Skills
+A **recipe** turns skills into a script. It tells the AI what steps to run, what inputs to collect, and what to do when something succeeds or fails. The YAML format is a convention, not a constraint. The AI interprets the recipe and decides how to execute it.
 
-Bundled skills invoked as `/autoskillit:<name>`:
+When you run `autoskillit cook`, an orchestrating agent reads the recipe and drives the workflow. It never does the actual work itself. It just passes inputs to each skill, reads the result, and moves to the next step. All the real work (reading code, writing code, running tests) happens inside separate headless skill sessions, each with their own context window.
 
-| Skill | Purpose |
-|-------|---------|
-| `investigate` | Deep investigation of errors or questions without making code changes |
-| `rectify` | Follow-up investigation that designs architectural immunity rather than direct fixes |
-| `make-plan` | Create implementation plans through deep codebase exploration with subagents |
-| `make-groups` | Decompose a large plan or spec into sequenced implementation groups |
-| `dry-walkthrough` | Validate a plan by tracing each change without implementing |
-| `review-approach` | Research modern solutions for a plan via web-search subagents |
-| `implement-worktree` | Implement a plan in an isolated git worktree with full test and rebase |
-| `implement-worktree-no-merge` | Implement in a worktree without merging — leaves it intact for the orchestrator |
-| `retry-worktree` | Continue implementation after context exhaustion in a prior session |
-| `resolve-failures` | Fix test failures in a worktree without merging |
-| `audit-impl` | Audit a completed implementation against its plan — returns GO or NO GO |
-| `analyze-prs` | Analyze open PRs for merge order, file overlaps, and complexity |
-| `merge-pr` | Merge a single PR into the integration branch |
-| `audit-friction` | Scan Claude Code project logs for repeated failure patterns and stuck workflows |
-| `pipeline-summary` | Create a GitHub issue and PR summarizing pipeline bugs and fixes |
-| `write-recipe` | Generate YAML recipes for `.autoskillit/recipes/` interactively or from another skill |
-| `migrate-recipes` | Apply versioned migration notes to a recipe YAML file |
-| `mermaid` | Create and edit Mermaid diagrams in markdown files |
-| `setup-project` | Explore a target project and generate tailored recipes and config |
+This means the orchestrator's context window stays small. It only ever holds the recipe, the current step's result, and enough routing information to decide what comes next. Workflows have run for 48+ hours without approaching context limits, because the orchestrator never accumulates the content of the skills it delegates to.
 
-Use `autoskillit skills list` to see all bundled skills.
+### Example: The Implementation Pipeline
+
+The bundled `implementation` recipe automates the full development cycle:
+
+```
+clone > plan > verify > implement > test > merge > push
+```
+
+Give it a task description or a GitHub issue URL, and it:
+
+- Clones your repo into an isolated directory
+- Creates a detailed implementation plan
+- Validates the plan with a dry walkthrough
+- Implements changes in a git worktree
+- Runs your test suite
+- Merges on success, pushes, and opens a PR
+
+If tests fail, it automatically routes to a fix skill that diagnoses and resolves the failures before retrying.
+
+## Bundled Recipes
+
+| Recipe | What it automates |
+|--------|-------------------|
+| `implementation` | Plan, verify, implement, test, merge, and push |
+| `bugfix-loop` | Test, investigate, plan, implement, verify, and merge |
+| `remediation` | Investigate-first approach for issues needing diagnosis |
+| `audit-and-fix` | Audit, investigate, rectify, implement, test, and merge |
+| `smoke-test` | Integration self-test of the orchestration path |
+
+```bash
+autoskillit recipes list              # list available recipes
+autoskillit recipes show bugfix-loop  # inspect a recipe's YAML
+```
+
+Project recipes in `.autoskillit/recipes/` override bundled ones with the same name. Generate custom recipes with `/autoskillit:write-recipe` or `/autoskillit:setup-project`.
+
+## CLI Reference
+
+| Command | Purpose |
+|---------|---------|
+| `autoskillit install` | Register plugin with Claude Code |
+| `autoskillit init` | Create project config (`.autoskillit/config.yaml`) |
+| `autoskillit cook [recipe]` | Launch a pipeline |
+| `autoskillit doctor` | Check setup for common issues |
+| `autoskillit recipes list` | List available recipes |
+| `autoskillit skills list` | List all 24 bundled skills |
+| `autoskillit config show` | Show resolved configuration |
+| `autoskillit migrate` | Check for outdated recipes |
 
 ## Configuration
 
-Layered YAML resolution: package defaults < `~/.autoskillit/config.yaml` (user) < `.autoskillit/config.yaml` (project) < `.autoskillit/.secrets.yaml` < env vars (`AUTOSKILLIT_SECTION__KEY`). Partial configs are fine — unset fields keep defaults. View resolved config with `autoskillit config show`.
-
-### Test Command
-
-Used by `test_check` and `merge_worktree`. The only setting most projects need.
+`autoskillit init` writes a `.autoskillit/config.yaml` with your test command:
 
 ```yaml
 test_check:
-  command: ["task", "test-check"]
-  timeout: 600
+  command: ["pytest", "-v"]
 ```
 
-`autoskillit init` sets this for you. Default: `["task", "test-check"]`.
+Config resolves in layers: package defaults < user config (`~/.autoskillit/config.yaml`) < project config (`.autoskillit/config.yaml`). View the result with `autoskillit config show`.
 
-### Model Selection
-
-Control which model `run_skill` and `run_skill_retry` use for headless sessions.
-
-```yaml
-model:
-  default: null      # default model when step has no model field (null = CLI default)
-  override: null     # force all sessions to use this model (overrides step YAML)
-```
-
-Recipe steps can also specify a `model` field per-step in their YAML definition.
-
-### Worktree Setup
-
-Command to run after creating a git worktree (e.g. to install dependencies).
-
-```yaml
-worktree_setup:
-  command: ["task", "install-worktree"]
-```
-
-Default: `null` (disabled).
-
-### classify_fix
-
-```yaml
-classify_fix:
-  path_prefixes:
-    - "src/schema/"
-    - "db/migrations/"
-```
-
-File prefixes that trigger `full_restart` instead of `partial_restart`. Default: `[]`.
-
-### reset_workspace
-
-```yaml
-reset_workspace:
-  command: ["task", "clean"]
-  preserve_dirs: ["data", ".cache"]
-```
-
-Default: `command: null` (disabled), `preserve_dirs: []`.
-
-### Quota Guard
-
-```yaml
-quota_guard:
-  enabled: true
-  threshold: 80.0          # block run_skill when 5-hour utilization exceeds this %
-  buffer_seconds: 60       # extra buffer after quota reset before resuming
-  cache_max_age: 60        # seconds before a live quota fetch is triggered
-```
-
-### GitHub Integration
-
-```yaml
-github:
-  default_repo: "owner/repo"   # used when a bare issue number (#42) is provided
-# token goes in .autoskillit/.secrets.yaml (never commit)
-```
-
-### Safety and Gates
-
-```yaml
-implement_gate:
-  marker: "Dry-walkthrough verified = TRUE"
-  skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
-
-safety:
-  reset_guard_marker: ".autoskillit-workspace"
-  require_dry_walkthrough: true
-  test_gate_on_merge: true
-```
-
-These defaults are usually fine. Override per-project if needed.
-
-### Full Example
-
-```yaml
-test_check:
-  command: ["pytest", "-v", "--tb=short"]
-
-model:
-  default: "claude-sonnet-4-6"
-
-worktree_setup:
-  command: ["task", "install-worktree"]
-
-classify_fix:
-  path_prefixes:
-    - "src/schema/"
-    - "db/migrations/"
-
-reset_workspace:
-  command: ["task", "clean"]
-  preserve_dirs: ["data", ".cache"]
-
-github:
-  default_repo: "my-org/my-repo"
-```
-
-## Recipes
-
-Declarative YAML pipeline definitions stored in `.autoskillit/recipes/` that guide the orchestrating agent through multi-step processes.
-
-### Bundled recipes
-
-| Recipe | Description |
-|--------|-------------|
-| `implementation` | Clone > plan > verify > implement > test > merge > push > cleanup (supports group decomposition) |
-| `bugfix-loop` | Reset > test > investigate > rectify > implement > verify > audit > merge |
-| `remediation` | Clone > investigate > rectify > dry-walkthrough > implement > test > merge > push > cleanup |
-| `audit-and-fix` | Clone > audit > investigate > rectify > implement > test > merge > push > cleanup |
-| `smoke-test` | Self-contained integration test exercising the full orchestration path |
-
-```bash
-autoskillit recipes list              # show available recipes
-autoskillit recipes show bugfix-loop  # print YAML
-```
-
-Agents access recipes via MCP resource: `recipe://bugfix-loop`. Project recipes in `.autoskillit/recipes/` override bundled ones.
-
-### Recipe schema
-
-```yaml
-name: implementation
-description: Plan and implement a task end-to-end.
-summary: make-plan > dry-walk > implement > test > merge
-
-ingredients:
-  task:
-    description: What to implement
-    required: true
-  base_branch:
-    description: Branch to merge into
-    default: main
-
-kitchen_rules:
-  - "NEVER use native Claude Code tools from the orchestrator."
-
-steps:
-  plan:
-    tool: run_skill
-    with:
-      skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
-      cwd: "."
-    on_success: verify
-    on_failure: escalate
-  verify:
-    tool: run_skill
-    with:
-      skill_command: "/autoskillit:dry-walkthrough ${{ inputs.plan_path }}"
-      cwd: "."
-    on_success: implement
-    on_failure: escalate
-  implement:
-    tool: run_skill_retry
-    with:
-      skill_command: "/autoskillit:implement-worktree-no-merge ${{ inputs.plan_path }}"
-      cwd: "."
-    on_success: done
-    on_failure: escalate
-  done:
-    action: stop
-    message: "Implementation complete."
-  escalate:
-    action: stop
-    message: "Failed — human intervention needed."
-```
-
-`/autoskillit:setup-project` generates recipes tailored to your project. `/autoskillit:write-recipe` generates them interactively.
-
-## Diagnostics
-
-```bash
-autoskillit doctor              # check for stale MCP servers, missing config, plugin metadata
-autoskillit doctor --output-json  # structured JSON output
-autoskillit migrate             # report outdated recipes and available migrations
-autoskillit migrate --check     # exit 1 if any migrations pending (CI use)
-autoskillit quota-status        # check 5-hour API quota utilization
-```
+See [docs/configuration.md](docs/configuration.md) for the full reference covering model selection, worktree setup, quota guard, GitHub integration, and safety settings.
 
 ## Safety
 
-- **Tool gating**: 15 tools disabled by default, require user activation via MCP prompt
-- **Reset guard**: Destructive operations require a marker file (`.autoskillit-workspace`). Create with `autoskillit workspace init <dir>`
-- **Dry-walkthrough gate**: Plans must be verified before implementation skills run
-- **Test gate**: Programmatic test validation before merge (no bypass parameter)
-- **Quota guard**: PreToolUse hook blocks `run_skill` when 5-hour API utilization exceeds threshold
-- **Read-only DB**: Triple-layered protection (regex, OS-level `mode=ro`, SQLite authorizer)
-- **Process tree cleanup**: psutil-based cleanup of all subprocess descendants
+AutoSkillit is designed around defense in depth:
 
-## Development
-
-```bash
-uv sync --extra dev
-pre-commit install
-task test-all                        # run tests
-pre-commit run --all-files           # format, lint, typecheck
-```
+- **Tool gating**: 16 tools are locked until you run the `/open_kitchen` command
+- **Test gate**: code must pass tests before merge, no bypass
+- **Dry-walkthrough gate**: plans are verified before implementation begins
+- **Clone isolation**: pipeline work happens in cloned directories, not your working tree
+- **Process cleanup**: all subprocess trees are cleaned up after sessions
 
 ## License
 

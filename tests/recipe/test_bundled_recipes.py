@@ -157,7 +157,7 @@ class TestImplementationPipelineStructure:
             (
                 i
                 for i, (name, step) in enumerate(steps)
-                if step.tool in {"run_skill", "run_skill_retry"}
+                if step.tool in {"run_skill"}
                 and "implement-worktree" in step.with_args.get("skill_command", "")
             ),
             None,

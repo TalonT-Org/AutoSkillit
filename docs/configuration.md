@@ -34,7 +34,7 @@ test_check:
 
 ## Model Selection
 
-Control which model `run_skill` and `run_skill_retry` use for headless sessions.
+Control which model `run_skill` uses for headless sessions.
 
 ```yaml
 model:

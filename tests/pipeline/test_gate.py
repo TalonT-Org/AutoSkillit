@@ -126,8 +126,8 @@ def test_helpers_has_no_gate_error_result_duplicate():
     )
 
 
-def test_gate_has_no_internal_imports():
-    """_gate.py must have zero autoskillit internal imports (L0 constraint)."""
+def test_gate_imports_only_from_core():
+    """gate.py (L1 pipeline) may only import from autoskillit.core (L0)."""
     import ast
 
     from autoskillit.core.paths import pkg_root
@@ -136,13 +136,15 @@ def test_gate_has_no_internal_imports():
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                assert "autoskillit" not in node.module, (
-                    f"_gate.py must not import from autoskillit (L0 constraint): "
+            if isinstance(node, ast.ImportFrom) and node.module and "autoskillit" in node.module:
+                assert node.module == "autoskillit.core" or node.module.startswith(
+                    "autoskillit.core."
+                ), (
+                    f"gate.py (L1) may only import from autoskillit.core (L0): "
                     f"found 'from {node.module} import ...'"
                 )
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     assert "autoskillit" not in alias.name, (
-                        "_gate.py must not import autoskillit (L0 constraint)"
+                        "gate.py must not use bare autoskillit imports"
                     )

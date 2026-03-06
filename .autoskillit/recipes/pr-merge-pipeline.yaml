@@ -26,7 +26,7 @@ ingredients:
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
     Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
-    orchestrator. All work is delegated through run_skill/run_skill_retry
+    orchestrator. All work is delegated through run_skill
     and run_cmd."
   - "Route to on_failure when a step fails — do not investigate or fix directly."
   - "SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before
@@ -170,7 +170,7 @@ steps:
       (verify → implement → test → merge_to_integration) before advancing.
 
   implement:
-    tool: run_skill_retry
+    tool: run_skill
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.pr_plan_path }}"
       cwd: "${{ context.work_dir }}"
@@ -184,7 +184,7 @@ steps:
     on_context_limit: retry_worktree
 
   retry_worktree:
-    tool: run_skill_retry
+    tool: run_skill
     with:
       skill_command: "/autoskillit:retry-worktree ${{ context.pr_plan_path }} ${{ context.worktree_path }}"
       cwd: "${{ context.worktree_path }}"

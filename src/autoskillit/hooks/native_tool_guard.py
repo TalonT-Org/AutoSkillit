@@ -35,7 +35,7 @@ def main() -> None:
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
                         "Native tools are prohibited during pipeline execution. "
-                        "Use run_skill/run_skill_retry for code investigation "
+                        "Use run_skill for code investigation "
                         "and run_cmd for shell commands."
                     ),
                 }

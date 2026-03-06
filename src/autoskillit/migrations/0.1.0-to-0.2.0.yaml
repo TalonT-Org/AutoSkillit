@@ -5,7 +5,7 @@ changes:
   - id: resolve-failures-model
     description: "Steps invoking resolve-failures should set model: sonnet"
     instruction: |
-      Find any step whose tool is run_skill or run_skill_retry and whose
+      Find any step whose tool is run_skill and whose
       skill_command (in the with: block) contains "resolve-failures".
       Add `model: sonnet` as a sibling field to `tool:` on that step.
       If the step already has a model: field, leave it unchanged.

@@ -164,6 +164,18 @@ def extract_input_refs(step: Any) -> set[str]:
     return refs
 
 
+def extract_skill_cmd_refs(skill_command: str) -> set[str]:
+    """Extract context and input ref names from a skill_command string only.
+
+    Unlike extract_context_refs/extract_input_refs which scan all with_args,
+    this scans only the skill_command string. Used to detect positional-style
+    invocations where template ref names don't match named contract inputs.
+    """
+    ctx = set(_CONTEXT_REF_RE.findall(skill_command))
+    inp = set(_INPUT_REF_RE.findall(skill_command))
+    return ctx | inp
+
+
 def count_positional_args(skill_command: str) -> int:
     """Count positional text tokens after the skill name.
 

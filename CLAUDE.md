@@ -142,6 +142,7 @@ src/autoskillit/
 │   ├── rules_dataflow.py    #   Semantic rules for capture/output dataflow analysis
 │   ├── rules_graph.py       #   Semantic rules for step graph reachability and cycles
 │   ├── rules_inputs.py      #   Semantic rules for ingredient/version validation
+│   ├── rules_merge.py       #   Semantic rules for merge_worktree routing completeness
 │   ├── rules_worktree.py    #   Semantic rules for worktree retry lifecycle
 │   ├── schema.py            #   Recipe, RecipeStep, DataFlowWarning, AUTOSKILLIT_VERSION_KEY
 │   ├── staleness_cache.py   #   Disk-backed staleness check cache (StalenessEntry, load_cache, save_cache)

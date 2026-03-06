@@ -224,3 +224,14 @@ Artifacts created:
 - `temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
 - `.autoskillit/recipes/{name}.yaml` — approved recipes
 - `.autoskillit/config.yaml` — updated config (if changes approved)
+
+After the summary confirmation gate completes (Step 7), emit the following structured
+output tokens as the very last lines of your text output:
+
+```
+analysis_path={absolute_path_to_analysis_file}
+config_path={absolute_path_to_config_file}
+```
+
+Emit `config_path` only if `.autoskillit/config.yaml` was written in this session.
+If no config changes were applied, omit the `config_path=` line.

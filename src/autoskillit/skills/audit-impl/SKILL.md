@@ -179,6 +179,13 @@ MERGE APPROVED
 
 Exit 0. The pipeline may proceed to merge.
 
+After printing the GO result, emit the following structured output token as the very
+last line of your text output:
+
+```
+verdict=GO
+```
+
 ---
 
 #### If NO GO
@@ -241,6 +248,19 @@ MERGE BLOCKED — feed remediation file to /autoskillit:retry-worktree or /autos
 ```
 
 Exit 1.
+
+After printing the NO GO result, emit the following structured output tokens as the very
+last lines of your text output:
+
+```
+verdict=NO GO
+remediation_path={absolute_path_to_remediation_file}
+```
+
+The `verdict` token must be exactly `GO` or `NO GO` — this is the value the recipe's
+`on_result: field: verdict` routing matches against. The `remediation_path` token must
+be the absolute path to the remediation file written in this session (only emitted for
+NO GO; omit the `remediation_path=` line entirely on GO).
 
 ## Output Location
 

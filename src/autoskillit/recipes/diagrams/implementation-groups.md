@@ -1,9 +1,9 @@
-<!-- autoskillit-recipe-hash: sha256:d2757f57626415f752b399daae08128503d4a7ac2d7a56496544055e9ca602f7 -->
+<!-- autoskillit-recipe-hash: sha256:b2c2dce6a996ff6125db471182a1cfeef180cc3fff508f90022802648229ff4d -->
 <!-- autoskillit-diagram-format: v2 -->
-## implementation
-Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
+## implementation-groups
+Decompose a source document into sequenced implementation groups, then plan, verify, implement, test, and merge each group end-to-end. Use when you have a large document or roadmap to implement via make-groups.
 
-**Flow:** clone > capture_base_sha > set_merge_target > (create_branch?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup
+**Flow:** clone > capture_base_sha > set_merge_target > (create_branch?) > make-groups > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part) > (audit-impl?) > (open_pr?) > push > cleanup
 
 ### Graph
 ┌─ clone  [clone_repo]
@@ -35,6 +35,11 @@ Plan, verify, implement, test, and merge a task end-to-end. Use when user says "
 │
 │  ⟨skip if inputs.open_pr is false⟩
 ┌─ push_merge_target  [push_to_remote]
+│  ✓ success  → group
+│  ✗ failure  → cleanup_failure
+│  ↺ ×3  → escalate
+│
+┌─ group  [run_skill]
 │  ✓ success  → plan
 │  ✗ failure  → cleanup_failure
 │  ↺ ×3  → escalate
@@ -87,6 +92,7 @@ Plan, verify, implement, test, and merge a task end-to-end. Use when user says "
 │
 ┌─ next_or_done  [route]
 │  ├─ ${{ result.next }} == more_parts  → verify ↑
+│  ├─ ${{ result.next }} == more_groups  → plan ↑
 │  ├─ (default)  → audit_impl
 │  ↺ ×3  → escalate
 │
@@ -118,26 +124,27 @@ Plan, verify, implement, test, and merge a task end-to-end. Use when user says "
 │  ↺ ×3  → escalate
 │
 ───────────────────────────────────────
-⏹ done  "Implementation pipeline complete. All tasks have been planned, implemented, tested, and merged."
+⏹ done  "Implementation pipeline complete. All groups/tasks have been planned, implemented, tested, and merged."
 ⏹ escalate_stop  "Pipeline failed — human intervention needed. Check the worktree and plan for details."
 
 ### Ingredients
 | Name | Description | Required | Default |
 |------|-------------|----------|---------|
-| task | Description of what to implement | yes |  |
+| source_doc | Path to source document for group decomposition | yes |  |
 | source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel.
  | no |  |
 | run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. impl/124 or impl/20260304) and in the clone directory name.
  | no | impl |
 | base_branch | Branch to merge into (defaults to current branch) | no | main |
 | review_approach | Run /review-approach before implementation? (true/false) | no | false |
-| audit | Run /autoskillit:audit-impl once after all parts have been merged, to check overall implementation quality and optionally trigger a remediation round (true/false) | no | true |
+| audit | Run /autoskillit:audit-impl once after all groups/parts have been merged, to check overall implementation quality and optionally trigger a remediation round (true/false) | no | true |
 | open_pr | Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false) | no | true |
 | issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched and used to enrich planning, and the resulting PR will include "Closes #N" to auto-close the issue on merge.
  | no |  |
 ### Kitchen Rules
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill.
 - Route to on_failure — never investigate or fix directly from the orchestrator.
-- Process plan parts sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront.
+- source_doc is required — it provides the work via group decomposition.
+- Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront.
 - By default (open_pr=true), a feature branch is created with a unique name derived from inputs.run_name and context.issue_number (e.g. impl/124) or a date suffix (e.g. impl/20260304) when no issue is available. All worktree merges target the feature branch (context.merge_target), not base_branch directly. The push step publishes the feature branch, then open_pr_step opens a PR to base_branch. When open_pr=false, merges target base_branch directly and open_pr_step is skipped.
 - SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly off-limits. Never run any command in source_dir — no git checkout, git fetch, git reset, git pull, run_cmd, run_skill, or any other operation. All work — skill invocations, git operations, file reads — happens exclusively in the clone (work_dir). source_dir is used ONLY to read the remote URL inside push_to_remote.

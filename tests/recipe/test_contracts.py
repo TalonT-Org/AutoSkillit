@@ -459,9 +459,7 @@ def test_rectify_investigation_path_is_required() -> None:
     """T_SC_NEW: rectify.investigation_path input must be required: true."""
     manifest = load_bundled_manifest()
     rectify = manifest["skills"]["rectify"]
-    inv_input = next(
-        (i for i in rectify["inputs"] if i["name"] == "investigation_path"), None
-    )
+    inv_input = next((i for i in rectify["inputs"] if i["name"] == "investigation_path"), None)
     assert inv_input is not None, "rectify must have an investigation_path input"
     assert inv_input["required"] is True, (
         "rectify.investigation_path must be required: true — "

@@ -399,9 +399,10 @@ class TestBugfixLoopStructure:
     def test_bugfix_loop_investigate_captures_investigation_path(self, recipe) -> None:
         """1e: investigate step must capture investigation_path; plan step must pass it."""
         investigate_step = recipe.steps["investigate"]
-        assert investigate_step.capture is not None and "investigation_path" in investigate_step.capture, (
-            "bugfix-loop investigate step must capture investigation_path"
-        )
+        assert (
+            investigate_step.capture is not None
+            and "investigation_path" in investigate_step.capture
+        ), "bugfix-loop investigate step must capture investigation_path"
         plan_step = recipe.steps["plan"]
         skill_cmd = plan_step.with_args.get("skill_command", "")
         assert "${{ context.investigation_path }}" in skill_cmd, (
@@ -624,9 +625,10 @@ class TestAuditAndFixStructure:
     def test_audit_and_fix_investigate_captures_investigation_path(self, recipe) -> None:
         """1f: investigate step must capture investigation_path; plan step must pass it."""
         investigate_step = recipe.steps["investigate"]
-        assert investigate_step.capture is not None and "investigation_path" in investigate_step.capture, (
-            "audit-and-fix investigate step must capture investigation_path"
-        )
+        assert (
+            investigate_step.capture is not None
+            and "investigation_path" in investigate_step.capture
+        ), "audit-and-fix investigate step must capture investigation_path"
         plan_step = recipe.steps["plan"]
         skill_cmd = plan_step.with_args.get("skill_command", "")
         assert "${{ context.investigation_path }}" in skill_cmd, (

@@ -53,22 +53,17 @@ class TestImplementationPipelineStructure:
         assert any("context.review_path" in str(v) for v in verify_with.values())
 
     def test_ip5_audit_impl_has_on_failure(self, recipe) -> None:
-        """T_IP5: audit_impl uses predicate on_result exclusively for all routing.
+        """T_IP5: audit_impl declares on_failure for tool-level failure routing.
 
-        In predicate format (v0.3.0), on_result handles all routing paths including
-        tool-level failures via the 'when: result.error' condition. on_failure must
-        be absent (mutually exclusive with predicate on_result per schema validator).
+        In the two-tier failure model, on_result.conditions fire when run_skill returns
+        success=true with a result object. on_failure fires when run_skill returns
+        success=false (tool-level failure, no result object). Both must be declared.
         """
         step = recipe.steps["audit_impl"]
         assert step.on_success is None  # on_result is used; on_success remains absent
-        assert step.on_failure is None, (
-            "audit_impl must NOT declare on_failure in predicate format. "
-            "Predicate conditions handle all routing including failures via 'when: result.error'."
-        )
-        conds = step.on_result.conditions if step.on_result else []
-        assert any("result.error" in (c.when or "") for c in conds), (
-            "audit_impl predicate on_result must include a 'when: result.error' condition "
-            "to handle tool-level run_skill failures."
+        assert step.on_failure == "escalate_stop", (
+            "audit_impl must declare on_failure: escalate_stop. "
+            "Tool-level failures produce no result object — on_result conditions cannot fire."
         )
 
     def test_ip6_plan_step_note_contains_glob_pattern(self, recipe) -> None:
@@ -729,4 +724,45 @@ def test_bundled_diagrams_are_not_stale() -> None:
             stale.append(recipe_path.stem)
     assert not stale, (
         f"Stale diagrams for: {stale}. Run 'autoskillit recipes render' to regenerate."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Two-tier failure model tests
+# ---------------------------------------------------------------------------
+
+
+def test_all_predicate_steps_have_on_failure() -> None:
+    """Every tool/python step with on_result.conditions must declare on_failure."""
+    for recipe_name in ["implementation", "remediation", "bugfix-loop", "smoke-test"]:
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        for step_name, step in recipe.steps.items():
+            is_tool = step.tool is not None or step.python is not None
+            if is_tool and step.on_result and step.on_result.conditions:
+                assert step.on_failure is not None, (
+                    f"{recipe_name}.{step_name}: predicate step must declare on_failure"
+                )
+
+
+def test_audit_impl_on_failure_routes_to_escalation() -> None:
+    """audit_impl.on_failure must route to an escalation step in each recipe."""
+    impl = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+    rem = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+    bl = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
+    assert impl.steps["audit_impl"].on_failure == "escalate_stop"
+    assert rem.steps["audit_impl"].on_failure == "escalate_stop"
+    assert bl.steps["audit_impl"].on_failure == "escalate"
+
+
+def test_smoke_check_summary_has_error_escalation() -> None:
+    """check_summary must have a result.error condition routing to a non-done step."""
+    recipe = load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
+    step = recipe.steps["check_summary"]
+    error_routes = [
+        c.route for c in step.on_result.conditions
+        if c.when is not None and "result.error" in c.when
+    ]
+    assert error_routes, "check_summary must have a result.error condition"
+    assert all(r != "done" for r in error_routes), (
+        f"check_summary result.error must not route to done; got {error_routes}"
     )

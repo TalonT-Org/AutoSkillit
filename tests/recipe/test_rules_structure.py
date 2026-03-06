@@ -1249,6 +1249,58 @@ class TestPredicateOnResultValidation:
         errors = validate_recipe(recipe)
         assert any("on_result.field must be non-empty" in e for e in errors)
 
+    def test_predicate_format_with_on_failure_allowed(self) -> None:
+        """validator.py must not reject on_failure alongside on_result.conditions."""
+        from autoskillit.recipe.validator import validate_recipe
+
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                "on_failure": "cleanup_failure",
+            }
+        )
+        errors = validate_recipe(wf)
+        assert not any("mutually exclusive" in e for e in errors), errors
+
+    def test_on_result_missing_failure_route_fires_for_predicate_format(self) -> None:
+        """Predicate-format steps with no on_failure must trigger ERROR finding."""
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                # no on_failure — should trigger finding
+            }
+        )
+        findings = run_semantic_rules(wf)
+        names = [f.rule for f in findings]
+        assert "on-result-missing-failure-route" in names
+
+    def test_on_result_missing_failure_route_clear_when_predicate_has_on_failure(self) -> None:
+        """Predicate-format step with on_failure must not trigger the rule."""
+        wf = self._make_merge_recipe(
+            {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {"when": "result.error", "route": "cleanup_failure"},
+                    {"route": "push"},
+                ],
+                "on_failure": "cleanup_failure",
+            }
+        )
+        findings = run_semantic_rules(wf)
+        names = [f.rule for f in findings]
+        assert "on-result-missing-failure-route" not in names
+
 
 # ---------------------------------------------------------------------------
 # TestPredicateBuildStepGraph

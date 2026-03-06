@@ -72,7 +72,9 @@ class TestImplementationPipelineIssueUrl:
 
         recipe = load_recipe(_recipe_path("implementation"))
         report = analyze_dataflow(recipe)
-        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT" and w.field == "issue_number"]
+        dead = [
+            w for w in report.warnings if w.code == "DEAD_OUTPUT" and w.field == "issue_number"
+        ]
         assert dead == [], f"Unexpected DEAD_OUTPUT for issue_number: {dead}"
 
     def test_no_issue_content_dead_output(self):
@@ -165,7 +167,9 @@ class TestInvestigateFirstIssueUrl:
 
         recipe = load_recipe(_recipe_path("remediation"))
         report = analyze_dataflow(recipe)
-        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT" and w.field == "issue_number"]
+        dead = [
+            w for w in report.warnings if w.code == "DEAD_OUTPUT" and w.field == "issue_number"
+        ]
         assert dead == [], f"Unexpected DEAD_OUTPUT for issue_number: {dead}"
 
     def test_no_issue_content_dead_output(self):
@@ -240,7 +244,9 @@ class TestAuditAndFixIssueUrl:
 
         recipe = load_recipe(_recipe_path("audit-and-fix"))
         report = analyze_dataflow(recipe)
-        dead = [w for w in report.warnings if w.code == "DEAD_OUTPUT" and w.field == "issue_number"]
+        dead = [
+            w for w in report.warnings if w.code == "DEAD_OUTPUT" and w.field == "issue_number"
+        ]
         assert dead == [], f"Unexpected DEAD_OUTPUT for issue_number: {dead}"
 
     def test_no_issue_content_dead_output(self):

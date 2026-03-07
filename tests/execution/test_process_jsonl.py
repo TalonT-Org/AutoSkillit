@@ -250,3 +250,69 @@ class TestJsonlHasRecordTypeResultContent:
         """A type=result record with result='   ' (whitespace only) must NOT satisfy."""
         whitespace_line = '{"type":"result","subtype":"success","result":"   ","is_error":false}\n'
         assert not _jsonl_has_record_type(whitespace_line, frozenset({"result"}))
+
+    def test_rejects_result_without_marker_when_marker_configured(self):
+        """Non-empty result missing the marker must NOT confirm."""
+        line = (
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "result": "Task completed.",
+                    "is_error": False,
+                }
+            )
+            + "\n"
+        )
+        assert not _jsonl_has_record_type(
+            line, frozenset({"result"}), completion_marker="%%ORDER_UP%%"
+        )
+
+    def test_accepts_result_with_marker_when_marker_configured(self):
+        """Non-empty result with marker as standalone line must confirm."""
+        line = (
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "result": "Task completed.\n%%ORDER_UP%%",
+                    "is_error": False,
+                }
+            )
+            + "\n"
+        )
+        assert _jsonl_has_record_type(
+            line, frozenset({"result"}), completion_marker="%%ORDER_UP%%"
+        )
+
+    def test_marker_empty_string_skips_marker_check(self):
+        """Empty marker string means no marker check — backward-compatible."""
+        line = (
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "result": "Task completed.",
+                    "is_error": False,
+                }
+            )
+            + "\n"
+        )
+        assert _jsonl_has_record_type(line, frozenset({"result"}), completion_marker="")
+
+    def test_marker_must_be_standalone_line_in_result(self):
+        """Marker embedded in prose (not standalone) must NOT confirm."""
+        line = (
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "result": "I will emit %%ORDER_UP%% soon",
+                    "is_error": False,
+                }
+            )
+            + "\n"
+        )
+        assert not _jsonl_has_record_type(
+            line, frozenset({"result"}), completion_marker="%%ORDER_UP%%"
+        )

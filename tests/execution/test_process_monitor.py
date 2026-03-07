@@ -718,6 +718,62 @@ class TestSessionLogMonitorStaleSuppressionGate:
         )
 
 
+class TestHeartbeatMarkerAwareness:
+    """_heartbeat respects completion_marker when configured."""
+
+    @pytest.mark.anyio
+    async def test_heartbeat_does_not_fire_without_marker_when_configured(self, tmp_path):
+        """Channel A must NOT fire on a result missing the marker when marker is configured."""
+        import json
+
+        stdout_path = tmp_path / "stdout.tmp"
+        result_record = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Partial output",
+                "session_id": "s1",
+            },
+            separators=(",", ":"),
+        )
+        stdout_path.write_text(result_record + "\n")
+
+        with pytest.raises(TimeoutError):
+            with anyio.fail_after(0.3):
+                await _heartbeat(
+                    stdout_path,
+                    completion_marker="%%ORDER_UP%%",
+                    _poll_interval=0.05,
+                )
+
+    @pytest.mark.anyio
+    async def test_heartbeat_fires_with_marker_when_configured(self, tmp_path):
+        """Channel A fires when the result contains the marker as a standalone line."""
+        import json
+
+        stdout_path = tmp_path / "stdout.tmp"
+        result_record = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.\n%%ORDER_UP%%",
+                "session_id": "s1",
+            },
+            separators=(",", ":"),
+        )
+        stdout_path.write_text(result_record + "\n")
+
+        with anyio.fail_after(5.0):
+            result = await _heartbeat(
+                stdout_path,
+                completion_marker="%%ORDER_UP%%",
+                _poll_interval=0.05,
+            )
+        assert result == "completion"
+
+
 class TestHeartbeatScanPosition:
     """_heartbeat uses byte-safe scan position — regression test for multi-byte content."""
 

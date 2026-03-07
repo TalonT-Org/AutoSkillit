@@ -25,6 +25,7 @@ class SessionMonitorResult(NamedTuple):
 async def _heartbeat(
     stdout_path: Path,
     record_types: frozenset[str] = frozenset({"result"}),
+    completion_marker: str = "",
     _poll_interval: float = 0.5,
     _on_poll: Callable[[], None] | None = None,
 ) -> str:
@@ -34,6 +35,10 @@ async def _heartbeat(
     in stdout AND, for ``type=result`` records, the ``result`` field is non-empty.
     This guards against confirming on empty-result envelopes flushed before content
     is populated (drain-race false negative).
+
+    When *completion_marker* is non-empty, ``type=result`` records additionally
+    require the marker as a standalone line in the ``result`` field before Channel A
+    fires — preventing premature confirmation on partial output.
 
     *_on_poll* is a test-only callback invoked after each sleep iteration. Pass
     ``None`` (the default) in production — zero overhead.
@@ -55,7 +60,7 @@ async def _heartbeat(
         new_raw = raw[scan_pos:]
         scan_pos = len(raw)
         new_content = new_raw.decode("utf-8", errors="replace")
-        if _jsonl_has_record_type(new_content, record_types):
+        if _jsonl_has_record_type(new_content, record_types, completion_marker=completion_marker):
             return "completion"
 
 

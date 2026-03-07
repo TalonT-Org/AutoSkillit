@@ -64,13 +64,22 @@ def _jsonl_contains_marker(
     return False
 
 
-def _jsonl_has_record_type(content: str, record_types: frozenset[str]) -> bool:
+def _jsonl_has_record_type(
+    content: str,
+    record_types: frozenset[str],
+    completion_marker: str = "",
+) -> bool:
     """Check if any JSONL record of an allowed type exists in content.
 
     Used by the heartbeat to detect when Claude CLI emits a result record
     to stdout. For ``type=result`` records, additionally requires the ``result``
     field to be a non-empty string — confirming on an empty-result envelope
     is the source of the drain-race false negative.
+
+    When *completion_marker* is non-empty, ``type=result`` records additionally
+    require the marker to appear as a standalone line in the ``result`` field.
+    This prevents Channel A from confirming on premature exits where the model
+    produced output but did not complete its task.
     """
     import json as _json
 
@@ -91,5 +100,7 @@ def _jsonl_has_record_type(content: str, record_types: frozenset[str]) -> bool:
             result_field = obj.get("result", "")
             if not (isinstance(result_field, str) and result_field.strip()):
                 continue  # result absent, null, or empty — do not confirm
+            if completion_marker and not _marker_is_standalone(result_field, completion_marker):
+                continue  # marker configured but absent — do not confirm
         return True
     return False

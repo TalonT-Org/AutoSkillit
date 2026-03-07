@@ -72,12 +72,18 @@ async def _watch_process(
 async def _watch_heartbeat(
     stdout_path: Path,
     heartbeat_record_types: frozenset[str],
+    completion_marker: str,
     acc: RaceAccumulator,
     trigger: anyio.Event,
     _poll_interval: float,
 ) -> None:
     """Poll stdout NDJSON for a result record and deposit the Channel A signal."""
-    await _heartbeat(stdout_path, heartbeat_record_types, _poll_interval=_poll_interval)
+    await _heartbeat(
+        stdout_path,
+        heartbeat_record_types,
+        completion_marker=completion_marker,
+        _poll_interval=_poll_interval,
+    )
     logger.debug(
         "channel_a_confirmed",
         stdout_path=str(stdout_path),

@@ -157,6 +157,7 @@ async def run_managed_async(
                     _watch_heartbeat,
                     stdout_path,
                     heartbeat_record_types,
+                    completion_marker,
                     acc,
                     trigger,
                     _heartbeat_poll,

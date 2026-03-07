@@ -116,38 +116,36 @@ Selection criteria:
 
 ### Step 5: Generate Arch-Lens Diagrams
 
-For each selected lens (e.g., `module-dependency`), load the corresponding skill:
+For each selected lens (e.g., `module-dependency`), invoke the arch-lens skill with the
+PR changed-files context passed as the skill argument. This ensures the skill receives
+its scoping context as part of the invocation rather than as a separate output step.
 
 ```python
-# Use the Skill tool to load each arch-lens skill
-/arch-lens-module-dependency
-/arch-lens-process-flow
-# etc.
+# Use the Skill tool with context as the argument
+Skill(skill="arch-lens-mcp:arch-lens-module-dependency", args="""
+PR Context — Changed Files
+
+This diagram is for a Pull Request. Focus the diagram on the areas of the codebase
+affected by these changes. Do not create a generic whole-project diagram.
+
+New files (use ★ prefix on these nodes):
+{list of new_files from Step 3, or "None"}
+
+Modified files (use ● prefix on these nodes):
+{list of modified_files from Step 3, or "None"}
+
+Instructions:
+- Focus exploration and the diagram on the architectural areas these files belong to
+- Use ★ prefix on nodes representing new files/components
+- Use ● prefix on nodes representing modified files/components
+- Leave unchanged components unmarked (include them only if needed for context/connectivity)
+- The diagram should help PR reviewers understand the architectural impact of these changes
+""")
 ```
 
-After loading each arch-lens skill, **immediately** provide the following context message
-before the skill begins its analysis:
-
-> **PR Context — Changed Files**
->
-> This diagram is for a Pull Request. Focus the diagram on the areas of the codebase affected by these changes. Do not create a generic whole-project diagram.
->
-> **New files (use ★ prefix on these nodes):**
-> {list of new_files from Step 3, or "None"}
->
-> **Modified files (use ● prefix on these nodes):**
-> {list of modified_files from Step 3, or "None"}
->
-> **Instructions:**
-> - Focus exploration and the diagram on the architectural areas these files belong to
-> - Use `★` prefix on nodes representing new files/components
-> - Use `●` prefix on nodes representing modified files/components
-> - Leave unchanged components unmarked (include them only if needed for context/connectivity)
-> - The diagram should help PR reviewers understand the architectural impact of these specific changes
-
-The key mechanism: after loading the arch-lens skill via the Skill tool, the open-pr agent
-provides this context as a follow-up message in the same conversation turn. The arch-lens
-skill then uses this context to scope its exploration.
+After each skill runs, immediately begin exploring the codebase using tool calls (Read,
+Grep, Glob) to gather context for the next lens — do not pause to emit text output
+between skill invocations.
 
 The arch-lens skills write their output to `temp/arch-lens-{lens-name}/`. After each skill
 runs, read the generated markdown file and extract the mermaid code block(s).

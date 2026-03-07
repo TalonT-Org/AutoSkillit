@@ -750,6 +750,19 @@ class TestAdjudicationConsistency:
                 False,
                 False,
             ),
+            # NATURAL_EXIT + UNMONITORED: substantive result without marker
+            # (premature exit scenario — Channel A marker-aware, didn't fire)
+            pytest.param(
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.UNMONITORED,
+                "Here is the PR context block with substantive content...",
+                0,
+                "success",
+                False,
+                False,
+                False,
+                id="natural_exit-unmonitored-substantive_result_no_marker",
+            ),
         ],
     )
     def test_raw_adjudication_pair(
@@ -790,6 +803,37 @@ class TestAdjudicationConsistency:
         )
         assert success == expected_success
         assert needs_retry == expected_retry
+
+    def test_premature_exit_substantive_result_no_marker_is_failed(self) -> None:
+        """NATURAL_EXIT + UNMONITORED + substantive result without marker → FAILED.
+
+        Documents the expected post-fix behavior: when Channel A is marker-aware
+        and doesn't fire on a premature exit, channel confirmation is UNMONITORED,
+        and the dead-end guard does not promote to RETRIABLE.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="Here is the PR context block with substantive content...",
+            is_error=False,
+            session_id="premature",
+            errors=[],
+        )
+        success = _compute_success(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+            completion_marker="%%ORDER_UP%%",
+        )
+        needs_retry, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        assert success is False
+        assert needs_retry is False
+        assert reason == RetryReason.NONE
 
     def test_channel_a_empty_result_raw_dead_end(self) -> None:
         """Document: NATURAL_EXIT + CHANNEL_A + empty result is a dead end at raw function level.

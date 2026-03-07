@@ -1,5 +1,7 @@
 """Cross-skill contract tests for requirement traceability across PR lifecycle skills."""
+
 from pathlib import Path
+
 import pytest
 
 SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills"
@@ -13,18 +15,20 @@ def _read(skill_name: str) -> str:
 
 
 def test_pipeline_summary_includes_requirements_from_issue():
-    """pipeline-summary must document extracting and embedding requirements from the linked issue."""
+    """pipeline-summary must document extracting and embedding requirements from linked issue."""
     text = _read("pipeline-summary")
     has_req = "## Requirements" in text or "requirements" in text.lower()
     has_issue_fetch = "gh issue view" in text or "closing_issue" in text
     assert has_req, "pipeline-summary must reference requirements"
-    assert has_issue_fetch, "pipeline-summary must fetch issue content (for requirements extraction)"
+    assert has_issue_fetch, (
+        "pipeline-summary must fetch issue content (for requirements extraction)"
+    )
 
 
 def test_pipeline_summary_pr_body_includes_requirements():
     """pipeline-summary PR body must include requirements section."""
     text = _read("pipeline-summary")
-    pr_section = text[text.find("gh pr create"):] if "gh pr create" in text else text
+    pr_section = text[text.find("gh pr create") :] if "gh pr create" in text else text
     assert "requirements" in pr_section.lower() or "## Requirements" in pr_section
 
 

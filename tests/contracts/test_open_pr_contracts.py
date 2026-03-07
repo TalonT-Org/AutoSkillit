@@ -1,5 +1,7 @@
 """Contract tests for open-pr skill — requirement traceability."""
+
 from pathlib import Path
+
 import pytest
 
 SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills"
@@ -18,9 +20,8 @@ def test_open_pr_skill_file_exists():
 def test_open_pr_fetches_requirements_from_closing_issue(text):
     """open-pr must document extracting ## Requirements from the closing_issue."""
     # Must reference fetching the closing issue body to extract requirements
-    has_fetch = (
-        ("closing_issue" in text and "## Requirements" in text)
-        or ("gh issue view" in text and "## Requirements" in text)
+    has_fetch = ("closing_issue" in text and "## Requirements" in text) or (
+        "gh issue view" in text and "## Requirements" in text
     )
     assert has_fetch, "open-pr must document extracting requirements from closing_issue"
 
@@ -30,7 +31,7 @@ def test_open_pr_includes_requirements_in_pr_body(text):
     # The body composition section must reference requirements
     body_idx = text.find("PR body") if "PR body" in text else text.find("pr_body")
     assert body_idx != -1, "open-pr must document PR body composition"
-    body_section = text[body_idx:body_idx + 3000]
+    body_section = text[body_idx : body_idx + 3000]
     assert "## Requirements" in body_section or "requirements" in body_section.lower()
 
 
@@ -42,9 +43,13 @@ def test_open_pr_requirements_conditional_on_presence(text):
         or "if extracted" in lower
         or "if the issue has" in lower
         or "when requirements exist" in lower
-        or "only if" in lower and "requirements" in lower
+        or "only if" in lower
+        and "requirements" in lower
     )
-    assert conditional, "Requirements must be included conditionally — only if the issue has a ## Requirements section"
+    assert conditional, (
+        "Requirements must be included conditionally — only if the issue has a"
+        " ## Requirements section"
+    )
 
 
 def test_open_pr_requirements_section_placement(text):

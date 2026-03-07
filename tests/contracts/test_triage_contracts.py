@@ -1,6 +1,7 @@
 """Contract tests for triage-issues --enrich flag and requirement enrichment behavior."""
-import re
+
 from pathlib import Path
+
 import pytest
 
 SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills"
@@ -20,7 +21,7 @@ def test_triage_enrich_flag_is_opt_in():
     assert "--enrich" in text
     # Default must NOT enrich (enrichment is off without the flag)
     lines = text.splitlines()
-    enrich_lines = [l for l in lines if "--enrich" in l]
+    enrich_lines = [line for line in lines if "--enrich" in line]
     assert len(enrich_lines) >= 1
 
 
@@ -31,7 +32,7 @@ def test_triage_enrich_targets_implementation_only():
     enrich_idx = text.find("--enrich")
     assert enrich_idx != -1
     # After mentioning --enrich, the text must associate it with implementation
-    enrich_section = text[enrich_idx:enrich_idx + 2000]
+    enrich_section = text[enrich_idx : enrich_idx + 2000]
     assert "implementation" in enrich_section.lower() or "recipe:implementation" in enrich_section
 
 
@@ -85,7 +86,7 @@ def test_triage_enrich_no_subagents():
     enrich_idx = text.find("--enrich")
     if enrich_idx == -1:
         pytest.skip("--enrich not yet documented")
-    enrich_section = text[enrich_idx:enrich_idx + 3000]
+    enrich_section = text[enrich_idx : enrich_idx + 3000]
     # "subagent" must not appear specifically in the enrich step documentation
     # (other steps like split analysis do use subagents — we can't forbid globally)
     # Check that the enrich step description does not mention spawning/launching subagents

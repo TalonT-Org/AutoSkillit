@@ -42,8 +42,14 @@ def test_prepare_issue_generates_requirements_on_implementation_route():
     assert "recipe:implementation" in text
     # Requirement generation step must appear after classification
     impl_pos = text.find("recipe:implementation")
-    req_gen_pos = text.find("Requirement Generation") if "Requirement Generation" in text else text.find("## Requirements")
-    assert req_gen_pos > impl_pos, "Requirement generation must appear after implementation route classification"
+    req_gen_pos = (
+        text.find("Requirement Generation")
+        if "Requirement Generation" in text
+        else text.find("## Requirements")
+    )
+    assert req_gen_pos > impl_pos, (
+        "Requirement generation must appear after implementation route classification"
+    )
 
 
 def test_prepare_issue_appends_requirements_section():
@@ -98,8 +104,11 @@ def test_prepare_issue_handles_vague_issues():
     vague_handled = (
         "can't be cleanly extracted" in text.lower()
         or "cannot be cleanly extracted" in text.lower()
-        or "flag" in text.lower() and "more detail" in text.lower()
+        or "flag" in text.lower()
+        and "more detail" in text.lower()
         or "needs more detail" in text.lower()
         or "suggest remediation" in text.lower()
     )
-    assert vague_handled, "Skill must document behavior when issue is too vague for requirement extraction"
+    assert vague_handled, (
+        "Skill must document behavior when issue is too vague for requirement extraction"
+    )

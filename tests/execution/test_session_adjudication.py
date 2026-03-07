@@ -617,7 +617,8 @@ class TestAdjudicationConsistency:
     """
 
     @pytest.mark.parametrize(
-        "termination,channel,result_content,returncode,subtype,is_error,expected_success,expected_retry",
+        "termination,channel,result_content,returncode,subtype,is_error,"
+        "expected_success,expected_retry,completion_marker",
         [
             # NATURAL_EXIT + CHANNEL_A: dead-end state
             # (known bug, corrected by guard in _build_skill_result)
@@ -630,6 +631,7 @@ class TestAdjudicationConsistency:
                 False,
                 False,
                 False,
+                "",
             ),
             # NATURAL_EXIT + CHANNEL_A: valid success with content
             (
@@ -641,6 +643,7 @@ class TestAdjudicationConsistency:
                 False,
                 True,
                 False,
+                "",
             ),
             # NATURAL_EXIT + CHANNEL_B: contradiction
             # (known bug, corrected by guard in _build_skill_result)
@@ -653,6 +656,7 @@ class TestAdjudicationConsistency:
                 True,
                 True,
                 True,
+                "",
             ),
             # NATURAL_EXIT + CHANNEL_B: valid success
             (
@@ -664,6 +668,7 @@ class TestAdjudicationConsistency:
                 False,
                 True,
                 False,
+                "",
             ),
             (
                 TerminationReason.NATURAL_EXIT,
@@ -674,6 +679,7 @@ class TestAdjudicationConsistency:
                 False,
                 True,
                 False,
+                "",
             ),
             # COMPLETED + CHANNEL_A: valid retriable (kill anomaly)
             (
@@ -685,6 +691,7 @@ class TestAdjudicationConsistency:
                 False,
                 False,
                 True,
+                "",
             ),
             # COMPLETED + CHANNEL_B: valid success
             (
@@ -696,6 +703,7 @@ class TestAdjudicationConsistency:
                 False,
                 True,
                 False,
+                "",
             ),
             # COMPLETED + CHANNEL_B: contradiction
             # (known bug, corrected by guard in _build_skill_result)
@@ -708,6 +716,7 @@ class TestAdjudicationConsistency:
                 True,
                 True,
                 True,
+                "",
             ),
             # UNMONITORED baselines — all should already be valid states
             (
@@ -719,6 +728,7 @@ class TestAdjudicationConsistency:
                 False,
                 False,
                 True,
+                "",
             ),
             (
                 TerminationReason.NATURAL_EXIT,
@@ -729,6 +739,7 @@ class TestAdjudicationConsistency:
                 False,
                 True,
                 False,
+                "",
             ),
             (
                 TerminationReason.TIMED_OUT,
@@ -739,6 +750,7 @@ class TestAdjudicationConsistency:
                 True,
                 False,
                 False,
+                "",
             ),
             (
                 TerminationReason.STALE,
@@ -749,6 +761,7 @@ class TestAdjudicationConsistency:
                 False,
                 False,
                 False,
+                "",
             ),
             # NATURAL_EXIT + UNMONITORED: substantive result without marker
             # (premature exit scenario — Channel A marker-aware, didn't fire)
@@ -761,6 +774,7 @@ class TestAdjudicationConsistency:
                 False,
                 False,
                 False,
+                "%%ORDER_UP%%",
                 id="natural_exit-unmonitored-substantive_result_no_marker",
             ),
         ],
@@ -775,6 +789,7 @@ class TestAdjudicationConsistency:
         is_error: bool,
         expected_success: bool,
         expected_retry: bool,
+        completion_marker: str,
     ) -> None:
         """Document exact raw outputs of the individual adjudication functions.
 
@@ -794,6 +809,7 @@ class TestAdjudicationConsistency:
             returncode,
             termination,
             channel_confirmation=channel,
+            completion_marker=completion_marker,
         )
         needs_retry, _ = _compute_retry(
             session,

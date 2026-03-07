@@ -115,6 +115,48 @@ If `confidence == "low"`:
 - Ask: **"Classify as recipe:{route} ({issue_type})? [Y/n]"**
 - If user overrides: record their chosen route/type
 
+### Step 7a: Requirement Generation (recipe:implementation only)
+
+Skip if route is `recipe:remediation` — proceed directly to Step 8.
+
+If route is `recipe:implementation`:
+
+1. Trace backward from the goal in the issue title and body:
+   - Ask: "What must be true for this functionality to exist?"
+   - Each answer is a requirement. Stop when you reach implementation choices.
+2. Group requirements by co-implementation concern. Name each group with a short
+   uppercase abbreviation (2–5 letters). Example groups: AUTH, API, DATA, UI, CLI.
+3. Format each requirement as: `**REQ-{GRP}-NNN:** {single-sentence condition}.`
+   - NNN is zero-padded, resets per group (001, 002, ...).
+   - Requirements are conditions, not instructions: "The system must X" not "Do X".
+4. Fetch the current issue body:
+   ```bash
+   gh issue view {N} --json body -q .body
+   ```
+5. If `## Requirements` section already exists in the body: skip (idempotent).
+6. If `--dry-run` is set: print the generated requirements to stdout but do NOT call
+   `gh issue edit`. Set `requirements_generated: true`, `requirements_appended: false`.
+7. Otherwise, append the Requirements section:
+   ```bash
+   gh issue edit {N} --body "$(gh issue view {N} --json body -q .body)
+
+## Requirements
+
+### {Group Name}
+
+- **REQ-{GRP}-001:** ...
+- **REQ-{GRP}-002:** ...
+
+### {Group 2 Name}
+
+- **REQ-{GRP2}-001:** ..."
+   ```
+8. If the issue is too vague for clean requirement extraction (no clear goal,
+   contradictory claims, or entirely implementation-prescriptive): do not force it.
+   Instead: post a comment flagging the issue as needs more detail, suggest
+   remediation routing if the goal is unclear. Set `requirements_generated: false`.
+9. On success: set `requirements_generated: true`, `requirements_appended: true`.
+
 ### Step 8: Mixed-Concern Detection
 
 Examine whether the issue blends distinct concern categories (e.g., bug fix + new feature,
@@ -184,7 +226,9 @@ Emit to stdout for recipe capture:
   "rationale": "...",
   "labels_applied": ["recipe:implementation", "enhancement"],
   "dry_run": false,
-  "sub_issues": []
+  "sub_issues": [],
+  "requirements_generated": true,
+  "requirements_appended": true
 }
 ---/prepare-issue-result---
 ```

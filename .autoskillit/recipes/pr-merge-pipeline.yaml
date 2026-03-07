@@ -116,12 +116,17 @@ steps:
       pr_order_file: "${{ context.pr_order_file }}"
     capture:
       needs_plan: "${{ result.needs_plan }}"
+      escalation_required: "${{ result.escalation_required }}"
       task: "${{ result.conflict_report_path }}"
     on_result:
       field: needs_plan
       routes:
         "true": plan
         "false": next_part_or_next_pr
+      fallthrough:
+        field: escalation_required
+        routes:
+          "true": escalate_stop
     on_failure: cleanup_failure
     retries: 5
     on_exhausted: cleanup_failure
@@ -132,6 +137,7 @@ steps:
         /autoskillit:merge-pr {pr_number} {complexity}
       needs_plan=false → PR merged directly → next_part_or_next_pr.
       needs_plan=true → conflict_report_path set as context.task → plan.
+      escalation_required=true → ambiguous conflict, human intervention needed → escalate_stop.
 
   plan:
     tool: run_skill

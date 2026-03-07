@@ -125,6 +125,20 @@ Launch one Explore subagent to retrieve:
 - `git log {base_branch}..HEAD --oneline` — commit history
 - `git diff {base_branch}...HEAD` — full diff
 
+### Step 2.5 — Conflict Resolution Context Check
+
+Before running standard audit, check if any plan contains a `PR Changes Inventory` section
+(written by `merge-pr` to document all files changed by the PR).
+
+If a `PR Changes Inventory` is found:
+1. Extract the **Category C — Clean Carry-Overs** file list from each plan.
+2. For each Category C file, verify it appears in the implementation diff.
+3. Any Category C file absent from the diff is a `MISSING` finding — even if no plan
+   requirement explicitly named it. Missing carry-over files indicate silent data loss
+   in the conflict resolution and always force a `NO GO` verdict.
+
+Record all Category C `MISSING` findings alongside the standard audit findings in Step 3.
+
 ### Step 3 — Audit via Parallel Subagents
 
 Divide the requirements inventory into up to 3 slices. Launch parallel Explore subagents,

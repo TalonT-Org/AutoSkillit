@@ -125,6 +125,30 @@ Launch an Explore subagent to:
 - Test changes from both sides modify the same test file in ways that conflict semantically
 → Proceed to write conflict report below
 
+### Step 3.5: Fetch All PR-Changed Files
+
+Before writing the conflict report, fetch the complete set of files changed on the PR branch
+(not just the conflicting files) and classify them:
+
+```bash
+# All files changed on the PR branch relative to the base
+git diff {base_branch}...origin/{pr_branch} --name-only
+```
+
+Classify each file into one of three categories:
+
+- **Category A — Git Conflicts**: files where `git` reported unresolved conflicts
+  (`git diff --name-only --diff-filter=U` after a failed merge attempt)
+- **Category B — Semantic Overlaps**: files that were auto-merged by git but appear in
+  both the PR and the integration branch diff (risky — may need human review)
+- **Category C — Clean Carry-Overs**: files changed only by this PR; the integration branch
+  did not touch them. These must be preserved in full during conflict resolution.
+
+Assess whether the conflicts can be confidently resolved. If any conflict is genuinely
+ambiguous (insufficient context, unclear intent, irreconcilable logic), set
+`escalation_required=true` in the output and do not write a conflict report — instead
+describe the ambiguity so a human can decide.
+
 ### Step 4: Write Conflict Report (complex path only)
 
 Before composing the report, extract `## Requirements` from the PR body:
@@ -148,6 +172,35 @@ semantic conflicts with previously merged PRs.
 **PR:** #{pr_number}
 **Branch:** {pr_branch}
 **Integration Branch:** {integration_branch (current HEAD)}
+
+## PR Changes Inventory
+
+All files changed by this PR, classified by conflict type:
+
+### Category A — Git Conflicts
+Files where `git` reported unresolved merge conflicts:
+- `{file}` — {brief description}
+
+### Category B — Semantic Overlaps
+Files that were auto-merged but are present in both the PR and the integration branch
+diff (verify intent is preserved):
+- `{file}` — {brief description}
+
+### Category C — Clean Carry-Overs
+Files changed only by this PR; the integration branch did not touch them.
+**These files must be carried over in full** — they are not conflicts, just PR changes
+that must not be dropped during resolution.
+- `{file}` — {brief description}
+
+## Resolver Contract
+
+The implementer MUST:
+1. Resolve all Category A conflicts, preserving the intent of both this PR and earlier merges.
+2. Verify Category B files for semantic correctness after auto-merge.
+3. Carry over every Category C file exactly as the PR changed it — no omissions.
+
+If any conflict cannot be confidently resolved, do NOT guess. Set `escalation_required=true`
+in the output and describe the ambiguity for human review.
 
 {If requirements_section is non-empty, include this block to give make-plan the full requirement context:}
 ## Requirements
@@ -219,6 +272,7 @@ Print a JSON result block to stdout for recipe capture:
 {
     "merged": false,
     "needs_plan": true,
+    "escalation_required": false,
     "pr_number": 47,
     "pr_branch": "feature/db-refactor",
     "pr_title": "Refactor database layer",
@@ -226,7 +280,21 @@ Print a JSON result block to stdout for recipe capture:
 }
 ```
 
-Exit 0 in both cases — `needs_plan=true` is not a failure, it is a routing signal.
+**On escalation required (ambiguous conflict):**
+```json
+{
+    "merged": false,
+    "needs_plan": false,
+    "escalation_required": true,
+    "pr_number": 47,
+    "pr_branch": "feature/db-refactor",
+    "pr_title": "Refactor database layer",
+    "conflict_report_path": null,
+    "escalation_reason": "Description of why the conflict cannot be resolved automatically"
+}
+```
+
+Exit 0 in all cases — `needs_plan=true` and `escalation_required=true` are routing signals, not failures.
 
 After printing the result block, emit the following structured output tokens as the
 very last lines of your text output:
@@ -244,14 +312,25 @@ pr_title={pr_title}
 ```
 merged=false
 needs_plan=true
+escalation_required=false
 pr_number={pr_number}
 pr_branch={pr_branch_name}
 pr_title={pr_title}
 conflict_report_path={absolute_path_to_conflict_plan_file}
 ```
 
+**On escalation required:**
+```
+merged=false
+needs_plan=false
+escalation_required=true
+pr_number={pr_number}
+pr_branch={pr_branch_name}
+pr_title={pr_title}
+```
+
 Emit `conflict_report_path=` only when `needs_plan=true` and a conflict plan file was
-written. Omit the line entirely on a successful direct merge.
+written. Omit the line entirely on a successful direct merge or when `escalation_required=true`.
 
 ## Output Location
 

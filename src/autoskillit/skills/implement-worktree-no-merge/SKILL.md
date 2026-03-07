@@ -170,6 +170,22 @@ cd "${WORKTREE_PATH}" && pre-commit run --all-files
 
 Fix any formatting or linting issues. Do NOT run the full test suite.
 
+### Step 5.5: Completeness Self-Check (Conflict Resolution Plans Only)
+
+If the plan contains a `PR Changes Inventory` section, perform a completeness check before
+handoff:
+
+1. Extract the **Category C — Clean Carry-Overs** file list from the plan.
+2. Run `git diff {base_branch}...HEAD --name-only` to get all files in the implementation.
+3. For each Category C file, verify it appears in the diff.
+4. If any Category C files are missing from the diff:
+   - Fetch them from the PR branch: `git show origin/{pr_branch}:{file_path}`
+   - Write them to the worktree and commit: `fix: carry over {file_path} from PR branch`
+   - Re-run the check until all Category C files are present.
+
+This guard prevents silent data loss: Category C files are PR-only changes that require no
+conflict resolution and must be preserved in full.
+
 ### Step 6: Handoff Report
 
 Output to terminal:

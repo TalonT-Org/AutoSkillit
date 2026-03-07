@@ -64,7 +64,27 @@ If `gh auth status` fails, abort with a clear error message.
 
 If there are zero open issues, skip to Step 7 and output an empty report.
 
-### Step 2: Parallel Issue Analysis
+### Step 2a: Parallel Split Analysis
+
+Before codebase analysis, run `issue-splitter` for every open issue to detect mixed-concern issues and expand the working set.
+
+Spawn up to 8 subagents in parallel (`model: "sonnet"`), one per issue. Each subagent invokes:
+
+```
+/autoskillit:issue-splitter --issue {N} --repo {owner/repo} [--no-label if --no-label was passed] [--dry-run if --dry-run was passed]
+```
+
+For each subagent result, parse the `---issue-splitter-result---` block and build the **expanded working set**:
+
+- `decision=no-split`: keep the original issue in the working set; note the pre-classified `route` as a seed for Step 3 (Recipe Classification) — Step 3 still re-verifies
+- `decision=split`: remove the original issue from the working set; add its `sub_issues` list instead
+- `decision=error`: log a warning; keep the original issue as-is (fail-safe)
+
+Proceed to Step 2b with the expanded working set.
+
+**Flag propagation:** When `triage-issues` is invoked with `--no-label`, pass `--no-label` to each `issue-splitter` call. When `--dry-run` is active, pass `--dry-run`. This ensures split analysis is observable without mutating GitHub.
+
+### Step 2b: Parallel Issue Analysis
 
 Launch parallel subagents (up to 8) to analyze each issue. Each subagent receives one issue and must identify:
 

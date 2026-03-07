@@ -12,3 +12,5 @@ temp/
 # dynaconf secrets files — never commit
 .secrets.*
 .autoskillit/.secrets.*
+src/autoskillit/hooks/hooks.json
+.claude/settings.json

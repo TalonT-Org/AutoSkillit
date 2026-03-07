@@ -421,13 +421,11 @@ async def prepare_issue(
         extra={"dry_run": dry_run, "split": split},
     )
 
-    from autoskillit.server import _get_config, _get_ctx
+    from autoskillit.server import _get_ctx
 
     tool_ctx = _get_ctx()
     if tool_ctx.executor is None:
         return json.dumps({"success": False, "error": "Executor not configured"})
-
-    config = _get_config()
 
     parts = [f"/autoskillit:prepare-issue\n\n{title}\n\n{body}"]
     if repo:
@@ -442,7 +440,7 @@ async def prepare_issue(
 
     result = await tool_ctx.executor.run(
         skill_command,
-        str(config.project_dir),
+        str(Path.cwd()),
     )
 
     parsed = _parse_prepare_result(result.result or "")

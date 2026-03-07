@@ -586,11 +586,7 @@ async def test_prepare_issue_parses_result_block(tool_ctx):
         "dry_run": False,
         "sub_issues": [],
     }
-    response = (
-        "---prepare-issue-result---\n"
-        f"{json.dumps(payload)}\n"
-        "---/prepare-issue-result---\n"
-    )
+    response = f"---prepare-issue-result---\n{json.dumps(payload)}\n---/prepare-issue-result---\n"
     mock_executor = AsyncMock()
     mock_executor.run.return_value = SkillResult(
         success=True,

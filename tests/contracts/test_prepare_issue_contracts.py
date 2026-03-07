@@ -5,10 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-SKILL_MD = (
-    Path(__file__).parents[2]
-    / "src/autoskillit/skills/prepare-issue/SKILL.md"
-)
+SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills/prepare-issue/SKILL.md"
 
 
 def _lines():
@@ -27,9 +24,7 @@ def test_no_batch_labels_applied():
     batch_pattern = re.compile(r"batch:\d+")
     for line in _lines():
         if "gh issue edit" in line or "add-label" in line:
-            assert not batch_pattern.search(line), (
-                f"batch label found in: {line}"
-            )
+            assert not batch_pattern.search(line), f"batch label found in: {line}"
 
 
 def test_only_known_recipe_routes_applied():

@@ -373,7 +373,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "open_pr"
       issue_number: "${{ context.issue_number }}"
-    on_success: ci_watch
+    on_success: review_pr
     on_failure: cleanup_failure
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -392,6 +392,60 @@ steps:
       5. If context.issue_number is a non-empty string (set by fetch_issue), append it
          as a 5th positional argument to the skill_command. The open-pr skill will insert
          "Closes #{issue_number}" into the PR body to auto-close the issue on merge.
+
+  review_pr:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "review_pr"
+    capture:
+      verdict: "${{ result.verdict }}"
+    on_result:
+      - when: "${{ result.verdict }} == changes_requested"
+        route: resolve_review
+      - when: "true"
+        route: ci_watch
+    on_failure: resolve_review
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Runs after open_pr_step creates the PR. Invokes the review-pr skill as a
+      headless session to leave inline review comments on the PR. The skill finds
+      the open PR by feature branch name (context.merge_target). Captures verdict
+      and routes via on_result: changes_requested → resolve_review,
+      approved/needs_human → ci_watch. On tool-level failure (MCP error, gh
+      unavailable), routes to resolve_review. Skipped when open_pr=false.
+
+  resolve_review:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "resolve_review"
+    retries: 2
+    on_exhausted: cleanup_failure
+    on_success: re_push_review
+    on_failure: cleanup_failure
+    note: >
+      Runs when review_pr reports issues (verdict=changes_requested). The clone
+      (context.work_dir) has the feature branch checked out — resolve-failures
+      reads the PR review comments and fixes the identified issues. Commits fixes
+      without merging; orchestrator re-pushes via re_push_review. Retries up to
+      2 times (3 total attempts) before exhausting to cleanup_failure.
+
+  re_push_review:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.merge_target }}"
+    on_success: review_pr
+    on_failure: cleanup_failure
+    note: >
+      Pushes the review-fixed feature branch back to the remote after resolve_review
+      succeeds. Routes back to review_pr to verify the fixes address the review
+      findings. On push failure, escalates via cleanup_failure.
 
   ci_watch:
     tool: run_cmd

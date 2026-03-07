@@ -193,3 +193,15 @@ skills:
       type: string
     - name: conflict_report_path
       type: file_path
+
+  review-pr:
+    inputs:
+    - name: feature_branch
+      type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs:
+    - name: verdict
+      type: string

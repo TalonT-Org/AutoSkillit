@@ -1,9 +1,9 @@
-<!-- autoskillit-recipe-hash: sha256:0f2108a6beb2408540233665ac51d37be713b4b798bd4cd9773b09d2dae17e37 -->
+<!-- autoskillit-recipe-hash: sha256:df249f2cd66686fb9f664aa4cb5328fe314da1a485b14490b1c74e10046d3b52 -->
 <!-- autoskillit-diagram-format: v4 -->
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
 
-**Flow:** clone > capture_base_sha > set_merge_target > (create_branch?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup
+**Flow:** clone > capture_base_sha > set_merge_target > (create_branch?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > (review_pr?) > (ci_watch?) > cleanup
 
 ### Graph
 clone  [clone_repo] (retry ×3)
@@ -62,6 +62,19 @@ remediate  [route] (retry ×3)
 │
 ├── [open_pr_step] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → cleanup_failure
+│
+├── [review_pr] (retry ×3)  ← only if inputs.open_pr
+│       ${{ result.verdict }} == changes_requested → resolve_review
+│       true → ci_watch
+│       ✗ failure → resolve_review
+│
+resolve_review  [run_skill] (retry ×2)
+│  ↓ success → re_push_review
+│  ✗ failure → cleanup_failure
+│
+re_push_review  [push_to_remote] (retry ×3)
+│  ↓ success → review_pr ↑
+│  ✗ failure → cleanup_failure
 │
 ├── [ci_watch] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → resolve_ci

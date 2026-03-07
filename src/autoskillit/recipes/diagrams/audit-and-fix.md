@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:2283736ef10a22d06821753a1697e5383487c7b1991ff1df262875ad87325ed7 -->
+<!-- autoskillit-recipe-hash: sha256:257a72d30617b83a81f4485c8f2e70db9fbd4f0948ed276ff869f207aacae638 -->
 <!-- autoskillit-diagram-format: v4 -->
 ## audit-and-fix
 Audit codebase, investigate findings, plan fixes, implement in a feature branch, and open a PR.
@@ -53,6 +53,19 @@ push  [push_to_remote] (retry ×3)
 │
 ├── [open_pr_step] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → cleanup_failure
+│
+├── [review_pr] (retry ×3)  ← only if inputs.open_pr
+│       ${{ result.verdict }} == changes_requested → resolve_review
+│       true → ci_watch
+│       ✗ failure → resolve_review
+│
+resolve_review  [run_skill] (retry ×2)
+│  ↓ success → re_push_review
+│  ✗ failure → cleanup_failure
+│
+re_push_review  [push_to_remote] (retry ×3)
+│  ↓ success → review_pr ↑
+│  ✗ failure → cleanup_failure
 │
 ├── [ci_watch] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → resolve_ci

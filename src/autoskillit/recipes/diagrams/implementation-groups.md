@@ -1,9 +1,9 @@
-<!-- autoskillit-recipe-hash: sha256:d2135cb4749920cd0664758c513b91a799a44f63b8a00aac06fd66727ac17ab4 -->
+<!-- autoskillit-recipe-hash: sha256:12422cc926496b271b0c2607fb57145a40b02a8421eb6a85f8f14d224ce39e68 -->
 <!-- autoskillit-diagram-format: v4 -->
 ## implementation-groups
 Decompose a source document into sequenced implementation groups, then plan, verify, implement, test, and merge each group end-to-end. Use when you have a large document or roadmap to implement via make-groups.
 
-**Flow:** clone > capture_base_sha > set_merge_target > (create_branch?) > make-groups > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part) > (audit-impl?) > (open_pr?) > push > cleanup
+**Flow:** clone > capture_base_sha > set_merge_target > (create_branch?) > make-groups > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part) > (audit-impl?) > (open_pr?) > push > (review_pr?) > (ci_watch?) > cleanup
 
 ### Graph
 clone  [clone_repo] (retry ×3)
@@ -66,6 +66,30 @@ remediate  [route] (retry ×3)
 │
 ├── [open_pr_step] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → cleanup_failure
+│
+├── [review_pr] (retry ×3)  ← only if inputs.open_pr
+│       ${{ result.verdict }} == changes_requested → resolve_review
+│       true → ci_watch
+│       ✗ failure → resolve_review
+│
+resolve_review  [run_skill] (retry ×2)
+│  ↓ success → re_push_review
+│  ✗ failure → cleanup_failure
+│
+re_push_review  [push_to_remote] (retry ×3)
+│  ↓ success → review_pr ↑
+│  ✗ failure → cleanup_failure
+│
+├── [ci_watch] (retry ×3)  ← only if inputs.open_pr
+│       ✗ failure → resolve_ci
+│
+resolve_ci  [run_skill] (retry ×2)
+│  ↓ success → re_push
+│  ✗ failure → cleanup_failure
+│
+re_push  [push_to_remote] (retry ×3)
+│  ↓ success → ci_watch ↑
+│  ✗ failure → cleanup_failure
 │
 cleanup_success  [remove_clone] (retry ×3)
 │  ↓ success → done

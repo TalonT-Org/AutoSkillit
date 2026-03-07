@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 
 import structlog
@@ -18,7 +19,11 @@ logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"automation"})
-async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str:
+async def test_check(
+    worktree_path: str,
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
     """Run the configured test command in a worktree directory. Returns unambiguous PASS/FAIL.
 
     CRITICAL: This tool is a pipeline gate, not a diagnostic tool. When it
@@ -31,6 +36,7 @@ async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str
 
     Args:
         worktree_path: Path to the git worktree to run tests in.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -51,23 +57,31 @@ async def test_check(worktree_path: str, ctx: Context = CurrentContext()) -> str
     if tool_ctx.tester is None:
         return json.dumps({"passed": False, "error": "Test runner not configured"})
 
-    passed, output = await tool_ctx.tester.run(Path(worktree_path))
+    _start = time.monotonic()
+    try:
+        passed, output = await tool_ctx.tester.run(Path(worktree_path))
 
-    if not passed:
-        await _notify(
-            ctx,
-            "error",
-            "test_check: tests failed",
-            "autoskillit.test_check",
-            extra={"worktree": worktree_path},
-        )
+        if not passed:
+            await _notify(
+                ctx,
+                "error",
+                "test_check: tests failed",
+                "autoskillit.test_check",
+                extra={"worktree": worktree_path},
+            )
 
-    return json.dumps({"passed": passed, "output": truncate_text(output)})
+        return json.dumps({"passed": passed, "output": truncate_text(output)})
+    finally:
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
 @mcp.tool(tags={"automation"})
 async def reset_test_dir(
-    test_dir: str, force: bool = False, ctx: Context = CurrentContext()
+    test_dir: str,
+    force: bool = False,
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
 ) -> str:
     """Remove all files from a test directory. Only works on directories with a reset guard marker.
 
@@ -78,6 +92,7 @@ async def reset_test_dir(
         test_dir: Path to the test directory to clear. Must contain the reset guard marker.
         force: Override the marker check. When True, all contents are deleted
                including the marker file itself.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -93,44 +108,48 @@ async def reset_test_dir(
         extra={"resolved": resolved, "force": force},
     )
 
-    if not os.path.isdir(resolved):
-        await _notify(
-            ctx,
-            "error",
-            "reset_test_dir failed",
-            "autoskillit.reset_test_dir",
-            extra={"reason": "directory does not exist"},
-        )
-        return json.dumps({"error": f"Directory does not exist: {resolved}"})
+    from autoskillit.server import _get_config, _get_ctx
 
-    from autoskillit.server import _get_config
+    _timing_ctx = _get_ctx()
+    _start = time.monotonic()
+    try:
+        if not os.path.isdir(resolved):
+            await _notify(
+                ctx,
+                "error",
+                "reset_test_dir failed",
+                "autoskillit.reset_test_dir",
+                extra={"reason": "directory does not exist"},
+            )
+            return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
-    marker_name = _get_config().safety.reset_guard_marker
-    marker_path = Path(resolved) / marker_name
-    if not force and not marker_path.is_file():
-        await _notify(
-            ctx,
-            "error",
-            "reset_test_dir failed",
-            "autoskillit.reset_test_dir",
-            extra={"reason": "marker missing"},
-        )
-        return json.dumps(
-            {
-                "error": f"Safety: directory missing reset guard marker ({marker_name})",
-                "hint": f"Create the marker with: autoskillit workspace init {resolved}",
-            }
-        )
+        marker_name = _get_config().safety.reset_guard_marker
+        marker_path = Path(resolved) / marker_name
+        if not force and not marker_path.is_file():
+            await _notify(
+                ctx,
+                "error",
+                "reset_test_dir failed",
+                "autoskillit.reset_test_dir",
+                extra={"reason": "marker missing"},
+            )
+            return json.dumps(
+                {
+                    "error": f"Safety: directory missing reset guard marker ({marker_name})",
+                    "hint": f"Create the marker with: autoskillit workspace init {resolved}",
+                }
+            )
 
-    from autoskillit.server import _get_ctx
+        tool_ctx = _timing_ctx
+        if tool_ctx.workspace_mgr is None:
+            return json.dumps({"error": "Workspace manager not configured"})
 
-    tool_ctx = _get_ctx()
-    if tool_ctx.workspace_mgr is None:
-        return json.dumps({"error": "Workspace manager not configured"})
-
-    preserve = None if force else {marker_name}
-    cleanup = tool_ctx.workspace_mgr.delete_contents(Path(resolved), preserve=preserve)
-    return json.dumps({**cleanup.to_dict(), "forced": force})
+        preserve = None if force else {marker_name}
+        cleanup = tool_ctx.workspace_mgr.delete_contents(Path(resolved), preserve=preserve)
+        return json.dumps({**cleanup.to_dict(), "forced": force})
+    finally:
+        if step_name:
+            _timing_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
 @mcp.tool(tags={"automation"})

@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:2283736ef10a22d06821753a1697e5383487c7b1991ff1df262875ad87325ed7 -->
+<!-- autoskillit-recipe-hash: sha256:5b8623acc898782c9ef4dc83d2aae9bbc3790ae1155f51aec51aa8262fae98ed -->
 <!-- autoskillit-diagram-format: v3 -->
 ## audit-and-fix
 Audit codebase, investigate findings, plan fixes, implement in a feature branch, and open a PR.
@@ -55,17 +55,28 @@ push  [push_to_remote] (retry ×3)
 │       ✗ failure → cleanup_failure
 │
 ┌────┤ FOR EACH:
-│  ├── [ci_watch] (retry ×3)  ← only if inputs.open_pr
-│  │       ✗ failure → resolve_ci
+│  ├── [review_pr] (retry ×3)  ← only if inputs.open_pr
+│  │       ✗ failure → resolve_review
 │  │
-│  resolve_ci  [run_skill] (retry ×2)
-│  │  ↓ success → re_push
+│  resolve_review  [run_skill] (retry ×2)
+│  │  ↓ success → re_push_review
 │  │  ✗ failure → cleanup_failure
 │  │
-│  re_push  [push_to_remote] (retry ×3)
-│  │  ↓ success → ci_watch ↑
+│  re_push_review  [push_to_remote] (retry ×3)
+│  │  ↓ success → review_pr ↑
 │  │  ✗ failure → cleanup_failure
 └────┘
+│
+├── [ci_watch] (retry ×3)  ← only if inputs.open_pr
+│       ✗ failure → resolve_ci
+│
+resolve_ci  [run_skill] (retry ×2)
+│  ↓ success → re_push
+│  ✗ failure → cleanup_failure
+│
+re_push  [push_to_remote] (retry ×3)
+│  ↓ success → ci_watch ↑
+│  ✗ failure → cleanup_failure
 │
 cleanup_success  [remove_clone] (retry ×3)
 │  ↓ success → done

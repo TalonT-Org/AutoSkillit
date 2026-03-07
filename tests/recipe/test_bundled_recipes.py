@@ -222,11 +222,11 @@ class TestImplementationPipelineStructure:
         )
         assert all(v.severity == Severity.WARNING for v in violations)
 
-    def test_ip_open_pr_step_routes_to_ci_watch(self, recipe) -> None:
-        """open_pr_step.on_success must be ci_watch — reached via ci_watch now."""
+    def test_ip_open_pr_step_routes_to_review_pr(self, recipe) -> None:
+        """open_pr_step.on_success must be review_pr — review loop inserted before ci_watch."""
         open_pr_step = recipe.steps["open_pr_step"]
-        assert open_pr_step.on_success == "ci_watch", (
-            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        assert open_pr_step.on_success == "review_pr", (
+            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
         )
 
     def test_ip_open_pr_step_has_skip_when_false(self, recipe) -> None:
@@ -397,11 +397,11 @@ class TestImplementationPipelineStructure:
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
 
-    def test_ip_open_pr_step_has_skip_when_false_ci(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success is now ci_watch (updated from cleanup_success)."""
+    def test_ip_open_pr_step_routes_to_review_pr_ci(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is now review_pr (review loop before ci_watch)."""
         step = recipe.steps["open_pr_step"]
-        assert step.on_success == "ci_watch", (
-            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        assert step.on_success == "review_pr", (
+            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
         )
 
 
@@ -755,11 +755,11 @@ class TestInvestigateFirstStructure:
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
 
-    def test_if_open_pr_step_routes_to_ci_watch(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success is ci_watch (updated from cleanup_success)."""
+    def test_if_open_pr_step_routes_to_review_pr(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is review_pr (review loop before ci_watch)."""
         step = recipe.steps["open_pr_step"]
-        assert step.on_success == "ci_watch", (
-            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        assert step.on_success == "review_pr", (
+            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
         )
 
 
@@ -902,11 +902,11 @@ class TestAuditAndFixStructure:
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
 
-    def test_aaf_open_pr_step_routes_to_ci_watch(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success is ci_watch (updated from cleanup_success)."""
+    def test_aaf_open_pr_step_routes_to_review_pr(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is review_pr (review loop before ci_watch)."""
         step = recipe.steps["open_pr_step"]
-        assert step.on_success == "ci_watch", (
-            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        assert step.on_success == "review_pr", (
+            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
         )
 
 

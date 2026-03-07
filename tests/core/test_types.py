@@ -24,6 +24,7 @@ def test_merge_failed_step_values():
     assert set(MergeFailedStep) == {
         MergeFailedStep.PATH_VALIDATION,
         MergeFailedStep.BRANCH_DETECTION,
+        MergeFailedStep.DIRTY_TREE,
         MergeFailedStep.TEST_GATE,
         MergeFailedStep.FETCH,
         MergeFailedStep.PRE_REBASE_CHECK,
@@ -39,6 +40,7 @@ def test_merge_state_values():
         MergeState.WORKTREE_INTACT,
         MergeState.WORKTREE_INTACT_REBASE_ABORTED,
         MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED,
+        MergeState.WORKTREE_DIRTY,
         MergeState.WORKTREE_DIRTY_ABORT_FAILED,
         MergeState.WORKTREE_DIRTY_MID_OPERATION,
         MergeState.MAIN_REPO_MERGE_ABORTED,

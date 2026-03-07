@@ -115,7 +115,7 @@ steps:
       issue_number: "${{ result.number }}"
       issue_title: "${{ result.title }}"
       issue_slug: "${{ result.slug }}"
-    on_success: create_branch
+    on_success: claim_issue
     on_failure: escalate_stop
     optional: true
     skip_when_false: "inputs.issue_url"
@@ -125,6 +125,21 @@ steps:
       issue_number is used for feature branch naming and threaded to
       open_pr_step for "Closes #N" in the PR body.
       issue_slug provides a descriptive branch prefix (e.g. fix-merge-conflict-triage).
+
+  claim_issue:
+    description: "Claim this issue with the in-progress label to prevent parallel work"
+    tool: claim_issue
+    optional: true
+    skip_when_false: inputs.issue_url
+    with_args:
+      issue_url: ${{ inputs.issue_url }}
+    capture:
+      claimed: result.claimed
+    on_result:
+      - when: "${{ result.claimed }} == true"
+        route: create_branch
+      - route: escalate_stop
+    on_failure: escalate_stop
 
   create_branch:
     tool: run_cmd
@@ -152,7 +167,7 @@ steps:
     capture:
       merge_target: "${{ result.stdout }}"
     on_success: push_merge_target
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
@@ -171,7 +186,7 @@ steps:
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
     on_success: plan
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
@@ -195,7 +210,7 @@ steps:
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
     on_success: review
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     note: >
       Produces plan in temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
       plan_parts context key contains the full ordered list of part files (sorted alphabetically).
@@ -220,7 +235,7 @@ steps:
     capture:
       review_path: "${{ result.review_path }}"
     on_success: verify
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     note: "Only execute this step if review_approach input is 'true'. Otherwise skip directly to verify."
 
   verify:
@@ -231,7 +246,7 @@ steps:
       step_name: "verify"
       review_path: "${{ context.review_path }}"
     on_success: implement
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     note: "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify → implement → test → merge — for that part before advancing to the next part. Never run verify for all parts first. If review produced a report, context.review_path is available — pass it as an additional arg to dry-walkthrough."
 
   implement:
@@ -245,7 +260,7 @@ steps:
     retries: 0
     on_context_limit: retry_worktree
     on_success: test
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     note: "Extracts worktree_path from result for use in subsequent steps."
 
   retry_worktree:
@@ -256,9 +271,9 @@ steps:
       step_name: "retry_worktree"
     capture:
       worktree_path: "${{ result.worktree_path }}"
-    on_exhausted: cleanup_failure
+    on_exhausted: release_issue_failure
     on_success: test
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
 
   test:
     tool: test_check
@@ -283,9 +298,9 @@ steps:
       - when: "result.failed_step == 'rebase'"
         route: fix
       - when: "result.error"
-        route: cleanup_failure
+        route: release_issue_failure
       - route: next_or_done
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     note: >
       After merge, route to next_or_done to process remaining parts before pushing.
       By default (open_pr=true), merge_target is the feature branch named from run_name.
@@ -300,7 +315,7 @@ steps:
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
     on_success: open_pr_step
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     note: >
       Runs once at the end, after audit_impl passes.
       Pushes merge_target branch from the clone to the upstream remote.
@@ -316,7 +331,7 @@ steps:
       cwd: "${{ context.worktree_path }}"
       step_name: "fix"
     on_success: test
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     on_context_limit: test
     note: "Fixes test failures without merging. Routes back to test for re-validation before merge_worktree. on_context_limit routes needs_retry=True to test (worktree may already be green) instead of re-running fix blindly."
 
@@ -372,7 +387,7 @@ steps:
       step_name: "open_pr"
       issue_number: "${{ context.issue_number }}"
     on_success: review_pr
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
@@ -422,9 +437,9 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_review"
     retries: 2
-    on_exhausted: cleanup_failure
+    on_exhausted: release_issue_failure
     on_success: re_push_review
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     note: >
       Runs when review_pr reports issues (verdict=changes_requested). The clone
       (context.work_dir) has the feature branch checked out — resolve-failures
@@ -439,7 +454,7 @@ steps:
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
     on_success: review_pr
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     note: >
       Pushes the review-fixed feature branch back to the remote after resolve_review
       succeeds. Routes back to review_pr to verify the fixes address the review
@@ -464,7 +479,7 @@ steps:
         gh run watch "$run_id" --exit-status
       cwd: "${{ context.work_dir }}"
       timeout: 150
-    on_success: cleanup_success
+    on_success: release_issue_success
     on_failure: resolve_ci
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -483,9 +498,9 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_ci"
     retries: 2
-    on_exhausted: cleanup_failure
+    on_exhausted: release_issue_failure
     on_success: re_push
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     note: >
       Runs when ci_watch reports a CI failure (exit != 0). The clone (context.work_dir)
       has the feature branch (context.merge_target) checked out — this is the working
@@ -501,11 +516,31 @@ steps:
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
     on_success: ci_watch
-    on_failure: cleanup_failure
+    on_failure: release_issue_failure
     note: >
       Pushes the CI-fixed feature branch back to the remote after resolve_ci succeeds.
       Routes back to ci_watch to verify the fix resolves CI. On push failure, escalates
       via cleanup_failure.
+
+  release_issue_success:
+    description: "Release the in-progress claim after successful completion"
+    tool: release_issue
+    optional: true
+    skip_when_false: inputs.issue_url
+    with_args:
+      issue_url: ${{ inputs.issue_url }}
+    on_success: cleanup_success
+    on_failure: cleanup_success
+
+  release_issue_failure:
+    description: "Release the in-progress claim after pipeline failure"
+    tool: release_issue
+    optional: true
+    skip_when_false: inputs.issue_url
+    with_args:
+      issue_url: ${{ inputs.issue_url }}
+    on_success: cleanup_failure
+    on_failure: cleanup_failure
 
   cleanup_success:
     tool: remove_clone

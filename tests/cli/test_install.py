@@ -393,15 +393,15 @@ class TestGroupFInstall:
         hook_script = pkg_dir / "hooks" / "quota_check.py"
         assert hook_script.exists(), f"Expected hook script at {hook_script}"
 
-    def test_quota_hook_json_exists(self):
-        """The plugin hooks.json must be present for automatic hook registration."""
-        from pathlib import Path
+    def test_generate_hooks_json_includes_quota_hook(self):
+        """generate_hooks_json() must include quota_check.py in output structure."""
+        from autoskillit.hook_registry import generate_hooks_json
 
-        import autoskillit
-
-        pkg_dir = Path(autoskillit.__file__).parent
-        hooks_json = pkg_dir / "hooks" / "hooks.json"
-        assert hooks_json.exists(), f"Expected hooks.json at {hooks_json}"
+        data = generate_hooks_json()
+        commands = [
+            hook["command"] for entry in data["hooks"]["PreToolUse"] for hook in entry["hooks"]
+        ]
+        assert any(cmd.endswith("quota_check.py") for cmd in commands)
 
     def test_install_writes_pretooluse_hooks(self, tmp_path, monkeypatch):
         """install must register the quota PreToolUse hook in .claude/settings.json."""

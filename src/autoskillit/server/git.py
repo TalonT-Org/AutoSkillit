@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
+    GENERATED_FILES,
     MergeFailedStep,
     MergeState,
     SubprocessRunner,
@@ -225,6 +226,39 @@ async def perform_merge(
             "worktree_path": worktree_path,
             **({"abort_failed": True, "abort_stderr": abort_stderr} if abort_failed else {}),
         }
+
+    # 6.1. Strip tracked generated files — prevents worktree-path contamination
+    ls_rc, ls_out, _ = await _run_git(
+        ["git", "ls-files", "--", *sorted(GENERATED_FILES)], worktree_path, 10, runner
+    )
+    tracked_generated = [f.strip() for f in ls_out.splitlines() if f.strip()]
+    if tracked_generated:
+        rm_rc, _, rm_stderr = await _run_git(
+            ["git", "rm", "--cached", "--ignore-unmatch", "--", *tracked_generated],
+            worktree_path,
+            10,
+            runner,
+        )
+        if rm_rc != 0:
+            return {
+                "error": f"Failed to untrack generated files: {rm_stderr}",
+                "failed_step": MergeFailedStep.GENERATED_FILE_CLEANUP,
+                "state": MergeState.WORKTREE_INTACT,
+                "worktree_path": worktree_path,
+            }
+        commit_rc, _, commit_stderr = await _run_git(
+            ["git", "commit", "--no-verify", "-m", "chore: untrack generated files"],
+            worktree_path,
+            10,
+            runner,
+        )
+        if commit_rc != 0:
+            return {
+                "error": f"Failed to commit generated file cleanup: {commit_stderr}",
+                "failed_step": MergeFailedStep.GENERATED_FILE_CLEANUP,
+                "state": MergeState.WORKTREE_INTACT,
+                "worktree_path": worktree_path,
+            }
 
     # 6.5. Post-rebase test gate — re-tests the rebased commits before merging
     if tester is not None and config.safety.test_gate_on_merge:

@@ -69,3 +69,11 @@ def is_git_worktree(path: Path) -> bool:
         if git_path.is_dir():
             return False  # .git dir = main checkout
     return False  # not in a git repo
+
+
+GENERATED_FILES: frozenset[str] = frozenset(
+    {
+        "src/autoskillit/hooks/hooks.json",
+        ".claude/settings.json",
+    }
+)

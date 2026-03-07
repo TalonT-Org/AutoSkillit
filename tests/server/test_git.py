@@ -130,6 +130,7 @@ async def test_perform_merge_returns_success_on_green_tests(
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check (5.5)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
@@ -165,6 +166,7 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch ok
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check (5.5)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase ok
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
 
     result = await perform_merge(
         str(tmp_path), "main", config=default_config, runner=conftest_mock_runner, tester=tester
@@ -191,6 +193,7 @@ async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_run
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
@@ -253,3 +256,119 @@ async def test_perform_merge_blocks_on_missing_remote_tracking_ref(
     assert result["state"] == MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED
     assert "feature/local-only" in result["error"]
     assert "push" in result["error"].lower()
+
+
+@pytest.mark.anyio
+async def test_perform_merge_strips_tracked_generated_files(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """perform_merge() strips tracked generated files after rebase."""
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
+    conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
+    conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
+    conftest_mock_runner.push(
+        _make_result(0, "src/autoskillit/hooks/hooks.json\n", "")
+    )  # git ls-files (generated file found)
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git rm --cached
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git commit --no-verify
+    conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
+    conftest_mock_runner.push(_make_result(0, "", ""))  # merge
+    conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
+    conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
+
+    result = await perform_merge(
+        fake_wt, "main", config=default_config, runner=conftest_mock_runner, tester=tester
+    )
+    assert result.get("merge_succeeded") is True
+
+    # Verify git ls-files was called after rebase
+    ls_cmds = [args[0] for args in conftest_mock_runner.call_args_list if "ls-files" in args[0]]
+    assert len(ls_cmds) == 1
+
+    # Verify git rm --cached was called with the tracked file
+    rm_cmds = [
+        args[0]
+        for args in conftest_mock_runner.call_args_list
+        if "rm" in args[0] and "--cached" in args[0]
+    ]
+    assert len(rm_cmds) == 1
+    assert "src/autoskillit/hooks/hooks.json" in rm_cmds[0]
+
+    # Verify git commit --no-verify was called
+    commit_cmds = [
+        args[0]
+        for args in conftest_mock_runner.call_args_list
+        if "commit" in args[0] and "--no-verify" in args[0]
+    ]
+    assert len(commit_cmds) == 1
+
+
+@pytest.mark.anyio
+async def test_perform_merge_noop_when_no_generated_files_tracked(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """perform_merge() skips cleanup when no generated files are tracked."""
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
+    conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
+    conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (empty — no generated files)
+    conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
+    conftest_mock_runner.push(_make_result(0, "", ""))  # merge
+    conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
+    conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
+
+    result = await perform_merge(
+        fake_wt, "main", config=default_config, runner=conftest_mock_runner, tester=tester
+    )
+    assert result.get("merge_succeeded") is True
+
+    # git rm --cached and git commit should NOT have been called
+    rm_cmds = [
+        args[0]
+        for args in conftest_mock_runner.call_args_list
+        if "rm" in args[0] and "--cached" in args[0]
+    ]
+    assert len(rm_cmds) == 0
+
+
+@pytest.mark.anyio
+async def test_perform_merge_fails_on_generated_file_cleanup_error(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """perform_merge() fails with GENERATED_FILE_CLEANUP when git rm --cached fails."""
+    from autoskillit.core.types import MergeFailedStep, MergeState
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    tester = StatefulMockTester(results=[(True, "ok")])
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
+    conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
+    conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
+    conftest_mock_runner.push(
+        _make_result(0, "src/autoskillit/hooks/hooks.json\n", "")
+    )  # git ls-files (generated file found)
+    conftest_mock_runner.push(_make_result(1, "", "error: pathspec"))  # git rm --cached fails
+
+    result = await perform_merge(
+        fake_wt, "main", config=default_config, runner=conftest_mock_runner, tester=tester
+    )
+    assert "error" in result
+    assert result["failed_step"] == MergeFailedStep.GENERATED_FILE_CLEANUP
+    assert result["state"] == MergeState.WORKTREE_INTACT

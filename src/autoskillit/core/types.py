@@ -31,6 +31,7 @@ class MergeFailedStep(StrEnum):
     FETCH = "fetch"
     PRE_REBASE_CHECK = "pre_rebase_check"
     REBASE = "rebase"
+    GENERATED_FILE_CLEANUP = "generated_file_cleanup"
     POST_REBASE_TEST_GATE = "post_rebase_test_gate"
     MERGE = "merge"
 

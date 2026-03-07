@@ -15,12 +15,13 @@ may be owned by different users, pass --no-hardlinks to git clone to avoid the
 cross-user hardlink risk (CVE-2024-32020).
 """
 
+import os
 import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from autoskillit.core import get_logger
+from autoskillit.core import GENERATED_FILES, get_logger
 
 logger = get_logger(__name__)
 
@@ -266,6 +267,49 @@ def clone_repo(
                 remote_url=remote_url,
                 stderr=rewrite_result.stderr.strip(),
             )
+
+    # Decontaminate: untrack inherited generated files
+    ls_gen = subprocess.run(
+        ["git", "ls-files", "--", *sorted(GENERATED_FILES)],
+        cwd=str(clone_path),
+        capture_output=True,
+        text=True,
+    )
+    tracked_gen = [f.strip() for f in ls_gen.stdout.splitlines() if f.strip()]
+    if tracked_gen:
+        rm_gen = subprocess.run(
+            ["git", "rm", "--cached", "--ignore-unmatch", "--", *tracked_gen],
+            cwd=str(clone_path),
+            capture_output=True,
+            text=True,
+        )
+        if rm_gen.returncode == 0:
+            subprocess.run(
+                [
+                    "git",
+                    "commit",
+                    "--no-verify",
+                    "-m",
+                    "chore: untrack generated files inherited from source",
+                ],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+            )
+        else:
+            logger.warning(
+                "clone_decontaminate_untrack_failed",
+                clone_path=str(clone_path),
+                stderr=rm_gen.stderr.strip(),
+            )
+
+    # Delete on-disk generated files (covers clone_local copytree copies)
+    for gen_path in GENERATED_FILES:
+        full = clone_path / gen_path
+        try:
+            os.unlink(full)
+        except FileNotFoundError:
+            pass
 
     return {"clone_path": str(clone_path), "source_dir": str(source), "remote_url": remote_url}
 

@@ -937,3 +937,94 @@ class TestClassifyRemoteUrl:
     def test_nonexistent_path_returns_unknown(self, tmp_path: Path) -> None:
         result = classify_remote_url(str(tmp_path / "nonexistent"))
         assert result == "unknown"
+
+
+class TestCloneDecontamination:
+    """clone_repo strips tracked and on-disk generated files from clones."""
+
+    def test_clone_repo_untracks_inherited_generated_files(self, tmp_path: Path) -> None:
+        """Tracked generated files in source are untracked in the clone."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        # Create and track a generated file
+        hooks_dir = repo / "src" / "autoskillit" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "hooks.json").write_text('{"hooks": {}}')
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "src/autoskillit/hooks/hooks.json"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "add generated file"],
+            check=True,
+            capture_output=True,
+        )
+
+        result = clone_repo(str(repo), "decontam-test", strategy="proceed")
+        clone_path = Path(result["clone_path"])
+        try:
+            ls_result = subprocess.run(
+                ["git", "ls-files", "--", "src/autoskillit/hooks/hooks.json"],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+            )
+            assert ls_result.stdout.strip() == "", "Generated file should be untracked in clone"
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    def test_clone_repo_deletes_untracked_generated_files_from_disk(self, tmp_path: Path) -> None:
+        """clone_local copies untracked generated files; decontamination deletes them."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        # Create on-disk generated file WITHOUT tracking it
+        hooks_dir = repo / "src" / "autoskillit" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "hooks.json").write_text('{"hooks": {}}')
+
+        result = clone_repo(str(repo), "disk-cleanup-test", strategy="clone_local")
+        clone_path = Path(result["clone_path"])
+        try:
+            assert not (clone_path / "src" / "autoskillit" / "hooks" / "hooks.json").exists(), (
+                "Untracked generated file should be deleted from clone disk"
+            )
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    def test_clone_repo_noop_when_no_generated_files_tracked(self, git_repo: Path) -> None:
+        """Clean repo with no tracked generated files clones without errors."""
+        result = clone_repo(str(git_repo), "clean-test", strategy="proceed")
+        clone_path = Path(result["clone_path"])
+        try:
+            assert clone_path.is_dir()
+            assert (clone_path / ".git").is_dir()
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)

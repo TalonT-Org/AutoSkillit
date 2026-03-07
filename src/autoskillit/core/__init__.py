@@ -17,6 +17,7 @@ from .logging import (
     get_logger,
 )
 from .paths import (
+    GENERATED_FILES,
     claude_code_log_path,
     claude_code_project_dir,
     is_git_worktree,
@@ -75,6 +76,7 @@ __all__ = [
     "configure_logging",
     "get_logger",
     # paths
+    "GENERATED_FILES",
     "claude_code_log_path",
     "claude_code_project_dir",
     "is_git_worktree",

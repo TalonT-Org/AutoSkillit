@@ -1173,8 +1173,28 @@ class TestReviewPrRecipeIntegration:
         assert step.skip_when_false == "inputs.open_pr"
 
     def test_review_pr_routes_to_ci_watch_on_success(self, recipe: object) -> None:
-        """T_RP4: review_pr.on_success routes to ci_watch."""
-        assert recipe.steps["review_pr"].on_success == "ci_watch"  # type: ignore[attr-defined]
+        """T_RP4: review_pr has on_result with catch-all route to ci_watch."""
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        assert step.on_result is not None
+        default_conditions = [
+            c for c in step.on_result.conditions if c.when is None or c.when == "true"
+        ]
+        assert any(c.route == "ci_watch" for c in default_conditions)
+
+    def test_review_pr_captures_verdict(self, recipe: object) -> None:
+        """T_RP4b: review_pr captures the verdict output from the skill result."""
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        assert "verdict" in step.capture
+        assert step.capture["verdict"] == "${{ result.verdict }}"
+
+    def test_review_pr_changes_requested_routes_to_resolve_review(self, recipe: object) -> None:
+        """T_RP4c: on_result routes changes_requested verdict to resolve_review."""
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        assert step.on_result is not None
+        changes_conditions = [
+            c for c in step.on_result.conditions if c.when and "changes_requested" in c.when
+        ]
+        assert any(c.route == "resolve_review" for c in changes_conditions)
 
     def test_review_pr_routes_to_resolve_review_on_failure(self, recipe: object) -> None:
         """T_RP5: review_pr.on_failure routes to resolve_review."""

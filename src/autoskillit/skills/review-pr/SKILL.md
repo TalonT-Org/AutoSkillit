@@ -33,7 +33,8 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not from a pre-captured URL)
 - Output `verdict=` on the final line
-- Exit 0 for `approved` and `needs_human`; exit non-zero for `changes_requested`
+- Exit 0 in all normal cases; verdict drives recipe routing via on_result, not exit code
+- Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation has already output verdict=approved)
 - Tag `@TalonT` in escalation comments (`needs_human` verdict)
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Deduplicate findings by (file, line) pairs before posting
@@ -186,8 +187,8 @@ Output the verdict as the final line:
 verdict={approved|changes_requested|needs_human}
 ```
 
-Exit 0 for `approved` and `needs_human`.
-Exit 1 for `changes_requested`.
+Exit 0 in all normal cases (approved, needs_human, changes_requested).
+Exit 1 only for unrecoverable tool-level errors.
 
 ## Output
 

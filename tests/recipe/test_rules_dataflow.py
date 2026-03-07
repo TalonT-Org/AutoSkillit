@@ -246,6 +246,38 @@ class TestDeadOutputRule:
         dead = [f for f in findings if f.rule == "dead-output" and f.step_name == "merge"]
         assert dead == []
 
+    def test_do5_predicate_condition_consumes_captured_var(self) -> None:
+        """T_DO5: dead-output does NOT fire when a predicate on_result condition
+        references the captured variable via context.X in its when clause."""
+        steps = {
+            "review_pr": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:review-pr feature main"},
+                "capture": {"verdict": "${{ result.verdict }}"},
+                "on_result": [
+                    {
+                        "when": "${{ result.verdict }} == changes_requested",
+                        "route": "resolve_review",
+                    },
+                    {"when": "true", "route": "done"},
+                ],
+                "on_failure": "resolve_review",
+            },
+            "resolve_review": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:resolve-failures worktree plan main",
+                },
+                "on_success": "done",
+                "on_failure": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        dead = [f for f in findings if f.rule == "dead-output" and f.step_name == "review_pr"]
+        assert dead == []
+
 
 # ---------------------------------------------------------------------------
 # TestImplicitHandoffRule

@@ -330,9 +330,16 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                     continue
                 consumed.update(_CONTEXT_REF_RE.findall(arg_val))
 
-        # on_result routing on a captured key is structural self-consumption
-        if step.on_result and step.on_result.field in step.capture:
-            consumed.add(step.on_result.field)
+        # on_result routing — both legacy field and predicate conditions count
+        # as structural consumption of captured variables.
+        if step.on_result:
+            # Legacy field routing: field name matches a captured key
+            if step.on_result.field in step.capture:
+                consumed.add(step.on_result.field)
+            # Predicate condition routing — conditions gate on step result;
+            # treat all captured vars as structurally consumed.
+            if step.on_result.conditions:
+                consumed.update(step.capture.keys())
 
         # Flag captured vars not consumed on any path
         for cap_key in step.capture:

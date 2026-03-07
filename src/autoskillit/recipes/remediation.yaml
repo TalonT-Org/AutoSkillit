@@ -382,17 +382,24 @@ steps:
       skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review_pr"
-    on_success: ci_watch
+    capture:
+      verdict: "${{ result.verdict }}"
+    on_result:
+      conditions:
+        - when: "${{ result.verdict }} == changes_requested"
+          route: resolve_review
+        - when: "true"
+          route: ci_watch
     on_failure: resolve_review
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
       Runs after open_pr_step creates the PR. Invokes the review-pr skill as a
       headless session to leave inline review comments on the PR. The skill finds
-      the open PR by feature branch name (context.merge_target). On success
-      (verdict=approved or needs_human, exit 0), proceeds to ci_watch. On failure
-      (verdict=changes_requested, exit non-zero), routes to resolve_review to fix
-      findings before continuing. Skipped when open_pr=false.
+      the open PR by feature branch name (context.merge_target). Captures verdict
+      and routes via on_result: changes_requested → resolve_review,
+      approved/needs_human → ci_watch. On tool-level failure (MCP error, gh
+      unavailable), routes to resolve_review. Skipped when open_pr=false.
 
   resolve_review:
     tool: run_skill

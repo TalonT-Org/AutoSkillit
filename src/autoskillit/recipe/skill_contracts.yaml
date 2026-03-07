@@ -202,4 +202,6 @@ skills:
     - name: base_branch
       type: string
       required: true
-    outputs: []
+    outputs:
+    - name: verdict
+      type: string

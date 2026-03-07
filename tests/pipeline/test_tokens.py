@@ -235,3 +235,28 @@ class TestDefaultTokenLog:
         assert total["output_tokens"] == 220
         assert total["cache_creation_input_tokens"] == 55
         assert total["cache_read_input_tokens"] == 33
+
+    def test_record_backward_clock_elapsed_is_non_negative(self):
+        """elapsed_seconds must never go negative even when end_ts < start_ts."""
+        log = DefaultTokenLog()
+        log.record(
+            "step",
+            {"input_tokens": 1, "output_tokens": 1},
+            start_ts="2026-01-01T12:05:00+00:00",  # later
+            end_ts="2026-01-01T12:00:00+00:00",  # earlier
+        )
+        entries = log.get_report()
+        assert entries[0]["elapsed_seconds"] >= 0
+
+    def test_record_uses_elapsed_seconds_param_over_iso_subtraction(self):
+        """When elapsed_seconds kwarg is provided, it is used directly, not ISO subtraction."""
+        log = DefaultTokenLog()
+        log.record(
+            "step",
+            {"input_tokens": 1, "output_tokens": 1},
+            start_ts="2026-01-01T12:00:00+00:00",
+            end_ts="2026-01-01T12:00:05+00:00",  # ISO implies 5.0s
+            elapsed_seconds=12.5,  # monotonic says 12.5s
+        )
+        entries = log.get_report()
+        assert entries[0]["elapsed_seconds"] == pytest.approx(12.5)

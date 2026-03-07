@@ -59,6 +59,7 @@ steps:
       run_name: "${{ inputs.run_name }}"
     capture:
       work_dir: "${{ result.clone_path }}"
+      remote_url: "${{ result.remote_url }}"
     on_success: setup_remote
     on_failure: escalate_stop
     note: >
@@ -100,17 +101,31 @@ steps:
     with:
       cmd: "git checkout ${{ inputs.base_branch }} && git pull && git checkout -b ${{ context.integration_branch }}"
       cwd: "${{ context.work_dir }}"
-    on_success: merge_pr
+    on_success: publish_integration_branch
     on_failure: cleanup_failure
     note: >
       Creates the integration branch from the latest base_branch HEAD.
       context.integration_branch was computed by analyze_prs.
       The agent initializes context.current_pr_index = 0 here.
 
+  publish_integration_branch:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.integration_branch }}"
+    on_success: merge_pr
+    on_failure: cleanup_failure
+    note: >
+      Publishes the integration branch to origin immediately after creation so
+      that merge_worktree can verify refs/remotes/origin/integration_branch exists
+      before rebasing. The branch is re-pushed at push_integration_branch after all
+      merges complete to update the remote with accumulated merge commits.
+
   merge_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:merge-pr"
+      skill_command: "/autoskillit:merge-pr {pr_number} {complexity}"
       cwd: "${{ context.work_dir }}"
       step_name: "merge_pr"
       pr_order_file: "${{ context.pr_order_file }}"
@@ -221,7 +236,6 @@ steps:
 
   fix:
     tool: run_skill
-    model: sonnet
     with:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.pr_plan_path }} ${{ context.integration_branch }}"
       cwd: "${{ context.worktree_path }}"
@@ -260,10 +274,8 @@ steps:
     on_success: collect_artifacts
     on_failure: cleanup_failure
     note: >
-      Pushes the integration branch to the GitHub remote so that gh pr create
-      can reference it. push_to_remote is not used here because this branch is
-      new and must be pushed directly to the remote — push_to_remote expects
-      the branch to already exist in the remote.
+      Pushes the updated integration branch to origin after all PR merges complete,
+      so the remote reflects the full merged state before opening the review PR.
 
   collect_artifacts:
     tool: run_cmd
@@ -341,6 +353,7 @@ steps:
     tool: run_cmd
     with:
       cmd: |
+        echo "Review PR: ${{ context.pr_url }}"
         run_id=""
         for i in 1 2 3 4 5 6; do
           run_id=$(gh run list \

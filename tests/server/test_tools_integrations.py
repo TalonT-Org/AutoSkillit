@@ -1,4 +1,4 @@
-"""Tests for the report_bug, fetch_github_issue, prepare_issue, and enrich_issues MCP tool handlers."""
+"""Tests for the report_bug, fetch_github_issue, prepare_issue, and enrich_issues tool handlers."""
 
 from __future__ import annotations
 
@@ -690,13 +690,15 @@ async def test_enrich_issues_repo_flag(tool_ctx):
 @pytest.mark.anyio
 async def test_enrich_issues_parses_result_block(tool_ctx):
     """Parses enriched/skipped counts from the result block."""
-    payload = json.dumps({
-        "enriched": [{"issue_number": 7, "requirements_count": 3, "groups": ["GRP"]}],
-        "skipped_already_enriched": [4],
-        "skipped_too_vague": [],
-        "skipped_mixed_concerns": [],
-        "dry_run": False,
-    })
+    payload = json.dumps(
+        {
+            "enriched": [{"issue_number": 7, "requirements_count": 3, "groups": ["GRP"]}],
+            "skipped_already_enriched": [4],
+            "skipped_too_vague": [],
+            "skipped_mixed_concerns": [],
+            "dry_run": False,
+        }
+    )
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok(
         f"---enrich-issues-result---\n{payload}\n---/enrich-issues-result---"

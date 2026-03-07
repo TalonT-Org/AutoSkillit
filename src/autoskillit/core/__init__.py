@@ -36,6 +36,7 @@ from .types import (
     UNGATED_TOOLS,
     AuditStore,
     ChannelConfirmation,
+    ClaudeFlags,
     CleanupResult,
     CloneManager,
     DatabaseReader,
@@ -85,6 +86,7 @@ __all__ = [
     "is_git_worktree",
     "pkg_root",
     # types
+    "ClaudeFlags",
     "AUTOSKILLIT_INSTALLED_VERSION",
     "AUTOSKILLIT_SKILL_PREFIX",
     "CONTEXT_EXHAUSTION_MARKER",

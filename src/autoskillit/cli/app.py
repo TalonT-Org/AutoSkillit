@@ -19,7 +19,7 @@ from autoskillit.cli._init_helpers import (
     _generate_config_yaml,
     _prompt_test_command,
 )
-from autoskillit.core import _atomic_write, pkg_root
+from autoskillit.core import ClaudeFlags, _atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
 from autoskillit.recipe import list_recipes
 
@@ -462,11 +462,11 @@ def cook(recipe: str | None = None):
 
     spec = build_interactive_cmd()
     cmd = spec.cmd + [
-        "--plugin-dir",
+        ClaudeFlags.PLUGIN_DIR,
         str(plugin_dir),
-        "--tools",
+        ClaudeFlags.TOOLS,
         "AskUserQuestion",
-        "--append-system-prompt",
+        ClaudeFlags.APPEND_SYSTEM_PROMPT,
         system_prompt,
     ]
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from autoskillit.core import ClaudeFlags
 from autoskillit.execution.commands import (
     ClaudeHeadlessCmd,
     ClaudeInteractiveCmd,
@@ -15,17 +16,17 @@ class TestBuildInteractiveCmd:
         result = build_interactive_cmd()
         assert isinstance(result, ClaudeInteractiveCmd)
 
-    def test_includes_allow_dangerous_permissions(self) -> None:
+    def test_includes_allow_dangerously_skip_permissions(self) -> None:
         result = build_interactive_cmd()
-        assert "--allow-dangerous-permissions" in result.cmd
+        assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS in result.cmd
 
     def test_does_not_include_dangerously_skip_permissions(self) -> None:
         result = build_interactive_cmd()
-        assert "--dangerously-skip-permissions" not in result.cmd
+        assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS not in result.cmd
 
     def test_does_not_include_prompt_flag(self) -> None:
         result = build_interactive_cmd()
-        assert "-p" not in result.cmd
+        assert ClaudeFlags.PRINT not in result.cmd
 
     def test_starts_with_claude(self) -> None:
         result = build_interactive_cmd()
@@ -37,13 +38,13 @@ class TestBuildInteractiveCmd:
 
     def test_accepts_model(self) -> None:
         result = build_interactive_cmd(model="claude-opus-4-6")
-        assert "--model" in result.cmd
-        idx = result.cmd.index("--model")
+        assert ClaudeFlags.MODEL in result.cmd
+        idx = result.cmd.index(ClaudeFlags.MODEL)
         assert result.cmd[idx + 1] == "claude-opus-4-6"
 
     def test_no_model_flag_when_model_is_none(self) -> None:
         result = build_interactive_cmd(model=None)
-        assert "--model" not in result.cmd
+        assert ClaudeFlags.MODEL not in result.cmd
 
 
 class TestBuildHeadlessCmd:
@@ -53,15 +54,15 @@ class TestBuildHeadlessCmd:
 
     def test_includes_prompt_flag(self) -> None:
         result = build_headless_cmd("some prompt")
-        assert "-p" in result.cmd
+        assert ClaudeFlags.PRINT in result.cmd
 
     def test_includes_dangerously_skip_permissions(self) -> None:
         result = build_headless_cmd("some prompt")
-        assert "--dangerously-skip-permissions" in result.cmd
+        assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS in result.cmd
 
-    def test_does_not_include_allow_dangerous_permissions(self) -> None:
+    def test_does_not_include_allow_dangerously_skip_permissions(self) -> None:
         result = build_headless_cmd("some prompt")
-        assert "--allow-dangerous-permissions" not in result.cmd
+        assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS not in result.cmd
 
     def test_env_is_empty(self) -> None:
         result = build_headless_cmd("some prompt")
@@ -69,6 +70,6 @@ class TestBuildHeadlessCmd:
 
     def test_accepts_model(self) -> None:
         result = build_headless_cmd("some prompt", model="claude-sonnet-4-6")
-        assert "--model" in result.cmd
-        idx = result.cmd.index("--model")
+        assert ClaudeFlags.MODEL in result.cmd
+        idx = result.cmd.index(ClaudeFlags.MODEL)
         assert result.cmd[idx + 1] == "claude-sonnet-4-6"

@@ -18,6 +18,11 @@ class RecipeIngredient:
     required: bool = False
     default: str | None = None
 
+    def __post_init__(self) -> None:
+        self.description = self.description.strip()
+        if self.default is not None:
+            self.default = self.default.strip()
+
 
 @dataclass
 class StepResultCondition:
@@ -80,6 +85,12 @@ class Recipe:
     steps: dict[str, RecipeStep] = field(default_factory=dict)
     kitchen_rules: list[str] = field(default_factory=list)
     version: str | None = None
+
+    def __post_init__(self) -> None:
+        self.name = self.name.strip()
+        self.description = self.description.strip()
+        self.summary = self.summary.strip()
+        self.kitchen_rules = [rule.strip() for rule in self.kitchen_rules]
 
 
 @dataclass

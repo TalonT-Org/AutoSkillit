@@ -327,17 +327,20 @@ steps:
     on_success: plan
 
   create_review_pr:
-    tool: run_cmd
+    tool: run_skill
     with:
-      cmd: >-
-        gh pr create
-        --base ${{ inputs.base_branch }}
-        --head ${{ context.integration_branch }}
-        --title "Integration: collapsed PRs into ${{ inputs.base_branch }}"
-        --body "Auto-generated integration branch collapsing open PRs into a single review. See temp/pr-merge-pipeline/ for analysis and conflict resolution details."
+      skill_command: "/autoskillit:create-review-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }}"
       cwd: "${{ context.work_dir }}"
+      step_name: "create_review_pr"
+    capture:
+      pr_url: "${{ result.pr_url }}"
     on_success: ci_watch_pr
     on_failure: cleanup_failure
+    note: >
+      Generates rich integration PR body from pr_order_file: per-PR table, arch-lens
+      diagrams, audit verdict, and carried-forward Closes #N references. Closes all
+      collapsed PRs after creation. context.verdict may be empty string when audit
+      was skipped (inputs.audit=false or check_impl_plans routed directly here).
 
   ci_watch_pr:
     tool: run_cmd

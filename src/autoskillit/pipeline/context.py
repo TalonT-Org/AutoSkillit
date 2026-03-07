@@ -21,6 +21,7 @@ from autoskillit.core import (
     RecipeRepository,
     SubprocessRunner,
     TestRunner,
+    TimingStore,
     TokenStore,
     WorkspaceManager,
 )
@@ -39,6 +40,7 @@ class ToolContext:
     config:        AutomationConfig loaded from .autoskillit/config.yaml
     audit:         AuditStore — records pipeline failures
     token_log:     TokenStore — per-step token tracking
+    timing_log:    TimingStore — per-step wall-clock duration tracking
     gate:          GatePolicy — enables/disables gated tools
     plugin_dir:    Absolute path string to the autoskillit package directory
     runner:        SubprocessRunner implementation (DefaultSubprocessRunner in production,
@@ -56,6 +58,7 @@ class ToolContext:
     config: AutomationConfig
     audit: AuditStore
     token_log: TokenStore
+    timing_log: TimingStore
     gate: GatePolicy
     plugin_dir: str
     runner: SubprocessRunner | None

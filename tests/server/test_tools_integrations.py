@@ -1,4 +1,4 @@
-"""Tests for the report_bug, fetch_github_issue, and prepare_issue MCP tool handlers."""
+"""Tests for the report_bug, fetch_github_issue, prepare_issue, and enrich_issues MCP tool handlers."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from autoskillit.server.tools_integrations import (
     _FINGERPRINT_START,
     _parse_fingerprint,
     _parse_prepare_result,
+    enrich_issues,
     fetch_github_issue,
     prepare_issue,
     report_bug,
@@ -605,3 +606,118 @@ async def test_prepare_issue_parses_result_block(tool_ctx):
     assert result["status"] == "complete"
     assert result["route"] == "recipe:remediation"
     assert result["issue_url"] == "https://github.com/o/r/issues/42"
+
+
+# ---------------------------------------------------------------------------
+# enrich_issues MCP tool tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_enrich_issues_gate_closed(tool_ctx):
+    """Returns gate error when kitchen is closed."""
+    tool_ctx.gate.disable()
+    data = json.loads(await enrich_issues())
+    assert data["success"] is False
+    assert "open_kitchen" in data["result"].lower() or "not enabled" in data["result"].lower()
+
+
+@pytest.mark.anyio
+async def test_enrich_issues_fires_headless_skill(tool_ctx):
+    """Dispatches /autoskillit:enrich-issues with no args when called bare."""
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok(
+        '---enrich-issues-result---\n{"enriched":[],"dry_run":false}\n---/enrich-issues-result---'
+    )
+    tool_ctx.executor = mock_executor
+    await enrich_issues()
+    call_args = mock_executor.run.call_args
+    assert "/autoskillit:enrich-issues" in call_args[0][0]
+
+
+@pytest.mark.anyio
+async def test_enrich_issues_single_issue_flag(tool_ctx):
+    """Passes --issue N to the skill command."""
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok(
+        '---enrich-issues-result---\n{"enriched":[]}\n---/enrich-issues-result---'
+    )
+    tool_ctx.executor = mock_executor
+    await enrich_issues(issue_number=42)
+    cmd = mock_executor.run.call_args[0][0]
+    assert "--issue 42" in cmd
+
+
+@pytest.mark.anyio
+async def test_enrich_issues_batch_flag(tool_ctx):
+    """Passes --batch N to the skill command."""
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok(
+        '---enrich-issues-result---\n{"enriched":[]}\n---/enrich-issues-result---'
+    )
+    tool_ctx.executor = mock_executor
+    await enrich_issues(batch=3)
+    cmd = mock_executor.run.call_args[0][0]
+    assert "--batch 3" in cmd
+
+
+@pytest.mark.anyio
+async def test_enrich_issues_dry_run_flag(tool_ctx):
+    """Passes --dry-run to the skill command."""
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok(
+        '---enrich-issues-result---\n{"enriched":[],"dry_run":true}\n---/enrich-issues-result---'
+    )
+    tool_ctx.executor = mock_executor
+    await enrich_issues(dry_run=True)
+    cmd = mock_executor.run.call_args[0][0]
+    assert "--dry-run" in cmd
+
+
+@pytest.mark.anyio
+async def test_enrich_issues_repo_flag(tool_ctx):
+    """Passes --repo to the skill command when specified."""
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok(
+        '---enrich-issues-result---\n{"enriched":[]}\n---/enrich-issues-result---'
+    )
+    tool_ctx.executor = mock_executor
+    await enrich_issues(repo="owner/repo")
+    cmd = mock_executor.run.call_args[0][0]
+    assert "--repo owner/repo" in cmd
+
+
+@pytest.mark.anyio
+async def test_enrich_issues_parses_result_block(tool_ctx):
+    """Parses enriched/skipped counts from the result block."""
+    payload = json.dumps({
+        "enriched": [{"issue_number": 7, "requirements_count": 3, "groups": ["GRP"]}],
+        "skipped_already_enriched": [4],
+        "skipped_too_vague": [],
+        "skipped_mixed_concerns": [],
+        "dry_run": False,
+    })
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok(
+        f"---enrich-issues-result---\n{payload}\n---/enrich-issues-result---"
+    )
+    tool_ctx.executor = mock_executor
+    data = json.loads(await enrich_issues())
+    assert data["enriched"][0]["issue_number"] == 7
+    assert data["skipped_already_enriched"] == [4]
+
+
+@pytest.mark.anyio
+async def test_enrich_issues_skill_failure(tool_ctx):
+    """Returns error dict when headless session fails."""
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_fail()
+    tool_ctx.executor = mock_executor
+    data = json.loads(await enrich_issues())
+    assert data["success"] is False
+
+
+def test_enrich_issues_in_gated_tools():
+    from autoskillit.pipeline.gate import GATED_TOOLS
+
+    assert "enrich_issues" in GATED_TOOLS

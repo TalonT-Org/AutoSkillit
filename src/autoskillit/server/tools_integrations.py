@@ -1,4 +1,4 @@
-"""MCP tool handlers: fetch_github_issue, report_bug, prepare_issue."""
+"""MCP tool handlers: fetch_github_issue, report_bug, prepare_issue, enrich_issues."""
 
 from __future__ import annotations
 
@@ -28,6 +28,10 @@ _FINGERPRINT_END = "---/bug-fingerprint---"
 # Result block delimiters written by the prepare-issue skill in its response.
 _PREPARE_RESULT_START = "---prepare-issue-result---"
 _PREPARE_RESULT_END = "---/prepare-issue-result---"
+
+# Result block delimiters written by the enrich-issues skill in its response.
+_ENRICH_RESULT_START = "---enrich-issues-result---"
+_ENRICH_RESULT_END = "---/enrich-issues-result---"
 
 # Strong references to in-flight non-blocking report tasks (prevents GC).
 _pending_report_tasks: set[asyncio.Task[Any]] = set()
@@ -463,3 +467,113 @@ async def prepare_issue(
             **parsed,
         }
     )
+
+
+def _build_enrich_skill_command(
+    issue_number: int | None,
+    batch: int | None,
+    dry_run: bool,
+    repo: str | None,
+) -> str:
+    """Assemble the skill_command string for /autoskillit:enrich-issues."""
+    parts = ["/autoskillit:enrich-issues"]
+    if issue_number is not None:
+        parts.append(f"--issue {issue_number}")
+    if batch is not None:
+        parts.append(f"--batch {batch}")
+    if dry_run:
+        parts.append("--dry-run")
+    if repo:
+        parts.append(f"--repo {repo}")
+    return "\n".join(parts)
+
+
+def _parse_enrich_result(response_text: str) -> dict[str, Any]:
+    """Extract and JSON-parse the enrich-issues result block from a skill response.
+
+    Returns the parsed dict on success, or {"success": False, "error": "..."} on
+    missing block or parse failure.
+    """
+    in_block = False
+    block_lines: list[str] = []
+    for line in response_text.splitlines():
+        stripped = line.strip()
+        if stripped == _ENRICH_RESULT_START:
+            in_block = True
+            continue
+        if stripped == _ENRICH_RESULT_END:
+            break
+        if in_block:
+            block_lines.append(line)
+    if not block_lines:
+        return {"success": False, "error": "no result block found"}
+    try:
+        return json.loads("\n".join(block_lines))
+    except json.JSONDecodeError:
+        return {"success": False, "error": "result block contained invalid JSON"}
+
+
+@mcp.tool(tags={"automation"})
+async def enrich_issues(
+    issue_number: int | None = None,
+    batch: int | None = None,
+    dry_run: bool = False,
+    repo: str | None = None,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Backfill structured requirements on existing recipe:implementation issues.
+
+    Launches /autoskillit:enrich-issues in a headless session to scan candidate
+    issues, filter out already-enriched ones, perform codebase-grounded analysis,
+    and append a Requirements section in REQ-{GRP}-NNN format via gh issue edit.
+
+    Complements prepare_issue (which enriches at creation time) by handling the
+    pre-existing backlog.
+
+    Returns JSON with: enriched[], skipped_already_enriched[], skipped_too_vague[],
+    skipped_mixed_concerns[], dry_run.
+    On gate closed or skill failure: {success: false, error: "..."}
+
+    Args:
+        issue_number: Enrich a single issue by number (optional).
+        batch: Filter candidates by batch:N label in addition to recipe:implementation.
+        dry_run: When True, previews generated requirements without editing issues.
+        repo: Target repository as owner/repo. Falls back to gh default repo if None.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(
+        tool="enrich_issues",
+        issue_number=issue_number,
+        batch=batch,
+        dry_run=dry_run,
+    )
+    logger.info("enrich_issues", issue_number=issue_number, batch=batch, dry_run=dry_run)
+    await _notify(
+        ctx,
+        "info",
+        "enrich_issues: backfilling requirements on recipe:implementation issues",
+        "autoskillit.enrich_issues",
+        extra={"dry_run": dry_run},
+    )
+
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+    if tool_ctx.executor is None:
+        return json.dumps({"success": False, "error": "Executor not configured"})
+
+    skill_command = _build_enrich_skill_command(issue_number, batch, dry_run, repo)
+
+    result = await tool_ctx.executor.run(
+        skill_command,
+        str(Path.cwd()),
+    )
+
+    if not result.success:
+        return json.dumps({"success": False, "error": result.stderr or "skill session failed"})
+
+    parsed = _parse_enrich_result(result.result or "")
+    return json.dumps(parsed)

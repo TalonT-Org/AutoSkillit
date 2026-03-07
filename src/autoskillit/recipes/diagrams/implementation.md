@@ -3,7 +3,7 @@
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
 
-**Flow:** clone > capture_base_sha > set_merge_target > (create_branch?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > (review_pr?) > (ci_watch?) > cleanup
+**Flow:** clone > capture_base_sha > set_merge_target > (create_branch?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup
 
 ### Graph
 clone  [clone_repo] (retry ×3)

@@ -92,6 +92,47 @@ async def fetch_github_issue(
 
 
 @mcp.tool(tags={"automation"})
+async def get_issue_title(issue_url: str) -> str:
+    """Fetch only the title and slug for a GitHub issue — no body, no comments.
+
+    Returns JSON with: success, number, title, slug.
+    slug is a URL-safe branch-prefix derived from the title
+    (lowercased, non-alphanumeric chars replaced with hyphens).
+
+    Use this tool when you need a descriptive branch prefix from an issue title
+    without fetching the full issue content.
+
+    This tool is always available (not gated by open_kitchen).
+    This tool sends no MCP progress notifications by design (ungated tools are
+    notification-free — see CLAUDE.md).
+
+    Args:
+        issue_url: Full GitHub issue URL (https://github.com/owner/repo/issues/42)
+                   or shorthand (owner/repo#42).
+    """
+    from autoskillit.server import _get_config, _get_ctx
+
+    tool_ctx = _get_ctx()
+    if tool_ctx.github_client is None:
+        return json.dumps({"success": False, "error": "GitHub client not available."})
+
+    config = _get_config()
+    url = issue_url.strip()
+    if url.isdigit():
+        if not config.github.default_repo:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "Bare issue number requires github.default_repo in config.",
+                }
+            )
+        url = f"{config.github.default_repo}#{url}"
+
+    result = await tool_ctx.github_client.fetch_title(url)
+    return json.dumps(result)
+
+
+@mcp.tool(tags={"automation"})
 async def report_bug(
     error_context: str,
     cwd: str,

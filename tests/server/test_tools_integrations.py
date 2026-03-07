@@ -17,6 +17,7 @@ from autoskillit.server.tools_integrations import (
     _FINGERPRINT_START,
     _parse_fingerprint,
     fetch_github_issue,
+    get_issue_title,
     report_bug,
 )
 
@@ -484,3 +485,52 @@ def test_github_config_defaults():
     config = AutomationConfig()
     assert config.github.token is None
     assert config.github.default_repo is None
+
+
+# ---------------------------------------------------------------------------
+# get_issue_title tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetIssueTitleTool:
+    @pytest.mark.anyio
+    async def test_get_issue_title_success(self, tool_ctx):
+        """Delegates to github_client.fetch_title; returns JSON result."""
+        mock_client = AsyncMock()
+        mock_client.fetch_title.return_value = {
+            "success": True,
+            "number": 42,
+            "title": "Fix merge conflict triage",
+            "slug": "fix-merge-conflict-triage",
+        }
+        tool_ctx.github_client = mock_client
+        result = json.loads(await get_issue_title("https://github.com/owner/repo/issues/42"))
+        assert result["success"] is True
+        assert result["number"] == 42
+        assert result["title"] == "Fix merge conflict triage"
+        assert result["slug"] == "fix-merge-conflict-triage"
+        mock_client.fetch_title.assert_called_once_with("https://github.com/owner/repo/issues/42")
+
+    @pytest.mark.anyio
+    async def test_get_issue_title_no_github_client(self, tool_ctx):
+        """Returns error JSON when github_client is None."""
+        tool_ctx.github_client = None
+        result = json.loads(await get_issue_title("https://github.com/owner/repo/issues/1"))
+        assert result["success"] is False
+        assert "error" in result
+
+    @pytest.mark.anyio
+    async def test_get_issue_title_client_error_propagated(self, tool_ctx):
+        """Propagates {success: False, error: ...} from fetch_title."""
+        mock_client = AsyncMock()
+        mock_client.fetch_title.return_value = {"success": False, "error": "Not Found"}
+        tool_ctx.github_client = mock_client
+        result = json.loads(await get_issue_title("owner/repo#404"))
+        assert result["success"] is False
+
+    def test_get_issue_title_is_ungated(self):
+        """'get_issue_title' in UNGATED_TOOLS."""
+        from autoskillit.pipeline.gate import GATED_TOOLS
+
+        assert "get_issue_title" in UNGATED_TOOLS
+        assert "get_issue_title" not in GATED_TOOLS

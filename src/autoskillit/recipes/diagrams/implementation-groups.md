@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:12422cc926496b271b0c2607fb57145a40b02a8421eb6a85f8f14d224ce39e68 -->
+<!-- autoskillit-recipe-hash: sha256:74e7dee14055e7de3757e5ad2389ba307a9ec9e77d38ca0c26b7298c4d711b01 -->
 <!-- autoskillit-diagram-format: v4 -->
 ## implementation-groups
 Decompose a source document into sequenced implementation groups, then plan, verify, implement, test, and merge each group end-to-end. Use when you have a large document or roadmap to implement via make-groups.
@@ -7,10 +7,10 @@ Decompose a source document into sequenced implementation groups, then plan, ver
 
 ### Graph
 clone  [clone_repo] (retry ×3)
-│  ↓ success → fetch_issue
+│  ↓ success → get_issue_title
 │  ✗ failure → escalate_stop
 │
-├── [fetch_issue] (retry ×3)  ← only if inputs.issue_url
+├── [get_issue_title] (retry ×3)  ← only if inputs.issue_url
 │       ✗ failure → escalate_stop
 │
 ├── [push_merge_target] (retry ×3)  ← only if inputs.open_pr

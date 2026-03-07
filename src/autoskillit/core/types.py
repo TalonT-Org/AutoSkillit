@@ -347,6 +347,7 @@ UNGATED_TOOLS: frozenset[str] = frozenset(
         "load_recipe",
         "validate_recipe",
         "fetch_github_issue",
+        "get_issue_title",
     }
 )
 
@@ -643,3 +644,5 @@ class GitHubFetcher(Protocol):
         issue_number: int,
         body: str,
     ) -> dict[str, Any]: ...
+
+    async def fetch_title(self, issue_url: str) -> dict[str, object]: ...

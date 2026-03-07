@@ -49,6 +49,7 @@ Parse optional arguments from the user's invocation:
 - `--batch-size N` — maximum issues per batch (default: 4)
 - `--no-label` — skip GitHub label application after triage
 - `--dry-run` — run analysis but skip label application even if `--no-label` is not set
+- `--collapse` — invoke `collapse-issues` after split analysis to consolidate related issues
 
 ### Step 1: Authenticate and Fetch Issues
 
@@ -80,9 +81,28 @@ For each subagent result, parse the `---issue-splitter-result---` block and buil
 - `decision=split`: remove the original issue from the working set; add its `sub_issues` list instead
 - `decision=error`: log a warning; keep the original issue as-is (fail-safe)
 
-Proceed to Step 2b with the expanded working set.
+Proceed to Step 2c (if `--collapse`) or Step 2b with the expanded working set.
 
 **Flag propagation:** When `triage-issues` is invoked with `--no-label`, pass `--no-label` to each `issue-splitter` call. When `--dry-run` is active, pass `--dry-run`. This ensures split analysis is observable without mutating GitHub.
+
+### Step 2c (optional): Collapse Related Issues
+
+If `--collapse` was passed:
+
+Invoke the collapse-issues skill to consolidate related issues before analysis:
+
+```
+/autoskillit:collapse-issues --repo {owner/repo} [--dry-run if --dry-run was passed] [--no-label if --no-label was passed]
+```
+
+Parse the `---collapse-issues-result---` block from the skill output:
+- `groups_formed`: log "Collapsed N groups ({M} issues → {groups_formed} combined issues)"
+- Update the working issue list: remove closed originals, add new combined issue numbers
+- If the skill returns an error, log a warning but continue triage with the original issue list (fail-safe)
+
+**Flag propagation:** `--dry-run` and `--no-label` are passed through to collapse-issues.
+
+The collapse step runs after splitting is complete so it sees the fully-decomposed issue list.
 
 ### Step 2b: Parallel Issue Analysis
 

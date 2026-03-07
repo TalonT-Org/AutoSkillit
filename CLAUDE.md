@@ -194,20 +194,21 @@ src/autoskillit/
 │   ├── implementation.yaml
 │   ├── remediation.yaml
 │   └── smoke-test.yaml
-└── skills/                  # 26 bundled skills (SKILL.md per skill)
+└── skills/                  # 27 bundled skills (SKILL.md per skill)
     ├── analyze-prs/          ├── audit-friction/
-    ├── audit-impl/           ├── dry-walkthrough/
-    ├── implement-worktree/   ├── implement-worktree-no-merge/
-    ├── investigate/          ├── issue-splitter/
-    ├── make-groups/          ├── make-plan/
-    ├── merge-pr/             ├── mermaid/
-    ├── migrate-recipes/      ├── open-pr/
-    ├── pipeline-summary/     ├── prepare-issue/
-    ├── rectify/              ├── report-bug/
-    ├── resolve-failures/     ├── retry-worktree/
-    ├── review-approach/      ├── setup-project/
-    ├── smoke-task/           ├── sous-chef/
-    ├── triage-issues/        └── write-recipe/
+    ├── audit-impl/           ├── collapse-issues/
+    ├── dry-walkthrough/      ├── implement-worktree/
+    ├── implement-worktree-no-merge/ ├── investigate/
+    ├── issue-splitter/       ├── make-groups/
+    ├── make-plan/            ├── merge-pr/
+    ├── mermaid/              ├── migrate-recipes/
+    ├── open-pr/              ├── pipeline-summary/
+    ├── prepare-issue/        ├── rectify/
+    ├── report-bug/           ├── resolve-failures/
+    ├── retry-worktree/       ├── review-approach/
+    ├── setup-project/        ├── smoke-task/
+    ├── sous-chef/            ├── triage-issues/
+    └── write-recipe/
 ```
 
 **Session diagnostics logs** are stored globally at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir` in config. Session directories are named by Claude Code session UUID when available (preferred: parsed from stdout, fallback: discovered from JSONL filename via Channel B). When no session ID is available from either source, directories use `no_session_{timestamp}` naming. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from autoskillit.workspace.skills import bundled_skills_dir
 
 
@@ -113,3 +115,30 @@ def test_issue_splitter_uses_split_not_batch_labels() -> None:
     content = (bd / "issue-splitter" / "SKILL.md").read_text()
     assert "split" in content
     assert "split-from:" in content
+
+
+def test_collapse_issues_gh_label_create_force() -> None:
+    """All gh label create calls in collapse-issues must include --force."""
+    from autoskillit.workspace.skills import bundled_skills_dir
+
+    skill_file = bundled_skills_dir() / "collapse-issues" / "SKILL.md"
+    if not skill_file.exists():
+        pytest.skip("collapse-issues skill not yet implemented")
+    text = skill_file.read_text()
+    calls = re.findall(r"gh label create[^\n]*", text)
+    assert calls, "collapse-issues must document at least one gh label create call"
+    for call in calls:
+        assert "--force" in call, f"Missing --force in collapse-issues: {call}"
+
+
+def test_no_batch_labels_collapse_issues() -> None:
+    """collapse-issues must not apply batch:N labels."""
+    from autoskillit.workspace.skills import bundled_skills_dir
+
+    skill_file = bundled_skills_dir() / "collapse-issues" / "SKILL.md"
+    if not skill_file.exists():
+        pytest.skip("collapse-issues skill not yet implemented")
+    text = skill_file.read_text()
+    label_lines = re.findall(r"(gh issue create[^\n]*|gh label create[^\n]*|--label[^\n]*)", text)
+    for line in label_lines:
+        assert "batch:" not in line, f"batch: label must not appear in collapse-issues: {line}"

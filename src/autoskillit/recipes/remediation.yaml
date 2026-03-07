@@ -130,7 +130,7 @@ steps:
     on_result:
       - when: "claimed == false"
         route: escalate_stop
-    on_success: create_branch
+      - route: create_branch
     on_failure: escalate_stop
     optional: true
     skip_when_false: "inputs.issue_url"

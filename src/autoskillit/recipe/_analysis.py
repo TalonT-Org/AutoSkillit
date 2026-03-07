@@ -333,6 +333,13 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         # on_result routing on a captured key is structural self-consumption
         if step.on_result and step.on_result.field in step.capture:
             consumed.add(step.on_result.field)
+        # Predicate on_result: variables referenced in `when` conditions are consumed
+        if step.on_result and step.on_result.conditions:
+            for cond in step.on_result.conditions:
+                if cond.when:
+                    for cap_key in step.capture:
+                        if cap_key in cond.when:
+                            consumed.add(cap_key)
 
         # Flag captured vars not consumed on any path
         for cap_key in step.capture:

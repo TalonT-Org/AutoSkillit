@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:bea4904310ffee85bacf5d9fd9f26909e627ddd695f50841c81ed056056c9f00 -->
+<!-- autoskillit-recipe-hash: sha256:d758ae47b6c971f1f20cd7d6c3dc3c40d927e186b81481c8dc15c75e58f39b66 -->
 <!-- autoskillit-diagram-format: v3 -->
 ## remediation
 Investigate a problem deeply, plan architectural fix, implement in a feature branch, and open a PR.
@@ -7,24 +7,29 @@ Investigate a problem deeply, plan architectural fix, implement in a feature bra
 
 ### Graph
 clone  [clone_repo] (retry ×3)
-│  ↓ success → push_merge_target
+│  ↓ success → claim_issue
 │  ✗ failure → escalate_stop
 │
+├── [claim_issue] (retry ×3)  ← only if inputs.issue_url
+│       claimed == false → escalate_stop
+│       (default) → push_merge_target
+│       ✗ failure → escalate_stop
+│
 ├── [push_merge_target] (retry ×3)  ← only if inputs.open_pr
-│       ✗ failure → cleanup_failure
+│       ✗ failure → release_issue_failure
 │
 investigate  [run_skill] (retry ×3)
 │  ↓ success → rectify
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 rectify  [run_skill] (retry ×3)
 │  ↓ success → review
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 ┌────┤ FOR EACH:
 │  review  [run_skill] (retry ×3)
 │  │  ↓ success → dry_walkthrough
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 │  │
 │  dry_walkthrough  [run_skill] (retry ×3)
 │  │  ↓ success → implement
@@ -32,12 +37,12 @@ rectify  [run_skill] (retry ×3)
 │  │
 │  implement  [run_skill] (retry ×∞)
 │  │  ↓ success → verify
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 │  │  ⌛ context limit → retry_worktree
 │  │
 │  retry_worktree  [run_skill] (retry ×3)
 │  │  ↓ success → verify
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 │  │
 │  verify  [test_check] (retry ×3)
 │  │  ↓ success → audit_impl
@@ -45,7 +50,7 @@ rectify  [run_skill] (retry ×3)
 │  │
 │  assess  [run_skill] (retry ×3)
 │  │  ↓ success → verify ↑
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 │  │
 │  ├── [audit_impl] (retry ×3)  ← only if inputs.audit
 │  │       ${{ result.verdict }} == GO → merge
@@ -58,33 +63,41 @@ rectify  [run_skill] (retry ×3)
 │  │
 │  make_plan  [run_skill] (retry ×3)
 │  │  ↓ success → review ↑
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 └────┘
 │
 merge  [merge_worktree] (retry ×3)
 │  result.failed_step == 'test_gate' → assess ↑
 │  result.failed_step == 'post_rebase_test_gate' → assess ↑
 │  result.failed_step == 'rebase' → assess ↑
-│  result.error → cleanup_failure
+│  result.error → release_issue_failure
 │  (default) → push
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 push  [push_to_remote] (retry ×3)
 │  ↓ success → open_pr_step
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 ├── [open_pr_step] (retry ×3)  ← only if inputs.open_pr
-│       ✗ failure → cleanup_failure
+│       ✗ failure → release_issue_failure
 │
 ├── [ci_watch] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → resolve_ci
 │
 resolve_ci  [run_skill] (retry ×2)
 │  ↓ success → re_push
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 re_push  [push_to_remote] (retry ×3)
 │  ↓ success → ci_watch ↑
+│  ✗ failure → release_issue_failure
+│
+release_issue_success  [release_issue] (retry ×3)
+│  ↓ success → cleanup_success
+│  ✗ failure → cleanup_success
+│
+release_issue_failure  [release_issue] (retry ×3)
+│  ↓ success → cleanup_failure
 │  ✗ failure → cleanup_failure
 │
 cleanup_success  [remove_clone] (retry ×3)

@@ -12,7 +12,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import _atomic_write, get_logger
+from autoskillit.core import _atomic_write, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import _notify, _require_enabled
 
@@ -35,6 +35,11 @@ _ENRICH_RESULT_END = "---/enrich-issues-result---"
 
 # Strong references to in-flight non-blocking report tasks (prevents GC).
 _pending_report_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _extract_label_names(raw_labels: list[Any]) -> list[str]:
+    """Extract label name strings from a mixed list of dicts or strings."""
+    return [lbl["name"] if isinstance(lbl, dict) else str(lbl) for lbl in raw_labels]
 
 
 @mcp.tool(tags={"automation"})
@@ -601,7 +606,6 @@ async def claim_issue(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    from autoskillit.execution.github import _parse_issue_ref
     from autoskillit.server import _get_ctx
 
     tool_ctx = _get_ctx()
@@ -621,8 +625,7 @@ async def claim_issue(
     if not result.get("success"):
         return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
 
-    raw_labels = result.get("labels", [])
-    current_labels = [lbl["name"] if isinstance(lbl, dict) else lbl for lbl in raw_labels]
+    current_labels = _extract_label_names(result.get("labels", []))
     if effective_label in current_labels:
         return json.dumps(
             {
@@ -681,7 +684,6 @@ async def release_issue(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    from autoskillit.execution.github import _parse_issue_ref
     from autoskillit.server import _get_ctx
 
     tool_ctx = _get_ctx()

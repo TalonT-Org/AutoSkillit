@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:0f2108a6beb2408540233665ac51d37be713b4b798bd4cd9773b09d2dae17e37 -->
+<!-- autoskillit-recipe-hash: sha256:f0cbe7ecd85ab532eb95a98bc489e8527387f343576b370106974bbfce545b01 -->
 <!-- autoskillit-diagram-format: v3 -->
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
@@ -7,33 +7,38 @@ Plan, verify, implement, test, and merge a task end-to-end. Use when user says "
 
 ### Graph
 clone  [clone_repo] (retry ×3)
-│  ↓ success → push_merge_target
+│  ↓ success → claim_issue
 │  ✗ failure → escalate_stop
 │
+├── [claim_issue] (retry ×3)  ← only if inputs.issue_url
+│       claimed == false → escalate_stop
+│       (default) → push_merge_target
+│       ✗ failure → escalate_stop
+│
 ├── [push_merge_target] (retry ×3)  ← only if inputs.open_pr
-│       ✗ failure → cleanup_failure
+│       ✗ failure → release_issue_failure
 │
 ┌────┤ FOR EACH:
 │  plan  [run_skill] (retry ×3)
 │  │  ↓ success → review
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 │  │
 │  review  [run_skill] (retry ×3)
 │  │  ↓ success → verify
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 │  │
 │  verify  [run_skill] (retry ×3)
 │  │  ↓ success → implement
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 │  │
 │  implement  [run_skill] (retry ×∞)
 │  │  ↓ success → test
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 │  │  ⌛ context limit → retry_worktree
 │  │
 │  retry_worktree  [run_skill] (retry ×3)
 │  │  ↓ success → test
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 │  │
 │  test  [test_check] (retry ×3)
 │  │  ↓ success → merge
@@ -43,17 +48,17 @@ clone  [clone_repo] (retry ×3)
 │  │  result.failed_step == 'test_gate' → fix
 │  │  result.failed_step == 'post_rebase_test_gate' → fix
 │  │  result.failed_step == 'rebase' → fix
-│  │  result.error → cleanup_failure
+│  │  result.error → release_issue_failure
 │  │  (default) → next_or_done
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 │  │
 │  push  [push_to_remote] (retry ×3)
 │  │  ↓ success → open_pr_step
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 │  │
 │  fix  [run_skill] (retry ×3)
 │  │  ↓ success → test ↑
-│  │  ✗ failure → cleanup_failure
+│  │  ✗ failure → release_issue_failure
 │  │  ⌛ context limit → test
 │  │
 │  next_or_done  [route] (retry ×3)
@@ -71,17 +76,25 @@ clone  [clone_repo] (retry ×3)
 └────┘
 │
 ├── [open_pr_step] (retry ×3)  ← only if inputs.open_pr
-│       ✗ failure → cleanup_failure
+│       ✗ failure → release_issue_failure
 │
 ├── [ci_watch] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → resolve_ci
 │
 resolve_ci  [run_skill] (retry ×2)
 │  ↓ success → re_push
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 re_push  [push_to_remote] (retry ×3)
 │  ↓ success → ci_watch ↑
+│  ✗ failure → release_issue_failure
+│
+release_issue_success  [release_issue] (retry ×3)
+│  ↓ success → cleanup_success
+│  ✗ failure → cleanup_success
+│
+release_issue_failure  [release_issue] (retry ×3)
+│  ↓ success → cleanup_failure
 │  ✗ failure → cleanup_failure
 │
 cleanup_success  [remove_clone] (retry ×3)

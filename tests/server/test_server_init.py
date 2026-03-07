@@ -166,6 +166,8 @@ class TestToolRegistration:
             "report_bug",
             "prepare_issue",
             "enrich_issues",
+            "claim_issue",
+            "release_issue",
         }
         assert expected == tool_names
 

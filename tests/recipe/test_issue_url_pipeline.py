@@ -51,7 +51,7 @@ class TestImplementationPipelineIssueUrl:
         """parse_issue_number must be positioned after set_merge_target, before create_branch."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
         assert data["steps"]["set_merge_target"]["on_success"] == "parse_issue_number"
-        assert data["steps"]["parse_issue_number"]["on_success"] == "create_branch"
+        assert data["steps"]["parse_issue_number"]["on_success"] == "claim_issue"
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """plan step must reference inputs.issue_url, not issue_content."""
@@ -147,7 +147,7 @@ class TestInvestigateFirstIssueUrl:
         """parse_issue_number must be positioned after set_merge_target, before create_branch."""
         data = yaml.safe_load(_recipe_path("remediation").read_text())
         assert data["steps"]["set_merge_target"]["on_success"] == "parse_issue_number"
-        assert data["steps"]["parse_issue_number"]["on_success"] == "create_branch"
+        assert data["steps"]["parse_issue_number"]["on_success"] == "claim_issue"
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """investigate step must reference inputs.issue_url, not issue_content."""
@@ -224,7 +224,7 @@ class TestAuditAndFixIssueUrl:
         """parse_issue_number must be positioned after set_merge_target, before create_branch."""
         data = yaml.safe_load(_recipe_path("audit-and-fix").read_text())
         assert data["steps"]["set_merge_target"]["on_success"] == "parse_issue_number"
-        assert data["steps"]["parse_issue_number"]["on_success"] == "create_branch"
+        assert data["steps"]["parse_issue_number"]["on_success"] == "claim_issue"
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """investigate step must reference inputs.issue_url, not issue_content."""

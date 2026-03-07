@@ -6,40 +6,16 @@ Never raises — all errors are captured and returned as {"success": False, "err
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 import httpx
 
-from autoskillit.core import get_logger
+from autoskillit.core import _parse_issue_ref, get_logger
 
 _log = get_logger(__name__)
 
-_FULL_URL_RE = re.compile(r"https?://github\.com/([^/]+)/([^/]+)/issues/(\d+)")
-_SHORTHAND_RE = re.compile(r"^([^/]+)/([^#]+)#(\d+)$")
-
-
-def _parse_issue_ref(issue_ref: str) -> tuple[str, str, int]:
-    """Parse owner, repo, number from a GitHub issue reference.
-
-    Accepts:
-    - Full URL: https://github.com/owner/repo/issues/42
-    - Shorthand: owner/repo#42
-
-    Raises ValueError for unrecognised formats (including bare numbers).
-    Bare number resolution is the caller's responsibility.
-    """
-    m = _FULL_URL_RE.match(issue_ref.strip())
-    if m:
-        return m.group(1), m.group(2), int(m.group(3))
-    m = _SHORTHAND_RE.match(issue_ref.strip())
-    if m:
-        return m.group(1), m.group(2), int(m.group(3))
-    raise ValueError(
-        f"Cannot parse GitHub issue reference: {issue_ref!r}. "
-        "Expected a full URL (https://github.com/owner/repo/issues/N) "
-        "or shorthand (owner/repo#N)."
-    )
+# Re-export for callers that import _parse_issue_ref from this module.
+__all__ = ["_parse_issue_ref"]
 
 
 def _format_issue_markdown(

@@ -8,6 +8,7 @@ explicit `from autoskillit.core.logging import get_logger`.
 from .io import (
     YAMLError,
     _atomic_write,
+    _parse_issue_ref,
     dump_yaml_str,
     ensure_project_temp,
     load_yaml,
@@ -68,6 +69,7 @@ __all__ = [
     # io
     "YAMLError",
     "_atomic_write",
+    "_parse_issue_ref",
     "dump_yaml_str",
     "ensure_project_temp",
     "load_yaml",

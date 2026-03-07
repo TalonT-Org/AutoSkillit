@@ -47,6 +47,50 @@ async def test_perform_merge_returns_error_for_nonexistent_path(
 
 
 @pytest.mark.anyio
+async def test_perform_merge_rejects_dirty_worktree(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """perform_merge() rejects worktrees with uncommitted changes."""
+    from autoskillit.core.types import MergeFailedStep, MergeState
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    conftest_mock_runner.push(_make_result(0, " M hooks.json\n", ""))  # git status --porcelain
+
+    result = await perform_merge(
+        fake_wt, "main", config=default_config, runner=conftest_mock_runner
+    )
+    assert "error" in result
+    assert result["failed_step"] == MergeFailedStep.DIRTY_TREE
+    assert result["state"] == MergeState.WORKTREE_DIRTY
+    assert "hooks.json" in str(result["dirty_files"])
+
+
+@pytest.mark.anyio
+async def test_perform_merge_dirty_tree_reports_files(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """perform_merge() lists all dirty files in the error response."""
+    from autoskillit.core.types import MergeFailedStep
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    dirty_output = " M hooks.json\n M .claude/settings.json\n?? untracked.txt\n"
+    conftest_mock_runner.push(_make_result(0, dirty_output, ""))  # git status --porcelain
+
+    result = await perform_merge(
+        fake_wt, "main", config=default_config, runner=conftest_mock_runner
+    )
+    assert result["failed_step"] == MergeFailedStep.DIRTY_TREE
+    assert len(result["dirty_files"]) == 3
+    assert "3 dirty file(s)" in result["error"]
+
+
+@pytest.mark.anyio
 async def test_perform_merge_blocks_on_failing_tests(
     default_config, conftest_mock_runner, tmp_path
 ):
@@ -55,9 +99,10 @@ async def test_perform_merge_blocks_on_failing_tests(
 
     # Create a temp dir to use as a fake worktree path so os.path.isdir passes
     fake_wt = str(tmp_path)
-    # Queue: rev-parse (worktree ok), branch, test (fails)
+    # Queue: rev-parse (worktree ok), branch, dirty check, test (fails)
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(1, "= 1 failed =", ""))  # test
 
     result = await perform_merge(
@@ -76,10 +121,12 @@ async def test_perform_merge_returns_success_on_green_tests(
 
     fake_wt = str(tmp_path)
     tester = StatefulMockTester(results=[(True, "= 50 passed ="), (True, "= 50 passed =")])
-    # Queue 8 steps: rev-parse, branch, fetch, rebase, wt-list, merge, remove, branch-D
+    # Queue 9 steps: rev-parse, branch, dirty check, fetch, rebase,
+    # wt-list, merge, remove, branch-D
     # (test gate now handled by tester, not subprocess)
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check (5.5)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
@@ -110,10 +157,11 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
 
     # Pre-rebase: pass; post-rebase: fail
     tester = StatefulMockTester(results=[(True, "= 10 passed ="), (False, "= 1 failed =")])
-    # Queue: rev-parse (valid worktree), branch, fetch ok, rebase ok
+    # Queue: rev-parse (valid worktree), branch, dirty check, fetch ok, rebase ok
     # No merge/cleanup queued — gate blocks before those
     conftest_mock_runner.push(_make_result(0, f"{str(tmp_path)}/.git/worktrees/feature", ""))
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch ok
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check (5.5)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase ok
@@ -136,9 +184,10 @@ async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_run
 
     fake_wt = str(tmp_path)
     tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
-    # Queue all 9 steps for success path
+    # Queue all 10 steps for success path
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
@@ -184,6 +233,8 @@ async def test_perform_merge_blocks_on_missing_remote_tracking_ref(
     conftest_mock_runner.push(_make_result(0, str(tmp_path / ".git/worktrees/wt"), ""))
     # Step 3: branch name found
     conftest_mock_runner.push(_make_result(0, "feat/my-feature\n", ""))
+    # Step 3c: dirty tree check (clean)
+    conftest_mock_runner.push(_make_result(0, "", ""))
     # Step 4: test gate handled by tester (not runner)
     # Step 5: fetch succeeds
     conftest_mock_runner.push(_make_result(0, "", ""))

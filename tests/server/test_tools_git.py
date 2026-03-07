@@ -86,6 +86,7 @@ class TestMergeWorktree:
             _make_result(0, "/repo/.git/worktrees/wt\n", "")
         )  # rev-parse --git-dir
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(1, "FAIL\n= 3 failed, 97 passed =", ""))  # test-check
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
@@ -102,6 +103,7 @@ class TestMergeWorktree:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
@@ -133,6 +135,7 @@ class TestMergeWorktree:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
@@ -179,6 +182,7 @@ class TestMergeWorktreeNoBypass:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(
             _make_result(0, "= 3 failed, 97 passed =", "")
         )  # test-check: rc=0 but failed text
@@ -195,6 +199,7 @@ class TestMergeWorktreeNoBypass:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(1, "= 3 failed, 97 passed =", ""))  # test-check
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert "error" in result
@@ -213,6 +218,7 @@ class TestMergeWorktreeCleanupReporting:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
@@ -244,6 +250,7 @@ class TestMergeWorktreeCleanupReporting:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
@@ -274,6 +281,7 @@ class TestMergeWorktreeCleanupReporting:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
         tool_ctx.runner.push(
             _make_result(1, "", "fatal: could not connect to remote")
@@ -294,6 +302,7 @@ class TestMergeWorktreeCleanupWarnings:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
@@ -325,6 +334,7 @@ class TestMergeWorktreeCleanupWarnings:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
@@ -354,6 +364,7 @@ class TestMergeWorktreeCleanupWarnings:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
@@ -393,6 +404,7 @@ class TestMergeWorktreeRemoteTrackingGuard:
 
         tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))  # rev-parse
         tool_ctx.runner.push(_make_result(stdout="impl/task-01"))  # branch --show-current
+        tool_ctx.runner.push(_make_result())  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))  # test check
         tool_ctx.runner.push(_make_result())  # git fetch origin
         # Step 5.5: ref check fails — branch not on remote
@@ -419,6 +431,7 @@ class TestMergeWorktreeRemoteTrackingGuard:
 
         tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))  # rev-parse
         tool_ctx.runner.push(_make_result(stdout="feat/x"))  # branch
+        tool_ctx.runner.push(_make_result())  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(stdout="PASS\n= 5 passed ="))  # test-check
         tool_ctx.runner.push(_make_result())  # fetch
         tool_ctx.runner.push(
@@ -441,6 +454,7 @@ class TestMergeWorktreeRemoteTrackingGuard:
 
         tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))
         tool_ctx.runner.push(_make_result(stdout="impl/task-01"))
+        tool_ctx.runner.push(_make_result())  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))  # test gate
         tool_ctx.runner.push(_make_result())  # fetch
         tool_ctx.runner.push(_make_result())  # ref check passes

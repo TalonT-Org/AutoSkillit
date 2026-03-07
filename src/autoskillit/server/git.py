@@ -131,6 +131,23 @@ async def perform_merge(
             "worktree_path": worktree_path,
         }
 
+    # 3c. Dirty tree check — reject worktrees with uncommitted changes
+    dirty_rc, dirty_out, _ = await _run_git(
+        ["git", "status", "--porcelain"], worktree_path, 10, runner
+    )
+    if dirty_rc == 0 and dirty_out.strip():
+        dirty_files = [line.strip() for line in dirty_out.strip().splitlines()]
+        return {
+            "error": (
+                f"Worktree has {len(dirty_files)} dirty file(s). "
+                "All changes must be committed before merge."
+            ),
+            "dirty_files": dirty_files,
+            "failed_step": MergeFailedStep.DIRTY_TREE,
+            "state": MergeState.WORKTREE_DIRTY,
+            "worktree_path": worktree_path,
+        }
+
     # 4. Test gate
     if config.safety.test_gate_on_merge:
         if tester is None:
@@ -185,7 +202,7 @@ async def perform_merge(
 
     # 6. Rebase
     rc, _, rebase_stderr = await _run_git(
-        ["git", "rebase", f"origin/{base_branch}"], worktree_path, 120, runner
+        ["git", "rebase", "--autostash", f"origin/{base_branch}"], worktree_path, 120, runner
     )
     if rc != 0:
         abort_rc, _, abort_stderr = await _run_git(

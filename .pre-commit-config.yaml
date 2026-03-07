@@ -26,6 +26,12 @@ repos:
         files: ^(pyproject\.toml|uv\.lock)$
         pass_filenames: false
 
+      - id: no-generated-configs
+        name: Block generated config files from being committed
+        entry: "Machine-generated file — must not be committed. Run 'autoskillit install' to regenerate."
+        language: fail
+        files: '(src/autoskillit/hooks/hooks\.json|\.claude/settings\.json)$'
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.0
     hooks:

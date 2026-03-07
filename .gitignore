@@ -9,6 +9,10 @@ temp/
 .mypy_cache/
 .pytest_cache/
 
+# Generated at install time with machine-local absolute paths
+.claude/settings.json
+src/autoskillit/hooks/hooks.json
+
 # dynaconf secrets files — never commit
 .secrets.*
 .autoskillit/.secrets.*

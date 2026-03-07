@@ -176,11 +176,13 @@ def install(*, scope: str = "user"):
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
     settings_path = _hooks_mod._claude_settings_path(scope)
     _evict_stale_autoskillit_hooks(settings_path)
-    _register_quota_hook(settings_path)
+    # Order matches HOOK_REGISTRY: run_skill group (skill_cmd_check → quota → skill_command_guard),
+    # then remove_clone, then native_tool_guard.
     _register_skill_cmd_check_hook(settings_path)
-    _register_native_tool_guard_hook(settings_path)
-    _register_remove_clone_guard_hook(settings_path)
+    _register_quota_hook(settings_path)
     _register_skill_command_guard_hook(settings_path)
+    _register_remove_clone_guard_hook(settings_path)
+    _register_native_tool_guard_hook(settings_path)
     _print_next_steps()
 
 

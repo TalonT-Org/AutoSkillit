@@ -163,6 +163,7 @@ class TestToolRegistration:
             "remove_clone",
             "push_to_remote",
             "fetch_github_issue",
+            "get_issue_title",
             "report_bug",
         }
         assert expected == tool_names

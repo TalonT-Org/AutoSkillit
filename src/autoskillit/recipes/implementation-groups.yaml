@@ -209,6 +209,7 @@ steps:
       step_name: "plan"
       group_files: "${{ context.group_files }}"
       issue_url: "${{ inputs.issue_url }}"
+      issue_title: "${{ context.issue_title }}"
     capture:
       plan_path: "${{ result.plan_path }}"
       all_plan_paths: "${{ result.plan_path }}"

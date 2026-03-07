@@ -188,6 +188,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "plan"
       issue_url: "${{ inputs.issue_url }}"
+      issue_title: "${{ context.issue_title }}"
     capture:
       plan_path: "${{ result.plan_path }}"
       all_plan_paths: "${{ result.plan_path }}"

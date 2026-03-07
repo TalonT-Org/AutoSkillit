@@ -179,6 +179,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "investigate"
       issue_url: "${{ inputs.issue_url }}"
+      issue_title: "${{ context.issue_title }}"
     capture:
       investigation_path: "${{ result.investigation_path }}"
     on_success: plan

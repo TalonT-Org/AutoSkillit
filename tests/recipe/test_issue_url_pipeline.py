@@ -1,6 +1,5 @@
 """Tests for issue_url ingredient threading across the three PR-opening recipes."""
 
-import subprocess
 from pathlib import Path
 
 import yaml
@@ -36,22 +35,31 @@ class TestImplementationPipelineIssueUrl:
         data = yaml.safe_load(_recipe_path("implementation").read_text())
         assert "fetch_issue" not in data["steps"]
 
-    def test_parse_issue_number_step_present(self):
-        """parse_issue_number step must exist with correct structure."""
+    def test_get_issue_title_step_present(self):
+        """get_issue_title step must exist with correct structure."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
-        assert "parse_issue_number" in data["steps"]
-        step = data["steps"]["parse_issue_number"]
-        assert step["tool"] == "run_cmd"
+        assert "get_issue_title" in data["steps"]
+        assert "parse_issue_number" not in data["steps"]
+        step = data["steps"]["get_issue_title"]
+        assert step["tool"] == "get_issue_title"
         assert step.get("optional") is True
         assert step.get("skip_when_false") == "inputs.issue_url"
         assert "issue_number" in step.get("capture", {})
-        assert "issue_content" not in step.get("capture", {})
+        assert "issue_title" in step.get("capture", {})
+        assert "issue_slug" in step.get("capture", {})
 
-    def test_parse_issue_number_between_set_merge_target_and_create_branch(self):
-        """parse_issue_number must be positioned after set_merge_target, before create_branch."""
+    def test_get_issue_title_between_set_merge_target_and_create_branch(self):
+        """get_issue_title must be positioned after set_merge_target, before create_branch."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
-        assert data["steps"]["set_merge_target"]["on_success"] == "parse_issue_number"
-        assert data["steps"]["parse_issue_number"]["on_success"] == "create_branch"
+        assert data["steps"]["set_merge_target"]["on_success"] == "get_issue_title"
+        assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue"
+
+    def test_create_branch_uses_slug_fallback(self):
+        """create_branch shell uses ${SLUG:-$RUN} pattern."""
+        data = yaml.safe_load(_recipe_path("implementation").read_text())
+        cmd = data["steps"]["create_branch"]["with"]["cmd"]
+        assert "SLUG" in cmd
+        assert "${SLUG:-" in cmd
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """plan step must reference inputs.issue_url, not issue_content."""
@@ -67,7 +75,7 @@ class TestImplementationPipelineIssueUrl:
         assert any("issue_number" in str(v) for v in openpr_with.values())
 
     def test_no_dead_output_for_issue_number(self):
-        """issue_number captured by parse_issue_number must not be a dead output."""
+        """issue_number captured by get_issue_title must not be a dead output."""
         from autoskillit.recipe.validator import analyze_dataflow
 
         recipe = load_recipe(_recipe_path("implementation"))
@@ -94,24 +102,6 @@ class TestImplementationPipelineIssueUrl:
                 f"Step '{step_name}' must not capture issue_content"
             )
 
-    def test_parse_issue_number_cmd_extracts_number_from_url(self):
-        """The parse_issue_number shell command must correctly extract trailing digits."""
-        test_cases = [
-            ("https://github.com/owner/repo/issues/42", "42"),
-            ("https://github.com/owner/repo/issues/123", "123"),
-            ("owner/repo#99", "99"),
-            ("#7", "7"),
-        ]
-        for url, expected in test_cases:
-            result = subprocess.run(
-                ["bash", "-c", f"printf '%s' '{url}' | grep -oE '[0-9]+$' || true"],
-                capture_output=True,
-                text=True,
-            )
-            assert result.stdout.strip() == expected, (
-                f"For '{url}': expected '{expected}', got '{result.stdout.strip()}'"
-            )
-
 
 class TestInvestigateFirstIssueUrl:
     def test_recipe_validates_clean(self):
@@ -132,22 +122,31 @@ class TestInvestigateFirstIssueUrl:
         data = yaml.safe_load(_recipe_path("remediation").read_text())
         assert "fetch_issue" not in data["steps"]
 
-    def test_parse_issue_number_step_present(self):
-        """parse_issue_number step must exist with correct structure."""
+    def test_get_issue_title_step_present(self):
+        """get_issue_title step must exist with correct structure."""
         data = yaml.safe_load(_recipe_path("remediation").read_text())
-        assert "parse_issue_number" in data["steps"]
-        step = data["steps"]["parse_issue_number"]
-        assert step["tool"] == "run_cmd"
+        assert "get_issue_title" in data["steps"]
+        assert "parse_issue_number" not in data["steps"]
+        step = data["steps"]["get_issue_title"]
+        assert step["tool"] == "get_issue_title"
         assert step.get("optional") is True
         assert step.get("skip_when_false") == "inputs.issue_url"
         assert "issue_number" in step.get("capture", {})
-        assert "issue_content" not in step.get("capture", {})
+        assert "issue_title" in step.get("capture", {})
+        assert "issue_slug" in step.get("capture", {})
 
-    def test_parse_issue_number_between_set_merge_target_and_create_branch(self):
-        """parse_issue_number must be positioned after set_merge_target, before create_branch."""
+    def test_get_issue_title_between_set_merge_target_and_create_branch(self):
+        """get_issue_title must be positioned after set_merge_target, before create_branch."""
         data = yaml.safe_load(_recipe_path("remediation").read_text())
-        assert data["steps"]["set_merge_target"]["on_success"] == "parse_issue_number"
-        assert data["steps"]["parse_issue_number"]["on_success"] == "create_branch"
+        assert data["steps"]["set_merge_target"]["on_success"] == "get_issue_title"
+        assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue"
+
+    def test_create_branch_uses_slug_fallback(self):
+        """create_branch shell uses ${SLUG:-$RUN} pattern."""
+        data = yaml.safe_load(_recipe_path("remediation").read_text())
+        cmd = data["steps"]["create_branch"]["with"]["cmd"]
+        assert "SLUG" in cmd
+        assert "${SLUG:-" in cmd
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """investigate step must reference inputs.issue_url, not issue_content."""
@@ -162,7 +161,7 @@ class TestInvestigateFirstIssueUrl:
         assert any("issue_number" in str(v) for v in openpr_with.values())
 
     def test_no_dead_output_for_issue_number(self):
-        """issue_number captured by parse_issue_number must not be a dead output."""
+        """issue_number captured by get_issue_title must not be a dead output."""
         from autoskillit.recipe.validator import analyze_dataflow
 
         recipe = load_recipe(_recipe_path("remediation"))
@@ -209,22 +208,31 @@ class TestAuditAndFixIssueUrl:
         data = yaml.safe_load(_recipe_path("audit-and-fix").read_text())
         assert "fetch_issue" not in data["steps"]
 
-    def test_parse_issue_number_step_present(self):
-        """parse_issue_number step must exist with correct structure."""
+    def test_get_issue_title_step_present(self):
+        """get_issue_title step must exist with correct structure."""
         data = yaml.safe_load(_recipe_path("audit-and-fix").read_text())
-        assert "parse_issue_number" in data["steps"]
-        step = data["steps"]["parse_issue_number"]
-        assert step["tool"] == "run_cmd"
+        assert "get_issue_title" in data["steps"]
+        assert "parse_issue_number" not in data["steps"]
+        step = data["steps"]["get_issue_title"]
+        assert step["tool"] == "get_issue_title"
         assert step.get("optional") is True
         assert step.get("skip_when_false") == "inputs.issue_url"
         assert "issue_number" in step.get("capture", {})
-        assert "issue_content" not in step.get("capture", {})
+        assert "issue_title" in step.get("capture", {})
+        assert "issue_slug" in step.get("capture", {})
 
-    def test_parse_issue_number_between_set_merge_target_and_create_branch(self):
-        """parse_issue_number must be positioned after set_merge_target, before create_branch."""
+    def test_get_issue_title_between_set_merge_target_and_create_branch(self):
+        """get_issue_title must be positioned after set_merge_target, before create_branch."""
         data = yaml.safe_load(_recipe_path("audit-and-fix").read_text())
-        assert data["steps"]["set_merge_target"]["on_success"] == "parse_issue_number"
-        assert data["steps"]["parse_issue_number"]["on_success"] == "create_branch"
+        assert data["steps"]["set_merge_target"]["on_success"] == "get_issue_title"
+        assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue"
+
+    def test_create_branch_uses_slug_fallback(self):
+        """create_branch shell uses ${SLUG:-$RUN} pattern."""
+        data = yaml.safe_load(_recipe_path("audit-and-fix").read_text())
+        cmd = data["steps"]["create_branch"]["with"]["cmd"]
+        assert "SLUG" in cmd
+        assert "${SLUG:-" in cmd
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """investigate step must reference inputs.issue_url, not issue_content."""
@@ -239,7 +247,7 @@ class TestAuditAndFixIssueUrl:
         assert any("issue_number" in str(v) for v in openpr_with.values())
 
     def test_no_dead_output_for_issue_number(self):
-        """issue_number captured by parse_issue_number must not be a dead output."""
+        """issue_number captured by get_issue_title must not be a dead output."""
         from autoskillit.recipe.validator import analyze_dataflow
 
         recipe = load_recipe(_recipe_path("audit-and-fix"))
@@ -264,4 +272,113 @@ class TestAuditAndFixIssueUrl:
             captures = step.get("capture", {})
             assert "issue_content" not in captures, (
                 f"Step '{step_name}' must not capture issue_content"
+            )
+
+
+class TestImplementationGroupsIssueTitle:
+    def test_recipe_validates_clean(self):
+        result = validate_from_path(_recipe_path("implementation-groups"))
+        assert result["valid"] is True
+        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_fetch_issue_step_replaced(self):
+        data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
+        assert "fetch_issue" not in data["steps"]
+        assert "get_issue_title" in data["steps"]
+
+    def test_get_issue_title_captures_three_fields(self):
+        data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
+        step = data["steps"]["get_issue_title"]
+        assert "issue_number" in step["capture"]
+        assert "issue_title" in step["capture"]
+        assert "issue_slug" in step["capture"]
+
+    def test_get_issue_title_skips_when_no_url(self):
+        data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
+        step = data["steps"]["get_issue_title"]
+        assert step.get("skip_when_false") == "inputs.issue_url"
+        assert step.get("optional") is True
+
+    def test_create_branch_uses_slug_fallback(self):
+        data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
+        cmd = data["steps"]["create_branch"]["with"]["cmd"]
+        assert "SLUG" in cmd
+        assert "${SLUG:-" in cmd
+
+    def test_no_issue_content_capture(self):
+        """issue_content must not be captured anywhere in the recipe."""
+        data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
+        all_captures = {
+            k: v
+            for step in data["steps"].values()
+            if "capture" in step
+            for k, v in step["capture"].items()
+        }
+        assert "issue_content" not in all_captures
+
+    def test_open_pr_step_still_references_issue_number(self):
+        data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
+        step = data["steps"]["open_pr_step"]
+        assert "context.issue_number" in str(step)
+
+
+class TestClaimReleaseGates:
+    """Claim/release issue gate steps are present and correctly wired in all 4 recipes."""
+
+    RECIPES = ["implementation", "implementation-groups", "remediation", "audit-and-fix"]
+
+    def test_claim_issue_step_present(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            assert "claim_issue" in data["steps"], f"{name}: missing claim_issue step"
+
+    def test_get_issue_title_routes_to_claim_issue(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue", (
+                f"{name}: get_issue_title.on_success should be claim_issue"
+            )
+
+    def test_claim_issue_routes_to_create_branch_on_true(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            step = data["steps"]["claim_issue"]
+            routes = step.get("on_result", [])
+            true_routes = [r["route"] for r in routes if r.get("when", "").endswith("== true")]
+            assert "create_branch" in true_routes, (
+                f"{name}: claim_issue should route to create_branch when claimed==true"
+            )
+
+    def test_release_issue_steps_present(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            assert "release_issue_success" in data["steps"], (
+                f"{name}: missing release_issue_success"
+            )
+            assert "release_issue_failure" in data["steps"], (
+                f"{name}: missing release_issue_failure"
+            )
+
+    def test_release_issue_success_routes_to_cleanup(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            step = data["steps"]["release_issue_success"]
+            assert step["on_success"] == "cleanup_success", (
+                f"{name}: release_issue_success.on_success should be cleanup_success"
+            )
+
+    def test_release_issue_failure_routes_to_cleanup_failure(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            step = data["steps"]["release_issue_failure"]
+            assert step["on_success"] == "cleanup_failure", (
+                f"{name}: release_issue_failure.on_success should be cleanup_failure"
+            )
+
+    def test_ci_watch_routes_to_release_issue_success(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            assert data["steps"]["ci_watch"]["on_success"] == "release_issue_success", (
+                f"{name}: ci_watch.on_success should be release_issue_success"
             )

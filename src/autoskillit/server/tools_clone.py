@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 
 import structlog
 from fastmcp import Context
@@ -22,6 +23,7 @@ async def clone_repo(
     run_name: str,
     branch: str = "",
     strategy: str = "",
+    step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Clone a source repository for isolated pipeline execution.
@@ -42,6 +44,7 @@ async def clone_repo(
         strategy: On uncommitted changes: "" = return warning (default),
                   "proceed" = clone remote committed state only,
                   "clone_local" = copytree (includes working-tree changes).
+        step_name: Optional YAML step key for wall-clock timing accumulation.
 
     SOURCE ISOLATION: Once this tool returns, source_dir must not be touched for
     any purpose except reading its remote URL in push_to_remote. Never run git
@@ -73,6 +76,7 @@ async def clone_repo(
     if tool_ctx.clone_mgr is None:
         return json.dumps({"error": "Clone manager not configured"})
 
+    _start = time.monotonic()
     try:
         result = await asyncio.to_thread(
             tool_ctx.clone_mgr.clone_repo, source_dir, run_name, branch, strategy
@@ -86,13 +90,19 @@ async def clone_repo(
             extra={"reason": str(exc)},
         )
         return json.dumps({"error": str(exc)})
+    finally:
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
     return json.dumps(result)
 
 
 @mcp.tool(tags={"automation"})
 async def remove_clone(
-    clone_path: str, keep: str = "false", ctx: Context = CurrentContext()
+    clone_path: str,
+    keep: str = "false",
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
 ) -> str:
     """Remove a pipeline clone directory.
 
@@ -106,6 +116,7 @@ async def remove_clone(
     Args:
         clone_path: Absolute path to the clone directory to remove.
         keep: Pass "true" to preserve the directory (debugging). Default "false".
+        step_name: Optional YAML step key for wall-clock timing accumulation.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -126,8 +137,13 @@ async def remove_clone(
     if tool_ctx.clone_mgr is None:
         return json.dumps({"removed": "false", "reason": "Clone manager not configured"})
 
-    result = await asyncio.to_thread(tool_ctx.clone_mgr.remove_clone, clone_path, keep)
-    return json.dumps(result)
+    _start = time.monotonic()
+    try:
+        result = await asyncio.to_thread(tool_ctx.clone_mgr.remove_clone, clone_path, keep)
+        return json.dumps(result)
+    finally:
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
 @mcp.tool(tags={"automation"})
@@ -136,6 +152,7 @@ async def push_to_remote(
     branch: str,
     source_dir: str = "",
     remote_url: str = "",
+    step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Push the merged branch from a pipeline clone back to the upstream remote.
@@ -157,6 +174,7 @@ async def push_to_remote(
         branch: Branch name to push (e.g. "main").
         source_dir: Source repo path (read-only URL lookup when remote_url is empty).
         remote_url: Pre-resolved upstream remote URL. When provided, source_dir is skipped.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -189,24 +207,32 @@ async def push_to_remote(
     if clone_mgr is None:
         return json.dumps({"error": "Clone manager not configured", "stderr": ""})
 
-    result = await asyncio.to_thread(
-        lambda: clone_mgr.push_to_remote(clone_path, source_dir, branch, remote_url=remote_url)
-    )
-
-    if not result.get("success"):
-        await _notify(
-            ctx,
-            "error",
-            "push_to_remote failed",
-            "autoskillit.push_to_remote",
-            extra={"stderr": result.get("stderr", ""), "error_type": result.get("error_type", "")},
-        )
-        return json.dumps(
-            {
-                "error": "push failed",
-                "stderr": result.get("stderr", ""),
-                "error_type": result.get("error_type", ""),
-            }
+    _start = time.monotonic()
+    try:
+        result = await asyncio.to_thread(
+            lambda: clone_mgr.push_to_remote(clone_path, source_dir, branch, remote_url=remote_url)
         )
 
-    return json.dumps(result)
+        if not result.get("success"):
+            await _notify(
+                ctx,
+                "error",
+                "push_to_remote failed",
+                "autoskillit.push_to_remote",
+                extra={
+                    "stderr": result.get("stderr", ""),
+                    "error_type": result.get("error_type", ""),
+                },
+            )
+            return json.dumps(
+                {
+                    "error": "push failed",
+                    "stderr": result.get("stderr", ""),
+                    "error_type": result.get("error_type", ""),
+                }
+            )
+
+        return json.dumps(result)
+    finally:
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

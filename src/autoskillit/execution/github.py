@@ -11,35 +11,21 @@ from typing import Any
 
 import httpx
 
-from autoskillit.core import get_logger
+from autoskillit.core import _parse_issue_ref, get_logger
 
 _log = get_logger(__name__)
 
-_FULL_URL_RE = re.compile(r"https?://github\.com/([^/]+)/([^/]+)/issues/(\d+)")
-_SHORTHAND_RE = re.compile(r"^([^/]+)/([^#]+)#(\d+)$")
 
+def _slugify(title: str) -> str:
+    """Convert an issue title to a URL-safe branch prefix slug.
 
-def _parse_issue_ref(issue_ref: str) -> tuple[str, str, int]:
-    """Parse owner, repo, number from a GitHub issue reference.
-
-    Accepts:
-    - Full URL: https://github.com/owner/repo/issues/42
-    - Shorthand: owner/repo#42
-
-    Raises ValueError for unrecognised formats (including bare numbers).
-    Bare number resolution is the caller's responsibility.
+    Lowercases, replaces non-alphanumeric sequences with hyphens,
+    strips leading/trailing hyphens, and truncates to 60 chars at a word boundary.
     """
-    m = _FULL_URL_RE.match(issue_ref.strip())
-    if m:
-        return m.group(1), m.group(2), int(m.group(3))
-    m = _SHORTHAND_RE.match(issue_ref.strip())
-    if m:
-        return m.group(1), m.group(2), int(m.group(3))
-    raise ValueError(
-        f"Cannot parse GitHub issue reference: {issue_ref!r}. "
-        "Expected a full URL (https://github.com/owner/repo/issues/N) "
-        "or shorthand (owner/repo#N)."
-    )
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    if len(slug) > 60:
+        slug = slug[:60].rstrip("-")
+    return slug
 
 
 def _format_issue_markdown(
@@ -317,3 +303,135 @@ class DefaultGitHubFetcher:
             "comment_id": data.get("id"),
             "url": data.get("html_url", ""),
         }
+
+    async def fetch_title(self, issue_url: str) -> dict[str, object]:
+        """Fetch only the title and slug for a GitHub issue — no body, no comments.
+
+        Returns {success, number, title, slug}. Never raises.
+        Makes exactly one HTTP call regardless of issue comment count.
+        """
+        try:
+            owner, repo, number = _parse_issue_ref(issue_url)
+        except ValueError as exc:
+            return {"success": False, "error": str(exc)}
+        url = f"https://api.github.com/repos/{owner}/{repo}/issues/{number}"
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+                resp = await client.get(url, headers=self._headers())
+                if resp.status_code == 404:
+                    hint = (
+                        " Configure github.token in .autoskillit/config.yaml."
+                        if not self._token
+                        else ""
+                    )
+                    return {
+                        "success": False,
+                        "error": f"Issue {owner}/{repo}#{number} not found.{hint}",
+                    }
+                if resp.status_code == 401:
+                    return {"success": False, "error": "GitHub authentication failed (401)"}
+                resp.raise_for_status()
+                data = resp.json()
+                title: str = data.get("title", "")
+                slug = _slugify(title)
+                return {"success": True, "number": data["number"], "title": title, "slug": slug}
+        except httpx.HTTPStatusError as exc:
+            return {
+                "success": False,
+                "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+            }
+        except httpx.RequestError as exc:
+            return {"success": False, "error": f"Request error: {exc}"}
+
+    async def add_labels(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        labels: list[str],
+    ) -> dict[str, Any]:
+        """Add labels to an issue. Returns {success, labels}. Never raises."""
+        headers = self._headers()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+                resp = await client.post(
+                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/labels",
+                    headers=headers,
+                    json={"labels": labels},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPStatusError as exc:
+            _log.warning("github add_labels http error", status=exc.response.status_code)
+            return {
+                "success": False,
+                "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+            }
+        except httpx.RequestError as exc:
+            _log.warning("github add_labels request error", error=str(exc))
+            return {"success": False, "error": f"Request error: {exc}"}
+        applied = [lbl["name"] for lbl in data]
+        return {"success": True, "labels": applied}
+
+    async def remove_label(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        label: str,
+    ) -> dict[str, Any]:
+        """Remove a label from an issue. 404 is treated as success (idempotent).
+        Returns {success}. Never raises."""
+        headers = self._headers()
+        encoded = label.replace(" ", "%20")
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+                resp = await client.delete(
+                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/labels/{encoded}",
+                    headers=headers,
+                )
+                if resp.status_code == 404:
+                    return {"success": True}  # already removed — idempotent
+                resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _log.warning("github remove_label http error", status=exc.response.status_code)
+            return {
+                "success": False,
+                "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+            }
+        except httpx.RequestError as exc:
+            _log.warning("github remove_label request error", error=str(exc))
+            return {"success": False, "error": f"Request error: {exc}"}
+        return {"success": True}
+
+    async def ensure_label(
+        self,
+        owner: str,
+        repo: str,
+        label: str,
+        color: str = "ededed",
+        description: str = "",
+    ) -> dict[str, Any]:
+        """Create a label if it doesn't exist. 422 (already exists) is success.
+        Returns {success, created}. Never raises."""
+        headers = self._headers()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+                resp = await client.post(
+                    f"https://api.github.com/repos/{owner}/{repo}/labels",
+                    headers=headers,
+                    json={"name": label, "color": color, "description": description},
+                )
+                if resp.status_code == 422:
+                    return {"success": True, "created": False}  # already exists
+                resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _log.warning("github ensure_label http error", status=exc.response.status_code)
+            return {
+                "success": False,
+                "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+            }
+        except httpx.RequestError as exc:
+            _log.warning("github ensure_label request error", error=str(exc))
+            return {"success": False, "error": f"Request error: {exc}"}
+        return {"success": True, "created": True}

@@ -139,3 +139,66 @@ class TestPushToRemoteTool:
         )
         assert "error" in result
         assert "remote rejected" in result["stderr"]
+
+
+class TestCloneRepoTiming:
+    """clone_repo records wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_clone_repo_step_name_records_timing(self, tool_ctx):
+        mock_mgr = MagicMock()
+        mock_mgr.clone_repo.return_value = {"clone_path": "/clone", "source_dir": "/src"}
+        tool_ctx.clone_mgr = mock_mgr
+        await clone_repo(source_dir="/src", run_name="test", step_name="clone")
+        report = tool_ctx.timing_log.get_report()
+        assert any(e["step_name"] == "clone" for e in report)
+
+    @pytest.mark.anyio
+    async def test_clone_repo_empty_step_name_skips_timing(self, tool_ctx):
+        mock_mgr = MagicMock()
+        mock_mgr.clone_repo.return_value = {"clone_path": "/clone", "source_dir": "/src"}
+        tool_ctx.clone_mgr = mock_mgr
+        await clone_repo(source_dir="/src", run_name="test")
+        assert tool_ctx.timing_log.get_report() == []
+
+
+class TestRemoveCloneTiming:
+    """remove_clone records wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_remove_clone_step_name_records_timing(self, tool_ctx):
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx.clone_mgr = mock_mgr
+        await remove_clone(clone_path="/clone", step_name="cleanup")
+        report = tool_ctx.timing_log.get_report()
+        assert any(e["step_name"] == "cleanup" for e in report)
+
+    @pytest.mark.anyio
+    async def test_remove_clone_empty_step_name_skips_timing(self, tool_ctx):
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx.clone_mgr = mock_mgr
+        await remove_clone(clone_path="/clone")
+        assert tool_ctx.timing_log.get_report() == []
+
+
+class TestPushToRemoteTiming:
+    """push_to_remote records wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_push_to_remote_step_name_records_timing(self, tool_ctx):
+        mock_mgr = MagicMock()
+        mock_mgr.push_to_remote.return_value = {"success": "true", "stderr": ""}
+        tool_ctx.clone_mgr = mock_mgr
+        await push_to_remote(clone_path="/clone", branch="main", step_name="push")
+        report = tool_ctx.timing_log.get_report()
+        assert any(e["step_name"] == "push" for e in report)
+
+    @pytest.mark.anyio
+    async def test_push_to_remote_empty_step_name_skips_timing(self, tool_ctx):
+        mock_mgr = MagicMock()
+        mock_mgr.push_to_remote.return_value = {"success": "true", "stderr": ""}
+        tool_ctx.clone_mgr = mock_mgr
+        await push_to_remote(clone_path="/clone", branch="main")
+        assert tool_ctx.timing_log.get_report() == []

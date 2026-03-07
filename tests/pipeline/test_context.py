@@ -10,6 +10,7 @@ from autoskillit.core import GitHubFetcher
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.gate import DefaultGateState
+from autoskillit.pipeline.timings import DefaultTimingLog
 from autoskillit.pipeline.tokens import DefaultTokenLog
 
 
@@ -19,6 +20,7 @@ def test_tool_context_fields_accessible(tmp_path):
         config=AutomationConfig(),
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
         plugin_dir=str(tmp_path),
         runner=None,
@@ -33,6 +35,7 @@ def test_tool_context_audit_isolation():
         config=AutomationConfig(),
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
         plugin_dir="/a",
         runner=None,
@@ -41,6 +44,7 @@ def test_tool_context_audit_isolation():
         config=AutomationConfig(),
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
         plugin_dir="/b",
         runner=None,
@@ -66,6 +70,7 @@ def test_gate_state_replacement():
         config=AutomationConfig(),
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=False),
         plugin_dir="/x",
         runner=None,
@@ -81,6 +86,7 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
         config=AutomationConfig(),
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
         plugin_dir=str(tmp_path),
         runner=None,
@@ -165,6 +171,7 @@ def _make_ctx(tmp_path: Path) -> ToolContext:
         config=AutomationConfig(),
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
         plugin_dir=plugin_dir,
         runner=None,
@@ -175,3 +182,12 @@ def test_toolcontext_github_client_annotated_with_protocol():
     """github_client annotation must reference GitHubFetcher protocol."""
     hints = get_type_hints(ToolContext)
     assert GitHubFetcher in get_args(hints["github_client"])
+
+
+def test_tool_context_has_timing_log_field(tmp_path):
+    """ToolContext.timing_log is a non-None TimingStore instance."""
+    from autoskillit.core import TimingStore
+
+    ctx = _make_ctx(tmp_path)
+    assert ctx.timing_log is not None
+    assert isinstance(ctx.timing_log, TimingStore)

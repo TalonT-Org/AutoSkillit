@@ -1510,7 +1510,7 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond3 = step.on_result.conditions[3]
         assert cond3.when == "result.error"
-        assert cond3.route == "cleanup_failure"
+        assert cond3.route == "release_issue_failure"
 
         cond4 = step.on_result.conditions[4]
         assert cond4.when is None
@@ -1543,7 +1543,7 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond3 = step.on_result.conditions[3]
         assert cond3.when == "result.error"
-        assert cond3.route == "cleanup_failure"
+        assert cond3.route == "release_issue_failure"
 
         cond4 = step.on_result.conditions[4]
         assert cond4.when is None

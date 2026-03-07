@@ -132,7 +132,7 @@ class TestVersionInfo:
 
 
 class TestToolRegistration:
-    """All 22 tools are registered on the MCP server."""
+    """All 26 tools are registered on the MCP server."""
 
     def test_all_tools_exist(self):
         from fastmcp.tools import Tool
@@ -159,11 +159,17 @@ class TestToolRegistration:
             "validate_recipe",
             "get_pipeline_report",
             "get_token_summary",
+            "get_timing_summary",
             "clone_repo",
             "remove_clone",
             "push_to_remote",
             "fetch_github_issue",
+            "get_issue_title",
             "report_bug",
+            "prepare_issue",
+            "enrich_issues",
+            "claim_issue",
+            "release_issue",
         }
         assert expected == tool_names
 

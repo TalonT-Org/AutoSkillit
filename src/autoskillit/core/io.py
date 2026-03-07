@@ -7,6 +7,7 @@ management, and YAML load/dump helpers.
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -21,7 +22,34 @@ __all__ = [
     "load_yaml",
     "dump_yaml",
     "dump_yaml_str",
+    "_parse_issue_ref",
 ]
+
+_FULL_URL_RE = re.compile(r"https?://github\.com/([^/]+)/([^/]+)/issues/(\d+)")
+_SHORTHAND_RE = re.compile(r"^([^/]+)/([^#]+)#(\d+)$")
+
+
+def _parse_issue_ref(issue_ref: str) -> tuple[str, str, int]:
+    """Parse owner, repo, number from a GitHub issue reference.
+
+    Accepts:
+    - Full URL: https://github.com/owner/repo/issues/42
+    - Shorthand: owner/repo#42
+
+    Raises ValueError for unrecognised formats (including bare numbers).
+    Bare number resolution is the caller's responsibility.
+    """
+    m = _FULL_URL_RE.match(issue_ref.strip())
+    if m:
+        return m.group(1), m.group(2), int(m.group(3))
+    m = _SHORTHAND_RE.match(issue_ref.strip())
+    if m:
+        return m.group(1), m.group(2), int(m.group(3))
+    raise ValueError(
+        f"Cannot parse GitHub issue reference: {issue_ref!r}. "
+        "Expected a full URL (https://github.com/owner/repo/issues/N) "
+        "or shorthand (owner/repo#N)."
+    )
 
 
 def _atomic_write(path: Path, content: str) -> None:

@@ -222,11 +222,11 @@ class TestImplementationPipelineStructure:
         )
         assert all(v.severity == Severity.WARNING for v in violations)
 
-    def test_ip_open_pr_step_routes_to_ci_watch(self, recipe) -> None:
-        """open_pr_step.on_success must be ci_watch — reached via ci_watch now."""
+    def test_ip_open_pr_step_routes_to_review_pr(self, recipe) -> None:
+        """open_pr_step.on_success must be review_pr — review loop inserted before ci_watch."""
         open_pr_step = recipe.steps["open_pr_step"]
-        assert open_pr_step.on_success == "ci_watch", (
-            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        assert open_pr_step.on_success == "review_pr", (
+            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
         )
 
     def test_ip_open_pr_step_has_skip_when_false(self, recipe) -> None:
@@ -355,9 +355,9 @@ class TestImplementationPipelineStructure:
         assert step.with_args.get("timeout") == 150
 
     def test_ip_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch routes on_success to cleanup_success and on_failure to resolve_ci."""
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "cleanup_success"
+        assert step.on_success == "release_issue_success"
         assert step.on_failure == "resolve_ci"
 
     def test_ip_ci_watch_uses_merge_target(self, recipe) -> None:
@@ -369,14 +369,14 @@ class TestImplementationPipelineStructure:
 
     def test_ip_resolve_ci_structure(self, recipe) -> None:
         """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
-        and on_exhausted: cleanup_failure."""
+        and on_exhausted: release_issue_failure."""
         assert "resolve_ci" in recipe.steps
         step = recipe.steps["resolve_ci"]
         assert step.tool == "run_skill"
         skill_cmd = step.with_args.get("skill_command", "")
         assert "resolve-failures" in skill_cmd
         assert step.retries == 2
-        assert step.on_exhausted == "cleanup_failure"
+        assert step.on_exhausted == "release_issue_failure"
 
     def test_ip_resolve_ci_uses_work_dir(self, recipe) -> None:
         """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
@@ -389,7 +389,7 @@ class TestImplementationPipelineStructure:
         step = recipe.steps["re_push"]
         assert step.tool == "push_to_remote"
         assert step.on_success == "ci_watch"
-        assert step.on_failure == "cleanup_failure"
+        assert step.on_failure == "release_issue_failure"
 
     def test_ip_re_push_has_explicit_remote_url(self, recipe) -> None:
         """T_CI7: re_push uses explicit remote_url (satisfies push-missing-explicit-remote-url)."""
@@ -397,11 +397,11 @@ class TestImplementationPipelineStructure:
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
 
-    def test_ip_open_pr_step_has_skip_when_false_ci(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success is now ci_watch (updated from cleanup_success)."""
+    def test_ip_open_pr_step_routes_to_review_pr_ci(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is now review_pr (review loop before ci_watch)."""
         step = recipe.steps["open_pr_step"]
-        assert step.on_success == "ci_watch", (
-            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        assert step.on_success == "review_pr", (
+            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
         )
 
 
@@ -611,7 +611,7 @@ class TestInvestigateFirstStructure:
         assert "plan_path" in step.capture
         assert "plan_parts" in step.capture_list
         assert step.on_success == "review"
-        assert step.on_failure == "cleanup_failure"
+        assert step.on_failure == "release_issue_failure"
 
     def test_if3_verify_step_uses_implementation_ref(self, recipe) -> None:
         """T_IF3: verify step worktree_path must reference context.implementation_ref."""
@@ -713,9 +713,9 @@ class TestInvestigateFirstStructure:
         assert step.with_args.get("timeout") == 150
 
     def test_if_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch routes on_success to cleanup_success and on_failure to resolve_ci."""
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "cleanup_success"
+        assert step.on_success == "release_issue_success"
         assert step.on_failure == "resolve_ci"
 
     def test_if_ci_watch_uses_merge_target(self, recipe) -> None:
@@ -727,14 +727,14 @@ class TestInvestigateFirstStructure:
 
     def test_if_resolve_ci_structure(self, recipe) -> None:
         """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
-        and on_exhausted: cleanup_failure."""
+        and on_exhausted: release_issue_failure."""
         assert "resolve_ci" in recipe.steps
         step = recipe.steps["resolve_ci"]
         assert step.tool == "run_skill"
         skill_cmd = step.with_args.get("skill_command", "")
         assert "resolve-failures" in skill_cmd
         assert step.retries == 2
-        assert step.on_exhausted == "cleanup_failure"
+        assert step.on_exhausted == "release_issue_failure"
 
     def test_if_resolve_ci_uses_work_dir(self, recipe) -> None:
         """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
@@ -747,7 +747,7 @@ class TestInvestigateFirstStructure:
         step = recipe.steps["re_push"]
         assert step.tool == "push_to_remote"
         assert step.on_success == "ci_watch"
-        assert step.on_failure == "cleanup_failure"
+        assert step.on_failure == "release_issue_failure"
 
     def test_if_re_push_has_explicit_remote_url(self, recipe) -> None:
         """T_CI7: re_push uses explicit remote_url."""
@@ -755,11 +755,11 @@ class TestInvestigateFirstStructure:
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
 
-    def test_if_open_pr_step_routes_to_ci_watch(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success is ci_watch (updated from cleanup_success)."""
+    def test_if_open_pr_step_routes_to_review_pr(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is review_pr (review loop before ci_watch)."""
         step = recipe.steps["open_pr_step"]
-        assert step.on_success == "ci_watch", (
-            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        assert step.on_success == "review_pr", (
+            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
         )
 
 
@@ -860,9 +860,9 @@ class TestAuditAndFixStructure:
         assert step.with_args.get("timeout") == 150
 
     def test_aaf_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch routes on_success to cleanup_success and on_failure to resolve_ci."""
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "cleanup_success"
+        assert step.on_success == "release_issue_success"
         assert step.on_failure == "resolve_ci"
 
     def test_aaf_ci_watch_uses_merge_target(self, recipe) -> None:
@@ -874,14 +874,14 @@ class TestAuditAndFixStructure:
 
     def test_aaf_resolve_ci_structure(self, recipe) -> None:
         """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
-        and on_exhausted: cleanup_failure."""
+        and on_exhausted: release_issue_failure."""
         assert "resolve_ci" in recipe.steps
         step = recipe.steps["resolve_ci"]
         assert step.tool == "run_skill"
         skill_cmd = step.with_args.get("skill_command", "")
         assert "resolve-failures" in skill_cmd
         assert step.retries == 2
-        assert step.on_exhausted == "cleanup_failure"
+        assert step.on_exhausted == "release_issue_failure"
 
     def test_aaf_resolve_ci_uses_work_dir(self, recipe) -> None:
         """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
@@ -894,7 +894,7 @@ class TestAuditAndFixStructure:
         step = recipe.steps["re_push"]
         assert step.tool == "push_to_remote"
         assert step.on_success == "ci_watch"
-        assert step.on_failure == "cleanup_failure"
+        assert step.on_failure == "release_issue_failure"
 
     def test_aaf_re_push_has_explicit_remote_url(self, recipe) -> None:
         """T_CI7: re_push uses explicit remote_url."""
@@ -902,11 +902,11 @@ class TestAuditAndFixStructure:
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
 
-    def test_aaf_open_pr_step_routes_to_ci_watch(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success is ci_watch (updated from cleanup_success)."""
+    def test_aaf_open_pr_step_routes_to_review_pr(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is review_pr (review loop before ci_watch)."""
         step = recipe.steps["open_pr_step"]
-        assert step.on_success == "ci_watch", (
-            "open_pr_step must route to ci_watch — cleanup_success is reached via ci_watch now"
+        assert step.on_success == "review_pr", (
+            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
         )
 
 
@@ -1138,3 +1138,88 @@ def test_bundled_recipes_pass_uncaptured_handoff_consumer() -> None:
         findings = run_semantic_rules(recipe)
         handoff_findings = [f for f in findings if f.rule == "uncaptured-handoff-consumer"]
         assert not handoff_findings, f"{yaml_file.name}: {handoff_findings}"
+
+
+# ---------------------------------------------------------------------------
+# PR Review Loop integration tests (T_RP*)
+# ---------------------------------------------------------------------------
+
+
+class TestReviewPrRecipeIntegration:
+    @pytest.fixture(
+        scope="class",
+        params=[
+            "implementation.yaml",
+            "implementation-groups.yaml",
+            "audit-and-fix.yaml",
+            "remediation.yaml",
+        ],
+    )
+    def recipe(self, request: pytest.FixtureRequest) -> object:
+        return load_recipe(builtin_recipes_dir() / request.param)
+
+    def test_open_pr_step_routes_to_review_pr(self, recipe: object) -> None:
+        """T_RP1: open_pr_step.on_success must be review_pr in all four recipes."""
+        assert recipe.steps["open_pr_step"].on_success == "review_pr"  # type: ignore[attr-defined]
+
+    def test_review_pr_step_exists_and_is_run_skill(self, recipe: object) -> None:
+        """T_RP2: review_pr step exists and uses run_skill tool."""
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        assert step.tool == "run_skill"
+
+    def test_review_pr_skipped_when_open_pr_false(self, recipe: object) -> None:
+        """T_RP3: review_pr is gated by inputs.open_pr (skip_when_false)."""
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        assert step.skip_when_false == "inputs.open_pr"
+
+    def test_review_pr_routes_to_ci_watch_on_success(self, recipe: object) -> None:
+        """T_RP4: review_pr has on_result with catch-all route to ci_watch."""
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        assert step.on_result is not None
+        default_conditions = [
+            c for c in step.on_result.conditions if c.when is None or c.when == "true"
+        ]
+        assert any(c.route == "ci_watch" for c in default_conditions)
+
+    def test_review_pr_captures_verdict(self, recipe: object) -> None:
+        """T_RP4b: review_pr captures the verdict output from the skill result."""
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        assert "verdict" in step.capture
+        assert step.capture["verdict"] == "${{ result.verdict }}"
+
+    def test_review_pr_changes_requested_routes_to_resolve_review(self, recipe: object) -> None:
+        """T_RP4c: on_result routes changes_requested verdict to resolve_review."""
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        assert step.on_result is not None
+        changes_conditions = [
+            c for c in step.on_result.conditions if c.when and "changes_requested" in c.when
+        ]
+        assert any(c.route == "resolve_review" for c in changes_conditions)
+
+    def test_review_pr_routes_to_resolve_review_on_failure(self, recipe: object) -> None:
+        """T_RP5: review_pr.on_failure routes to resolve_review."""
+        assert recipe.steps["review_pr"].on_failure == "resolve_review"  # type: ignore[attr-defined]
+
+    def test_resolve_review_has_retries(self, recipe: object) -> None:
+        """T_RP6: resolve_review has retries=2 matching resolve_ci pattern."""
+        assert recipe.steps["resolve_review"].retries == 2  # type: ignore[attr-defined]
+
+    def test_resolve_review_routes_to_re_push_review(self, recipe: object) -> None:
+        """T_RP7: resolve_review.on_success routes to re_push_review."""
+        assert recipe.steps["resolve_review"].on_success == "re_push_review"  # type: ignore[attr-defined]
+
+    def test_re_push_review_routes_back_to_review_pr(self, recipe: object) -> None:
+        """T_RP8: re_push_review routes back to review_pr (loop)."""
+        assert recipe.steps["re_push_review"].on_success == "review_pr"  # type: ignore[attr-defined]
+
+    def test_ci_watch_present(self, recipe: object) -> None:
+        """T_RP9: ci_watch step present in all four recipes."""
+        assert "ci_watch" in recipe.steps  # type: ignore[attr-defined]
+
+
+def test_implementation_groups_has_ci_watch() -> None:
+    """T_RP10: implementation-groups now has ci_watch (parity with other recipes)."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
+    assert "ci_watch" in recipe.steps
+    assert "resolve_ci" in recipe.steps
+    assert "re_push" in recipe.steps

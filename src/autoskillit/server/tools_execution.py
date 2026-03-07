@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 import structlog
 from fastmcp import Context
@@ -22,13 +23,20 @@ logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"automation"})
-async def run_cmd(cmd: str, cwd: str, timeout: int = 600, ctx: Context = CurrentContext()) -> str:
+async def run_cmd(
+    cmd: str,
+    cwd: str,
+    timeout: int = 600,
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
     """Run an arbitrary shell command in the specified directory.
 
     Args:
         cmd: The full command to run (e.g. "make build").
         cwd: Working directory for the command.
         timeout: Max seconds before killing the process (default 600).
+        step_name: Optional YAML step key for wall-clock timing accumulation.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -36,22 +44,35 @@ async def run_cmd(cmd: str, cwd: str, timeout: int = 600, ctx: Context = Current
     structlog.contextvars.bind_contextvars(tool="run_cmd", cwd=cwd)
     logger.info("run_cmd", cmd=cmd[:80], cwd=cwd)
     await _notify(ctx, "info", f"run_cmd: {cmd[:80]}", "autoskillit.run_cmd", extra={"cwd": cwd})
-    returncode, stdout, stderr = await _run_subprocess(
-        ["bash", "-c", cmd],
-        cwd=cwd,
-        timeout=float(timeout),
-    )
-    result = {
-        "success": returncode == 0,
-        "exit_code": returncode,
-        "stdout": truncate_text(stdout),
-        "stderr": truncate_text(stderr),
-    }
-    if not result["success"]:
-        await _notify(
-            ctx, "error", "run_cmd failed", "autoskillit.run_cmd", extra={"exit_code": returncode}
+
+    from autoskillit.server import _get_ctx
+
+    _timing_ctx = _get_ctx()
+    _start = time.monotonic()
+    try:
+        returncode, stdout, stderr = await _run_subprocess(
+            ["bash", "-c", cmd],
+            cwd=cwd,
+            timeout=float(timeout),
         )
-    return json.dumps(result)
+        result = {
+            "success": returncode == 0,
+            "exit_code": returncode,
+            "stdout": truncate_text(stdout),
+            "stderr": truncate_text(stderr),
+        }
+        if not result["success"]:
+            await _notify(
+                ctx,
+                "error",
+                "run_cmd failed",
+                "autoskillit.run_cmd",
+                extra={"exit_code": returncode},
+            )
+        return json.dumps(result)
+    finally:
+        if step_name:
+            _timing_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
 @mcp.tool(tags={"automation"})
@@ -156,18 +177,23 @@ async def run_skill(
     tool_ctx = _get_ctx()
     if tool_ctx.executor is None:
         return json.dumps({"success": False, "error": "Executor not configured"})
-    skill_result = await tool_ctx.executor.run(
-        skill_command, cwd, model=model, add_dir=add_dir, step_name=step_name
-    )
-    if not skill_result.success:
-        await _notify(
-            ctx,
-            "error",
-            "run_skill failed",
-            "autoskillit.run_skill",
-            extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
+    _start = time.monotonic()
+    try:
+        skill_result = await tool_ctx.executor.run(
+            skill_command, cwd, model=model, add_dir=add_dir, step_name=step_name
         )
-    return skill_result.to_json()
+        if not skill_result.success:
+            await _notify(
+                ctx,
+                "error",
+                "run_skill failed",
+                "autoskillit.run_skill",
+                extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
+            )
+        return skill_result.to_json()
+    finally:
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
 __all__ = [

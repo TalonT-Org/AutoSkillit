@@ -334,6 +334,10 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "remove_clone",
         "push_to_remote",
         "report_bug",
+        "prepare_issue",
+        "enrich_issues",
+        "claim_issue",
+        "release_issue",
     }
 )
 
@@ -342,10 +346,12 @@ UNGATED_TOOLS: frozenset[str] = frozenset(
         "kitchen_status",
         "get_pipeline_report",
         "get_token_summary",
+        "get_timing_summary",
         "list_recipes",
         "load_recipe",
         "validate_recipe",
         "fetch_github_issue",
+        "get_issue_title",
     }
 )
 
@@ -496,6 +502,19 @@ class TokenStore(Protocol):
 
 
 @runtime_checkable
+class TimingStore(Protocol):
+    """Protocol for per-step wall-clock timing accumulation."""
+
+    def record(self, step_name: str, duration_seconds: float) -> None: ...
+
+    def get_report(self) -> list[dict[str, Any]]: ...
+
+    def compute_total(self) -> dict[str, Any]: ...
+
+    def clear(self) -> None: ...
+
+
+@runtime_checkable
 class TestRunner(Protocol):
     """Protocol for running a test suite and reporting pass/fail."""
 
@@ -628,4 +647,31 @@ class GitHubFetcher(Protocol):
         repo: str,
         issue_number: int,
         body: str,
+    ) -> dict[str, Any]: ...
+
+    async def fetch_title(self, issue_url: str) -> dict[str, object]: ...
+
+    async def add_labels(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        labels: list[str],
+    ) -> dict[str, Any]: ...
+
+    async def remove_label(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        label: str,
+    ) -> dict[str, Any]: ...
+
+    async def ensure_label(
+        self,
+        owner: str,
+        repo: str,
+        label: str,
+        color: str = "ededed",
+        description: str = "",
     ) -> dict[str, Any]: ...

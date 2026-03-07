@@ -1,5 +1,5 @@
 <!-- autoskillit-recipe-hash: sha256:02b965e606fd79e5bd327cc611f28a39458c0457e5efa853c149e8e2f100af26 -->
-<!-- autoskillit-diagram-format: v3 -->
+<!-- autoskillit-diagram-format: v4 -->
 ## smoke-test
 End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
 
@@ -10,36 +10,34 @@ setup  [run_cmd] (retry ×3)
 │  ↓ success → investigate
 │  ✗ failure → escalate
 │
-┌────┤ FOR EACH:
-│  investigate  [run_skill] (retry ×3)
-│  │  ↓ success → rectify
-│  │  ✗ failure → escalate
-│  │
-│  rectify  [run_skill] (retry ×3)
-│  │  ↓ success → implement
-│  │  ✗ failure → escalate
-│  │
-│  implement  [run_skill] (retry ×2)
-│  │  ↓ success → test
-│  │  ✗ failure → escalate
-│  │
-│  test  [test_check] (retry ×3)
-│  │  ↓ success → push_feature_branch
-│  │  ✗ failure → assess
-│  │
-│  ├── [push_feature_branch] (retry ×3)  ← only if inputs.collect_on_branch
-│  │       ✗ failure → escalate
-│  │
-│  assess  [run_skill] (retry ×2)
-│  │  ↓ success → test ↑
-│  │  ✗ failure → classify
-│  │
-│  classify  [classify_fix] (retry ×3)
-│  │  ${{ result.restart_scope }} == full_restart → investigate ↑
-│  │  result.error → escalate
-│  │  (default) → implement ↑
-│  │  ✗ failure → escalate
-└────┘
+investigate  [run_skill] (retry ×3)
+│  ↓ success → rectify
+│  ✗ failure → escalate
+│
+rectify  [run_skill] (retry ×3)
+│  ↓ success → implement
+│  ✗ failure → escalate
+│
+implement  [run_skill] (retry ×2)
+│  ↓ success → test
+│  ✗ failure → escalate
+│
+test  [test_check] (retry ×3)
+│  ↓ success → push_feature_branch
+│  ✗ failure → assess
+│
+├── [push_feature_branch] (retry ×3)  ← only if inputs.collect_on_branch
+│       ✗ failure → escalate
+│
+assess  [run_skill] (retry ×2)
+│  ↓ success → test ↑
+│  ✗ failure → classify
+│
+classify  [classify_fix] (retry ×3)
+│  ${{ result.restart_scope }} == full_restart → investigate ↑
+│  result.error → escalate
+│  (default) → implement ↑
+│  ✗ failure → escalate
 │
 merge  [merge_worktree] (retry ×3)
 │  ↓ success → check_summary

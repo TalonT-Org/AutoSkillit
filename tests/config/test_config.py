@@ -526,3 +526,9 @@ class TestDynaconfIntegration:
         defaults_path = pkg_root() / "config" / "defaults.yaml"
         assert defaults_path.exists(), f"defaults.yaml missing at {defaults_path}"
         assert defaults_path.is_file()
+
+    def test_github_config_has_in_progress_label(self):
+        from autoskillit.config.settings import GitHubConfig
+
+        cfg = GitHubConfig()
+        assert cfg.in_progress_label == "in-progress"

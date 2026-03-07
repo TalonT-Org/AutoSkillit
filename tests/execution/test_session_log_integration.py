@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import UTC, datetime
+import time
+from datetime import UTC, datetime, timedelta
 
 import anyio
 import pytest
@@ -22,12 +23,17 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
 
     config = LinuxTracingConfig(proc_interval=0.05)
     start_ts = datetime.now(UTC).isoformat()
+    start_mono = time.monotonic()
     async with anyio.create_task_group() as tg:
         handle = start_linux_tracing(os.getpid(), config, tg)
         await anyio.sleep(0.3)
         snaps = handle.stop()
         tg.cancel_scope.cancel()
-    end_ts = datetime.now(UTC).isoformat()
+    # Derive end_ts from monotonic elapsed to guard against WSL2 wall-clock regressions.
+    # datetime.now(UTC) can go backward on WSL2 (NTP correction / host sleep-wake),
+    # causing end_ts < start_ts and a spurious negative duration_seconds.
+    elapsed = time.monotonic() - start_mono
+    end_ts = (datetime.fromisoformat(start_ts) + timedelta(seconds=elapsed)).isoformat()
     assert len(snaps) >= 2, "Need at least 2 snapshots for timestamp variance test"
     snap_dicts = [s.__dict__ for s in snaps]
 

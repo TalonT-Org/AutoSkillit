@@ -477,3 +477,59 @@ class TestMergeWorktreeRemoteTrackingGuard:
         assert result["failed_step"] == "rebase"
         assert result["state"] == "worktree_intact_rebase_aborted"
         assert "invalid upstream" in result["stderr"]
+
+
+class TestMergeWorktreeTiming:
+    """merge_worktree records wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_merge_worktree_step_name_records_timing(self, tool_ctx, tmp_path):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+        tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))
+        tool_ctx.runner.push(_make_result(stdout="impl/task-01"))
+        tool_ctx.runner.push(_make_result())
+        tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))
+        tool_ctx.runner.push(_make_result())
+        tool_ctx.runner.push(_make_result())
+        tool_ctx.runner.push(_make_result())
+        tool_ctx.runner.push(_make_result())
+
+        await merge_worktree(str(wt), "main", step_name="merge")
+        report = tool_ctx.timing_log.get_report()
+        assert any(e["step_name"] == "merge" for e in report)
+
+    @pytest.mark.anyio
+    async def test_merge_worktree_empty_step_name_skips_timing(self, tool_ctx, tmp_path):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+        tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))
+        tool_ctx.runner.push(_make_result(stdout="impl/task-01"))
+        tool_ctx.runner.push(_make_result())
+        tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))
+        tool_ctx.runner.push(_make_result())
+        tool_ctx.runner.push(_make_result())
+        tool_ctx.runner.push(_make_result())
+        tool_ctx.runner.push(_make_result())
+
+        await merge_worktree(str(wt), "main")
+        assert tool_ctx.timing_log.get_report() == []
+
+
+class TestClassifyFixTiming:
+    """classify_fix records wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_classify_fix_step_name_records_timing(self, tool_ctx, tmp_path):
+        tool_ctx.runner.push(_make_result(stdout="src/other/file.py\n"))
+        await classify_fix(str(tmp_path), "main", step_name="classify")
+        report = tool_ctx.timing_log.get_report()
+        assert any(e["step_name"] == "classify" for e in report)
+
+    @pytest.mark.anyio
+    async def test_classify_fix_empty_step_name_skips_timing(self, tool_ctx, tmp_path):
+        tool_ctx.runner.push(_make_result(stdout="src/other/file.py\n"))
+        await classify_fix(str(tmp_path), "main")
+        assert tool_ctx.timing_log.get_report() == []

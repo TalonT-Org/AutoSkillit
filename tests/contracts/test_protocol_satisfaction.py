@@ -116,6 +116,13 @@ def test_defaulttokenlog_satisfies_tokenstore():
     assert isinstance(DefaultTokenLog(), TokenStore)
 
 
+def test_default_timing_log_satisfies_timing_store_protocol():
+    from autoskillit.core import TimingStore
+    from autoskillit.pipeline.timings import DefaultTimingLog
+
+    assert isinstance(DefaultTimingLog(), TimingStore)
+
+
 # ── isinstance checks — Default* classes satisfy protocols ─────────────────────
 
 

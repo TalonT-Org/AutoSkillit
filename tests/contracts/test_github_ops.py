@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from autoskillit.workspace.skills import bundled_skills_dir
 
 
@@ -104,3 +106,62 @@ def test_triage_issues_label_flag_is_opt_out() -> None:
                 "triage-issues argument section must not define --label as opt-in flag; "
                 "use --no-label (opt-out) instead"
             )
+
+
+def test_issue_splitter_uses_split_not_batch_labels() -> None:
+    """issue-splitter must use split/split-from vocabulary, not batch:N labels."""
+    bd = bundled_skills_dir()
+    content = (bd / "issue-splitter" / "SKILL.md").read_text()
+    assert "split" in content
+    assert "split-from:" in content
+
+
+def test_collapse_issues_gh_label_create_force() -> None:
+    """All gh label create calls in collapse-issues must include --force."""
+    skill_file = bundled_skills_dir() / "collapse-issues" / "SKILL.md"
+    if not skill_file.exists():
+        pytest.skip("collapse-issues skill not yet implemented")
+    text = skill_file.read_text()
+    calls = re.findall(r"gh label create[^\n]*", text)
+    assert calls, "collapse-issues must document at least one gh label create call"
+    for call in calls:
+        assert "--force" in call, f"Missing --force in collapse-issues: {call}"
+
+
+def test_no_batch_labels_collapse_issues() -> None:
+    """collapse-issues must not apply batch:N labels."""
+    skill_file = bundled_skills_dir() / "collapse-issues" / "SKILL.md"
+    if not skill_file.exists():
+        pytest.skip("collapse-issues skill not yet implemented")
+    text = skill_file.read_text()
+    label_lines = re.findall(r"(gh issue create[^\n]*|gh label create[^\n]*|--label[^\n]*)", text)
+    for line in label_lines:
+        assert "batch:" not in line, f"batch: label must not appear in collapse-issues: {line}"
+
+
+@pytest.fixture
+def enrich_skill_text() -> str:
+    """Load the enrich-issues SKILL.md text for contract assertions."""
+    skill_file = bundled_skills_dir() / "enrich-issues" / "SKILL.md"
+    return skill_file.read_text()
+
+
+def test_enrich_issues_skips_existing_requirements(enrich_skill_text: str) -> None:
+    """enrich-issues must be idempotent: skip issues that already have ## Requirements."""
+    assert "## Requirements" in enrich_skill_text
+    assert "already" in enrich_skill_text.lower() or "skip" in enrich_skill_text.lower()
+
+
+def test_enrich_issues_emits_result_block(enrich_skill_text: str) -> None:
+    """enrich-issues must emit a structured result block for pipeline capture."""
+    assert "---enrich-issues-result---" in enrich_skill_text
+
+
+def test_enrich_issues_uses_gh_issue_edit(enrich_skill_text: str) -> None:
+    """enrich-issues must use gh issue edit to update issue bodies."""
+    assert "gh issue edit" in enrich_skill_text
+
+
+def test_enrich_issues_requires_recipe_implementation_label(enrich_skill_text: str) -> None:
+    """enrich-issues must target recipe:implementation issues."""
+    assert "recipe:implementation" in enrich_skill_text

@@ -8,7 +8,6 @@ import pytest
 
 from autoskillit.recipe.io import load_recipe
 
-
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
@@ -87,8 +86,7 @@ def test_pmp_check_impl_plans_has_fallthrough_to_audit_impl(recipe) -> None:
     fallthrough = [c for c in conds if c.when is None]
     assert len(fallthrough) == 1, "check_impl_plans must have exactly one fallthrough condition"
     assert fallthrough[0].route == "audit_impl", (
-        "check_impl_plans fallthrough must route to audit_impl "
-        "when implementation plans exist"
+        "check_impl_plans fallthrough must route to audit_impl when implementation plans exist"
     )
 
 

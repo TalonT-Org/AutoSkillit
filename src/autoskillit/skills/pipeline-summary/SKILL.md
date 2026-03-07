@@ -17,13 +17,14 @@ and a PR from the feature branch into the target branch.
 
 ## Arguments
 
-`/autoskillit:pipeline-summary {bug_report_path} {feature_branch} {target_branch} {workspace} [{token_summary_path}]`
+`/autoskillit:pipeline-summary {bug_report_path} {feature_branch} {target_branch} {workspace} [{token_summary_path}] [{closing_issue}]`
 
 - **bug_report_path** — Path to the JSON file containing bug metadata
 - **feature_branch** — Name of the branch containing all accumulated fixes
 - **target_branch** — Branch to create the PR against (e.g., "main")
 - **workspace** — Path to the git repository workspace
 - **token_summary_path** — (Optional) Path to a JSON file with token/timing data written by the orchestrator. When absent or the file does not exist, the skill operates exactly as today with no token table in the PR body.
+- **closing_issue** — (Optional) GitHub issue number whose `## Requirements` section should be extracted and embedded in the PR body. When absent or empty, requirements extraction is skipped.
 
 ## When to Use
 
@@ -47,7 +48,7 @@ and a PR from the feature branch into the target branch.
 ## Workflow
 
 ### Step 1: Parse Arguments
-Parse up to five positional arguments from the prompt. The fifth (`token_summary_path`) is optional.
+Parse up to six positional arguments from the prompt. The fifth (`token_summary_path`) and sixth (`closing_issue`) are optional.
 
 ### Step 2: Read Bug Report
 Read the JSON file at `{bug_report_path}`. Expected structure:
@@ -124,6 +125,15 @@ git push -u origin {feature_branch}
 ```
 If push fails (no remote, network issue), log the error and exit successfully.
 
+### Step 5b: Fetch Requirements from Closing Issue (if closing_issue known)
+
+- If `closing_issue` was provided as the sixth argument:
+  ```bash
+  gh issue view {closing_issue} --json body -q .body
+  ```
+  Extract the `## Requirements` section: `requirements_section` = everything from `## Requirements` to the next `## ` heading or end of body, whichever comes first.
+- If gh auth is unavailable or `closing_issue` is not provided: skip gracefully — `requirements_section = ""`.
+
 ### Step 6: Create GitHub Issue
 Write the issue body to a temp file, then:
 ```bash
@@ -145,6 +155,13 @@ gh pr create \
   --base {target_branch} \
   --head {feature_branch}
 ```
+The PR body (`temp_pr_body`) contains:
+- `## Summary` — bug count and branch info
+- `## Requirements` (if `requirements_section` is non-empty from Step 5b)
+- `Closes #{closing_issue}` (if closing_issue was provided)
+- Bug table from Step 3
+- Token/timing table from Step 3b (if available)
+
 Capture the PR URL from stdout.
 
 Output: `pr_url={url}`

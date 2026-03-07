@@ -76,6 +76,29 @@ Read all plan files. For each, extract the first `# ` heading line and strip the
   that captures the overall scope. The title should NOT enumerate every group — it
   should describe the aggregate change.
 
+**PR Title Prefix (derived from run_name):**
+
+If a `run_name` positional argument is provided, apply a prefix to the PR title:
+
+- `run_name` starts with `"feature"` → prepend `[FEATURE] ` to the PR title
+- `run_name` starts with `"fix"` → prepend `[FIX] ` to the PR title
+- Any other `run_name` → no prefix (existing behavior preserved)
+
+This convention is set by `/autoskillit:process-issues` when it passes
+`run_name="feature"` for `recipe:implementation` issues and `run_name="fix"`
+for `recipe:remediation` issues. Direct recipe invocations using `run_name="impl"`
+(the default) are unaffected.
+
+```bash
+BASE_TITLE="$(head -1 {plan_path} | sed 's/^# //')"
+case "$RUN_NAME" in
+  feature*) TITLE="[FEATURE] $BASE_TITLE" ;;
+  fix*)     TITLE="[FIX] $BASE_TITLE" ;;
+  *)        TITLE="$BASE_TITLE" ;;
+esac
+gh pr create --title "$TITLE" ...
+```
+
 ### Step 3: Get Changed Files
 
 Run:

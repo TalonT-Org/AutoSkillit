@@ -30,6 +30,7 @@ BUNDLED_SKILLS = [
     "resolve-failures",
     "retry-worktree",
     "review-approach",
+    "review-pr",
     "setup-project",
     "smoke-task",
     "sous-chef",

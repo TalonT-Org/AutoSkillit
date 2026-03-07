@@ -1138,3 +1138,68 @@ def test_bundled_recipes_pass_uncaptured_handoff_consumer() -> None:
         findings = run_semantic_rules(recipe)
         handoff_findings = [f for f in findings if f.rule == "uncaptured-handoff-consumer"]
         assert not handoff_findings, f"{yaml_file.name}: {handoff_findings}"
+
+
+# ---------------------------------------------------------------------------
+# PR Review Loop integration tests (T_RP*)
+# ---------------------------------------------------------------------------
+
+
+class TestReviewPrRecipeIntegration:
+    @pytest.fixture(
+        scope="class",
+        params=[
+            "implementation.yaml",
+            "implementation-groups.yaml",
+            "audit-and-fix.yaml",
+            "remediation.yaml",
+        ],
+    )
+    def recipe(self, request: pytest.FixtureRequest) -> object:
+        return load_recipe(builtin_recipes_dir() / request.param)
+
+    def test_open_pr_step_routes_to_review_pr(self, recipe: object) -> None:
+        """T_RP1: open_pr_step.on_success must be review_pr in all four recipes."""
+        assert recipe.steps["open_pr_step"].on_success == "review_pr"  # type: ignore[attr-defined]
+
+    def test_review_pr_step_exists_and_is_run_skill(self, recipe: object) -> None:
+        """T_RP2: review_pr step exists and uses run_skill tool."""
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        assert step.tool == "run_skill"
+
+    def test_review_pr_skipped_when_open_pr_false(self, recipe: object) -> None:
+        """T_RP3: review_pr is gated by inputs.open_pr (skip_when_false)."""
+        step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        assert step.skip_when_false == "inputs.open_pr"
+
+    def test_review_pr_routes_to_ci_watch_on_success(self, recipe: object) -> None:
+        """T_RP4: review_pr.on_success routes to ci_watch."""
+        assert recipe.steps["review_pr"].on_success == "ci_watch"  # type: ignore[attr-defined]
+
+    def test_review_pr_routes_to_resolve_review_on_failure(self, recipe: object) -> None:
+        """T_RP5: review_pr.on_failure routes to resolve_review."""
+        assert recipe.steps["review_pr"].on_failure == "resolve_review"  # type: ignore[attr-defined]
+
+    def test_resolve_review_has_retries(self, recipe: object) -> None:
+        """T_RP6: resolve_review has retries=2 matching resolve_ci pattern."""
+        assert recipe.steps["resolve_review"].retries == 2  # type: ignore[attr-defined]
+
+    def test_resolve_review_routes_to_re_push_review(self, recipe: object) -> None:
+        """T_RP7: resolve_review.on_success routes to re_push_review."""
+        assert recipe.steps["resolve_review"].on_success == "re_push_review"  # type: ignore[attr-defined]
+
+    def test_re_push_review_routes_back_to_review_pr(self, recipe: object) -> None:
+        """T_RP8: re_push_review routes back to review_pr (loop)."""
+        assert recipe.steps["re_push_review"].on_success == "review_pr"  # type: ignore[attr-defined]
+
+    def test_ci_watch_present(self, recipe: object) -> None:
+        """T_RP9: ci_watch step present in all four recipes."""
+        assert "ci_watch" in recipe.steps  # type: ignore[attr-defined]
+
+
+def test_implementation_groups_has_ci_watch() -> None:
+    """T_RP10: implementation-groups now has ci_watch (parity with other recipes)."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
+    assert "ci_watch" in recipe.steps
+    assert "resolve_ci" in recipe.steps
+    assert "re_push" in recipe.steps

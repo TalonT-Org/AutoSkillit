@@ -1,19 +1,15 @@
-"""Structural assertions for .autoskillit/recipes/pr-merge-pipeline.yaml."""
+"""Structural assertions for the bundled pr-merge-pipeline recipe."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from autoskillit.recipe.io import load_recipe
-
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
 
 @pytest.fixture(scope="module")
 def recipe():
-    return load_recipe(PROJECT_ROOT / ".autoskillit" / "recipes" / "pr-merge-pipeline.yaml")
+    return load_recipe(builtin_recipes_dir() / "pr-merge-pipeline.yaml")
 
 
 def test_pmp_check_impl_plans_step_exists(recipe) -> None:
@@ -100,3 +96,44 @@ def test_pmp_audit_impl_is_optional(recipe) -> None:
     """audit_impl must be marked optional (required by skip_when_false rule)."""
     step = recipe.steps["audit_impl"]
     assert step.optional is True
+
+
+def test_pmp_create_review_pr_uses_run_skill(recipe) -> None:
+    """create_review_pr must use run_skill (not run_cmd)."""
+    step = recipe.steps["create_review_pr"]
+    assert step.tool == "run_skill", (
+        "create_review_pr must use run_skill to invoke /autoskillit:create-review-pr — "
+        "the skill produces rich PR bodies with tables and arch-lens diagrams; "
+        "run_cmd produces a minimal plain text PR"
+    )
+
+
+def test_pmp_create_review_pr_calls_create_review_pr_skill(recipe) -> None:
+    """create_review_pr skill_command must invoke /autoskillit:create-review-pr."""
+    step = recipe.steps["create_review_pr"]
+    cmd = step.with_args.get("skill_command", "")
+    assert "/autoskillit:create-review-pr" in cmd, (
+        "create_review_pr step must call /autoskillit:create-review-pr skill"
+    )
+
+
+def test_pmp_create_review_pr_captures_pr_url(recipe) -> None:
+    """create_review_pr must capture pr_url from the skill result."""
+    step = recipe.steps["create_review_pr"]
+    assert "pr_url" in (step.capture or {}), (
+        "create_review_pr must capture pr_url from result — "
+        "the create-review-pr skill emits pr_url in its output"
+    )
+
+
+def test_pmp_create_review_pr_passes_four_args(recipe) -> None:
+    """skill_command must supply integration_branch, base_branch, pr_order_file, verdict."""
+    step = recipe.steps["create_review_pr"]
+    cmd = step.with_args.get("skill_command", "")
+    for arg in [
+        "context.integration_branch",
+        "inputs.base_branch",
+        "context.pr_order_file",
+        "context.verdict",
+    ]:
+        assert arg in cmd, f"create_review_pr skill_command must include {arg}"

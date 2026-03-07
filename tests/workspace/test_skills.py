@@ -25,6 +25,7 @@ BUNDLED_SKILLS = [
     "migrate-recipes",
     "open-pr",
     "pipeline-summary",
+    "prepare-issue",
     "rectify",
     "report-bug",
     "resolve-failures",
@@ -269,3 +270,14 @@ class TestSkillResolver:
         all_names = {s.name for s in resolver.list_all()}
         expected = set(BUNDLED_SKILLS) - INTERNAL_SKILLS
         assert all_names == expected
+
+    def test_prepare_issue_skill_resolvable(self) -> None:
+        resolver = SkillResolver()
+        info = resolver.resolve("prepare-issue")
+        assert info is not None
+        assert info.name == "prepare-issue"
+
+    def test_prepare_issue_appears_in_list_all(self) -> None:
+        resolver = SkillResolver()
+        names = [s.name for s in resolver.list_all()]
+        assert "prepare-issue" in names

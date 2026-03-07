@@ -1,4 +1,4 @@
-"""Tests for the report_bug and fetch_github_issue MCP tool handlers."""
+"""Tests for the report_bug, fetch_github_issue, and prepare_issue MCP tool handlers."""
 
 from __future__ import annotations
 
@@ -16,7 +16,9 @@ from autoskillit.server.tools_integrations import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
     _parse_fingerprint,
+    _parse_prepare_result,
     fetch_github_issue,
+    prepare_issue,
     report_bug,
 )
 
@@ -484,3 +486,126 @@ def test_github_config_defaults():
     config = AutomationConfig()
     assert config.github.token is None
     assert config.github.default_repo is None
+
+
+# ---------------------------------------------------------------------------
+# _parse_prepare_result unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_prepare_result_present():
+    payload = {"issue_url": "https://github.com/o/r/issues/1", "route": "recipe:implementation"}
+    response = (
+        "Some preamble\n"
+        "---prepare-issue-result---\n"
+        f"{json.dumps(payload)}\n"
+        "---/prepare-issue-result---\n"
+        "Some epilogue\n"
+    )
+    result = _parse_prepare_result(response)
+    assert result == payload
+
+
+def test_parse_prepare_result_missing_returns_empty():
+    assert _parse_prepare_result("No result block here") == {}
+
+
+def test_parse_prepare_result_invalid_json_returns_empty():
+    response = "---prepare-issue-result---\nnot valid json\n---/prepare-issue-result---\n"
+    assert _parse_prepare_result(response) == {}
+
+
+# ---------------------------------------------------------------------------
+# prepare_issue MCP tool tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_returns_gate_error_when_closed(tool_ctx):
+    """prepare_issue must return the gate error JSON when kitchen is closed."""
+    from autoskillit.pipeline.gate import DefaultGateState
+
+    tool_ctx.gate = DefaultGateState(enabled=False)
+    result = json.loads(await prepare_issue(title="Test issue", body="Test body"))
+    assert result.get("success") is False
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_fires_headless_session(tool_ctx):
+    """prepare_issue must invoke a headless session with /autoskillit:prepare-issue."""
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = SkillResult(
+        success=True,
+        result="",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+    )
+    tool_ctx.executor = mock_executor
+    await prepare_issue(title="My feature", body="Add X to Y")
+    call_args = mock_executor.run.call_args
+    assert "/autoskillit:prepare-issue" in call_args[0][0]
+    assert "My feature" in call_args[0][0]
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_includes_repo_flag(tool_ctx):
+    """prepare_issue passes --repo flag when repo is provided."""
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = SkillResult(
+        success=True,
+        result="",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+    )
+    tool_ctx.executor = mock_executor
+    await prepare_issue(title="Issue", body="Body", repo="owner/myrepo")
+    call_args = mock_executor.run.call_args
+    assert "--repo owner/myrepo" in call_args[0][0]
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_parses_result_block(tool_ctx):
+    """prepare_issue extracts and returns the prepare-issue-result block."""
+    payload = {
+        "issue_url": "https://github.com/o/r/issues/42",
+        "route": "recipe:remediation",
+        "issue_type": "bug",
+        "confidence": "high",
+        "rationale": "Error traceback present.",
+        "labels_applied": ["recipe:remediation", "bug"],
+        "dry_run": False,
+        "sub_issues": [],
+    }
+    response = (
+        "---prepare-issue-result---\n"
+        f"{json.dumps(payload)}\n"
+        "---/prepare-issue-result---\n"
+    )
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = SkillResult(
+        success=True,
+        result=response,
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+    )
+    tool_ctx.executor = mock_executor
+    result = json.loads(await prepare_issue(title="Bug report", body="Stack trace here"))
+    assert result["success"] is True
+    assert result["status"] == "complete"
+    assert result["route"] == "recipe:remediation"
+    assert result["issue_url"] == "https://github.com/o/r/issues/42"

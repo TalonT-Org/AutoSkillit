@@ -139,18 +139,18 @@ For each concern (up to `max_sub_issues`):
 
 ```bash
 # Ensure the split-from label exists (idempotent)
-gh label create "split-from:#N" \
+gh label create "split-from:#N" --force \
   --description "Sub-issue created from parent #N" \
-  --color "e4e669" --force [--repo {repo}]
+  --color "e4e669" [--repo {repo}]
 
 # Ensure the recipe route label exists (idempotent)
-gh label create "recipe:implementation" \
+gh label create "recipe:implementation" --force \
   --description "Route through implementation recipe" \
-  --color "0E8A16" --force [--repo {repo}]
+  --color "0E8A16" [--repo {repo}]
 # or:
-gh label create "recipe:remediation" \
+gh label create "recipe:remediation" --force \
   --description "Route through remediation recipe" \
-  --color "D93F0B" --force [--repo {repo}]
+  --color "D93F0B" [--repo {repo}]
 
 # Create the sub-issue
 gh issue create \
@@ -167,9 +167,9 @@ Capture the new issue URL and number from stdout.
 
 ```bash
 # Ensure the split label exists (idempotent)
-gh label create "split" \
+gh label create "split" --force \
   --description "Issue decomposed into focused sub-issues" \
-  --color "0075ca" --force [--repo {repo}]
+  --color "0075ca" [--repo {repo}]
 
 # Label the parent as split
 gh issue edit {N} --add-label "split" [--repo {repo}]

@@ -17,6 +17,7 @@ BUNDLED_SKILLS = [
     "implement-worktree",
     "implement-worktree-no-merge",
     "investigate",
+    "issue-splitter",
     "make-groups",
     "make-plan",
     "merge-pr",

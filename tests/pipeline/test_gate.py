@@ -23,7 +23,7 @@ def test_tool_sets_total_count():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
     assert len(GATED_TOOLS) == 14
-    assert len(UNGATED_TOOLS) == 7
+    assert len(UNGATED_TOOLS) == 8
 
 
 def test_gated_tools_contains_expected_names():
@@ -64,6 +64,7 @@ def test_ungated_tools_contains_expected_names():
         "kitchen_status",
         "get_pipeline_report",
         "get_token_summary",
+        "get_timing_summary",
         "list_recipes",
         "load_recipe",
         "validate_recipe",

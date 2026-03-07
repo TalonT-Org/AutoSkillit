@@ -182,3 +182,12 @@ def test_toolcontext_github_client_annotated_with_protocol():
     """github_client annotation must reference GitHubFetcher protocol."""
     hints = get_type_hints(ToolContext)
     assert GitHubFetcher in get_args(hints["github_client"])
+
+
+def test_tool_context_has_timing_log_field(tmp_path):
+    """ToolContext.timing_log is a non-None TimingStore instance."""
+    from autoskillit.core import TimingStore
+
+    ctx = _make_ctx(tmp_path)
+    assert ctx.timing_log is not None
+    assert isinstance(ctx.timing_log, TimingStore)

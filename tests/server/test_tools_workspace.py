@@ -576,3 +576,47 @@ async def test_reset_workspace_returns_partial_failure_json(tool_ctx, tmp_path):
 
     assert result["success"] is False
     assert result["failed"] == [{"path": "bad_dir", "error": "PermissionError: denied"}]
+
+
+class TestTestCheckTiming:
+    """test_check records wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_test_check_step_name_records_timing(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
+        await test_check("/tmp/wt", step_name="test_check")
+        report = tool_ctx.timing_log.get_report()
+        assert any(e["step_name"] == "test_check" for e in report)
+
+    @pytest.mark.anyio
+    async def test_test_check_empty_step_name_skips_timing(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
+        await test_check("/tmp/wt")
+        assert tool_ctx.timing_log.get_report() == []
+
+
+class TestResetTestDirTiming:
+    """reset_test_dir records wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_reset_test_dir_step_name_records_timing(self, tool_ctx, tmp_path):
+        marker = tmp_path / ".autoskillit-workspace"
+        marker.write_text("")
+        mock_result = CleanupResult(deleted=[], failed=[], skipped=[])
+        tool_ctx.workspace_mgr = type(
+            "MockWM", (), {"delete_contents": lambda self, d, preserve=None: mock_result}
+        )()
+        await reset_test_dir(str(tmp_path), step_name="reset")
+        report = tool_ctx.timing_log.get_report()
+        assert any(e["step_name"] == "reset" for e in report)
+
+    @pytest.mark.anyio
+    async def test_reset_test_dir_empty_step_name_skips_timing(self, tool_ctx, tmp_path):
+        marker = tmp_path / ".autoskillit-workspace"
+        marker.write_text("")
+        mock_result = CleanupResult(deleted=[], failed=[], skipped=[])
+        tool_ctx.workspace_mgr = type(
+            "MockWM", (), {"delete_contents": lambda self, d, preserve=None: mock_result}
+        )()
+        await reset_test_dir(str(tmp_path))
+        assert tool_ctx.timing_log.get_report() == []

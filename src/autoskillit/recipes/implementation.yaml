@@ -402,11 +402,10 @@ steps:
     capture:
       verdict: "${{ result.verdict }}"
     on_result:
-      conditions:
-        - when: "${{ result.verdict }} == changes_requested"
-          route: resolve_review
-        - when: "true"
-          route: ci_watch
+      - when: "${{ result.verdict }} == changes_requested"
+        route: resolve_review
+      - when: "true"
+        route: ci_watch
     on_failure: resolve_review
     optional: true
     skip_when_false: "inputs.open_pr"

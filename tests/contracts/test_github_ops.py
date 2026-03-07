@@ -142,3 +142,36 @@ def test_no_batch_labels_collapse_issues() -> None:
     label_lines = re.findall(r"(gh issue create[^\n]*|gh label create[^\n]*|--label[^\n]*)", text)
     for line in label_lines:
         assert "batch:" not in line, f"batch: label must not appear in collapse-issues: {line}"
+
+
+# ---------------------------------------------------------------------------
+# enrich-issues contract tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def enrich_skill_text() -> str:
+    """Load the enrich-issues SKILL.md text for contract assertions."""
+    skill_file = bundled_skills_dir() / "enrich-issues" / "SKILL.md"
+    return skill_file.read_text()
+
+
+def test_enrich_issues_skips_existing_requirements(enrich_skill_text: str) -> None:
+    """enrich-issues must be idempotent: skip issues that already have ## Requirements."""
+    assert "## Requirements" in enrich_skill_text
+    assert "already" in enrich_skill_text.lower() or "skip" in enrich_skill_text.lower()
+
+
+def test_enrich_issues_emits_result_block(enrich_skill_text: str) -> None:
+    """enrich-issues must emit a structured result block for pipeline capture."""
+    assert "---enrich-issues-result---" in enrich_skill_text
+
+
+def test_enrich_issues_uses_gh_issue_edit(enrich_skill_text: str) -> None:
+    """enrich-issues must use gh issue edit to update issue bodies."""
+    assert "gh issue edit" in enrich_skill_text
+
+
+def test_enrich_issues_requires_recipe_implementation_label(enrich_skill_text: str) -> None:
+    """enrich-issues must target recipe:implementation issues."""
+    assert "recipe:implementation" in enrich_skill_text

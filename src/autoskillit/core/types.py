@@ -332,6 +332,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "push_to_remote",
         "report_bug",
         "prepare_issue",
+        "enrich_issues",
     }
 )
 

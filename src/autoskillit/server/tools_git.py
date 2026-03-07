@@ -137,8 +137,8 @@ async def classify_fix(
                 "autoskillit.classify_fix",
                 extra={"worktree": worktree_path},
             )
-            # A missing origin/<base_branch> ref (rc=128, "ambiguous argument" or "unknown revision")
-            # is treated as FULL_RESTART — conservative safe default.
+            # A missing origin/<base_branch> ref (rc=128, "ambiguous argument" or
+            # "unknown revision") is treated as FULL_RESTART — conservative safe default.
             # Any other git error also falls back to FULL_RESTART for the same reason:
             # if we can't determine what changed, assume the worst.
             return json.dumps(

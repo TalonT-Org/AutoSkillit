@@ -1,4 +1,5 @@
-"""MCP tool handlers: kitchen_status, get_pipeline_report, get_token_summary, get_timing_summary, read_db."""
+"""MCP tool handlers: kitchen_status, get_pipeline_report, get_token_summary,
+get_timing_summary, read_db."""
 
 from __future__ import annotations
 

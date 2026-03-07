@@ -162,18 +162,12 @@ def test_hooks_json_has_native_tool_guard():
 
 
 # T6b
-def test_hooks_json_commands_use_plugin_root():
-    """All hook commands must use ${CLAUDE_PLUGIN_ROOT}, not python3 -m."""
-    import json as json_mod
+def test_hooks_json_commands_have_no_env_vars():
+    """hooks.json commands must use absolute paths, not ${...} variables."""
+    from autoskillit.hooks import generate_hooks_json
 
-    from autoskillit.core import pkg_root
-
-    hooks_json = pkg_root() / "hooks" / "hooks.json"
-    data = json_mod.loads(hooks_json.read_text())
+    data = generate_hooks_json()
     for entry in data.get("hooks", {}).get("PreToolUse", []):
         for hook in entry.get("hooks", []):
             cmd = hook["command"]
-            assert "python3 -m" not in cmd, f"Hook uses python3 -m pattern: {cmd}"
-            assert "${CLAUDE_PLUGIN_ROOT}" in cmd, (
-                f"Hook does not use ${{CLAUDE_PLUGIN_ROOT}}: {cmd}"
-            )
+            assert "${" not in cmd, f"Hook command contains env var substitution: {cmd}"

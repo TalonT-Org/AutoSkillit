@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from autoskillit.core import _atomic_write, pkg_root
+from autoskillit.hooks import HOOK_REGISTRY
 
 
 def _hook_command(script_name: str) -> str:
@@ -16,6 +17,15 @@ def _hook_command(script_name: str) -> str:
     interpreter Claude Code uses to run the hook.
     """
     return f"python3 {pkg_root() / 'hooks' / script_name}"
+
+
+def _matcher_for_scripts(*script_names: str) -> str:
+    """Look up the registry matcher that contains the given script(s)."""
+    for hook_def in HOOK_REGISTRY:
+        if all(s in hook_def.scripts for s in script_names):
+            return hook_def.matcher
+    msg = f"No registry entry contains scripts: {script_names}"
+    raise ValueError(msg)
 
 
 def _load_settings_data(settings_path: Path) -> dict:
@@ -60,12 +70,54 @@ def _register_pretooluse_hook(settings_path: Path, matcher: str, command: str) -
     _write_settings_data(settings_path, data)
 
 
+def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
+    """Remove all autoskillit-related PreToolUse entries from settings.json.
+
+    This is a destructive-then-rebuild approach: evict everything autoskillit-
+    related, then let the _register_* functions write canonical entries fresh.
+    Covers all legacy formats (python3 -m, old absolute paths, ${CLAUDE_PLUGIN_ROOT}).
+    """
+    data = _load_settings_data(settings_path)
+    hooks = data.get("hooks", {})
+    pretooluse: list[dict] = hooks.get("PreToolUse", [])
+    if not pretooluse:
+        return
+
+    cleaned = []
+    for entry in pretooluse:
+        entry_hooks = entry.get("hooks", [])
+        non_autoskillit = [h for h in entry_hooks if "autoskillit" not in h.get("command", "")]
+        if non_autoskillit:
+            entry["hooks"] = non_autoskillit
+            cleaned.append(entry)
+    hooks["PreToolUse"] = cleaned
+    _write_settings_data(settings_path, data)
+
+
 def _register_quota_hook(settings_path: Path) -> None:
     """Idempotently add the quota PreToolUse hook to .claude/settings.json."""
     _register_pretooluse_hook(
         settings_path,
-        matcher="mcp__.*autoskillit.*__run_skill.*",
+        matcher=_matcher_for_scripts("quota_check.py"),
         command=_hook_command("quota_check.py"),
+    )
+
+
+def _register_skill_cmd_check_hook(settings_path: Path) -> None:
+    """Idempotently add the skill_cmd_check PreToolUse hook to .claude/settings.json."""
+    _register_pretooluse_hook(
+        settings_path,
+        matcher=_matcher_for_scripts("skill_cmd_check.py"),
+        command=_hook_command("skill_cmd_check.py"),
+    )
+
+
+def _register_native_tool_guard_hook(settings_path: Path) -> None:
+    """Idempotently add the native_tool_guard PreToolUse hook to .claude/settings.json."""
+    _register_pretooluse_hook(
+        settings_path,
+        matcher=_matcher_for_scripts("native_tool_guard.py"),
+        command=_hook_command("native_tool_guard.py"),
     )
 
 
@@ -73,7 +125,7 @@ def _register_remove_clone_guard_hook(settings_path: Path) -> None:
     """Idempotently add the remove_clone_guard PreToolUse hook to .claude/settings.json."""
     _register_pretooluse_hook(
         settings_path,
-        matcher="mcp__.*autoskillit.*__remove_clone",
+        matcher=_matcher_for_scripts("remove_clone_guard.py"),
         command=_hook_command("remove_clone_guard.py"),
     )
 
@@ -88,7 +140,7 @@ def _register_skill_command_guard_hook(settings_path: Path) -> None:
     hooks = data.setdefault("hooks", {})
     pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
 
-    MATCHER = "mcp__.*autoskillit.*__run_skill.*"
+    MATCHER = _matcher_for_scripts("skill_command_guard.py")
     COMMAND = _hook_command("skill_command_guard.py")
 
     # Idempotency: return if command already present anywhere

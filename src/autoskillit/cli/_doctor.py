@@ -229,8 +229,7 @@ def run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> N
         for entry in hooks_data.get("hooks", {}).get("PreToolUse", []):
             for hook in entry.get("hooks", []):
                 cmd = hook.get("command", "")
-                resolved = cmd.replace("${CLAUDE_PLUGIN_ROOT}", str(pkg_dir))
-                parts = resolved.split()
+                parts = cmd.split()
                 if len(parts) >= 2:
                     script_path = Path(parts[-1])
                     if not script_path.is_file():

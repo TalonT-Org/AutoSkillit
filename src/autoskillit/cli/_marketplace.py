@@ -12,8 +12,11 @@ from pathlib import Path
 
 import autoskillit.cli._hooks as _hooks_mod
 from autoskillit.cli._hooks import (
+    _evict_stale_autoskillit_hooks,
+    _register_native_tool_guard_hook,
     _register_quota_hook,
     _register_remove_clone_guard_hook,
+    _register_skill_cmd_check_hook,
     _register_skill_command_guard_hook,
 )
 from autoskillit.cli.app import app
@@ -139,6 +142,12 @@ def install(*, scope: str = "user"):
 
     _clear_plugin_cache()
 
+    # Regenerate hooks.json from the canonical registry with absolute paths
+    from autoskillit.hooks import generate_hooks_json
+
+    hooks_json_path = pkg_root() / "hooks" / "hooks.json"
+    hooks_json_path.write_text(json.dumps(generate_hooks_json(), indent=2) + "\n")
+
     # Register the marketplace (idempotent)
     result = subprocess.run(
         ["claude", "plugin", "marketplace", "add", str(marketplace_dir)],
@@ -166,7 +175,10 @@ def install(*, scope: str = "user"):
 
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
     settings_path = _hooks_mod._claude_settings_path(scope)
+    _evict_stale_autoskillit_hooks(settings_path)
     _register_quota_hook(settings_path)
+    _register_skill_cmd_check_hook(settings_path)
+    _register_native_tool_guard_hook(settings_path)
     _register_remove_clone_guard_hook(settings_path)
     _register_skill_command_guard_hook(settings_path)
     _print_next_steps()

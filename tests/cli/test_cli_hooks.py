@@ -117,16 +117,20 @@ def test_claude_settings_path_project_scope(tmp_path, monkeypatch):
 
 
 # HK11
-def test_registered_hooks_use_plugin_root(tmp_path):
-    """Hook commands written to settings.json must use CLAUDE_PLUGIN_ROOT, not python3 -m."""
+def test_registered_hooks_use_absolute_paths(tmp_path):
+    """Hook commands written to settings.json must use absolute paths, not python3 -m."""
     from autoskillit.cli._hooks import (
+        _register_native_tool_guard_hook,
         _register_quota_hook,
         _register_remove_clone_guard_hook,
+        _register_skill_cmd_check_hook,
         _register_skill_command_guard_hook,
     )
 
     settings = tmp_path / "settings.json"
     _register_quota_hook(settings)
+    _register_skill_cmd_check_hook(settings)
+    _register_native_tool_guard_hook(settings)
     _register_skill_command_guard_hook(settings)
     _register_remove_clone_guard_hook(settings)
     data = json.loads(settings.read_text())
@@ -134,3 +138,109 @@ def test_registered_hooks_use_plugin_root(tmp_path):
         for hook in entry.get("hooks", []):
             cmd = hook["command"]
             assert "python3 -m" not in cmd, f"Registered hook uses python3 -m: {cmd}"
+            assert "${" not in cmd, f"Registered hook uses env var: {cmd}"
+
+
+# HK12
+def test_hooks_py_covers_full_registry():
+    """Every hook in HOOK_REGISTRY has a corresponding _register_* function."""
+    from autoskillit.cli._hooks import (
+        _register_native_tool_guard_hook,
+        _register_quota_hook,
+        _register_remove_clone_guard_hook,
+        _register_skill_cmd_check_hook,
+        _register_skill_command_guard_hook,
+    )
+    from autoskillit.hooks import HOOK_REGISTRY
+
+    all_registry_scripts = {s for h in HOOK_REGISTRY for s in h.scripts}
+    register_functions = [
+        _register_quota_hook,
+        _register_skill_cmd_check_hook,
+        _register_native_tool_guard_hook,
+        _register_remove_clone_guard_hook,
+        _register_skill_command_guard_hook,
+    ]
+    # Each function registers a script — verify by calling them all
+    # and checking that every registry script appears in settings.json
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        settings = Path(td) / "settings.json"
+        for fn in register_functions:
+            fn(settings)
+        data = json.loads(settings.read_text())
+        registered_commands = [
+            h["command"] for entry in data["hooks"]["PreToolUse"] for h in entry.get("hooks", [])
+        ]
+        registered_scripts = {cmd.split("/")[-1] for cmd in registered_commands}
+        assert all_registry_scripts == registered_scripts, (
+            f"Missing: {all_registry_scripts - registered_scripts}, "
+            f"Extra: {registered_scripts - all_registry_scripts}"
+        )
+
+
+# HK13
+def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
+    """install() must remove all legacy autoskillit hook formats before writing fresh ones."""
+    from autoskillit.cli._hooks import (
+        _evict_stale_autoskillit_hooks,
+        _register_quota_hook,
+    )
+
+    settings = tmp_path / "settings.json"
+    # Seed with three legacy format entries
+    legacy_data = {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "mcp__.*autoskillit.*__run_skill.*",
+                    "hooks": [
+                        {"type": "command", "command": "python3 -m autoskillit.hooks.quota_check"},
+                    ],
+                },
+                {
+                    "matcher": "mcp__.*autoskillit.*__run_skill.*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "python3 /old/path/hooks/quota_check.py",
+                        },
+                    ],
+                },
+                {
+                    "matcher": "mcp__.*autoskillit.*__remove_clone",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/remove_clone_guard.py",
+                        },
+                    ],
+                },
+                {
+                    "matcher": "some_other_matcher",
+                    "hooks": [
+                        {"type": "command", "command": "python3 /unrelated/hook.py"},
+                    ],
+                },
+            ]
+        }
+    }
+    settings.write_text(json.dumps(legacy_data, indent=2))
+
+    # Evict all autoskillit entries
+    _evict_stale_autoskillit_hooks(settings)
+    data = json.loads(settings.read_text())
+    remaining = data["hooks"]["PreToolUse"]
+    # Only the unrelated hook should remain
+    assert len(remaining) == 1
+    assert remaining[0]["matcher"] == "some_other_matcher"
+
+    # Now register fresh entries — no duplicates
+    _register_quota_hook(settings)
+    data = json.loads(settings.read_text())
+    all_commands = [
+        h["command"] for entry in data["hooks"]["PreToolUse"] for h in entry.get("hooks", [])
+    ]
+    quota_commands = [c for c in all_commands if "quota_check" in c]
+    assert len(quota_commands) == 1

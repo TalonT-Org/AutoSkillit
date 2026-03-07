@@ -262,6 +262,7 @@ class TestCLIDoctor:
             "project_config",
             "version_consistency",
             "script_version_health",
+            "hook_health",
         }
         assert expected <= check_names
 

@@ -1056,3 +1056,94 @@ def test_smoke_test_diagram_has_no_for_each_block(tmp_path: Path) -> None:
         "smoke-test.yaml has no plan_parts iteration; "
         "its diagram must not contain a FOR EACH block"
     )
+
+
+# ---------------------------------------------------------------------------
+# T-FS-1, T-FS-2: Folded-scalar regression guards
+# ---------------------------------------------------------------------------
+
+_FOLDED_SCALAR_RECIPE_YAML = """\
+name: test-folded
+description: Test recipe for folded scalar regression
+summary: Tests folded scalar normalization
+version: "1.0"
+ingredients:
+  source_dir:
+    description: >
+      Path to the source repository to clone and work in.
+      Leave empty to auto-detect from git rev-parse --show-toplevel.
+    required: false
+    default: ""
+  run_name:
+    description: >
+      Name prefix for this pipeline run.
+      Used as the first path component of the branch name.
+    required: false
+    default: impl
+steps: []
+"""
+
+
+def test_diagram_inputs_table_rows_are_single_lines_with_folded_scalars(
+    tmp_path: Path,
+) -> None:
+    """T-FS-1: Table rows built from folded-scalar descriptions must not embed newlines."""
+    pipeline = tmp_path / "test-folded.yaml"
+    pipeline.write_text(_FOLDED_SCALAR_RECIPE_YAML)
+    content = generate_recipe_diagram(pipeline, recipes_dir=tmp_path, out_dir=tmp_path)
+
+    inputs_start = content.index("### Inputs")
+    inputs_section = content[inputs_start:]
+    # Extract data rows (skip header and separator rows)
+    rows = [
+        line
+        for line in inputs_section.splitlines()
+        if line.startswith("| ") and "Name" not in line and "---" not in line
+    ]
+    assert rows, "Expected at least one data row in Inputs table"
+    for row in rows:
+        assert "\n" not in row, f"Embedded newline found in table row: {row!r}"
+        # Each row must open and close with a pipe
+        assert row.startswith("| ") and row.endswith(" |"), (
+            f"Row is not a complete pipe-table row: {row!r}"
+        )
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "implementation",
+        "implementation-groups",
+        "audit-and-fix",
+        "remediation",
+        "bugfix-loop",
+        "smoke-test",
+    ],
+)
+def test_bundled_diagram_inputs_table_has_no_embedded_newlines(
+    recipe_name: str, tmp_path: Path
+) -> None:
+    """T-FS-2: Generated diagram Inputs tables must contain only single-line rows.
+
+    This is a correctness guard. It will catch any future regression where
+    YAML-sourced strings are not normalized before table interpolation.
+    """
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    pipeline = recipes_dir / f"{recipe_name}.yaml"
+    out_dir = tmp_path / "diagrams"
+    out_dir.mkdir()
+    content = generate_recipe_diagram(pipeline, recipes_dir=recipes_dir, out_dir=out_dir)
+
+    if "### Inputs" not in content:
+        return  # recipe has no ingredients — skip
+    inputs_start = content.index("### Inputs")
+    inputs_section = content[inputs_start:]
+    rows = [
+        line
+        for line in inputs_section.splitlines()
+        if line.startswith("| ") and "Name" not in line and "---" not in line
+    ]
+    for row in rows:
+        assert "\n" not in row, f"[{recipe_name}] Embedded newline in Inputs table row: {row!r}"

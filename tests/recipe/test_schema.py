@@ -183,3 +183,49 @@ def test_skip_when_false_field_is_parsed_from_yaml() -> None:
     }
     step = _parse_step(raw)
     assert step.skip_when_false == "inputs.open_pr"
+
+
+# ---------------------------------------------------------------------------
+# RecipeIngredient normalization tests (Tests 1.1-1.3)
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_ingredient_description_strips_folded_scalar_newline() -> None:
+    """RecipeIngredient.__post_init__ must strip trailing \\n from folded scalars."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="some description text\n", required=False)
+    assert ing.description == "some description text"
+    assert "\n" not in ing.description
+
+
+def test_recipe_ingredient_default_strips_for_comparison() -> None:
+    """Trailing \\n on default must not cause _format_ingredient_default to fall through."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing_false = RecipeIngredient(description="d", default="false\n")
+    assert ing_false.default == "false"
+
+    ing_empty = RecipeIngredient(description="d", default="\n")
+    assert ing_empty.default == ""
+
+    ing_true = RecipeIngredient(description="d", default="true\n")
+    assert ing_true.default == "true"
+
+    ing_none = RecipeIngredient(description="d", default=None)
+    assert ing_none.default is None  # None sentinel preserved
+
+
+def test_format_ingredient_default_folded_scalar_bool() -> None:
+    """_format_ingredient_default must return 'off'/'on'/'auto-detect' for folded defaults."""
+    from autoskillit.recipe.diagrams import _format_ingredient_default
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    assert (
+        _format_ingredient_default(RecipeIngredient(description="d", default="false\n")) == "off"
+    )
+    assert _format_ingredient_default(RecipeIngredient(description="d", default="true\n")) == "on"
+    assert (
+        _format_ingredient_default(RecipeIngredient(description="d", default="\n"))
+        == "auto-detect"
+    )

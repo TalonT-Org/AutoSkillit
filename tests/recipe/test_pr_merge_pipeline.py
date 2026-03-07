@@ -100,3 +100,30 @@ def test_pmp_audit_impl_is_optional(recipe) -> None:
     """audit_impl must be marked optional (required by skip_when_false rule)."""
     step = recipe.steps["audit_impl"]
     assert step.optional is True
+
+
+def test_pmp_create_review_pr_uses_run_skill(recipe) -> None:
+    """create_review_pr step must use run_skill, not run_cmd."""
+    step = recipe.steps["create_review_pr"]
+    assert step.tool == "run_skill", (
+        "create_review_pr must delegate to /autoskillit:create-review-pr via run_skill — "
+        "replacing the old hardcoded run_cmd gh pr create invocation"
+    )
+
+
+def test_pmp_create_review_pr_skill_command(recipe) -> None:
+    """create_review_pr skill_command must invoke /autoskillit:create-review-pr."""
+    step = recipe.steps["create_review_pr"]
+    cmd = step.with_args.get("skill_command", "")
+    assert cmd.startswith("/autoskillit:create-review-pr"), (
+        "create_review_pr skill_command must start with /autoskillit:create-review-pr"
+    )
+
+
+def test_pmp_create_review_pr_captures_pr_url(recipe) -> None:
+    """create_review_pr must capture pr_url from skill output."""
+    step = recipe.steps["create_review_pr"]
+    captures = step.capture or {}
+    assert "pr_url" in captures, (
+        "create_review_pr must capture pr_url — used by ci_watch_pr and done message"
+    )

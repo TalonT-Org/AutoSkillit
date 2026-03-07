@@ -172,6 +172,23 @@ skills:
       type: string
     - name: needs_check_count
       type: string
+  create-review-pr:
+    inputs:
+    - name: integration_branch
+      type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: pr_order_file
+      type: file_path
+      required: true
+    - name: audit_verdict
+      type: string
+      required: false
+    outputs:
+    - name: pr_url
+      type: string
   merge-pr:
     inputs:
     - name: pr_number

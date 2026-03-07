@@ -14,6 +14,7 @@ BUNDLED_SKILLS = [
     "audit-friction",
     "audit-impl",
     "collapse-issues",
+    "create-review-pr",
     "dry-walkthrough",
     "enrich-issues",
     "implement-worktree",

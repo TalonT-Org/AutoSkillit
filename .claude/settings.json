@@ -10,6 +10,10 @@
           },
           {
             "type": "command",
+            "command": "python3 /home/talon/projects/worktrees/impl-hook-dual-source-20260306-165233/src/autoskillit/hooks/skill_cmd_check.py"
+          },
+          {
+            "type": "command",
             "command": "python3 /home/talon/projects/worktrees/impl-hook-dual-source-20260306-165233/src/autoskillit/hooks/skill_command_guard.py"
           }
         ]

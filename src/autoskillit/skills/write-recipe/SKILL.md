@@ -213,7 +213,7 @@ Available tools for use in `tool:` fields:
 
 These skills ship with the autoskillit plugin and are invoked as `/autoskillit:<name>`:
 
-analyze-prs, audit-friction, audit-impl, collapse-issues, dry-walkthrough, implement-worktree, implement-worktree-no-merge,
+analyze-prs, audit-friction, audit-impl, collapse-issues, dry-walkthrough, enrich-issues, implement-worktree, implement-worktree-no-merge,
 investigate, issue-splitter, make-groups, make-plan, merge-pr, write-recipe, mermaid, migrate-recipes, open-pr,
 pipeline-summary, prepare-issue, rectify, report-bug, resolve-failures, retry-worktree, review-approach, setup-project,
 smoke-task, sous-chef, triage-issues

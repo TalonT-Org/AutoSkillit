@@ -57,6 +57,7 @@ class _LayoutResult:
     # Indices in the visible (non-infra, non-terminal) step list for the
     # FOR EACH iteration block, or None if no loop is detected.
     for_each_range: tuple[int, int] | None = None
+    for_each_label: str = "FOR EACH:"  # descriptive label for the FOR EACH box header
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +102,16 @@ def _is_plan_iteration_note(note: str) -> bool:
     """Return True if a step note signals plan-parts or groups iteration intent."""
     note_lower = note.lower()
     return any(kw in note_lower for kw in _PLAN_ITERATION_KEYWORDS)
+
+
+def _derive_for_each_label(span_steps: list[_LayoutStep]) -> str:
+    """Derive the descriptive FOR EACH label from step notes within the loop span."""
+    notes_combined = " ".join(s.note.lower() for s in span_steps)
+    if "groups mode" in notes_combined or "for each group" in notes_combined:
+        return "FOR EACH GROUP / PLAN PART:"
+    if "plan_parts" in notes_combined or "plan_part" in notes_combined:
+        return "FOR EACH PLAN PART:"
+    return "FOR EACH:"
 
 
 def _compute_layout(recipe: Any) -> _LayoutResult:
@@ -211,6 +222,7 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
 
     best_span = 1
     best_range: tuple[int, int] | None = None
+    best_label = "FOR EACH:"
 
     for vi, step in enumerate(visible):
         back_targets: list[str] = []
@@ -237,6 +249,8 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
             if has_intent:
                 best_span = span
                 best_range = (vj, vi)
+                span_steps = visible[vj : vi + 1]
+                best_label = _derive_for_each_label(span_steps)
 
     for_each_range = best_range
 
@@ -244,6 +258,7 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
         steps=layout_steps,
         back_edges=back_edges,
         for_each_range=for_each_range,
+        for_each_label=best_label,
     )
 
 
@@ -301,11 +316,12 @@ def _append_step(step: _LayoutStep, lines: list[str], prefix: str) -> None:
 def _render_for_each_chain(
     inner_steps: list[_LayoutStep],
     lines: list[str],
+    label: str = "FOR EACH:",
 ) -> None:
     """Render FOR EACH inner steps as a horizontal chain with side-leg failure branches.
 
     Produces:
-        ┌────┤ FOR EACH:
+        ┌────┤ FOR EACH PLAN PART:
         │    │
         │    step_a (retry ×∞) ─── step_b (retry ×3) ─── step_c (retry ×∞) ↑
         │         │
@@ -317,7 +333,7 @@ def _render_for_each_chain(
     (│  ↓ success → ...) because it never calls _append_step(). The horizontal
     layout is the only code path.
     """
-    lines.append("┌────┤ FOR EACH:")
+    lines.append(f"┌────┤ {label}")
     lines.append("│    │")
 
     # Build the horizontal chain tokens: join step names with ─── connectors.
@@ -392,7 +408,7 @@ def _render_visual_flow(layout: _LayoutResult) -> str:
         if fe_start is not None and i == fe_start:
             assert fe_end is not None
             inner_steps = visible[fe_start : fe_end + 1]
-            _render_for_each_chain(inner_steps, lines)
+            _render_for_each_chain(inner_steps, lines, label=layout.for_each_label)
             i = fe_end + 1
             if i < len(visible):
                 lines.append("│")

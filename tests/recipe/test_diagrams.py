@@ -977,3 +977,82 @@ def test_bundled_diagram_roundtrip(recipe_name: str, tmp_path: Path) -> None:
         f"Committed {recipe_name}.md differs from renderer output. "
         f"Run: autoskillit recipes render {recipe_name}"
     )
+
+
+# ---------------------------------------------------------------------------
+# T-LBL-1, T-LBL-2, T-BD-1, T-BD-2: Descriptive FOR EACH labels and no-FOR-EACH guards
+# ---------------------------------------------------------------------------
+
+
+def test_implementation_diagram_for_each_label_names_plan_part(tmp_path: Path) -> None:
+    """T-LBL-1: implementation.yaml must use 'FOR EACH PLAN PART:' label in diagram."""
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    content = generate_recipe_diagram(
+        recipes_dir / "implementation.yaml",
+        recipes_dir=recipes_dir,
+        out_dir=out_dir,
+    )
+    graph = _extract_graph_section(content)
+    assert "FOR EACH PLAN PART:" in graph, (
+        "implementation.yaml iterates plan_parts; FOR EACH label must say 'FOR EACH PLAN PART:'"
+    )
+
+
+def test_implementation_groups_diagram_for_each_label_names_group(tmp_path: Path) -> None:
+    """T-LBL-2: implementation-groups.yaml must use a group-level label in diagram."""
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    content = generate_recipe_diagram(
+        recipes_dir / "implementation-groups.yaml",
+        recipes_dir=recipes_dir,
+        out_dir=out_dir,
+    )
+    graph = _extract_graph_section(content)
+    assert "FOR EACH GROUP" in graph, (
+        "implementation-groups.yaml iterates groups; FOR EACH label must say 'FOR EACH GROUP...'"
+    )
+
+
+def test_audit_and_fix_diagram_has_no_for_each_block(tmp_path: Path) -> None:
+    """T-BD-1: audit-and-fix.yaml has no plan_parts iteration; diagram must not have FOR EACH."""
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    content = generate_recipe_diagram(
+        recipes_dir / "audit-and-fix.yaml",
+        recipes_dir=recipes_dir,
+        out_dir=out_dir,
+    )
+    graph = _extract_graph_section(content)
+    assert "FOR EACH" not in graph.upper(), (
+        "audit-and-fix.yaml has no plan_parts iteration (only CI polling); "
+        "its diagram must not contain a FOR EACH block"
+    )
+
+
+def test_smoke_test_diagram_has_no_for_each_block(tmp_path: Path) -> None:
+    """T-BD-2: smoke-test.yaml is a single synthetic task run; diagram must not have FOR EACH."""
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    content = generate_recipe_diagram(
+        recipes_dir / "smoke-test.yaml",
+        recipes_dir=recipes_dir,
+        out_dir=out_dir,
+    )
+    graph = _extract_graph_section(content)
+    assert "FOR EACH" not in graph.upper(), (
+        "smoke-test.yaml has no plan_parts iteration; "
+        "its diagram must not contain a FOR EACH block"
+    )

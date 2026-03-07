@@ -21,7 +21,7 @@ review  [run_skill] (retry ×3)
 │  ↓ success → verify
 │  ✗ failure → cleanup_failure
 │
-┌────┤ FOR EACH:
+┌────┤ FOR EACH PLAN PART:
 │    │
 │    verify (retry ×3) ─── implement (retry ×∞) ─── retry_worktree (retry ×3) ─── test (retry ×3) ─── merge (retry ×3) ─── push (retry ×3) ─── fix (retry ×3) ↑ ─── next_or_done (retry ×3)
 │     │

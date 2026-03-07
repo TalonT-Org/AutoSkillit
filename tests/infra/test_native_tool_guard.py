@@ -137,12 +137,9 @@ def test_allows_askuserquestion_when_gate_open(tmp_path):
 # T6a
 def test_hooks_json_has_native_tool_guard():
     """hooks.json has a matcher for native tools pointing to native_tool_guard."""
-    import json as json_mod
+    from autoskillit.hooks import generate_hooks_json
 
-    from autoskillit.core import pkg_root
-
-    hooks_json = pkg_root() / "hooks" / "hooks.json"
-    data = json_mod.loads(hooks_json.read_text())
+    data = generate_hooks_json()
     pretooluse_entries = data.get("hooks", {}).get("PreToolUse", [])
 
     native_guard_entries = [

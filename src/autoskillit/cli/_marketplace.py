@@ -146,7 +146,7 @@ def install(*, scope: str = "user"):
     from autoskillit.hooks import generate_hooks_json
 
     hooks_json_path = pkg_root() / "hooks" / "hooks.json"
-    hooks_json_path.write_text(json.dumps(generate_hooks_json(), indent=2) + "\n")
+    _atomic_write(hooks_json_path, json.dumps(generate_hooks_json(), indent=2) + "\n")
 
     # Register the marketplace (idempotent)
     result = subprocess.run(

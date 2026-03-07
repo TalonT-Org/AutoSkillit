@@ -70,6 +70,14 @@ def _register_pretooluse_hook(settings_path: Path, matcher: str, command: str) -
     _write_settings_data(settings_path, data)
 
 
+def _is_autoskillit_hook_command(command: str) -> bool:
+    """Check if a hook command belongs to autoskillit (any format)."""
+    if "autoskillit" in command:
+        return True
+    known_scripts = {s for h in HOOK_REGISTRY for s in h.scripts}
+    return any(command.endswith(script) or f"/{script}" in command for script in known_scripts)
+
+
 def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
     """Remove all autoskillit-related PreToolUse entries from settings.json.
 
@@ -86,7 +94,9 @@ def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
     cleaned = []
     for entry in pretooluse:
         entry_hooks = entry.get("hooks", [])
-        non_autoskillit = [h for h in entry_hooks if "autoskillit" not in h.get("command", "")]
+        non_autoskillit = [
+            h for h in entry_hooks if not _is_autoskillit_hook_command(h.get("command", ""))
+        ]
         if non_autoskillit:
             entry["hooks"] = non_autoskillit
             cleaned.append(entry)
@@ -104,12 +114,35 @@ def _register_quota_hook(settings_path: Path) -> None:
 
 
 def _register_skill_cmd_check_hook(settings_path: Path) -> None:
-    """Idempotently add the skill_cmd_check PreToolUse hook to .claude/settings.json."""
-    _register_pretooluse_hook(
-        settings_path,
-        matcher=_matcher_for_scripts("skill_cmd_check.py"),
-        command=_hook_command("skill_cmd_check.py"),
+    """Idempotently add the skill_cmd_check PreToolUse hook to .claude/settings.json.
+
+    This hook shares the same ``run_skill`` matcher as the quota hook, so it
+    appends its command to the existing matcher entry when one already exists.
+    """
+    data = _load_settings_data(settings_path)
+    hooks = data.setdefault("hooks", {})
+    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
+
+    MATCHER = _matcher_for_scripts("skill_cmd_check.py")
+    COMMAND = _hook_command("skill_cmd_check.py")
+
+    for entry in pretooluse:
+        if any(h.get("command") == COMMAND for h in entry.get("hooks", [])):
+            return
+
+    for entry in pretooluse:
+        if entry.get("matcher") == MATCHER:
+            entry["hooks"].append({"type": "command", "command": COMMAND})
+            _write_settings_data(settings_path, data)
+            return
+
+    pretooluse.append(
+        {
+            "matcher": MATCHER,
+            "hooks": [{"type": "command", "command": COMMAND}],
+        }
     )
+    _write_settings_data(settings_path, data)
 
 
 def _register_native_tool_guard_hook(settings_path: Path) -> None:

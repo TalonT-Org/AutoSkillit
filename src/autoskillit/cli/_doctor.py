@@ -221,37 +221,29 @@ def run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> N
             )
         )
 
-    # Check 8: Hook executability
-    hooks_json_path = pkg_dir / "hooks" / "hooks.json"
-    if hooks_json_path.is_file():
-        hooks_data = json.loads(hooks_json_path.read_text())
-        broken_hooks: list[str] = []
-        for entry in hooks_data.get("hooks", {}).get("PreToolUse", []):
-            for hook in entry.get("hooks", []):
-                cmd = hook.get("command", "")
-                parts = cmd.split()
-                if len(parts) >= 2:
-                    script_path = Path(parts[-1])
-                    if not script_path.is_file():
-                        broken_hooks.append(cmd)
-        if broken_hooks:
-            results.append(
-                DoctorResult(
-                    Severity.ERROR,
-                    "hook_health",
-                    f"Hook scripts not found: {', '.join(broken_hooks)}",
-                )
-            )
-        else:
-            results.append(DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible"))
-    else:
+    # Check 8: Hook executability — validates scripts from the canonical registry
+    from autoskillit.hooks import generate_hooks_json
+
+    hooks_data = generate_hooks_json()
+    broken_hooks: list[str] = []
+    for entry in hooks_data.get("hooks", {}).get("PreToolUse", []):
+        for hook in entry.get("hooks", []):
+            cmd = hook.get("command", "")
+            parts = cmd.split()
+            if len(parts) >= 2:
+                script_path = Path(parts[-1])
+                if not script_path.is_file():
+                    broken_hooks.append(cmd)
+    if broken_hooks:
         results.append(
             DoctorResult(
                 Severity.ERROR,
                 "hook_health",
-                "hooks.json not found — hook registration is broken",
+                f"Hook scripts not found: {', '.join(broken_hooks)}",
             )
         )
+    else:
+        results.append(DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible"))
 
     # Check 7: Script version health
     from autoskillit import __version__

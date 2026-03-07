@@ -54,6 +54,18 @@ Parse the optional fourth positional argument `token_summary_path` (may be absen
 Parse the optional fifth positional argument `closing_issue` (may be absent or empty string).
 Split `plan_paths` by comma to get a list of plan file paths.
 
+### Step 1b: Fetch Requirements from Closing Issue
+
+- If `closing_issue` is absent or empty string: skip — set `requirements_section = ""`.
+- Fetch issue body:
+  ```bash
+  gh issue view {closing_issue} --json body -q .body
+  ```
+- Extract the `## Requirements` section:
+  `requirements_section` = everything from `## Requirements` to the next `## ` heading or end of body, whichever comes first.
+- If no `## Requirements` section found: set `requirements_section = ""`.
+- This step is skipped gracefully if `gh` is unavailable — `requirements_section` remains `""`.
+
 ### Step 2: Extract PR Title from Plan
 
 Read all plan files. For each, extract the first `# ` heading line and strip the `# ` prefix.
@@ -178,8 +190,10 @@ Read `## Summary` from each plan file.
 
 {First paragraph of the plan's ## Summary section, or first 5 lines after the heading}
 
-{If closing_issue is provided and non-empty:}
-Closes #{closing_issue}
+{If extracted: include the requirements section from the closing issue}
+## Requirements
+
+{requirements_section from closing issue}
 
 {## Architecture Impact — conditional: include only if validated_diagrams is non-empty}
 ## Architecture Impact
@@ -191,6 +205,9 @@ Closes #{closing_issue}
 ` ` `mermaid
 {diagram content}
 ` ` `
+
+{If closing_issue is provided and non-empty:}
+Closes #{closing_issue}
 
 ## Implementation Plan
 
@@ -212,9 +229,6 @@ Plan file: `{plan_path}`
 {Synthesized overall summary — 2-3 sentences covering the aggregate change.
  Use a sonnet subagent to produce this from all individual summaries.}
 
-{If closing_issue is provided and non-empty:}
-Closes #{closing_issue}
-
 <details>
 <summary>Individual Group Plans</summary>
 
@@ -226,6 +240,11 @@ Closes #{closing_issue}
 
 </details>
 
+{If extracted: include the requirements section from the closing issue}
+## Requirements
+
+{requirements_section from closing issue}
+
 {## Architecture Impact — conditional: include only if validated_diagrams is non-empty}
 ## Architecture Impact
 
@@ -236,6 +255,9 @@ Closes #{closing_issue}
 ` ` `mermaid
 {diagram content}
 ` ` `
+
+{If closing_issue is provided and non-empty:}
+Closes #{closing_issue}
 
 ## Implementation Plan
 

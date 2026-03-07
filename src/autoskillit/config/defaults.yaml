@@ -65,6 +65,7 @@ quota_guard:
 github:
   token: null
   default_repo: null
+  in_progress_label: "in-progress"
 
 report_bug:
   timeout: 600

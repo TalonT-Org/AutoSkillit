@@ -164,6 +164,7 @@ class TestToolRegistration:
             "push_to_remote",
             "fetch_github_issue",
             "report_bug",
+            "prepare_issue",
         }
         assert expected == tool_names
 

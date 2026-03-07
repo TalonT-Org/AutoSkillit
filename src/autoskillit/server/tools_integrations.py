@@ -354,6 +354,27 @@ async def _run_report_session(
     }
 
 
+def _build_prepare_skill_command(
+    title: str,
+    body: str,
+    repo: str,
+    labels: list[str] | None,
+    dry_run: bool,
+    split: bool,
+) -> str:
+    """Assemble the skill_command string for /autoskillit:prepare-issue."""
+    parts = [f"/autoskillit:prepare-issue\n\n{title}\n\n{body}"]
+    if repo:
+        parts.append(f"--repo {repo}")
+    if dry_run:
+        parts.append("--dry-run")
+    if split:
+        parts.append("--split")
+    if labels:
+        parts.extend(f"--label {lbl}" for lbl in labels)
+    return "\n".join(parts)
+
+
 def _parse_prepare_result(response: str) -> dict[str, Any]:
     """Extract and JSON-parse the prepare-issue result block from a skill response.
 
@@ -427,16 +448,7 @@ async def prepare_issue(
     if tool_ctx.executor is None:
         return json.dumps({"success": False, "error": "Executor not configured"})
 
-    parts = [f"/autoskillit:prepare-issue\n\n{title}\n\n{body}"]
-    if repo:
-        parts.append(f"--repo {repo}")
-    if dry_run:
-        parts.append("--dry-run")
-    if split:
-        parts.append("--split")
-    if labels:
-        parts.extend(f"--label {lbl}" for lbl in labels)
-    skill_command = "\n".join(parts)
+    skill_command = _build_prepare_skill_command(title, body, repo, labels, dry_run, split)
 
     result = await tool_ctx.executor.run(
         skill_command,

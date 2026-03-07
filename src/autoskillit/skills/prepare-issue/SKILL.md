@@ -135,21 +135,39 @@ Otherwise:
 
 ```bash
 # Ensure labels exist (idempotent)
-gh label create "recipe:implementation" \
+gh label create "recipe:implementation" --force \
     --description "Route: proceed directly to implementation" \
-    --color "0E8A16" --force
-gh label create "recipe:remediation" \
+    --color "0E8A16"
+gh label create "recipe:remediation" --force \
     --description "Route: investigate/decompose before implementation" \
-    --color "D93F0B" --force
-gh label create "bug" --description "Existing behavior is broken" \
-    --color "d73a4a" --force
-gh label create "enhancement" --description "New feature or request" \
-    --color "a2eeef" --force
+    --color "D93F0B"
+gh label create "bug" --force \
+    --description "Existing behavior is broken" \
+    --color "d73a4a"
+gh label create "enhancement" --force \
+    --description "New feature or request" \
+    --color "a2eeef"
 
-# Apply triage labels
-gh issue edit {issue_number} --add-label "recipe:{route}"
+# Apply triage labels (use the route determined in Step 6)
+gh issue edit {issue_number} --add-label "recipe:implementation"
+# or, for remediation route:
+gh issue edit {issue_number} --add-label "recipe:remediation"
 gh issue edit {issue_number} --add-label "{issue_type}"
 ```
+
+## Critical Constraints
+
+**NEVER:**
+- Create or modify GitHub issues without explicit user intent
+- Apply labels not in the defined set (`recipe:implementation`, `recipe:remediation`, `bug`, `enhancement`)
+- Skip the dedup check when creating a new issue (unless `--issue N` is provided)
+- Proceed past Step 2 (Auth) if `gh auth status` fails
+
+**ALWAYS:**
+- Confirm repo access with `gh repo view` before any issue operations
+- Use `--force` on all `gh label create` calls for idempotency
+- Emit the result block (`---prepare-issue-result---`) even on dry-run
+- Respect `--dry-run`: never create or edit anything when this flag is set
 
 ## Output
 

@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:2283736ef10a22d06821753a1697e5383487c7b1991ff1df262875ad87325ed7 -->
+<!-- autoskillit-recipe-hash: sha256:3cdf68c5ff4a6987b34b7843f9372b15c04825bd7710de9b88cb60acba218bd2 -->
 <!-- autoskillit-diagram-format: v3 -->
 ## audit-and-fix
 Audit codebase, investigate findings, plan fixes, implement in a feature branch, and open a PR.
@@ -7,8 +7,11 @@ Audit codebase, investigate findings, plan fixes, implement in a feature branch,
 
 ### Graph
 clone  [clone_repo] (retry ×3)
-│  ↓ success → push_merge_target
+│  ↓ success → get_issue_title
 │  ✗ failure → escalate_stop
+│
+├── [get_issue_title] (retry ×3)  ← only if inputs.issue_url
+│       ✗ failure → escalate_stop
 │
 ├── [push_merge_target] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → cleanup_failure

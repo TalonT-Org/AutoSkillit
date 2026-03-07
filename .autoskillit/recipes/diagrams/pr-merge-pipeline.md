@@ -1,126 +1,110 @@
-<!-- autoskillit-recipe-hash: sha256:085833c62ea0319f46c09b9fcd3a00d3d1b10076e1b2d8f743a8f1ecf1836811 -->
-<!-- autoskillit-diagram-format: v2 -->
+<!-- autoskillit-recipe-hash: sha256:637288ffe16e6ee801c4367e0376dc9a13fd69a73fa8610d06d2d9467a38d3f9 -->
+<!-- autoskillit-diagram-format: v4 -->
 ## pr-merge-pipeline
 Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
 
-**Flow:** clone > setup_remote > analyze_prs > create_integration_branch > [loop per PR: merge_pr or (plan > verify > implement > test > merge_to_integration)] > push_integration_branch > collect_artifacts > audit_impl > create_review_pr > cleanup
+**Flow:** clone > setup_remote > analyze_prs > create_integration_branch > [loop per PR: merge_pr or (plan > verify > implement > test > merge_to_integration)] > push_integration_branch > collect_artifacts > check_impl_plans > (audit_impl?) > create_review_pr > cleanup
 
 ### Graph
-┌─ clone  [autoskillit.workspace.clone.clone_repo]
-│  ✓ success  → setup_remote
-│  ✗ failure  → escalate_stop
-│  ↺ ×3  → escalate
+clone  [autoskillit.workspace.clone.clone_repo] (retry ×3)
+│  ↓ success → setup_remote
+│  ✗ failure → escalate_stop
 │
-┌─ setup_remote  [run_cmd]
-│  ✓ success  → analyze_prs
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+setup_remote  [run_cmd] (retry ×3)
+│  ↓ success → analyze_prs
+│  ✗ failure → cleanup_failure
 │
-┌─ analyze_prs  [run_skill]
-│  ✓ success  → create_integration_branch
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+analyze_prs  [run_skill] (retry ×3)
+│  ↓ success → create_integration_branch
+│  ✗ failure → cleanup_failure
 │
-┌─ create_integration_branch  [run_cmd]
-│  ✓ success  → merge_pr
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+create_integration_branch  [run_cmd] (retry ×3)
+│  ↓ success → merge_pr
+│  ✗ failure → cleanup_failure
 │
-┌─ merge_pr  [run_skill]
-│  ├─ true  → plan
-│  ├─ false  → next_part_or_next_pr
-│  ✗ failure  → cleanup_failure
-│  ↺ ×5  → cleanup_failure
+┌────┤ FOR EACH PLAN PART:
+│    │
+│    merge_pr (retry ×5) ─── plan (retry ×3) ─── verify (retry ×5) ─── implement (retry ×∞) ─── retry_worktree (retry ×3) ─── test (retry ×3) ─── merge_to_integration (retry ×3) ─── fix (retry ×3) ↑ ─── next_part_or_next_pr (retry ×3)
+│     │
+│     ✗ failure → cleanup_failure
+│     ⌛ context limit → cleanup_failure
+│     true → plan
+│     false → next_part_or_next_pr
+│                             │
+│                             ✗ failure → cleanup_failure
+│                                                 │
+│                                                 ✗ failure → cleanup_failure
+│                                                 ⌛ context limit → cleanup_failure
+│                                                                       │
+│                                                                       ✗ failure → cleanup_failure
+│                                                                       ⌛ context limit → retry_worktree
+│                                                                                                │
+│                                                                                                ✗ failure → cleanup_failure
+│                                                                                                ⌛ context limit → cleanup_failure
+│                                                                                                                              │
+│                                                                                                                              ✗ failure → fix
+│                                                                                                                                                  │
+│                                                                                                                                                  ✗ failure → cleanup_failure
+│                                                                                                                                                                                      │
+│                                                                                                                                                                                      ✗ failure → cleanup_failure
+│                                                                                                                                                                                      ⌛ context limit → cleanup_failure
+│                                                                                                                                                                                                           │
+│                                                                                                                                                                                                           more_parts → verify ↑
+│                                                                                                                                                                                                           more_prs → merge_pr ↑
+│                                                                                                                                                                                                           all_done → push_integration_branch
 │
-┌─ plan  [run_skill]
-│  ✓ success  → verify
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+└────┘
 │
-┌─ verify  [run_skill]
-│  ✓ success  → implement
-│  ✗ failure  → cleanup_failure
-│  ↺ ×5  → cleanup_failure
+push_integration_branch  [run_cmd] (retry ×3)
+│  ↓ success → collect_artifacts
+│  ✗ failure → cleanup_failure
 │
-┌─ implement  [run_skill]
-│  ✓ success  → test
-│  ✗ failure  → cleanup_failure
+collect_artifacts  [run_cmd] (retry ×3)
+│  ↓ success → check_impl_plans
+│  ✗ failure → check_impl_plans
 │
-┌─ retry_worktree  [run_skill]
-│  ✓ success  → test
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → cleanup_failure
+check_impl_plans  [run_cmd] (retry ×3)
+│  ${{ result.stdout | trim }} == 0 → create_review_pr
+│  (default) → audit_impl
+│  ✗ failure → audit_impl
 │
-┌─ test  [test_check]
-│  ✓ success  → merge_to_integration
-│  ✗ failure  → fix
-│  ↺ ×3  → escalate
+├── [audit_impl] (retry ×3)  ← only if inputs.audit
+│       GO → create_review_pr
+│       NO GO → remediate
+│       ✗ failure → cleanup_failure
 │
-┌─ merge_to_integration  [merge_worktree]
-│  ✓ success  → next_part_or_next_pr
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+remediate  [route] (retry ×3)
+│  ↓ success → plan ↑
 │
-┌─ fix  [run_skill [sonnet]]
-│  ✓ success  → test ↑
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → cleanup_failure
+create_review_pr  [run_cmd] (retry ×3)
+│  ↓ success → ci_watch_pr
+│  ✗ failure → cleanup_failure
 │
-┌─ next_part_or_next_pr  [route]
-│  ├─ more_parts  → verify ↑
-│  ├─ more_prs  → merge_pr ↑
-│  ├─ all_done  → push_integration_branch
-│  ↺ ×3  → escalate
+ci_watch_pr  [run_cmd] (retry ×3)
+│  ↓ success → cleanup_success
+│  ✗ failure → cleanup_failure
 │
-┌─ push_integration_branch  [run_cmd]
-│  ✓ success  → collect_artifacts
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
+cleanup_success  [remove_clone] (retry ×3)
+│  ↓ success → done
+│  ✗ failure → done
 │
-┌─ collect_artifacts  [run_cmd]
-│  ✓ success  → audit_impl
-│  ✗ failure  → audit_impl
-│  ↺ ×3  → escalate
+cleanup_failure  [remove_clone] (retry ×3)
+│  ↓ success → escalate_stop
+│  ✗ failure → escalate_stop
 │
-│  ⟨skip if inputs.audit is false⟩
-┌─ audit_impl  [run_skill]
-│  ├─ GO  → create_review_pr
-│  ├─ NO GO  → remediate
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
-│
-┌─ remediate  [route]
-│  ✓ success  → plan ↑
-│  ↺ ×3  → escalate
-│
-┌─ create_review_pr  [run_cmd]
-│  ✓ success  → cleanup_success
-│  ✗ failure  → cleanup_failure
-│  ↺ ×3  → escalate
-│
-┌─ cleanup_success  [remove_clone]
-│  ✓ success  → done
-│  ✗ failure  → done
-│  ↺ ×3  → escalate
-│
-┌─ cleanup_failure  [remove_clone]
-│  ✓ success  → escalate_stop
-│  ✗ failure  → escalate_stop
-│  ↺ ×3  → escalate
-│
-───────────────────────────────────────
+─────────────────────────────────────
 ⏹ done  "PR consolidation complete. Integration branch pushed, review PR opened. Human review required before merging to base_branch."
 ⏹ escalate_stop  "Pipeline failed — human intervention needed. Check the integration branch and temp/pr-merge-pipeline/ for details."
 
-### Ingredients
-| Name | Description | Required | Default |
-|------|-------------|----------|---------|
-| source_dir | Path to the source repository to clone and work in | yes |  |
-| run_name | Name prefix for this pipeline run (used in clone directory name) | no | pr-merge |
-| keep_clone_on_failure | Keep the clone directory when the pipeline fails (true/false) | no | false |
-| base_branch | Target branch that all PRs are merging into; integration branch is created from this | no | main |
-| audit | Run /autoskillit:audit-impl after all PRs are merged to check coherency (true/false) | no | true |
-| plans_dir | Directory where collected plan files are stored for audit-impl | no | temp/pr-merge-pipeline |
+### Inputs
+| Name | Description | Default |
+|------|-------------|---------|
+| source_dir | Path to the source repository to clone and work in | — |
+| run_name | Name prefix for this pipeline run (used in clone directory name) | pr-merge |
+| keep_clone_on_failure | Keep the clone directory when the pipeline fails (true/false) | off |
+| base_branch | Target branch that all PRs are merging into; integration branch is created from this | main |
+| audit | Run /autoskillit:audit-impl after all PRs are merged to check coherency (true/false) | on |
+| plans_dir | Directory where collected plan files are stored for audit-impl | temp/pr-merge-pipeline |
 ### Kitchen Rules
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill and run_cmd.
 - Route to on_failure when a step fails — do not investigate or fix directly.

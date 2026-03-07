@@ -1,5 +1,5 @@
 <!-- autoskillit-recipe-hash: sha256:707f143e6a17bbf14baaa891ea0086f313534ccc5a96487904f00ad2b7b447c9 -->
-<!-- autoskillit-diagram-format: v3 -->
+<!-- autoskillit-diagram-format: v4 -->
 ## bugfix-loop
 End-to-end test with automatic bug fixing in isolated worktrees.
 
@@ -18,43 +18,41 @@ investigate  [run_skill] (retry ×3)
 │  ↓ success → plan
 │  ✗ failure → escalate
 │
-┌────┤ FOR EACH:
-│  plan  [run_skill] (retry ×3)
-│  │  ↓ success → implement
-│  │  ✗ failure → escalate
-│  │
-│  implement  [run_skill] (retry ×∞)
-│  │  ↓ success → verify
-│  │  ✗ failure → escalate
-│  │  ⌛ context limit → retry_worktree
-│  │
-│  retry_worktree  [run_skill] (retry ×3)
-│  │  ↓ success → verify
-│  │  ✗ failure → escalate
-│  │
-│  verify  [test_check] (retry ×3)
-│  │  ↓ success → audit_impl
-│  │  ✗ failure → assess
-│  │
-│  assess  [run_skill] (retry ×3)
-│  │  ↓ success → verify ↑
-│  │  ✗ failure → classify
-│  │
-│  classify  [classify_fix] (retry ×3)
-│  │  ${{ result.restart_scope }} == full_restart → investigate ↑
-│  │  result.error → escalate
-│  │  (default) → implement ↑
-│  │  ✗ failure → escalate
-│  │
-│  ├── [audit_impl] (retry ×3)  ← only if inputs.audit
-│  │       ${{ result.verdict }} == GO → merge
-│  │       result.error → escalate
-│  │       (default) → remediate
-│  │       ✗ failure → escalate
-│  │
-│  remediate  [route] (retry ×3)
-│  │  ↓ success → plan ↑
-└────┘
+plan  [run_skill] (retry ×3)
+│  ↓ success → implement
+│  ✗ failure → escalate
+│
+implement  [run_skill] (retry ×∞)
+│  ↓ success → verify
+│  ✗ failure → escalate
+│  ⌛ context limit → retry_worktree
+│
+retry_worktree  [run_skill] (retry ×3)
+│  ↓ success → verify
+│  ✗ failure → escalate
+│
+verify  [test_check] (retry ×3)
+│  ↓ success → audit_impl
+│  ✗ failure → assess
+│
+assess  [run_skill] (retry ×3)
+│  ↓ success → verify ↑
+│  ✗ failure → classify
+│
+classify  [classify_fix] (retry ×3)
+│  ${{ result.restart_scope }} == full_restart → investigate ↑
+│  result.error → escalate
+│  (default) → implement ↑
+│  ✗ failure → escalate
+│
+├── [audit_impl] (retry ×3)  ← only if inputs.audit
+│       ${{ result.verdict }} == GO → merge
+│       result.error → escalate
+│       (default) → remediate
+│       ✗ failure → escalate
+│
+remediate  [route] (retry ×3)
+│  ↓ success → plan ↑
 │
 merge  [merge_worktree] (retry ×3)
 │  result.failed_step == 'test_gate' → assess ↑

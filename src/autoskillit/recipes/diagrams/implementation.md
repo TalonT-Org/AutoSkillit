@@ -1,5 +1,5 @@
 <!-- autoskillit-recipe-hash: sha256:0f2108a6beb2408540233665ac51d37be713b4b798bd4cd9773b09d2dae17e37 -->
-<!-- autoskillit-diagram-format: v3 -->
+<!-- autoskillit-diagram-format: v4 -->
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
 
@@ -13,62 +13,52 @@ clone  [clone_repo] (retry ×3)
 ├── [push_merge_target] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → cleanup_failure
 │
-┌────┤ FOR EACH:
-│  plan  [run_skill] (retry ×3)
-│  │  ↓ success → review
-│  │  ✗ failure → cleanup_failure
-│  │
-│  review  [run_skill] (retry ×3)
-│  │  ↓ success → verify
-│  │  ✗ failure → cleanup_failure
-│  │
-│  verify  [run_skill] (retry ×3)
-│  │  ↓ success → implement
-│  │  ✗ failure → cleanup_failure
-│  │
-│  implement  [run_skill] (retry ×∞)
-│  │  ↓ success → test
-│  │  ✗ failure → cleanup_failure
-│  │  ⌛ context limit → retry_worktree
-│  │
-│  retry_worktree  [run_skill] (retry ×3)
-│  │  ↓ success → test
-│  │  ✗ failure → cleanup_failure
-│  │
-│  test  [test_check] (retry ×3)
-│  │  ↓ success → merge
-│  │  ✗ failure → fix
-│  │
-│  merge  [merge_worktree] (retry ×3)
-│  │  result.failed_step == 'test_gate' → fix
-│  │  result.failed_step == 'post_rebase_test_gate' → fix
-│  │  result.failed_step == 'rebase' → fix
-│  │  result.error → cleanup_failure
-│  │  (default) → next_or_done
-│  │  ✗ failure → cleanup_failure
-│  │
-│  push  [push_to_remote] (retry ×3)
-│  │  ↓ success → open_pr_step
-│  │  ✗ failure → cleanup_failure
-│  │
-│  fix  [run_skill] (retry ×3)
-│  │  ↓ success → test ↑
-│  │  ✗ failure → cleanup_failure
-│  │  ⌛ context limit → test
-│  │
-│  next_or_done  [route] (retry ×3)
-│  │  ${{ result.next }} == more_parts → verify ↑
-│  │  (default) → audit_impl
-│  │
-│  ├── [audit_impl] (retry ×3)  ← only if inputs.audit
-│  │       ${{ result.verdict }} == GO → push ↑
-│  │       result.error → escalate_stop
-│  │       (default) → remediate
-│  │       ✗ failure → escalate_stop
-│  │
-│  remediate  [route] (retry ×3)
-│  │  ↓ success → plan ↑
+plan  [run_skill] (retry ×3)
+│  ↓ success → review
+│  ✗ failure → cleanup_failure
+│
+review  [run_skill] (retry ×3)
+│  ↓ success → verify
+│  ✗ failure → cleanup_failure
+│
+┌────┤ FOR EACH PLAN PART:
+│    │
+│    verify (retry ×3) ─── implement (retry ×∞) ─── retry_worktree (retry ×3) ─── test (retry ×3) ─── merge (retry ×3) ─── push (retry ×3) ─── fix (retry ×3) ↑ ─── next_or_done (retry ×3)
+│     │
+│     ✗ failure → cleanup_failure
+│                           │
+│                           ✗ failure → cleanup_failure
+│                           ⌛ context limit → retry_worktree
+│                                                    │
+│                                                    ✗ failure → cleanup_failure
+│                                                                                  │
+│                                                                                  ✗ failure → fix
+│                                                                                                      │
+│                                                                                                      ✗ failure → cleanup_failure
+│                                                                                                      result.failed_step == 'test_gate' → fix
+│                                                                                                      result.failed_step == 'post_rebase_test_gate' → fix
+│                                                                                                      result.failed_step == 'rebase' → fix
+│                                                                                                      result.error → cleanup_failure
+│                                                                                                      (default) → next_or_done
+│                                                                                                                           │
+│                                                                                                                           ✗ failure → cleanup_failure
+│                                                                                                                                               │
+│                                                                                                                                               ✗ failure → cleanup_failure
+│                                                                                                                                               ⌛ context limit → test
+│                                                                                                                                                                    │
+│                                                                                                                                                                    ${{ result.next }} == more_parts → verify ↑
+│                                                                                                                                                                    (default) → audit_impl
+│
 └────┘
+│
+├── [audit_impl] (retry ×3)  ← only if inputs.audit
+│       ${{ result.verdict }} == GO → push ↑
+│       result.error → escalate_stop
+│       (default) → remediate
+│       ✗ failure → escalate_stop
+│
+remediate  [route] (retry ×3)
+│  ↓ success → plan ↑
 │
 ├── [open_pr_step] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → cleanup_failure

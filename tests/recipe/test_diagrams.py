@@ -13,6 +13,14 @@ from autoskillit.recipe.diagrams import (
     load_recipe_diagram,
 )
 
+
+def _extract_graph_section(content: str) -> str:
+    """Extract the ### Graph section content."""
+    start = content.index("### Graph")
+    end = content.index("### Inputs")
+    return content[start:end]
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -767,4 +775,284 @@ def test_bundled_implementation_diagram_matches_spec_structure() -> None:
     inputs_section = content[inputs_start:]
     assert "off" in inputs_section, (
         "Boolean-default ingredients must render as 'off' in Inputs table."
+    )
+
+
+# ---------------------------------------------------------------------------
+# T-HC-1, T-SD-1, T-GF-1..6: Horizontal chain, semantic detection, golden-file
+# ---------------------------------------------------------------------------
+
+_LOOPING_PLAN_PARTS_YAML = """\
+name: looping-parts-test
+description: Recipe that iterates over plan_parts
+summary: plan -> verify -> implement -> next_or_done loop
+ingredients:
+  task:
+    description: What to do
+    required: true
+steps:
+  plan:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:make-plan
+    retries: 3
+    on_success: verify
+    on_failure: escalate
+    note: |
+      plan_parts are built here. For each plan_part, run the full cycle.
+  verify:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:dry-walkthrough
+    retries: 3
+    on_success: implement
+    on_failure: escalate
+  implement:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:implement-worktree
+    retries: 0
+    on_success: next_or_done
+    on_failure: escalate
+  next_or_done:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:smoke-task
+    retries: 3
+    on_success: verify
+    on_failure: escalate
+    note: Checks if more plan_parts remain; if so, routes back to verify for the next plan_part.
+  escalate:
+    action: stop
+    message: "Failed."
+"""
+
+_CI_POLLING_YAML = """\
+name: ci-poll-test
+description: Recipe with CI polling retry only
+summary: implement -> ci_watch -> done
+ingredients:
+  task:
+    description: What to do
+    required: true
+steps:
+  implement:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:implement-worktree
+    retries: 3
+    on_success: ci_watch
+    on_failure: escalate
+  ci_watch:
+    tool: run_cmd
+    with:
+      cmd: "gh run watch"
+      cwd: "."
+    retries: 3
+    on_success: done
+    on_failure: resolve_ci
+    note: Polls for GitHub Actions completion. On failure, routes to resolve_ci.
+  resolve_ci:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:resolve-failures
+    retries: 2
+    on_success: re_push
+    on_failure: escalate
+  re_push:
+    tool: push_to_remote
+    with:
+      clone_path: "."
+      remote_url: "."
+      branch: "main"
+    retries: 2
+    on_success: ci_watch
+    on_failure: escalate
+    note: Pushes the CI-fixed branch back to the remote. Routes back to ci_watch to verify.
+  done:
+    action: stop
+    message: "Done."
+  escalate:
+    action: stop
+    message: "Failed."
+"""
+
+
+@pytest.fixture
+def looping_parts_recipe(tmp_path: Path):  # type: ignore[no-untyped-def]
+    recipes_dir = tmp_path / "recipes"
+    recipes_dir.mkdir()
+    pipeline = recipes_dir / "looping-parts-test.yaml"
+    pipeline.write_text(_LOOPING_PLAN_PARTS_YAML)
+    return pipeline, recipes_dir
+
+
+@pytest.fixture
+def ci_polling_recipe(tmp_path: Path):  # type: ignore[no-untyped-def]
+    recipes_dir = tmp_path / "recipes"
+    recipes_dir.mkdir()
+    pipeline = recipes_dir / "ci-poll-test.yaml"
+    pipeline.write_text(_CI_POLLING_YAML)
+    return pipeline, recipes_dir
+
+
+def test_for_each_inner_layout_is_horizontal_chain(looping_parts_recipe, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    """T-HC-1: Steps inside FOR EACH must use horizontal chain layout (───), not vertical blocks.
+
+    This test will fail as long as _render_visual_flow() uses _append_step() inside the
+    FOR EACH block. It passes only when _render_for_each_chain() is implemented.
+    """
+    pipeline, recipes_dir = looping_parts_recipe
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    content = generate_recipe_diagram(pipeline, recipes_dir=recipes_dir, out_dir=out_dir)
+    graph = _extract_graph_section(content)
+
+    assert "FOR EACH" in graph.upper(), (
+        "Looping recipe with plan_parts notes must have FOR EACH block"
+    )
+    assert "───" in graph, "FOR EACH steps must be connected by horizontal chain (───)"
+
+    # No vertical routing sub-lines inside the FOR EACH block
+    fe_start = graph.index("┌────┤")
+    fe_end = graph.index("└────┘") + len("└────┘")
+    for_each_block = graph[fe_start:fe_end]
+    assert "↓ success →" not in for_each_block, (
+        "Vertical step blocks (│  ↓ success →) found inside FOR EACH; "
+        "expected horizontal chain layout"
+    )
+    assert "✗ failure →" not in for_each_block or "─── " in for_each_block, (
+        "Failure routes inside FOR EACH must appear as side-legs below a horizontal chain"
+    )
+
+
+def test_ci_polling_loop_does_not_get_for_each_block(ci_polling_recipe, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    """T-SD-1: A recipe whose only back-edge is a CI polling retry must NOT get a FOR EACH block.
+
+    FOR EACH requires plan-iteration intent signaled by 'plan_parts' or 'for each'
+    in step note: fields. A structural back-edge alone is not sufficient.
+    """
+    pipeline, recipes_dir = ci_polling_recipe
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    content = generate_recipe_diagram(pipeline, recipes_dir=recipes_dir, out_dir=out_dir)
+    graph = _extract_graph_section(content)
+    assert "FOR EACH" not in graph.upper(), (
+        "CI polling loop (re_push → ci_watch↑) must not be wrapped in a FOR EACH block; "
+        "FOR EACH requires plan-iteration intent in note: fields"
+    )
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "implementation",
+        "bugfix-loop",
+        "implementation-groups",
+        "audit-and-fix",
+        "remediation",
+        "smoke-test",
+    ],
+)
+def test_bundled_diagram_roundtrip(recipe_name: str, tmp_path: Path) -> None:
+    """T-GF-1..6: Committed diagram file must exactly match what the renderer generates.
+
+    This is a golden-file regression test. It fails whenever:
+    - The renderer logic changes but committed files are not regenerated, OR
+    - Committed files are manually edited to differ from renderer output.
+
+    Run `autoskillit recipes render` to regenerate committed files.
+    """
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    pipeline = recipes_dir / f"{recipe_name}.yaml"
+    committed = (recipes_dir / "diagrams" / f"{recipe_name}.md").read_text()
+
+    out_dir = tmp_path / "diagrams"
+    out_dir.mkdir()
+    generated = generate_recipe_diagram(pipeline, recipes_dir=recipes_dir, out_dir=out_dir)
+
+    assert generated == committed, (
+        f"Committed {recipe_name}.md differs from renderer output. "
+        f"Run: autoskillit recipes render {recipe_name}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T-LBL-1, T-LBL-2, T-BD-1, T-BD-2: Descriptive FOR EACH labels and no-FOR-EACH guards
+# ---------------------------------------------------------------------------
+
+
+def test_implementation_diagram_for_each_label_names_plan_part(tmp_path: Path) -> None:
+    """T-LBL-1: implementation.yaml must use 'FOR EACH PLAN PART:' label in diagram."""
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    content = generate_recipe_diagram(
+        recipes_dir / "implementation.yaml",
+        recipes_dir=recipes_dir,
+        out_dir=out_dir,
+    )
+    graph = _extract_graph_section(content)
+    assert "FOR EACH PLAN PART:" in graph, (
+        "implementation.yaml iterates plan_parts; FOR EACH label must say 'FOR EACH PLAN PART:'"
+    )
+
+
+def test_implementation_groups_diagram_for_each_label_names_group(tmp_path: Path) -> None:
+    """T-LBL-2: implementation-groups.yaml must use a group-level label in diagram."""
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    content = generate_recipe_diagram(
+        recipes_dir / "implementation-groups.yaml",
+        recipes_dir=recipes_dir,
+        out_dir=out_dir,
+    )
+    graph = _extract_graph_section(content)
+    assert "FOR EACH GROUP" in graph, (
+        "implementation-groups.yaml iterates groups; FOR EACH label must say 'FOR EACH GROUP...'"
+    )
+
+
+def test_audit_and_fix_diagram_has_no_for_each_block(tmp_path: Path) -> None:
+    """T-BD-1: audit-and-fix.yaml has no plan_parts iteration; diagram must not have FOR EACH."""
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    content = generate_recipe_diagram(
+        recipes_dir / "audit-and-fix.yaml",
+        recipes_dir=recipes_dir,
+        out_dir=out_dir,
+    )
+    graph = _extract_graph_section(content)
+    assert "FOR EACH" not in graph.upper(), (
+        "audit-and-fix.yaml has no plan_parts iteration (only CI polling); "
+        "its diagram must not contain a FOR EACH block"
+    )
+
+
+def test_smoke_test_diagram_has_no_for_each_block(tmp_path: Path) -> None:
+    """T-BD-2: smoke-test.yaml is a single synthetic task run; diagram must not have FOR EACH."""
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    content = generate_recipe_diagram(
+        recipes_dir / "smoke-test.yaml",
+        recipes_dir=recipes_dir,
+        out_dir=out_dir,
+    )
+    graph = _extract_graph_section(content)
+    assert "FOR EACH" not in graph.upper(), (
+        "smoke-test.yaml has no plan_parts iteration; "
+        "its diagram must not contain a FOR EACH block"
     )

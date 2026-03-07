@@ -19,7 +19,7 @@ from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 # Diagram format version — bump when rendering logic changes so that
 # existing diagrams are flagged stale even if the recipe YAML hasn't changed.
-_DIAGRAM_FORMAT_VERSION = "v3"
+_DIAGRAM_FORMAT_VERSION = "v4"
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +45,7 @@ class _LayoutStep:
     is_back_edge_failure: bool = False
     on_result_conditions: list[tuple[str, str, bool]] = field(default_factory=list)
     skip_when_false: str | None = None
+    note: str = ""  # carries recipe step note for semantic FOR EACH detection
 
 
 @dataclass
@@ -83,6 +84,23 @@ def _is_infrastructure_step(step: Any) -> bool:
         or "git rev-parse" in cmd
         or (cmd.strip().startswith("echo") and "\n" not in cmd)
     )
+
+
+_PLAN_ITERATION_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "plan_parts",
+        "plan_part",
+        "for each plan",
+        "for each group",
+        "groups mode",
+    }
+)
+
+
+def _is_plan_iteration_note(note: str) -> bool:
+    """Return True if a step note signals plan-parts or groups iteration intent."""
+    note_lower = note.lower()
+    return any(kw in note_lower for kw in _PLAN_ITERATION_KEYWORDS)
 
 
 def _compute_layout(recipe: Any) -> _LayoutResult:
@@ -128,6 +146,7 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
             retries=step.retries if not is_terminal else 0,
             on_exhausted=step.on_exhausted if not is_terminal else "escalate",
             skip_when_false=step.skip_when_false,
+            note=step.note or "",
         )
 
         if _is_back_edge(step.on_success, idx):
@@ -182,31 +201,44 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
             for when_str, target, is_back in ls.on_result_conditions
         ]
 
-    # Detect FOR EACH loop group among visible (non-infra, non-terminal) steps.
-    # Find the back-edge with the largest span (most steps in the loop).
+    # Phase 3: Semantic FOR EACH detection.
+    # A back-edge span qualifies as FOR EACH only when at least one step in
+    # the span has a note: field signaling plan-iteration intent.
+    # Structural criterion alone (largest span) is insufficient: CI polling
+    # loops and failure-recovery paths produce back-edges but are not FOR EACH.
     visible = [s for s in layout_steps if not s.is_infrastructure and not s.is_terminal]
     vis_index = {s.name: i for i, s in enumerate(visible)}
 
-    for_each_range: tuple[int, int] | None = None
-    best_span = 1  # require loop of at least 3 visible steps (span > 1)
+    best_span = 1
+    best_range: tuple[int, int] | None = None
 
-    for vi, vs in enumerate(visible):
+    for vi, step in enumerate(visible):
         back_targets: list[str] = []
-        if vs.is_back_edge_success and vs.on_success:
-            back_targets.append(vs.on_success)
-        if vs.is_back_edge_failure and vs.on_failure:
-            back_targets.append(vs.on_failure)
-        for _, target, is_back in vs.on_result_conditions:
-            if is_back:
-                back_targets.append(target)
+        if step.is_back_edge_success and step.on_success:
+            back_targets.append(step.on_success)
+        if step.is_back_edge_failure and step.on_failure:
+            back_targets.append(step.on_failure)
+        back_targets.extend(tgt for _, tgt, is_back in step.on_result_conditions if is_back)
 
         for target in back_targets:
             vj = vis_index.get(target)
-            if vj is not None and vj < vi:
-                span = vi - vj
-                if span > best_span:
-                    best_span = span
-                    for_each_range = (vj, vi)
+            if vj is None or vj >= vi:
+                continue
+            span = vi - vj
+            if span <= best_span:
+                continue
+            # Semantic gate: require plan-iteration intent in the back-edge SOURCE
+            # step's note (visible[vi] — the step that routes back to start the
+            # next iteration). Checking the whole span would falsely accept the
+            # remediate→plan back-edge (span=11) in implementation.yaml because
+            # plan.note mentions "plan_parts", even though that back-edge is a
+            # remediation retry path, not a plan-parts iteration loop.
+            has_intent = _is_plan_iteration_note(visible[vi].note)
+            if has_intent:
+                best_span = span
+                best_range = (vj, vi)
+
+    for_each_range = best_range
 
     return _LayoutResult(
         steps=layout_steps,
@@ -266,6 +298,73 @@ def _append_step(step: _LayoutStep, lines: list[str], prefix: str) -> None:
             lines.append(f"{prefix}│  ⌛ context limit → {step.on_context_limit}")
 
 
+def _render_for_each_chain(
+    inner_steps: list[_LayoutStep],
+    lines: list[str],
+) -> None:
+    """Render FOR EACH inner steps as a horizontal chain with side-leg failure branches.
+
+    Produces:
+        ┌────┤ FOR EACH:
+        │    │
+        │    step_a (retry ×∞) ─── step_b (retry ×3) ─── step_c (retry ×∞) ↑
+        │         │
+        │         ✗ failure → escalate
+        │
+        └────┘
+
+    This function is structurally incapable of producing vertical step blocks
+    (│  ↓ success → ...) because it never calls _append_step(). The horizontal
+    layout is the only code path.
+    """
+    lines.append("┌────┤ FOR EACH:")
+    lines.append("│    │")
+
+    # Build the horizontal chain tokens: join step names with ─── connectors.
+    # inner_steps come from visible[] which already excludes terminal steps.
+    chain_tokens: list[str] = []
+    for step in inner_steps:
+        if step.skip_when_false:
+            token = f"[{step.name}]"
+        else:
+            token = step.name
+        if step.retries == 0:
+            token += " (retry ×∞)"
+        else:
+            token += f" (retry ×{step.retries})"
+        if step.is_back_edge_success or step.is_back_edge_failure:
+            token += " ↑"
+        chain_tokens.append(token)
+
+    chain_line = " ─── ".join(chain_tokens)
+    lines.append(f"│    {chain_line}")
+
+    # Side-leg failure branches: one block per step that has a failure route.
+    # Each side-leg hangs below the chain line, indented to the step's position.
+    indent_base = 4  # "│    " prefix = 4 chars after the leading │
+    cursor = 0
+    for idx, step in enumerate(inner_steps):
+        failure_routes: list[str] = []
+        if step.on_failure:
+            suf = " ↑" if step.is_back_edge_failure else ""
+            failure_routes.append(f"✗ failure → {step.on_failure}{suf}")
+        if step.on_context_limit:
+            failure_routes.append(f"⌛ context limit → {step.on_context_limit}")
+        for cond_str, target, is_back in step.on_result_conditions:
+            suf = " ↑" if is_back else ""
+            failure_routes.append(f"{cond_str} → {target}{suf}")
+        if failure_routes:
+            pad = " " * (indent_base + cursor + 1)
+            lines.append(f"│{pad}│")
+            for route in failure_routes:
+                lines.append(f"│{pad}{route}")
+        # Advance cursor by token length + " ─── " separator (5 chars)
+        cursor += len(chain_tokens[idx]) + 5
+
+    lines.append("│")
+    lines.append("└────┘")
+
+
 def _render_visual_flow(layout: _LayoutResult) -> str:
     """Render the layout as a spec-compliant visual ASCII flow diagram.
 
@@ -291,15 +390,9 @@ def _render_visual_flow(layout: _LayoutResult) -> str:
     i = 0
     while i < len(visible):
         if fe_start is not None and i == fe_start:
-            # Wrap loop group in FOR EACH block
-            lines.append("┌────┤ FOR EACH:")
             assert fe_end is not None
-            for j in range(fe_start, fe_end + 1):
-                inner = visible[j]
-                _append_step(inner, lines, "│  ")
-                if j < fe_end:
-                    lines.append("│  │")
-            lines.append("└────┘")
+            inner_steps = visible[fe_start : fe_end + 1]
+            _render_for_each_chain(inner_steps, lines)
             i = fe_end + 1
             if i < len(visible):
                 lines.append("│")
@@ -337,18 +430,23 @@ def _format_ingredient_default(ing: Any) -> str:
     return ing.default
 
 
-def generate_recipe_diagram(pipeline_path: Path, recipes_dir: Path) -> str:
+def generate_recipe_diagram(
+    pipeline_path: Path,
+    recipes_dir: Path,
+    out_dir: Path | None = None,
+) -> str:
     """Generate a visual flow diagram for the recipe at *pipeline_path*.
 
     Reads the recipe YAML, builds a spec-compliant visual ASCII flow diagram
     and 3-column Inputs table, embeds SHA-256 hash and format version for
-    staleness detection, and writes the result atomically to
-    ``recipes_dir/diagrams/{stem}.md``.
+    staleness detection, and writes the result atomically to the output
+    directory.
 
     Args:
         pipeline_path: Absolute path to the recipe ``.yaml`` file.
-        recipes_dir: Root recipes directory (diagrams written to its
-            ``diagrams/`` sub-directory).
+        recipes_dir: Root recipes directory (used for loading the recipe).
+        out_dir: Directory to write the diagram file into. Defaults to
+            ``recipes_dir/diagrams/`` when not provided.
 
     Returns:
         The diagram Markdown string that was written to disk.
@@ -405,8 +503,9 @@ def generate_recipe_diagram(pipeline_path: Path, recipes_dir: Path) -> str:
         f"{rules_section}\n"
     )
 
-    # Write atomically to diagrams/{stem}.md
-    out_path = recipes_dir / "diagrams" / f"{pipeline_path.stem}.md"
+    # Write atomically to out_dir/{stem}.md (defaults to recipes_dir/diagrams/)
+    _out_dir = out_dir if out_dir is not None else recipes_dir / "diagrams"
+    out_path = _out_dir / f"{pipeline_path.stem}.md"
     _atomic_write(out_path, diagram)
     return diagram
 

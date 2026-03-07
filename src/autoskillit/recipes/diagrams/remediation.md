@@ -1,5 +1,5 @@
 <!-- autoskillit-recipe-hash: sha256:bea4904310ffee85bacf5d9fd9f26909e627ddd695f50841c81ed056056c9f00 -->
-<!-- autoskillit-diagram-format: v3 -->
+<!-- autoskillit-diagram-format: v4 -->
 ## remediation
 Investigate a problem deeply, plan architectural fix, implement in a feature branch, and open a PR.
 
@@ -21,45 +21,43 @@ rectify  [run_skill] (retry ×3)
 │  ↓ success → review
 │  ✗ failure → cleanup_failure
 │
-┌────┤ FOR EACH:
-│  review  [run_skill] (retry ×3)
-│  │  ↓ success → dry_walkthrough
-│  │  ✗ failure → cleanup_failure
-│  │
-│  dry_walkthrough  [run_skill] (retry ×3)
-│  │  ↓ success → implement
-│  │  ✗ failure → rectify ↑
-│  │
-│  implement  [run_skill] (retry ×∞)
-│  │  ↓ success → verify
-│  │  ✗ failure → cleanup_failure
-│  │  ⌛ context limit → retry_worktree
-│  │
-│  retry_worktree  [run_skill] (retry ×3)
-│  │  ↓ success → verify
-│  │  ✗ failure → cleanup_failure
-│  │
-│  verify  [test_check] (retry ×3)
-│  │  ↓ success → audit_impl
-│  │  ✗ failure → assess
-│  │
-│  assess  [run_skill] (retry ×3)
-│  │  ↓ success → verify ↑
-│  │  ✗ failure → cleanup_failure
-│  │
-│  ├── [audit_impl] (retry ×3)  ← only if inputs.audit
-│  │       ${{ result.verdict }} == GO → merge
-│  │       result.error → escalate_stop
-│  │       (default) → remediate
-│  │       ✗ failure → escalate_stop
-│  │
-│  remediate  [route] (retry ×3)
-│  │  ↓ success → make_plan
-│  │
-│  make_plan  [run_skill] (retry ×3)
-│  │  ↓ success → review ↑
-│  │  ✗ failure → cleanup_failure
-└────┘
+review  [run_skill] (retry ×3)
+│  ↓ success → dry_walkthrough
+│  ✗ failure → cleanup_failure
+│
+dry_walkthrough  [run_skill] (retry ×3)
+│  ↓ success → implement
+│  ✗ failure → rectify ↑
+│
+implement  [run_skill] (retry ×∞)
+│  ↓ success → verify
+│  ✗ failure → cleanup_failure
+│  ⌛ context limit → retry_worktree
+│
+retry_worktree  [run_skill] (retry ×3)
+│  ↓ success → verify
+│  ✗ failure → cleanup_failure
+│
+verify  [test_check] (retry ×3)
+│  ↓ success → audit_impl
+│  ✗ failure → assess
+│
+assess  [run_skill] (retry ×3)
+│  ↓ success → verify ↑
+│  ✗ failure → cleanup_failure
+│
+├── [audit_impl] (retry ×3)  ← only if inputs.audit
+│       ${{ result.verdict }} == GO → merge
+│       result.error → escalate_stop
+│       (default) → remediate
+│       ✗ failure → escalate_stop
+│
+remediate  [route] (retry ×3)
+│  ↓ success → make_plan
+│
+make_plan  [run_skill] (retry ×3)
+│  ↓ success → review ↑
+│  ✗ failure → cleanup_failure
 │
 merge  [merge_worktree] (retry ×3)
 │  result.failed_step == 'test_gate' → assess ↑

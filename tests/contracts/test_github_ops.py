@@ -104,3 +104,12 @@ def test_triage_issues_label_flag_is_opt_out() -> None:
                 "triage-issues argument section must not define --label as opt-in flag; "
                 "use --no-label (opt-out) instead"
             )
+
+
+# 14. split and split-from labels are in issue-splitter SKILL.md, not batch labels
+def test_issue_splitter_uses_split_not_batch_labels() -> None:
+    """issue-splitter must use split/split-from vocabulary, not batch:N labels."""
+    bd = bundled_skills_dir()
+    content = (bd / "issue-splitter" / "SKILL.md").read_text()
+    assert "split" in content
+    assert "split-from:" in content

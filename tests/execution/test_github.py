@@ -463,3 +463,157 @@ class TestFetchTitle:
     def test_protocol_conformance(self):
         """DefaultGitHubFetcher satisfies GitHubFetcher protocol (has fetch_title)."""
         assert isinstance(DefaultGitHubFetcher(), GitHubFetcher)
+
+
+# ---------------------------------------------------------------------------
+# T2 — _parse_issue_ref source is in core, not github.py
+# ---------------------------------------------------------------------------
+
+
+def test_parse_issue_ref_not_defined_in_github_module():
+    import inspect
+
+    import autoskillit.execution.github as gh
+
+    src_file = inspect.getfile(gh._parse_issue_ref)
+    assert "github.py" not in src_file
+    assert "core" in src_file
+
+
+# ---------------------------------------------------------------------------
+# add_labels
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_add_labels_posts_to_github_api(httpx_mock):
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels",
+        method="POST",
+        json=[{"name": "in-progress"}, {"name": "bug"}],
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.add_labels("owner", "repo", 42, ["in-progress"])
+    assert result["success"] is True
+    assert "in-progress" in result["labels"]
+    requests = httpx_mock.get_requests()
+    assert requests[0].headers.get("authorization") == "Bearer tok"
+
+
+@pytest.mark.anyio
+async def test_add_labels_returns_error_on_404(httpx_mock):
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels",
+        method="POST",
+        status_code=404,
+        json={"message": "Not Found"},
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.add_labels("owner", "repo", 42, ["in-progress"])
+    assert result["success"] is False
+    assert "error" in result
+
+
+# ---------------------------------------------------------------------------
+# remove_label
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_remove_label_deletes_from_github_api(httpx_mock):
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels/in-progress",
+        method="DELETE",
+        status_code=200,
+        json=[{"name": "bug"}],
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.remove_label("owner", "repo", 42, "in-progress")
+    assert result["success"] is True
+
+
+@pytest.mark.anyio
+async def test_remove_label_returns_success_on_404(httpx_mock):
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/issues/42/labels/in-progress",
+        method="DELETE",
+        status_code=404,
+        json={"message": "Not Found"},
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.remove_label("owner", "repo", 42, "in-progress")
+    assert result["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# ensure_label
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_ensure_label_creates_when_missing(httpx_mock):
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/labels",
+        method="POST",
+        status_code=201,
+        json={"name": "in-progress", "color": "fbca04"},
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.ensure_label("owner", "repo", "in-progress")
+    assert result["success"] is True
+    assert result["created"] is True
+
+
+@pytest.mark.anyio
+async def test_ensure_label_no_op_when_exists(httpx_mock):
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/owner/repo/labels",
+        method="POST",
+        status_code=422,
+        json={"message": "Validation Failed"},
+    )
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.ensure_label("owner", "repo", "in-progress")
+    assert result["success"] is True
+    assert result["created"] is False
+
+
+@pytest.mark.anyio
+async def test_ensure_label_returns_error_on_network_failure(httpx_mock):
+    httpx_mock.add_exception(httpx.ConnectError("down"))
+    fetcher = DefaultGitHubFetcher(token="tok")
+    result = await fetcher.ensure_label("owner", "repo", "in-progress")
+    assert result["success"] is False
+    assert "error" in result
+
+
+# ---------------------------------------------------------------------------
+# Protocol conformance — new methods
+# ---------------------------------------------------------------------------
+
+
+def test_github_fetcher_protocol_has_add_labels():
+    assert hasattr(GitHubFetcher, "add_labels")
+
+
+def test_github_fetcher_protocol_has_remove_label():
+    assert hasattr(GitHubFetcher, "remove_label")
+
+
+def test_github_fetcher_protocol_has_ensure_label():
+    assert hasattr(GitHubFetcher, "ensure_label")
+
+
+def test_default_github_fetcher_implements_full_protocol():
+    fetcher = DefaultGitHubFetcher(token=None)
+    assert isinstance(fetcher, GitHubFetcher)
+    for method in (
+        "fetch_issue",
+        "search_issues",
+        "create_issue",
+        "add_comment",
+        "add_labels",
+        "remove_label",
+        "ensure_label",
+    ):
+        assert callable(getattr(fetcher, method, None)), f"missing method: {method}"

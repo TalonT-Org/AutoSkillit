@@ -127,6 +127,12 @@ Launch an Explore subagent to:
 
 ### Step 4: Write Conflict Report (complex path only)
 
+Before composing the report, extract `## Requirements` from the PR body:
+```bash
+gh pr view {pr_number} --json body -q .body
+```
+Extract the `## Requirements` section if present — set `requirements_section = ""` if not found. Gracefully skip if `gh` is unavailable.
+
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.
 
 Write `temp/pr-merge-pipeline/conflict_pr{pr_number}_plan_{ts}.md`:
@@ -142,6 +148,11 @@ semantic conflicts with previously merged PRs.
 **PR:** #{pr_number}
 **Branch:** {pr_branch}
 **Integration Branch:** {integration_branch (current HEAD)}
+
+{If requirements_section is non-empty, include this block to give make-plan the full requirement context:}
+## Requirements
+
+{requirements_section from PR body}
 
 ## PR Summary
 

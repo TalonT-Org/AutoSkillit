@@ -16,8 +16,12 @@ from autoskillit.server.tools_integrations import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
     _parse_fingerprint,
+    claim_issue,
+    enrich_issues,
     fetch_github_issue,
     get_issue_title,
+    prepare_issue,
+    release_issue,
     report_bug,
 )
 
@@ -534,3 +538,119 @@ class TestGetIssueTitleTool:
 
         assert "get_issue_title" in UNGATED_TOOLS
         assert "get_issue_title" not in GATED_TOOLS
+
+
+# ---------------------------------------------------------------------------
+# claim_issue / release_issue / prepare_issue / enrich_issues — gated tools
+# ---------------------------------------------------------------------------
+
+
+class TestClaimIssueTool:
+    def test_claim_issue_is_gated(self):
+        from autoskillit.pipeline.gate import GATED_TOOLS
+
+        assert "claim_issue" in GATED_TOOLS
+
+    @pytest.mark.anyio
+    async def test_claim_issue_returns_gate_error_when_kitchen_closed(self, tool_ctx):
+        from autoskillit.pipeline.gate import DefaultGateState
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+
+    @pytest.mark.anyio
+    async def test_claim_issue_returns_error_without_github_client(self, tool_ctx):
+        tool_ctx.github_client = None
+        result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+        assert result["success"] is False
+        assert "error" in result
+
+    @pytest.mark.anyio
+    async def test_claim_issue_success(self, tool_ctx):
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {"success": True, "labels": []}
+        mock_client.ensure_label.return_value = {"success": True, "created": True}
+        mock_client.add_labels.return_value = {"success": True, "labels": ["in-progress"]}
+        tool_ctx.github_client = mock_client
+        result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+        assert result["success"] is True
+        assert result["claimed"] is True
+        assert result["issue_number"] == 42
+
+    @pytest.mark.anyio
+    async def test_claim_issue_already_claimed(self, tool_ctx):
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {
+            "success": True,
+            "labels": [{"name": "in-progress"}],
+        }
+        tool_ctx.github_client = mock_client
+        result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+        assert result["success"] is True
+        assert result["claimed"] is False
+
+
+class TestReleaseIssueTool:
+    def test_release_issue_is_gated(self):
+        from autoskillit.pipeline.gate import GATED_TOOLS
+
+        assert "release_issue" in GATED_TOOLS
+
+    @pytest.mark.anyio
+    async def test_release_issue_returns_gate_error_when_kitchen_closed(self, tool_ctx):
+        from autoskillit.pipeline.gate import DefaultGateState
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        result = json.loads(await release_issue("https://github.com/owner/repo/issues/42"))
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+
+    @pytest.mark.anyio
+    async def test_release_issue_returns_error_without_github_client(self, tool_ctx):
+        tool_ctx.github_client = None
+        result = json.loads(await release_issue("https://github.com/owner/repo/issues/42"))
+        assert result["success"] is False
+        assert "error" in result
+
+    @pytest.mark.anyio
+    async def test_release_issue_success(self, tool_ctx):
+        mock_client = AsyncMock()
+        mock_client.remove_label.return_value = {"success": True}
+        tool_ctx.github_client = mock_client
+        result = json.loads(await release_issue("https://github.com/owner/repo/issues/42"))
+        assert result["success"] is True
+        assert result["issue_number"] == 42
+
+
+class TestPrepareIssueTool:
+    def test_prepare_issue_is_gated(self):
+        from autoskillit.pipeline.gate import GATED_TOOLS
+
+        assert "prepare_issue" in GATED_TOOLS
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_returns_gate_error_when_kitchen_closed(self, tool_ctx):
+        from autoskillit.pipeline.gate import DefaultGateState
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        result = json.loads(await prepare_issue("Test title", "Test body"))
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+
+
+class TestEnrichIssuesTool:
+    def test_enrich_issues_is_gated(self):
+        from autoskillit.pipeline.gate import GATED_TOOLS
+
+        assert "enrich_issues" in GATED_TOOLS
+
+    @pytest.mark.anyio
+    async def test_enrich_issues_returns_gate_error_when_kitchen_closed(self, tool_ctx):
+        from autoskillit.pipeline.gate import DefaultGateState
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        result = json.loads(await enrich_issues())
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"

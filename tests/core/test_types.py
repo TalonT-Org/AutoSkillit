@@ -196,3 +196,14 @@ def test_severity_has_ok_member():
     assert Severity.OK == "ok"
     assert Severity.ERROR == "error"
     assert Severity.WARNING == "warning"
+
+
+def test_github_fetcher_protocol_has_label_methods():
+    import inspect
+
+    from autoskillit.core.types import GitHubFetcher
+
+    members = {name for name, _ in inspect.getmembers(GitHubFetcher)}
+    assert "add_labels" in members
+    assert "remove_label" in members
+    assert "ensure_label" in members

@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:74e7dee14055e7de3757e5ad2389ba307a9ec9e77d38ca0c26b7298c4d711b01 -->
+<!-- autoskillit-recipe-hash: sha256:ad9cb5c9bc405f4636ea19794f8a6b8c29015543b99d688887bf2f668da0a181 -->
 <!-- autoskillit-diagram-format: v4 -->
 ## implementation-groups
 Decompose a source document into sequenced implementation groups, then plan, verify, implement, test, and merge each group end-to-end. Use when you have a large document or roadmap to implement via make-groups.
@@ -13,40 +13,45 @@ clone  [clone_repo] (retry ×3)
 ├── [get_issue_title] (retry ×3)  ← only if inputs.issue_url
 │       ✗ failure → escalate_stop
 │
+├── [claim_issue] (retry ×3)  ← only if inputs.issue_url
+│       ${{ result.claimed }} == true → push_merge_target
+│       (default) → escalate_stop
+│       ✗ failure → escalate_stop
+│
 ├── [push_merge_target] (retry ×3)  ← only if inputs.open_pr
-│       ✗ failure → cleanup_failure
+│       ✗ failure → release_issue_failure
 │
 group  [run_skill] (retry ×3)
 │  ↓ success → plan
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 ┌────┤ FOR EACH GROUP / PLAN PART:
 │    │
 │    plan (retry ×3) ─── review (retry ×3) ─── verify (retry ×3) ─── implement (retry ×∞) ─── retry_worktree (retry ×3) ─── test (retry ×3) ─── merge (retry ×3) ─── push (retry ×3) ─── fix (retry ×3) ↑ ─── next_or_done (retry ×3)
 │     │
-│     ✗ failure → cleanup_failure
+│     ✗ failure → release_issue_failure
 │                         │
-│                         ✗ failure → cleanup_failure
+│                         ✗ failure → release_issue_failure
 │                                               │
-│                                               ✗ failure → cleanup_failure
+│                                               ✗ failure → release_issue_failure
 │                                                                     │
-│                                                                     ✗ failure → cleanup_failure
+│                                                                     ✗ failure → release_issue_failure
 │                                                                     ⌛ context limit → retry_worktree
 │                                                                                              │
-│                                                                                              ✗ failure → cleanup_failure
+│                                                                                              ✗ failure → release_issue_failure
 │                                                                                                                            │
 │                                                                                                                            ✗ failure → fix
 │                                                                                                                                                │
-│                                                                                                                                                ✗ failure → cleanup_failure
+│                                                                                                                                                ✗ failure → release_issue_failure
 │                                                                                                                                                result.failed_step == 'test_gate' → fix
 │                                                                                                                                                result.failed_step == 'post_rebase_test_gate' → fix
 │                                                                                                                                                result.failed_step == 'rebase' → fix
-│                                                                                                                                                result.error → cleanup_failure
+│                                                                                                                                                result.error → release_issue_failure
 │                                                                                                                                                (default) → next_or_done
 │                                                                                                                                                                     │
-│                                                                                                                                                                     ✗ failure → cleanup_failure
+│                                                                                                                                                                     ✗ failure → release_issue_failure
 │                                                                                                                                                                                         │
-│                                                                                                                                                                                         ✗ failure → cleanup_failure
+│                                                                                                                                                                                         ✗ failure → release_issue_failure
 │                                                                                                                                                                                         ⌛ context limit → test
 │                                                                                                                                                                                                              │
 │                                                                                                                                                                                                              ${{ result.next }} == more_parts → verify ↑
@@ -65,7 +70,7 @@ remediate  [route] (retry ×3)
 │  ↓ success → plan ↑
 │
 ├── [open_pr_step] (retry ×3)  ← only if inputs.open_pr
-│       ✗ failure → cleanup_failure
+│       ✗ failure → release_issue_failure
 │
 ├── [review_pr] (retry ×3)  ← only if inputs.open_pr
 │       ${{ result.verdict }} == changes_requested → resolve_review
@@ -74,22 +79,28 @@ remediate  [route] (retry ×3)
 │
 resolve_review  [run_skill] (retry ×2)
 │  ↓ success → re_push_review
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 re_push_review  [push_to_remote] (retry ×3)
 │  ↓ success → review_pr ↑
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 ├── [ci_watch] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → resolve_ci
 │
 resolve_ci  [run_skill] (retry ×2)
 │  ↓ success → re_push
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 re_push  [push_to_remote] (retry ×3)
 │  ↓ success → ci_watch ↑
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
+│
+├── [release_issue_success] (retry ×3)  ← only if inputs.issue_url
+│       ✗ failure → cleanup_success
+│
+├── [release_issue_failure] (retry ×3)  ← only if inputs.issue_url
+│       ✗ failure → cleanup_failure
 │
 cleanup_success  [remove_clone] (retry ×3)
 │  ↓ success → done

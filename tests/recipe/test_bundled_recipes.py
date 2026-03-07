@@ -355,9 +355,9 @@ class TestImplementationPipelineStructure:
         assert step.with_args.get("timeout") == 150
 
     def test_ip_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch routes on_success to cleanup_success and on_failure to resolve_ci."""
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "cleanup_success"
+        assert step.on_success == "release_issue_success"
         assert step.on_failure == "resolve_ci"
 
     def test_ip_ci_watch_uses_merge_target(self, recipe) -> None:
@@ -369,14 +369,14 @@ class TestImplementationPipelineStructure:
 
     def test_ip_resolve_ci_structure(self, recipe) -> None:
         """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
-        and on_exhausted: cleanup_failure."""
+        and on_exhausted: release_issue_failure."""
         assert "resolve_ci" in recipe.steps
         step = recipe.steps["resolve_ci"]
         assert step.tool == "run_skill"
         skill_cmd = step.with_args.get("skill_command", "")
         assert "resolve-failures" in skill_cmd
         assert step.retries == 2
-        assert step.on_exhausted == "cleanup_failure"
+        assert step.on_exhausted == "release_issue_failure"
 
     def test_ip_resolve_ci_uses_work_dir(self, recipe) -> None:
         """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
@@ -389,7 +389,7 @@ class TestImplementationPipelineStructure:
         step = recipe.steps["re_push"]
         assert step.tool == "push_to_remote"
         assert step.on_success == "ci_watch"
-        assert step.on_failure == "cleanup_failure"
+        assert step.on_failure == "release_issue_failure"
 
     def test_ip_re_push_has_explicit_remote_url(self, recipe) -> None:
         """T_CI7: re_push uses explicit remote_url (satisfies push-missing-explicit-remote-url)."""
@@ -611,7 +611,7 @@ class TestInvestigateFirstStructure:
         assert "plan_path" in step.capture
         assert "plan_parts" in step.capture_list
         assert step.on_success == "review"
-        assert step.on_failure == "cleanup_failure"
+        assert step.on_failure == "release_issue_failure"
 
     def test_if3_verify_step_uses_implementation_ref(self, recipe) -> None:
         """T_IF3: verify step worktree_path must reference context.implementation_ref."""
@@ -713,9 +713,9 @@ class TestInvestigateFirstStructure:
         assert step.with_args.get("timeout") == 150
 
     def test_if_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch routes on_success to cleanup_success and on_failure to resolve_ci."""
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "cleanup_success"
+        assert step.on_success == "release_issue_success"
         assert step.on_failure == "resolve_ci"
 
     def test_if_ci_watch_uses_merge_target(self, recipe) -> None:
@@ -727,14 +727,14 @@ class TestInvestigateFirstStructure:
 
     def test_if_resolve_ci_structure(self, recipe) -> None:
         """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
-        and on_exhausted: cleanup_failure."""
+        and on_exhausted: release_issue_failure."""
         assert "resolve_ci" in recipe.steps
         step = recipe.steps["resolve_ci"]
         assert step.tool == "run_skill"
         skill_cmd = step.with_args.get("skill_command", "")
         assert "resolve-failures" in skill_cmd
         assert step.retries == 2
-        assert step.on_exhausted == "cleanup_failure"
+        assert step.on_exhausted == "release_issue_failure"
 
     def test_if_resolve_ci_uses_work_dir(self, recipe) -> None:
         """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
@@ -747,7 +747,7 @@ class TestInvestigateFirstStructure:
         step = recipe.steps["re_push"]
         assert step.tool == "push_to_remote"
         assert step.on_success == "ci_watch"
-        assert step.on_failure == "cleanup_failure"
+        assert step.on_failure == "release_issue_failure"
 
     def test_if_re_push_has_explicit_remote_url(self, recipe) -> None:
         """T_CI7: re_push uses explicit remote_url."""
@@ -860,9 +860,9 @@ class TestAuditAndFixStructure:
         assert step.with_args.get("timeout") == 150
 
     def test_aaf_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch routes on_success to cleanup_success and on_failure to resolve_ci."""
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "cleanup_success"
+        assert step.on_success == "release_issue_success"
         assert step.on_failure == "resolve_ci"
 
     def test_aaf_ci_watch_uses_merge_target(self, recipe) -> None:
@@ -874,14 +874,14 @@ class TestAuditAndFixStructure:
 
     def test_aaf_resolve_ci_structure(self, recipe) -> None:
         """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
-        and on_exhausted: cleanup_failure."""
+        and on_exhausted: release_issue_failure."""
         assert "resolve_ci" in recipe.steps
         step = recipe.steps["resolve_ci"]
         assert step.tool == "run_skill"
         skill_cmd = step.with_args.get("skill_command", "")
         assert "resolve-failures" in skill_cmd
         assert step.retries == 2
-        assert step.on_exhausted == "cleanup_failure"
+        assert step.on_exhausted == "release_issue_failure"
 
     def test_aaf_resolve_ci_uses_work_dir(self, recipe) -> None:
         """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
@@ -894,7 +894,7 @@ class TestAuditAndFixStructure:
         step = recipe.steps["re_push"]
         assert step.tool == "push_to_remote"
         assert step.on_success == "ci_watch"
-        assert step.on_failure == "cleanup_failure"
+        assert step.on_failure == "release_issue_failure"
 
     def test_aaf_re_push_has_explicit_remote_url(self, recipe) -> None:
         """T_CI7: re_push uses explicit remote_url."""

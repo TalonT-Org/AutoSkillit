@@ -55,6 +55,7 @@ Launch one Explore subagent per PR (up to 8 in parallel; batch if more):
 Each subagent fetches:
 - `gh pr diff {number}` — full unified diff
 - `gh pr view {number} --json files` — structured file list with additions/deletions per file
+- `gh pr view {number} --json body -q .body` — PR body to extract `## Requirements` section if present
 
 Each subagent returns:
 - `pr_number`: int
@@ -64,6 +65,7 @@ Each subagent returns:
 - `additions`: int
 - `deletions`: int
 - `test_files_changed`: list of test file paths (files matching `test_*.py`, `*_test.py`, `*.test.*`, `tests/**`)
+- `requirements_section`: str — the `## Requirements` section extracted from the PR body, or `""` if not present
 
 ### Step 2: Build File Overlap Matrix
 
@@ -175,6 +177,11 @@ This file is named `*_plan_*.md` so `audit-impl` can discover it as the baseline
 - **Rationale:** {why this complexity tag was assigned}
 - **Key files:** {list}
 - **Risk notes:** {any concerns}
+
+{If requirements_section is non-empty, include this block so reviewers can trace intent:}
+#### Requirements
+
+{requirements_section from PR body}
 
 {repeat for each PR}
 

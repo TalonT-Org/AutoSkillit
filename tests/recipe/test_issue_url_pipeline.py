@@ -52,7 +52,7 @@ class TestImplementationPipelineIssueUrl:
         """get_issue_title must be positioned after set_merge_target, before create_branch."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
         assert data["steps"]["set_merge_target"]["on_success"] == "get_issue_title"
-        assert data["steps"]["get_issue_title"]["on_success"] == "create_branch"
+        assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue"
 
     def test_create_branch_uses_slug_fallback(self):
         """create_branch shell uses ${SLUG:-$RUN} pattern."""
@@ -139,7 +139,7 @@ class TestInvestigateFirstIssueUrl:
         """get_issue_title must be positioned after set_merge_target, before create_branch."""
         data = yaml.safe_load(_recipe_path("remediation").read_text())
         assert data["steps"]["set_merge_target"]["on_success"] == "get_issue_title"
-        assert data["steps"]["get_issue_title"]["on_success"] == "create_branch"
+        assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue"
 
     def test_create_branch_uses_slug_fallback(self):
         """create_branch shell uses ${SLUG:-$RUN} pattern."""
@@ -225,7 +225,7 @@ class TestAuditAndFixIssueUrl:
         """get_issue_title must be positioned after set_merge_target, before create_branch."""
         data = yaml.safe_load(_recipe_path("audit-and-fix").read_text())
         assert data["steps"]["set_merge_target"]["on_success"] == "get_issue_title"
-        assert data["steps"]["get_issue_title"]["on_success"] == "create_branch"
+        assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue"
 
     def test_create_branch_uses_slug_fallback(self):
         """create_branch shell uses ${SLUG:-$RUN} pattern."""
@@ -321,3 +321,64 @@ class TestImplementationGroupsIssueTitle:
         data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
         step = data["steps"]["open_pr_step"]
         assert "context.issue_number" in str(step)
+
+
+class TestClaimReleaseGates:
+    """Claim/release issue gate steps are present and correctly wired in all 4 recipes."""
+
+    RECIPES = ["implementation", "implementation-groups", "remediation", "audit-and-fix"]
+
+    def test_claim_issue_step_present(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            assert "claim_issue" in data["steps"], f"{name}: missing claim_issue step"
+
+    def test_get_issue_title_routes_to_claim_issue(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            assert data["steps"]["get_issue_title"]["on_success"] == "claim_issue", (
+                f"{name}: get_issue_title.on_success should be claim_issue"
+            )
+
+    def test_claim_issue_routes_to_create_branch_on_true(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            step = data["steps"]["claim_issue"]
+            routes = step.get("on_result", [])
+            true_routes = [r["route"] for r in routes if r.get("when", "").endswith("== true")]
+            assert "create_branch" in true_routes, (
+                f"{name}: claim_issue should route to create_branch when claimed==true"
+            )
+
+    def test_release_issue_steps_present(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            assert "release_issue_success" in data["steps"], (
+                f"{name}: missing release_issue_success"
+            )
+            assert "release_issue_failure" in data["steps"], (
+                f"{name}: missing release_issue_failure"
+            )
+
+    def test_release_issue_success_routes_to_cleanup(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            step = data["steps"]["release_issue_success"]
+            assert step["on_success"] == "cleanup_success", (
+                f"{name}: release_issue_success.on_success should be cleanup_success"
+            )
+
+    def test_release_issue_failure_routes_to_cleanup_failure(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            step = data["steps"]["release_issue_failure"]
+            assert step["on_success"] == "cleanup_failure", (
+                f"{name}: release_issue_failure.on_success should be cleanup_failure"
+            )
+
+    def test_ci_watch_routes_to_release_issue_success(self):
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            assert data["steps"]["ci_watch"]["on_success"] == "release_issue_success", (
+                f"{name}: ci_watch.on_success should be release_issue_success"
+            )

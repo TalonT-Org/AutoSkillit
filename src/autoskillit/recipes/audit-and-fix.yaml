@@ -116,7 +116,7 @@ steps:
     with_args:
       issue_url: ${{ inputs.issue_url }}
     capture:
-      claimed: result.claimed
+      claimed: "${{ result.claimed }}"
     on_result:
       - when: "${{ result.claimed }} == true"
         route: create_branch

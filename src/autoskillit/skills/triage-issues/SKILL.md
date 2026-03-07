@@ -49,6 +49,11 @@ Parse optional arguments from the user's invocation:
 - `--batch-size N` — maximum issues per batch (default: 4)
 - `--no-label` — skip GitHub label application after triage
 - `--dry-run` — run analysis but skip label application even if `--no-label` is not set
+- `--collapse` — invoke `collapse-issues` after split analysis to consolidate related issues
+- `--enrich` — for each issue classified as `recipe:implementation`, generate and append
+               structured requirements (`REQ-{GRP}-NNN` format) to the issue body.
+               Skips issues that already have a `## Requirements` section (idempotent).
+               No effect on `recipe:remediation` issues.
 
 ### Step 1: Authenticate and Fetch Issues
 
@@ -56,15 +61,58 @@ Parse optional arguments from the user's invocation:
 # Verify GitHub authentication
 gh auth status
 
-# Fetch all open issues with required fields
-gh issue list --state open --json number,title,body,labels,url,assignees --limit 200
+# Fetch all open issues with required fields, excluding in-progress issues
+gh issue list --state open --json number,title,body,labels,url,assignees --limit 200 \
+  | jq '[.[] | select(.labels | map(.name) | contains(["in-progress"]) | not)]'
 ```
+
+Issues carrying the `in-progress` label are actively being processed by a pipeline session
+and are excluded from triage to prevent duplicate work.
 
 If `gh auth status` fails, abort with a clear error message.
 
-If there are zero open issues, skip to Step 7 and output an empty report.
+If there are zero open issues (after filtering), skip to Step 7 and output an empty report.
 
-### Step 2: Parallel Issue Analysis
+### Step 2a: Parallel Split Analysis
+
+Before codebase analysis, run `issue-splitter` for every open issue to detect mixed-concern issues and expand the working set.
+
+Launch up to 8 subagents in parallel (`model: "sonnet"`), one per issue. Each subagent invokes:
+
+```
+/autoskillit:issue-splitter --issue {N} --repo {owner/repo} [--no-label if --no-label was passed] [--dry-run if --dry-run was passed]
+```
+
+For each subagent result, parse the `---issue-splitter-result---` block and build the **expanded working set**:
+
+- `decision=no-split`: keep the original issue in the working set; note the pre-classified `route` as a seed for Step 3 (Recipe Classification) — Step 3 still re-verifies
+- `decision=split`: remove the original issue from the working set; add its `sub_issues` list instead
+- `decision=error`: log a warning; keep the original issue as-is (fail-safe)
+
+Proceed to Step 2c (if `--collapse`) or Step 2b with the expanded working set.
+
+**Flag propagation:** When `triage-issues` is invoked with `--no-label`, pass `--no-label` to each `issue-splitter` call. When `--dry-run` is active, pass `--dry-run`. This ensures split analysis is observable without mutating GitHub.
+
+### Step 2c (optional): Collapse Related Issues
+
+If `--collapse` was passed:
+
+Invoke the collapse-issues skill to consolidate related issues before analysis:
+
+```
+/autoskillit:collapse-issues --repo {owner/repo} [--dry-run if --dry-run was passed] [--no-label if --no-label was passed]
+```
+
+Parse the `---collapse-issues-result---` block from the skill output:
+- `groups_formed`: log "Collapsed N groups ({M} issues → {groups_formed} combined issues)"
+- Update the working issue list: remove closed originals, add new combined issue numbers
+- If the skill returns an error, log a warning but continue triage with the original issue list (fail-safe)
+
+**Flag propagation:** `--dry-run` and `--no-label` are passed through to collapse-issues.
+
+The collapse step runs after splitting is complete so it sees the fully-decomposed issue list.
+
+### Step 2b: Parallel Issue Analysis
 
 Launch parallel subagents (up to 8) to analyze each issue. Each subagent receives one issue and must identify:
 
@@ -116,6 +164,40 @@ Present each ambiguous issue as follows:
 
 Wait for the user's response before continuing to the next ambiguous issue.
 Record all human decisions for inclusion in the triage report.
+
+### Step 3c: Requirement Enrichment (only when `--enrich` is passed)
+
+For each issue in the working set classified as `recipe:implementation`:
+
+1. Fetch issue body:
+   ```bash
+   gh issue view {N} --json body -q .body
+   ```
+2. If `## Requirements` section already present in the body: skip (idempotent).
+3. In-context requirement generation using the issue title, body, and classification
+   rationale already in context:
+   - Trace: "What must be true for this functionality to exist?"
+   - Group by co-implementation concern (short uppercase abbreviation, 2–5 letters).
+   - Format: `**REQ-{GRP}-NNN:** {single-sentence condition statement}.`
+4. If `--dry-run` or `--no-label` is active: print generated requirements to stdout
+   per issue but skip `gh issue edit`. Record `requirements_generated: true` in manifest.
+5. Otherwise, append via:
+   ```bash
+   gh issue edit {N} --body "$(gh issue view {N} --json body -q .body)
+
+## Requirements
+
+### {Group Name}
+
+- **REQ-{GRP}-001:** ...
+..."
+   ```
+6. If the issue is too vague for clean extraction: skip silently and record
+   `requirements_generated: false` in the manifest for that issue.
+
+This step is in-context only — no subagents are spawned for enrichment.
+
+`recipe:remediation` issues are not enriched regardless of the `--enrich` flag.
 
 ### Step 4: Build Conflict Graph
 
@@ -177,7 +259,8 @@ The report contains:
                     "recipe": "implementation",
                     "confidence": "high",
                     "systems": ["auth", "api"],
-                    "rationale": "Well-defined feature with clear acceptance criteria"
+                    "rationale": "Well-defined feature with clear acceptance criteria",
+                    "requirements_generated": true
                 }
             ]
         }
@@ -188,6 +271,8 @@ The report contains:
     ]
 }
 ```
+
+Issues not enriched (`recipe:remediation`, or `--enrich` not passed) emit `"requirements_generated": null`.
 
 **7c. Label application (unless `--no-label` is passed):**
 

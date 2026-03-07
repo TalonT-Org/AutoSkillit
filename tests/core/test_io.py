@@ -97,3 +97,22 @@ class TestYamlConsolidationArchitecture:
                     if (node.module or "").startswith("yaml"):
                         violations.append(f"{rel}: from {node.module} import ...")
         assert not violations, f"Direct yaml imports found outside core/io.py: {violations}"
+
+
+# ---------------------------------------------------------------------------
+# T1 — _parse_issue_ref importable from core
+# ---------------------------------------------------------------------------
+
+
+def test_parse_issue_ref_importable_from_core():
+    from autoskillit.core import _parse_issue_ref
+
+    owner, repo, number = _parse_issue_ref("https://github.com/acme/proj/issues/42")
+    assert owner == "acme" and repo == "proj" and number == 42
+
+
+def test_parse_issue_ref_importable_from_core_io():
+    from autoskillit.core.io import _parse_issue_ref
+
+    owner, repo, number = _parse_issue_ref("acme/proj#7")
+    assert owner == "acme" and repo == "proj" and number == 7

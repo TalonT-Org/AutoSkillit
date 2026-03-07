@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:0a26a3129e7eaffc53429af9e83a6463675d1663daf96fe67bb22252417ea845 -->
+<!-- autoskillit-recipe-hash: sha256:66f07b3e60be243693be0c173db8cbf702e31256a47a4c0a4775dd3d1f0ef0ff -->
 <!-- autoskillit-diagram-format: v4 -->
 ## audit-and-fix
 Audit codebase, investigate findings, plan fixes, implement in a feature branch, and open a PR.
@@ -13,29 +13,34 @@ clone  [clone_repo] (retry ×3)
 ├── [get_issue_title] (retry ×3)  ← only if inputs.issue_url
 │       ✗ failure → escalate_stop
 │
+├── [claim_issue] (retry ×3)  ← only if inputs.issue_url
+│       ${{ result.claimed }} == true → push_merge_target
+│       (default) → escalate_stop
+│       ✗ failure → escalate_stop
+│
 ├── [push_merge_target] (retry ×3)  ← only if inputs.open_pr
-│       ✗ failure → cleanup_failure
+│       ✗ failure → release_issue_failure
 │
 audit  [run_skill] (retry ×3)
 │  ↓ success → investigate
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 investigate  [run_skill] (retry ×3)
 │  ↓ success → plan
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 plan  [run_skill] (retry ×3)
 │  ↓ success → implement
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 implement  [run_skill] (retry ×∞)
 │  ↓ success → test
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │  ⌛ context limit → retry_worktree
 │
 retry_worktree  [run_skill] (retry ×3)
 │  ↓ success → test
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 test  [test_check] (retry ×3)
 │  ↓ success → merge
@@ -43,19 +48,19 @@ test  [test_check] (retry ×3)
 │
 fix  [run_skill] (retry ×3)
 │  ↓ success → test ↑
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │  ⌛ context limit → test
 │
 merge  [merge_worktree] (retry ×3)
 │  ↓ success → push
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 push  [push_to_remote] (retry ×3)
 │  ↓ success → open_pr_step
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 ├── [open_pr_step] (retry ×3)  ← only if inputs.open_pr
-│       ✗ failure → cleanup_failure
+│       ✗ failure → release_issue_failure
 │
 ├── [review_pr] (retry ×3)  ← only if inputs.open_pr
 │       ${{ result.verdict }} == changes_requested → resolve_review
@@ -64,22 +69,28 @@ push  [push_to_remote] (retry ×3)
 │
 resolve_review  [run_skill] (retry ×2)
 │  ↓ success → re_push_review
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 re_push_review  [push_to_remote] (retry ×3)
 │  ↓ success → review_pr ↑
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 ├── [ci_watch] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → resolve_ci
 │
 resolve_ci  [run_skill] (retry ×2)
 │  ↓ success → re_push
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
 │
 re_push  [push_to_remote] (retry ×3)
 │  ↓ success → ci_watch ↑
-│  ✗ failure → cleanup_failure
+│  ✗ failure → release_issue_failure
+│
+├── [release_issue_success] (retry ×3)  ← only if inputs.issue_url
+│       ✗ failure → cleanup_success
+│
+├── [release_issue_failure] (retry ×3)  ← only if inputs.issue_url
+│       ✗ failure → cleanup_failure
 │
 cleanup_success  [remove_clone] (retry ×3)
 │  ↓ success → done

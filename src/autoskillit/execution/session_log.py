@@ -124,7 +124,9 @@ def flush_session_log(
         try:
             duration_seconds = max(
                 0.0,
-                (datetime.fromisoformat(end_ts) - datetime.fromisoformat(start_ts)).total_seconds(),
+                (
+                    datetime.fromisoformat(end_ts) - datetime.fromisoformat(start_ts)
+                ).total_seconds(),
             )
         except ValueError:
             pass

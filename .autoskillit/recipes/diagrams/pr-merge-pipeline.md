@@ -22,7 +22,7 @@ create_integration_branch  [run_cmd] (retry ×3)
 │  ↓ success → merge_pr
 │  ✗ failure → cleanup_failure
 │
-┌────┤ FOR EACH:
+┌────┤ FOR EACH PLAN PART:
 │    │
 │    merge_pr (retry ×5) ─── plan (retry ×3) ─── verify (retry ×5) ─── implement (retry ×∞) ─── retry_worktree (retry ×3) ─── test (retry ×3) ─── merge_to_integration (retry ×3) ─── fix (retry ×3) ↑ ─── next_part_or_next_pr (retry ×3)
 │     │

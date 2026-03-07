@@ -1,4 +1,4 @@
-"""MCP tool handlers: fetch_github_issue, report_bug."""
+"""MCP tool handlers: fetch_github_issue, report_bug, prepare_issue."""
 
 from __future__ import annotations
 
@@ -24,6 +24,10 @@ logger = get_logger(__name__)
 # Fingerprint block delimiters written by the report-bug skill in its response.
 _FINGERPRINT_START = "---bug-fingerprint---"
 _FINGERPRINT_END = "---/bug-fingerprint---"
+
+# Result block delimiters written by the prepare-issue skill in its response.
+_PREPARE_RESULT_START = "---prepare-issue-result---"
+_PREPARE_RESULT_END = "---/prepare-issue-result---"
 
 # Strong references to in-flight non-blocking report tasks (prevents GC).
 _pending_report_tasks: set[asyncio.Task[Any]] = set()
@@ -348,3 +352,104 @@ async def _run_report_session(
         "report_path": str(report_path),
         "github": github,
     }
+
+
+def _parse_prepare_result(response: str) -> dict[str, Any]:
+    """Extract and JSON-parse the prepare-issue result block from a skill response.
+
+    Returns the parsed dict on success, or {} on any parse error or missing block.
+    """
+    in_block = False
+    block_lines: list[str] = []
+    for line in response.splitlines():
+        stripped = line.strip()
+        if stripped == _PREPARE_RESULT_START:
+            in_block = True
+            continue
+        if stripped == _PREPARE_RESULT_END:
+            break
+        if in_block:
+            block_lines.append(line)
+    if not block_lines:
+        return {}
+    try:
+        return json.loads("\n".join(block_lines))
+    except json.JSONDecodeError:
+        return {}
+
+
+@mcp.tool(tags={"automation"})
+async def prepare_issue(
+    title: str,
+    body: str,
+    repo: str = "",
+    labels: list[str] | None = None,
+    dry_run: bool = False,
+    split: bool = False,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Create a GitHub issue and immediately triage it with LLM classification.
+
+    Launches /autoskillit:prepare-issue in a headless session to perform the
+    full triage workflow: dedup check, create or adopt the issue, LLM
+    classification (bug vs enhancement, implementation vs remediation route),
+    mixed-concern detection, and label application.
+
+    Returns JSON with: success, status, issue_url, issue_number, route,
+    issue_type, confidence, rationale, labels_applied, dry_run, sub_issues.
+    On gate closed or misconfiguration: {success: false, error: "..."}
+
+    Args:
+        title: Issue title.
+        body: Issue body — description, acceptance criteria, or error context.
+        repo: Target repository as owner/repo. Falls back to gh default repo if empty.
+        labels: Additional labels to apply beyond triage labels (optional).
+        dry_run: When True, classifies and previews without creating or labeling.
+        split: When True, splits mixed-concern issues into sub-issues automatically.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="prepare_issue", title=title[:60])
+    logger.info("prepare_issue", title=title[:60], dry_run=dry_run, split=split)
+    await _notify(
+        ctx,
+        "info",
+        f"prepare_issue: {title[:60]}",
+        "autoskillit.prepare_issue",
+        extra={"dry_run": dry_run, "split": split},
+    )
+
+    from autoskillit.server import _get_config, _get_ctx
+
+    tool_ctx = _get_ctx()
+    if tool_ctx.executor is None:
+        return json.dumps({"success": False, "error": "Executor not configured"})
+
+    config = _get_config()
+
+    parts = [f"/autoskillit:prepare-issue\n\n{title}\n\n{body}"]
+    if repo:
+        parts.append(f"--repo {repo}")
+    if dry_run:
+        parts.append("--dry-run")
+    if split:
+        parts.append("--split")
+    if labels:
+        parts.extend(f"--label {lbl}" for lbl in labels)
+    skill_command = "\n".join(parts)
+
+    result = await tool_ctx.executor.run(
+        skill_command,
+        str(config.project_dir),
+    )
+
+    parsed = _parse_prepare_result(result.result or "")
+    return json.dumps(
+        {
+            "success": result.success,
+            "status": "complete" if result.success else "failed",
+            **parsed,
+        }
+    )

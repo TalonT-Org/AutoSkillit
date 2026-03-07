@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:57899207f00dcd9b632073f68f6dccec692449b4e14cb254b6305866a9202380 -->
+<!-- autoskillit-recipe-hash: sha256:12422cc926496b271b0c2607fb57145a40b02a8421eb6a85f8f14d224ce39e68 -->
 <!-- autoskillit-diagram-format: v3 -->
 ## implementation-groups
 Decompose a source document into sequenced implementation groups, then plan, verify, implement, test, and merge each group end-to-end. Use when you have a large document or roadmap to implement via make-groups.
@@ -82,6 +82,8 @@ group  [run_skill] (retry ×3)
 │       ✗ failure → cleanup_failure
 │
 ├── [review_pr] (retry ×3)  ← only if inputs.open_pr
+│       ${{ result.verdict }} == changes_requested → resolve_review
+│       true → ci_watch
 │       ✗ failure → resolve_review
 │
 resolve_review  [run_skill] (retry ×2)

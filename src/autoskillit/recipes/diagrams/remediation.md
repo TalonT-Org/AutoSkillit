@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:c596c804675abd47f8296410b5ad22bf665467bd34689a5b899db45f1abf3132 -->
+<!-- autoskillit-recipe-hash: sha256:6700fa916c75e739c61734a4018f361dcaf603bb2c6a70fb7736b0cceeb9e7a5 -->
 <!-- autoskillit-diagram-format: v3 -->
 ## remediation
 Investigate a problem deeply, plan architectural fix, implement in a feature branch, and open a PR.
@@ -77,6 +77,8 @@ push  [push_to_remote] (retry ×3)
 │       ✗ failure → cleanup_failure
 │
 ├── [review_pr] (retry ×3)  ← only if inputs.open_pr
+│       ${{ result.verdict }} == changes_requested → resolve_review
+│       true → ci_watch
 │       ✗ failure → resolve_review
 │
 resolve_review  [run_skill] (retry ×2)

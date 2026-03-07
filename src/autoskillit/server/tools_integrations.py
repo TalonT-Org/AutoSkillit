@@ -577,3 +577,131 @@ async def enrich_issues(
 
     parsed = _parse_enrich_result(result.result or "")
     return json.dumps(parsed)
+
+
+@mcp.tool(tags={"automation"})
+async def claim_issue(
+    issue_url: str,
+    label: str | None = None,
+) -> str:
+    """Apply an in-progress label to a GitHub issue to claim it for processing.
+
+    Checks if the issue already has the label (another session may be processing it),
+    ensures the label exists in the repo, then applies it atomically.
+
+    Returns JSON with: success, claimed (bool), issue_number, label.
+    When claimed=false, the issue is already being processed by another session.
+    On gate closed or no token: {success: false, error: "..."}.
+
+    Args:
+        issue_url: Full GitHub issue URL (https://github.com/owner/repo/issues/42)
+                   or shorthand (owner/repo#42).
+        label: Label name to apply. Defaults to github.in_progress_label from config.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    from autoskillit.execution.github import _parse_issue_ref
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+    if tool_ctx.github_client is None:
+        return json.dumps(
+            {"success": False, "error": "GitHub token required for label management"}
+        )
+
+    effective_label = label or tool_ctx.config.github.in_progress_label
+
+    try:
+        owner, repo, issue_number = _parse_issue_ref(issue_url)
+    except ValueError as exc:
+        return json.dumps({"success": False, "error": str(exc)})
+
+    result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
+    if not result.get("success"):
+        return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
+
+    raw_labels = result.get("labels", [])
+    current_labels = [lbl["name"] if isinstance(lbl, dict) else lbl for lbl in raw_labels]
+    if effective_label in current_labels:
+        return json.dumps(
+            {
+                "success": True,
+                "claimed": False,
+                "reason": (
+                    f"Issue #{issue_number} already has '{effective_label}' label"
+                    " — another session may be processing it"
+                ),
+            }
+        )
+
+    await tool_ctx.github_client.ensure_label(
+        owner,
+        repo,
+        effective_label,
+        color="fbca04",
+        description="Issue is actively being processed by a pipeline session",
+    )
+
+    add_result = await tool_ctx.github_client.add_labels(
+        owner, repo, issue_number, [effective_label]
+    )
+    if not add_result.get("success"):
+        return json.dumps(
+            {"success": False, "error": add_result.get("error", "add_labels failed")}
+        )
+
+    return json.dumps(
+        {
+            "success": True,
+            "claimed": True,
+            "issue_number": issue_number,
+            "label": effective_label,
+        }
+    )
+
+
+@mcp.tool(tags={"automation"})
+async def release_issue(
+    issue_url: str,
+    label: str | None = None,
+) -> str:
+    """Remove the in-progress label from a GitHub issue to release it.
+
+    Call this in cleanup paths (both success and failure) to allow the issue
+    to be picked up by future pipeline runs.
+
+    Returns JSON with: success, issue_number, label.
+    On gate closed or no token: {success: false, error: "..."}.
+
+    Args:
+        issue_url: Full GitHub issue URL or shorthand (owner/repo#42).
+        label: Label name to remove. Defaults to github.in_progress_label from config.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    from autoskillit.execution.github import _parse_issue_ref
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+    if tool_ctx.github_client is None:
+        return json.dumps(
+            {"success": False, "error": "GitHub token required for label management"}
+        )
+
+    effective_label = label or tool_ctx.config.github.in_progress_label
+
+    try:
+        owner, repo, issue_number = _parse_issue_ref(issue_url)
+    except ValueError as exc:
+        return json.dumps({"success": False, "error": str(exc)})
+
+    result = await tool_ctx.github_client.remove_label(owner, repo, issue_number, effective_label)
+    return json.dumps(
+        {
+            "success": result.get("success", False),
+            "issue_number": issue_number,
+            "label": effective_label,
+        }
+    )

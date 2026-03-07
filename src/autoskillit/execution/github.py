@@ -317,3 +317,125 @@ class DefaultGitHubFetcher:
             "comment_id": data.get("id"),
             "url": data.get("html_url", ""),
         }
+
+    async def add_labels(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        labels: list[str],
+    ) -> dict[str, Any]:
+        """Add labels to an issue.
+
+        Returns {success, labels: [names]}. Never raises.
+        """
+        headers = self._headers()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+                resp = await client.post(
+                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/labels",
+                    headers=headers,
+                    json={"labels": labels},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPStatusError as exc:
+            _log.warning(
+                "github add_labels http error",
+                status=exc.response.status_code,
+                issue=issue_number,
+            )
+            return {
+                "success": False,
+                "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+            }
+        except httpx.RequestError as exc:
+            _log.warning("github add_labels request error", issue=issue_number, error=str(exc))
+            return {"success": False, "error": f"Request error: {exc}"}
+
+        return {
+            "success": True,
+            "labels": [lbl["name"] for lbl in data if isinstance(lbl, dict)],
+        }
+
+    async def remove_label(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        label: str,
+    ) -> dict[str, Any]:
+        """Remove a label from an issue. Idempotent — 404 is treated as success.
+
+        Returns {success}. Never raises.
+        """
+        headers = self._headers()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+                resp = await client.delete(
+                    f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/labels/{label}",
+                    headers=headers,
+                )
+                if resp.status_code == 404:
+                    return {"success": True}
+                resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _log.warning(
+                "github remove_label http error",
+                status=exc.response.status_code,
+                issue=issue_number,
+                label=label,
+            )
+            return {
+                "success": False,
+                "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+            }
+        except httpx.RequestError as exc:
+            _log.warning(
+                "github remove_label request error",
+                issue=issue_number,
+                label=label,
+                error=str(exc),
+            )
+            return {"success": False, "error": f"Request error: {exc}"}
+
+        return {"success": True}
+
+    async def ensure_label(
+        self,
+        owner: str,
+        repo: str,
+        label: str,
+        color: str = "fbca04",
+        description: str = "",
+    ) -> dict[str, Any]:
+        """Ensure a label exists in the repo. Idempotent — 422 (already exists) is success.
+
+        Returns {success, created}. Never raises.
+        """
+        headers = self._headers()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+                resp = await client.post(
+                    f"https://api.github.com/repos/{owner}/{repo}/labels",
+                    headers=headers,
+                    json={"name": label, "color": color, "description": description},
+                )
+                if resp.status_code == 422:
+                    return {"success": True, "created": False}
+                resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _log.warning(
+                "github ensure_label http error",
+                status=exc.response.status_code,
+                label=label,
+            )
+            return {
+                "success": False,
+                "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+            }
+        except httpx.RequestError as exc:
+            _log.warning("github ensure_label request error", label=label, error=str(exc))
+            return {"success": False, "error": f"Request error: {exc}"}
+
+        return {"success": True, "created": True}

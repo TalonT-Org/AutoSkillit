@@ -526,3 +526,19 @@ class TestDynaconfIntegration:
         defaults_path = pkg_root() / "config" / "defaults.yaml"
         assert defaults_path.exists(), f"defaults.yaml missing at {defaults_path}"
         assert defaults_path.is_file()
+
+    def test_github_config_in_progress_label_default(self):
+        """GH_LABEL_C1: in_progress_label defaults to 'in-progress'."""
+        cfg = AutomationConfig()
+        assert cfg.github.in_progress_label == "in-progress"
+
+    def test_github_config_in_progress_label_from_load_config(self, tmp_path):
+        """GH_LABEL_C2: in_progress_label is loaded correctly from config file."""
+        cfg = load_config(tmp_path)
+        assert cfg.github.in_progress_label == "in-progress"
+
+    def test_github_config_in_progress_label_configurable(self, tmp_path, monkeypatch):
+        """GH_LABEL_C3: in_progress_label can be overridden via env var."""
+        monkeypatch.setenv("AUTOSKILLIT_GITHUB__IN_PROGRESS_LABEL", "wip")
+        cfg = load_config(tmp_path)
+        assert cfg.github.in_progress_label == "wip"

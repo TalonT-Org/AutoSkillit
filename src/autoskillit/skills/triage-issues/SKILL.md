@@ -61,13 +61,17 @@ Parse optional arguments from the user's invocation:
 # Verify GitHub authentication
 gh auth status
 
-# Fetch all open issues with required fields
-gh issue list --state open --json number,title,body,labels,url,assignees --limit 200
+# Fetch all open issues with required fields, excluding in-progress issues
+gh issue list --state open --json number,title,body,labels,url,assignees --limit 200 \
+  | jq '[.[] | select(.labels | map(.name) | contains(["in-progress"]) | not)]'
 ```
+
+Issues carrying the `in-progress` label are actively being processed by a pipeline session
+and are excluded from triage to prevent duplicate work.
 
 If `gh auth status` fails, abort with a clear error message.
 
-If there are zero open issues, skip to Step 7 and output an empty report.
+If there are zero open issues (after filtering), skip to Step 7 and output an empty report.
 
 ### Step 2a: Parallel Split Analysis
 

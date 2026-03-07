@@ -333,6 +333,8 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "report_bug",
         "prepare_issue",
         "enrich_issues",
+        "claim_issue",
+        "release_issue",
     }
 )
 
@@ -627,4 +629,29 @@ class GitHubFetcher(Protocol):
         repo: str,
         issue_number: int,
         body: str,
+    ) -> dict[str, Any]: ...
+
+    async def add_labels(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        labels: list[str],
+    ) -> dict[str, Any]: ...
+
+    async def remove_label(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        label: str,
+    ) -> dict[str, Any]: ...
+
+    async def ensure_label(
+        self,
+        owner: str,
+        repo: str,
+        label: str,
+        color: str = "fbca04",
+        description: str = "",
     ) -> dict[str, Any]: ...

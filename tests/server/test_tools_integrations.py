@@ -723,3 +723,149 @@ def test_enrich_issues_in_gated_tools():
     from autoskillit.pipeline.gate import GATED_TOOLS
 
     assert "enrich_issues" in GATED_TOOLS
+
+
+# ---------------------------------------------------------------------------
+# claim_issue MCP tool tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_claim_issue_returns_claimed_true_when_label_absent(tool_ctx):
+    mock_client = AsyncMock()
+    mock_client.fetch_issue.return_value = {
+        "success": True,
+        "issue_number": 42,
+        "labels": [],
+    }
+    mock_client.ensure_label.return_value = {"success": True}
+    mock_client.add_labels.return_value = {"success": True, "labels": ["in-progress"]}
+    tool_ctx.github_client = mock_client
+
+    from autoskillit.server.tools_integrations import claim_issue
+
+    result = json.loads(await claim_issue(issue_url="https://github.com/owner/repo/issues/42"))
+    assert result["claimed"] is True
+    assert result["issue_number"] == 42
+    mock_client.add_labels.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_claim_issue_returns_claimed_false_when_label_present(tool_ctx):
+    mock_client = AsyncMock()
+    mock_client.fetch_issue.return_value = {
+        "success": True,
+        "issue_number": 42,
+        "labels": ["in-progress", "bug"],
+    }
+    tool_ctx.github_client = mock_client
+
+    from autoskillit.server.tools_integrations import claim_issue
+
+    result = json.loads(await claim_issue(issue_url="https://github.com/owner/repo/issues/42"))
+    assert result["claimed"] is False
+    mock_client.add_labels.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_claim_issue_uses_configured_label_name(tool_ctx):
+    tool_ctx.config.github.in_progress_label = "wip"
+    mock_client = AsyncMock()
+    mock_client.fetch_issue.return_value = {
+        "success": True,
+        "issue_number": 42,
+        "labels": [],
+    }
+    mock_client.ensure_label.return_value = {"success": True}
+    mock_client.add_labels.return_value = {"success": True, "labels": ["wip"]}
+    tool_ctx.github_client = mock_client
+
+    from autoskillit.server.tools_integrations import claim_issue
+
+    await claim_issue(issue_url="https://github.com/owner/repo/issues/42")
+    call_args = mock_client.add_labels.call_args
+    assert call_args[0][3] == ["wip"]
+
+
+@pytest.mark.anyio
+async def test_claim_issue_accepts_explicit_label_override(tool_ctx):
+    mock_client = AsyncMock()
+    mock_client.fetch_issue.return_value = {
+        "success": True,
+        "issue_number": 42,
+        "labels": [],
+    }
+    mock_client.ensure_label.return_value = {"success": True}
+    mock_client.add_labels.return_value = {"success": True, "labels": ["custom-lock"]}
+    tool_ctx.github_client = mock_client
+
+    from autoskillit.server.tools_integrations import claim_issue
+
+    await claim_issue(issue_url="https://github.com/owner/repo/issues/42", label="custom-lock")
+    call_args = mock_client.add_labels.call_args
+    assert call_args[0][3] == ["custom-lock"]
+
+
+@pytest.mark.anyio
+async def test_claim_issue_returns_error_when_no_token(tool_ctx):
+    tool_ctx.github_client = None
+
+    from autoskillit.server.tools_integrations import claim_issue
+
+    result = json.loads(await claim_issue(issue_url="https://github.com/owner/repo/issues/42"))
+    assert result["success"] is False
+    assert "token" in result["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# release_issue MCP tool tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_release_issue_calls_remove_label(tool_ctx):
+    mock_client = AsyncMock()
+    mock_client.remove_label.return_value = {"success": True}
+    tool_ctx.github_client = mock_client
+
+    from autoskillit.server.tools_integrations import release_issue
+
+    result = json.loads(await release_issue(issue_url="https://github.com/owner/repo/issues/42"))
+    assert result["success"] is True
+    assert result["issue_number"] == 42
+    mock_client.remove_label.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_release_issue_succeeds_when_label_missing(tool_ctx):
+    mock_client = AsyncMock()
+    mock_client.remove_label.return_value = {"success": True}
+    tool_ctx.github_client = mock_client
+
+    from autoskillit.server.tools_integrations import release_issue
+
+    result = json.loads(await release_issue(issue_url="https://github.com/owner/repo/issues/42"))
+    assert result["success"] is True
+
+
+@pytest.mark.anyio
+async def test_release_issue_returns_error_when_no_token(tool_ctx):
+    tool_ctx.github_client = None
+
+    from autoskillit.server.tools_integrations import release_issue
+
+    result = json.loads(await release_issue(issue_url="https://github.com/owner/repo/issues/42"))
+    assert result["success"] is False
+    assert "token" in result["error"].lower()
+
+
+def test_claim_issue_in_gated_tools():
+    from autoskillit.pipeline.gate import GATED_TOOLS
+
+    assert "claim_issue" in GATED_TOOLS
+
+
+def test_release_issue_in_gated_tools():
+    from autoskillit.pipeline.gate import GATED_TOOLS
+
+    assert "release_issue" in GATED_TOOLS

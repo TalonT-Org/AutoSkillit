@@ -193,3 +193,44 @@ def test_severity_has_ok_member():
     assert Severity.OK == "ok"
     assert Severity.ERROR == "error"
     assert Severity.WARNING == "warning"
+
+
+# ---------------------------------------------------------------------------
+# GitHubFetcher protocol — new label management methods
+# ---------------------------------------------------------------------------
+
+
+def test_github_fetcher_protocol_has_add_labels():
+    from autoskillit.core import GitHubFetcher
+
+    assert hasattr(GitHubFetcher, "add_labels")
+
+
+def test_github_fetcher_protocol_has_remove_label():
+    from autoskillit.core import GitHubFetcher
+
+    assert hasattr(GitHubFetcher, "remove_label")
+
+
+def test_github_fetcher_protocol_has_ensure_label():
+    from autoskillit.core import GitHubFetcher
+
+    assert hasattr(GitHubFetcher, "ensure_label")
+
+
+def test_default_github_fetcher_implements_full_protocol():
+    from autoskillit.core import GitHubFetcher
+    from autoskillit.execution.github import DefaultGitHubFetcher
+
+    fetcher = DefaultGitHubFetcher(token=None)
+    assert isinstance(fetcher, GitHubFetcher)
+    for method in (
+        "fetch_issue",
+        "search_issues",
+        "create_issue",
+        "add_comment",
+        "add_labels",
+        "remove_label",
+        "ensure_label",
+    ):
+        assert callable(getattr(fetcher, method, None)), f"missing method: {method}"

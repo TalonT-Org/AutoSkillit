@@ -112,6 +112,7 @@ class QuotaGuardConfig:
 class GitHubConfig:
     token: str | None = None
     default_repo: str | None = None
+    in_progress_label: str = "in-progress"
 
 
 @dataclass
@@ -278,6 +279,7 @@ class AutomationConfig:
             github=GitHubConfig(
                 token=val(gh, "token", _gh["token"]) or None,
                 default_repo=val(gh, "default_repo", _gh["default_repo"]) or None,
+                in_progress_label=str(val(gh, "in_progress_label", _gh["in_progress_label"])),
             ),
             report_bug=ReportBugConfig(
                 timeout=int(val(rb, "timeout", _rb["timeout"])),

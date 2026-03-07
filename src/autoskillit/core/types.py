@@ -219,6 +219,13 @@ class SubprocessResult:
     channel_b_session_id: str = ""
     start_ts: str = ""
     end_ts: str = ""
+    elapsed_seconds: float = 0.0
+    """Pre-computed monotonic elapsed time in seconds (always >= 0).
+
+    Set by headless.py using time.monotonic() brackets around the subprocess run.
+    Consumers (session_log, tokens) must use this float directly — never re-derive
+    duration from start_ts/end_ts ISO strings.
+    """
 
 
 @runtime_checkable
@@ -492,6 +499,7 @@ class TokenStore(Protocol):
         *,
         start_ts: str = "",
         end_ts: str = "",
+        elapsed_seconds: float | None = None,
     ) -> None: ...
 
     def get_report(self) -> list[dict[str, Any]]: ...

@@ -11,7 +11,8 @@ Public API:
 from __future__ import annotations
 
 import dataclasses
-from datetime import UTC, datetime
+import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -364,6 +365,7 @@ async def run_headless_core(
 
         linux_tracing_cfg = ctx.config.linux_tracing
         _start_ts = datetime.now(UTC).isoformat()
+        _start_mono = time.monotonic()
 
         _result: SubprocessResult | None = None
         try:
@@ -400,8 +402,11 @@ async def run_headless_core(
                     )
                 except Exception:
                     logger.debug("flush_session_log during crash failed", exc_info=True)
-        _end_ts = datetime.now(UTC).isoformat()
-        result = dataclasses.replace(_result, start_ts=_start_ts, end_ts=_end_ts)  # type: ignore[arg-type]
+        _elapsed = time.monotonic() - _start_mono
+        _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
+        result = dataclasses.replace(  # type: ignore[arg-type]
+            _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
+        )
 
         skill_result = _build_skill_result(
             result,
@@ -428,6 +433,7 @@ async def run_headless_core(
                     exit_code=skill_result.exit_code,
                     start_ts=result.start_ts,
                     end_ts=result.end_ts,
+                    elapsed_seconds=result.elapsed_seconds,
                     termination_reason=result.termination.value,
                     snapshot_interval_seconds=ctx.config.linux_tracing.proc_interval,
                     proc_snapshots=result.proc_snapshots,
@@ -449,6 +455,7 @@ async def run_headless_core(
                 skill_result.token_usage,
                 start_ts=result.start_ts,
                 end_ts=result.end_ts,
+                elapsed_seconds=result.elapsed_seconds,
             )
         return skill_result
 

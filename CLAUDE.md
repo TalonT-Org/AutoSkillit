@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 21 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, fetch_github_issue) with 14 gated behind MCP prompts for user-only activation, and 23 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 22 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, fetch_github_issue) with 15 gated behind MCP prompts for user-only activation, and 24 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -165,7 +165,7 @@ src/autoskillit/
 │   ├── tools_git.py         #   merge_worktree, classify_fix tool handlers
 │   ├── tools_recipe.py      #   migrate_recipe, load_recipe, list_recipes, validate_recipe tool handlers
 │   ├── tools_status.py      #   kitchen_status, get_pipeline_report, get_token_summary tool handlers
-│   ├── tools_integrations.py #  fetch_github_issue, report_bug tool handlers
+│   ├── tools_integrations.py #  fetch_github_issue, report_bug, prepare_issue tool handlers
 │   ├── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace, read_db tool handlers
 │   ├── _factory.py          #   Composition Root: make_context() wires ToolContext
 │   └── _state.py            #   Server state extraction (lazy init, plugin dir resolution)

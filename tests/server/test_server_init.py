@@ -159,6 +159,7 @@ class TestToolRegistration:
             "validate_recipe",
             "get_pipeline_report",
             "get_token_summary",
+            "get_timing_summary",
             "clone_repo",
             "remove_clone",
             "push_to_remote",

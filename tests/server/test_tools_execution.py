@@ -810,3 +810,40 @@ class TestResponseFieldsAreTypeSafe:
         tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
+
+
+class TestRunCmdTiming:
+    """run_cmd accumulates wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_run_cmd_step_name_records_timing(self, tool_ctx):
+        await run_cmd(cmd="echo hi", cwd="/tmp", step_name="clone")
+        report = tool_ctx.timing_log.get_report()
+        assert len(report) == 1
+        assert report[0]["step_name"] == "clone"
+        assert report[0]["total_seconds"] >= 0.0
+        assert report[0]["invocation_count"] == 1
+
+    @pytest.mark.anyio
+    async def test_run_cmd_empty_step_name_skips_timing(self, tool_ctx):
+        await run_cmd(cmd="echo hi", cwd="/tmp")
+        assert tool_ctx.timing_log.get_report() == []
+
+
+class TestRunSkillTiming:
+    """run_skill accumulates wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_records_timing_via_step_name(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
+        await run_skill("/investigate foo", "/tmp", step_name="implement")
+        report = tool_ctx.timing_log.get_report()
+        assert len(report) == 1
+        assert report[0]["step_name"] == "implement"
+        assert report[0]["invocation_count"] == 1
+
+    @pytest.mark.anyio
+    async def test_run_skill_empty_step_name_skips_timing(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
+        await run_skill("/investigate foo", "/tmp")
+        assert tool_ctx.timing_log.get_report() == []

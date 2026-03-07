@@ -342,6 +342,7 @@ UNGATED_TOOLS: frozenset[str] = frozenset(
         "kitchen_status",
         "get_pipeline_report",
         "get_token_summary",
+        "get_timing_summary",
         "list_recipes",
         "load_recipe",
         "validate_recipe",
@@ -487,6 +488,19 @@ class TokenStore(Protocol):
         start_ts: str = "",
         end_ts: str = "",
     ) -> None: ...
+
+    def get_report(self) -> list[dict[str, Any]]: ...
+
+    def compute_total(self) -> dict[str, Any]: ...
+
+    def clear(self) -> None: ...
+
+
+@runtime_checkable
+class TimingStore(Protocol):
+    """Protocol for per-step wall-clock timing accumulation."""
+
+    def record(self, step_name: str, duration_seconds: float) -> None: ...
 
     def get_report(self) -> list[dict[str, Any]]: ...
 

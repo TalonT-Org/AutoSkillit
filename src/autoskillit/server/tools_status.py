@@ -1,4 +1,5 @@
-"""MCP tool handlers: kitchen_status, get_pipeline_report, get_token_summary, read_db."""
+"""MCP tool handlers: kitchen_status, get_pipeline_report, get_token_summary,
+get_timing_summary, read_db."""
 
 from __future__ import annotations
 
@@ -109,6 +110,30 @@ async def get_token_summary(clear: bool = False) -> str:
     total = _get_ctx().token_log.compute_total()
     if clear:
         _get_ctx().token_log.clear()
+    return json.dumps({"steps": steps, "total": total})
+
+
+@mcp.tool(tags={"automation"})
+async def get_timing_summary(clear: bool = False) -> str:
+    """Return accumulated wall-clock timing grouped by step name.
+
+    This tool is always available (not gated by open_kitchen).
+    This tool sends no MCP progress notifications by design (ungated tools are
+    notification-free — see CLAUDE.md).
+
+    Returns JSON with:
+    - steps: list of {step_name, total_seconds, invocation_count}
+    - total: {total_seconds}
+
+    Args:
+        clear: If True, reset the timing log after returning current data.
+    """
+    from autoskillit.server import _get_ctx
+
+    steps = _get_ctx().timing_log.get_report()
+    total = _get_ctx().timing_log.compute_total()
+    if clear:
+        _get_ctx().timing_log.clear()
     return json.dumps({"steps": steps, "total": total})
 
 

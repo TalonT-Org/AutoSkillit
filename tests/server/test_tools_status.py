@@ -16,6 +16,7 @@ from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools_execution import run_skill
 from autoskillit.server.tools_status import (
     get_pipeline_report,
+    get_timing_summary,
     get_token_summary,
     kitchen_status,
 )
@@ -342,6 +343,70 @@ class TestGetTokenSummary:
         result = json.loads(await get_token_summary())
         assert "total_elapsed_seconds" in result["total"]
         assert result["total"]["total_elapsed_seconds"] == pytest.approx(13.0)
+
+
+class TestGetTimingSummary:
+    """get_timing_summary is ungated and returns accumulated wall-clock timing."""
+
+    @pytest.fixture(autouse=True)
+    def _close_kitchen(self, tool_ctx):
+        from autoskillit.pipeline.gate import DefaultGateState
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+
+    @pytest.mark.anyio
+    async def test_ungated_does_not_require_open_kitchen(self, tool_ctx):
+        result = json.loads(await get_timing_summary())
+        assert "error" not in result
+
+    @pytest.mark.anyio
+    async def test_returns_empty_steps_initially(self, tool_ctx):
+        result = json.loads(await get_timing_summary())
+        assert result["steps"] == []
+        assert result["total"]["total_seconds"] == 0.0
+
+    @pytest.mark.anyio
+    async def test_returns_entry_per_step_name(self, tool_ctx):
+        tool_ctx.timing_log.record("clone", 4.0)
+        tool_ctx.timing_log.record("test_check", 12.0)
+        result = json.loads(await get_timing_summary())
+        assert len(result["steps"]) == 2
+        step_names = {s["step_name"] for s in result["steps"]}
+        assert step_names == {"clone", "test_check"}
+
+    @pytest.mark.anyio
+    async def test_multiple_invocations_same_step_are_summed(self, tool_ctx):
+        tool_ctx.timing_log.record("impl", 10.0)
+        tool_ctx.timing_log.record("impl", 10.0)
+        tool_ctx.timing_log.record("impl", 10.0)
+        result = json.loads(await get_timing_summary())
+        assert len(result["steps"]) == 1
+        assert result["steps"][0]["total_seconds"] == 30.0
+        assert result["steps"][0]["invocation_count"] == 3
+
+    @pytest.mark.anyio
+    async def test_total_field_sums_all_steps(self, tool_ctx):
+        tool_ctx.timing_log.record("a", 5.0)
+        tool_ctx.timing_log.record("b", 8.0)
+        result = json.loads(await get_timing_summary())
+        assert result["total"]["total_seconds"] == 13.0
+
+    @pytest.mark.anyio
+    async def test_clear_true_resets_after_returning(self, tool_ctx):
+        tool_ctx.timing_log.record("clone", 4.0)
+        result = json.loads(await get_timing_summary(clear=True))
+        assert len(result["steps"]) == 1
+        result2 = json.loads(await get_timing_summary())
+        assert result2["steps"] == []
+
+    @pytest.mark.anyio
+    async def test_response_shape(self, tool_ctx):
+        tool_ctx.timing_log.record("plan", 3.0)
+        result = json.loads(await get_timing_summary())
+        assert "steps" in result
+        assert "total" in result
+        assert isinstance(result["steps"], list)
+        assert "total_seconds" in result["total"]
 
 
 def test_check_quota_absent_from_mcp_registry(tool_ctx):

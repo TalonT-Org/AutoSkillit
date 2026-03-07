@@ -6,15 +6,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/talon/projects/worktrees/impl-hook-dual-source-20260306-165233/src/autoskillit/hooks/quota_check.py"
+            "command": "python3 /home/talon/projects/generic_automation_mcp/src/autoskillit/hooks/quota_check.py"
           },
           {
             "type": "command",
-            "command": "python3 /home/talon/projects/worktrees/impl-hook-dual-source-20260306-165233/src/autoskillit/hooks/skill_cmd_check.py"
+            "command": "python3 /home/talon/projects/generic_automation_mcp/src/autoskillit/hooks/skill_cmd_check.py"
           },
           {
             "type": "command",
-            "command": "python3 /home/talon/projects/worktrees/impl-hook-dual-source-20260306-165233/src/autoskillit/hooks/skill_command_guard.py"
+            "command": "python3 /home/talon/projects/generic_automation_mcp/src/autoskillit/hooks/skill_command_guard.py"
           }
         ]
       },
@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/talon/projects/worktrees/impl-hook-dual-source-20260306-165233/src/autoskillit/hooks/native_tool_guard.py"
+            "command": "python3 /home/talon/projects/generic_automation_mcp/src/autoskillit/hooks/native_tool_guard.py"
           }
         ]
       },
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/talon/projects/worktrees/impl-hook-dual-source-20260306-165233/src/autoskillit/hooks/remove_clone_guard.py"
+            "command": "python3 /home/talon/projects/generic_automation_mcp/src/autoskillit/hooks/remove_clone_guard.py"
           }
         ]
       }

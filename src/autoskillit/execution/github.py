@@ -19,6 +19,18 @@ _FULL_URL_RE = re.compile(r"https?://github\.com/([^/]+)/([^/]+)/issues/(\d+)")
 _SHORTHAND_RE = re.compile(r"^([^/]+)/([^#]+)#(\d+)$")
 
 
+def _slugify(title: str) -> str:
+    """Convert an issue title to a URL-safe branch prefix slug.
+
+    Lowercases, replaces non-alphanumeric sequences with hyphens,
+    strips leading/trailing hyphens, and truncates to 60 chars at a word boundary.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    if len(slug) > 60:
+        slug = slug[:60].rstrip("-")
+    return slug
+
+
 def _parse_issue_ref(issue_ref: str) -> tuple[str, str, int]:
     """Parse owner, repo, number from a GitHub issue reference.
 
@@ -317,3 +329,42 @@ class DefaultGitHubFetcher:
             "comment_id": data.get("id"),
             "url": data.get("html_url", ""),
         }
+
+    async def fetch_title(self, issue_url: str) -> dict[str, object]:
+        """Fetch only the title and slug for a GitHub issue — no body, no comments.
+
+        Returns {success, number, title, slug}. Never raises.
+        Makes exactly one HTTP call regardless of issue comment count.
+        """
+        try:
+            owner, repo, number = _parse_issue_ref(issue_url)
+        except ValueError as exc:
+            return {"success": False, "error": str(exc)}
+        url = f"https://api.github.com/repos/{owner}/{repo}/issues/{number}"
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+                resp = await client.get(url, headers=self._headers())
+                if resp.status_code == 404:
+                    hint = (
+                        " Configure github.token in .autoskillit/config.yaml."
+                        if not self._token
+                        else ""
+                    )
+                    return {
+                        "success": False,
+                        "error": f"Issue {owner}/{repo}#{number} not found.{hint}",
+                    }
+                if resp.status_code == 401:
+                    return {"success": False, "error": "GitHub authentication failed (401)"}
+                resp.raise_for_status()
+                data = resp.json()
+                title: str = data.get("title", "")
+                slug = _slugify(title)
+                return {"success": True, "number": data["number"], "title": title, "slug": slug}
+        except httpx.HTTPStatusError as exc:
+            return {
+                "success": False,
+                "error": f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
+            }
+        except httpx.RequestError as exc:
+            return {"success": False, "error": f"Request error: {exc}"}

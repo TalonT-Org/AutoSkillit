@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:df249f2cd66686fb9f664aa4cb5328fe314da1a485b14490b1c74e10046d3b52 -->
+<!-- autoskillit-recipe-hash: sha256:09c972fdf3ebe5e5ed959d660b10fd77a736171cf379ffe9a9c1ff28ce94eff4 -->
 <!-- autoskillit-diagram-format: v4 -->
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
@@ -7,8 +7,11 @@ Plan, verify, implement, test, and merge a task end-to-end. Use when user says "
 
 ### Graph
 clone  [clone_repo] (retry ×3)
-│  ↓ success → push_merge_target
+│  ↓ success → get_issue_title
 │  ✗ failure → escalate_stop
+│
+├── [get_issue_title] (retry ×3)  ← only if inputs.issue_url
+│       ✗ failure → escalate_stop
 │
 ├── [push_merge_target] (retry ×3)  ← only if inputs.open_pr
 │       ✗ failure → cleanup_failure

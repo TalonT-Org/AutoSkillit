@@ -725,6 +725,7 @@ class TestSafetyConfigWiring:
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(
             _make_result(
                 0,

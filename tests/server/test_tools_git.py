@@ -310,6 +310,7 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
@@ -342,6 +343,7 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
@@ -372,6 +374,7 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")

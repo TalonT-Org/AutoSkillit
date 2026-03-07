@@ -45,12 +45,12 @@ Grouping analysis is performed as in-context LLM reasoning. No parallel sessions
 - Apply `batch:N` labels to combined or original issues
 - Collapse issues with different `recipe:*` labels into one combined issue
 - Delegate grouping to parallel sessions — grouping analysis is in-context LLM reasoning only
-- Use the Task tool
+- Use parallel session spawning (Agent/Task) for grouping analysis — it is in-context LLM reasoning
 - Create files outside `temp/collapse-issues/`
 - Skip emitting the `---collapse-issues-result---` block (emit even on error or no-collapse)
 
 **ALWAYS:**
-- Use `--force` on all `gh label create` calls for idempotency
+- Include `--force` on all label creation calls (`gh label create --force`) for idempotency
 - Respect `--dry-run` (skip all GitHub mutations when set)
 - Respect `--no-label` (skip all label creation and `--label` flags when set)
 - Cap groups at `--max-group` (default 5)
@@ -100,7 +100,7 @@ gh issue list --state open --json number,title,body,labels --limit 200 [--repo {
 
 ### Step 4: LLM Grouping Analysis (in-context)
 
-This step is pure in-context LLM reasoning — do not use the Task tool.
+This step is pure in-context LLM reasoning — no parallel session spawning.
 
 **4a. Partition by recipe route (hard constraint):**
 

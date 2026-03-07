@@ -84,6 +84,7 @@ src/autoskillit/
 ├── __main__.py              # python -m autoskillit entry point (delegates to cli)
 ├── _llm_triage.py           # LLM-assisted contract staleness triage (Haiku subprocess)
 ├── smoke_utils.py           # Utility callables for smoke-test pipeline run_python steps
+├── hook_registry.py         # Canonical hook definitions (HookDef, HOOK_REGISTRY, generate_hooks_json)
 ├── version.py               # Version health utilities (Layer 0)
 ├── .claude-plugin/          # Plugin metadata (plugin.json)
 ├── .mcp.json                # MCP server config for plugin loading

@@ -16,7 +16,7 @@ cross-reference comments. This is the **inverse** of `issue-splitter` — where 
 decomposes mixed-concern issues, this consolidates related small issues into fewer,
 better-scoped units.
 
-Grouping analysis is performed as in-context LLM reasoning. No subagents are used.
+Grouping analysis is performed as in-context LLM reasoning. No parallel sessions are spawned.
 
 ## When to Use
 
@@ -36,7 +36,7 @@ Grouping analysis is performed as in-context LLM reasoning. No subagents are use
 - `--min-group N` — minimum issues per group to justify collapsing (default: 2)
 - `--max-group N` — maximum issues per combined issue (default: 5)
 - `--repo owner/repo` — explicit repo; if absent, resolve via `gh repo view`
-- `--no-label` — skip all `gh label create` and `--label` calls
+- `--no-label` — skip all label creation and `--label` calls
 
 ## Critical Constraints
 
@@ -44,7 +44,7 @@ Grouping analysis is performed as in-context LLM reasoning. No subagents are use
 - Close original issues before the combined issue is successfully created
 - Apply `batch:N` labels to combined or original issues
 - Collapse issues with different `recipe:*` labels into one combined issue
-- Use subagents — grouping analysis is in-context LLM reasoning, not subagent delegation
+- Delegate grouping to parallel sessions — grouping analysis is in-context LLM reasoning only
 - Use the Task tool
 - Create files outside `temp/collapse-issues/`
 - Skip emitting the `---collapse-issues-result---` block (emit even on error or no-collapse)
@@ -98,9 +98,9 @@ gh issue list --state open --json number,title,body,labels --limit 200 [--repo {
   ---/collapse-issues-result---
   ```
 
-### Step 4: LLM Grouping Analysis (in-context, no subagents)
+### Step 4: LLM Grouping Analysis (in-context)
 
-This step is pure in-context LLM reasoning — no subagents, no Task tool invocations.
+This step is pure in-context LLM reasoning — do not use the Task tool.
 
 **4a. Partition by recipe route (hard constraint):**
 
@@ -202,8 +202,7 @@ gh label create "recipe:implementation" --force [--repo {repo}]
 gh label create "enhancement" --force [--repo {repo}]
 ```
 
-Apply `--force` to every `gh label create` call for idempotency. Repeat for each unique
-label in the collected set (e.g., `recipe:remediation`, `bug`).
+Repeat for each unique label in the collected set (e.g., `recipe:remediation`, `bug`), always with `--force`.
 
 **6e. Create combined issue:**
 

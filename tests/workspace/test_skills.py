@@ -13,6 +13,7 @@ BUNDLED_SKILLS = [
     "analyze-prs",
     "audit-friction",
     "audit-impl",
+    "collapse-issues",
     "dry-walkthrough",
     "implement-worktree",
     "implement-worktree-no-merge",

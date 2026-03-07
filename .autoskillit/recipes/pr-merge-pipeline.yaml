@@ -141,6 +141,7 @@ steps:
       step_name: "plan"
     capture:
       pr_plan_path: "${{ result.plan_path }}"
+      all_plan_paths: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
     on_success: verify
@@ -153,6 +154,12 @@ steps:
       REMEDIATION MODE: context.remediation_path is set when re-entering from
       the remediate step; pass it inline in the skill_command instead of
       context.task.
+      ACCUMULATION: all_plan_paths accumulates across loop re-entries (one per
+      complex PR, plus any remediation re-entry). On first execution,
+      all_plan_paths = result.plan_path. On each subsequent re-entry, append
+      result.plan_path to context.all_plan_paths with a comma separator (no spaces):
+      context.all_plan_paths += "," + result.plan_path. The comma-separated value is
+      passed to audit-impl after the PR loop completes.
 
   verify:
     tool: run_skill
@@ -298,7 +305,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl ${{ inputs.plans_dir }} ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl ${{ context.all_plan_paths }} ${{ context.integration_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:
@@ -315,8 +322,9 @@ steps:
     note: >
       Gated by check_impl_plans — only reached when implementation plan files exist in
       plans_dir. Only execute if inputs.audit is 'true'; if false, skip directly to
-      create_review_pr. Passes temp/pr-merge-pipeline/ as plans_input — audit-impl
-      discovers all *_plan_*.md files there (conflict reports + make-plan outputs).
+      create_review_pr. Passes context.all_plan_paths (comma-separated list of plan file
+      paths accumulated across the PR loop) as plans_input. audit-impl splits on commas
+      and audits each plan file.
       implementation_ref is context.integration_branch (no worktree remains).
       GO → create_review_pr. NO GO → remediate (re-enters plan with remediation file).
 

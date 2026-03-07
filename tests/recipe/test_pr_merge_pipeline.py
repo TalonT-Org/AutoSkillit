@@ -100,3 +100,58 @@ def test_pmp_audit_impl_is_optional(recipe) -> None:
     """audit_impl must be marked optional (required by skip_when_false rule)."""
     step = recipe.steps["audit_impl"]
     assert step.optional is True
+
+
+def test_pmp_plan_step_captures_all_plan_paths(recipe) -> None:
+    """plan step must capture all_plan_paths for accumulation across the PR loop.
+
+    Each make-plan invocation (one per complex PR) must contribute its plan_path
+    to context.all_plan_paths via agent-managed comma-append. The capture entry
+    seeds the variable on first execution; the recipe note instructs the agent
+    to append on re-entry rather than overwrite.
+    """
+    step = recipe.steps["plan"]
+    assert "all_plan_paths" in step.capture, (
+        "plan step must capture all_plan_paths — needed so audit_impl receives "
+        "explicit plan file paths instead of a directory"
+    )
+    assert "${{ result.plan_path }}" in step.capture["all_plan_paths"], (
+        "all_plan_paths must be seeded from result.plan_path on first execution"
+    )
+
+
+def test_pmp_audit_impl_uses_all_plan_paths(recipe) -> None:
+    """audit_impl must pass context.all_plan_paths, not inputs.plans_dir.
+
+    inputs.plans_dir is a directory; audit-impl's contract expects explicit
+    plan file paths. The accumulated context.all_plan_paths (comma-separated)
+    is the correct argument.
+    """
+    step = recipe.steps["audit_impl"]
+    cmd = step.with_args["skill_command"]
+    assert "context.all_plan_paths" in cmd, (
+        "audit_impl skill_command must reference context.all_plan_paths"
+    )
+    assert "inputs.plans_dir" not in cmd, (
+        "audit_impl must not pass inputs.plans_dir — directory discovery is fragile "
+        "and inconsistent with how every other recipe invokes audit-impl"
+    )
+
+
+def test_pmp_all_plan_paths_available_at_audit_impl(recipe) -> None:
+    """all_plan_paths must be accumulated before audit_impl in declaration order.
+
+    iter_steps_with_context gives the validator-view of what context keys are
+    available at each step. all_plan_paths must appear before audit_impl.
+    """
+    from autoskillit.recipe.io import iter_steps_with_context
+
+    for name, _step, available in iter_steps_with_context(recipe):
+        if name == "audit_impl":
+            assert "all_plan_paths" in available, (
+                "all_plan_paths must be in available context before audit_impl — "
+                "plan step must precede audit_impl in recipe declaration order"
+            )
+            break
+    else:
+        pytest.fail("audit_impl step not found in recipe")

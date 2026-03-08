@@ -129,6 +129,7 @@ async def test_perform_merge_returns_success_on_green_tests(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check (5.5)
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
@@ -192,6 +193,7 @@ async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_run
     conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
@@ -272,6 +274,7 @@ async def test_perform_merge_strips_tracked_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(
         _make_result(0, "src/autoskillit/hooks/hooks.json\n", "")
@@ -324,6 +327,7 @@ async def test_perform_merge_noop_when_no_generated_files_tracked(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (empty — no generated files)
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
@@ -360,6 +364,7 @@ async def test_perform_merge_fails_on_generated_file_cleanup_error(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(
         _make_result(0, "src/autoskillit/hooks/hooks.json\n", "")

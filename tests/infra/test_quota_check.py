@@ -233,11 +233,12 @@ def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypa
 
 
 # T-CFG-4
-def test_quota_check_falls_back_to_defaults_without_hook_config(tmp_path):
+def test_quota_check_falls_back_to_defaults_without_hook_config(tmp_path, monkeypatch):
     """Without hook config, hook falls back to hard-coded defaults (threshold=90.0).
 
     Regression test: no regression when kitchen was never opened or hook config was removed.
     """
+    monkeypatch.chdir(tmp_path)
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0)
     out = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)

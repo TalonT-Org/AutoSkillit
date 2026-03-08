@@ -236,3 +236,7 @@ skills:
     outputs:
     - name: verdict
       type: string
+      allowed_values:
+        - approved
+        - changes_requested
+        - needs_human

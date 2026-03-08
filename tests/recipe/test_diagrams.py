@@ -1086,7 +1086,11 @@ def test_confirm_step_not_in_terminal_section(tmp_path: Path) -> None:
     # Find the terminal section by locating the separator line (a line of all ─ characters)
     diagram_lines = diagram.splitlines()
     sep_idx = next(
-        (i for i, ln in enumerate(diagram_lines) if ln.strip() and all(c == "─" for c in ln.strip())),
+        (
+            i
+            for i, ln in enumerate(diagram_lines)
+            if ln.strip() and all(c == "─" for c in ln.strip())
+        ),
         None,
     )
     terminal_section = "\n".join(diagram_lines[sep_idx + 1 :]) if sep_idx is not None else ""
@@ -1156,7 +1160,9 @@ def test_diagram_inputs_table_rows_are_single_lines_with_folded_scalars(
     ]
     assert rows, "Expected at least one data row in Inputs table"
     for row in rows:
-        assert row.count("|") >= 4, f"Malformed table row (likely split by embedded newline): {row!r}"
+        assert row.count("|") >= 4, (
+            f"Malformed table row (likely split by embedded newline): {row!r}"
+        )
         assert row.startswith("| ") and row.endswith(" |"), (
             f"Row is not a complete pipe-table row: {row!r}"
         )
@@ -1200,4 +1206,6 @@ def test_bundled_diagram_inputs_table_has_no_embedded_newlines(
     ]
     assert rows, f"No data rows found in inputs table for {recipe_name}"
     for row in rows:
-        assert row.count("|") >= 4, f"[{recipe_name}] Malformed table row (likely split by embedded newline): {row!r}"
+        assert row.count("|") >= 4, (
+            f"[{recipe_name}] Malformed table row (likely split by embedded newline): {row!r}"
+        )

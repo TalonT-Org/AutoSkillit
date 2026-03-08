@@ -14,7 +14,9 @@ ingredients:
     description: Keep the clone directory when the pipeline fails (true/false)
     default: "false"
   base_branch:
-    description: Target branch that all PRs are merging into; integration branch is created from this
+    description: Target branch that all PRs are merging into; integration branch is created from this. Pass 'integration' to use the persistent integration branch feature.
+  upstream_branch:
+    description: Branch to create base_branch from if it does not yet exist on the remote
     default: main
   audit:
     description: Run /autoskillit:audit-impl after all PRs are merged to check coherency (true/false)
@@ -33,9 +35,12 @@ kitchen_rules:
     advancing to the next PR. Never batch-assess all PRs before starting merges."
   - "SEQUENTIAL EXECUTION: complete full cycle (verify → implement → test →
     merge_to_integration) per plan part before advancing to the next part or PR."
-  - "INTEGRATION BRANCH: All PR merges and worktree merges target
-    context.integration_branch, not inputs.base_branch. The base_branch is only
-    used for the final review PR."
+  - "INTEGRATION BRANCH: Two distinct branches exist. inputs.base_branch is the
+    PERMANENT branch (default: integration) that accumulates AI work across runs —
+    it is never deleted. context.integration_branch is the PER-RUN batch branch
+    (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this pipeline run.
+    All PR merges and worktree merges target context.integration_branch. The final
+    review PR opens from context.integration_branch into inputs.base_branch."
   - "PR QUEUE: The agent reads context.pr_order_file once at analyze_prs and
     maintains an ordered queue. context.current_pr_index (agent-maintained, starts
     at 0) tracks progress. Advance the index after each successful merge or
@@ -72,12 +77,54 @@ steps:
     with:
       cmd: "git remote set-url origin \"$(git -C ${{ inputs.source_dir }} remote get-url origin)\""
       cwd: "${{ context.work_dir }}"
-    on_success: analyze_prs
+    on_success: check_integration_exists
     on_failure: cleanup_failure
     note: >
       The clone's origin initially points to the local source_dir path.
       This step replaces it with the actual GitHub remote URL from source_dir,
       so that gh CLI commands and git fetch origin work correctly in the clone.
+
+  check_integration_exists:
+    tool: run_cmd
+    with:
+      cmd: "git ls-remote --exit-code --heads origin \"${{ inputs.base_branch }}\""
+      cwd: "${{ context.work_dir }}"
+    on_success: analyze_prs
+    on_failure: confirm_create_integration
+    note: >
+      Checks whether the permanent base_branch (default: integration) exists on
+      the remote. Exit code 0 means the branch exists — proceed to analyze_prs.
+      Non-zero exit means the branch is absent — route to user confirmation before
+      creating it. This is an idempotent check: re-running the pipeline after
+      the branch is created will simply skip through on_success.
+
+  confirm_create_integration:
+    action: confirm
+    message: >-
+      The branch '${{ inputs.base_branch }}' does not exist on the remote.
+      Create it now from '${{ inputs.upstream_branch }}'?
+      This will be a permanent branch that accumulates AI-generated work.
+      Type yes to create it or no to abort.
+    on_success: create_persistent_integration
+    on_failure: escalate_stop
+    note: >
+      User approval gate. On yes: create_persistent_integration creates and
+      pushes the permanent branch. On no: escalate_stop — the pipeline cannot
+      proceed without the target branch.
+
+  create_persistent_integration:
+    tool: run_cmd
+    with:
+      cmd: "git checkout '${{ inputs.upstream_branch }}' && git pull && git checkout -b '${{ inputs.base_branch }}' && git push origin '${{ inputs.base_branch }}'"
+      cwd: "${{ context.work_dir }}"
+    on_success: analyze_prs
+    on_failure: cleanup_failure
+    note: >
+      Creates the permanent base_branch (e.g. integration) off upstream_branch
+      (e.g. main) and pushes it to the remote. This step only executes when the
+      user confirmed branch creation in confirm_create_integration. Once created,
+      subsequent pipeline runs skip directly from check_integration_exists to
+      analyze_prs via on_success.
 
   analyze_prs:
     tool: run_skill
@@ -431,7 +478,7 @@ steps:
 
   done:
     action: stop
-    message: "PR consolidation complete. Integration branch pushed, review PR opened. Human review required before merging to base_branch."
+    message: "PR consolidation complete. Batch branch pushed, review PR opened targeting integration branch. Human review required before merging integration into main."
 
   escalate_stop:
     action: stop

@@ -13,7 +13,6 @@ from autoskillit.execution.commands import (
     build_interactive_cmd,
 )
 
-
 # ---------------------------------------------------------------------------
 # Part 1: Constant value contracts — each assertion is the ground truth.
 # Any typo or wrong value in ClaudeFlags.* fails here immediately.
@@ -21,9 +20,11 @@ from autoskillit.execution.commands import (
 
 
 class TestClaudeFlagValues:
-
     def test_allow_dangerously_skip_permissions_value(self):
-        assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS == "--allow-dangerously-skip-permissions"
+        assert (
+            ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS
+            == "--allow-dangerously-skip-permissions"
+        )
 
     def test_dangerously_skip_permissions_value(self):
         assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS == "--dangerously-skip-permissions"
@@ -67,7 +68,6 @@ def _extract_flags(cmd: list[str]) -> set[str]:
 
 
 class TestFlagRegistryAudit:
-
     def test_interactive_cmd_flags_are_all_registered(self):
         result = build_interactive_cmd(model="claude-sonnet-4-6")
         unknown = _extract_flags(result.cmd) - KNOWN_CLAUDE_FLAGS

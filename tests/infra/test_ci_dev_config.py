@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).parent.parent.parent
@@ -163,6 +164,69 @@ class TestCIWorkflow:
                         "add 'version: \"X.Y.Z\"' to prevent silent behavior changes"
                         " from minor releases"
                     )
+
+    def test_ci_push_trigger_includes_integration(self) -> None:
+        """CI must trigger on push to integration branch."""
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        # PyYAML parses the YAML 'on:' key as Python True (boolean)
+        triggers = workflow.get(True, workflow.get("on", {}))
+        push_branches = triggers["push"]["branches"]
+        assert "integration" in push_branches, (
+            "CI must trigger on push to integration branch — "
+            "this is the permanent accumulator that also needs CI on direct pushes"
+        )
+
+    def test_ci_preflight_outputs_os_matrix(self) -> None:
+        """preflight job must export an os-matrix output computed from base_ref."""
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        outputs = workflow["jobs"]["preflight"].get("outputs", {})
+        assert "os-matrix" in outputs, (
+            "preflight must export os-matrix so the test job can vary runners "
+            "based on PR target branch"
+        )
+
+    def test_ci_test_matrix_uses_preflight_os_matrix(self) -> None:
+        """test job matrix must consume the os-matrix from preflight, not a hardcoded list."""
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        matrix = workflow["jobs"]["test"]["strategy"]["matrix"]
+        os_value = matrix["os"]
+        assert "fromJSON" in os_value or "needs.preflight" in str(os_value), (
+            "test job os matrix must be dynamic (fromJSON of preflight output), "
+            "not a hardcoded list — hardcoded list cannot vary by PR target"
+        )
+
+    def test_ci_preflight_computes_matrix_from_branch_context(self) -> None:
+        """preflight must contain a step that computes os matrix based on branch context.
+
+        Uses github.base_ref for pull_request events and github.ref for push events,
+        since github.base_ref is empty on direct push events.
+        """
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        steps = workflow["jobs"]["preflight"]["steps"]
+        matrix_steps = [
+            s
+            for s in steps
+            if any(kw in str(s.get("run", "")) for kw in ("base_ref", "github.ref"))
+            and "integration" in str(s.get("run", ""))
+        ]
+        assert matrix_steps, (
+            "preflight must have a step that branches on github.base_ref (for PRs) "
+            "or github.ref (for pushes) to produce the os-matrix output"
+        )
+
+    def test_ci_integration_target_produces_ubuntu_only_matrix(self) -> None:
+        """The integration branch must produce a single-element ubuntu matrix."""
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        steps = workflow["jobs"]["preflight"]["steps"]
+        for step in steps:
+            run = step.get("run", "")
+            if "integration" in run and ("base_ref" in run or "github.ref" in run):
+                assert '["ubuntu-latest"]' in run, (
+                    "When branch targets integration, matrix must contain ubuntu-latest only"
+                )
+                break
+        else:
+            pytest.fail("No step computes integration-specific matrix in preflight")
 
 
 class TestPtyTestGuard:

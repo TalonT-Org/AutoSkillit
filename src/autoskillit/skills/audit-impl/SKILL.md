@@ -21,8 +21,11 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 {plans_input} {branch_name} {base_branch}
 ```
 
-- `plans_input` — path to a single plan `.md` file, a directory containing `*_plan_*.md`
-  files, or a `manifest_*.json` from `/autoskillit:make-groups`
+- `plans_input` — one of:
+  - A single plan `.md` file path
+  - A comma-separated list of `.md` plan file paths (no spaces around commas)
+  - A directory containing `*_plan_*.md` files
+  - A `manifest_*.json` from `/autoskillit:make-groups`
 - `branch_name` — commit SHA of the pre-implementation base ref (preferred from pipeline,
   stable after merge_worktree destroys named refs); a branch name is also accepted for
   standalone invocations. A live worktree path is accepted for legacy use (Step 0 extracts
@@ -49,10 +52,14 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 
 Resolve `plans_input`:
 
-- **Single `.md` file**: use it directly
-- **Directory**: glob for `*_plan_*.md` files in the directory
-- **`manifest_*.json`**: parse it; extract `groups[*].file` paths, resolved relative to the
-  manifest's parent directory
+- **Single `.md` file**: no comma, ends in `.md` → use it directly
+- **Comma-separated `.md` paths**: value contains `,` → split on `,`, trim whitespace
+  from each token. Validate that each trimmed token ends in `.md`; log a warning and
+  skip any token that does not. Use each valid token as a plan file path
+- **Directory**: no comma, does not end in `.md` or `.json` → glob for `*_plan_*.md`
+  files in the directory
+- **`manifest_*.json`**: no comma, ends in `.json` → parse it; extract `groups[*].file`
+  paths, resolved relative to the manifest's parent directory
 
 Verify every plan file exists. If any are missing, abort with a clear error listing them.
 

@@ -195,26 +195,34 @@ class TestCIWorkflow:
             "not a hardcoded list — hardcoded list cannot vary by PR target"
         )
 
-    def test_ci_preflight_computes_matrix_from_base_ref(self) -> None:
-        """preflight must contain a step that computes os matrix based on github.base_ref."""
+    def test_ci_preflight_computes_matrix_from_branch_context(self) -> None:
+        """preflight must contain a step that computes os matrix based on branch context.
+
+        Uses github.base_ref for pull_request events and github.ref for push events,
+        since github.base_ref is empty on direct push events.
+        """
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
         steps = workflow["jobs"]["preflight"]["steps"]
-        matrix_steps = [s for s in steps if "base_ref" in str(s.get("run", ""))]
+        matrix_steps = [
+            s
+            for s in steps
+            if any(kw in str(s.get("run", "")) for kw in ("base_ref", "github.ref"))
+            and "integration" in str(s.get("run", ""))
+        ]
         assert matrix_steps, (
-            "preflight must have a step that branches on github.base_ref to produce "
-            "the os-matrix output"
+            "preflight must have a step that branches on github.base_ref (for PRs) "
+            "or github.ref (for pushes) to produce the os-matrix output"
         )
 
     def test_ci_integration_target_produces_ubuntu_only_matrix(self) -> None:
-        """The base_ref=integration branch must produce a single-element ubuntu matrix."""
+        """The integration branch must produce a single-element ubuntu matrix."""
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
         steps = workflow["jobs"]["preflight"]["steps"]
         for step in steps:
             run = step.get("run", "")
-            if "base_ref" in run and "integration" in run:
-                assert "ubuntu-latest" in run
-                assert "macos" not in run.split("integration")[1].split("\n")[0], (
-                    "When base_ref is integration, matrix must contain ubuntu-latest only"
+            if "integration" in run and ("base_ref" in run or "github.ref" in run):
+                assert '["ubuntu-latest"]' in run, (
+                    "When branch targets integration, matrix must contain ubuntu-latest only"
                 )
                 break
         else:

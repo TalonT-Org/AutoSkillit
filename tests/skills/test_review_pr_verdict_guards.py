@@ -8,7 +8,14 @@ than a count-based threshold (len(warning_findings) > N).
 import re
 from pathlib import Path
 
-SKILL_PATH = Path("src/autoskillit/skills/review-pr/SKILL.md")
+SKILL_PATH = (
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "skills"
+    / "review-pr"
+    / "SKILL.md"
+)
 
 
 def _skill_text() -> str:

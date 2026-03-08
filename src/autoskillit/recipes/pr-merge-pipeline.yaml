@@ -369,7 +369,7 @@ steps:
         gh run watch "$run_id" --exit-status
       cwd: "${{ context.work_dir }}"
       timeout: 150
-    on_success: cleanup_success
+    on_success: confirm_cleanup
     on_failure: cleanup_failure
     note: >
       Polls for an active GitHub Actions run on context.integration_branch for up to 30 s,
@@ -378,17 +378,29 @@ steps:
       that the human reviewer should see. No automated remediation; on failure, the clone
       is preserved via cleanup_failure for manual inspection.
 
-  cleanup_success:
+  confirm_cleanup:
+    action: confirm
+    message: >-
+      PR-merge pipeline succeeded! The clone at ${{ context.work_dir }} is preserved.
+      Delete it now? Keeping it lets you resume any session from this pipeline run.
+      Type yes to delete or no to keep.
+    on_success: delete_clone
+    on_failure: done
+    note: >-
+      User confirmation gate — preserves clone by default. On yes: delete_clone removes it.
+      On no: done is reached immediately, clone stays on disk.
+
+  delete_clone:
     tool: remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
       keep: "false"
+      step_name: delete_clone
     on_success: done
     on_failure: done
-    note: >
-      Removes the clone after a successful pipeline run. The sync-check hook
-      gates deletion — removal is approved only when the branch is pushed.
-      Routes to done regardless of whether removal succeeds.
+    note: >-
+      Reached only after user explicitly confirms cleanup. Sync-check hook gates deletion —
+      removal approved only when branch is pushed.
 
   cleanup_failure:
     tool: remove_clone

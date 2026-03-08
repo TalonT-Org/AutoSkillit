@@ -93,6 +93,15 @@ OPTIONAL STEP SEMANTICS:
   skip_when_false ingredient is false. It does NOT mean failures are tolerated.
 - A running optional step that returns success: false MUST follow on_failure.
   Never route a running optional step's failure to done.
+
+ACTION: CONFIRM STEP SEMANTICS:
+- When you reach a step with action: "confirm", call AskUserQuestion with the
+  step's message. Do NOT call any MCP tools for this step type — user interaction
+  via AskUserQuestion IS the step.
+- If the user confirms (answers yes, ok, proceed, delete, or similar affirmative),
+  route to the step's on_success target.
+- If the user declines (answers no, skip, keep, cancel, or similar negative),
+  route to the step's on_failure target.
 {sous_chef_content}
 --- RECIPE ---
 {script_yaml}

@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:ea283d9810ecb8a8d66026a31942893e3f7debc51beb44123620b1e7bd424c34 -->
+<!-- autoskillit-recipe-hash: sha256:1d767978bfc4c53157183ca5e985b928da20fffb03cb99c0bb39011a5f9d7bfd -->
 <!-- autoskillit-diagram-format: v5 -->
 ## pr-merge-pipeline
 Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
@@ -57,7 +57,7 @@ publish_integration_branch  [push_to_remote] (retry ×3)
 │                                                                                                                                                  (default) → next_part_or_next_pr
 │                                                                                                                                                                                      │
 │                                                                                                                                                                                      ✗ failure → cleanup_failure
-│                                                                                                                                                                                      result.escalation_required == 'true' → cleanup_failure
+│                                                                                                                                                                                      ${{ result.escalation_required }} == true → cleanup_failure
 │                                                                                                                                                                                      (default) → retry_merge_after_resolution
 │                                                                                                                                                                                                                             │
 │                                                                                                                                                                                                                             ✗ failure → cleanup_failure

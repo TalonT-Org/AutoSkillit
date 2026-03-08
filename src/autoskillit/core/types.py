@@ -21,6 +21,7 @@ AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
 class RetryReason(StrEnum):
     RESUME = "resume"
     NONE = "none"
+    BUDGET_EXHAUSTED = "budget_exhausted"
 
 
 class MergeFailedStep(StrEnum):
@@ -30,6 +31,7 @@ class MergeFailedStep(StrEnum):
     TEST_GATE = "test_gate"
     FETCH = "fetch"
     PRE_REBASE_CHECK = "pre_rebase_check"
+    MERGE_COMMITS_DETECTED = "merge_commits_detected"
     REBASE = "rebase"
     GENERATED_FILE_CLEANUP = "generated_file_cleanup"
     POST_REBASE_TEST_GATE = "post_rebase_test_gate"
@@ -40,6 +42,7 @@ class MergeState(StrEnum):
     WORKTREE_INTACT = "worktree_intact"
     WORKTREE_INTACT_REBASE_ABORTED = "worktree_intact_rebase_aborted"
     WORKTREE_INTACT_BASE_NOT_PUBLISHED = "worktree_intact_base_not_published"
+    WORKTREE_INTACT_MERGE_COMMITS_DETECTED = "worktree_intact_merge_commits_detected"
     WORKTREE_DIRTY = "worktree_dirty"
     WORKTREE_DIRTY_ABORT_FAILED = "worktree_dirty_abort_failed"
     WORKTREE_DIRTY_MID_OPERATION = "worktree_dirty_mid_operation"
@@ -59,6 +62,41 @@ class SkillSource(StrEnum):
 class RecipeSource(StrEnum):
     PROJECT = "project"
     BUILTIN = "builtin"
+
+
+class ClaudeFlags(StrEnum):
+    """Canonical registry of all claude CLI flags used by autoskillit.
+
+    Every flag string that autoskillit passes to the claude binary MUST be
+    defined here. Call sites must reference these constants — never hardcode
+    flag strings at the call site.
+
+    When the claude CLI renames or removes a flag:
+      1. Update the constant value here.
+      2. Follow the failing tests in test_flag_contracts.py to update call sites.
+    """
+
+    # Permission bypass — mode-dependent (never use the wrong one for the wrong mode)
+    ALLOW_DANGEROUSLY_SKIP_PERMISSIONS = "--allow-dangerously-skip-permissions"  # interactive only
+    DANGEROUSLY_SKIP_PERMISSIONS = "--dangerously-skip-permissions"  # headless only
+
+    # Prompt / execution mode
+    PRINT = "-p"
+
+    # Model selection
+    MODEL = "--model"
+
+    # Plugin / directory
+    PLUGIN_DIR = "--plugin-dir"
+    ADD_DIR = "--add-dir"
+
+    # Output format
+    OUTPUT_FORMAT = "--output-format"
+    VERBOSE = "--verbose"
+
+    # Interactive session restrictions
+    TOOLS = "--tools"
+    APPEND_SYSTEM_PROMPT = "--append-system-prompt"
 
 
 class OutputFormat(StrEnum):
@@ -84,7 +122,7 @@ class OutputFormat(StrEnum):
     def required_cli_flags(self) -> tuple[str, ...]:
         """CLI flags required when this format is used with -p (headless) mode."""
         if self == OutputFormat.STREAM_JSON:
-            return ("--verbose",)
+            return (ClaudeFlags.VERBOSE,)
         return ()
 
     @classmethod
@@ -219,6 +257,13 @@ class SubprocessResult:
     channel_b_session_id: str = ""
     start_ts: str = ""
     end_ts: str = ""
+    elapsed_seconds: float = 0.0
+    """Pre-computed monotonic elapsed time in seconds (always >= 0).
+
+    Set by headless.py using time.monotonic() brackets around the subprocess run.
+    Consumers (session_log, tokens) must use this float directly — never re-derive
+    duration from start_ts/end_ts ISO strings.
+    """
 
 
 @runtime_checkable
@@ -405,23 +450,24 @@ class SkillResult:
     retry_reason: RetryReason
     stderr: str
     token_usage: dict[str, Any] | None = None
+    worktree_path: str | None = None
 
     def to_json(self) -> str:
-        return json.dumps(
-            {
-                "success": self.success,
-                "result": self.result,
-                "session_id": self.session_id,
-                "subtype": self.subtype,
-                "is_error": self.is_error,
-                "exit_code": self.exit_code,
-                "needs_retry": self.needs_retry,
-                "retry_reason": self.retry_reason,
-                "stderr": self.stderr,
-                "token_usage": self.token_usage,
-            },
-            default=lambda o: o.value if isinstance(o, Enum) else str(o),
-        )
+        data: dict[str, Any] = {
+            "success": self.success,
+            "result": self.result,
+            "session_id": self.session_id,
+            "subtype": self.subtype,
+            "is_error": self.is_error,
+            "exit_code": self.exit_code,
+            "needs_retry": self.needs_retry,
+            "retry_reason": self.retry_reason,
+            "stderr": self.stderr,
+            "token_usage": self.token_usage,
+        }
+        if self.worktree_path is not None:
+            data["worktree_path"] = self.worktree_path
+        return json.dumps(data, default=lambda o: o.value if isinstance(o, Enum) else str(o))
 
     @property
     def outcome(self) -> SessionOutcome:
@@ -480,6 +526,12 @@ class AuditStore(Protocol):
 
     def clear(self) -> None: ...
 
+    def consecutive_failures(self, skill_command: str) -> int: ...
+
+    def record_success(self, skill_command: str) -> None: ...
+
+    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int: ...
+
 
 @runtime_checkable
 class TokenStore(Protocol):
@@ -492,6 +544,7 @@ class TokenStore(Protocol):
         *,
         start_ts: str = "",
         end_ts: str = "",
+        elapsed_seconds: float | None = None,
     ) -> None: ...
 
     def get_report(self) -> list[dict[str, Any]]: ...
@@ -499,6 +552,8 @@ class TokenStore(Protocol):
     def compute_total(self) -> dict[str, Any]: ...
 
     def clear(self) -> None: ...
+
+    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int: ...
 
 
 @runtime_checkable
@@ -512,6 +567,8 @@ class TimingStore(Protocol):
     def compute_total(self) -> dict[str, Any]: ...
 
     def clear(self) -> None: ...
+
+    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int: ...
 
 
 @runtime_checkable

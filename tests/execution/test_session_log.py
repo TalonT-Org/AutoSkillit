@@ -443,3 +443,219 @@ def test_recover_crashed_sessions_handles_multiple_files(tmp_path):
     assert count == 3
     sessions = list((tmp_path / "logs" / "sessions").iterdir())
     assert len(sessions) == 3
+
+
+def test_flush_session_log_backward_clock_produces_non_negative_duration(tmp_path):
+    """duration_seconds must never be negative, even if end_ts precedes start_ts."""
+    start_ts = "2026-01-01T12:05:00+00:00"  # later
+    end_ts = "2026-01-01T12:00:00+00:00"  # earlier — backward clock
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="backward-clock-test",
+        pid=1,
+        skill_command="/test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        proc_snapshots=[],
+        termination_reason="completed",
+        snapshot_interval_seconds=5.0,
+    )
+    session_dir = tmp_path / "sessions" / "backward-clock-test"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["duration_seconds"] >= 0, (
+        f"duration_seconds must not be negative, got {summary['duration_seconds']}"
+    )
+
+
+def test_flush_session_log_uses_elapsed_seconds_over_iso_subtraction(tmp_path):
+    """When elapsed_seconds is provided, it is used as duration_seconds, not ISO subtraction."""
+    start_ts = "2026-01-01T12:00:00+00:00"
+    end_ts = "2026-01-01T12:00:05+00:00"  # ISO implies 5.0s
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="elapsed-seconds-test",
+        pid=1,
+        skill_command="/test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        elapsed_seconds=12.5,  # monotonic says 12.5s
+        proc_snapshots=[],
+        termination_reason="completed",
+        snapshot_interval_seconds=5.0,
+    )
+    session_dir = tmp_path / "sessions" / "elapsed-seconds-test"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["duration_seconds"] == pytest.approx(12.5), (
+        "elapsed_seconds param must override ISO subtraction"
+    )
+
+
+def test_flush_session_log_zero_elapsed_seconds_is_valid(tmp_path):
+    """elapsed_seconds=0.0 is falsy but must be used as duration_seconds, not fall through to ISO subtraction."""
+    start_ts = "2026-01-01T12:00:00+00:00"
+    end_ts = "2026-01-01T12:00:05+00:00"  # ISO implies 5.0s
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="zero-elapsed-test",
+        pid=1,
+        skill_command="/test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        elapsed_seconds=0.0,  # explicit zero — must not fall through to ISO subtraction
+        proc_snapshots=[],
+        termination_reason="completed",
+        snapshot_interval_seconds=5.0,
+    )
+    session_dir = tmp_path / "sessions" / "zero-elapsed-test"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["duration_seconds"] == 0.0
+
+
+# --- telemetry persistence tests ---
+
+
+def test_flush_writes_token_usage_json_when_step_provided(tmp_path):
+    """token_usage.json appears in session dir when step_name + token_usage given."""
+    _flush(
+        tmp_path,
+        step_name="implement",
+        token_usage={"input_tokens": 100, "output_tokens": 50},
+        proc_snapshots=None,
+        success=False,
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert (session_dir / "token_usage.json").is_file()
+
+
+def test_flush_omits_token_usage_json_when_no_step_name(tmp_path):
+    """token_usage.json is NOT written when step_name is empty, even if token_usage provided."""
+    _flush(
+        tmp_path,
+        step_name="",
+        token_usage={"input_tokens": 100},
+        proc_snapshots=None,
+        success=False,
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert not (session_dir / "token_usage.json").exists()
+
+
+def test_flush_writes_step_timing_json(tmp_path):
+    """step_timing.json appears when step_name and timing_seconds > 0 provided."""
+    _flush(
+        tmp_path, step_name="implement", timing_seconds=42.5, proc_snapshots=None, success=False
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert (session_dir / "step_timing.json").is_file()
+
+
+def test_flush_writes_audit_log_json(tmp_path):
+    """audit_log.json written to session dir when step_name and audit_record dict provided."""
+    record = {
+        "timestamp": "2026-01-01T00:00:00Z",
+        "skill_command": "/foo",
+        "exit_code": 1,
+        "subtype": "error",
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "oops",
+    }
+    _flush(tmp_path, step_name="implement", audit_record=record, proc_snapshots=None, success=False)
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert (session_dir / "audit_log.json").is_file()
+
+
+def test_flush_omits_audit_log_when_no_record(tmp_path):
+    """audit_log.json NOT written when audit_record=None."""
+    _flush(tmp_path, audit_record=None, proc_snapshots=None, step_name="implement", success=False)
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert not (session_dir / "audit_log.json").exists()
+
+
+def test_flush_index_includes_step_name_and_token_fields(tmp_path):
+    """sessions.jsonl entry has step_name, input_tokens, output_tokens fields."""
+    _flush(
+        tmp_path,
+        step_name="implement",
+        token_usage={"input_tokens": 100, "output_tokens": 50},
+        proc_snapshots=None,
+        success=False,
+    )
+    lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
+    entry = json.loads(lines[-1])
+    assert entry["step_name"] == "implement"
+    assert entry["input_tokens"] == 100
+    assert entry["output_tokens"] == 50
+
+
+def test_flush_index_token_fields_zero_when_no_step(tmp_path):
+    """sessions.jsonl entry has step_name='' and token fields=0 when no step telemetry."""
+    _flush(tmp_path, proc_snapshots=None, success=False)  # no step_name
+    lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
+    entry = json.loads(lines[-1])
+    assert entry["step_name"] == ""
+    assert entry["input_tokens"] == 0
+    assert entry["output_tokens"] == 0
+
+
+def test_token_usage_json_schema(tmp_path):
+    """token_usage.json contains all expected fields."""
+    _flush(
+        tmp_path,
+        step_name="plan",
+        token_usage={
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_creation_input_tokens": 2,
+            "cache_read_input_tokens": 1,
+        },
+        timing_seconds=15.0,
+        proc_snapshots=None,
+        success=False,
+    )
+    tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
+    assert tu["step_name"] == "plan"
+    assert tu["input_tokens"] == 10
+    assert tu["output_tokens"] == 5
+    assert tu["cache_creation_input_tokens"] == 2
+    assert tu["cache_read_input_tokens"] == 1
+    assert tu["timing_seconds"] == 15.0
+
+
+def test_step_timing_json_schema(tmp_path):
+    """step_timing.json contains step_name and total_seconds."""
+    _flush(tmp_path, step_name="plan", timing_seconds=20.0, proc_snapshots=None, success=False)
+    st = json.loads((tmp_path / "sessions" / "test-session-001" / "step_timing.json").read_text())
+    assert st["step_name"] == "plan"
+    assert st["total_seconds"] == 20.0
+
+
+def test_audit_log_json_schema(tmp_path):
+    """audit_log.json contains list with expected failure record fields."""
+    record = {
+        "timestamp": "2026-01-01T00:00:00Z",
+        "skill_command": "/foo",
+        "exit_code": 1,
+        "subtype": "error",
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "bad",
+    }
+    _flush(tmp_path, step_name="implement", audit_record=record, proc_snapshots=None, success=False)
+    al = json.loads((tmp_path / "sessions" / "test-session-001" / "audit_log.json").read_text())
+    assert isinstance(al, list)
+    assert len(al) == 1
+    assert al[0]["skill_command"] == "/foo"
+    assert al[0]["exit_code"] == 1

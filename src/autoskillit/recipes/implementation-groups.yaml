@@ -562,8 +562,8 @@ steps:
     skip_when_false: inputs.issue_url
     with_args:
       issue_url: ${{ inputs.issue_url }}
-    on_success: cleanup_success
-    on_failure: cleanup_success
+    on_success: confirm_cleanup
+    on_failure: confirm_cleanup
 
   release_issue_failure:
     description: "Release the in-progress claim after pipeline failure"
@@ -575,17 +575,29 @@ steps:
     on_success: cleanup_failure
     on_failure: cleanup_failure
 
-  cleanup_success:
+  confirm_cleanup:
+    action: confirm
+    message: >-
+      Implementation-groups pipeline succeeded! The clone at ${{ context.work_dir }} is preserved.
+      Delete it now? Keeping it lets you resume any session from this pipeline run.
+      Type yes to delete or no to keep.
+    on_success: delete_clone
+    on_failure: done
+    note: >-
+      User confirmation gate — preserves clone by default. On yes: delete_clone removes it.
+      On no: done is reached immediately, clone stays on disk.
+
+  delete_clone:
     tool: remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
       keep: "false"
+      step_name: delete_clone
     on_success: done
     on_failure: done
-    note: >
-      Removes the clone after a successful pipeline run. The sync-check hook
-      gates deletion — removal is approved only when the branch is pushed.
-      Routes to done regardless of whether removal succeeds.
+    note: >-
+      Reached only after user explicitly confirms cleanup. Sync-check hook gates deletion —
+      removal approved only when branch is pushed.
 
   cleanup_failure:
     tool: remove_clone

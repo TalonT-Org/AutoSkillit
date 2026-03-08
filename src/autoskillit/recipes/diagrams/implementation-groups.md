@@ -1,5 +1,5 @@
-<!-- autoskillit-recipe-hash: sha256:ad9cb5c9bc405f4636ea19794f8a6b8c29015543b99d688887bf2f668da0a181 -->
-<!-- autoskillit-diagram-format: v4 -->
+<!-- autoskillit-recipe-hash: sha256:f6de7178434861ef185945fea3c951684ccfb87eb8cdf534949cb3fabe0455b9 -->
+<!-- autoskillit-diagram-format: v5 -->
 ## implementation-groups
 Decompose a source document into sequenced implementation groups, then plan, verify, implement, test, and merge each group end-to-end. Use when you have a large document or roadmap to implement via make-groups.
 
@@ -97,12 +97,16 @@ re_push  [push_to_remote] (retry ×3)
 │  ✗ failure → release_issue_failure
 │
 ├── [release_issue_success] (retry ×3)  ← only if inputs.issue_url
-│       ✗ failure → cleanup_success
+│       ✗ failure → confirm_cleanup
 │
 ├── [release_issue_failure] (retry ×3)  ← only if inputs.issue_url
 │       ✗ failure → cleanup_failure
 │
-cleanup_success  [remove_clone] (retry ×3)
+❓ confirm_cleanup
+│  ✓ yes  → delete_clone
+│  ✗ no   → done
+│
+delete_clone  [remove_clone] (retry ×3)
 │  ↓ success → done
 │  ✗ failure → done
 │
@@ -118,16 +122,13 @@ cleanup_failure  [remove_clone] (retry ×3)
 | Name | Description | Default |
 |------|-------------|---------|
 | source_doc | Path to source document for group decomposition | — |
-| source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel.
- | auto-detect |
-| run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. impl/124 or impl/20260304) and in the clone directory name.
- | impl |
+| source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel. | auto-detect |
+| run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. impl/124 or impl/20260304) and in the clone directory name. | impl |
 | base_branch | Branch to merge into (defaults to current branch) | main |
 | review_approach | Run /review-approach before implementation? (true/false) | off |
 | audit | Run /autoskillit:audit-impl once after all groups/parts have been merged, to check overall implementation quality and optionally trigger a remediation round (true/false) | on |
 | open_pr | Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false) | on |
-| issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched and used to enrich planning, and the resulting PR will include "Closes #N" to auto-close the issue on merge.
- | auto-detect |
+| issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched and used to enrich planning, and the resulting PR will include "Closes #N" to auto-close the issue on merge. | auto-detect |
 ### Kitchen Rules
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill.
 - Route to on_failure — never investigate or fix directly from the orchestrator.

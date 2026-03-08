@@ -129,6 +129,39 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 Include the diagram in the plan document under a "## Proposed Architecture" section.
 More than one lens diagram is okay if it is complex plan (don't do more than 3, and make sure to load each appropriate skill).
+
+## Conflict-Resolution Plan Requirements
+
+When the task involves applying changes from a PR branch to an integration branch
+(i.e., the input is a conflict report produced by `merge-pr`), the plan
+**MUST produce a worktree with a linear commit history**.
+
+`merge_worktree` rebases the worktree branch before merging. Standard
+`git rebase` cannot replay merge commits; a worktree containing them will
+fail with `WORKTREE_INTACT_MERGE_COMMITS_DETECTED`.
+
+**NEVER prescribe in conflict-resolution plans:**
+```
+git merge --no-ff origin/{branch}            # creates merge commit — rebase fails
+git merge --no-commit --no-ff origin/{branch}  # same problem
+```
+
+**ALWAYS use linear approaches instead:**
+```
+# Option A: Per-file checkout (copies contents without merge relationship)
+git checkout origin/{branch} -- path/to/file.py
+
+# Option B: Cherry-pick (replays individual commits as regular commits)
+git cherry-pick {commit-hash}
+
+# Option C: Squash merge (single linear commit from all changes)
+git merge --squash origin/{branch}
+git commit -m "feat: apply changes from {branch}"
+```
+
+These produce regular (single-parent) commits that `merge_worktree`'s rebase gate
+handles correctly.
+
 ---
 
 ## Skill Loading Checklist

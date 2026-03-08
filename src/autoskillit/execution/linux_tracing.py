@@ -16,11 +16,12 @@ On non-Linux platforms, all public functions are safe no-ops.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import IO, TYPE_CHECKING
 
@@ -129,11 +130,26 @@ def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
 
 
 async def proc_monitor(pid: int, interval: float = 5.0) -> AsyncIterator[ProcSnapshot]:
-    """Async generator: yields ProcSnapshot at interval until process dies."""
+    """Async generator: yields ProcSnapshot at interval until process dies.
+
+    Guarantees that each yielded snapshot has a strictly increasing captured_at
+    value. If the wall clock steps backward (e.g., NTP correction on WSL2),
+    the captured_at is advanced by 1 microsecond from the previous value to
+    maintain the monotonic ordering invariant at the production site.
+    """
+    _last_captured_at: str = ""
     while True:
         snap = read_proc_snapshot(pid)
         if snap is None:
             return
+        captured_at = snap.captured_at
+        if captured_at <= _last_captured_at:
+            # Clock stepped backward or stood still — advance by 1 microsecond
+            captured_at = (
+                datetime.fromisoformat(_last_captured_at) + timedelta(microseconds=1)
+            ).isoformat()
+            snap = dataclasses.replace(snap, captured_at=captured_at)
+        _last_captured_at = captured_at
         yield snap
         await anyio.sleep(interval)
 

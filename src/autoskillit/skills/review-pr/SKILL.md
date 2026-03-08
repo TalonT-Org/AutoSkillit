@@ -35,7 +35,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Output `verdict=` on the final line
 - Exit 0 in all normal cases; verdict drives recipe routing via on_result, not exit code
 - Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation has already output verdict=approved)
-- Tag `@TalonT` in escalation comments (`needs_human` verdict)
+- Tag the authenticated GitHub user (`gh api user -q .login`) in escalation comments (`needs_human` verdict) — omit the mention silently if username derivation fails
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Deduplicate findings by (file, line) pairs before posting
 
@@ -44,6 +44,15 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 ### Step 0: Validate Arguments
 
 Parse two positional arguments: `feature_branch` and `base_branch`.
+
+Derive the escalation username for `needs_human` verdicts:
+
+```bash
+escalation_user=$(gh api user -q .login 2>/dev/null || echo "")
+```
+
+If `escalation_user` is non-empty, set `escalation_user_mention="@${escalation_user}"`.
+If empty (gh unavailable or not authenticated), set `escalation_user_mention=""`.
 
 ### Step 1: Find the Open PR
 
@@ -143,17 +152,37 @@ else:
 
 ### Step 6: Post Inline Review Comments
 
-Build review comment bodies for each critical/warning finding. Map findings to diff
-positions using the unified diff format.
+Build review comment bodies for each critical and warning finding. Use the `line` and `side`
+fields (modern GitHub Reviews API — not the deprecated `position` field) so that file line
+numbers from audit findings map directly without diff-position counting.
+
+For each finding, `line` is the finding's `line` value (the line number in the new file) and
+`side` is always `RIGHT` (referring to the right-hand side of the diff — additions and context
+in the updated file).
+
+Build a proper JSON payload where each comment is a complete object, then post via `--input -`.
+The `--field` approach creates one array entry per flag (not one object per comment), so it must
+not be used for the `comments` array:
 
 ```bash
+# Build comments JSON array — each element is a complete object
+COMMENTS_JSON=$(jq -n --argjson findings "$FINDINGS_JSON" '
+  $findings | map({
+    path: .file,
+    line: .line,
+    side: "RIGHT",
+    body: ("[" + .severity + "] " + .dimension + ": " + .message)
+  })
+')
+
+# Build and post the full review payload via stdin
+jq -n \
+  --arg body "AutoSkillit PR Review — Verdict: {verdict}" \
+  --arg event "{APPROVE|COMMENT|REQUEST_CHANGES}" \
+  --argjson comments "$COMMENTS_JSON" \
+  '{body: $body, event: $event, comments: $comments}' | \
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
-  --method POST \
-  --field body="AutoSkillit PR Review\n\nVerdict: {verdict}\n\nSee inline comments for details." \
-  --field event="{COMMENT|REQUEST_CHANGES|APPROVE}" \
-  --field "comments[][path]={file}" \
-  --field "comments[][position]={diff_position}" \
-  --field "comments[][body]=[{severity}] {dimension}: {message}"
+  --method POST --input -
 ```
 
 Event mapping:
@@ -161,8 +190,33 @@ Event mapping:
 - `needs_human` → `COMMENT`
 - `changes_requested` → `REQUEST_CHANGES`
 
-If the `gh api` call fails (e.g., diff position mismatch), fall back to a single
-summary review comment listing all findings without inline anchoring.
+**Fallback (if the `gh api` call fails):**
+
+Post a per-file structured summary using `gh pr review --comment`. Group all findings by file and
+format each group as a markdown section:
+
+```
+## AutoSkillit Review Findings
+
+**Verdict:** {verdict}
+
+### {file_path_1}
+| Line | Severity | Dimension | Message |
+|------|----------|-----------|---------|
+| {line} | {severity} | {dimension} | {message} |
+...
+
+### {file_path_2}
+| Line | Severity | Dimension | Message |
+...
+```
+
+Post this structured comment with:
+```bash
+gh pr review {pr_number} --comment --body "{structured_findings_markdown}"
+```
+
+This preserves per-file grouping even when inline anchoring is unavailable.
 
 ### Step 7: Submit Summary Review
 
@@ -174,7 +228,7 @@ gh pr review {pr_number} --approve --body "AutoSkillit review passed. No blockin
 gh pr review {pr_number} --request-changes --body "AutoSkillit review found {N} blocking issues. See inline comments."
 
 # needs_human
-gh pr review {pr_number} --comment --body "AutoSkillit review: uncertain trade-offs detected. @TalonT please review. See inline comments."
+gh pr review {pr_number} --comment --body "AutoSkillit review: uncertain trade-offs detected. {escalation_user_mention} Please review. See inline comments."
 ```
 
 ### Step 8: Write Summary and Emit Verdict
@@ -194,6 +248,6 @@ Exit 1 only for unrecoverable tool-level errors.
 
 - `verdict=approved` — No blocking issues; CI can proceed
 - `verdict=changes_requested` — Blocking issues found; recipe routes to `resolve_review`
-- `verdict=needs_human` — Uncertain trade-offs; human review requested via `@TalonT`
+- `verdict=needs_human` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)
 
 Summary written to: `temp/review-pr/summary_{pr_number}_{timestamp}.md`

@@ -48,6 +48,7 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
         exit_code=0,
         start_ts=start_ts,
         end_ts=end_ts,
+        elapsed_seconds=elapsed,
         termination_reason="natural_exit",
         snapshot_interval_seconds=0.05,
         proc_snapshots=snap_dicts,
@@ -65,3 +66,7 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
     assert "end_ts" in summary
     assert "duration_seconds" in summary
     assert summary["duration_seconds"] > 0
+    assert summary["duration_seconds"] == pytest.approx(elapsed, abs=0.5), (
+        "duration_seconds in summary.json must reflect monotonic elapsed, "
+        "not wall-clock subtraction"
+    )

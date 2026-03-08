@@ -12,6 +12,15 @@ skills:
       type: string
       required: true
     outputs: []
+  resolve-review:
+    inputs:
+    - name: feature_branch
+      type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs: []
   dry-walkthrough:
     inputs:
     - name: plan_path
@@ -184,6 +193,10 @@ skills:
     - name: merged
       type: string
     - name: needs_plan
+      type: string
+    - name: escalation_required
+      type: string
+    - name: escalation_reason
       type: string
     - name: pr_number
       type: string

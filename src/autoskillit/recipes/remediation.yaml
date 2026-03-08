@@ -416,7 +416,7 @@ steps:
   resolve_review:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:resolve-review ${{ context.merge_target }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_review"
     retries: 2
@@ -425,10 +425,11 @@ steps:
     on_failure: release_issue_failure
     note: >
       Runs when review_pr reports issues (verdict=changes_requested). The clone
-      (context.work_dir) has the feature branch checked out — resolve-failures
-      reads the PR review comments and fixes the identified issues. Commits fixes
-      without merging; orchestrator re-pushes via re_push_review. Retries up to
-      2 times (3 total attempts) before exhausting to cleanup_failure.
+      (context.work_dir) has the feature branch (context.merge_target) checked out.
+      resolve-review fetches inline and summary review comments via the GitHub API,
+      applies fixes for each actionable finding (critical + warning severity), and
+      commits each fix. Orchestrator re-pushes via re_push_review after success.
+      Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.
 
   re_push_review:
     tool: push_to_remote
@@ -512,8 +513,8 @@ steps:
     skip_when_false: inputs.issue_url
     with_args:
       issue_url: ${{ inputs.issue_url }}
-    on_success: cleanup_success
-    on_failure: cleanup_success
+    on_success: confirm_cleanup
+    on_failure: confirm_cleanup
 
   release_issue_failure:
     description: "Release the in-progress claim after pipeline failure"
@@ -525,17 +526,29 @@ steps:
     on_success: cleanup_failure
     on_failure: cleanup_failure
 
-  cleanup_success:
+  confirm_cleanup:
+    action: confirm
+    message: >-
+      Remediation pipeline succeeded! The clone at ${{ context.work_dir }} is preserved.
+      Delete it now? Keeping it lets you resume any session from this pipeline run.
+      Type yes to delete or no to keep.
+    on_success: delete_clone
+    on_failure: done
+    note: >-
+      User confirmation gate — preserves clone by default. On yes: delete_clone removes it.
+      On no: done is reached immediately, clone stays on disk.
+
+  delete_clone:
     tool: remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
       keep: "false"
+      step_name: delete_clone
     on_success: done
     on_failure: done
-    note: >
-      Removes the clone after a successful pipeline run. The sync-check hook
-      gates deletion — removal is approved only when the branch is pushed.
-      Routes to done regardless of whether removal succeeds.
+    note: >-
+      Reached only after user explicitly confirms cleanup. Sync-check hook gates deletion —
+      removal approved only when branch is pushed.
 
   cleanup_failure:
     tool: remove_clone

@@ -762,6 +762,34 @@ class TestInvestigateFirstStructure:
             "open_pr_step must route to review_pr — review loop runs before ci_watch now"
         )
 
+    def test_if_resolve_review_uses_resolve_review_skill(self, recipe) -> None:
+        """T_IF_RR1: resolve_review step must invoke resolve-review, not resolve-failures.
+
+        resolve-failures is test-driven and finds no work when tests are green.
+        resolve-review reads PR review comments and applies the reviewer's requested changes.
+        """
+        assert "resolve_review" in recipe.steps
+        step = recipe.steps["resolve_review"]
+        assert step.tool == "run_skill"
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "resolve-review" in skill_cmd, (
+            "resolve_review step must call /autoskillit:resolve-review; "
+            "resolve-failures is test-driven and ignores PR review comments"
+        )
+        assert "resolve-failures" not in skill_cmd, (
+            "resolve_review step must not call resolve-failures; "
+            "that skill does not read review comments"
+        )
+
+    def test_if_resolve_review_passes_merge_target(self, recipe) -> None:
+        """T_IF_RR2: resolve_review skill_command must pass context.merge_target."""
+        step = recipe.steps["resolve_review"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "context.merge_target" in skill_cmd, (
+            "resolve-review requires feature_branch as first arg; "
+            "context.merge_target holds the feature branch name"
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestAuditAndFixStructure
@@ -1223,3 +1251,96 @@ def test_implementation_groups_has_ci_watch() -> None:
     assert "ci_watch" in recipe.steps
     assert "resolve_ci" in recipe.steps
     assert "re_push" in recipe.steps
+
+
+# ---------------------------------------------------------------------------
+# Confirm-cleanup gate tests
+# ---------------------------------------------------------------------------
+
+
+def _build_reverse_on_success(recipe) -> dict[str, list[str]]:
+    """Build a reverse mapping: step_name → list of steps whose on_success points to it."""
+    reverse: dict[str, list[str]] = {name: [] for name in recipe.steps}
+    for name, step in recipe.steps.items():
+        if step.on_success and step.on_success in recipe.steps:
+            reverse[step.on_success].append(name)
+    return reverse
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "implementation",
+        "audit-and-fix",
+        "remediation",
+        "implementation-groups",
+        "pr-merge-pipeline",
+    ],
+)
+def test_bundled_recipe_cleanup_uses_confirm(recipe_name: str) -> None:
+    """Every bundled recipe that clones must use action:confirm before deleting clone.
+
+    Verifies that at least one confirm step's on_success points directly to a remove_clone step.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    confirm_steps = [name for name, step in recipe.steps.items() if step.action == "confirm"]
+    assert confirm_steps, f"{recipe_name} has no confirm step — cleanup is unguarded"
+
+    # At least one confirm step must route directly to a remove_clone step on success
+    for conf_name in confirm_steps:
+        conf_step = recipe.steps[conf_name]
+        if conf_step.on_success and conf_step.on_success in recipe.steps:
+            target = recipe.steps[conf_step.on_success]
+            if target.tool == "remove_clone":
+                return  # Found a properly connected confirm → remove_clone pair
+
+    raise AssertionError(
+        f"{recipe_name}: confirm step(s) exist but none has on_success pointing to remove_clone"
+    )
+
+
+def test_no_bundled_recipe_auto_deletes_on_success() -> None:
+    """No bundled recipe should call remove_clone(keep=false) directly from success path.
+
+    Uses transitive predecessor checking: walks the on_success graph backwards from each
+    remove_clone(keep=false) step to verify that every reachable ancestor (via on_success
+    edges, not crossing confirm steps) is itself a confirm step.
+    """
+    for recipe_name in [
+        "implementation",
+        "audit-and-fix",
+        "remediation",
+        "implementation-groups",
+        "pr-merge-pipeline",
+    ]:
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        reverse_on_success = _build_reverse_on_success(recipe)
+
+        for name, step in recipe.steps.items():
+            if step.tool == "remove_clone":
+                keep = (step.with_args or {}).get("keep", "false")
+                if keep == "false":
+                    # Walk backwards via on_success edges, stopping at confirm steps.
+                    # Any non-confirm step found is unguarded — a violation.
+                    violations: list[str] = []
+                    visited: set[str] = set()
+                    queue = [name]
+
+                    while queue:
+                        current = queue.pop(0)
+                        for pred in reverse_on_success.get(current, []):
+                            if pred in visited:
+                                continue
+                            visited.add(pred)
+                            pred_step = recipe.steps[pred]
+                            if pred_step.action == "confirm":
+                                # Guarded — stop tracing further back through this branch
+                                pass
+                            else:
+                                violations.append(pred)
+                                queue.append(pred)  # Continue tracing to find all unguarded ancestors
+
+                    assert not violations, (
+                        f"{recipe_name}: {name} (keep=false) is reachable via on_success "
+                        f"from unguarded (non-confirm) steps: {violations}"
+                    )

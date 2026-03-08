@@ -1,5 +1,5 @@
-<!-- autoskillit-recipe-hash: sha256:568729b1c82d7cc872820b87d15a75cd414121e9caac42a668abd689da40cc44 -->
-<!-- autoskillit-diagram-format: v4 -->
+<!-- autoskillit-recipe-hash: sha256:be8b79bbbbe37163ff3f50a28181b0327dd2ddd5cae44fd54ce4772dab4f4cd6 -->
+<!-- autoskillit-diagram-format: v5 -->
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
 
@@ -96,12 +96,16 @@ re_push  [push_to_remote] (retry ×3)
 │  ✗ failure → release_issue_failure
 │
 ├── [release_issue_success] (retry ×3)  ← only if inputs.issue_url
-│       ✗ failure → cleanup_success
+│       ✗ failure → confirm_cleanup
 │
 ├── [release_issue_failure] (retry ×3)  ← only if inputs.issue_url
 │       ✗ failure → cleanup_failure
 │
-cleanup_success  [remove_clone] (retry ×3)
+❓ confirm_cleanup
+│  ✓ yes  → delete_clone
+│  ✗ no   → done
+│
+delete_clone  [remove_clone] (retry ×3)
 │  ↓ success → done
 │  ✗ failure → done
 │
@@ -117,16 +121,13 @@ cleanup_failure  [remove_clone] (retry ×3)
 | Name | Description | Default |
 |------|-------------|---------|
 | task | Description of what to implement | — |
-| source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel.
- | auto-detect |
-| run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. impl/124 or impl/20260304) and in the clone directory name.
- | impl |
+| source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel. | auto-detect |
+| run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. impl/124 or impl/20260304) and in the clone directory name. | impl |
 | base_branch | Branch to merge into (defaults to current branch) | main |
 | review_approach | Run /review-approach before implementation? (true/false) | off |
 | audit | Run /autoskillit:audit-impl once after all parts have been merged, to check overall implementation quality and optionally trigger a remediation round (true/false) | on |
 | open_pr | Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false) | on |
-| issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched and used to enrich planning, and the resulting PR will include "Closes #N" to auto-close the issue on merge.
- | auto-detect |
+| issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched and used to enrich planning, and the resulting PR will include "Closes #N" to auto-close the issue on merge. | auto-detect |
 ### Kitchen Rules
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill.
 - Route to on_failure — never investigate or fix directly from the orchestrator.

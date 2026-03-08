@@ -18,7 +18,12 @@ from autoskillit.cli._marketplace import (
     install,
     upgrade,
 )
-from autoskillit.cli._prompts import _build_orchestrator_prompt
+from autoskillit.cli._prompts import (
+    _OPEN_KITCHEN_CHOICE,
+    _build_open_kitchen_prompt,
+    _build_orchestrator_prompt,
+    _resolve_recipe_input,
+)
 from autoskillit.cli.app import (
     _generate_config_yaml,
     _prompt_test_command,
@@ -44,6 +49,8 @@ from autoskillit.cli.app import (
 )
 
 __all__ = [
+    "_OPEN_KITCHEN_CHOICE",
+    "_build_open_kitchen_prompt",
     "_build_orchestrator_prompt",
     "_clear_plugin_cache",
     "_claude_settings_path",
@@ -52,6 +59,7 @@ __all__ = [
     "_print_next_steps",
     "_prompt_recipe_choice",
     "_prompt_test_command",
+    "_resolve_recipe_input",
     "app",
     "config_app",
     "config_show",

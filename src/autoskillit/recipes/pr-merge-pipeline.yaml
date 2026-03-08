@@ -131,12 +131,15 @@ steps:
       pr_order_file: "${{ context.pr_order_file }}"
     capture:
       needs_plan: "${{ result.needs_plan }}"
+      escalation_required: "${{ result.escalation_required }}"
+      escalation_reason: "${{ result.escalation_reason }}"
       task: "${{ result.conflict_report_path }}"
     on_result:
-      field: needs_plan
-      routes:
-        "true": plan
-        "false": next_part_or_next_pr
+      - when: "${{ result.escalation_required }} == true"
+        route: escalate_stop
+      - when: "${{ result.needs_plan }} == true"
+        route: plan
+      - route: next_part_or_next_pr
     on_failure: cleanup_failure
     retries: 5
     on_exhausted: cleanup_failure
@@ -145,8 +148,9 @@ steps:
       The agent reads context.pr_order_file at context.current_pr_index to get the
       current PR's number and complexity. Appends them to skill_command:
         /autoskillit:merge-pr {pr_number} {complexity}
-      needs_plan=false → PR merged directly → next_part_or_next_pr.
+      escalation_required=true → ambiguous conflict, human intervention needed → escalate_stop.
       needs_plan=true → conflict_report_path set as context.task → plan.
+      needs_plan=false (fallthrough) → PR merged directly → next_part_or_next_pr.
 
   plan:
     tool: run_skill
@@ -158,6 +162,7 @@ steps:
       pr_plan_path: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
+      all_plan_paths: "${{ result.plan_path }}"
     on_success: verify
     on_failure: cleanup_failure
     note: >
@@ -233,6 +238,11 @@ steps:
       (not inputs.base_branch). After merge, check if more plan_parts remain
       for this PR. If so, return to verify with the next part. If all parts
       are done, go to next_part_or_next_pr.
+      On ANY failure, follow on_failure: cleanup_failure — NEVER use run_cmd
+      as a workaround. A state of worktree_intact_merge_commits_detected
+      means the conflict-resolution plan used git merge --no-ff; clean up
+      the worktree and regenerate the plan using cherry-pick or
+      git checkout -- file approaches.
 
   fix:
     tool: run_skill
@@ -310,7 +320,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl ${{ inputs.plans_dir }} ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl \"${{ context.all_plan_paths }}\" ${{ context.integration_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:
@@ -325,10 +335,15 @@ steps:
     optional: true
     skip_when_false: "inputs.audit"
     note: >
+      DEPENDENCY: context.all_plan_paths is only populated if the plan step executed
+      at least once. The check_impl_plans gate ensures this step is only reached when
+      implementation plan files exist (i.e. make-plan was invoked), so all_plan_paths
+      is guaranteed to be set when audit_impl runs.
       Gated by check_impl_plans — only reached when implementation plan files exist in
       plans_dir. Only execute if inputs.audit is 'true'; if false, skip directly to
-      create_review_pr. Passes temp/pr-merge-pipeline/ as plans_input — audit-impl
-      discovers all *_plan_*.md files there (conflict reports + make-plan outputs).
+      create_review_pr. Passes context.all_plan_paths (comma-separated list of plan file
+      paths accumulated across the PR loop) as plans_input. audit-impl splits on commas
+      and audits each plan file.
       implementation_ref is context.integration_branch (no worktree remains).
       GO → create_review_pr. NO GO → remediate (re-enters plan with remediation file).
 
@@ -369,7 +384,7 @@ steps:
         gh run watch "$run_id" --exit-status
       cwd: "${{ context.work_dir }}"
       timeout: 150
-    on_success: cleanup_success
+    on_success: confirm_cleanup
     on_failure: cleanup_failure
     note: >
       Polls for an active GitHub Actions run on context.integration_branch for up to 30 s,
@@ -378,17 +393,29 @@ steps:
       that the human reviewer should see. No automated remediation; on failure, the clone
       is preserved via cleanup_failure for manual inspection.
 
-  cleanup_success:
+  confirm_cleanup:
+    action: confirm
+    message: >-
+      PR-merge pipeline succeeded! The clone at ${{ context.work_dir }} is preserved.
+      Delete it now? Keeping it lets you resume any session from this pipeline run.
+      Type yes to delete or no to keep.
+    on_success: delete_clone
+    on_failure: done
+    note: >-
+      User confirmation gate — preserves clone by default. On yes: delete_clone removes it.
+      On no: done is reached immediately, clone stays on disk.
+
+  delete_clone:
     tool: remove_clone
     with:
       clone_path: "${{ context.work_dir }}"
       keep: "false"
+      step_name: delete_clone
     on_success: done
     on_failure: done
-    note: >
-      Removes the clone after a successful pipeline run. The sync-check hook
-      gates deletion — removal is approved only when the branch is pushed.
-      Routes to done regardless of whether removal succeeds.
+    note: >-
+      Reached only after user explicitly confirms cleanup. Sync-check hook gates deletion —
+      removal approved only when branch is pushed.
 
   cleanup_failure:
     tool: remove_clone
@@ -409,3 +436,7 @@ steps:
   escalate_stop:
     action: stop
     message: "Pipeline failed — human intervention needed. Check the integration branch and temp/pr-merge-pipeline/ for details."
+    note: >
+      context.task may be null when reached via escalation_required=true from merge_pr
+      (merge-pr does not set conflict_report_path on escalation paths). Do not rely on
+      context.task being populated when handling this stop.

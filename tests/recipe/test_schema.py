@@ -6,6 +6,8 @@ import ast
 import dataclasses
 import pathlib
 
+import pytest
+
 
 def test_all_dataclasses_importable() -> None:
     """All dataclasses are importable from recipe.schema."""
@@ -183,3 +185,58 @@ def test_skip_when_false_field_is_parsed_from_yaml() -> None:
     }
     step = _parse_step(raw)
     assert step.skip_when_false == "inputs.open_pr"
+
+
+# ---------------------------------------------------------------------------
+# RecipeIngredient normalization tests (Tests 1.1-1.3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("some description text\n", "some description text"),
+        ("First line\nsecond line\n", "First line second line"),
+    ],
+)
+def test_recipe_ingredient_description_strips_folded_scalar_newline(
+    raw: str, expected: str
+) -> None:
+    """RecipeIngredient.__post_init__ must normalize folded-scalar descriptions."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description=raw, required=False)
+    assert ing.description == expected
+    assert "\n" not in ing.description
+
+
+def test_recipe_ingredient_default_strips_for_comparison() -> None:
+    """Trailing \\n on default must not cause _format_ingredient_default to fall through."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing_false = RecipeIngredient(description="d", default="false\n")
+    assert ing_false.default == "false"
+
+    ing_empty = RecipeIngredient(description="d", default="\n")
+    assert ing_empty.default == ""
+
+    ing_true = RecipeIngredient(description="d", default="true\n")
+    assert ing_true.default == "true"
+
+    ing_none = RecipeIngredient(description="d", default=None)
+    assert ing_none.default is None  # None sentinel preserved
+
+
+def test_format_ingredient_default_folded_scalar_bool() -> None:
+    """_format_ingredient_default must return 'off'/'on'/'auto-detect' for folded defaults."""
+    from autoskillit.recipe.diagrams import _format_ingredient_default
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    assert (
+        _format_ingredient_default(RecipeIngredient(description="d", default="false\n")) == "off"
+    )
+    assert _format_ingredient_default(RecipeIngredient(description="d", default="true\n")) == "on"
+    assert (
+        _format_ingredient_default(RecipeIngredient(description="d", default="\n"))
+        == "auto-detect"
+    )

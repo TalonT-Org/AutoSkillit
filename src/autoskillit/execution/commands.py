@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from autoskillit.core import ClaudeFlags
+
 
 @dataclass(frozen=True)
 class ClaudeInteractiveCmd:
@@ -19,15 +21,15 @@ class ClaudeHeadlessCmd:
 
 def build_interactive_cmd(*, model: str | None = None) -> ClaudeInteractiveCmd:
     """Build a Claude interactive session command with kitchen pre-opened."""
-    cmd = ["claude", "--allow-dangerous-permissions"]
+    cmd = ["claude", ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS]
     if model:
-        cmd += ["--model", model]
+        cmd += [ClaudeFlags.MODEL, model]
     return ClaudeInteractiveCmd(cmd=cmd, env={"AUTOSKILLIT_KITCHEN_OPEN": "1"})
 
 
 def build_headless_cmd(prompt: str, *, model: str | None = None) -> ClaudeHeadlessCmd:
     """Build a Claude headless session command for skill execution."""
-    cmd = ["claude", "-p", prompt, "--dangerously-skip-permissions"]
+    cmd = ["claude", ClaudeFlags.PRINT, prompt, ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
     if model:
-        cmd += ["--model", model]
+        cmd += [ClaudeFlags.MODEL, model]
     return ClaudeHeadlessCmd(cmd=cmd, env={})

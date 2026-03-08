@@ -1040,6 +1040,59 @@ def test_audit_and_fix_diagram_has_no_for_each_block(tmp_path: Path) -> None:
     )
 
 
+_CONFIRM_RECIPE_YAML = """\
+name: confirm-test
+description: Recipe with confirm step
+summary: confirm_cleanup -> done
+ingredients:
+  work_dir:
+    description: Clone path
+    default: "/tmp/clone"
+steps:
+  confirm_cleanup:
+    action: confirm
+    message: "Delete the clone?"
+    on_success: delete_clone
+    on_failure: done
+  delete_clone:
+    tool: remove_clone
+    with:
+      clone_path: "${{ context.work_dir }}"
+      keep: "false"
+    on_success: done
+    on_failure: done
+  done:
+    action: stop
+    message: "Done."
+kitchen_rules:
+  - "Use AutoSkillit tools only"
+"""
+
+
+def test_confirm_step_rendered_as_decision_point(tmp_path: Path) -> None:
+    """DG-C1: confirm steps appear with ❓ prefix and show yes/no routes."""
+    recipe_path = tmp_path / "confirm-test.yaml"
+    recipe_path.write_text(_CONFIRM_RECIPE_YAML)
+    diagram = generate_recipe_diagram(recipe_path, tmp_path)
+    assert "❓" in diagram and "confirm" in diagram.lower()
+    assert "yes" in diagram.lower() and "no" in diagram.lower()
+
+
+def test_confirm_step_not_in_terminal_section(tmp_path: Path) -> None:
+    """DG-C2: confirm steps must NOT appear in the ⏹ terminal section."""
+    recipe_path = tmp_path / "confirm-test.yaml"
+    recipe_path.write_text(_CONFIRM_RECIPE_YAML)
+    diagram = generate_recipe_diagram(recipe_path, tmp_path)
+    # Find the terminal section by locating the separator line (a line of all ─ characters)
+    diagram_lines = diagram.splitlines()
+    sep_idx = next(
+        (i for i, ln in enumerate(diagram_lines) if ln.strip() and all(c == "─" for c in ln.strip())),
+        None,
+    )
+    terminal_section = "\n".join(diagram_lines[sep_idx + 1 :]) if sep_idx is not None else ""
+    assert "confirm_cleanup" not in terminal_section
+
+
 def test_smoke_test_diagram_has_no_for_each_block(tmp_path: Path) -> None:
     """T-BD-2: smoke-test.yaml is a single synthetic task run; diagram must not have FOR EACH."""
     from autoskillit.core.paths import pkg_root  # noqa: PLC0415
@@ -1057,3 +1110,94 @@ def test_smoke_test_diagram_has_no_for_each_block(tmp_path: Path) -> None:
         "smoke-test.yaml has no plan_parts iteration; "
         "its diagram must not contain a FOR EACH block"
     )
+
+
+# ---------------------------------------------------------------------------
+# T-FS-1, T-FS-2: Folded-scalar regression guards
+# ---------------------------------------------------------------------------
+
+_FOLDED_SCALAR_RECIPE_YAML = """\
+name: test-folded
+description: Test recipe for folded scalar regression
+summary: Tests folded scalar normalization
+version: "1.0"
+ingredients:
+  source_dir:
+    description: >
+      Path to the source repository to clone and work in.
+      Leave empty to auto-detect from git rev-parse --show-toplevel.
+    required: false
+    default: ""
+  run_name:
+    description: >
+      Name prefix for this pipeline run.
+      Used as the first path component of the branch name.
+    required: false
+    default: impl
+steps: []
+"""
+
+
+def test_diagram_inputs_table_rows_are_single_lines_with_folded_scalars(
+    tmp_path: Path,
+) -> None:
+    """T-FS-1: Table rows built from folded-scalar descriptions must not embed newlines."""
+    pipeline = tmp_path / "test-folded.yaml"
+    pipeline.write_text(_FOLDED_SCALAR_RECIPE_YAML)
+    content = generate_recipe_diagram(pipeline, recipes_dir=tmp_path, out_dir=tmp_path)
+
+    inputs_start = content.index("### Inputs")
+    inputs_section = content[inputs_start:]
+    # Extract data rows (skip header and separator rows)
+    rows = [
+        line
+        for line in inputs_section.splitlines()
+        if line.startswith("| ") and not line.startswith("| Name |") and "---" not in line
+    ]
+    assert rows, "Expected at least one data row in Inputs table"
+    for row in rows:
+        assert row.count("|") >= 4, f"Malformed table row (likely split by embedded newline): {row!r}"
+        assert row.startswith("| ") and row.endswith(" |"), (
+            f"Row is not a complete pipe-table row: {row!r}"
+        )
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "implementation",
+        "implementation-groups",
+        "audit-and-fix",
+        "remediation",
+        "bugfix-loop",
+        "smoke-test",
+    ],
+)
+def test_bundled_diagram_inputs_table_has_no_embedded_newlines(
+    recipe_name: str, tmp_path: Path
+) -> None:
+    """T-FS-2: Generated diagram Inputs tables must contain only single-line rows.
+
+    This is a correctness guard. It will catch any future regression where
+    YAML-sourced strings are not normalized before table interpolation.
+    """
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    pipeline = recipes_dir / f"{recipe_name}.yaml"
+    out_dir = tmp_path / "diagrams"
+    out_dir.mkdir()
+    content = generate_recipe_diagram(pipeline, recipes_dir=recipes_dir, out_dir=out_dir)
+
+    if "### Inputs" not in content:
+        return  # recipe has no ingredients — skip
+    inputs_start = content.index("### Inputs")
+    inputs_section = content[inputs_start:]
+    rows = [
+        line
+        for line in inputs_section.splitlines()
+        if line.startswith("| ") and not line.startswith("| Name |") and "---" not in line
+    ]
+    assert rows, f"No data rows found in inputs table for {recipe_name}"
+    for row in rows:
+        assert row.count("|") >= 4, f"[{recipe_name}] Malformed table row (likely split by embedded newline): {row!r}"

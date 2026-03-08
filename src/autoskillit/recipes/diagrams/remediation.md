@@ -1,5 +1,5 @@
-<!-- autoskillit-recipe-hash: sha256:df6ac52b20b6ee20b8f9d3f4c6e8bd86d1079aa80b77a21830dd2338946826e8 -->
-<!-- autoskillit-diagram-format: v4 -->
+<!-- autoskillit-recipe-hash: sha256:57975e4a50ccdd0d9a5910e1a84df6ca0c02edbf9b8c8aa23e119f8bccf6bf5b -->
+<!-- autoskillit-diagram-format: v5 -->
 ## remediation
 Investigate a problem deeply, plan architectural fix, implement in a feature branch, and open a PR.
 
@@ -107,12 +107,16 @@ re_push  [push_to_remote] (retry ×3)
 │  ✗ failure → release_issue_failure
 │
 ├── [release_issue_success] (retry ×3)  ← only if inputs.issue_url
-│       ✗ failure → cleanup_success
+│       ✗ failure → confirm_cleanup
 │
 ├── [release_issue_failure] (retry ×3)  ← only if inputs.issue_url
 │       ✗ failure → cleanup_failure
 │
-cleanup_success  [remove_clone] (retry ×3)
+❓ confirm_cleanup
+│  ✓ yes  → delete_clone
+│  ✗ no   → done
+│
+delete_clone  [remove_clone] (retry ×3)
 │  ↓ success → done
 │  ✗ failure → done
 │
@@ -128,17 +132,14 @@ cleanup_failure  [remove_clone] (retry ×3)
 | Name | Description | Default |
 |------|-------------|---------|
 | topic | Description of the bug, error, or question to investigate | — |
-| source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel.
- | auto-detect |
-| run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. investigate/42 or investigate/20260304) and in the clone directory name.
- | investigate |
+| source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel. | auto-detect |
+| run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. investigate/42 or investigate/20260304) and in the clone directory name. | investigate |
 | target_dir | Optional additional project directory for context | auto-detect |
 | base_branch | Branch to branch off of and PR target | main |
 | audit | Run /autoskillit:audit-impl before merge to gate on implementation quality | on |
 | review_approach | Run /autoskillit:review-approach before dry walkthrough? (true/false) | off |
 | open_pr | Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false) | on |
-| issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched and used to enrich investigation, and the resulting PR will include "Closes #N" to auto-close the issue on merge.
- | auto-detect |
+| issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched and used to enrich investigation, and the resulting PR will include "Closes #N" to auto-close the issue on merge. | auto-detect |
 ### Kitchen Rules
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All code changes and investigation happen through headless sessions via run_skill.
 - Route to on_failure when a step fails — the downstream skill (e.g., resolve-failures) has diagnostic access that the orchestrator does not. Do not investigate or attempt to fix failures directly.

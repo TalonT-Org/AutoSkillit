@@ -32,3 +32,12 @@ def test_build_orchestrator_prompt_not_in_app_module():
     assert "def _build_orchestrator_prompt(" not in src, (
         "_build_orchestrator_prompt must be in cli/_prompts.py, not cli/app.py"
     )
+
+
+def test_orchestrator_prompt_documents_confirm_action():
+    """The orchestrator system prompt must explain how to handle action:confirm steps."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("<dummy yaml>")
+    assert 'action: confirm' in prompt or 'action: "confirm"' in prompt
+    assert "AskUserQuestion" in prompt

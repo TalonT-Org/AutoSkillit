@@ -1,5 +1,5 @@
-<!-- autoskillit-recipe-hash: sha256:66f07b3e60be243693be0c173db8cbf702e31256a47a4c0a4775dd3d1f0ef0ff -->
-<!-- autoskillit-diagram-format: v4 -->
+<!-- autoskillit-recipe-hash: sha256:c610d163529d3e8176b75c4e6ac986ea22dc0f8cdce49a38d548787eed65e4e6 -->
+<!-- autoskillit-diagram-format: v5 -->
 ## audit-and-fix
 Audit codebase, investigate findings, plan fixes, implement in a feature branch, and open a PR.
 
@@ -87,12 +87,16 @@ re_push  [push_to_remote] (retry ×3)
 │  ✗ failure → release_issue_failure
 │
 ├── [release_issue_success] (retry ×3)  ← only if inputs.issue_url
-│       ✗ failure → cleanup_success
+│       ✗ failure → confirm_cleanup
 │
 ├── [release_issue_failure] (retry ×3)  ← only if inputs.issue_url
 │       ✗ failure → cleanup_failure
 │
-cleanup_success  [remove_clone] (retry ×3)
+❓ confirm_cleanup
+│  ✓ yes  → delete_clone
+│  ✗ no   → done
+│
+delete_clone  [remove_clone] (retry ×3)
 │  ↓ success → done
 │  ✗ failure → done
 │
@@ -107,15 +111,12 @@ cleanup_failure  [remove_clone] (retry ×3)
 ### Inputs
 | Name | Description | Default |
 |------|-------------|---------|
-| source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel.
- | auto-detect |
-| run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. audit-fix/124 or audit-fix/20260304) and in the clone directory name.
- | audit-fix |
+| source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel. | auto-detect |
+| run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. audit-fix/124 or audit-fix/20260304) and in the clone directory name. | audit-fix |
 | base_branch | Branch to branch off of and PR target | main |
 | audit_type | Type of audit to run (arch, tests, cohesion, defense-standards) | arch |
 | open_pr | Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false) | on |
-| issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched for additional audit context, and the resulting PR will include "Closes #N" to auto-close the issue on merge.
- | auto-detect |
+| issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched for additional audit context, and the resulting PR will include "Closes #N" to auto-close the issue on merge. | auto-detect |
 ### Kitchen Rules
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All code changes and investigation happen through headless sessions via run_skill.
 - Route to on_failure when a step fails — the downstream skill (e.g., resolve-failures) has diagnostic access that the orchestrator does not. Do not investigate or attempt to fix failures directly.

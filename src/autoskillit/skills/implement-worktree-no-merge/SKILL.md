@@ -57,7 +57,9 @@ creates a brand-new timestamped worktree, discarding all partial progress.
 
 Correct orchestration on `needs_retry=true`:
 - Route immediately to `/autoskillit:retry-worktree` (via `retry.on_exhausted`)
-- Pass `worktree_path` from `context.worktree_path` (captured from this step's output)
+- The `run_skill` response now includes `worktree_path` as a top-level JSON
+  field when `needs_retry=true`. The orchestrator reads it from
+  `result.worktree_path` — no filesystem search is needed.
 - Use `max_attempts: 0` on this step's `retry` block to ensure immediate escalation
 
 ## Workflow
@@ -106,6 +108,22 @@ if ! git -C "${WORKTREE_PATH}" branch --set-upstream-to="origin/${CURRENT_BRANCH
     echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → 'origin/${CURRENT_BRANCH}'."
 fi
 ```
+
+### Step 1 (cont.): Emit Structured Tokens Early
+
+Immediately after the worktree is created, output these tokens on their own
+lines so the execution layer can capture them from `assistant_messages` even
+if context is exhausted before Step 6:
+
+```
+worktree_path=${WORKTREE_PATH}
+branch_name=${WORKTREE_NAME}
+```
+
+**Why emit early?** If context exhaustion occurs during Steps 2–5, the
+execution layer scans `assistant_messages` for `worktree_path=` and surfaces
+it as a top-level field in the `run_skill` JSON response. The orchestrator
+reads this field directly without filesystem discovery heuristics.
 
 ### Step 1.5: Initialize Code Index for Original Project
 
@@ -169,6 +187,22 @@ cd "${WORKTREE_PATH}" && pre-commit run --all-files
 ```
 
 Fix any formatting or linting issues. Do NOT run the full test suite.
+
+### Step 5.5: Completeness Self-Check (Conflict Resolution Plans Only)
+
+If the plan contains a `PR Changes Inventory` section, perform a completeness check before
+handoff:
+
+1. Extract the **Category C — Clean Carry-Overs** file list from the plan.
+2. Run `git diff {base_branch}...HEAD --name-only` to get all files in the implementation.
+3. For each Category C file, verify it appears in the diff.
+4. If any Category C files are missing from the diff:
+   - Fetch them from the PR branch: `git show origin/{pr_branch}:{file_path}`
+   - Write them to the worktree and commit: `fix: carry over {file_path} from PR branch`
+   - Re-run the check until all Category C files are present.
+
+This guard prevents silent data loss: Category C files are PR-only changes that require no
+conflict resolution and must be preserved in full.
 
 ### Step 6: Handoff Report
 

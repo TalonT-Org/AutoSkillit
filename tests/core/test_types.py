@@ -1,6 +1,9 @@
 """Tests for shared type contracts — enum exhaustiveness."""
 
+import dataclasses
 import json
+
+import pytest
 
 from autoskillit.core.types import (
     ChannelConfirmation,
@@ -15,7 +18,7 @@ from autoskillit.core.types import (
 
 def test_retry_reason_values():
     """RetryReason enum has exactly the expected members."""
-    assert set(RetryReason) == {RetryReason.RESUME, RetryReason.NONE}
+    assert set(RetryReason) == {RetryReason.RESUME, RetryReason.NONE, RetryReason.BUDGET_EXHAUSTED}
     assert RetryReason.NONE.value == "none"
 
 
@@ -28,6 +31,7 @@ def test_merge_failed_step_values():
         MergeFailedStep.TEST_GATE,
         MergeFailedStep.FETCH,
         MergeFailedStep.PRE_REBASE_CHECK,
+        MergeFailedStep.MERGE_COMMITS_DETECTED,
         MergeFailedStep.REBASE,
         MergeFailedStep.GENERATED_FILE_CLEANUP,
         MergeFailedStep.POST_REBASE_TEST_GATE,
@@ -41,6 +45,7 @@ def test_merge_state_values():
         MergeState.WORKTREE_INTACT,
         MergeState.WORKTREE_INTACT_REBASE_ABORTED,
         MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED,
+        MergeState.WORKTREE_INTACT_MERGE_COMMITS_DETECTED,
         MergeState.WORKTREE_DIRTY,
         MergeState.WORKTREE_DIRTY_ABORT_FAILED,
         MergeState.WORKTREE_DIRTY_MID_OPERATION,
@@ -207,3 +212,60 @@ def test_github_fetcher_protocol_has_label_methods():
     assert "add_labels" in members
     assert "remove_label" in members
     assert "ensure_label" in members
+
+
+def test_subprocess_result_has_elapsed_seconds_field():
+    """SubprocessResult must carry a pre-computed monotonic elapsed_seconds."""
+    from autoskillit.core.types import SubprocessResult, TerminationReason
+
+    result = SubprocessResult(
+        returncode=0,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.COMPLETED,
+        pid=1,
+    )
+    assert hasattr(result, "elapsed_seconds")
+    assert result.elapsed_seconds == 0.0
+    result2 = dataclasses.replace(result, elapsed_seconds=7.3)
+    assert result2.elapsed_seconds == pytest.approx(7.3)
+
+
+# ---------------------------------------------------------------------------
+# SkillResult.worktree_path field + to_json() conditional inclusion
+# ---------------------------------------------------------------------------
+
+
+def test_skill_result_to_json_includes_worktree_path_when_set():
+    """worktree_path appears as a top-level JSON field when not None."""
+    sr = SkillResult(
+        success=False,
+        result="Context limit reached during session execution.",
+        session_id="s1",
+        subtype="error_during_execution",
+        is_error=True,
+        exit_code=-1,
+        needs_retry=True,
+        retry_reason=RetryReason.RESUME,
+        stderr="",
+        worktree_path="/projects/worktrees/impl-fix-20260307",
+    )
+    data = json.loads(sr.to_json())
+    assert data["worktree_path"] == "/projects/worktrees/impl-fix-20260307"
+
+
+def test_skill_result_to_json_omits_worktree_path_when_none():
+    """worktree_path key is absent from JSON when the field is None."""
+    sr = SkillResult(
+        success=True,
+        result="Done.",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+    )
+    data = json.loads(sr.to_json())
+    assert "worktree_path" not in data

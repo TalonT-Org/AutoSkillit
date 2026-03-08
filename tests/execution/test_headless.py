@@ -16,6 +16,7 @@ from autoskillit.core.types import (
 from autoskillit.execution.headless import (
     _build_skill_result,
     _ensure_skill_prefix,
+    _extract_worktree_path,
     _resolve_model,
 )
 from tests.conftest import _make_result, _make_timeout_result
@@ -917,6 +918,194 @@ class TestCompletionViaMonitorKill:
         )
 
 
+def _context_exhausted_with_worktree_ndjson(worktree_path: str) -> str:
+    """NDJSON where context exhaustion occurred after the skill emitted
+    worktree_path= in Step 1's assistant message."""
+    assistant = json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": (
+                    "Worktree created successfully.\n\n"
+                    f"worktree_path={worktree_path}\n"
+                    "branch_name=impl-fix-20260307\n"
+                ),
+            },
+        }
+    )
+    result = json.dumps(
+        {
+            "type": "result",
+            "subtype": "error_during_execution",
+            "is_error": True,
+            "result": "prompt is too long",
+            "session_id": "s1",
+            "errors": ["prompt is too long"],
+        }
+    )
+    return f"{assistant}\n{result}\n"
+
+
+class TestExtractWorktreePath:
+    """Unit tests for _extract_worktree_path helper."""
+
+    def test_extracts_path_from_single_message(self):
+        """Finds worktree_path= token in a single assistant message."""
+        msg = "Worktree created.\nworktree_path=/path/to/wt\nbranch_name=impl"
+        assert _extract_worktree_path([msg]) == "/path/to/wt"
+
+    def test_returns_last_occurrence_across_messages(self):
+        """When multiple messages contain the token, last match wins."""
+        msgs = [
+            "worktree_path=/first/path",
+            "worktree_path=/second/path",
+        ]
+        assert _extract_worktree_path(msgs) == "/second/path"
+
+    def test_returns_none_when_no_token(self):
+        """Returns None when no worktree_path= token is present."""
+        assert _extract_worktree_path(["No token here."]) is None
+
+    def test_returns_none_for_empty_messages(self):
+        """Returns None for empty message list."""
+        assert _extract_worktree_path([]) is None
+
+    def test_strips_trailing_whitespace(self):
+        """Extracted value has trailing whitespace stripped."""
+        msg = "worktree_path=/some/path   \n"
+        assert _extract_worktree_path([msg]) == "/some/path"
+
+
+class TestBuildSkillResultWorktreePath:
+    """_build_skill_result extracts worktree_path on context exhaustion."""
+
+    def test_extracts_worktree_path_on_context_exhaustion(self):
+        """worktree_path from early Step 1 emission flows into SkillResult."""
+        path = "/home/talon/projects/autoskillit-runs/worktrees/impl-fix-20260307"
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=_context_exhausted_with_worktree_ndjson(path),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1234,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(sub_result, "", "/test", None)
+        assert sr.success is False
+        assert sr.needs_retry is True
+        assert sr.worktree_path == path
+
+    def test_worktree_path_none_when_token_absent(self):
+        """If the skill never emitted worktree_path=, the field is None."""
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=_context_exhausted_session_json(),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1234,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(sub_result, "", "/test", None)
+        assert sr.success is False
+        assert sr.needs_retry is True
+        assert sr.worktree_path is None
+
+    def test_worktree_path_none_on_success(self):
+        """On success, worktree_path is not extracted (field stays None)."""
+        sub_result = _make_result(
+            returncode=0,
+            stdout=_success_session_json("worktree_path=/path\nbranch_name=impl-fix"),
+        )
+        sr = _build_skill_result(sub_result, "", "/test", None)
+        assert sr.success is True
+        assert sr.worktree_path is None
+
+    def test_worktree_path_uses_last_occurrence(self):
+        """When worktree_path= appears multiple times, the last value wins."""
+        assistant1 = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": "worktree_path=/first/path\nbranch_name=b1",
+                },
+            }
+        )
+        assistant2 = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": "worktree_path=/second/path\nbranch_name=b1",
+                },
+            }
+        )
+        result = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "result": "prompt is too long",
+                "session_id": "s1",
+                "errors": ["prompt is too long"],
+            }
+        )
+        ndjson = f"{assistant1}\n{assistant2}\n{result}\n"
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1234,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(sub_result, "", "/test", None)
+        assert sr.worktree_path == "/second/path"
+
+
+class TestWorktreePathOnContextExhaustion:
+    """Contract: worktree_path appears as top-level JSON field on needs_retry."""
+
+    def test_worktree_path_in_json_response_on_context_limit(self):
+        """Full stack: NDJSON with early token → SkillResult → to_json()."""
+        path = "/home/talon/projects/autoskillit-runs/worktrees/impl-fix"
+        assistant = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": f"worktree_path={path}\nbranch_name=impl-fix",
+                },
+            }
+        )
+        result = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "result": "prompt is too long",
+                "session_id": "s1",
+                "errors": ["prompt is too long"],
+            }
+        )
+        ndjson = f"{assistant}\n{result}\n"
+        sub = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1234,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(sub, "", "/test", None)
+        data = json.loads(sr.to_json())
+
+        assert sr.success is False
+        assert data["needs_retry"] is True
+        assert data["worktree_path"] == path
+
+
 class TestBuildSkillResultCompleted:
     """_build_skill_result and _compute_success handle COMPLETED termination correctly."""
 
@@ -1607,3 +1796,98 @@ class TestCrashSessionLog:
         crash_calls = [f for f in flushed if f.get("termination_reason") == "CRASHED"]
         assert len(crash_calls) >= 1
         assert crash_calls[0]["success"] is False
+
+
+class TestRetryBudgetEnforcement:
+    """_build_skill_result enforces max_consecutive_retries budget."""
+
+    def _make_retry_record(self, skill_command: str) -> "object":
+        from datetime import UTC, datetime
+
+        from autoskillit.pipeline.audit import FailureRecord
+
+        return FailureRecord(
+            timestamp=datetime.now(UTC).isoformat(),
+            skill_command=skill_command,
+            exit_code=-1,
+            subtype="stale",
+            needs_retry=True,
+            retry_reason="resume",
+            stderr="",
+        )
+
+    def _make_audit_with_failures(self, skill_command: str, n: int) -> "object":
+        from autoskillit.pipeline.audit import DefaultAuditLog
+
+        audit = DefaultAuditLog()
+        for _ in range(n):
+            audit.record_failure(self._make_retry_record(skill_command))  # type: ignore[arg-type]
+        return audit
+
+    def test_budget_below_threshold_preserves_needs_retry(self) -> None:
+        """Fewer than max_consecutive_retries failures: needs_retry=True is preserved."""
+        audit = self._make_audit_with_failures("/autoskillit:open-pr", 2)
+        result = _make_result(returncode=-1, termination_reason=TerminationReason.STALE)
+        sr = _build_skill_result(
+            result,
+            skill_command="/autoskillit:open-pr",
+            audit=audit,  # type: ignore[arg-type]
+            max_consecutive_retries=3,
+        )
+        assert sr.needs_retry is True
+        assert sr.retry_reason == RetryReason.RESUME
+
+    def test_budget_at_threshold_overrides_needs_retry_to_false(self) -> None:
+        """At exactly max_consecutive_retries prior failures: needs_retry is overridden."""
+        audit = self._make_audit_with_failures("/autoskillit:open-pr", 3)
+        result = _make_result(returncode=-1, termination_reason=TerminationReason.STALE)
+        sr = _build_skill_result(
+            result,
+            skill_command="/autoskillit:open-pr",
+            audit=audit,  # type: ignore[arg-type]
+            max_consecutive_retries=3,
+        )
+        assert sr.needs_retry is False
+        assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED
+
+    def test_budget_no_audit_does_not_override(self) -> None:
+        """Without an audit log, budget enforcement is skipped; needs_retry unchanged."""
+        result = _make_result(returncode=-1, termination_reason=TerminationReason.STALE)
+        sr = _build_skill_result(
+            result,
+            skill_command="/autoskillit:open-pr",
+            audit=None,
+            max_consecutive_retries=3,
+        )
+        assert sr.needs_retry is True
+        assert sr.retry_reason == RetryReason.RESUME
+
+    def test_budget_other_skill_command_not_counted(self) -> None:
+        """Consecutive failures for a different skill_command don't exhaust this skill's budget."""
+        audit = self._make_audit_with_failures("/autoskillit:other-skill", 3)
+        result = _make_result(returncode=-1, termination_reason=TerminationReason.STALE)
+        sr = _build_skill_result(
+            result,
+            skill_command="/autoskillit:open-pr",
+            audit=audit,  # type: ignore[arg-type]
+            max_consecutive_retries=3,
+        )
+        assert sr.needs_retry is True
+        assert sr.retry_reason == RetryReason.RESUME
+
+    def test_budget_applies_to_normal_path_context_exhaustion(self) -> None:
+        """Budget applies to the normal path (not just stale), e.g. context exhaustion."""
+        audit = self._make_audit_with_failures("/autoskillit:open-pr", 3)
+        result = _make_result(
+            returncode=0,
+            stdout=_context_exhausted_session_json(),
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        sr = _build_skill_result(
+            result,
+            skill_command="/autoskillit:open-pr",
+            audit=audit,  # type: ignore[arg-type]
+            max_consecutive_retries=3,
+        )
+        assert sr.needs_retry is False
+        assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED

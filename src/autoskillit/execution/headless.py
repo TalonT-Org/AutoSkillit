@@ -11,13 +11,17 @@ Public API:
 from __future__ import annotations
 
 import dataclasses
-from datetime import UTC, datetime
+import os
+import re
+import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
 
 from autoskillit.core import (
+    ClaudeFlags,
     FailureRecord,
     RetryReason,
     SessionOutcome,
@@ -148,11 +152,57 @@ def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
     return None
 
 
+_WORKTREE_PATH_PATTERN: re.Pattern[str] = re.compile(r"^worktree_path=(.+)$", re.MULTILINE)
+
+
+def _extract_worktree_path(assistant_messages: list[str]) -> str | None:
+    """Return the last absolute path emitted as worktree_path=<value> across assistant messages, or None."""
+    last: str | None = None
+    for msg in assistant_messages:
+        m = _WORKTREE_PATH_PATTERN.search(msg)
+        if m:
+            candidate = m.group(1).strip()
+            if os.path.isabs(candidate):
+                last = candidate
+    return last
+
+
+def _apply_budget_guard(
+    sr: SkillResult,
+    skill_command: str,
+    audit: AuditStore | None,
+    max_consecutive_retries: int,
+) -> SkillResult:
+    """Override needs_retry to False when the consecutive-failure budget is exhausted.
+
+    The audit log records the raw failure (needs_retry=True) before this guard
+    runs; the guard is a post-processing filter on the returned SkillResult only.
+    """
+    if not sr.needs_retry or audit is None or not skill_command:
+        return sr
+    consecutive = audit.consecutive_failures(skill_command)
+    # current failure already recorded; consecutive count includes this attempt
+    if consecutive > max_consecutive_retries:
+        logger.warning(
+            "retry_budget_exhausted",
+            skill_command=skill_command,
+            consecutive_failures=consecutive,
+            max_consecutive_retries=max_consecutive_retries,
+        )
+        return dataclasses.replace(
+            sr,
+            needs_retry=False,
+            retry_reason=RetryReason.BUDGET_EXHAUSTED,
+        )
+    return sr
+
+
 def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
     skill_command: str = "",
     audit: AuditStore | None = None,
+    max_consecutive_retries: int = 3,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     branch = (
@@ -215,7 +265,7 @@ def _build_skill_result(
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
-        return SkillResult(
+        stale_sr = SkillResult(
             success=False,
             result=(
                 "Session went stale (no activity for configured threshold). "
@@ -230,6 +280,7 @@ def _build_skill_result(
             stderr="",
             token_usage=None,
         )
+        return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
 
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
@@ -276,6 +327,10 @@ def _build_skill_result(
     if completion_marker:
         result_text = result_text.replace(completion_marker, "").strip()
 
+    extracted_worktree_path: str | None = None
+    if needs_retry:
+        extracted_worktree_path = _extract_worktree_path(session.assistant_messages)
+
     sr = SkillResult(
         success=success,
         result=result_text,
@@ -287,7 +342,9 @@ def _build_skill_result(
         retry_reason=retry_reason,
         stderr=_truncate(result.stderr),
         token_usage=session.token_usage,
+        worktree_path=extracted_worktree_path,
     )
+    sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
     logger.debug(
         "build_skill_result_exit",
         success=sr.success,
@@ -330,9 +387,9 @@ async def run_headless_core(
         resolved_model = _resolve_model(model, ctx.config)
         spec = build_headless_cmd(skill_command, model=resolved_model)
         cmd = spec.cmd + [
-            "--plugin-dir",
+            ClaudeFlags.PLUGIN_DIR,
             effective_plugin_dir,
-            "--output-format",
+            ClaudeFlags.OUTPUT_FORMAT,
             cfg.output_format.value,
         ]
         # Apply any CLI flags required by the chosen output format.
@@ -340,7 +397,7 @@ async def run_headless_core(
             if flag not in cmd:
                 cmd.append(flag)
         if add_dir:
-            cmd.extend(["--add-dir", add_dir])
+            cmd.extend([ClaudeFlags.ADD_DIR, add_dir])
 
         delay_ms = cfg.exit_after_stop_delay_ms
         if delay_ms > 0:
@@ -364,6 +421,7 @@ async def run_headless_core(
 
         linux_tracing_cfg = ctx.config.linux_tracing
         _start_ts = datetime.now(UTC).isoformat()
+        _start_mono = time.monotonic()
 
         _result: SubprocessResult | None = None
         try:
@@ -400,9 +458,13 @@ async def run_headless_core(
                     )
                 except Exception:
                     logger.debug("flush_session_log during crash failed", exc_info=True)
-        _end_ts = datetime.now(UTC).isoformat()
-        result = dataclasses.replace(_result, start_ts=_start_ts, end_ts=_end_ts)  # type: ignore[arg-type]
+        _elapsed = time.monotonic() - _start_mono
+        _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
+        result = dataclasses.replace(  # type: ignore[arg-type]
+            _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
+        )
 
+        audit_count_before = len(ctx.audit.get_report())
         skill_result = _build_skill_result(
             result,
             completion_marker=cfg.completion_marker,
@@ -410,10 +472,18 @@ async def run_headless_core(
             audit=ctx.audit,
         )
 
+        # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
+        # brackets in run_managed_async. Never re-derive from ISO strings (backward-clock risk).
+        timing_seconds: float = result.elapsed_seconds
+
+        # Extract the audit record (if any) added by this session
+        new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
+        audit_record = new_audit_records[0] if new_audit_records else None
+
         # Resolve effective session ID: prefer stdout-parsed, fall back to Channel B discovery
         effective_session_id = skill_result.session_id or result.channel_b_session_id
 
-        if result.proc_snapshots is not None or not skill_result.success:
+        if result.proc_snapshots is not None or not skill_result.success or bool(step_name):
             from autoskillit.execution.session_log import flush_session_log
 
             try:
@@ -428,9 +498,14 @@ async def run_headless_core(
                     exit_code=skill_result.exit_code,
                     start_ts=result.start_ts,
                     end_ts=result.end_ts,
+                    elapsed_seconds=result.elapsed_seconds,
                     termination_reason=result.termination.value,
                     snapshot_interval_seconds=ctx.config.linux_tracing.proc_interval,
                     proc_snapshots=result.proc_snapshots,
+                    step_name=step_name,
+                    token_usage=skill_result.token_usage,
+                    timing_seconds=timing_seconds,
+                    audit_record=audit_record,
                 )
             except Exception:
                 logger.debug("session_log_flush_failed", exc_info=True)
@@ -449,6 +524,7 @@ async def run_headless_core(
                 skill_result.token_usage,
                 start_ts=result.start_ts,
                 end_ts=result.end_ts,
+                elapsed_seconds=result.elapsed_seconds,
             )
         return skill_result
 

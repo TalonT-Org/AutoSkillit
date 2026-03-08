@@ -386,6 +386,26 @@ def recipes_render(name: str | None = None) -> None:
             print(f"Rendered: {info.name}")
 
 
+def _launch_cook_session(system_prompt: str) -> None:
+    """Launch an interactive Claude Code cook session with the given system prompt."""
+    if shutil.which("claude") is None:
+        print("ERROR: 'claude' command not found on PATH.")
+        print("Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code")
+        sys.exit(1)
+    spec = build_interactive_cmd()
+    cmd = spec.cmd + [
+        ClaudeFlags.PLUGIN_DIR,
+        str(pkg_root()),
+        ClaudeFlags.TOOLS,
+        "AskUserQuestion",
+        ClaudeFlags.APPEND_SYSTEM_PROMPT,
+        system_prompt,
+    ]
+    result = subprocess.run(cmd, env={**os.environ, **spec.env})
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+
+
 @app.command
 def cook(recipe: str | None = None):
     """Launch an interactive Claude Code session to execute a recipe.
@@ -408,14 +428,30 @@ def cook(recipe: str | None = None):
         sys.exit(1)
 
     if recipe is None:
+        from autoskillit.cli._prompts import (
+            _OPEN_KITCHEN_CHOICE,
+            _build_open_kitchen_prompt,
+            _resolve_recipe_input,
+        )
+
         available = list_recipes(Path.cwd()).items
         if not available:
             print("No recipes found. Run 'autoskillit recipes list' to check.")
             sys.exit(1)
         print("Available recipes:")
+        print("  0. Open kitchen (no recipe)")
         for i, r in enumerate(available, 1):
             print(f"  {i}. {r.name}")
-        recipe = input("Recipe name: ").strip()
+        raw = input(f"Select recipe [0-{len(available)}]: ").strip()
+        resolved = _resolve_recipe_input(raw, available)
+        if resolved is _OPEN_KITCHEN_CHOICE:
+            _launch_cook_session(_build_open_kitchen_prompt())
+            return
+        elif resolved is None:
+            print(f"Invalid selection: '{raw}'")
+            sys.exit(1)
+        else:
+            recipe = resolved.name
 
     from autoskillit.core import YAMLError
     from autoskillit.recipe import find_recipe_by_name, validate_recipe
@@ -452,27 +488,7 @@ def cook(recipe: str | None = None):
             print(f"  - {err}")
         sys.exit(1)
 
-    if shutil.which("claude") is None:
-        print("ERROR: 'claude' command not found on PATH.")
-        print("Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code")
-        sys.exit(1)
-
-    plugin_dir = pkg_root()
-    system_prompt = _build_orchestrator_prompt(recipe_yaml)
-
-    spec = build_interactive_cmd()
-    cmd = spec.cmd + [
-        ClaudeFlags.PLUGIN_DIR,
-        str(plugin_dir),
-        ClaudeFlags.TOOLS,
-        "AskUserQuestion",
-        ClaudeFlags.APPEND_SYSTEM_PROMPT,
-        system_prompt,
-    ]
-
-    result = subprocess.run(cmd, env={**os.environ, **spec.env})
-    if result.returncode != 0:
-        sys.exit(result.returncode)
+    _launch_cook_session(_build_orchestrator_prompt(recipe_yaml))
 
 
 def main() -> None:

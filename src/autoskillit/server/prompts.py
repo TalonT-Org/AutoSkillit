@@ -7,16 +7,65 @@ from pathlib import Path
 
 from fastmcp.prompts import Message, PromptResult
 
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, pkg_root
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, atomic_write, pkg_root
 from autoskillit.server import mcp
 
 
-def _open_kitchen_handler() -> None:
+async def _prime_quota_cache() -> None:
+    """Fetch quota from the Anthropic API and write the local cache.
+
+    Called at open_kitchen so the cache is primed before any run_skill hook fires.
+    Fails open: a quota fetch failure must not abort kitchen open.
+    """
+    from autoskillit.execution import check_and_sleep_if_needed
+    from autoskillit.server import _get_ctx, logger
+
+    try:
+        await check_and_sleep_if_needed(_get_ctx().config.quota_guard)
+    except Exception:
+        logger.warning("quota_prime_failed", exc_info=True)
+
+
+def _write_hook_config() -> None:
+    """Write user-configured quota values to temp/.autoskillit_hook_config.json.
+
+    The hook subprocess (quota_check.py) reads this file to apply user settings
+    without importing the autoskillit package.
+    """
+    from autoskillit.server import _get_ctx, logger
+
+    cfg = _get_ctx().config.quota_guard
+    payload = {
+        "quota_guard": {
+            "threshold": cfg.threshold if cfg.threshold is not None else 90.0,
+            "cache_max_age": cfg.cache_max_age if cfg.cache_max_age is not None else 300,
+            "cache_path": cfg.cache_path
+            if cfg.cache_path is not None
+            else "~/.claude/autoskillit_quota_cache.json",
+        }
+    }
+    hook_cfg_path = Path.cwd() / "temp" / ".autoskillit_hook_config.json"
+    try:
+        hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(hook_cfg_path, json.dumps(payload))
+    except OSError:
+        logger.warning("hook_config_write_failed", path=str(hook_cfg_path))
+
+
+async def _open_kitchen_handler() -> None:
     """Set the tools-enabled flag. Extracted for testability."""
     from autoskillit.server import _get_ctx, logger
 
     _get_ctx().gate.enable()
     logger.info("open_kitchen", gate_state="open")
+    gate_path = Path.cwd() / "temp" / ".kitchen_gate"
+    try:
+        gate_path.parent.mkdir(parents=True, exist_ok=True)
+        gate_path.touch()
+    except OSError:
+        logger.warning("gate_file_write_failed", path=str(gate_path))
+    _write_hook_config()
+    await _prime_quota_cache()
 
 
 def _close_kitchen_handler() -> None:
@@ -25,6 +74,16 @@ def _close_kitchen_handler() -> None:
 
     _get_ctx().gate.disable()
     logger.info("close_kitchen", gate_state="closed")
+    gate_path = Path.cwd() / "temp" / ".kitchen_gate"
+    try:
+        gate_path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("gate_file_remove_failed", path=str(gate_path))
+    hook_cfg_path = Path.cwd() / "temp" / ".autoskillit_hook_config.json"
+    try:
+        hook_cfg_path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("hook_config_remove_failed", path=str(hook_cfg_path))
 
 
 @mcp.resource("recipe://{name}")
@@ -39,9 +98,9 @@ def get_recipe(name: str) -> str:
 
 
 @mcp.prompt()
-def open_kitchen() -> PromptResult:
+async def open_kitchen() -> PromptResult:
     """Open the AutoSkillit kitchen for service."""
-    _open_kitchen_handler()
+    await _open_kitchen_handler()
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
 

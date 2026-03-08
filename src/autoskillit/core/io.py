@@ -17,6 +17,7 @@ from yaml import YAMLError as YAMLError  # explicit re-export for callers and ty
 
 __all__ = [
     "YAMLError",
+    "atomic_write",
     "_atomic_write",
     "ensure_project_temp",
     "load_yaml",
@@ -66,6 +67,10 @@ def _atomic_write(path: Path, content: str) -> None:
         except OSError:
             pass
         raise
+
+
+#: Public alias for atomic_write — use this in L1+ code; _atomic_write is the canonical impl.
+atomic_write = _atomic_write
 
 
 def ensure_project_temp(project_dir: Path) -> Path:

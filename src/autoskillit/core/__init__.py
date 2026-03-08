@@ -9,6 +9,7 @@ from .io import (
     YAMLError,
     _atomic_write,
     _parse_issue_ref,
+    atomic_write,
     dump_yaml_str,
     ensure_project_temp,
     load_yaml,
@@ -71,6 +72,7 @@ from .types import (
 __all__ = [
     # io
     "YAMLError",
+    "atomic_write",
     "_atomic_write",
     "_parse_issue_ref",
     "dump_yaml_str",

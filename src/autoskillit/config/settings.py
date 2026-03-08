@@ -103,7 +103,7 @@ class QuotaGuardConfig:
     enabled: bool = True
     threshold: float = 90.0
     buffer_seconds: int = 60
-    cache_max_age: int = 60
+    cache_max_age: int = 300
     credentials_path: str = "~/.claude/.credentials.json"
     cache_path: str = "~/.claude/autoskillit_quota_cache.json"
 

@@ -52,10 +52,10 @@ def test_app_py_under_line_limit():
 
 # CD2
 def test_unified_hook_helper_in_hooks_module():
-    """cli/_hooks.py must define _register_pretooluse_hook."""
+    """cli/_hooks.py must define sync_hooks_to_settings (registry-driven registration)."""
     tree = ast.parse((SRC_ROOT / "cli" / "_hooks.py").read_text())
     fn_names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
-    assert "_register_pretooluse_hook" in fn_names
+    assert "sync_hooks_to_settings" in fn_names
 
 
 # CD3

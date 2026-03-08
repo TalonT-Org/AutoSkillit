@@ -324,6 +324,7 @@ conflict_report_path={absolute_path_to_conflict_plan_file}
 merged=false
 needs_plan=false
 escalation_required=true
+escalation_reason={human-readable description of why the conflict cannot be resolved automatically}
 pr_number={pr_number}
 pr_branch={pr_branch_name}
 pr_title={pr_title}

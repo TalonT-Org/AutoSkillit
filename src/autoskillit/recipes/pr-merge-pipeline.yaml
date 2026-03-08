@@ -132,6 +132,7 @@ steps:
     capture:
       needs_plan: "${{ result.needs_plan }}"
       escalation_required: "${{ result.escalation_required }}"
+      escalation_reason: "${{ result.escalation_reason }}"
       task: "${{ result.conflict_report_path }}"
     on_result:
       - when: "${{ result.escalation_required }} == true"
@@ -147,9 +148,9 @@ steps:
       The agent reads context.pr_order_file at context.current_pr_index to get the
       current PR's number and complexity. Appends them to skill_command:
         /autoskillit:merge-pr {pr_number} {complexity}
-      needs_plan=false → PR merged directly → next_part_or_next_pr.
-      needs_plan=true → conflict_report_path set as context.task → plan.
       escalation_required=true → ambiguous conflict, human intervention needed → escalate_stop.
+      needs_plan=true → conflict_report_path set as context.task → plan.
+      needs_plan=false (fallthrough) → PR merged directly → next_part_or_next_pr.
 
   plan:
     tool: run_skill
@@ -412,3 +413,7 @@ steps:
   escalate_stop:
     action: stop
     message: "Pipeline failed — human intervention needed. Check the integration branch and temp/pr-merge-pipeline/ for details."
+    note: >
+      context.task may be null when reached via escalation_required=true from merge_pr
+      (merge-pr does not set conflict_report_path on escalation paths). Do not rely on
+      context.task being populated when handling this stop.

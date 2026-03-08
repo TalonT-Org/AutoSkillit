@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:34fc30f9ac7b88a04b3533ca026740ab112894b7e7fa744fc30c80f207ae13ae -->
+<!-- autoskillit-recipe-hash: sha256:ef67d8372a284ac4bdde73bb1ec5e1ab6fc2a0c66b2ae8620a8dd31cd1c2ada1 -->
 <!-- autoskillit-diagram-format: v4 -->
 ## pr-merge-pipeline
 Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.

@@ -187,6 +187,8 @@ skills:
       type: string
     - name: escalation_required
       type: string
+    - name: escalation_reason
+      type: string
     - name: pr_number
       type: string
     - name: pr_branch

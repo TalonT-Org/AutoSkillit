@@ -16,6 +16,7 @@ from autoskillit.core.types import (
 from autoskillit.execution.headless import (
     _build_skill_result,
     _ensure_skill_prefix,
+    _extract_worktree_path,
     _resolve_model,
 )
 from tests.conftest import _make_result, _make_timeout_result
@@ -951,15 +952,11 @@ class TestExtractWorktreePath:
 
     def test_extracts_path_from_single_message(self):
         """Finds worktree_path= token in a single assistant message."""
-        from autoskillit.execution.headless import _extract_worktree_path
-
         msg = "Worktree created.\nworktree_path=/path/to/wt\nbranch_name=impl"
         assert _extract_worktree_path([msg]) == "/path/to/wt"
 
     def test_returns_last_occurrence_across_messages(self):
         """When multiple messages contain the token, last match wins."""
-        from autoskillit.execution.headless import _extract_worktree_path
-
         msgs = [
             "worktree_path=/first/path",
             "worktree_path=/second/path",
@@ -968,20 +965,14 @@ class TestExtractWorktreePath:
 
     def test_returns_none_when_no_token(self):
         """Returns None when no worktree_path= token is present."""
-        from autoskillit.execution.headless import _extract_worktree_path
-
         assert _extract_worktree_path(["No token here."]) is None
 
     def test_returns_none_for_empty_messages(self):
         """Returns None for empty message list."""
-        from autoskillit.execution.headless import _extract_worktree_path
-
         assert _extract_worktree_path([]) is None
 
     def test_strips_trailing_whitespace(self):
         """Extracted value has trailing whitespace stripped."""
-        from autoskillit.execution.headless import _extract_worktree_path
-
         msg = "worktree_path=/some/path   \n"
         assert _extract_worktree_path([msg]) == "/some/path"
 
@@ -1001,6 +992,7 @@ class TestBuildSkillResultWorktreePath:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         sr = _build_skill_result(sub_result, "", "/test", None)
+        assert sr.success is False
         assert sr.needs_retry is True
         assert sr.worktree_path == path
 
@@ -1015,6 +1007,7 @@ class TestBuildSkillResultWorktreePath:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         sr = _build_skill_result(sub_result, "", "/test", None)
+        assert sr.success is False
         assert sr.needs_retry is True
         assert sr.worktree_path is None
 

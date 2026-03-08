@@ -11,6 +11,7 @@ Public API:
 from __future__ import annotations
 
 import dataclasses
+import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -153,21 +154,14 @@ _WORKTREE_PATH_PATTERN: re.Pattern[str] = re.compile(r"^worktree_path=(.+)$", re
 
 
 def _extract_worktree_path(assistant_messages: list[str]) -> str | None:
-    """Scan assistant messages for the last worktree_path=<value> token.
-
-    The skill emits this token immediately after git worktree add (Step 1),
-    before any context-intensive implementation steps. When context is
-    exhausted before Step 6, the token survives in assistant_messages even
-    though it never appears in the overridden result text.
-
-    Uses the last match so that if the skill manages to emit the token
-    again in Step 6 before exhaustion, the most recent value wins.
-    """
+    """Return the last absolute path emitted as worktree_path=<value> across assistant messages, or None."""
     last: str | None = None
     for msg in assistant_messages:
         m = _WORKTREE_PATH_PATTERN.search(msg)
         if m:
-            last = m.group(1).strip()
+            candidate = m.group(1).strip()
+            if os.path.isabs(candidate):
+                last = candidate
     return last
 
 

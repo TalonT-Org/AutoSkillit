@@ -91,7 +91,8 @@ findings in JSON format:
     "line": 42,
     "severity": "critical|warning|info",
     "dimension": "arch|tests|defense|bugs|cohesion|slop",
-    "message": "Description of the finding"
+    "message": "Description of the finding",
+    "requires_decision": false
   }
 ]
 ```
@@ -120,7 +121,19 @@ Subagent prompt template:
 
 > You are reviewing a GitHub PR diff for [{dimension}] issues only.
 > Scope: examine only the diff content provided. Do not fetch or read files outside the diff.
-> Return a JSON array of findings. Each finding must have: file, line, severity (critical/warning/info), dimension, message.
+> Return a JSON array of findings. Each finding must have:
+>   file, line, severity (critical/warning/info), dimension, message,
+>   requires_decision (boolean).
+>
+> Set requires_decision=true ONLY for findings where the correct path forward is
+> genuinely ambiguous and cannot be determined without the human's intent or
+> preference — for example: design trade-offs, approach choices with valid
+> alternatives, unclear intent after a merge conflict, plan/implementation
+> divergences where both directions are valid.
+>
+> Set requires_decision=false for ALL bugs, style issues, or anything with a
+> clear fix, regardless of severity. When in doubt, set requires_decision=false.
+>
 > If no issues found, return an empty array [].
 > Diff content:
 > {diff_content}
@@ -129,22 +142,28 @@ Subagent prompt template:
 
 1. Collect all subagent JSON responses
 2. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
-3. Separate into:
-   - `critical_findings` — severity == "critical"
-   - `warning_findings` — severity == "warning"
-   - `info_findings` — severity == "info"
+3. Bucket by actionability:
+   - `actionable_findings` — requires_decision=false AND severity in ("critical", "warning")
+   - `decision_findings` — requires_decision=true (any severity)
+   - `info_findings` — severity == "info" AND requires_decision=false
 
 ### Step 5: Determine Verdict
 
-- Any entry in `critical_findings` → `verdict = "changes_requested"`
-- `critical_findings` empty, but uncertain trade-offs present → `verdict = "needs_human"`
-- No actionable findings → `verdict = "approved"`
+- Any `actionable_findings` present → `verdict = "changes_requested"` (clear fix exists, automated resolver handles it)
+- No actionable findings, but `decision_findings` present → `verdict = "needs_human"` (`needs_human` fires only when one or more findings have `requires_decision=true` — meaning the correct path forward requires a human decision that the automated reviewer cannot make)
+- No actionable or decision findings → `verdict = "approved"`
 
 **Verdict logic:**
-```
-if len(critical_findings) > 0:
+```python
+decision_findings = [f for f in all_findings if f.get("requires_decision")]
+actionable_findings = [
+    f for f in all_findings
+    if not f.get("requires_decision") and f["severity"] in ("critical", "warning")
+]
+
+if actionable_findings:
     verdict = "changes_requested"
-elif len(warning_findings) > 3:
+elif decision_findings:
     verdict = "needs_human"
 else:
     verdict = "approved"

@@ -19,7 +19,10 @@ _SKILL_NAME_RE = re.compile(r"/autoskillit:([\w-]+)")
 
 def _get_allowed_values_for_skill(skill_name: str) -> dict[str, list[str]]:
     """Return {output_name: [allowed_value, ...]} for a skill's outputs with allowed_values."""
-    manifest = load_bundled_manifest()
+    try:
+        manifest = load_bundled_manifest()
+    except Exception:
+        return {}
     skill_contract = manifest.get("skills", {}).get(skill_name, {})
     result: dict[str, list[str]] = {}
     for output in skill_contract.get("outputs", []):
@@ -40,7 +43,7 @@ def _is_explicit_condition(when: str | None, value: str) -> bool:
         return False
     if when.strip() == "true":
         return False
-    return value in when
+    return bool(re.search(r"\b" + re.escape(value) + r"\b", when))
 
 
 @semantic_rule(
@@ -81,6 +84,8 @@ def check_unrouted_verdict_values(ctx: ValidationContext) -> list[RuleFinding]:
             # Check that the output is captured
             captured_key = None
             for cap_key, cap_expr in capture.items():
+                if not isinstance(cap_expr, str):
+                    continue
                 if f"result.{output_name}" in cap_expr:
                     captured_key = cap_key
                     break

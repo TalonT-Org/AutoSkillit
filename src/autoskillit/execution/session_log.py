@@ -119,7 +119,7 @@ def flush_session_log(
 
     duration_seconds: float | None = None
     if elapsed_seconds is not None:
-        duration_seconds = elapsed_seconds  # monotonic-safe, caller-owned
+        duration_seconds = elapsed_seconds
     elif end_ts:
         try:
             duration_seconds = max(

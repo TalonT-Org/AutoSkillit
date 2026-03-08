@@ -496,3 +496,28 @@ def test_flush_session_log_uses_elapsed_seconds_over_iso_subtraction(tmp_path):
     assert summary["duration_seconds"] == pytest.approx(12.5), (
         "elapsed_seconds param must override ISO subtraction"
     )
+
+
+def test_flush_session_log_zero_elapsed_seconds_is_valid(tmp_path):
+    """elapsed_seconds=0.0 is falsy but must be used as duration_seconds, not fall through to ISO subtraction."""
+    start_ts = "2026-01-01T12:00:00+00:00"
+    end_ts = "2026-01-01T12:00:05+00:00"  # ISO implies 5.0s
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="zero-elapsed-test",
+        pid=1,
+        skill_command="/test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        elapsed_seconds=0.0,  # explicit zero — must not fall through to ISO subtraction
+        proc_snapshots=[],
+        termination_reason="completed",
+        snapshot_interval_seconds=5.0,
+    )
+    session_dir = tmp_path / "sessions" / "zero-elapsed-test"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert summary["duration_seconds"] == 0.0

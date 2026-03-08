@@ -260,3 +260,16 @@ class TestDefaultTokenLog:
         )
         entries = log.get_report()
         assert entries[0]["elapsed_seconds"] == pytest.approx(12.5)
+
+    def test_record_zero_elapsed_seconds_is_valid(self):
+        """elapsed_seconds=0.0 is falsy but must be used directly, not fall through to ISO subtraction."""
+        log = DefaultTokenLog()
+        log.record(
+            "step",
+            {"input_tokens": 1, "output_tokens": 1},
+            start_ts="2026-01-01T12:00:00+00:00",
+            end_ts="2026-01-01T12:00:05+00:00",  # ISO implies 5.0s
+            elapsed_seconds=0.0,  # explicit zero — should be used, not skipped
+        )
+        entries = log.get_report()
+        assert entries[0]["elapsed_seconds"] == pytest.approx(0.0)

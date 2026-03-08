@@ -71,7 +71,7 @@ class DefaultTokenLog:
         e.cache_read_input_tokens += token_usage.get("cache_read_input_tokens", 0)
         e.invocation_count += 1
         if elapsed_seconds is not None:
-            e.elapsed_seconds += elapsed_seconds  # monotonic-safe, always >= 0
+            e.elapsed_seconds += elapsed_seconds
         elif start_ts and end_ts:
             try:
                 delta = (

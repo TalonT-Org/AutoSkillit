@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
-from autoskillit.cli._init_helpers import _OPEN_KITCHEN_CHOICE, _resolve_recipe_input
+from autoskillit.cli._prompts import _OPEN_KITCHEN_CHOICE, _resolve_recipe_input
 from autoskillit.cli._workspace import _format_age
 
 _SCRIPT_YAML = """\
@@ -812,19 +812,15 @@ class TestCLICook:
         capsys: pytest.CaptureFixture,
     ) -> None:
         """Out-of-range numeric input exits 1 with an error message."""
-        import importlib
-        import sys as _sys
+        import sys
 
-        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
-            "autoskillit.cli.app"
-        )
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         fake_recipe = MagicMock()
         fake_recipe.name = "some-recipe"
         mock_result = MagicMock()
         mock_result.items = [fake_recipe]
-        monkeypatch.setattr(_app_mod, "list_recipes", lambda _: mock_result)
+        monkeypatch.setattr(sys.modules["autoskillit.cli.app"], "list_recipes", lambda _: mock_result)
         monkeypatch.setattr("builtins.input", lambda _prompt="": "99")
 
         with pytest.raises(SystemExit) as exc_info:
@@ -840,19 +836,15 @@ class TestCLICook:
         capsys: pytest.CaptureFixture,
     ) -> None:
         """Unknown recipe name exits 1 with an error message."""
-        import importlib
-        import sys as _sys
+        import sys
 
-        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
-            "autoskillit.cli.app"
-        )
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         fake_recipe = MagicMock()
         fake_recipe.name = "some-recipe"
         mock_result = MagicMock()
         mock_result.items = [fake_recipe]
-        monkeypatch.setattr(_app_mod, "list_recipes", lambda _: mock_result)
+        monkeypatch.setattr(sys.modules["autoskillit.cli.app"], "list_recipes", lambda _: mock_result)
         monkeypatch.setattr("builtins.input", lambda _prompt="": "no-such-recipe")
 
         with pytest.raises(SystemExit) as exc_info:

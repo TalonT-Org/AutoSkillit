@@ -428,8 +428,11 @@ def cook(recipe: str | None = None):
         sys.exit(1)
 
     if recipe is None:
-        from autoskillit.cli._init_helpers import _OPEN_KITCHEN_CHOICE, _resolve_recipe_input
-        from autoskillit.cli._prompts import _build_open_kitchen_prompt
+        from autoskillit.cli._prompts import (
+            _OPEN_KITCHEN_CHOICE,
+            _build_open_kitchen_prompt,
+            _resolve_recipe_input,
+        )
 
         available = list_recipes(Path.cwd()).items
         if not available:

@@ -2,7 +2,37 @@
 
 from __future__ import annotations
 
-from autoskillit.core import pkg_root
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, pkg_root
+
+if TYPE_CHECKING:
+    from autoskillit.recipe.loader import RecipeInfo
+
+
+# Sentinel returned by _resolve_recipe_input when the user selects option 0.
+_OPEN_KITCHEN_CHOICE: str = "__open_kitchen__"
+
+
+def _resolve_recipe_input(raw: str, available: list[RecipeInfo]) -> RecipeInfo | str | None:
+    """Resolve picker raw text to a selection.
+
+    Returns:
+        _OPEN_KITCHEN_CHOICE  if raw is "0" (open kitchen, always valid)
+        RecipeInfo            if raw is a valid 1-based index or an exact name match
+        None                  for empty input, out-of-range numbers, or unknown names
+    """
+    if not raw:
+        return None
+    if raw.isdigit():
+        n = int(raw)
+        if n == 0:
+            return _OPEN_KITCHEN_CHOICE
+        if 1 <= n <= len(available):
+            return available[n - 1]
+        return None
+    return next((r for r in available if r.name == raw), None)
 
 
 def _build_orchestrator_prompt(script_yaml: str) -> str:
@@ -102,10 +132,6 @@ OPTIONAL STEP SEMANTICS:
 
 def _build_open_kitchen_prompt() -> str:
     """Build the --append-system-prompt content for an open-kitchen cook session (no recipe)."""
-    from pathlib import Path
-
-    from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS
-
     sous_chef_content = ""
     _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
     if _sous_chef_path.exists():

@@ -91,29 +91,34 @@ lens guard.
 
 For each selected lens, follow this exact sequence:
 
-**1. Output the PR context block as plain text (NOT as a tool call):**
+**1. Write the PR context to a file using the Write tool:**
 
-> **PR Context — Changed Files**
->
-> This diagram is for a Pull Request. Focus the diagram on the areas of the codebase affected by these changes. Do not create a generic whole-project diagram.
->
-> **New files (use ★ prefix on these nodes):**
-> {list of new_files from Step 4, or "None"}
->
-> **Modified files (use ● prefix on these nodes):**
-> {list of modified_files from Step 4, or "None"}
->
-> **Instructions:**
-> - Focus exploration and the diagram on the architectural areas these files belong to
-> - Use `★` prefix on nodes representing new files/components
-> - Use `●` prefix on nodes representing modified files/components
-> - Leave unchanged components unmarked (include them only if needed for context/connectivity)
-> - The diagram should help PR reviewers understand the architectural impact of these specific changes
+- **Path:** `temp/pr-arch-lens-context.md`
+- **Content:** The following PR context block, with placeholders filled in:
 
-**2. THEN load the arch-lens skill via the Skill tool** (e.g., `/arch-lens-module-dependency`).
+```markdown
+# PR Context — Changed Files
+
+This diagram is for a Pull Request. Focus the diagram on the areas of the codebase affected by these changes. Do not create a generic whole-project diagram.
+
+## New files (use ★ prefix on these nodes):
+{list of new_files from Step 4, or "None"}
+
+## Modified files (use ● prefix on these nodes):
+{list of modified_files from Step 4, or "None"}
+
+## Instructions:
+- Focus exploration and the diagram on the architectural areas these files belong to
+- Use `★` prefix on nodes representing new files/components
+- Use `●` prefix on nodes representing modified files/components
+- Leave unchanged components unmarked (include them only if needed for context/connectivity)
+- The diagram should help PR reviewers understand the architectural impact of these specific changes
+```
+
+**2. Immediately call the Skill tool to load the arch-lens skill** (e.g., `/arch-lens-module-dependency`).
+The loaded skill will read `temp/pr-arch-lens-context.md` for PR context.
 
 **3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.
-The context block above is already in the conversation history — do not re-output it.
 
 The arch-lens skills write their output to `temp/arch-lens-{lens-name}/`. After each skill
 runs, read the generated markdown file and extract the mermaid code block(s).

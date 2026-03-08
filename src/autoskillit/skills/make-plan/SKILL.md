@@ -85,7 +85,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 5. **Visualize with Architecture Lens** - After finalizing the plan, determine which architecture lens best illustrates the proposed changes, then create a mermaid diagram.
 
-**Select the lens based on what the plan primarily affects:**
+**5a. Select the lens based on what the plan primarily affects:**
 
 | If the plan primarily involves... | Use Lens |
 |-----------------------------------|----------|
@@ -103,7 +103,12 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 | Modifying state contracts, field lifecycles, or resume logic | State Lifecycle |
 | Changing deployment topology or infrastructure | Deployment |
 
-**MANDATORY: LOAD the appropriate arch-lens skill using the Skill tool:**
+**5b. Write your lens selection rationale to a file using the Write tool:**
+
+- **Path:** `temp/arch-lens-selection.md`
+- **Content:** Which lens was selected and why (1-2 sentences of rationale).
+
+**5c. MANDATORY: LOAD the appropriate arch-lens skill using the Skill tool:**
 
 | Lens | Skill to LOAD |
 |------|---------------|
@@ -121,7 +126,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 | State Lifecycle | `/arch-lens-state-lifecycle` |
 | Deployment | `/arch-lens-deployment` |
 
-**Create the diagram following the loaded skill's instructions:**
+**5d. Create the diagram following the loaded skill's instructions:**
 - Focus on the PROPOSED changes (use `newComponent` class for new elements)
 - Show how new components integrate with existing architecture
 - Use `●` prefix for modified existing components

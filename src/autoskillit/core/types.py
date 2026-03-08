@@ -22,6 +22,7 @@ class RetryReason(StrEnum):
     RESUME = "resume"
     NONE = "none"
     BUDGET_EXHAUSTED = "budget_exhausted"
+    EARLY_STOP = "early_stop"
 
 
 class MergeFailedStep(StrEnum):
@@ -592,6 +593,7 @@ class HeadlessExecutor(Protocol):
         add_dir: str = "",
         timeout: float | None = None,
         stale_threshold: float | None = None,
+        expected_output_patterns: Sequence[str] = (),
     ) -> SkillResult: ...
 
 

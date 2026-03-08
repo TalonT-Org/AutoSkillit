@@ -7,10 +7,13 @@ import pytest
 from autoskillit.core.types import (
     ChannelConfirmation,
     RetryReason,
+    SessionOutcome,
     TerminationReason,
 )
 from autoskillit.execution.session import (
     ClaudeSessionResult,
+    _check_session_content,
+    _compute_outcome,
     _compute_retry,
     _compute_success,
     _is_kill_anomaly,
@@ -764,7 +767,7 @@ class TestAdjudicationConsistency:
                 "",
             ),
             # NATURAL_EXIT + UNMONITORED: substantive result without marker
-            # (premature exit scenario — Channel A marker-aware, didn't fire)
+            # (premature exit / early stop — retriable via EARLY_STOP)
             pytest.param(
                 TerminationReason.NATURAL_EXIT,
                 ChannelConfirmation.UNMONITORED,
@@ -773,7 +776,7 @@ class TestAdjudicationConsistency:
                 "success",
                 False,
                 False,
-                False,
+                True,
                 "%%ORDER_UP%%",
                 id="natural_exit-unmonitored-substantive_result_no_marker",
             ),
@@ -816,16 +819,17 @@ class TestAdjudicationConsistency:
             returncode,
             termination,
             channel_confirmation=channel,
+            completion_marker=completion_marker,
         )
         assert success == expected_success
         assert needs_retry == expected_retry
 
-    def test_premature_exit_substantive_result_no_marker_is_failed(self) -> None:
-        """NATURAL_EXIT + UNMONITORED + substantive result without marker → FAILED.
+    def test_premature_exit_substantive_result_no_marker_is_early_stop(self) -> None:
+        """NATURAL_EXIT + UNMONITORED + substantive result without marker → EARLY_STOP.
 
-        Documents the expected post-fix behavior: when Channel A is marker-aware
-        and doesn't fire on a premature exit, channel confirmation is UNMONITORED,
-        and the dead-end guard does not promote to RETRIABLE.
+        When the model produces substantive output but stops before emitting
+        the completion marker, the session is classified as retriable with
+        EARLY_STOP reason. This is the text-then-tool boundary fix.
         """
         session = ClaudeSessionResult(
             subtype="success",
@@ -846,10 +850,11 @@ class TestAdjudicationConsistency:
             returncode=0,
             termination=TerminationReason.NATURAL_EXIT,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
+            completion_marker="%%ORDER_UP%%",
         )
         assert success is False
-        assert needs_retry is False
-        assert reason == RetryReason.NONE
+        assert needs_retry is True
+        assert reason == RetryReason.EARLY_STOP
 
     def test_channel_a_empty_result_raw_dead_end(self) -> None:
         """Document: NATURAL_EXIT + CHANNEL_A + empty result is a dead end at raw function level.
@@ -884,3 +889,274 @@ class TestAdjudicationConsistency:
         # individual function level, corrected at the _build_skill_result boundary.
         assert success is False
         assert needs_retry is False
+
+
+class TestEarlyStop:
+    """Tests for EARLY_STOP retry classification."""
+
+    def test_natural_exit_substantive_content_no_marker_is_retriable(self) -> None:
+        """A session that exits cleanly with substantive output but without
+        the completion marker should be classified as RETRIABLE with EARLY_STOP,
+        because the model may have stopped early at a text-then-tool boundary.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="Here is the PR context block with substantive content...",
+            is_error=False,
+            session_id="early-stop",
+            errors=[],
+        )
+        outcome, reason = _compute_outcome(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        assert outcome == SessionOutcome.RETRIABLE
+        assert reason == RetryReason.EARLY_STOP
+
+    def test_early_stop_not_triggered_without_marker(self) -> None:
+        """When no completion_marker is configured, EARLY_STOP should NOT fire.
+
+        Sessions without a marker are not subject to early-stop detection.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="Some output without any marker",
+            is_error=False,
+            session_id="no-marker",
+            errors=[],
+        )
+        needs_retry, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+            completion_marker="",
+        )
+        assert needs_retry is False
+        assert reason == RetryReason.NONE
+
+    def test_early_stop_not_triggered_when_marker_present(self) -> None:
+        """When the completion marker IS present, EARLY_STOP should NOT fire."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="Result with %%ORDER_UP%% marker present",
+            is_error=False,
+            session_id="has-marker",
+            errors=[],
+        )
+        needs_retry, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+            completion_marker="%%ORDER_UP%%",
+        )
+        assert needs_retry is False
+        assert reason == RetryReason.NONE
+
+    def test_early_stop_not_triggered_for_errors(self) -> None:
+        """Error sessions should not be classified as EARLY_STOP."""
+        session = ClaudeSessionResult(
+            subtype="error_during_execution",
+            result="Error occurred but substantive output...",
+            is_error=True,
+            session_id="error-session",
+            errors=["something broke"],
+        )
+        needs_retry, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+            completion_marker="%%ORDER_UP%%",
+        )
+        # is_error sessions may trigger API-level retry via needs_retry property,
+        # but EARLY_STOP specifically should not fire for non-success subtypes
+        assert reason != RetryReason.EARLY_STOP
+
+    def test_early_stop_not_triggered_for_empty_result(self) -> None:
+        """Empty result should be classified as kill anomaly, not EARLY_STOP."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="",
+            is_error=False,
+            session_id="empty",
+            errors=[],
+        )
+        needs_retry, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+            completion_marker="%%ORDER_UP%%",
+        )
+        # Empty result triggers kill_anomaly path (RESUME), not EARLY_STOP
+        assert needs_retry is True
+        assert reason == RetryReason.RESUME
+
+
+class TestArtifactValidation:
+    """Tests for expected_output_patterns artifact validation."""
+
+    def test_check_session_content_validates_expected_artifacts(self) -> None:
+        """When expected_output_patterns are configured, _check_session_content
+        must verify that the session result contains at least one match.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="Done! %%ORDER_UP%%",
+            is_error=False,
+            session_id="no-artifact",
+            errors=[],
+        )
+        # With marker present but no matching artifact
+        result = _check_session_content(
+            session,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[r"https://github\.com/.*/pull/\d+"],
+        )
+        assert result is False
+
+    def test_check_session_content_passes_with_matching_artifact(self) -> None:
+        """When artifacts match, content check passes."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="PR created: https://github.com/user/repo/pull/42 %%ORDER_UP%%",
+            is_error=False,
+            session_id="has-artifact",
+            errors=[],
+        )
+        result = _check_session_content(
+            session,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[r"https://github\.com/.*/pull/\d+"],
+        )
+        assert result is True
+
+    def test_check_session_content_no_patterns_skips_validation(self) -> None:
+        """When no patterns are provided, artifact validation is skipped."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="Done! %%ORDER_UP%%",
+            is_error=False,
+            session_id="no-patterns",
+            errors=[],
+        )
+        result = _check_session_content(
+            session,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[],
+        )
+        assert result is True
+
+    def test_compute_outcome_threads_expected_output_patterns(self) -> None:
+        """_compute_outcome must thread expected_output_patterns through to
+        _compute_success and _check_session_content."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="Done! %%ORDER_UP%%",
+            is_error=False,
+            session_id="threaded",
+            errors=[],
+        )
+        # Without patterns: success
+        outcome_no_patterns, _ = _compute_outcome(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+            expected_output_patterns=[],
+        )
+        assert outcome_no_patterns == SessionOutcome.SUCCEEDED
+
+        # With patterns that don't match: failed (EARLY_STOP since marker
+        # absent from _compute_success perspective when artifact check fails)
+        outcome_with_patterns, _ = _compute_outcome(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+            expected_output_patterns=[r"https://github\.com/.*/pull/\d+"],
+        )
+        assert outcome_with_patterns != SessionOutcome.SUCCEEDED
+
+
+class TestToolUseParsing:
+    """Tests for tool_use NDJSON record extraction."""
+
+    @staticmethod
+    def _result_line() -> str:
+        import json
+
+        return json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+            }
+        )
+
+    @staticmethod
+    def _assistant_line(*content_blocks: dict) -> str:  # type: ignore[type-arg]
+        import json
+
+        return json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": list(content_blocks)},
+            }
+        )
+
+    def test_parse_session_result_captures_tool_uses(self) -> None:
+        """parse_session_result must extract tool_use records."""
+        ndjson = "\n".join(
+            [
+                self._assistant_line(
+                    {"type": "tool_use", "name": "Skill", "id": "tu_1"},
+                    {"type": "text", "text": "loading skill"},
+                ),
+                self._result_line(),
+            ]
+        )
+        session = parse_session_result(ndjson)
+        assert len(session.tool_uses) == 1
+        assert session.tool_uses[0]["name"] == "Skill"
+        assert session.tool_uses[0]["id"] == "tu_1"
+
+    def test_parse_session_result_no_tool_uses(self) -> None:
+        """Sessions without tool_use records have an empty list."""
+        ndjson = "\n".join(
+            [
+                self._assistant_line(
+                    {"type": "text", "text": "just text"},
+                ),
+                self._result_line(),
+            ]
+        )
+        session = parse_session_result(ndjson)
+        assert session.tool_uses == []
+
+    def test_parse_session_result_multiple_tool_uses(self) -> None:
+        """Multiple tool_use records across messages are captured."""
+        ndjson = "\n".join(
+            [
+                self._assistant_line(
+                    {"type": "tool_use", "name": "Write", "id": "tu_1"},
+                ),
+                self._assistant_line(
+                    {"type": "tool_use", "name": "Skill", "id": "tu_2"},
+                ),
+                self._result_line(),
+            ]
+        )
+        session = parse_session_result(ndjson)
+        assert len(session.tool_uses) == 2
+        assert session.tool_uses[0]["name"] == "Write"
+        assert session.tool_uses[1]["name"] == "Skill"

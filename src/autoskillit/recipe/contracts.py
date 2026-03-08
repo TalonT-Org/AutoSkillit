@@ -53,6 +53,7 @@ class SkillOutput:
 class SkillContract:
     inputs: list[SkillInput]
     outputs: list[SkillOutput]
+    expected_output_patterns: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -136,7 +137,8 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     outputs = [
         SkillOutput(name=out["name"], type=out["type"]) for out in skill_data.get("outputs", [])
     ]
-    return SkillContract(inputs=inputs, outputs=outputs)
+    patterns = skill_data.get("expected_output_patterns", [])
+    return SkillContract(inputs=inputs, outputs=outputs, expected_output_patterns=patterns)
 
 
 def compute_skill_hash(skill_name: str, *, skills_dir: Path) -> str:

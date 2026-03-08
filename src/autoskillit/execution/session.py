@@ -8,6 +8,8 @@ objects instead of raw JSON strings.
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, assert_never
 
@@ -52,6 +54,7 @@ class ClaudeSessionResult:
     errors: list[str] = field(default_factory=list)
     token_usage: dict[str, Any] | None = None
     assistant_messages: list[str] = field(default_factory=list)
+    tool_uses: list[dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
@@ -218,6 +221,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
 
     result_obj = None
     assistant_messages: list[str] = []
+    tool_uses: list[dict[str, Any]] = []
     for line in stdout.strip().splitlines():
         line = line.strip()
         if not line:
@@ -235,6 +239,11 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                     continue
                 content = msg.get("content", "")
                 if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_use":
+                            tool_uses.append(
+                                {"name": block.get("name", ""), "id": block.get("id", "")}
+                            )
                     text = "\n".join(
                         block.get("text", "") for block in content if isinstance(block, dict)
                     ).strip()
@@ -281,12 +290,14 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         errors=result_obj.get("errors") or [],
         token_usage=token_usage,
         assistant_messages=assistant_messages,
+        tool_uses=tool_uses,
     )
 
 
 def _check_session_content(
     session: ClaudeSessionResult,
     completion_marker: str,
+    expected_output_patterns: Sequence[str] = (),
 ) -> bool:
     """Validate session content fields after termination-specific gates pass."""
     if session.is_error:
@@ -311,6 +322,16 @@ def _check_session_content(
                 result_tail=result_text[-200:] if len(result_text) > 200 else result_text,
             )
             return False
+    if expected_output_patterns:
+        result_text = session.result.strip()
+        matched = any(re.search(p, result_text) for p in expected_output_patterns)
+        if not matched:
+            logger.warning(
+                "content_check_failed",
+                reason="expected_artifact_absent",
+                patterns=list(expected_output_patterns),
+            )
+            return False
     logger.debug("content_check_passed")
     return True
 
@@ -321,6 +342,7 @@ def _compute_success(
     termination: TerminationReason,
     completion_marker: str = "",
     channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
+    expected_output_patterns: Sequence[str] = (),
 ) -> bool:
     """Cross-validate all signals to determine unambiguous success/failure.
 
@@ -354,7 +376,9 @@ def _compute_success(
             # trustworthy when the session envelope says "success".
             if returncode != 0 and not (session.subtype == "success" and session.result.strip()):
                 return False
-            content_ok = _check_session_content(session, completion_marker)
+            content_ok = _check_session_content(
+                session, completion_marker, expected_output_patterns
+            )
             logger.debug(
                 "compute_success_termination",
                 termination="COMPLETED",
@@ -368,7 +392,9 @@ def _compute_success(
             # as authoritative evidence of failure — no asymmetric bypass.
             if returncode != 0:
                 return False
-            content_ok = _check_session_content(session, completion_marker)
+            content_ok = _check_session_content(
+                session, completion_marker, expected_output_patterns
+            )
             logger.debug(
                 "compute_success_termination",
                 termination="NATURAL_EXIT",
@@ -417,6 +443,7 @@ def _compute_retry(
     returncode: int,
     termination: TerminationReason,
     channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
+    completion_marker: str = "",
 ) -> tuple[bool, RetryReason]:
     """Compute whether the session result warrants a retry.
 
@@ -463,6 +490,23 @@ def _compute_retry(
                     kill_anomaly=True,
                 )
                 return True, RetryReason.RESUME
+            # EARLY_STOP: model produced substantive output but stopped before
+            # emitting the completion marker (text-then-tool boundary).
+            if (
+                returncode == 0
+                and session.subtype == "success"
+                and session.result.strip()
+                and completion_marker
+                and completion_marker not in session.result
+            ):
+                skill_tool_calls = [t for t in session.tool_uses if t.get("name") == "Skill"]
+                logger.debug(
+                    "compute_retry_early_stop",
+                    termination="NATURAL_EXIT",
+                    has_skill_calls=bool(skill_tool_calls),
+                    skill_call_count=len(skill_tool_calls),
+                )
+                return True, RetryReason.EARLY_STOP
             logger.debug(
                 "compute_retry_result",
                 termination="NATURAL_EXIT",
@@ -522,6 +566,7 @@ def _compute_outcome(
     termination: TerminationReason,
     completion_marker: str = "",
     channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
+    expected_output_patterns: Sequence[str] = (),
 ) -> tuple[SessionOutcome, RetryReason]:
     """Compose _compute_success and _compute_retry into a single SessionOutcome.
 
@@ -537,10 +582,15 @@ def _compute_outcome(
     the recovered session then delegates to _compute_outcome.
     """
     success = _compute_success(
-        session, returncode, termination, completion_marker, channel_confirmation
+        session,
+        returncode,
+        termination,
+        completion_marker,
+        channel_confirmation,
+        expected_output_patterns,
     )
     needs_retry, retry_reason = _compute_retry(
-        session, returncode, termination, channel_confirmation
+        session, returncode, termination, channel_confirmation, completion_marker
     )
 
     logger.debug(

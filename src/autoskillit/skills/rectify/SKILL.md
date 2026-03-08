@@ -94,7 +94,7 @@ Design an approach that provides **immunity** rather than a fix:
 
 After finalizing the plan, determine which architecture lens best illustrates the proposed changes, then create a mermaid diagram.
 
-**Select the lens based on what the plan primarily affects:**
+**4a. Select the lens based on what the plan primarily affects:**
 
 | If the plan primarily involves... | Use Lens |
 |-----------------------------------|----------|
@@ -112,7 +112,12 @@ After finalizing the plan, determine which architecture lens best illustrates th
 | Modifying state contracts, field lifecycles, or resume logic | State Lifecycle |
 | Changing deployment topology or infrastructure | Deployment |
 
-**MANDATORY: LOAD the appropriate arch-lens skill using the Skill tool:**
+**4b. Write your lens selection rationale to a file using the Write tool:**
+
+- **Path:** `temp/arch-lens-selection.md`
+- **Content:** Which lens was selected and why (1-2 sentences of rationale).
+
+**4c. MANDATORY: LOAD the appropriate arch-lens skill using the Skill tool:**
 
 | Lens | Skill to LOAD |
 |------|---------------|
@@ -130,7 +135,7 @@ After finalizing the plan, determine which architecture lens best illustrates th
 | State Lifecycle | `/arch-lens-state-lifecycle` |
 | Deployment | `/arch-lens-deployment` |
 
-**Create the diagram following the loaded skill's instructions:**
+**4d. Create the diagram following the loaded skill's instructions:**
 - Focus on the PROPOSED changes (use `newComponent` class for new elements)
 - Show how new components integrate with existing architecture
 - Use `●` prefix for modified existing components

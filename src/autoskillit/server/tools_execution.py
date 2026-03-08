@@ -10,6 +10,11 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, truncate_text
+from autoskillit.recipe.contracts import (
+    get_skill_contract,
+    load_bundled_manifest,
+    resolve_skill_name,
+)
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
@@ -177,10 +182,24 @@ async def run_skill(
     tool_ctx = _get_ctx()
     if tool_ctx.executor is None:
         return json.dumps({"success": False, "error": "Executor not configured"})
+
+    # Look up artifact validation patterns from skill contract
+    expected_output_patterns: list[str] = []
+    skill_name = resolve_skill_name(skill_command)
+    if skill_name:
+        contract = get_skill_contract(skill_name, load_bundled_manifest())
+        if contract and contract.expected_output_patterns:
+            expected_output_patterns = contract.expected_output_patterns
+
     _start = time.monotonic()
     try:
         skill_result = await tool_ctx.executor.run(
-            skill_command, cwd, model=model, add_dir=add_dir, step_name=step_name
+            skill_command,
+            cwd,
+            model=model,
+            add_dir=add_dir,
+            step_name=step_name,
+            expected_output_patterns=expected_output_patterns,
         )
         if skill_result.success:
             tool_ctx.audit.record_success(skill_command)

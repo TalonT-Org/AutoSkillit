@@ -14,6 +14,7 @@ import dataclasses
 import os
 import re
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -156,7 +157,7 @@ _WORKTREE_PATH_PATTERN: re.Pattern[str] = re.compile(r"^worktree_path=(.+)$", re
 
 
 def _extract_worktree_path(assistant_messages: list[str]) -> str | None:
-    """Return the last absolute path emitted as worktree_path=<value> across assistant messages, or None."""
+    """Return the last absolute path emitted as worktree_path=<value>."""
     last: str | None = None
     for msg in assistant_messages:
         m = _WORKTREE_PATH_PATTERN.search(msg)
@@ -203,6 +204,7 @@ def _build_skill_result(
     skill_command: str = "",
     audit: AuditStore | None = None,
     max_consecutive_retries: int = 3,
+    expected_output_patterns: Sequence[str] = (),
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     branch = (
@@ -308,6 +310,7 @@ def _build_skill_result(
         result.termination,
         completion_marker,
         channel_confirmation=result.channel_confirmation,
+        expected_output_patterns=expected_output_patterns,
     )
     success = outcome == SessionOutcome.SUCCEEDED
     needs_retry = outcome == SessionOutcome.RETRIABLE
@@ -367,6 +370,7 @@ async def run_headless_core(
     add_dir: str = "",
     timeout: float | None = None,
     stale_threshold: float | None = None,
+    expected_output_patterns: Sequence[str] = (),
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -470,6 +474,7 @@ async def run_headless_core(
             completion_marker=cfg.completion_marker,
             skill_command=original_skill_command,
             audit=ctx.audit,
+            expected_output_patterns=expected_output_patterns,
         )
 
         # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
@@ -545,6 +550,7 @@ class DefaultHeadlessExecutor:
         add_dir: str = "",
         timeout: float | None = None,
         stale_threshold: float | None = None,
+        expected_output_patterns: Sequence[str] = (),
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -558,4 +564,5 @@ class DefaultHeadlessExecutor:
             add_dir=add_dir,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
+            expected_output_patterns=expected_output_patterns,
         )

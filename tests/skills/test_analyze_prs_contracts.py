@@ -1,4 +1,5 @@
 """Contract tests for analyze-prs SKILL.md batch branch naming convention."""
+
 from pathlib import Path
 
 import pytest

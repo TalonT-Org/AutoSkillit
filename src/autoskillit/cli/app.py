@@ -451,6 +451,7 @@ def cook(recipe: str | None = None):
             print(f"Invalid selection: '{raw}'")
             sys.exit(1)
         else:
+            assert not isinstance(resolved, str)
             recipe = resolved.name
 
     from autoskillit.core import YAMLError

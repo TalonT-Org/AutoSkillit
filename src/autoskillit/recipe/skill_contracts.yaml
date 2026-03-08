@@ -12,6 +12,26 @@ skills:
       type: string
       required: true
     outputs: []
+  resolve-merge-conflicts:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs:
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
+    - name: escalation_required
+      type: string
+    - name: escalation_reason
+      type: string
   resolve-review:
     inputs:
     - name: feature_branch

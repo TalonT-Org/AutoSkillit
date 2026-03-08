@@ -3,7 +3,7 @@
 Rules enforced:
 - gh label create must always include --force (idempotent label management)
 - batch:N labels must not appear in gh issue edit / gh pr edit (internal state boundary)
-- triage-issues classification must use behavioral criterion ("is behavior broken?")
+- triage-issues classification must use behavioral criterion ("does existing code produce a runtime error?")
 - triage-issues label application must be opt-out (--no-label), not opt-in (--label)
 """
 
@@ -62,12 +62,11 @@ def test_no_internal_batch_labels_on_github_objects() -> None:
 
 
 def test_triage_issues_classification_uses_behavioral_criterion() -> None:
-    """triage-issues Step 3 must classify by whether existing behavior is broken,
+    """triage-issues Step 3 must classify by whether existing code produces a runtime error,
     not by scope clarity or implementation complexity.
 
-    The scope-based table conflates "needs investigation" with "is a runtime bug"
-    and misroutes complex features (large enhancements) to the remediation recipe,
-    which is designed for broken-behavior investigation, not feature planning.
+    The key distinction is broken vs. missing: runtime errors route to remediation,
+    new features and enhancements route to implementation regardless of scope or complexity.
     """
     bd = bundled_skills_dir()
     content = (bd / "triage-issues" / "SKILL.md").read_text()

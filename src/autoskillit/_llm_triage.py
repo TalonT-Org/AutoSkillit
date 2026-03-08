@@ -11,7 +11,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import OutputFormat, SubprocessResult, TerminationReason, get_logger
+from autoskillit.core import (
+    ClaudeFlags,
+    OutputFormat,
+    SubprocessResult,
+    TerminationReason,
+    get_logger,
+)
 from autoskillit.execution import parse_session_result, run_managed_async
 from autoskillit.recipe import StaleItem, load_bundled_manifest
 from autoskillit.workspace import bundled_skills_dir
@@ -98,7 +104,17 @@ async def _triage_batch(
 
     try:
         fmt = OutputFormat.JSON
-        triage_cmd = ["claude", "-p", prompt, "--model", "haiku", "--output-format", fmt.value]
+        # Build the command manually — triage is a read-only Haiku query with no
+        # tool use, so it must NOT receive --dangerously-skip-permissions.
+        triage_cmd: list[str] = [
+            "claude",
+            ClaudeFlags.PRINT,
+            prompt,
+            ClaudeFlags.MODEL,
+            "claude-haiku-4-5-20251001",
+            ClaudeFlags.OUTPUT_FORMAT,
+            fmt.value,
+        ]
         for flag in fmt.required_cli_flags:
             if flag not in triage_cmd:
                 triage_cmd.append(flag)

@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from autoskillit.core import (
+    ClaudeFlags,
     FailureRecord,
     RetryReason,
     SessionOutcome,
@@ -330,9 +331,9 @@ async def run_headless_core(
         resolved_model = _resolve_model(model, ctx.config)
         spec = build_headless_cmd(skill_command, model=resolved_model)
         cmd = spec.cmd + [
-            "--plugin-dir",
+            ClaudeFlags.PLUGIN_DIR,
             effective_plugin_dir,
-            "--output-format",
+            ClaudeFlags.OUTPUT_FORMAT,
             cfg.output_format.value,
         ]
         # Apply any CLI flags required by the chosen output format.
@@ -340,7 +341,7 @@ async def run_headless_core(
             if flag not in cmd:
                 cmd.append(flag)
         if add_dir:
-            cmd.extend(["--add-dir", add_dir])
+            cmd.extend([ClaudeFlags.ADD_DIR, add_dir])
 
         delay_ms = cfg.exit_after_stop_delay_ms
         if delay_ms > 0:

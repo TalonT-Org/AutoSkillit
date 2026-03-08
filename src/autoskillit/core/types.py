@@ -61,6 +61,41 @@ class RecipeSource(StrEnum):
     BUILTIN = "builtin"
 
 
+class ClaudeFlags(StrEnum):
+    """Canonical registry of all claude CLI flags used by autoskillit.
+
+    Every flag string that autoskillit passes to the claude binary MUST be
+    defined here. Call sites must reference these constants — never hardcode
+    flag strings at the call site.
+
+    When the claude CLI renames or removes a flag:
+      1. Update the constant value here.
+      2. Follow the failing tests in test_flag_contracts.py to update call sites.
+    """
+
+    # Permission bypass — mode-dependent (never use the wrong one for the wrong mode)
+    ALLOW_DANGEROUSLY_SKIP_PERMISSIONS = "--allow-dangerously-skip-permissions"  # interactive only
+    DANGEROUSLY_SKIP_PERMISSIONS = "--dangerously-skip-permissions"  # headless only
+
+    # Prompt / execution mode
+    PRINT = "-p"
+
+    # Model selection
+    MODEL = "--model"
+
+    # Plugin / directory
+    PLUGIN_DIR = "--plugin-dir"
+    ADD_DIR = "--add-dir"
+
+    # Output format
+    OUTPUT_FORMAT = "--output-format"
+    VERBOSE = "--verbose"
+
+    # Interactive session restrictions
+    TOOLS = "--tools"
+    APPEND_SYSTEM_PROMPT = "--append-system-prompt"
+
+
 class OutputFormat(StrEnum):
     """Claude CLI output format with declared data capabilities.
 
@@ -84,7 +119,7 @@ class OutputFormat(StrEnum):
     def required_cli_flags(self) -> tuple[str, ...]:
         """CLI flags required when this format is used with -p (headless) mode."""
         if self == OutputFormat.STREAM_JSON:
-            return ("--verbose",)
+            return (ClaudeFlags.VERBOSE,)
         return ()
 
     @classmethod

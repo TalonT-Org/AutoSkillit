@@ -105,7 +105,7 @@ For each PR in the ordered list, assign a complexity tag:
 
 Compute a timestamp: `YYYY-MM-DD_HHMMSS`.
 
-Compute integration branch name: `integration/pr-merge-{YYYYMMDD-HHMMSS}`.
+Compute integration branch name: `pr-batch/pr-merge-{YYYYMMDD-HHMMSS}`.
 
 Ensure `temp/pr-merge-pipeline/` exists.
 
@@ -113,7 +113,7 @@ Ensure `temp/pr-merge-pipeline/` exists.
 
 ```json
 {
-    "integration_branch": "integration/pr-merge-YYYYMMDD-HHMMSS",
+    "integration_branch": "pr-batch/pr-merge-YYYYMMDD-HHMMSS",
     "base_branch": "{base_branch}",
     "generated_at": "{ISO timestamp}",
     "pr_count": 5,
@@ -153,7 +153,7 @@ This file is named `*_plan_*.md` so `audit-impl` can discover it as the baseline
 
 **Date:** {YYYY-MM-DD}
 **Base Branch:** {base_branch}
-**Integration Branch:** integration/pr-merge-YYYYMMDD-HHMMSS
+**Integration Branch:** pr-batch/pr-merge-YYYYMMDD-HHMMSS
 **PRs Analyzed:** {count}
 
 ## Merge Order

@@ -14,7 +14,9 @@ ingredients:
     description: Keep the clone directory when the pipeline fails (true/false)
     default: "false"
   base_branch:
-    description: Target branch that all PRs are merging into; integration branch is created from this
+    description: Target branch that all PRs are merging into; integration branch is created from this. Pass 'integration' to use the persistent integration branch feature.
+  upstream_branch:
+    description: Branch to create base_branch from if it does not yet exist on the remote
     default: main
   audit:
     description: Run /autoskillit:audit-impl after all PRs are merged to check coherency (true/false)
@@ -29,18 +31,16 @@ kitchen_rules:
     orchestrator. All work is delegated through run_skill
     and run_cmd."
   - "Route to on_failure when a step fails — do not investigate or fix directly."
-  - "LINEAR HISTORY: Conflict resolution plans must NEVER use `git merge` (including
-    --no-ff or --no-commit variants). Use `git cherry-pick <commit>` for individual
-    commits or `git checkout <branch> -- <file>` for specific files to apply PR changes.
-    merge_worktree requires linear commit history for rebasing — merge commits cause
-    WORKTREE_INTACT_MERGE_COMMITS_DETECTED failure."
   - "SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before
     advancing to the next PR. Never batch-assess all PRs before starting merges."
   - "SEQUENTIAL EXECUTION: complete full cycle (verify → implement → test →
     merge_to_integration) per plan part before advancing to the next part or PR."
-  - "INTEGRATION BRANCH: All PR merges and worktree merges target
-    context.integration_branch, not inputs.base_branch. The base_branch is only
-    used for the final review PR."
+  - "INTEGRATION BRANCH: Two distinct branches exist. inputs.base_branch is the
+    PERMANENT branch (default: integration) that accumulates AI work across runs —
+    it is never deleted. context.integration_branch is the PER-RUN batch branch
+    (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this pipeline run.
+    All PR merges and worktree merges target context.integration_branch. The final
+    review PR opens from context.integration_branch into inputs.base_branch."
   - "PR QUEUE: The agent reads context.pr_order_file once at analyze_prs and
     maintains an ordered queue. context.current_pr_index (agent-maintained, starts
     at 0) tracks progress. Advance the index after each successful merge or
@@ -77,12 +77,54 @@ steps:
     with:
       cmd: "git remote set-url origin \"$(git -C ${{ inputs.source_dir }} remote get-url origin)\""
       cwd: "${{ context.work_dir }}"
-    on_success: analyze_prs
+    on_success: check_integration_exists
     on_failure: cleanup_failure
     note: >
       The clone's origin initially points to the local source_dir path.
       This step replaces it with the actual GitHub remote URL from source_dir,
       so that gh CLI commands and git fetch origin work correctly in the clone.
+
+  check_integration_exists:
+    tool: run_cmd
+    with:
+      cmd: "git ls-remote --exit-code --heads origin \"${{ inputs.base_branch }}\""
+      cwd: "${{ context.work_dir }}"
+    on_success: analyze_prs
+    on_failure: confirm_create_integration
+    note: >
+      Checks whether the permanent base_branch (default: integration) exists on
+      the remote. Exit code 0 means the branch exists — proceed to analyze_prs.
+      Non-zero exit means the branch is absent — route to user confirmation before
+      creating it. This is an idempotent check: re-running the pipeline after
+      the branch is created will simply skip through on_success.
+
+  confirm_create_integration:
+    action: confirm
+    message: >-
+      The branch '${{ inputs.base_branch }}' does not exist on the remote.
+      Create it now from '${{ inputs.upstream_branch }}'?
+      This will be a permanent branch that accumulates AI-generated work.
+      Type yes to create it or no to abort.
+    on_success: create_persistent_integration
+    on_failure: escalate_stop
+    note: >
+      User approval gate. On yes: create_persistent_integration creates and
+      pushes the permanent branch. On no: escalate_stop — the pipeline cannot
+      proceed without the target branch.
+
+  create_persistent_integration:
+    tool: run_cmd
+    with:
+      cmd: "git checkout '${{ inputs.upstream_branch }}' && git pull && git checkout -b '${{ inputs.base_branch }}' && git push origin '${{ inputs.base_branch }}'"
+      cwd: "${{ context.work_dir }}"
+    on_success: analyze_prs
+    on_failure: cleanup_failure
+    note: >
+      Creates the permanent base_branch (e.g. integration) off upstream_branch
+      (e.g. main) and pushes it to the remote. This step only executes when the
+      user confirmed branch creation in confirm_create_integration. Once created,
+      subsequent pipeline runs skip directly from check_integration_exists to
+      analyze_prs via on_success.
 
   analyze_prs:
     tool: run_skill
@@ -236,18 +278,69 @@ steps:
       base_branch: "${{ context.integration_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-    on_success: next_part_or_next_pr
     on_failure: cleanup_failure
+    on_result:
+      - when: "${{ result.state }} == worktree_intact_rebase_aborted"
+        route: resolve_merge_conflicts
+      - when: "result.failed_step == 'rebase'"
+        route: cleanup_failure
+      - when: "result.failed_step == 'test_gate'"
+        route: cleanup_failure
+      - when: "result.failed_step == 'post_rebase_test_gate'"
+        route: cleanup_failure
+      - route: next_part_or_next_pr
     note: >
       Merges the conflict-resolution worktree into the integration branch
       (not inputs.base_branch). After merge, check if more plan_parts remain
       for this PR. If so, return to verify with the next part. If all parts
       are done, go to next_part_or_next_pr.
-      On ANY failure, follow on_failure: cleanup_failure — NEVER use run_cmd
-      as a workaround. A state of worktree_intact_merge_commits_detected
-      means the conflict-resolution plan used git merge --no-ff; clean up
-      the worktree and regenerate the plan using cherry-pick or
-      git checkout -- file approaches.
+      On rebase failure with worktree intact, routes to resolve_merge_conflicts
+      for goal-aware resolution. On dirty-worktree rebase failure or test gate
+      failures, follow on_failure: cleanup_failure.
+      NEVER use run_cmd as a workaround. A state of
+      worktree_intact_merge_commits_detected means the conflict-resolution plan
+      used git merge --no-ff; clean up the worktree and regenerate the plan
+      using cherry-pick or git checkout -- file approaches.
+
+  resolve_merge_conflicts:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.worktree_path }} ${{ context.pr_plan_path }} ${{ context.integration_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "resolve_merge_conflicts"
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+      branch_name: "${{ result.branch_name }}"
+      escalation_required: "${{ result.escalation_required }}"
+      escalation_reason: "${{ result.escalation_reason }}"
+    on_failure: cleanup_failure
+    on_result:
+      - when: "${{ result.escalation_required }} == true"
+        route: cleanup_failure
+      - route: retry_merge_after_resolution
+    note: >
+      Invoked when merge_worktree fails with a rebase conflict and the worktree
+      is still intact (worktree_intact_rebase_aborted). The skill reads the
+      implementation plan and git history to understand the goals of both sides,
+      resolves conflicts in-place when confidence is HIGH or MEDIUM, and
+      escalates (cleanup_failure) when confidence is LOW. On success, routes
+      to retry_merge_after_resolution to re-attempt the merge without loop-back
+      routing.
+
+  retry_merge_after_resolution:
+    tool: merge_worktree
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+      base_branch: "${{ context.integration_branch }}"
+    capture:
+      cleanup_succeeded: "${{ result.cleanup_succeeded }}"
+    on_success: next_part_or_next_pr
+    on_failure: cleanup_failure
+    note: >
+      Re-attempts merge_worktree after resolve_merge_conflicts has rebased the
+      worktree onto the integration branch. Has no on_result routing back to
+      resolve_merge_conflicts — if this fails, the pipeline escalates without
+      further automated recovery to prevent infinite loops.
 
   fix:
     tool: run_skill
@@ -436,7 +529,7 @@ steps:
 
   done:
     action: stop
-    message: "PR consolidation complete. Integration branch pushed, review PR opened. Human review required before merging to base_branch."
+    message: "PR consolidation complete. Batch branch pushed, review PR opened targeting integration branch. Human review required before merging integration into main."
 
   escalate_stop:
     action: stop

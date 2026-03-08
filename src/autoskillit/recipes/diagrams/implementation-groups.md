@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:f6de7178434861ef185945fea3c951684ccfb87eb8cdf534949cb3fabe0455b9 -->
+<!-- autoskillit-recipe-hash: sha256:4a976a23569256afb2b12d77c0ff20404a4fd4aa96eccc24708ec0d8e3952542 -->
 <!-- autoskillit-diagram-format: v5 -->
 ## implementation-groups
 Decompose a source document into sequenced implementation groups, then plan, verify, implement, test, and merge each group end-to-end. Use when you have a large document or roadmap to implement via make-groups.
@@ -74,6 +74,7 @@ remediate  [route] (retry ×3)
 │
 ├── [review_pr] (retry ×3)  ← only if inputs.open_pr
 │       ${{ result.verdict }} == changes_requested → resolve_review
+│       ${{ result.verdict }} == needs_human → ci_watch
 │       true → ci_watch
 │       ✗ failure → resolve_review
 │

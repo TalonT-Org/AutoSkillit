@@ -2,14 +2,26 @@ name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, integration]
   pull_request:
 
 jobs:
   preflight:
     name: Preflight checks
     runs-on: ubuntu-latest
+    outputs:
+      os-matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - name: Compute OS matrix
+        id: set-matrix
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "integration" ]] || \
+             [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/integration" ]]; then
+            echo 'matrix=["ubuntu-latest"]' >> $GITHUB_OUTPUT
+          else
+            echo 'matrix=["ubuntu-latest","macos-15"]' >> $GITHUB_OUTPUT
+          fi
+
       - uses: actions/checkout@v4
 
       - name: Install uv
@@ -32,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15]
+        os: ${{ fromJSON(needs.preflight.outputs.os-matrix) }}
 
     steps:
       - uses: actions/checkout@v4

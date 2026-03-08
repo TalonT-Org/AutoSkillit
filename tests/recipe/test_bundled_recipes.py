@@ -1244,6 +1244,40 @@ class TestReviewPrRecipeIntegration:
         """T_RP9: ci_watch step present in all four recipes."""
         assert "ci_watch" in recipe.steps  # type: ignore[attr-defined]
 
+    def test_review_pr_needs_human_has_explicit_route(self, recipe: object) -> None:
+        """needs_human must have a dedicated on_result route in every recipe."""
+        review_pr_step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
+        explicit_conditions = [
+            c.when
+            for c in review_pr_step.on_result.conditions
+            if c.when and "needs_human" in c.when and c.when.strip() != "true"
+        ]
+        assert len(explicit_conditions) >= 1, (
+            "review_pr on_result must have an explicit condition for 'needs_human'. "
+            "It must not silently fall through the catch-all."
+        )
+
+    def test_resolve_review_step_uses_correct_skill(self, recipe: object) -> None:
+        """resolve_review step must invoke /autoskillit:resolve-review in all recipes."""
+        resolve_step = recipe.steps["resolve_review"]  # type: ignore[attr-defined]
+        skill_cmd = resolve_step.with_args.get("skill_command", "")
+        assert "resolve-review" in skill_cmd and "resolve-failures" not in skill_cmd, (
+            "resolve_review step must call /autoskillit:resolve-review, "
+            f"not resolve-failures. Got: {skill_cmd}"
+        )
+
+
+def test_bundled_recipes_pass_unrouted_verdict_value_rule() -> None:
+    """All bundled recipes must pass the unrouted-verdict-value semantic rule."""
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        findings = run_semantic_rules(recipe)
+        verdict_errors = [f for f in findings if f.rule == "unrouted-verdict-value"]
+        assert len(verdict_errors) == 0, (
+            f"Recipe '{yaml_path.stem}' has unrouted verdict values: "
+            + ", ".join(f.message for f in verdict_errors)
+        )
+
 
 def test_implementation_groups_has_ci_watch() -> None:
     """T_RP10: implementation-groups now has ci_watch (parity with other recipes)."""
@@ -1338,7 +1372,9 @@ def test_no_bundled_recipe_auto_deletes_on_success() -> None:
                                 pass
                             else:
                                 violations.append(pred)
-                                queue.append(pred)  # Continue tracing to find all unguarded ancestors
+                                queue.append(
+                                    pred
+                                )  # Continue tracing to find all unguarded ancestors
 
                     assert not violations, (
                         f"{recipe_name}: {name} (keep=false) is reachable via on_success "

@@ -59,11 +59,16 @@ class TestServerToolSurfaceContract:
 
         monkeypatch.setattr(tool_ctx, "gate", DefaultGateState(enabled=False))
 
-    def test_open_kitchen_prompt_names_all_forbidden_tools(self):
+    @pytest.mark.anyio
+    async def test_open_kitchen_prompt_names_all_forbidden_tools(self):
         """open_kitchen prompt text must name every forbidden tool with prohibition framing."""
+        from unittest.mock import AsyncMock, patch
+
         from autoskillit.server.prompts import open_kitchen
 
-        result = open_kitchen()
+        with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
+            with patch("autoskillit.server.prompts._write_hook_config"):
+                result = await open_kitchen()
         content = result.messages[0].content
         text = content.text if hasattr(content, "text") else str(content)
 

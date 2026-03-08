@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:be8b79bbbbe37163ff3f50a28181b0327dd2ddd5cae44fd54ce4772dab4f4cd6 -->
+<!-- autoskillit-recipe-hash: sha256:c2f2c36fc7849262ea021708d2194e52aa7281a62c9fb351215df5b4ec32b2a1 -->
 <!-- autoskillit-diagram-format: v5 -->
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
@@ -73,6 +73,7 @@ remediate  [route] (retry ×3)
 │
 ├── [review_pr] (retry ×3)  ← only if inputs.open_pr
 │       ${{ result.verdict }} == changes_requested → resolve_review
+│       ${{ result.verdict }} == needs_human → ci_watch
 │       true → ci_watch
 │       ✗ failure → resolve_review
 │

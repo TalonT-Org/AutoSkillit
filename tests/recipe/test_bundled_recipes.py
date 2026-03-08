@@ -762,6 +762,34 @@ class TestInvestigateFirstStructure:
             "open_pr_step must route to review_pr — review loop runs before ci_watch now"
         )
 
+    def test_if_resolve_review_uses_resolve_review_skill(self, recipe) -> None:
+        """T_IF_RR1: resolve_review step must invoke resolve-review, not resolve-failures.
+
+        resolve-failures is test-driven and finds no work when tests are green.
+        resolve-review reads PR review comments and applies the reviewer's requested changes.
+        """
+        assert "resolve_review" in recipe.steps
+        step = recipe.steps["resolve_review"]
+        assert step.tool == "run_skill"
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "resolve-review" in skill_cmd, (
+            "resolve_review step must call /autoskillit:resolve-review; "
+            "resolve-failures is test-driven and ignores PR review comments"
+        )
+        assert "resolve-failures" not in skill_cmd, (
+            "resolve_review step must not call resolve-failures; "
+            "that skill does not read review comments"
+        )
+
+    def test_if_resolve_review_passes_merge_target(self, recipe) -> None:
+        """T_IF_RR2: resolve_review skill_command must pass context.merge_target."""
+        step = recipe.steps["resolve_review"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "context.merge_target" in skill_cmd, (
+            "resolve-review requires feature_branch as first arg; "
+            "context.merge_target holds the feature branch name"
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestAuditAndFixStructure

@@ -12,6 +12,15 @@ skills:
       type: string
       required: true
     outputs: []
+  resolve-review:
+    inputs:
+    - name: feature_branch
+      type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs: []
   dry-walkthrough:
     inputs:
     - name: plan_path

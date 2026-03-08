@@ -451,7 +451,8 @@ def cook(recipe: str | None = None):
             print(f"Invalid selection: '{raw}'")
             sys.exit(1)
         else:
-            assert not isinstance(resolved, str)
+            if isinstance(resolved, str):
+                raise TypeError(f"Expected RecipeInfo, got str: {resolved!r}")
             recipe = resolved.name
 
     from autoskillit.core import YAMLError

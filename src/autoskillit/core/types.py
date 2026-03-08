@@ -447,23 +447,24 @@ class SkillResult:
     retry_reason: RetryReason
     stderr: str
     token_usage: dict[str, Any] | None = None
+    worktree_path: str | None = None
 
     def to_json(self) -> str:
-        return json.dumps(
-            {
-                "success": self.success,
-                "result": self.result,
-                "session_id": self.session_id,
-                "subtype": self.subtype,
-                "is_error": self.is_error,
-                "exit_code": self.exit_code,
-                "needs_retry": self.needs_retry,
-                "retry_reason": self.retry_reason,
-                "stderr": self.stderr,
-                "token_usage": self.token_usage,
-            },
-            default=lambda o: o.value if isinstance(o, Enum) else str(o),
-        )
+        data: dict[str, Any] = {
+            "success": self.success,
+            "result": self.result,
+            "session_id": self.session_id,
+            "subtype": self.subtype,
+            "is_error": self.is_error,
+            "exit_code": self.exit_code,
+            "needs_retry": self.needs_retry,
+            "retry_reason": self.retry_reason,
+            "stderr": self.stderr,
+            "token_usage": self.token_usage,
+        }
+        if self.worktree_path is not None:
+            data["worktree_path"] = self.worktree_path
+        return json.dumps(data, default=lambda o: o.value if isinstance(o, Enum) else str(o))
 
     @property
     def outcome(self) -> SessionOutcome:

@@ -11,6 +11,8 @@ Public API:
 from __future__ import annotations
 
 import dataclasses
+import os
+import re
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -150,6 +152,21 @@ def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
     return None
 
 
+_WORKTREE_PATH_PATTERN: re.Pattern[str] = re.compile(r"^worktree_path=(.+)$", re.MULTILINE)
+
+
+def _extract_worktree_path(assistant_messages: list[str]) -> str | None:
+    """Return the last absolute path emitted as worktree_path=<value> across assistant messages, or None."""
+    last: str | None = None
+    for msg in assistant_messages:
+        m = _WORKTREE_PATH_PATTERN.search(msg)
+        if m:
+            candidate = m.group(1).strip()
+            if os.path.isabs(candidate):
+                last = candidate
+    return last
+
+
 def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
@@ -278,6 +295,10 @@ def _build_skill_result(
     if completion_marker:
         result_text = result_text.replace(completion_marker, "").strip()
 
+    extracted_worktree_path: str | None = None
+    if needs_retry:
+        extracted_worktree_path = _extract_worktree_path(session.assistant_messages)
+
     sr = SkillResult(
         success=success,
         result=result_text,
@@ -289,6 +310,7 @@ def _build_skill_result(
         retry_reason=retry_reason,
         stderr=_truncate(result.stderr),
         token_usage=session.token_usage,
+        worktree_path=extracted_worktree_path,
     )
     logger.debug(
         "build_skill_result_exit",

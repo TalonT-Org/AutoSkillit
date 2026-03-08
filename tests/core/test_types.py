@@ -227,3 +227,43 @@ def test_subprocess_result_has_elapsed_seconds_field():
     assert result.elapsed_seconds == 0.0
     result2 = dataclasses.replace(result, elapsed_seconds=7.3)
     assert result2.elapsed_seconds == pytest.approx(7.3)
+
+
+# ---------------------------------------------------------------------------
+# SkillResult.worktree_path field + to_json() conditional inclusion
+# ---------------------------------------------------------------------------
+
+
+def test_skill_result_to_json_includes_worktree_path_when_set():
+    """worktree_path appears as a top-level JSON field when not None."""
+    sr = SkillResult(
+        success=False,
+        result="Context limit reached during session execution.",
+        session_id="s1",
+        subtype="error_during_execution",
+        is_error=True,
+        exit_code=-1,
+        needs_retry=True,
+        retry_reason=RetryReason.RESUME,
+        stderr="",
+        worktree_path="/projects/worktrees/impl-fix-20260307",
+    )
+    data = json.loads(sr.to_json())
+    assert data["worktree_path"] == "/projects/worktrees/impl-fix-20260307"
+
+
+def test_skill_result_to_json_omits_worktree_path_when_none():
+    """worktree_path key is absent from JSON when the field is None."""
+    sr = SkillResult(
+        success=True,
+        result="Done.",
+        session_id="s1",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+    )
+    data = json.loads(sr.to_json())
+    assert "worktree_path" not in data

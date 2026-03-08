@@ -400,6 +400,8 @@ steps:
     on_result:
       - when: "${{ result.verdict }} == changes_requested"
         route: resolve_review
+      - when: "${{ result.verdict }} == needs_human"
+        route: ci_watch
       - when: "true"
         route: ci_watch
     on_failure: resolve_review
@@ -410,7 +412,7 @@ steps:
       headless session to leave inline review comments on the PR. The skill finds
       the open PR by feature branch name (context.merge_target). Captures verdict
       and routes via on_result: changes_requested → resolve_review,
-      approved/needs_human → ci_watch. On tool-level failure (MCP error, gh
+      needs_human → ci_watch (explicit), approved → ci_watch. On tool-level failure (MCP error, gh
       unavailable), routes to resolve_review. Skipped when open_pr=false.
 
   resolve_review:

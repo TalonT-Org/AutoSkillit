@@ -162,7 +162,7 @@ def _apply_budget_guard(
     if not sr.needs_retry or audit is None or not skill_command:
         return sr
     consecutive = audit.consecutive_failures(skill_command)
-    if consecutive >= max_consecutive_retries:
+    if consecutive > max_consecutive_retries:
         logger.warning(
             "retry_budget_exhausted",
             skill_command=skill_command,

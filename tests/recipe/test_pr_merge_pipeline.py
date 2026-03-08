@@ -180,3 +180,47 @@ def test_pmp_create_review_pr_passes_four_args(recipe) -> None:
         "context.verdict",
     ]:
         assert arg in cmd, f"create_review_pr skill_command must include {arg}"
+
+
+def test_pmp_resolve_merge_conflicts_step_exists(recipe):
+    assert "resolve_merge_conflicts" in recipe.steps
+
+
+def test_pmp_resolve_merge_conflicts_is_run_skill(recipe):
+    step = recipe.steps["resolve_merge_conflicts"]
+    assert step.tool == "run_skill"
+
+
+def test_pmp_resolve_merge_conflicts_calls_correct_skill(recipe):
+    step = recipe.steps["resolve_merge_conflicts"]
+    cmd = step.with_args.get("skill_command", "")
+    assert "/autoskillit:resolve-merge-conflicts" in cmd
+
+
+def test_pmp_resolve_merge_conflicts_routes_to_retry_merge(recipe):
+    step = recipe.steps["resolve_merge_conflicts"]
+    assert step.on_success == "retry_merge_after_resolution"
+
+
+def test_pmp_retry_merge_after_resolution_step_exists(recipe):
+    assert "retry_merge_after_resolution" in recipe.steps
+
+
+def test_pmp_retry_merge_after_resolution_uses_merge_worktree(recipe):
+    step = recipe.steps["retry_merge_after_resolution"]
+    assert step.tool == "merge_worktree"
+
+
+def test_pmp_retry_merge_after_resolution_routes_to_next_part(recipe):
+    step = recipe.steps["retry_merge_after_resolution"]
+    assert step.on_success == "next_part_or_next_pr"
+
+
+def test_pmp_retry_merge_no_loop_back_to_resolve(recipe):
+    step = recipe.steps["retry_merge_after_resolution"]
+    # Must not have on_result routing back to resolve_merge_conflicts — prevents infinite loop
+    if step.on_result is not None:
+        for condition in step.on_result.conditions:
+            assert condition.route != "resolve_merge_conflicts", (
+                "retry_merge_after_resolution must never route back to resolve_merge_conflicts"
+            )

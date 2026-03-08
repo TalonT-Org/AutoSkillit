@@ -952,6 +952,7 @@ def test_ci_polling_loop_does_not_get_for_each_block(ci_polling_recipe, tmp_path
         "audit-and-fix",
         "remediation",
         "smoke-test",
+        "pr-merge-pipeline",
     ],
 )
 def test_bundled_diagram_roundtrip(recipe_name: str, tmp_path: Path) -> None:

@@ -268,7 +268,7 @@ steps:
       escalation_reason: "${{ result.escalation_reason }}"
     on_failure: cleanup_failure
     on_result:
-      - when: "result.escalation_required == 'true'"
+      - when: "${{ result.escalation_required }} == true"
         route: cleanup_failure
       - route: retry_merge_after_resolution
     note: >

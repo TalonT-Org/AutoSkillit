@@ -177,7 +177,7 @@ def flush_session_log(
             json.dumps({"step_name": step_name, "total_seconds": max(0.0, timing_seconds)}),
         )
 
-    if audit_record is not None:
+    if step_name and audit_record is not None:
         _atomic_write(session_dir / "audit_log.json", json.dumps([audit_record]))
 
     # Append to sessions.jsonl index

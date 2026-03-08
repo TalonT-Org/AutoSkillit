@@ -66,7 +66,7 @@ def _initialize(ctx: ToolContext) -> None:
                 n_aud,
             )
     except Exception:
-        logger.debug("telemetry_recovery_at_startup_failed", exc_info=True)
+        logger.warning("telemetry_recovery_at_startup_failed", exc_info=True)
 
 
 def _get_ctx() -> ToolContext:

@@ -10,7 +10,7 @@ with a defensive copy getter.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -120,10 +120,8 @@ class DefaultTokenLog:
         Returns the count of session directories successfully loaded.
         """
         import json
-        from datetime import datetime
-        from pathlib import Path as _Path
 
-        index_path = _Path(log_root) / "sessions.jsonl"
+        index_path = Path(log_root) / "sessions.jsonl"
         if not index_path.exists():
             return 0
 
@@ -147,6 +145,8 @@ class DefaultTokenLog:
             if since_dt:
                 try:
                     entry_ts = datetime.fromisoformat(idx.get("timestamp", ""))
+                    if entry_ts.tzinfo is None:
+                        entry_ts = entry_ts.replace(tzinfo=UTC)
                     if entry_ts < since_dt:
                         continue
                 except (ValueError, TypeError):
@@ -156,7 +156,7 @@ class DefaultTokenLog:
             if not dir_name:
                 continue
 
-            tu_path = _Path(log_root) / "sessions" / dir_name / "token_usage.json"
+            tu_path = Path(log_root) / "sessions" / dir_name / "token_usage.json"
             if not tu_path.exists():
                 continue
 

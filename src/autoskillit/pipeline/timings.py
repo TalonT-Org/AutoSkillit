@@ -76,10 +76,9 @@ class DefaultTimingLog:
         Returns the count of session directories successfully loaded.
         """
         import json
-        from datetime import datetime
-        from pathlib import Path as _Path
+        from datetime import UTC, datetime
 
-        index_path = _Path(log_root) / "sessions.jsonl"
+        index_path = Path(log_root) / "sessions.jsonl"
         if not index_path.exists():
             return 0
 
@@ -103,6 +102,8 @@ class DefaultTimingLog:
             if since_dt:
                 try:
                     entry_ts = datetime.fromisoformat(idx.get("timestamp", ""))
+                    if entry_ts.tzinfo is None:
+                        entry_ts = entry_ts.replace(tzinfo=UTC)
                     if entry_ts < since_dt:
                         continue
                 except (ValueError, TypeError):
@@ -112,7 +113,7 @@ class DefaultTimingLog:
             if not dir_name:
                 continue
 
-            st_path = _Path(log_root) / "sessions" / dir_name / "step_timing.json"
+            st_path = Path(log_root) / "sessions" / dir_name / "step_timing.json"
             if not st_path.exists():
                 continue
 

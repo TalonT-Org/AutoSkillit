@@ -484,7 +484,7 @@ def test_flush_writes_step_timing_json(tmp_path):
 
 
 def test_flush_writes_audit_log_json(tmp_path):
-    """audit_log.json written to session dir when audit_record dict provided."""
+    """audit_log.json written to session dir when step_name and audit_record dict provided."""
     record = {
         "timestamp": "2026-01-01T00:00:00Z",
         "skill_command": "/foo",
@@ -494,7 +494,7 @@ def test_flush_writes_audit_log_json(tmp_path):
         "retry_reason": "none",
         "stderr": "oops",
     }
-    _flush(tmp_path, audit_record=record, proc_snapshots=None, success=False)
+    _flush(tmp_path, step_name="implement", audit_record=record, proc_snapshots=None, success=False)
     session_dir = tmp_path / "sessions" / "test-session-001"
     assert (session_dir / "audit_log.json").is_file()
 
@@ -575,7 +575,7 @@ def test_audit_log_json_schema(tmp_path):
         "retry_reason": "none",
         "stderr": "bad",
     }
-    _flush(tmp_path, audit_record=record, proc_snapshots=None, success=False)
+    _flush(tmp_path, step_name="implement", audit_record=record, proc_snapshots=None, success=False)
     al = json.loads((tmp_path / "sessions" / "test-session-001" / "audit_log.json").read_text())
     assert isinstance(al, list)
     assert len(al) == 1

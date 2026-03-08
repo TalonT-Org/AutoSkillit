@@ -19,6 +19,22 @@ confidence is HIGH or MEDIUM, and escalates (without partial resolution) when LO
 - `{plan_path}` — absolute path to the implementation plan (`temp/make-plan/…_plan_….md`)
 - `{base_branch}` — the integration branch to rebase onto (e.g. `integration/run-N`)
 
+## Critical Constraints
+
+**NEVER:**
+- Run the full test suite — that is the pipeline `test` step's responsibility; tests already passed before `merge_to_integration` was attempted
+- Attempt partial resolution when any conflict file is LOW confidence — abort and escalate instead
+- Leave unresolved conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) in any file
+- Loop back to the calling pipeline step — emit output tokens and exit cleanly
+- Exceed 3 rebase continuation rounds — abort and escalate if exceeded
+
+**ALWAYS:**
+- Run `git rebase --abort` before emitting `escalation_required=true`
+- Emit both `escalation_required=true` and `escalation_reason=` when escalating
+- Emit `worktree_path=` and `branch_name=` on successful resolution
+- Run `pre-commit run --all-files` after a successful rebase before emitting output tokens
+- Validate all three positional arguments before touching git state
+
 ## When to Use
 
 - Called by the `pr-merge-pipeline` when `merge_worktree` fails with

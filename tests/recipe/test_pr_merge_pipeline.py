@@ -199,7 +199,14 @@ def test_pmp_resolve_merge_conflicts_calls_correct_skill(recipe):
 
 def test_pmp_resolve_merge_conflicts_routes_to_retry_merge(recipe):
     step = recipe.steps["resolve_merge_conflicts"]
-    assert step.on_success == "retry_merge_after_resolution"
+    # on_result is used (mutually exclusive with on_success); the fallthrough
+    # route (no when condition) must lead to retry_merge_after_resolution
+    assert step.on_result is not None
+    fallthrough_routes = [c for c in step.on_result.conditions if c.when is None]
+    routes = {c.route for c in fallthrough_routes}
+    assert "retry_merge_after_resolution" in routes, (
+        "resolve_merge_conflicts fallthrough must route to retry_merge_after_resolution"
+    )
 
 
 def test_pmp_retry_merge_after_resolution_step_exists(recipe):

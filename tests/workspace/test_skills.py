@@ -34,6 +34,7 @@ BUNDLED_SKILLS = [
     "rectify",
     "report-bug",
     "resolve-failures",
+    "resolve-merge-conflicts",
     "resolve-review",
     "retry-worktree",
     "review-approach",

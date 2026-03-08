@@ -231,7 +231,6 @@ steps:
       base_branch: "${{ context.integration_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-    on_success: next_part_or_next_pr
     on_failure: cleanup_failure
     on_result:
       - when: "result.failed_step == 'rebase' and result.state == 'worktree_intact_rebase_aborted'"
@@ -242,6 +241,7 @@ steps:
         route: cleanup_failure
       - when: "result.failed_step == 'post_rebase_test_gate'"
         route: cleanup_failure
+      - route: next_part_or_next_pr
     note: >
       Merges the conflict-resolution worktree into the integration branch
       (not inputs.base_branch). After merge, check if more plan_parts remain
@@ -261,11 +261,16 @@ steps:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.worktree_path }} ${{ context.pr_plan_path }} ${{ context.integration_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_merge_conflicts"
-    on_success: retry_merge_after_resolution
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+      branch_name: "${{ result.branch_name }}"
+      escalation_required: "${{ result.escalation_required }}"
+      escalation_reason: "${{ result.escalation_reason }}"
     on_failure: cleanup_failure
     on_result:
       - when: "result.escalation_required == 'true'"
         route: cleanup_failure
+      - route: retry_merge_after_resolution
     note: >
       Invoked when merge_worktree fails with a rebase conflict and the worktree
       is still intact (worktree_intact_rebase_aborted). The skill reads the

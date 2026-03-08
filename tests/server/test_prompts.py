@@ -132,23 +132,28 @@ async def test_open_kitchen_primes_quota_cache(tmp_path, monkeypatch):
 # T-CACHE-2
 @pytest.mark.anyio
 async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
-    """open_kitchen must write temp/.autoskillit_hook_config.json with user quota_guard values.
-
-    Fails today: hook config is never written.
-    """
+    """open_kitchen must write temp/.autoskillit_hook_config.json with user quota_guard values."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.config.quota_guard.threshold = 85.0
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "/custom/path.json"
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+    # _write_hook_config uses 'from autoskillit.server import _get_ctx' at call time.
+    # Patching autoskillit.server._get_ctx correctly intercepts that deferred import;
+    # assert call_count >= 2 confirms the patch covered both _open_kitchen_handler and
+    # _write_hook_config (not just one of them).
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx) as mock_get_ctx:
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
                 from autoskillit.server.prompts import _open_kitchen_handler
 
                 await _open_kitchen_handler()
 
+    assert mock_get_ctx.call_count >= 2, (
+        "_get_ctx must be called in both _open_kitchen_handler and _write_hook_config; "
+        "if call_count < 2 the patch did not cover _write_hook_config's deferred import"
+    )
     hook_cfg = tmp_path / "temp" / ".autoskillit_hook_config.json"
     assert hook_cfg.exists(), "Hook config file must be written by open_kitchen"
     data = json.loads(hook_cfg.read_text())

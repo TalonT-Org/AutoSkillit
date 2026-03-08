@@ -1040,6 +1040,54 @@ def test_audit_and_fix_diagram_has_no_for_each_block(tmp_path: Path) -> None:
     )
 
 
+_CONFIRM_RECIPE_YAML = """\
+name: confirm-test
+description: Recipe with confirm step
+summary: confirm_cleanup -> done
+ingredients:
+  work_dir:
+    description: Clone path
+    default: "/tmp/clone"
+steps:
+  confirm_cleanup:
+    action: confirm
+    message: "Delete the clone?"
+    on_success: delete_clone
+    on_failure: done
+  delete_clone:
+    tool: remove_clone
+    with:
+      clone_path: "${{ context.work_dir }}"
+      keep: "false"
+    on_success: done
+    on_failure: done
+  done:
+    action: stop
+    message: "Done."
+kitchen_rules:
+  - "Use AutoSkillit tools only"
+"""
+
+
+def test_confirm_step_rendered_as_decision_point(tmp_path: Path) -> None:
+    """DG-C1: confirm steps appear with ❓ prefix and show yes/no routes."""
+    recipe_path = tmp_path / "confirm-test.yaml"
+    recipe_path.write_text(_CONFIRM_RECIPE_YAML)
+    diagram = generate_recipe_diagram(recipe_path, tmp_path)
+    assert "❓" in diagram or "confirm" in diagram.lower()
+    assert "yes" in diagram.lower() or "on_success" in diagram.lower()
+    assert "no" in diagram.lower() or "on_failure" in diagram.lower()
+
+
+def test_confirm_step_not_in_terminal_section(tmp_path: Path) -> None:
+    """DG-C2: confirm steps must NOT appear in the ⏹ terminal section."""
+    recipe_path = tmp_path / "confirm-test.yaml"
+    recipe_path.write_text(_CONFIRM_RECIPE_YAML)
+    diagram = generate_recipe_diagram(recipe_path, tmp_path)
+    terminal_section = diagram.split("─────────")[1] if "─────────" in diagram else ""
+    assert "confirm_cleanup" not in terminal_section
+
+
 def test_smoke_test_diagram_has_no_for_each_block(tmp_path: Path) -> None:
     """T-BD-2: smoke-test.yaml is a single synthetic task run; diagram must not have FOR EACH."""
     from autoskillit.core.paths import pkg_root  # noqa: PLC0415

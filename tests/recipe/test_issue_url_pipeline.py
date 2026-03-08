@@ -360,12 +360,12 @@ class TestClaimReleaseGates:
                 f"{name}: missing release_issue_failure"
             )
 
-    def test_release_issue_success_routes_to_cleanup(self):
+    def test_release_issue_success_routes_to_confirm_cleanup(self):
         for name in self.RECIPES:
             data = yaml.safe_load(_recipe_path(name).read_text())
             step = data["steps"]["release_issue_success"]
-            assert step["on_success"] == "cleanup_success", (
-                f"{name}: release_issue_success.on_success should be cleanup_success"
+            assert step["on_success"] == "confirm_cleanup", (
+                f"{name}: release_issue_success.on_success should be confirm_cleanup"
             )
 
     def test_release_issue_failure_routes_to_cleanup_failure(self):

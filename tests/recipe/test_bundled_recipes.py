@@ -1223,3 +1223,53 @@ def test_implementation_groups_has_ci_watch() -> None:
     assert "ci_watch" in recipe.steps
     assert "resolve_ci" in recipe.steps
     assert "re_push" in recipe.steps
+
+
+# ---------------------------------------------------------------------------
+# Confirm-cleanup gate tests
+# ---------------------------------------------------------------------------
+
+
+def _find_predecessors(recipe, step_name: str, via: str) -> list[str]:
+    """Return names of all steps that route to step_name via the given field."""
+    return [name for name, step in recipe.steps.items() if getattr(step, via, None) == step_name]
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "implementation",
+        "audit-and-fix",
+        "remediation",
+        "implementation-groups",
+        "pr-merge-pipeline",
+    ],
+)
+def test_bundled_recipe_cleanup_uses_confirm(recipe_name: str) -> None:
+    """Every bundled recipe that clones must use action:confirm before deleting clone."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    confirm_steps = [name for name, step in recipe.steps.items() if step.action == "confirm"]
+    assert confirm_steps, f"{recipe_name} has no confirm step — cleanup is unguarded"
+
+
+def test_no_bundled_recipe_auto_deletes_on_success() -> None:
+    """No bundled recipe should call remove_clone(keep=false) directly from success path."""
+    for recipe_name in [
+        "implementation",
+        "audit-and-fix",
+        "remediation",
+        "implementation-groups",
+        "pr-merge-pipeline",
+    ]:
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        for name, step in recipe.steps.items():
+            if step.tool == "remove_clone":
+                keep = (step.with_args or {}).get("keep", "false")
+                if keep == "false":
+                    predecessors = _find_predecessors(recipe, name, via="on_success")
+                    for pred_name in predecessors:
+                        pred = recipe.steps[pred_name]
+                        assert pred.action == "confirm", (
+                            f"{recipe_name}: {name} (keep=false) is reachable via on_success "
+                            f"from {pred_name} which is not a confirm step"
+                        )

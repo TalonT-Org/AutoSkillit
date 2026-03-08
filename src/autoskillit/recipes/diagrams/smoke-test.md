@@ -1,5 +1,5 @@
 <!-- autoskillit-recipe-hash: sha256:02b965e606fd79e5bd327cc611f28a39458c0457e5efa853c149e8e2f100af26 -->
-<!-- autoskillit-diagram-format: v4 -->
+<!-- autoskillit-diagram-format: v5 -->
 ## smoke-test
 End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
 

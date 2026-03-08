@@ -919,3 +919,81 @@ steps:
         "validate_recipe must report an error about undeclared context reference "
         "'investigation_path' when the investigate step has no capture block"
     )
+
+
+# ---------------------------------------------------------------------------
+# TestConfirmAction — action: "confirm" validation
+# ---------------------------------------------------------------------------
+
+
+class TestConfirmAction:
+    def test_confirm_action_requires_message(self) -> None:
+        """action: confirm without message is a validation error."""
+        recipe = _make_workflow(
+            {
+                "step1": {"action": "confirm", "on_success": "done", "on_failure": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        errors = validate_recipe(recipe)
+        assert any("message" in e.lower() and "confirm" in e.lower() for e in errors)
+
+    def test_confirm_action_requires_on_success(self) -> None:
+        """action: confirm without on_success is a validation error."""
+        recipe = _make_workflow(
+            {
+                "step1": {"action": "confirm", "message": "Delete?", "on_failure": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        errors = validate_recipe(recipe)
+        assert any("on_success" in e.lower() for e in errors)
+
+    def test_confirm_action_requires_on_failure(self) -> None:
+        """action: confirm without on_failure is a validation error."""
+        recipe = _make_workflow(
+            {
+                "step1": {"action": "confirm", "message": "Delete?", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        errors = validate_recipe(recipe)
+        assert any("on_failure" in e.lower() for e in errors)
+
+    def test_confirm_action_valid_step(self) -> None:
+        """action: confirm with all required fields passes validation."""
+        recipe = _make_workflow(
+            {
+                "confirm_step": {
+                    "action": "confirm",
+                    "message": "Delete the clone?",
+                    "on_success": "delete_step",
+                    "on_failure": "done",
+                },
+                "delete_step": {
+                    "tool": "remove_clone",
+                    "with": {"clone_path": "/tmp/clone", "keep": "false"},
+                    "on_success": "done",
+                    "on_failure": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        errors = validate_recipe(recipe)
+        assert not errors
+
+    def test_confirm_action_routing_targets_validated(self) -> None:
+        """on_success and on_failure of a confirm step must name defined steps."""
+        recipe = _make_workflow(
+            {
+                "confirm_step": {
+                    "action": "confirm",
+                    "message": "Delete?",
+                    "on_success": "nonexistent_step",
+                    "on_failure": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        errors = validate_recipe(recipe)
+        assert any("nonexistent_step" in e for e in errors)

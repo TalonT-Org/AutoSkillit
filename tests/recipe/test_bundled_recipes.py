@@ -1338,7 +1338,9 @@ def test_no_bundled_recipe_auto_deletes_on_success() -> None:
                                 pass
                             else:
                                 violations.append(pred)
-                                queue.append(pred)  # Continue tracing to find all unguarded ancestors
+                                queue.append(
+                                    pred
+                                )  # Continue tracing to find all unguarded ancestors
 
                     assert not violations, (
                         f"{recipe_name}: {name} (keep=false) is reachable via on_success "

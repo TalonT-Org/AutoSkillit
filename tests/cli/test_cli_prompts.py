@@ -39,5 +39,5 @@ def test_orchestrator_prompt_documents_confirm_action():
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("<dummy yaml>")
-    assert 'action: confirm' in prompt or 'action: "confirm"' in prompt
+    assert "action: confirm" in prompt or 'action: "confirm"' in prompt
     assert "AskUserQuestion" in prompt

@@ -169,11 +169,7 @@ def _write_hook_config(
 
 # T-CFG-1
 def test_quota_check_reads_threshold_from_hook_config(tmp_path, monkeypatch):
-    """Hook must deny when utilization exceeds user-configured threshold from hook config.
-
-    Today: hook ignores hook config file → uses default threshold (90.0) → approves at 60.0.
-    After fix: reads threshold=50.0 from hook config → denies at 60.0 utilization.
-    """
+    """Hook must deny when utilization exceeds user-configured threshold from hook config."""
     monkeypatch.chdir(tmp_path)
     cache = tmp_path / "custom_cache.json"
     _write_cache(cache, utilization=60.0)
@@ -190,11 +186,7 @@ def test_quota_check_reads_threshold_from_hook_config(tmp_path, monkeypatch):
 
 # T-CFG-2
 def test_quota_check_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
-    """Hook must read cache from hook config cache_path when AUTOSKILLIT_QUOTA_CACHE is unset.
-
-    Today: hook uses default path (~/.claude/autoskillit_quota_cache.json) → missing → fail open.
-    After fix: reads cache_path from hook config → finds cache at custom path → denies.
-    """
+    """Hook must read cache from hook config cache_path when AUTOSKILLIT_QUOTA_CACHE is unset."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("AUTOSKILLIT_QUOTA_CACHE", raising=False)
     custom_cache = tmp_path / "my_custom_cache.json"

@@ -110,10 +110,7 @@ async def test_close_kitchen_removes_gate_file(tmp_path, monkeypatch):
 # T-CACHE-1
 @pytest.mark.anyio
 async def test_open_kitchen_primes_quota_cache(tmp_path, monkeypatch):
-    """open_kitchen must call _prime_quota_cache before any run_skill hook fires.
-
-    Fails today: _prime_quota_cache does not exist in prompts.py.
-    """
+    """open_kitchen must call _prime_quota_cache before any run_skill hook fires."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     prime_mock = AsyncMock()

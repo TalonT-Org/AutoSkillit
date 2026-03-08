@@ -782,7 +782,7 @@ class TestInvestigateFirstStructure:
         )
 
     def test_if_resolve_review_passes_merge_target(self, recipe) -> None:
-        """T_IF_RR2: resolve_review skill_command must pass context.merge_target (feature branch)."""
+        """T_IF_RR2: resolve_review skill_command must pass context.merge_target."""
         step = recipe.steps["resolve_review"]
         skill_cmd = step.with_args.get("skill_command", "")
         assert "context.merge_target" in skill_cmd, (

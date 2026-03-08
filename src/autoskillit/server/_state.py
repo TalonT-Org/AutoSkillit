@@ -41,6 +41,31 @@ def _initialize(ctx: ToolContext) -> None:
     except Exception:
         logger.debug("recover_crashed_sessions at startup failed", exc_info=True)
 
+    # Telemetry recovery: restore token, timing, and audit data from the last 24 hours.
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        from autoskillit.execution import resolve_log_dir
+
+        cfg = ctx.config.linux_tracing
+        log_root = resolve_log_dir(cfg.log_dir)
+        since_dt = datetime.now(tz=timezone.utc) - timedelta(hours=24)
+        since_str = since_dt.isoformat()
+
+        n_tok = ctx.token_log.load_from_log_dir(log_root, since=since_str)
+        n_tim = ctx.timing_log.load_from_log_dir(log_root, since=since_str)
+        n_aud = ctx.audit.load_from_log_dir(log_root, since=since_str)
+
+        if n_tok or n_tim or n_aud:
+            logger.info(
+                "Recovered telemetry from session logs",
+                token_sessions=n_tok,
+                timing_sessions=n_tim,
+                audit_sessions=n_aud,
+            )
+    except Exception:
+        logger.debug("telemetry_recovery_at_startup_failed", exc_info=True)
+
 
 def _get_ctx() -> ToolContext:
     """Return the active ToolContext. Raises if _initialize() has not been called."""

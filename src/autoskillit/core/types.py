@@ -21,6 +21,7 @@ AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
 class RetryReason(StrEnum):
     RESUME = "resume"
     NONE = "none"
+    BUDGET_EXHAUSTED = "budget_exhausted"
 
 
 class MergeFailedStep(StrEnum):
@@ -524,6 +525,10 @@ class AuditStore(Protocol):
     def get_report_as_dicts(self) -> list[dict[str, Any]]: ...
 
     def clear(self) -> None: ...
+
+    def consecutive_failures(self, skill_command: str) -> int: ...
+
+    def record_success(self, skill_command: str) -> None: ...
 
 
 @runtime_checkable

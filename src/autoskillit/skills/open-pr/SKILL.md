@@ -151,17 +151,9 @@ Selection criteria:
 
 ### Step 5: Generate Arch-Lens Diagrams
 
-For each selected lens (e.g., `module-dependency`), load the corresponding skill:
+For each selected lens, follow this exact sequence:
 
-```python
-# Use the Skill tool to load each arch-lens skill
-/arch-lens-module-dependency
-/arch-lens-process-flow
-# etc.
-```
-
-After loading each arch-lens skill, **immediately** provide the following context message
-before the skill begins its analysis:
+**1. Output the PR context block as plain text (NOT as a tool call):**
 
 > **PR Context — Changed Files**
 >
@@ -180,9 +172,10 @@ before the skill begins its analysis:
 > - Leave unchanged components unmarked (include them only if needed for context/connectivity)
 > - The diagram should help PR reviewers understand the architectural impact of these specific changes
 
-The key mechanism: after loading the arch-lens skill via the Skill tool, the open-pr agent
-provides this context as a follow-up message in the same conversation turn. The arch-lens
-skill then uses this context to scope its exploration.
+**2. THEN load the arch-lens skill via the Skill tool** (e.g., `/arch-lens-module-dependency`).
+
+**3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.
+The context block above is already in the conversation history — do not re-output it.
 
 The arch-lens skills write their output to `temp/arch-lens-{lens-name}/`. After each skill
 runs, read the generated markdown file and extract the mermaid code block(s).

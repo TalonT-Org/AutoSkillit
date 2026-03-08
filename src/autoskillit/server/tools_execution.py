@@ -182,7 +182,9 @@ async def run_skill(
         skill_result = await tool_ctx.executor.run(
             skill_command, cwd, model=model, add_dir=add_dir, step_name=step_name
         )
-        if not skill_result.success:
+        if skill_result.success:
+            tool_ctx.audit.record_success(skill_command)
+        else:
             await _notify(
                 ctx,
                 "error",

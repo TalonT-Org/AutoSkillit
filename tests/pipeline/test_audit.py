@@ -89,3 +89,93 @@ class TestDefaultAuditLog:
         assert d["exit_code"] == 1
         assert "timestamp" in d
         assert "stderr" in d
+
+
+class TestDefaultAuditLogBudget:
+    """DefaultAuditLog.consecutive_failures and record_success."""
+
+    def test_consecutive_failures_empty(self) -> None:
+        log = DefaultAuditLog()
+        assert log.consecutive_failures("/autoskillit:open-pr") == 0
+
+    def test_consecutive_failures_single_retry(self) -> None:
+        log = DefaultAuditLog()
+        log.record_failure(
+            _make_record(
+                skill_command="/autoskillit:open-pr", needs_retry=True, retry_reason="resume"
+            )
+        )
+        assert log.consecutive_failures("/autoskillit:open-pr") == 1
+
+    def test_consecutive_failures_multiple(self) -> None:
+        log = DefaultAuditLog()
+        for _ in range(3):
+            log.record_failure(
+                _make_record(
+                    skill_command="/autoskillit:open-pr", needs_retry=True, retry_reason="resume"
+                )
+            )
+        assert log.consecutive_failures("/autoskillit:open-pr") == 3
+
+    def test_consecutive_failures_reset_by_success_sentinel(self) -> None:
+        log = DefaultAuditLog()
+        for _ in range(3):
+            log.record_failure(
+                _make_record(
+                    skill_command="/autoskillit:open-pr", needs_retry=True, retry_reason="resume"
+                )
+            )
+        log.record_success("/autoskillit:open-pr")
+        assert log.consecutive_failures("/autoskillit:open-pr") == 0
+
+    def test_consecutive_failures_ignores_other_commands(self) -> None:
+        log = DefaultAuditLog()
+        for _ in range(3):
+            log.record_failure(
+                _make_record(
+                    skill_command="/autoskillit:other", needs_retry=True, retry_reason="resume"
+                )
+            )
+        assert log.consecutive_failures("/autoskillit:open-pr") == 0
+
+    def test_consecutive_failures_reset_by_terminal_failure(self) -> None:
+        """A needs_retry=False record for the same command resets the streak."""
+        log = DefaultAuditLog()
+        log.record_failure(
+            _make_record(
+                skill_command="/autoskillit:open-pr", needs_retry=True, retry_reason="resume"
+            )
+        )
+        log.record_failure(
+            _make_record(
+                skill_command="/autoskillit:open-pr", needs_retry=False, retry_reason="none"
+            )
+        )
+        assert log.consecutive_failures("/autoskillit:open-pr") == 0
+
+    def test_consecutive_failures_counts_after_success_reset(self) -> None:
+        """New failures after a success reset are counted from the reset point."""
+        log = DefaultAuditLog()
+        for _ in range(3):
+            log.record_failure(
+                _make_record(
+                    skill_command="/autoskillit:open-pr", needs_retry=True, retry_reason="resume"
+                )
+            )
+        log.record_success("/autoskillit:open-pr")
+        # One more failure after success
+        log.record_failure(
+            _make_record(
+                skill_command="/autoskillit:open-pr", needs_retry=True, retry_reason="resume"
+            )
+        )
+        assert log.consecutive_failures("/autoskillit:open-pr") == 1
+
+    def test_record_success_sentinel_visible_in_failure_report(self) -> None:
+        """Success sentinels are visible in get_report but with subtype='success'."""
+        log = DefaultAuditLog()
+        log.record_success("/autoskillit:open-pr")
+        report = log.get_report()
+        assert len(report) == 1
+        assert report[0].subtype == "success"
+        assert report[0].needs_retry is False

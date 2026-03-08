@@ -4,6 +4,7 @@ Ensures that recipe steps capturing a skill verdict with declared allowed_values
 have an explicit on_result condition for every allowed value. A catch-all
 `when: true` route does not count as explicit handling.
 """
+
 from __future__ import annotations
 
 import re
@@ -90,24 +91,30 @@ def check_unrouted_verdict_values(ctx: ValidationContext) -> list[RuleFinding]:
                 continue  # No on_result — other rules handle missing routing
 
             conditions = step.on_result.conditions or []
-            for value in allowed_values:
-                explicitly_routed = any(
-                    _is_explicit_condition(c.when, value) for c in conditions
-                )
-                if not explicitly_routed:
-                    findings.append(
-                        RuleFinding(
-                            rule="unrouted-verdict-value",
-                            severity=Severity.ERROR,
-                            step_name=step_name,
-                            message=(
-                                f"Step '{step_name}' captures '{output_name}' from "
-                                f"'{skill_name}' but has no explicit on_result condition "
-                                f"for allowed value '{value}'. Add a condition like: "
-                                f"when: \"${{{{ result.{output_name} }}}} == {value}\". "
-                                f"A catch-all 'when: true' does not count."
-                            ),
-                        )
+            unrouted = [
+                value
+                for value in allowed_values
+                if not any(_is_explicit_condition(c.when, value) for c in conditions)
+            ]
+            # Allow at most one value to fall through the catch-all (the intended default).
+            # Fire only when two or more values share the catch-all — that is the
+            # silent-fallthrough bug pattern (e.g. needs_human treated identically to approved).
+            if len(unrouted) <= 1:
+                continue
+            for value in unrouted:
+                findings.append(
+                    RuleFinding(
+                        rule="unrouted-verdict-value",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"Step '{step_name}' captures '{output_name}' from "
+                            f"'{skill_name}' but has no explicit on_result condition "
+                            f"for allowed value '{value}'. Add a condition like: "
+                            f'when: "${{{{ result.{output_name} }}}} == {value}". '
+                            f"A catch-all 'when: true' does not count."
+                        ),
                     )
+                )
 
     return findings

@@ -128,17 +128,14 @@ cleanup_failure  [remove_clone] (retry ×3)
 | Name | Description | Default |
 |------|-------------|---------|
 | topic | Description of the bug, error, or question to investigate | — |
-| source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel.
- | auto-detect |
-| run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. investigate/42 or investigate/20260304) and in the clone directory name.
- | investigate |
+| source_dir | Path to the source repository to clone and work in. Leave empty to auto-detect from git rev-parse --show-toplevel. | auto-detect |
+| run_name | Name prefix for this pipeline run. Used as the first path component of the feature branch name (e.g. investigate/42 or investigate/20260304) and in the clone directory name. | investigate |
 | target_dir | Optional additional project directory for context | auto-detect |
 | base_branch | Branch to branch off of and PR target | main |
 | audit | Run /autoskillit:audit-impl before merge to gate on implementation quality | on |
 | review_approach | Run /autoskillit:review-approach before dry walkthrough? (true/false) | off |
 | open_pr | Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false) | on |
-| issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched and used to enrich investigation, and the resulting PR will include "Closes #N" to auto-close the issue on merge.
- | auto-detect |
+| issue_url | Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42). When provided, the issue content is fetched and used to enrich investigation, and the resulting PR will include "Closes #N" to auto-close the issue on merge. | auto-detect |
 ### Kitchen Rules
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All code changes and investigation happen through headless sessions via run_skill.
 - Route to on_failure when a step fails — the downstream skill (e.g., resolve-failures) has diagnostic access that the orchestrator does not. Do not investigate or attempt to fix failures directly.

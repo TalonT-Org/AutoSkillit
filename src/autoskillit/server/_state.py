@@ -60,10 +60,10 @@ def _initialize(ctx: ToolContext) -> None:
 
         if n_tok or n_tim or n_aud:
             logger.info(
-                "Recovered telemetry from session logs",
-                token_sessions=n_tok,
-                timing_sessions=n_tim,
-                audit_sessions=n_aud,
+                "Recovered telemetry from session logs (tok=%d, timing=%d, audit=%d)",
+                n_tok,
+                n_tim,
+                n_aud,
             )
     except Exception:
         logger.debug("telemetry_recovery_at_startup_failed", exc_info=True)

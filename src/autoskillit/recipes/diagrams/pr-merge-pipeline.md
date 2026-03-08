@@ -32,8 +32,9 @@ publish_integration_branch  [push_to_remote] (retry ×3)
 │     │
 │     ✗ failure → cleanup_failure
 │     ⌛ context limit → cleanup_failure
-│     true → plan
-│     false → next_part_or_next_pr
+│     ${{ result.escalation_required }} == true → escalate_stop
+│     ${{ result.needs_plan }} == true → plan
+│     (default) → next_part_or_next_pr
 │                             │
 │                             ✗ failure → cleanup_failure
 │                                                 │

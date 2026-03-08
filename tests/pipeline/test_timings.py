@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import fields
+from pathlib import Path
+
+import pytest
 
 
 class TestTimingEntry:
@@ -137,3 +140,56 @@ class TestDefaultTimingLog:
         log.record("a", 10.0)
         log.record("b", 5.0)
         assert log.compute_total()["total_seconds"] == 15.0
+
+
+def _write_timing_session(
+    log_root: Path, dir_name: str, st_data: dict, timestamp: str = "2026-03-07T00:00:00+00:00"
+) -> None:
+    session_dir = log_root / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / "step_timing.json").write_text(json.dumps(st_data))
+    index_entry = {"dir_name": dir_name, "timestamp": timestamp}
+    with (log_root / "sessions.jsonl").open("a") as f:
+        f.write(json.dumps(index_entry) + "\n")
+
+
+class TestDefaultTimingLogLoadFromLogDir:
+    def test_restores_timing_entries(self, tmp_path):
+        """step_timing.json files in session dirs restore TimingEntry records."""
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        _write_timing_session(tmp_path, "s001", {"step_name": "implement", "total_seconds": 42.5})
+        log = DefaultTimingLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 1
+        report = log.get_report()
+        assert len(report) == 1
+        assert report[0]["step_name"] == "implement"
+        assert report[0]["total_seconds"] == pytest.approx(42.5)
+
+    def test_since_filter(self, tmp_path):
+        """Respects since= timestamp filter (sessions before cutoff excluded)."""
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        _write_timing_session(
+            tmp_path,
+            "old",
+            {"step_name": "old_step", "total_seconds": 10.0},
+            timestamp="2025-01-01T00:00:00+00:00",
+        )
+        log = DefaultTimingLog()
+        n = log.load_from_log_dir(tmp_path, since="2026-01-01T00:00:00+00:00")
+        assert n == 0
+        assert log.get_report() == []
+
+    def test_returns_count(self, tmp_path):
+        """Return value equals sessions loaded."""
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        for i in range(2):
+            _write_timing_session(
+                tmp_path, f"s{i:03d}", {"step_name": f"step{i}", "total_seconds": float(i + 1)}
+            )
+        log = DefaultTimingLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 2

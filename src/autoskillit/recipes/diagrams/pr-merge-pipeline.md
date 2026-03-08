@@ -54,32 +54,32 @@ publish_integration_branch  [push_to_remote] (retry ×3)
 │                                                 ⌛ context limit → cleanup_failure
 │                                                                       │
 │                                                                       ✗ failure → cleanup_failure
-│                                                                       ⌛ context limit → cleanup_failure
+│                                                                       ⌛ context limit → retry_worktree
 │                                                                                                │
 │                                                                                                ✗ failure → cleanup_failure
 │                                                                                                ⌛ context limit → cleanup_failure
 │                                                                                                                              │
 │                                                                                                                              ✗ failure → fix
 │                                                                                                                                                  │
-│                                                                                                                              on_result:
-│                                                                                                                              ${{ result.state }} == worktree_intact_rebase_aborted → resolve_merge_conflicts
-│                                                                                                                              ${{ result.failed_step }} == rebase → cleanup_failure
-│                                                                                                                              ${{ result.failed_step }} == test_gate → cleanup_failure
-│                                                                                                                              ${{ result.failed_step }} == post_rebase_test_gate → cleanup_failure
-│                                                                                                                              (default) → next_part_or_next_pr
-│                                                                                                                                                                         │
-│                                                                                                                                                                         ✗ failure → cleanup_failure
-│                                                                                                                                                                         ${{ result.escalation_required }} == true → cleanup_failure
-│                                                                                                                                                                         (default) → retry_merge_after_resolution
-│                                                                                                                                                                                                               │
-│                                                                                                                                                                                                               ✓ success → next_part_or_next_pr
-│                                                                                                                                                                                                               ✗ failure → cleanup_failure
-│                                                                                                                                                                         ✗ failure → cleanup_failure
-│                                                                                                                                                                         ⌛ context limit → cleanup_failure
-│                                                                                                                                                                                                      │
-│                                                                                                                                                                                                      more_parts → verify ↑
-│                                                                                                                                                                                                      more_prs → merge_pr ↑
-│                                                                                                                                                                                                      all_done → push_integration_branch
+│                                                                                                                                                  ✗ failure → cleanup_failure
+│                                                                                                                                                  ${{ result.state }} == worktree_intact_rebase_aborted → resolve_merge_conflicts
+│                                                                                                                                                  ${{ result.failed_step }} == rebase → cleanup_failure
+│                                                                                                                                                  ${{ result.failed_step }} == test_gate → cleanup_failure
+│                                                                                                                                                  ${{ result.failed_step }} == post_rebase_test_gate → cleanup_failure
+│                                                                                                                                                  (default) → next_part_or_next_pr
+│                                                                                                                                                                                      │
+│                                                                                                                                                                                      ✗ failure → cleanup_failure
+│                                                                                                                                                                                      ${{ result.escalation_required }} == true → cleanup_failure
+│                                                                                                                                                                                      (default) → retry_merge_after_resolution
+│                                                                                                                                                                                                                             │
+│                                                                                                                                                                                                                             ✗ failure → cleanup_failure
+│                                                                                                                                                                                                                                                                         │
+│                                                                                                                                                                                                                                                                         ✗ failure → cleanup_failure
+│                                                                                                                                                                                                                                                                         ⌛ context limit → cleanup_failure
+│                                                                                                                                                                                                                                                                                              │
+│                                                                                                                                                                                                                                                                                              more_parts → verify ↑
+│                                                                                                                                                                                                                                                                                              more_prs → merge_pr ↑
+│                                                                                                                                                                                                                                                                                              all_done → push_integration_branch
 │
 └────┘
 │

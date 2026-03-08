@@ -192,6 +192,7 @@ Before writing the final plan, verify:
 - Choose an approach because it's easier
 - Reject an approach because it's harder
 - Create files outside `temp/make-plan/` directory
+- **Use `git merge` in implementation plans.** When a plan needs to bring in changes from another branch, use `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires linear commit history — merge commits cannot be rebased and will cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure. See "Conflict-Resolution Plan Requirements" section for full guidance.
 
 **ALWAYS:**
 - Write to `temp/make-plan/` directory

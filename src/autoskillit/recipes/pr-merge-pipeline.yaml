@@ -156,9 +156,9 @@ steps:
       step_name: "plan"
     capture:
       pr_plan_path: "${{ result.plan_path }}"
-      all_plan_paths: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
+      all_plan_paths: "${{ result.plan_path }}"
     on_success: verify
     on_failure: cleanup_failure
     note: >
@@ -170,10 +170,8 @@ steps:
       the remediate step; pass it inline in the skill_command instead of
       context.task.
       ACCUMULATION: all_plan_paths accumulates across loop re-entries (one per
-      complex PR, plus any remediation re-entry). On first execution,
-      all_plan_paths = result.plan_path. On each subsequent re-entry, append
-      result.plan_path to context.all_plan_paths with a comma separator (no spaces):
-      context.all_plan_paths += "," + result.plan_path. The comma-separated value is
+      complex PR, plus any remediation re-entry) via capture_list, which appends
+      result.plan_path on each pass rather than overwriting. The accumulated list is
       passed to audit-impl after the PR loop completes.
 
   verify:
@@ -332,6 +330,10 @@ steps:
     optional: true
     skip_when_false: "inputs.audit"
     note: >
+      DEPENDENCY: context.all_plan_paths is only populated if the plan step executed
+      at least once. The check_impl_plans gate ensures this step is only reached when
+      implementation plan files exist (i.e. make-plan was invoked), so all_plan_paths
+      is guaranteed to be set when audit_impl runs.
       Gated by check_impl_plans — only reached when implementation plan files exist in
       plans_dir. Only execute if inputs.audit is 'true'; if false, skip directly to
       create_review_pr. Passes context.all_plan_paths (comma-separated list of plan file

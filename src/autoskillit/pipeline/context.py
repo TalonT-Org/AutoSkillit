@@ -7,6 +7,7 @@ Replaces two mutable module-level singletons in server.py:
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from autoskillit.config import AutomationConfig
@@ -70,3 +71,4 @@ class ToolContext:
     workspace_mgr: WorkspaceManager | None = field(default=None)
     clone_mgr: CloneManager | None = field(default=None)
     github_client: GitHubFetcher | None = field(default=None)
+    output_pattern_resolver: Callable[[str], Sequence[str]] | None = field(default=None)

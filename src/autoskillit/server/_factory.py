@@ -29,6 +29,11 @@ from autoskillit.pipeline import (
     ToolContext,
 )
 from autoskillit.recipe import DefaultRecipeRepository
+from autoskillit.recipe.contracts import (
+    get_skill_contract,
+    load_bundled_manifest,
+    resolve_skill_name,
+)
 from autoskillit.workspace import DefaultCloneManager, DefaultWorkspaceManager
 
 # Sentinel: distinguish "caller passed runner=None explicitly" from "not provided"
@@ -96,6 +101,17 @@ def make_context(
         clone_mgr=DefaultCloneManager(),
         github_client=DefaultGitHubFetcher(token=github_token),
     )
+
+    def _resolve_output_patterns(skill_command: str) -> list[str]:
+        name = resolve_skill_name(skill_command)
+        if not name:
+            return []
+        contract = get_skill_contract(name, load_bundled_manifest())
+        if not contract:
+            return []
+        return contract.expected_output_patterns
+
+    ctx.output_pattern_resolver = _resolve_output_patterns
     ctx.executor = DefaultHeadlessExecutor(ctx)
     ctx.migrations = DefaultMigrationService(
         default_migration_engine(), run_headless=ctx.executor.run

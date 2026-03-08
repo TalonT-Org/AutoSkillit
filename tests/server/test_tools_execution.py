@@ -752,6 +752,7 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
             add_dir: str = "",
             timeout: float | None = None,
             stale_threshold: float | None = None,
+            expected_output_patterns: tuple[str, ...] | list[str] = (),
         ) -> SkillResult:
             calls.append((skill_command, cwd))
             return SkillResult(

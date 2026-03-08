@@ -18,7 +18,12 @@ from autoskillit.core.types import (
 
 def test_retry_reason_values():
     """RetryReason enum has exactly the expected members."""
-    assert set(RetryReason) == {RetryReason.RESUME, RetryReason.NONE, RetryReason.BUDGET_EXHAUSTED}
+    assert set(RetryReason) == {
+        RetryReason.RESUME,
+        RetryReason.NONE,
+        RetryReason.BUDGET_EXHAUSTED,
+        RetryReason.EARLY_STOP,
+    }
     assert RetryReason.NONE.value == "none"
 
 

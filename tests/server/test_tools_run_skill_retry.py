@@ -81,7 +81,7 @@ class TestRunSkillSessionOutcome:
                 "type": "result",
                 "subtype": "success",
                 "is_error": False,
-                "result": "Done.",
+                "result": "Done. %%ORDER_UP%%",
                 "session_id": "s1",
             }
         )
@@ -188,7 +188,7 @@ class TestRunSkillFields:
                 "type": "result",
                 "subtype": "success",
                 "is_error": False,
-                "result": "Done.",
+                "result": "Done. %%ORDER_UP%%",
                 "session_id": "s1",
             }
         )

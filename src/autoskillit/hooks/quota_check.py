@@ -30,7 +30,7 @@ def _read_hook_config() -> dict:
     try:
         config_path = Path.cwd() / "temp" / ".autoskillit_hook_config.json"
         return json.loads(config_path.read_text()).get("quota_guard", {})
-    except (OSError, json.JSONDecodeError, AttributeError):
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
         return {}
 
 
@@ -66,7 +66,7 @@ def main() -> None:
     hook_config = _read_hook_config()
     threshold = hook_config.get("threshold", _DEFAULT_THRESHOLD)
     cache_max_age = hook_config.get("cache_max_age", _DEFAULT_CACHE_MAX_AGE)
-    # env var takes priority over hook config for cache path (backward compat)
+    # env var takes priority over hook config for cache path
     cache_path_str = (
         os.environ.get("AUTOSKILLIT_QUOTA_CACHE")
         or hook_config.get("cache_path")

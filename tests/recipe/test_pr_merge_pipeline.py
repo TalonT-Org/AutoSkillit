@@ -260,3 +260,50 @@ def test_pmp_create_persistent_integration_references_upstream_branch(recipe) ->
 def test_pmp_create_persistent_integration_routes_to_analyze_prs(recipe) -> None:
     """After creating integration branch, pipeline must proceed to analyze_prs."""
     assert recipe.steps["create_persistent_integration"].on_success == "analyze_prs"
+
+
+def test_pmp_resolve_merge_conflicts_step_exists(recipe):
+    assert "resolve_merge_conflicts" in recipe.steps
+
+
+def test_pmp_resolve_merge_conflicts_is_run_skill(recipe):
+    step = recipe.steps["resolve_merge_conflicts"]
+    assert step.tool == "run_skill"
+
+
+def test_pmp_resolve_merge_conflicts_calls_correct_skill(recipe):
+    step = recipe.steps["resolve_merge_conflicts"]
+    cmd = step.with_args.get("skill_command", "")
+    assert "/autoskillit:resolve-merge-conflicts" in cmd
+
+
+def test_pmp_resolve_merge_conflicts_routes_to_retry_merge(recipe):
+    step = recipe.steps["resolve_merge_conflicts"]
+    assert step.on_result is not None
+    fallthrough_routes = [c for c in step.on_result.conditions if c.when is None]
+    routes = {c.route for c in fallthrough_routes}
+    assert "retry_merge_after_resolution" in routes, (
+        "resolve_merge_conflicts fallthrough must route to retry_merge_after_resolution"
+    )
+
+
+def test_pmp_retry_merge_after_resolution_step_exists(recipe):
+    assert "retry_merge_after_resolution" in recipe.steps
+
+
+def test_pmp_retry_merge_after_resolution_uses_merge_worktree(recipe):
+    step = recipe.steps["retry_merge_after_resolution"]
+    assert step.tool == "merge_worktree"
+
+
+def test_pmp_retry_merge_after_resolution_routes_to_next_part(recipe):
+    step = recipe.steps["retry_merge_after_resolution"]
+    assert step.on_success == "next_part_or_next_pr"
+
+
+def test_pmp_retry_merge_no_loop_back_to_resolve(recipe):
+    step = recipe.steps["retry_merge_after_resolution"]
+    routes = [c.route for c in step.on_result.conditions] if step.on_result is not None else []
+    assert "resolve_merge_conflicts" not in routes, (
+        "retry_merge_after_resolution must never route back to resolve_merge_conflicts"
+    )

@@ -5,14 +5,14 @@ interfaces exist in SKILL.md files and the pr-merge-pipeline recipe, preventing
 silent regression if sections are accidentally removed.
 """
 
-from pathlib import Path
-
 import pytest
 import yaml
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-SKILLS_ROOT = PROJECT_ROOT / "src" / "autoskillit" / "skills"
-RECIPE_PATH = PROJECT_ROOT / "src" / "autoskillit" / "recipes" / "pr-merge-pipeline.yaml"
+from autoskillit.core.paths import pkg_root
+
+PROJECT_ROOT = pkg_root()
+SKILLS_ROOT = pkg_root() / "skills"
+RECIPE_PATH = pkg_root() / "recipes" / "pr-merge-pipeline.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -171,3 +171,106 @@ def test_pr_merge_pipeline_routes_escalation_to_stop(recipe):
         )
     # Verify escalate_stop is a defined step in the recipe
     assert "escalate_stop" in recipe["steps"], "escalate_stop must be a defined step in the recipe"
+
+
+def _skill_text(skill_name: str) -> str:
+    return (SKILLS_ROOT / skill_name / "SKILL.md").read_text()
+
+
+# ── New: resolve-merge-conflicts skill structure ────────────────────────────
+
+
+def test_resolve_merge_conflicts_skill_exists():
+    skill_path = SKILLS_ROOT / "resolve-merge-conflicts" / "SKILL.md"
+    assert skill_path.exists(), "resolve-merge-conflicts/SKILL.md must exist"
+
+
+def test_resolve_merge_conflicts_has_goal_analysis():
+    text = _skill_text("resolve-merge-conflicts")
+    assert "Determine intent" in text, (
+        "resolve-merge-conflicts must contain 'Determine intent' section headings "
+        "describing goal-aware analysis of ours/theirs sides"
+    )
+
+
+def test_resolve_merge_conflicts_has_confidence_threshold():
+    text = _skill_text("resolve-merge-conflicts")
+    for level in ("HIGH", "MEDIUM", "LOW"):
+        assert level in text, (
+            f"resolve-merge-conflicts must define confidence level {level!r} "
+            "in its confidence threshold table"
+        )
+
+
+def test_resolve_merge_conflicts_has_escalation_output():
+    text = _skill_text("resolve-merge-conflicts")
+    assert "escalation_required" in text, (
+        "resolve-merge-conflicts must emit escalation_required in its output contract"
+    )
+
+
+def test_resolve_merge_conflicts_aborts_on_low_confidence():
+    text = _skill_text("resolve-merge-conflicts")
+    assert "git rebase --abort" in text, (
+        "resolve-merge-conflicts must call git rebase --abort before escalating"
+    )
+
+
+def test_resolve_merge_conflicts_never_runs_full_test_suite():
+    text = _skill_text("resolve-merge-conflicts")
+    assert "task test-all" not in text and "task test-check" not in text, (
+        "resolve-merge-conflicts must NOT run the full test suite; that is the test step's job"
+    )
+
+
+def test_resolve_merge_conflicts_in_skill_contracts():
+    contracts_path = pkg_root() / "recipe" / "skill_contracts.yaml"
+    contracts = yaml.safe_load(contracts_path.read_text())
+    assert "resolve-merge-conflicts" in contracts.get("skills", {}), (
+        "skill_contracts.yaml must declare resolve-merge-conflicts as a key under 'skills'"
+    )
+
+
+# ── New: recipe routing for merge_to_integration ────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def pmp_recipe():
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+    return load_recipe(builtin_recipes_dir() / "pr-merge-pipeline.yaml")
+
+
+def test_merge_to_integration_has_on_result(pmp_recipe):
+    step = pmp_recipe.steps["merge_to_integration"]
+    assert step.on_result is not None, (
+        "merge_to_integration must have on_result routing for recoverable failures"
+    )
+
+
+def test_merge_to_integration_routes_intact_rebase_to_resolve_skill(pmp_recipe):
+    step = pmp_recipe.steps["merge_to_integration"]
+    conditions = step.on_result.conditions
+    assert conditions, "merge_to_integration on_result must have predicate conditions"
+    rebase_intact_routes = [
+        c
+        for c in conditions
+        if c.when
+        and "worktree_intact_rebase_aborted" in c.when
+        and c.route == "resolve_merge_conflicts"
+    ]
+    assert rebase_intact_routes, (
+        "merge_to_integration must have a condition with state 'worktree_intact_rebase_aborted' "
+        "routing to resolve_merge_conflicts"
+    )
+
+
+def test_merge_to_integration_handles_all_recoverable_steps(pmp_recipe):
+    step = pmp_recipe.steps["merge_to_integration"]
+    conditions = step.on_result.conditions
+    for recoverable in ("rebase", "test_gate", "post_rebase_test_gate"):
+        matching = [c for c in conditions if c.when and recoverable in c.when]
+        assert matching, (
+            f"merge_to_integration on_result must have a dedicated condition for "
+            f"failed_step={recoverable!r}"
+        )

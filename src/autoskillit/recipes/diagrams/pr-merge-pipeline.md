@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:4ecb1a8ab864c2af4d9a678a7c50c152561e54ba13d8451802af49fe8d6e96d5 -->
+<!-- autoskillit-recipe-hash: sha256:54228fe7831810b01a16fd31a94713840754f7f9f3a08d0f1eddc4f273003983 -->
 <!-- autoskillit-diagram-format: v5 -->
 ## pr-merge-pipeline
 Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
@@ -40,7 +40,7 @@ publish_integration_branch  [push_to_remote] (retry ×3)
 │
 ┌────┤ FOR EACH PLAN PART:
 │    │
-│    merge_pr (retry ×5) ─── plan (retry ×3) ─── verify (retry ×5) ─── implement (retry ×∞) ─── retry_worktree (retry ×3) ─── test (retry ×3) ─── merge_to_integration (retry ×3) ─── fix (retry ×3) ↑ ─── next_part_or_next_pr (retry ×3)
+│    merge_pr (retry ×5) ─── plan (retry ×3) ─── verify (retry ×5) ─── implement (retry ×∞) ─── retry_worktree (retry ×3) ─── test (retry ×3) ─── merge_to_integration (retry ×3) ─── resolve_merge_conflicts (retry ×3) ─── retry_merge_after_resolution (retry ×3) ─── fix (retry ×3) ↑ ─── next_part_or_next_pr (retry ×3)
 │     │
 │     ✗ failure → cleanup_failure
 │     ⌛ context limit → cleanup_failure
@@ -54,21 +54,32 @@ publish_integration_branch  [push_to_remote] (retry ×3)
 │                                                 ⌛ context limit → cleanup_failure
 │                                                                       │
 │                                                                       ✗ failure → cleanup_failure
-│                                                                       ⌛ context limit → retry_worktree
+│                                                                       ⌛ context limit → cleanup_failure
 │                                                                                                │
 │                                                                                                ✗ failure → cleanup_failure
 │                                                                                                ⌛ context limit → cleanup_failure
 │                                                                                                                              │
 │                                                                                                                              ✗ failure → fix
 │                                                                                                                                                  │
-│                                                                                                                                                  ✗ failure → cleanup_failure
-│                                                                                                                                                                                      │
-│                                                                                                                                                                                      ✗ failure → cleanup_failure
-│                                                                                                                                                                                      ⌛ context limit → cleanup_failure
-│                                                                                                                                                                                                           │
-│                                                                                                                                                                                                           more_parts → verify ↑
-│                                                                                                                                                                                                           more_prs → merge_pr ↑
-│                                                                                                                                                                                                           all_done → push_integration_branch
+│                                                                                                                              on_result:
+│                                                                                                                              ${{ result.state }} == worktree_intact_rebase_aborted → resolve_merge_conflicts
+│                                                                                                                              ${{ result.failed_step }} == rebase → cleanup_failure
+│                                                                                                                              ${{ result.failed_step }} == test_gate → cleanup_failure
+│                                                                                                                              ${{ result.failed_step }} == post_rebase_test_gate → cleanup_failure
+│                                                                                                                              (default) → next_part_or_next_pr
+│                                                                                                                                                                         │
+│                                                                                                                                                                         ✗ failure → cleanup_failure
+│                                                                                                                                                                         ${{ result.escalation_required }} == true → cleanup_failure
+│                                                                                                                                                                         (default) → retry_merge_after_resolution
+│                                                                                                                                                                                                               │
+│                                                                                                                                                                                                               ✓ success → next_part_or_next_pr
+│                                                                                                                                                                                                               ✗ failure → cleanup_failure
+│                                                                                                                                                                         ✗ failure → cleanup_failure
+│                                                                                                                                                                         ⌛ context limit → cleanup_failure
+│                                                                                                                                                                                                      │
+│                                                                                                                                                                                                      more_parts → verify ↑
+│                                                                                                                                                                                                      more_prs → merge_pr ↑
+│                                                                                                                                                                                                      all_done → push_integration_branch
 │
 └────┘
 │
@@ -131,7 +142,6 @@ Agent-managed: base_branch
 ### Kitchen Rules
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill and run_cmd.
 - Route to on_failure when a step fails — do not investigate or fix directly.
-- LINEAR HISTORY: Conflict resolution plans must NEVER use `git merge` (including --no-ff or --no-commit variants). Use `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files to apply PR changes. merge_worktree requires linear commit history for rebasing — merge commits cause WORKTREE_INTACT_MERGE_COMMITS_DETECTED failure.
 - SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before advancing to the next PR. Never batch-assess all PRs before starting merges.
 - SEQUENTIAL EXECUTION: complete full cycle (verify → implement → test → merge_to_integration) per plan part before advancing to the next part or PR.
 - INTEGRATION BRANCH: Two distinct branches exist. inputs.base_branch is the PERMANENT branch (default: integration) that accumulates AI work across runs — it is never deleted. context.integration_branch is the PER-RUN batch branch (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this pipeline run. All PR merges and worktree merges target context.integration_branch. The final review PR opens from context.integration_branch into inputs.base_branch.

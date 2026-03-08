@@ -1074,9 +1074,8 @@ def test_confirm_step_rendered_as_decision_point(tmp_path: Path) -> None:
     recipe_path = tmp_path / "confirm-test.yaml"
     recipe_path.write_text(_CONFIRM_RECIPE_YAML)
     diagram = generate_recipe_diagram(recipe_path, tmp_path)
-    assert "❓" in diagram or "confirm" in diagram.lower()
-    assert "yes" in diagram.lower() or "on_success" in diagram.lower()
-    assert "no" in diagram.lower() or "on_failure" in diagram.lower()
+    assert "❓" in diagram and "confirm" in diagram.lower()
+    assert "yes" in diagram.lower() and "no" in diagram.lower()
 
 
 def test_confirm_step_not_in_terminal_section(tmp_path: Path) -> None:
@@ -1084,7 +1083,13 @@ def test_confirm_step_not_in_terminal_section(tmp_path: Path) -> None:
     recipe_path = tmp_path / "confirm-test.yaml"
     recipe_path.write_text(_CONFIRM_RECIPE_YAML)
     diagram = generate_recipe_diagram(recipe_path, tmp_path)
-    terminal_section = diagram.split("─────────")[1] if "─────────" in diagram else ""
+    # Find the terminal section by locating the separator line (a line of all ─ characters)
+    diagram_lines = diagram.splitlines()
+    sep_idx = next(
+        (i for i, ln in enumerate(diagram_lines) if ln.strip() and all(c == "─" for c in ln.strip())),
+        None,
+    )
+    terminal_section = "\n".join(diagram_lines[sep_idx + 1 :]) if sep_idx is not None else ""
     assert "confirm_cleanup" not in terminal_section
 
 

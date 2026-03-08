@@ -936,7 +936,12 @@ class TestConfirmAction:
             }
         )
         errors = validate_recipe(recipe)
-        assert any("message" in e.lower() and "confirm" in e.lower() for e in errors)
+        assert any("message" in e.lower() for e in errors), (
+            "Expected a validation error mentioning 'message'"
+        )
+        assert any("confirm" in e.lower() for e in errors), (
+            "Expected a validation error mentioning 'confirm'"
+        )
 
     def test_confirm_action_requires_on_success(self) -> None:
         """action: confirm without on_success is a validation error."""

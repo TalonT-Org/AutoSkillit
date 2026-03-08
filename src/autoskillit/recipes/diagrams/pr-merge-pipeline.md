@@ -63,9 +63,9 @@ publish_integration_branch  [push_to_remote] (retry ×3)
 │                                                                                                                                                  │
 │                                                                                                                                                  ✗ failure → cleanup_failure
 │                                                                                                                                                  ${{ result.state }} == worktree_intact_rebase_aborted → resolve_merge_conflicts
-│                                                                                                                                                  ${{ result.failed_step }} == 'rebase' → cleanup_failure
-│                                                                                                                                                  ${{ result.failed_step }} == 'test_gate' → cleanup_failure
-│                                                                                                                                                  ${{ result.failed_step }} == 'post_rebase_test_gate' → cleanup_failure
+│                                                                                                                                                  result.failed_step == 'rebase' → cleanup_failure
+│                                                                                                                                                  result.failed_step == 'test_gate' → cleanup_failure
+│                                                                                                                                                  result.failed_step == 'post_rebase_test_gate' → cleanup_failure
 │                                                                                                                                                  (default) → next_part_or_next_pr
 │                                                                                                                                                                                      │
 │                                                                                                                                                                                      ✗ failure → cleanup_failure

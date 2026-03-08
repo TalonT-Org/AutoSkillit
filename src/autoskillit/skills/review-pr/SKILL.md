@@ -160,17 +160,29 @@ For each finding, `line` is the finding's `line` value (the line number in the n
 `side` is always `RIGHT` (referring to the right-hand side of the diff — additions and context
 in the updated file).
 
-Construct the `gh api` call:
+Build a proper JSON payload where each comment is a complete object, then post via `--input -`.
+The `--field` approach creates one array entry per flag (not one object per comment), so it must
+not be used for the `comments` array:
 
 ```bash
+# Build comments JSON array — each element is a complete object
+COMMENTS_JSON=$(jq -n --argjson findings "$FINDINGS_JSON" '
+  $findings | map({
+    path: .file,
+    line: .line,
+    side: "RIGHT",
+    body: ("[" + .severity + "] " + .dimension + ": " + .message)
+  })
+')
+
+# Build and post the full review payload via stdin
+jq -n \
+  --arg body "AutoSkillit PR Review — Verdict: {verdict}" \
+  --arg event "{APPROVE|COMMENT|REQUEST_CHANGES}" \
+  --argjson comments "$COMMENTS_JSON" \
+  '{body: $body, event: $event, comments: $comments}' | \
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
-  --method POST \
-  --field body="AutoSkillit PR Review — Verdict: {verdict}" \
-  --field event="{APPROVE|COMMENT|REQUEST_CHANGES}" \
-  --field "comments[][path]={file}" \
-  --field "comments[][line]={line}" \
-  --field "comments[][side]=RIGHT" \
-  --field "comments[][body]=[{severity}] {dimension}: {message}"
+  --method POST --input -
 ```
 
 Event mapping:

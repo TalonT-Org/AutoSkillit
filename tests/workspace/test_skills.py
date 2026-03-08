@@ -78,7 +78,12 @@ class TestSkillResolver:
 
     def test_no_hardcoded_username_mentions_in_skill_mds(self) -> None:
         """No SKILL.md may contain a hardcoded GitHub @-mention in any line (including code fences)."""
-        mention_pattern = re.compile(r"@[A-Za-z][A-Za-z0-9_-]{2,}")
+        # Negative lookbehind prevents matching email local-parts (e.g. noreply@anthropic.com)
+        # and decorator-like patterns where @ follows alphanumeric or dot.
+        mention_pattern = re.compile(r"(?<![a-zA-Z0-9.])@[A-Za-z][A-Za-z0-9_-]{2,}")
+        # Known-safe @-tokens that are not GitHub usernames (e.g. template variables, org names
+        # used in documentation context rather than as literal mentions).
+        SAFE_TOKENS: frozenset[str] = frozenset({"@anthropic"})
         violations: list[str] = []
 
         skills_dir = bundled_skills_dir()
@@ -86,7 +91,10 @@ class TestSkillResolver:
             skill_name = skill_md.parent.name
             for lineno, raw_line in enumerate(skill_md.read_text().splitlines(), start=1):
                 for match in mention_pattern.finditer(raw_line):
-                    violations.append(f"{skill_name}/SKILL.md:{lineno}: {match.group()!r}")
+                    token = match.group()
+                    if token in SAFE_TOKENS:
+                        continue
+                    violations.append(f"{skill_name}/SKILL.md:{lineno}: {token!r}")
 
         assert violations == [], (
             "Hardcoded GitHub @-mentions found in SKILL.md files. "

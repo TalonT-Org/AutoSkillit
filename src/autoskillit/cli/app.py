@@ -408,14 +408,44 @@ def cook(recipe: str | None = None):
         sys.exit(1)
 
     if recipe is None:
+        from autoskillit.cli._init_helpers import _OPEN_KITCHEN_CHOICE, _resolve_recipe_input
+        from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
         available = list_recipes(Path.cwd()).items
         if not available:
             print("No recipes found. Run 'autoskillit recipes list' to check.")
             sys.exit(1)
         print("Available recipes:")
+        print("  0. Open kitchen (no recipe)")
         for i, r in enumerate(available, 1):
             print(f"  {i}. {r.name}")
-        recipe = input("Recipe name: ").strip()
+        raw = input(f"Select recipe [0-{len(available)}]: ").strip()
+        resolved = _resolve_recipe_input(raw, available)
+        if resolved is _OPEN_KITCHEN_CHOICE:
+            if shutil.which("claude") is None:
+                print("ERROR: 'claude' command not found on PATH.")
+                print("Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code")
+                sys.exit(1)
+            plugin_dir = pkg_root()
+            system_prompt = _build_open_kitchen_prompt()
+            spec = build_interactive_cmd()
+            cmd = spec.cmd + [
+                "--plugin-dir",
+                str(plugin_dir),
+                "--tools",
+                "AskUserQuestion",
+                "--append-system-prompt",
+                system_prompt,
+            ]
+            result = subprocess.run(cmd, env={**os.environ, **spec.env})
+            if result.returncode != 0:
+                sys.exit(result.returncode)
+            return
+        elif resolved is None:
+            print(f"Invalid selection: '{raw}'")
+            sys.exit(1)
+        else:
+            recipe = resolved.name
 
     from autoskillit.core import YAMLError
     from autoskillit.recipe import find_recipe_by_name, validate_recipe

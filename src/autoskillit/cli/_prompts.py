@@ -98,3 +98,40 @@ OPTIONAL STEP SEMANTICS:
 {script_yaml}
 --- END RECIPE ---
 """
+
+
+def _build_open_kitchen_prompt() -> str:
+    """Build the --append-system-prompt content for an open-kitchen cook session (no recipe)."""
+    from pathlib import Path
+
+    from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS
+
+    sous_chef_content = ""
+    _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
+    if _sous_chef_path.exists():
+        sous_chef_content = "\n\n" + _sous_chef_path.read_text()
+
+    _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
+    text = (
+        "Kitchen is open. AutoSkillit tools are ready for service. "
+        "Call the kitchen_status tool now to display version "
+        "and health information to the user.\n\n"
+        "IMPORTANT — Orchestrator Discipline:\n"
+        f"NEVER use native Claude Code tools ({_forbidden_list}) "
+        "in this session. All code reading, searching, editing, and "
+        "investigation MUST be delegated through run_skill, which launches "
+        "headless sessions with full tool access. Do NOT use native tools to "
+        "investigate failures — route to on_failure and let the downstream skill handle diagnosis."
+        + sous_chef_content
+    )
+
+    scripts_dir = Path.cwd() / ".autoskillit" / "scripts"
+    recipes_dir = Path.cwd() / ".autoskillit" / "recipes"
+    if scripts_dir.exists() and not recipes_dir.exists():
+        text += (
+            "\n\n⚠️ UPGRADE NEEDED: This project has not been migrated to the new recipe format.\n"
+            "`.autoskillit/scripts/` still exists. Run `autoskillit upgrade` in this directory\n"
+            "to migrate automatically, or ask me to do it for you."
+        )
+
+    return text

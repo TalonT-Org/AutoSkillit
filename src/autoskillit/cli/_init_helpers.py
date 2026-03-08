@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from autoskillit.recipe import list_recipes
+
+if TYPE_CHECKING:
+    from autoskillit.recipe.loader import RecipeInfo
 
 _MARKER_CONTENT = """\
 # autoskillit workspace - do not delete
@@ -13,6 +17,30 @@ _MARKER_CONTENT = """\
 # Created: {timestamp}
 # Tool: autoskillit {version}
 """
+
+
+# Sentinel returned by _resolve_recipe_input when the user selects option 0.
+_OPEN_KITCHEN_CHOICE: str = "__open_kitchen__"
+
+
+def _resolve_recipe_input(raw: str, available: list[RecipeInfo]) -> RecipeInfo | str | None:
+    """Resolve picker raw text to a selection.
+
+    Returns:
+        _OPEN_KITCHEN_CHOICE  if raw is "0" (open kitchen, always valid)
+        RecipeInfo            if raw is a valid 1-based index or an exact name match
+        None                  for empty input, out-of-range numbers, or unknown names
+    """
+    if not raw:
+        return None
+    if raw.isdigit():
+        n = int(raw)
+        if n == 0:
+            return _OPEN_KITCHEN_CHOICE
+        if 1 <= n <= len(available):
+            return available[n - 1]
+        return None
+    return next((r for r in available if r.name == raw), None)
 
 
 def _prompt_recipe_choice() -> str:

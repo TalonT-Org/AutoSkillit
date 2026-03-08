@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
+from autoskillit.cli._init_helpers import _OPEN_KITCHEN_CHOICE, _resolve_recipe_input
 from autoskillit.cli._workspace import _format_age
 
 _SCRIPT_YAML = """\
@@ -35,6 +36,55 @@ steps:
 kitchen_rules:
   - Only use AutoSkillit MCP tools during pipeline execution
 """
+
+
+class TestResolveRecipeInput:
+    """Unit tests for the _resolve_recipe_input picker resolution helper."""
+
+    def _make_recipe(self, name: str) -> MagicMock:
+        r = MagicMock()
+        r.name = name
+        return r
+
+    def test_zero_returns_open_kitchen_sentinel(self) -> None:
+        available = [self._make_recipe("smoke-test")]
+        result = _resolve_recipe_input("0", available)
+        assert result is _OPEN_KITCHEN_CHOICE
+
+    def test_zero_with_empty_list_returns_open_kitchen_sentinel(self) -> None:
+        result = _resolve_recipe_input("0", [])
+        assert result is _OPEN_KITCHEN_CHOICE
+
+    def test_valid_number_first_returns_first_recipe(self) -> None:
+        r1 = self._make_recipe("implementation")
+        r2 = self._make_recipe("bugfix-loop")
+        assert _resolve_recipe_input("1", [r1, r2]) is r1
+
+    def test_valid_number_last_returns_last_recipe(self) -> None:
+        r1 = self._make_recipe("implementation")
+        r2 = self._make_recipe("bugfix-loop")
+        assert _resolve_recipe_input("2", [r1, r2]) is r2
+
+    def test_out_of_range_too_high_returns_none(self) -> None:
+        available = [self._make_recipe("smoke-test")]
+        assert _resolve_recipe_input("99", available) is None
+
+    def test_out_of_range_negative_digit_treated_as_name(self) -> None:
+        # "-1".isdigit() is False in Python — treated as name lookup, returns None
+        available = [self._make_recipe("smoke-test")]
+        assert _resolve_recipe_input("-1", available) is None
+
+    def test_name_match_returns_recipe(self) -> None:
+        r = self._make_recipe("smoke-test")
+        assert _resolve_recipe_input("smoke-test", [r, self._make_recipe("other")]) is r
+
+    def test_name_no_match_returns_none(self) -> None:
+        available = [self._make_recipe("smoke-test")]
+        assert _resolve_recipe_input("nonexistent", available) is None
+
+    def test_empty_string_returns_none(self) -> None:
+        available = [self._make_recipe("smoke-test")]
+        assert _resolve_recipe_input("", available) is None
 
 
 class TestCLICook:
@@ -636,6 +686,180 @@ class TestCLICook:
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "structure error" in captured.out
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_picker_shows_zero_option(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """Picker output includes '0. Open kitchen' line."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "test-script")
+
+        cli.cook()
+
+        captured = capsys.readouterr()
+        assert "0. Open kitchen" in captured.out
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_picker_prompt_includes_range(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Picker prompt text includes 'Select recipe [0-'."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+
+        prompts_seen: list[str] = []
+        monkeypatch.setattr(
+            "builtins.input", lambda prompt="": prompts_seen.append(prompt) or "test-script"
+        )
+
+        cli.cook()
+
+        assert any("Select recipe [0-" in p for p in prompts_seen)
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_picker_accepts_number_launches_recipe(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Typing '1' in the picker selects the first recipe and launches it."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "1")
+
+        cli.cook()
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert "--append-system-prompt" in cmd
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_picker_zero_launches_open_kitchen(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Typing '0' launches a session without a recipe YAML in the system prompt."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "0")
+
+        cli.cook()
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        system_prompt_idx = cmd.index("--append-system-prompt") + 1
+        assert "--- RECIPE ---" not in cmd[system_prompt_idx]
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_picker_zero_system_prompt_contains_kitchen_open(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Option 0 injects an open-kitchen system prompt, not a recipe orchestrator."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "0")
+
+        cli.cook()
+
+        cmd = mock_run.call_args[0][0]
+        system_prompt_idx = cmd.index("--append-system-prompt") + 1
+        assert "Kitchen is open" in cmd[system_prompt_idx]
+
+    def test_cook_picker_out_of_range_exits(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """Out-of-range numeric input exits 1 with an error message."""
+        import importlib
+        import sys as _sys
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        fake_recipe = MagicMock()
+        fake_recipe.name = "some-recipe"
+        mock_result = MagicMock()
+        mock_result.items = [fake_recipe]
+        monkeypatch.setattr(_app_mod, "list_recipes", lambda _: mock_result)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "99")
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.cook()
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Invalid selection" in captured.out
+
+    def test_cook_picker_invalid_name_exits(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """Unknown recipe name exits 1 with an error message."""
+        import importlib
+        import sys as _sys
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        fake_recipe = MagicMock()
+        fake_recipe.name = "some-recipe"
+        mock_result = MagicMock()
+        mock_result.items = [fake_recipe]
+        monkeypatch.setattr(_app_mod, "list_recipes", lambda _: mock_result)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "no-such-recipe")
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.cook()
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Invalid selection" in captured.out
 
     def test_cook_picker_empty_input_exits(
         self,

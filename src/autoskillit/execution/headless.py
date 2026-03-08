@@ -403,7 +403,6 @@ async def run_headless_core(
         _end_ts = datetime.now(UTC).isoformat()
         result = dataclasses.replace(_result, start_ts=_start_ts, end_ts=_end_ts)  # type: ignore[arg-type]
 
-        audit_count_before = len(ctx.audit.get_report())
         skill_result = _build_skill_result(
             result,
             completion_marker=cfg.completion_marker,
@@ -411,25 +410,10 @@ async def run_headless_core(
             audit=ctx.audit,
         )
 
-        # Compute wall-clock timing from injected timestamps
-        timing_seconds: float | None = None
-        try:
-            if result.start_ts and result.end_ts:
-                delta = datetime.fromisoformat(result.end_ts) - datetime.fromisoformat(
-                    result.start_ts
-                )
-                timing_seconds = max(0.0, delta.total_seconds())
-        except (ValueError, AttributeError):
-            pass
-
-        # Extract the audit record (if any) added by this session
-        new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
-        audit_record = new_audit_records[0] if new_audit_records else None
-
         # Resolve effective session ID: prefer stdout-parsed, fall back to Channel B discovery
         effective_session_id = skill_result.session_id or result.channel_b_session_id
 
-        if result.proc_snapshots is not None or not skill_result.success or bool(step_name):
+        if result.proc_snapshots is not None or not skill_result.success:
             from autoskillit.execution.session_log import flush_session_log
 
             try:
@@ -447,10 +431,6 @@ async def run_headless_core(
                     termination_reason=result.termination.value,
                     snapshot_interval_seconds=ctx.config.linux_tracing.proc_interval,
                     proc_snapshots=result.proc_snapshots,
-                    step_name=step_name,
-                    token_usage=skill_result.token_usage,
-                    timing_seconds=timing_seconds,
-                    audit_record=audit_record,
                 )
             except Exception:
                 logger.debug("session_log_flush_failed", exc_info=True)

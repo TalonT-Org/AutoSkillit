@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from autoskillit.core import get_logger
@@ -108,76 +107,3 @@ class DefaultTokenLog:
     def clear(self) -> None:
         """Reset the store."""
         self._entries = {}
-
-    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int:
-        """Reconstruct token entries from persisted session logs.
-
-        Reads the sessions.jsonl index at log_root, filters entries by since
-        (ISO timestamp), reads token_usage.json from each matching session
-        directory, and accumulates into self._entries (merging by step_name
-        with the existing in-memory state).
-
-        Returns the count of session directories successfully loaded.
-        """
-        import json
-        from datetime import datetime
-        from pathlib import Path as _Path
-
-        index_path = _Path(log_root) / "sessions.jsonl"
-        if not index_path.exists():
-            return 0
-
-        since_dt: datetime | None = None
-        if since:
-            try:
-                since_dt = datetime.fromisoformat(since)
-            except ValueError:
-                pass
-
-        count = 0
-        for line in index_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                idx = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-            if since_dt:
-                try:
-                    entry_ts = datetime.fromisoformat(idx.get("timestamp", ""))
-                    if entry_ts < since_dt:
-                        continue
-                except (ValueError, TypeError):
-                    continue
-
-            dir_name = idx.get("dir_name", "")
-            if not dir_name:
-                continue
-
-            tu_path = _Path(log_root) / "sessions" / dir_name / "token_usage.json"
-            if not tu_path.exists():
-                continue
-
-            try:
-                data = json.loads(tu_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                continue
-
-            step_name = data.get("step_name", "")
-            if not step_name:
-                continue
-
-            if step_name not in self._entries:
-                self._entries[step_name] = TokenEntry(step_name=step_name)
-            e = self._entries[step_name]
-            e.input_tokens += data.get("input_tokens", 0)
-            e.output_tokens += data.get("output_tokens", 0)
-            e.cache_creation_input_tokens += data.get("cache_creation_input_tokens", 0)
-            e.cache_read_input_tokens += data.get("cache_read_input_tokens", 0)
-            e.elapsed_seconds += float(data.get("timing_seconds", 0.0))
-            e.invocation_count += 1
-            count += 1
-
-        return count

@@ -386,6 +386,26 @@ def recipes_render(name: str | None = None) -> None:
             print(f"Rendered: {info.name}")
 
 
+def _launch_cook_session(system_prompt: str) -> None:
+    """Launch an interactive Claude Code cook session with the given system prompt."""
+    if shutil.which("claude") is None:
+        print("ERROR: 'claude' command not found on PATH.")
+        print("Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code")
+        sys.exit(1)
+    spec = build_interactive_cmd()
+    cmd = spec.cmd + [
+        "--plugin-dir",
+        str(pkg_root()),
+        "--tools",
+        "AskUserQuestion",
+        "--append-system-prompt",
+        system_prompt,
+    ]
+    result = subprocess.run(cmd, env={**os.environ, **spec.env})
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+
+
 @app.command
 def cook(recipe: str | None = None):
     """Launch an interactive Claude Code session to execute a recipe.
@@ -422,24 +442,7 @@ def cook(recipe: str | None = None):
         raw = input(f"Select recipe [0-{len(available)}]: ").strip()
         resolved = _resolve_recipe_input(raw, available)
         if resolved is _OPEN_KITCHEN_CHOICE:
-            if shutil.which("claude") is None:
-                print("ERROR: 'claude' command not found on PATH.")
-                print("Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code")
-                sys.exit(1)
-            plugin_dir = pkg_root()
-            system_prompt = _build_open_kitchen_prompt()
-            spec = build_interactive_cmd()
-            cmd = spec.cmd + [
-                "--plugin-dir",
-                str(plugin_dir),
-                "--tools",
-                "AskUserQuestion",
-                "--append-system-prompt",
-                system_prompt,
-            ]
-            result = subprocess.run(cmd, env={**os.environ, **spec.env})
-            if result.returncode != 0:
-                sys.exit(result.returncode)
+            _launch_cook_session(_build_open_kitchen_prompt())
             return
         elif resolved is None:
             print(f"Invalid selection: '{raw}'")
@@ -482,27 +485,7 @@ def cook(recipe: str | None = None):
             print(f"  - {err}")
         sys.exit(1)
 
-    if shutil.which("claude") is None:
-        print("ERROR: 'claude' command not found on PATH.")
-        print("Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code")
-        sys.exit(1)
-
-    plugin_dir = pkg_root()
-    system_prompt = _build_orchestrator_prompt(recipe_yaml)
-
-    spec = build_interactive_cmd()
-    cmd = spec.cmd + [
-        "--plugin-dir",
-        str(plugin_dir),
-        "--tools",
-        "AskUserQuestion",
-        "--append-system-prompt",
-        system_prompt,
-    ]
-
-    result = subprocess.run(cmd, env={**os.environ, **spec.env})
-    if result.returncode != 0:
-        sys.exit(result.returncode)
+    _launch_cook_session(_build_orchestrator_prompt(recipe_yaml))
 
 
 def main() -> None:

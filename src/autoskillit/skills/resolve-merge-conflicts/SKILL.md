@@ -250,7 +250,7 @@ git -C {worktree_path} branch --show-current
 |---|---|---|
 | `worktree_path=` | directory_path | On successful resolution (confidence gate passed) |
 | `branch_name=` | string | On successful resolution |
-| `escalation_required=true` | string | When confidence is LOW or rebase rounds exceed 3 |
+| `escalation_required=true` | string literal `'true'` (lowercase) | When confidence is LOW or rebase rounds exceed 3 |
 | `escalation_reason=` | string | When confidence is LOW — explains which file and why |
 
 ## Error handling

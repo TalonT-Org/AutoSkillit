@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:c4e2a6421251ab68cc03d57444686625946406d72207d5c7903d45bc7e2504cd -->
+<!-- autoskillit-recipe-hash: sha256:34fc30f9ac7b88a04b3533ca026740ab112894b7e7fa744fc30c80f207ae13ae -->
 <!-- autoskillit-diagram-format: v4 -->
 ## pr-merge-pipeline
 Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
@@ -32,8 +32,9 @@ publish_integration_branch  [push_to_remote] (retry ×3)
 │     │
 │     ✗ failure → cleanup_failure
 │     ⌛ context limit → cleanup_failure
-│     true → plan
-│     false → next_part_or_next_pr
+│     ${{ result.escalation_required }} == true → escalate_stop
+│     ${{ result.needs_plan }} == true → plan
+│     (default) → next_part_or_next_pr
 │                             │
 │                             ✗ failure → cleanup_failure
 │                                                 │

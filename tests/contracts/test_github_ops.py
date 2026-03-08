@@ -62,17 +62,16 @@ def test_no_internal_batch_labels_on_github_objects() -> None:
 
 
 def test_triage_issues_classification_uses_behavioral_criterion() -> None:
-    """triage-issues Step 3 must classify by whether existing behavior is broken,
+    """triage-issues Step 3 must classify by whether existing code produces a runtime error,
     not by scope clarity or implementation complexity.
 
-    The scope-based table conflates "needs investigation" with "is a runtime bug"
-    and misroutes complex features (large enhancements) to the remediation recipe,
-    which is designed for broken-behavior investigation, not feature planning.
+    The key distinction is broken vs. missing: remediation fixes code that runs and errors,
+    implementation fills a gap where no existing code is broken.
     """
     bd = bundled_skills_dir()
     content = (bd / "triage-issues" / "SKILL.md").read_text()
-    assert re.search(r"is existing behavior broken", content, re.IGNORECASE), (
-        "triage-issues Step 3 must ask 'Is existing behavior broken?' as the primary criterion"
+    assert re.search(r"does existing code produce a runtime error", content, re.IGNORECASE), (
+        "triage-issues Step 3 must ask 'Does existing code produce a runtime error?' as the primary criterion"
     )
     assert "Large/ambiguous enhancement" not in content, (
         "triage-issues Step 3 must not route large/ambiguous enhancements to remediation — "

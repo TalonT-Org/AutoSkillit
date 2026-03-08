@@ -134,14 +134,11 @@ steps:
       escalation_required: "${{ result.escalation_required }}"
       task: "${{ result.conflict_report_path }}"
     on_result:
-      field: needs_plan
-      routes:
-        "true": plan
-        "false": next_part_or_next_pr
-      fallthrough:
-        field: escalation_required
-        routes:
-          "true": escalate_stop
+      - when: "${{ result.escalation_required }} == true"
+        route: escalate_stop
+      - when: "${{ result.needs_plan }} == true"
+        route: plan
+      - route: next_part_or_next_pr
     on_failure: cleanup_failure
     retries: 5
     on_exhausted: cleanup_failure

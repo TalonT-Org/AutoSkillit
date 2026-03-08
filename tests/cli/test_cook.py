@@ -821,7 +821,9 @@ class TestCLICook:
         fake_recipe.name = "some-recipe"
         mock_result = MagicMock()
         mock_result.items = [fake_recipe]
-        monkeypatch.setattr(sys.modules["autoskillit.cli.app"], "list_recipes", lambda _: mock_result)
+        monkeypatch.setattr(
+            sys.modules["autoskillit.cli.app"], "list_recipes", lambda _: mock_result
+        )
         monkeypatch.setattr("builtins.input", lambda _prompt="": "99")
 
         with pytest.raises(SystemExit) as exc_info:
@@ -845,7 +847,9 @@ class TestCLICook:
         fake_recipe.name = "some-recipe"
         mock_result = MagicMock()
         mock_result.items = [fake_recipe]
-        monkeypatch.setattr(sys.modules["autoskillit.cli.app"], "list_recipes", lambda _: mock_result)
+        monkeypatch.setattr(
+            sys.modules["autoskillit.cli.app"], "list_recipes", lambda _: mock_result
+        )
         monkeypatch.setattr("builtins.input", lambda _prompt="": "no-such-recipe")
 
         with pytest.raises(SystemExit) as exc_info:

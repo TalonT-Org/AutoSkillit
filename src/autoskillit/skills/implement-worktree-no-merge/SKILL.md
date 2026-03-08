@@ -57,7 +57,9 @@ creates a brand-new timestamped worktree, discarding all partial progress.
 
 Correct orchestration on `needs_retry=true`:
 - Route immediately to `/autoskillit:retry-worktree` (via `retry.on_exhausted`)
-- Pass `worktree_path` from `context.worktree_path` (captured from this step's output)
+- The `run_skill` response now includes `worktree_path` as a top-level JSON
+  field when `needs_retry=true`. The orchestrator reads it from
+  `result.worktree_path` — no filesystem search is needed.
 - Use `max_attempts: 0` on this step's `retry` block to ensure immediate escalation
 
 ## Workflow
@@ -106,6 +108,22 @@ if ! git -C "${WORKTREE_PATH}" branch --set-upstream-to="origin/${CURRENT_BRANCH
     echo "NOTE: Could not set upstream tracking for '${WORKTREE_NAME}' → 'origin/${CURRENT_BRANCH}'."
 fi
 ```
+
+### Step 1 (cont.): Emit Structured Tokens Early
+
+Immediately after the worktree is created, output these tokens on their own
+lines so the execution layer can capture them from `assistant_messages` even
+if context is exhausted before Step 6:
+
+```
+worktree_path=${WORKTREE_PATH}
+branch_name=${WORKTREE_NAME}
+```
+
+**Why emit early?** If context exhaustion occurs during Steps 2–5, the
+execution layer scans `assistant_messages` for `worktree_path=` and surfaces
+it as a top-level field in the `run_skill` JSON response. The orchestrator
+reads this field directly without filesystem discovery heuristics.
 
 ### Step 1.5: Initialize Code Index for Original Project
 

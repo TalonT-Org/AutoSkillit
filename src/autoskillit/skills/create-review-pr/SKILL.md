@@ -89,10 +89,38 @@ lens guard.
 
 ### Step 6: Generate Arch-Lens Diagrams
 
-Same pattern as `open-pr` Step 5: load each arch-lens skill via the Skill tool,
-provide PR context message with `new_files` / `modified_files`, extract mermaid
-blocks, validate `★`/`●` markers. Only add to `validated_diagrams` if at least one
-marker is present.
+For each selected lens, follow this exact sequence:
+
+**1. Output the PR context block as plain text (NOT as a tool call):**
+
+> **PR Context — Changed Files**
+>
+> This diagram is for a Pull Request. Focus the diagram on the areas of the codebase affected by these changes. Do not create a generic whole-project diagram.
+>
+> **New files (use ★ prefix on these nodes):**
+> {list of new_files from Step 4, or "None"}
+>
+> **Modified files (use ● prefix on these nodes):**
+> {list of modified_files from Step 4, or "None"}
+>
+> **Instructions:**
+> - Focus exploration and the diagram on the architectural areas these files belong to
+> - Use `★` prefix on nodes representing new files/components
+> - Use `●` prefix on nodes representing modified files/components
+> - Leave unchanged components unmarked (include them only if needed for context/connectivity)
+> - The diagram should help PR reviewers understand the architectural impact of these specific changes
+
+**2. THEN load the arch-lens skill via the Skill tool** (e.g., `/arch-lens-module-dependency`).
+
+**3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.
+The context block above is already in the conversation history — do not re-output it.
+
+The arch-lens skills write their output to `temp/arch-lens-{lens-name}/`. After each skill
+runs, read the generated markdown file and extract the mermaid code block(s).
+
+After extracting the mermaid block, inspect its content for `★` or `●` characters:
+- If the block contains at least one `★` or `●` → add it to `validated_diagrams`.
+- If the block contains neither → discard this diagram; do not add it to the list.
 
 ### Step 7: Compose PR Body
 

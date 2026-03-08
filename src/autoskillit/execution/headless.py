@@ -148,11 +148,41 @@ def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
     return None
 
 
+def _apply_budget_guard(
+    sr: SkillResult,
+    skill_command: str,
+    audit: AuditStore | None,
+    max_consecutive_retries: int,
+) -> SkillResult:
+    """Override needs_retry to False when the consecutive-failure budget is exhausted.
+
+    The audit log records the raw failure (needs_retry=True) before this guard
+    runs; the guard is a post-processing filter on the returned SkillResult only.
+    """
+    if not sr.needs_retry or audit is None or not skill_command:
+        return sr
+    consecutive = audit.consecutive_failures(skill_command)
+    if consecutive >= max_consecutive_retries:
+        logger.warning(
+            "retry_budget_exhausted",
+            skill_command=skill_command,
+            consecutive_failures=consecutive,
+            max_consecutive_retries=max_consecutive_retries,
+        )
+        return dataclasses.replace(
+            sr,
+            needs_retry=False,
+            retry_reason=RetryReason.BUDGET_EXHAUSTED,
+        )
+    return sr
+
+
 def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
     skill_command: str = "",
     audit: AuditStore | None = None,
+    max_consecutive_retries: int = 3,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     branch = (
@@ -215,7 +245,7 @@ def _build_skill_result(
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
-        return SkillResult(
+        stale_sr = SkillResult(
             success=False,
             result=(
                 "Session went stale (no activity for configured threshold). "
@@ -230,6 +260,7 @@ def _build_skill_result(
             stderr="",
             token_usage=None,
         )
+        return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
 
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
@@ -288,6 +319,7 @@ def _build_skill_result(
         stderr=_truncate(result.stderr),
         token_usage=session.token_usage,
     )
+    sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
     logger.debug(
         "build_skill_result_exit",
         success=sr.success,

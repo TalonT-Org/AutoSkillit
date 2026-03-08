@@ -917,6 +917,160 @@ class TestCompletionViaMonitorKill:
         )
 
 
+def _context_exhausted_with_worktree_ndjson(worktree_path: str) -> str:
+    """NDJSON where context exhaustion occurred after the skill emitted
+    worktree_path= in Step 1's assistant message."""
+    assistant = json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": (
+                    "Worktree created successfully.\n\n"
+                    f"worktree_path={worktree_path}\n"
+                    "branch_name=impl-fix-20260307\n"
+                ),
+            },
+        }
+    )
+    result = json.dumps(
+        {
+            "type": "result",
+            "subtype": "error_during_execution",
+            "is_error": True,
+            "result": "prompt is too long",
+            "session_id": "s1",
+            "errors": ["prompt is too long"],
+        }
+    )
+    return f"{assistant}\n{result}\n"
+
+
+class TestExtractWorktreePath:
+    """Unit tests for _extract_worktree_path helper."""
+
+    def test_extracts_path_from_single_message(self):
+        """Finds worktree_path= token in a single assistant message."""
+        from autoskillit.execution.headless import _extract_worktree_path
+
+        msg = "Worktree created.\nworktree_path=/path/to/wt\nbranch_name=impl"
+        assert _extract_worktree_path([msg]) == "/path/to/wt"
+
+    def test_returns_last_occurrence_across_messages(self):
+        """When multiple messages contain the token, last match wins."""
+        from autoskillit.execution.headless import _extract_worktree_path
+
+        msgs = [
+            "worktree_path=/first/path",
+            "worktree_path=/second/path",
+        ]
+        assert _extract_worktree_path(msgs) == "/second/path"
+
+    def test_returns_none_when_no_token(self):
+        """Returns None when no worktree_path= token is present."""
+        from autoskillit.execution.headless import _extract_worktree_path
+
+        assert _extract_worktree_path(["No token here."]) is None
+
+    def test_returns_none_for_empty_messages(self):
+        """Returns None for empty message list."""
+        from autoskillit.execution.headless import _extract_worktree_path
+
+        assert _extract_worktree_path([]) is None
+
+    def test_strips_trailing_whitespace(self):
+        """Extracted value has trailing whitespace stripped."""
+        from autoskillit.execution.headless import _extract_worktree_path
+
+        msg = "worktree_path=/some/path   \n"
+        assert _extract_worktree_path([msg]) == "/some/path"
+
+
+class TestBuildSkillResultWorktreePath:
+    """_build_skill_result extracts worktree_path on context exhaustion."""
+
+    def test_extracts_worktree_path_on_context_exhaustion(self):
+        """worktree_path from early Step 1 emission flows into SkillResult."""
+        path = "/home/talon/projects/autoskillit-runs/worktrees/impl-fix-20260307"
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=_context_exhausted_with_worktree_ndjson(path),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1234,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(sub_result, "", "/test", None)
+        assert sr.needs_retry is True
+        assert sr.worktree_path == path
+
+    def test_worktree_path_none_when_token_absent(self):
+        """If the skill never emitted worktree_path=, the field is None."""
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=_context_exhausted_session_json(),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1234,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(sub_result, "", "/test", None)
+        assert sr.needs_retry is True
+        assert sr.worktree_path is None
+
+    def test_worktree_path_none_on_success(self):
+        """On success, worktree_path is not extracted (field stays None)."""
+        sub_result = _make_result(
+            returncode=0,
+            stdout=_success_session_json("worktree_path=/path\nbranch_name=impl-fix"),
+        )
+        sr = _build_skill_result(sub_result, "", "/test", None)
+        assert sr.success is True
+        assert sr.worktree_path is None
+
+    def test_worktree_path_uses_last_occurrence(self):
+        """When worktree_path= appears multiple times, the last value wins."""
+        assistant1 = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": "worktree_path=/first/path\nbranch_name=b1",
+                },
+            }
+        )
+        assistant2 = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": "worktree_path=/second/path\nbranch_name=b1",
+                },
+            }
+        )
+        result = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "result": "prompt is too long",
+                "session_id": "s1",
+                "errors": ["prompt is too long"],
+            }
+        )
+        ndjson = f"{assistant1}\n{assistant2}\n{result}\n"
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1234,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(sub_result, "", "/test", None)
+        assert sr.worktree_path == "/second/path"
+
+
 class TestBuildSkillResultCompleted:
     """_build_skill_result and _compute_success handle COMPLETED termination correctly."""
 

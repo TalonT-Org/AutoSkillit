@@ -48,6 +48,7 @@ def flush_session_log(
     start_ts: str,
     proc_snapshots: list[dict[str, object]] | None,
     end_ts: str = "",
+    elapsed_seconds: float | None = None,
     termination_reason: str = "",
     snapshot_interval_seconds: float = 0.0,
 ) -> None:
@@ -117,11 +118,16 @@ def flush_session_log(
     anomaly_count = len(anomalies)
 
     duration_seconds: float | None = None
-    if end_ts:
+    if elapsed_seconds is not None:
+        duration_seconds = elapsed_seconds
+    elif end_ts:
         try:
-            duration_seconds = (
-                datetime.fromisoformat(end_ts) - datetime.fromisoformat(start_ts)
-            ).total_seconds()
+            duration_seconds = max(
+                0.0,
+                (
+                    datetime.fromisoformat(end_ts) - datetime.fromisoformat(start_ts)
+                ).total_seconds(),
+            )
         except ValueError:
             pass
 

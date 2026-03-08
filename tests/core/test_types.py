@@ -1,6 +1,9 @@
 """Tests for shared type contracts — enum exhaustiveness."""
 
+import dataclasses
 import json
+
+import pytest
 
 from autoskillit.core.types import (
     ChannelConfirmation,
@@ -207,3 +210,20 @@ def test_github_fetcher_protocol_has_label_methods():
     assert "add_labels" in members
     assert "remove_label" in members
     assert "ensure_label" in members
+
+
+def test_subprocess_result_has_elapsed_seconds_field():
+    """SubprocessResult must carry a pre-computed monotonic elapsed_seconds."""
+    from autoskillit.core.types import SubprocessResult, TerminationReason
+
+    result = SubprocessResult(
+        returncode=0,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.COMPLETED,
+        pid=1,
+    )
+    assert hasattr(result, "elapsed_seconds")
+    assert result.elapsed_seconds == 0.0
+    result2 = dataclasses.replace(result, elapsed_seconds=7.3)
+    assert result2.elapsed_seconds == pytest.approx(7.3)

@@ -54,6 +54,7 @@ class DefaultTokenLog:
         *,
         start_ts: str = "",
         end_ts: str = "",
+        elapsed_seconds: float | None = None,
     ) -> None:
         """Accumulate token usage for a step.
 
@@ -69,7 +70,9 @@ class DefaultTokenLog:
         e.cache_creation_input_tokens += token_usage.get("cache_creation_input_tokens", 0)
         e.cache_read_input_tokens += token_usage.get("cache_read_input_tokens", 0)
         e.invocation_count += 1
-        if start_ts and end_ts:
+        if elapsed_seconds is not None:
+            e.elapsed_seconds += elapsed_seconds
+        elif start_ts and end_ts:
             try:
                 delta = (
                     datetime.fromisoformat(end_ts) - datetime.fromisoformat(start_ts)

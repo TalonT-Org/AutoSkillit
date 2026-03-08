@@ -149,7 +149,9 @@ def test_approve_when_stale_cache(tmp_path):
     assert out.strip() == ""
 
 
-def _write_hook_config(hook_cfg_path: Path, threshold: float, cache_max_age: int, cache_path: str) -> None:
+def _write_hook_config(
+    hook_cfg_path: Path, threshold: float, cache_max_age: int, cache_path: str
+) -> None:
     """Write a hook config file to the given path."""
     hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
     hook_cfg_path.write_text(

@@ -92,7 +92,10 @@ async def test_close_kitchen_removes_gate_file(tmp_path, monkeypatch):
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
-                from autoskillit.server.prompts import _close_kitchen_handler, _open_kitchen_handler
+                from autoskillit.server.prompts import (
+                    _close_kitchen_handler,
+                    _open_kitchen_handler,
+                )
 
                 await _open_kitchen_handler()
                 _close_kitchen_handler()
@@ -104,7 +107,10 @@ async def test_close_kitchen_removes_gate_file(tmp_path, monkeypatch):
 # T-CACHE-1
 @pytest.mark.anyio
 async def test_open_kitchen_primes_quota_cache(tmp_path, monkeypatch):
-    """open_kitchen must call _prime_quota_cache to prime the quota cache before any run_skill fires."""
+    """open_kitchen must call _prime_quota_cache before any run_skill hook fires.
+
+    Fails today: _prime_quota_cache does not exist in prompts.py.
+    """
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     prime_mock = AsyncMock()
@@ -122,7 +128,10 @@ async def test_open_kitchen_primes_quota_cache(tmp_path, monkeypatch):
 # T-CACHE-2
 @pytest.mark.anyio
 async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
-    """open_kitchen must write temp/.autoskillit_hook_config.json with user-configured quota values."""
+    """open_kitchen must write temp/.autoskillit_hook_config.json with user quota_guard values.
+
+    Fails today: hook config is never written.
+    """
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.config.quota_guard.threshold = 85.0
@@ -157,7 +166,10 @@ async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
-                from autoskillit.server.prompts import _close_kitchen_handler, _open_kitchen_handler
+                from autoskillit.server.prompts import (
+                    _close_kitchen_handler,
+                    _open_kitchen_handler,
+                )
 
                 await _open_kitchen_handler()
                 _close_kitchen_handler()
@@ -173,6 +185,6 @@ def test_open_kitchen_handler_is_async():
 
     from autoskillit.server.prompts import _open_kitchen_handler
 
-    assert inspect.iscoroutinefunction(
-        _open_kitchen_handler
-    ), "_open_kitchen_handler must be async"
+    assert inspect.iscoroutinefunction(_open_kitchen_handler), (
+        "_open_kitchen_handler must be async"
+    )

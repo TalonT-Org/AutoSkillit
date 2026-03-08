@@ -410,7 +410,7 @@ class TestCheckAndSleepResetAtNoneBlocks:
 
 
 class TestIntegration:
-    """Integration tests verifying write/read contract between execution.quota and hooks.quota_check."""
+    """Integration tests: write/read contract between execution.quota and hooks.quota_check."""
 
     def test_write_cache_then_quota_check_main_reads_it(self, tmp_path, monkeypatch):
         """Cache written by _write_cache must be readable and actionable by quota_check.main().

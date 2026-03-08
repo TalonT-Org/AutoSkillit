@@ -18,12 +18,24 @@ from pathlib import Path
 
 _DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
 _DEFAULT_THRESHOLD = 90.0
-_DEFAULT_CACHE_MAX_AGE = 60  # seconds
+_DEFAULT_CACHE_MAX_AGE = 300  # seconds
 
 
-def _read_quota_cache() -> dict | None:
+def _read_hook_config() -> dict:
+    """Read server-written config from temp/.autoskillit_hook_config.json.
+
+    Returns the quota_guard section, or {} if the file is absent or unreadable.
+    This file is written by open_kitchen and removed by close_kitchen.
+    """
+    try:
+        config_path = Path.cwd() / "temp" / ".autoskillit_hook_config.json"
+        return json.loads(config_path.read_text()).get("quota_guard", {})
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return {}
+
+
+def _read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
     """Read quota cache file. Returns parsed data or None if missing/stale/corrupt."""
-    cache_path_str = os.environ.get("AUTOSKILLIT_QUOTA_CACHE", _DEFAULT_CACHE_PATH)
     cache_path = Path(cache_path_str).expanduser()
     if not cache_path.is_file():
         return None
@@ -31,7 +43,7 @@ def _read_quota_cache() -> dict | None:
         data = json.loads(cache_path.read_text())
         fetched = datetime.fromisoformat(data["fetched_at"])
         age = (datetime.now(UTC) - fetched).total_seconds()
-        if age > _DEFAULT_CACHE_MAX_AGE:
+        if age > max_age:
             return None  # stale
         return data
     except (json.JSONDecodeError, KeyError, ValueError, OSError):
@@ -51,7 +63,17 @@ def main() -> None:
         )
         sys.exit(0)  # log but approve — don't block run_skill on hook bugs
 
-    cache = _read_quota_cache()
+    hook_config = _read_hook_config()
+    threshold = hook_config.get("threshold", _DEFAULT_THRESHOLD)
+    cache_max_age = hook_config.get("cache_max_age", _DEFAULT_CACHE_MAX_AGE)
+    # env var takes priority over hook config for cache path (backward compat)
+    cache_path_str = (
+        os.environ.get("AUTOSKILLIT_QUOTA_CACHE")
+        or hook_config.get("cache_path")
+        or _DEFAULT_CACHE_PATH
+    )
+
+    cache = _read_quota_cache(cache_path_str, cache_max_age)
     if cache is None:
         sys.exit(0)  # no fresh cache — fail open
 
@@ -60,7 +82,7 @@ def main() -> None:
     except (KeyError, ValueError, TypeError):
         sys.exit(0)  # malformed cache — fail open
 
-    if utilization >= _DEFAULT_THRESHOLD:
+    if utilization >= threshold:
         resets_at_str = cache.get("five_hour", {}).get("resets_at")
         if resets_at_str:
             try:

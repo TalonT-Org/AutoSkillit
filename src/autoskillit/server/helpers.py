@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
-from autoskillit.execution import check_and_sleep_if_needed  # noqa: F401
 from autoskillit.pipeline import gate_error_result
 from autoskillit.recipe import (
     StaleItem,

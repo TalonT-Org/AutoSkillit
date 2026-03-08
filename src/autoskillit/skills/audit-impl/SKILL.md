@@ -54,7 +54,8 @@ Resolve `plans_input`:
 
 - **Single `.md` file**: no comma, ends in `.md` → use it directly
 - **Comma-separated `.md` paths**: value contains `,` → split on `,`, trim whitespace
-  from each token, use each trimmed token as a plan file path
+  from each token. Validate that each trimmed token ends in `.md`; log a warning and
+  skip any token that does not. Use each valid token as a plan file path
 - **Directory**: no comma, does not end in `.md` or `.json` → glob for `*_plan_*.md`
   files in the directory
 - **`manifest_*.json`**: no comma, ends in `.json` → parse it; extract `groups[*].file`

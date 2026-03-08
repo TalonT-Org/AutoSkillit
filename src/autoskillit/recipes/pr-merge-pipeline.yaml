@@ -169,10 +169,6 @@ steps:
       REMEDIATION MODE: context.remediation_path is set when re-entering from
       the remediate step; pass it inline in the skill_command instead of
       context.task.
-      ACCUMULATION: all_plan_paths accumulates across loop re-entries (one per
-      complex PR, plus any remediation re-entry) via capture_list, which appends
-      result.plan_path on each pass rather than overwriting. The accumulated list is
-      passed to audit-impl after the PR loop completes.
 
   verify:
     tool: run_skill
@@ -315,7 +311,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl ${{ context.all_plan_paths }} ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl \"${{ context.all_plan_paths }}\" ${{ context.integration_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:

@@ -14,6 +14,8 @@ This module is the authoritative location for:
 
 from __future__ import annotations
 
+from datetime import UTC
+
 from autoskillit.config import AutomationConfig
 from autoskillit.core import get_logger
 from autoskillit.pipeline import ToolContext
@@ -40,6 +42,31 @@ def _initialize(ctx: ToolContext) -> None:
             logger.info("Recovered %d crashed session trace(s) from tmpfs", n)
     except Exception:
         logger.debug("recover_crashed_sessions at startup failed", exc_info=True)
+
+    # Telemetry recovery: restore token, timing, and audit data from the last 24 hours.
+    try:
+        from datetime import datetime, timedelta
+
+        from autoskillit.execution import resolve_log_dir
+
+        cfg = ctx.config.linux_tracing
+        log_root = resolve_log_dir(cfg.log_dir)
+        since_dt = datetime.now(tz=UTC) - timedelta(hours=24)
+        since_str = since_dt.isoformat()
+
+        n_tok = ctx.token_log.load_from_log_dir(log_root, since=since_str)
+        n_tim = ctx.timing_log.load_from_log_dir(log_root, since=since_str)
+        n_aud = ctx.audit.load_from_log_dir(log_root, since=since_str)
+
+        if n_tok or n_tim or n_aud:
+            logger.info(
+                "Recovered telemetry from session logs (tok=%d, timing=%d, audit=%d)",
+                n_tok,
+                n_tim,
+                n_aud,
+            )
+    except Exception:
+        logger.debug("telemetry_recovery_at_startup_failed", exc_info=True)
 
 
 def _get_ctx() -> ToolContext:

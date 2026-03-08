@@ -9,6 +9,7 @@ store with a defensive copy getter.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from autoskillit.core import FailureRecord, get_logger
@@ -64,3 +65,70 @@ class DefaultAuditLog:
         # Reassign rather than mutate in place: creates a new list object,
         # making the "store is now empty" intent unambiguous.
         self._records = []
+
+    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int:
+        """Reconstruct failure records from persisted session logs.
+
+        Reads the sessions.jsonl index at log_root, filters entries by since
+        (ISO timestamp), reads audit_log.json from each matching session
+        directory, and appends FailureRecord instances to self._records.
+
+        Returns the count of session directories successfully loaded.
+        """
+        import json
+        from datetime import datetime
+        from pathlib import Path as _Path
+
+        index_path = _Path(log_root) / "sessions.jsonl"
+        if not index_path.exists():
+            return 0
+
+        since_dt: datetime | None = None
+        if since:
+            try:
+                since_dt = datetime.fromisoformat(since)
+            except ValueError:
+                pass
+
+        count = 0
+        for line in index_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                idx = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            if since_dt:
+                try:
+                    entry_ts = datetime.fromisoformat(idx.get("timestamp", ""))
+                    if entry_ts < since_dt:
+                        continue
+                except (ValueError, TypeError):
+                    continue
+
+            dir_name = idx.get("dir_name", "")
+            if not dir_name:
+                continue
+
+            al_path = _Path(log_root) / "sessions" / dir_name / "audit_log.json"
+            if not al_path.exists():
+                continue
+
+            try:
+                data = json.loads(al_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            if not isinstance(data, list):
+                continue
+
+            for record_dict in data:
+                try:
+                    self._records.append(FailureRecord(**record_dict))
+                    count += 1
+                except (TypeError, KeyError):
+                    continue
+
+        return count

@@ -15,6 +15,7 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from autoskillit.core import _atomic_write, claude_code_log_path, get_logger
 from autoskillit.execution.anomaly_detection import detect_anomalies
@@ -50,12 +51,20 @@ def flush_session_log(
     end_ts: str = "",
     termination_reason: str = "",
     snapshot_interval_seconds: float = 0.0,
+    step_name: str = "",
+    token_usage: dict[str, Any] | None = None,
+    timing_seconds: float | None = None,
+    audit_record: dict[str, Any] | None = None,
 ) -> None:
     """Flush session diagnostics to disk.
 
     Writes proc_trace.jsonl, summary.json, anomalies.jsonl (if any),
     and appends to the global sessions.jsonl index. Applies retention
     to keep at most 500 session directories.
+
+    When step_name is provided along with telemetry kwargs, also writes
+    token_usage.json, step_timing.json, and (if audit_record) audit_log.json
+    to the session directory for recovery at next server startup.
     """
     log_root = resolve_log_dir(log_dir)
     dir_name = session_id if session_id else f"no_session_{start_ts.replace(':', '-')}"
@@ -150,6 +159,27 @@ def flush_session_log(
     summary_path = session_dir / "summary.json"
     _atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
 
+    # Write per-session telemetry files when step_name is provided
+    if step_name and token_usage is not None:
+        tu_data = {
+            "step_name": step_name,
+            "input_tokens": token_usage.get("input_tokens", 0),
+            "output_tokens": token_usage.get("output_tokens", 0),
+            "cache_creation_input_tokens": token_usage.get("cache_creation_input_tokens", 0),
+            "cache_read_input_tokens": token_usage.get("cache_read_input_tokens", 0),
+            "timing_seconds": timing_seconds if timing_seconds is not None else 0.0,
+        }
+        _atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
+
+    if step_name and timing_seconds is not None:
+        _atomic_write(
+            session_dir / "step_timing.json",
+            json.dumps({"step_name": step_name, "total_seconds": max(0.0, timing_seconds)}),
+        )
+
+    if audit_record is not None:
+        _atomic_write(session_dir / "audit_log.json", json.dumps([audit_record]))
+
     # Append to sessions.jsonl index
     index_entry = {
         "session_id": session_id,
@@ -165,6 +195,9 @@ def flush_session_log(
         "anomaly_count": anomaly_count,
         "peak_rss_kb": peak_rss_kb,
         "peak_oom_score": peak_oom_score,
+        "step_name": step_name,
+        "input_tokens": token_usage.get("input_tokens", 0) if token_usage else 0,
+        "output_tokens": token_usage.get("output_tokens", 0) if token_usage else 0,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

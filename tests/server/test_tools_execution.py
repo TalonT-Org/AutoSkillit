@@ -847,3 +847,53 @@ class TestRunSkillTiming:
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate foo", "/tmp")
         assert tool_ctx.timing_log.get_report() == []
+
+
+class TestRunHeadlessCoreFlushTelemetry:
+    """flush_session_log receives telemetry kwargs when step_name is provided."""
+
+    def _make_ndjson_with_usage(self) -> str:
+        asst = json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": 200, "output_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}}, "model": "claude-opus-4-6"})
+        result = json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "done", "session_id": "s1", "usage": {"input_tokens": 200, "output_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}})
+        return asst + "\n" + result
+
+    @pytest.mark.anyio
+    async def test_passes_step_telemetry_to_flush(self, tool_ctx, monkeypatch):
+        """flush_session_log is called with step_name, token_usage, and timing_seconds when step_name is set."""
+        import autoskillit.execution.session_log as sl_mod
+        calls = []
+
+        def mock_flush(**kwargs):
+            calls.append(kwargs)
+
+        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=self._make_ndjson_with_usage()))
+        await run_skill("/investigate foo", "/tmp", step_name="implement")
+        assert len(calls) == 1
+        assert calls[0]["step_name"] == "implement"
+        assert calls[0]["token_usage"] is not None
+        assert calls[0]["timing_seconds"] is not None
+
+    @pytest.mark.anyio
+    async def test_flushes_on_success_when_step_name_set(self, tool_ctx, monkeypatch):
+        """Successful sessions without proc_snapshots still flush when step_name is provided."""
+        import autoskillit.execution.session_log as sl_mod
+        calls = []
+
+        def mock_flush(**kwargs):
+            calls.append(kwargs)
+
+        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
+        await run_skill("/investigate foo", "/tmp", step_name="plan")
+        assert len(calls) == 1
+
+    @pytest.mark.anyio
+    async def test_records_timing_in_timing_log(self, tool_ctx):
+        """ctx.timing_log.record() is called with step_name and computed timing_seconds."""
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
+        await run_skill("/investigate foo", "/tmp", step_name="plan")
+        report = tool_ctx.timing_log.get_report()
+        assert len(report) == 1
+        assert report[0]["step_name"] == "plan"
+        assert report[0]["total_seconds"] >= 0.0

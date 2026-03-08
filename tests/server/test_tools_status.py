@@ -419,3 +419,66 @@ def test_check_quota_absent_from_mcp_registry(tool_ctx):
         "check_quota must be removed from the MCP registry. "
         "Agents should not call it — the PreToolUse hook enforces quota automatically."
     )
+
+
+class TestTelemetryRecoveryData:
+    """MCP status tools return data populated via load_from_log_dir recovery."""
+
+    def _write_token_session(self, log_root: Path, dir_name: str, step_name: str, input_tokens: int) -> None:
+        session_dir = log_root / "sessions" / dir_name
+        session_dir.mkdir(parents=True, exist_ok=True)
+        tu = {"step_name": step_name, "input_tokens": input_tokens, "output_tokens": 50, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "timing_seconds": 10.0}
+        (session_dir / "token_usage.json").write_text(json.dumps(tu))
+        idx = {"dir_name": dir_name, "timestamp": "2026-03-07T00:00:00+00:00", "session_id": dir_name}
+        with (log_root / "sessions.jsonl").open("a") as f:
+            f.write(json.dumps(idx) + "\n")
+
+    def _write_timing_session(self, log_root: Path, dir_name: str, step_name: str, total_seconds: float) -> None:
+        session_dir = log_root / "sessions" / dir_name
+        session_dir.mkdir(parents=True, exist_ok=True)
+        st = {"step_name": step_name, "total_seconds": total_seconds}
+        (session_dir / "step_timing.json").write_text(json.dumps(st))
+        idx = {"dir_name": dir_name, "timestamp": "2026-03-07T00:00:00+00:00", "session_id": dir_name}
+        with (log_root / "sessions.jsonl").open("a") as f:
+            f.write(json.dumps(idx) + "\n")
+
+    def _write_audit_session(self, log_root: Path, dir_name: str) -> None:
+        session_dir = log_root / "sessions" / dir_name
+        session_dir.mkdir(parents=True, exist_ok=True)
+        record = {"timestamp": "2026-03-07T00:00:00Z", "skill_command": "/autoskillit:implement-worktree", "exit_code": 1, "subtype": "error", "needs_retry": False, "retry_reason": "none", "stderr": "oops"}
+        (session_dir / "audit_log.json").write_text(json.dumps([record]))
+        idx = {"dir_name": dir_name, "timestamp": "2026-03-07T00:00:00+00:00", "session_id": dir_name}
+        with (log_root / "sessions.jsonl").open("a") as f:
+            f.write(json.dumps(idx) + "\n")
+
+    @pytest.mark.anyio
+    async def test_token_summary_reflects_recovered_data(self, tool_ctx, tmp_path):
+        """After load_from_log_dir populates token_log, get_token_summary returns recovered data."""
+        log_root = tmp_path / "logs"
+        self._write_token_session(log_root, "s001", "implement", 500)
+        tool_ctx.token_log.load_from_log_dir(log_root)
+        result = json.loads(await get_token_summary())
+        steps = {s["step_name"]: s for s in result["steps"]}
+        assert "implement" in steps
+        assert steps["implement"]["input_tokens"] == 500
+
+    @pytest.mark.anyio
+    async def test_timing_summary_reflects_recovered_data(self, tool_ctx, tmp_path):
+        """After load_from_log_dir populates timing_log, get_timing_summary returns recovered data."""
+        log_root = tmp_path / "logs"
+        self._write_timing_session(log_root, "s001", "plan", 99.0)
+        tool_ctx.timing_log.load_from_log_dir(log_root)
+        result = json.loads(await get_timing_summary())
+        steps = {s["step_name"]: s for s in result["steps"]}
+        assert "plan" in steps
+        assert steps["plan"]["total_seconds"] == pytest.approx(99.0)
+
+    @pytest.mark.anyio
+    async def test_pipeline_report_reflects_recovered_audit(self, tool_ctx, tmp_path):
+        """After load_from_log_dir populates audit, get_pipeline_report returns recovered failures."""
+        log_root = tmp_path / "logs"
+        self._write_audit_session(log_root, "s001")
+        tool_ctx.audit.load_from_log_dir(log_root)
+        result = json.loads(await get_pipeline_report())
+        assert result["total_failures"] == 1
+        assert result["failures"][0]["skill_command"] == "/autoskillit:implement-worktree"

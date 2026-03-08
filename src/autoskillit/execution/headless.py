@@ -470,8 +470,6 @@ async def run_headless_core(
                 start_ts=result.start_ts,
                 end_ts=result.end_ts,
             )
-            if timing_seconds is not None:
-                ctx.timing_log.record(step_name, timing_seconds)
         return skill_result
 
 

@@ -11,6 +11,7 @@ Public API:
 from __future__ import annotations
 
 import dataclasses
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -148,6 +149,28 @@ def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
     return None
 
 
+_WORKTREE_PATH_PATTERN: re.Pattern[str] = re.compile(r"^worktree_path=(.+)$", re.MULTILINE)
+
+
+def _extract_worktree_path(assistant_messages: list[str]) -> str | None:
+    """Scan assistant messages for the last worktree_path=<value> token.
+
+    The skill emits this token immediately after git worktree add (Step 1),
+    before any context-intensive implementation steps. When context is
+    exhausted before Step 6, the token survives in assistant_messages even
+    though it never appears in the overridden result text.
+
+    Uses the last match so that if the skill manages to emit the token
+    again in Step 6 before exhaustion, the most recent value wins.
+    """
+    last: str | None = None
+    for msg in assistant_messages:
+        m = _WORKTREE_PATH_PATTERN.search(msg)
+        if m:
+            last = m.group(1).strip()
+    return last
+
+
 def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
@@ -276,6 +299,10 @@ def _build_skill_result(
     if completion_marker:
         result_text = result_text.replace(completion_marker, "").strip()
 
+    extracted_worktree_path: str | None = None
+    if needs_retry:
+        extracted_worktree_path = _extract_worktree_path(session.assistant_messages)
+
     sr = SkillResult(
         success=success,
         result=result_text,
@@ -287,6 +314,7 @@ def _build_skill_result(
         retry_reason=retry_reason,
         stderr=_truncate(result.stderr),
         token_usage=session.token_usage,
+        worktree_path=extracted_worktree_path,
     )
     logger.debug(
         "build_skill_result_exit",

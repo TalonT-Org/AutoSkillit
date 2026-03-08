@@ -331,7 +331,7 @@ class TestQuotaGuardConfig:
         assert config.quota_guard.enabled is True
         assert config.quota_guard.threshold == pytest.approx(90.0)
         assert config.quota_guard.buffer_seconds == 60
-        assert config.quota_guard.cache_max_age == 60
+        assert config.quota_guard.cache_max_age == 300
 
     def test_load_quota_guard_from_yaml(self, tmp_path):
         import pytest

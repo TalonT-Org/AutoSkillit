@@ -27,9 +27,10 @@ async def test_open_kitchen_enables_gate(tmp_path, monkeypatch):
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
-                from autoskillit.server.prompts import _open_kitchen_handler
+                with patch("autoskillit.server.prompts._write_hook_config"):
+                    from autoskillit.server.prompts import _open_kitchen_handler
 
-                await _open_kitchen_handler()
+                    await _open_kitchen_handler()
 
     mock_ctx.gate.enable.assert_called_once()
     gate_file = tmp_path / "temp" / ".kitchen_gate"
@@ -74,9 +75,10 @@ async def test_open_kitchen_writes_gate_file(tmp_path, monkeypatch):
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
-                from autoskillit.server.prompts import _open_kitchen_handler
+                with patch("autoskillit.server.prompts._write_hook_config"):
+                    from autoskillit.server.prompts import _open_kitchen_handler
 
-                await _open_kitchen_handler()
+                    await _open_kitchen_handler()
 
     gate_file = tmp_path / "temp" / ".kitchen_gate"
     assert gate_file.exists(), "Gate file must exist after open_kitchen for hook subprocess access"
@@ -92,13 +94,14 @@ async def test_close_kitchen_removes_gate_file(tmp_path, monkeypatch):
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
-                from autoskillit.server.prompts import (
-                    _close_kitchen_handler,
-                    _open_kitchen_handler,
-                )
+                with patch("autoskillit.server.prompts._write_hook_config"):
+                    from autoskillit.server.prompts import (
+                        _close_kitchen_handler,
+                        _open_kitchen_handler,
+                    )
 
-                await _open_kitchen_handler()
-                _close_kitchen_handler()
+                    await _open_kitchen_handler()
+                    _close_kitchen_handler()
 
     gate_file = tmp_path / "temp" / ".kitchen_gate"
     assert not gate_file.exists(), "Gate file must be removed by close_kitchen"
@@ -118,9 +121,10 @@ async def test_open_kitchen_primes_quota_cache(tmp_path, monkeypatch):
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.prompts._prime_quota_cache", prime_mock):
-                from autoskillit.server.prompts import _open_kitchen_handler
+                with patch("autoskillit.server.prompts._write_hook_config"):
+                    from autoskillit.server.prompts import _open_kitchen_handler
 
-                await _open_kitchen_handler()
+                    await _open_kitchen_handler()
 
     prime_mock.assert_called_once()
 

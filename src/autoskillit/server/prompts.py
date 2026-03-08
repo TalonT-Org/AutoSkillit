@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastmcp.prompts import Message, PromptResult
 
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, pkg_root
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, _atomic_write, pkg_root
 from autoskillit.server import mcp
 
 
@@ -45,7 +45,7 @@ def _write_hook_config() -> None:
     hook_cfg_path = Path.cwd() / "temp" / ".autoskillit_hook_config.json"
     try:
         hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-        hook_cfg_path.write_text(json.dumps(payload))
+        _atomic_write(hook_cfg_path, json.dumps(payload))
     except OSError:
         logger.warning("hook_config_write_failed", path=str(hook_cfg_path))
 

@@ -210,10 +210,15 @@ class TestGatedToolAccess:
     @pytest.mark.anyio
     async def test_tools_work_after_enable(self, tool_ctx):
         """After open_kitchen prompt handler sets the flag, tools execute normally."""
+        from unittest.mock import AsyncMock
+
+        from autoskillit.server import prompts as prompts_mod
         from autoskillit.server.tools_execution import run_cmd
         from tests.conftest import _make_result
 
-        _open_kitchen_handler()
+        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(prompts_mod, "_write_hook_config"):
+                await _open_kitchen_handler()
         tool_ctx.runner.push(_make_result(0, "hello\n", ""))
         result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))
         assert result["success"] is True
@@ -273,9 +278,16 @@ class TestGatedToolAccess:
 class TestGateTransitionLogs:
     """N11: open_kitchen and close_kitchen handlers emit structured log events."""
 
-    def test_open_kitchen_logs_gate_open(self, tool_ctx):
-        with structlog.testing.capture_logs() as logs:
-            _open_kitchen_handler()
+    @pytest.mark.anyio
+    async def test_open_kitchen_logs_gate_open(self, tool_ctx):
+        from unittest.mock import AsyncMock
+
+        from autoskillit.server import prompts as prompts_mod
+
+        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(prompts_mod, "_write_hook_config"):
+                with structlog.testing.capture_logs() as logs:
+                    await _open_kitchen_handler()
         assert any(
             entry.get("event") == "open_kitchen" and entry.get("gate_state") == "open"
             for entry in logs
@@ -358,19 +370,31 @@ class TestOpenKitchenVersionReporting:
         content = result.messages[0].content
         return content.text if hasattr(content, "text") else str(content)
 
-    def test_open_kitchen_instructs_status_call(self):
+    @pytest.mark.anyio
+    async def test_open_kitchen_instructs_status_call(self):
+        from unittest.mock import AsyncMock
+
+        from autoskillit.server import prompts as prompts_mod
         from autoskillit.server.prompts import open_kitchen
 
-        result = open_kitchen()
+        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(prompts_mod, "_write_hook_config"):
+                result = await open_kitchen()
         msg = self._prompt_text(result)
         assert "kitchen_status" in msg
 
-    def test_open_kitchen_carries_orchestrator_contract(self):
+    @pytest.mark.anyio
+    async def test_open_kitchen_carries_orchestrator_contract(self):
         """open_kitchen prompt must use prohibition framing and name all forbidden tools."""
+        from unittest.mock import AsyncMock
+
         from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
+        from autoskillit.server import prompts as prompts_mod
         from autoskillit.server.prompts import open_kitchen
 
-        result = open_kitchen()
+        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(prompts_mod, "_write_hook_config"):
+                result = await open_kitchen()
         msg = self._prompt_text(result)
 
         # Must name every forbidden tool
@@ -390,7 +414,11 @@ class TestOpenKitchenVersionReporting:
             "phrasing — the restriction should be unconditional"
         )
 
-    def test_open_kitchen_still_enables_on_mismatch(self, tmp_path, tool_ctx):
+    @pytest.mark.anyio
+    async def test_open_kitchen_still_enables_on_mismatch(self, tmp_path, tool_ctx):
+        from unittest.mock import AsyncMock
+
+        from autoskillit.server import prompts as prompts_mod
         from autoskillit.server.prompts import open_kitchen
 
         plugin_dir = tmp_path / ".claude-plugin"
@@ -399,7 +427,9 @@ class TestOpenKitchenVersionReporting:
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
         tool_ctx.plugin_dir = str(tmp_path)
-        open_kitchen()
+        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(prompts_mod, "_write_hook_config"):
+                await open_kitchen()
         assert tool_ctx.gate.enabled is True
 
 
@@ -415,22 +445,33 @@ class TestOpenKitchenSousChef:
         content = result.messages[0].content
         return content.text if hasattr(content, "text") else str(content)
 
-    def test_sous_chef_rules_injected_at_open_kitchen(self):
+    @pytest.mark.anyio
+    async def test_sous_chef_rules_injected_at_open_kitchen(self):
         """open_kitchen must include sous-chef global orchestration rules."""
+        from unittest.mock import AsyncMock
+
+        import autoskillit.server.prompts as prompts_mod
         from autoskillit.server.prompts import open_kitchen
 
-        result = open_kitchen()
+        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(prompts_mod, "_write_hook_config"):
+                result = await open_kitchen()
         text = self._prompt_text(result)
         assert "MULTI-PART PLAN SEQUENCING" in text
         assert "retry-worktree" in text.lower()
 
-    def test_open_kitchen_degrades_gracefully_without_sous_chef(self, monkeypatch, tmp_path):
+    @pytest.mark.anyio
+    async def test_open_kitchen_degrades_gracefully_without_sous_chef(self, monkeypatch, tmp_path):
         """open_kitchen must not raise when sous-chef/SKILL.md is absent."""
+        from unittest.mock import AsyncMock
+
         import autoskillit.server.prompts as prompts_mod
         from autoskillit.server.prompts import open_kitchen
 
         monkeypatch.setattr(prompts_mod, "pkg_root", lambda: tmp_path)
-        result = open_kitchen()  # must not raise
+        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(prompts_mod, "_write_hook_config"):
+                result = await open_kitchen()  # must not raise
         text = self._prompt_text(result)
         assert "Kitchen is open" in text
         assert "kitchen_status" in text
@@ -1029,14 +1070,20 @@ def test_server_init_has_no_shim_reexports():
     assert not present, f"Shim re-exports found in server namespace (must be removed): {present}"
 
 
-def test_open_kitchen_has_no_update_advisory(tool_ctx):
+@pytest.mark.anyio
+async def test_open_kitchen_has_no_update_advisory(tool_ctx):
     """REQ-APP-004: open_kitchen prompt contains no recipe update advisory."""
+    from unittest.mock import AsyncMock
+
     from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.server import prompts as prompts_mod
     from autoskillit.server.prompts import open_kitchen
 
     # Ensure kitchen is closed before calling open_kitchen
     tool_ctx.gate = DefaultGateState(enabled=False)
-    result = open_kitchen()
+    with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
+        with patch.object(prompts_mod, "_write_hook_config"):
+            result = await open_kitchen()
 
     content = result.messages[0].content
     text = content.text if hasattr(content, "text") else str(content)

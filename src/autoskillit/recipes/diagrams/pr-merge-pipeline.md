@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:54228fe7831810b01a16fd31a94713840754f7f9f3a08d0f1eddc4f273003983 -->
+<!-- autoskillit-recipe-hash: sha256:79860a378ea2255bf7d2d16b7b4dc89d7b87108341be5338d9c515f0e781f6d9 -->
 <!-- autoskillit-diagram-format: v5 -->
 ## pr-merge-pipeline
 Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
@@ -63,9 +63,9 @@ publish_integration_branch  [push_to_remote] (retry ×3)
 │                                                                                                                                                  │
 │                                                                                                                                                  ✗ failure → cleanup_failure
 │                                                                                                                                                  ${{ result.state }} == worktree_intact_rebase_aborted → resolve_merge_conflicts
-│                                                                                                                                                  ${{ result.failed_step }} == rebase → cleanup_failure
-│                                                                                                                                                  ${{ result.failed_step }} == test_gate → cleanup_failure
-│                                                                                                                                                  ${{ result.failed_step }} == post_rebase_test_gate → cleanup_failure
+│                                                                                                                                                  ${{ result.failed_step }} == 'rebase' → cleanup_failure
+│                                                                                                                                                  ${{ result.failed_step }} == 'test_gate' → cleanup_failure
+│                                                                                                                                                  ${{ result.failed_step }} == 'post_rebase_test_gate' → cleanup_failure
 │                                                                                                                                                  (default) → next_part_or_next_pr
 │                                                                                                                                                                                      │
 │                                                                                                                                                                                      ✗ failure → cleanup_failure

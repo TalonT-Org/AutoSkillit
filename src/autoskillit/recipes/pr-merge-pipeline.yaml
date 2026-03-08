@@ -282,11 +282,11 @@ steps:
     on_result:
       - when: "${{ result.state }} == worktree_intact_rebase_aborted"
         route: resolve_merge_conflicts
-      - when: "${{ result.failed_step }} == 'rebase'"
+      - when: "result.failed_step == 'rebase'"
         route: cleanup_failure
-      - when: "${{ result.failed_step }} == 'test_gate'"
+      - when: "result.failed_step == 'test_gate'"
         route: cleanup_failure
-      - when: "${{ result.failed_step }} == 'post_rebase_test_gate'"
+      - when: "result.failed_step == 'post_rebase_test_gate'"
         route: cleanup_failure
       - route: next_part_or_next_pr
     note: >

@@ -35,7 +35,6 @@ BUNDLED_SKILLS = [
     "report-bug",
     "resolve-failures",
     "resolve-merge-conflicts",
-    "resolve-merge-conflicts",
     "resolve-review",
     "retry-worktree",
     "review-approach",

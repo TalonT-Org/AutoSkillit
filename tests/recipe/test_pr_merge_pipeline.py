@@ -216,7 +216,7 @@ def test_pmp_has_check_integration_exists_step(recipe) -> None:
 def test_pmp_check_integration_exists_cmd_uses_base_branch(recipe) -> None:
     """check_integration_exists cmd must reference inputs.base_branch."""
     cmd = recipe.steps["check_integration_exists"].with_args["cmd"]
-    assert "inputs.base_branch" in cmd or "base_branch" in cmd
+    assert "inputs.base_branch" in cmd
 
 
 def test_pmp_check_integration_exists_routes_to_analyze_prs_on_success(recipe) -> None:

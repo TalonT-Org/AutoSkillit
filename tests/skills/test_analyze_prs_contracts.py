@@ -13,25 +13,33 @@ def skill_text() -> str:
 
 
 def test_analyze_prs_batch_branch_uses_pr_batch_prefix(skill_text: str) -> None:
-    """Batch branch name must use pr-batch/ prefix, not integration/ prefix.
+    """Batch branch name must use pr-batch/pr-merge- prefix, not integration/ prefix.
 
     The permanent integration branch is named 'integration'. Git cannot have
     both a branch named 'integration' and branches named 'integration/*' —
     the slash-prefix requires 'integration' to be a directory, not a file.
     Batch branches must use a disjoint prefix (pr-batch/).
+
+    We require 'pr-batch/pr-merge-' (not just 'pr-batch/') to anchor the check
+    to the branch-computation context rather than any incidental occurrence.
     """
-    assert "pr-batch/" in skill_text, (
-        "analyze-prs must use 'pr-batch/' prefix for batch branch names — "
-        "using 'integration/' conflicts with the permanent 'integration' branch"
+    assert "pr-batch/pr-merge-" in skill_text, (
+        "analyze-prs must use 'pr-batch/pr-merge-{ts}' naming for integration_branch — "
+        "using 'integration/' prefix conflicts with the permanent 'integration' branch"
     )
 
 
 def test_analyze_prs_does_not_use_integration_slash_prefix(skill_text: str) -> None:
-    """SKILL.md must not compute batch branch names with integration/ prefix."""
-    # The permanent branch name 'integration' is fine to mention, but the
-    # computed branch name must not use integration/ as a prefix
-    assert "integration/pr-merge" not in skill_text, (
-        "analyze-prs must not use 'integration/pr-merge-{ts}' as batch branch name — "
+    """SKILL.md must not compute batch branch names with integration/ prefix.
+
+    The original check only caught 'integration/pr-merge'; it would miss other
+    integration/-prefixed patterns such as 'integration/batch-...' or
+    'integration/run-...'.  Checking for the bare 'integration/' substring
+    prohibits all such patterns while still allowing mentions of 'integration'
+    (the permanent branch name) without a trailing slash.
+    """
+    assert "integration/" not in skill_text, (
+        "analyze-prs must not use integration/ as a batch branch prefix in any context — "
         "this conflicts with the permanent 'integration' branch in git ref storage"
     )
 

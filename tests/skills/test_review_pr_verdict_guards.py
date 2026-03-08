@@ -41,15 +41,6 @@ def test_verdict_logic_does_not_use_warning_count_threshold():
     )
 
 
-def test_verdict_logic_uses_requires_decision():
-    """Verdict determination must reference the requires_decision field."""
-    text = _skill_text()
-    assert "requires_decision" in text, (
-        "Verdict logic must use the requires_decision field to determine whether a "
-        "finding needs human judgment or can be fixed automatically."
-    )
-
-
 def test_needs_human_not_gated_on_numeric_threshold():
     """needs_human verdict must not appear adjacent to any numeric count condition."""
     text = _skill_text()

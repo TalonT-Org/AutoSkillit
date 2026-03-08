@@ -198,6 +198,9 @@ The implementer MUST:
 1. Resolve all Category A conflicts, preserving the intent of both this PR and earlier merges.
 2. Verify Category B files for semantic correctness after auto-merge.
 3. Carry over every Category C file exactly as the PR changed it — no omissions.
+4. **NEVER use `git merge` to apply changes.** Use `git cherry-pick <commit>` for individual
+   commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires
+   linear commit history — merge commits cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure.
 
 If any conflict cannot be confidently resolved, do NOT guess. Set `escalation_required=true`
 in the output and describe the ambiguity for human review.

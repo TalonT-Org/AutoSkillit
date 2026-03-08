@@ -9,25 +9,6 @@ from autoskillit.core import _atomic_write, pkg_root
 from autoskillit.hooks import HOOK_REGISTRY
 
 
-def _hook_command(script_name: str) -> str:
-    """Build an absolute hook command for settings.json registration.
-
-    Uses pkg_root() to resolve the installed package location at registration
-    time, producing absolute paths that work regardless of which Python
-    interpreter Claude Code uses to run the hook.
-    """
-    return f"python3 {pkg_root() / 'hooks' / script_name}"
-
-
-def _matcher_for_scripts(*script_names: str) -> str:
-    """Look up the registry matcher that contains the given script(s)."""
-    for hook_def in HOOK_REGISTRY:
-        if all(s in hook_def.scripts for s in script_names):
-            return hook_def.matcher
-    msg = f"No registry entry contains scripts: {script_names}"
-    raise ValueError(msg)
-
-
 def _load_settings_data(settings_path: Path) -> dict:
     """Read and parse settings.json; return empty dict on any error."""
     if settings_path.exists():
@@ -44,32 +25,6 @@ def _write_settings_data(settings_path: Path, data: dict) -> None:
     _atomic_write(settings_path, json.dumps(data, indent=2))
 
 
-def _register_pretooluse_hook(settings_path: Path, matcher: str, command: str) -> None:
-    """Idempotently register a single PreToolUse hook entry in settings.json.
-
-    Idempotency checks:
-    - Returns early if any existing entry has the same ``matcher``.
-    - Returns early if any existing entry has the same ``command`` (regardless of matcher).
-    """
-    data = _load_settings_data(settings_path)
-    hooks = data.setdefault("hooks", {})
-    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
-
-    for entry in pretooluse:
-        if entry.get("matcher") == matcher:
-            return  # matcher already registered
-        if any(h.get("command") == command for h in entry.get("hooks", [])):
-            return  # command already registered under a different matcher
-
-    pretooluse.append(
-        {
-            "matcher": matcher,
-            "hooks": [{"type": "command", "command": command}],
-        }
-    )
-    _write_settings_data(settings_path, data)
-
-
 def _is_autoskillit_hook_command(command: str) -> bool:
     """Check if a hook command belongs to autoskillit (any format)."""
     if "autoskillit" in command:
@@ -82,7 +37,7 @@ def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
     """Remove all autoskillit-related PreToolUse entries from settings.json.
 
     This is a destructive-then-rebuild approach: evict everything autoskillit-
-    related, then let the _register_* functions write canonical entries fresh.
+    related, then let sync_hooks_to_settings() write canonical entries fresh.
     Covers all legacy formats (python3 -m, old absolute paths, ${CLAUDE_PLUGIN_ROOT}).
     """
     data = _load_settings_data(settings_path)
@@ -104,96 +59,22 @@ def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
     _write_settings_data(settings_path, data)
 
 
-def _register_quota_hook(settings_path: Path) -> None:
-    """Idempotently add the quota PreToolUse hook to .claude/settings.json."""
-    _register_pretooluse_hook(
-        settings_path,
-        matcher=_matcher_for_scripts("quota_check.py"),
-        command=_hook_command("quota_check.py"),
-    )
+def sync_hooks_to_settings(settings_path: Path) -> None:
+    """Write all HOOK_REGISTRY hooks to settings.json.
 
-
-def _register_skill_cmd_check_hook(settings_path: Path) -> None:
-    """Idempotently add the skill_cmd_check PreToolUse hook to .claude/settings.json.
-
-    This hook shares the same ``run_skill`` matcher as the quota hook, so it
-    appends its command to the existing matcher entry when one already exists.
+    Must be called after _evict_stale_autoskillit_hooks() — assumes no
+    autoskillit entries are present in PreToolUse when this function runs.
+    Each HookDef becomes one entry with all its scripts as ordered commands.
     """
+    hooks_dir = pkg_root() / "hooks"
     data = _load_settings_data(settings_path)
-    hooks = data.setdefault("hooks", {})
-    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
-
-    MATCHER = _matcher_for_scripts("skill_cmd_check.py")
-    COMMAND = _hook_command("skill_cmd_check.py")
-
-    for entry in pretooluse:
-        if any(h.get("command") == COMMAND for h in entry.get("hooks", [])):
-            return
-
-    for entry in pretooluse:
-        if entry.get("matcher") == MATCHER:
-            entry["hooks"].append({"type": "command", "command": COMMAND})
-            _write_settings_data(settings_path, data)
-            return
-
-    pretooluse.append(
-        {
-            "matcher": MATCHER,
-            "hooks": [{"type": "command", "command": COMMAND}],
-        }
-    )
-    _write_settings_data(settings_path, data)
-
-
-def _register_native_tool_guard_hook(settings_path: Path) -> None:
-    """Idempotently add the native_tool_guard PreToolUse hook to .claude/settings.json."""
-    _register_pretooluse_hook(
-        settings_path,
-        matcher=_matcher_for_scripts("native_tool_guard.py"),
-        command=_hook_command("native_tool_guard.py"),
-    )
-
-
-def _register_remove_clone_guard_hook(settings_path: Path) -> None:
-    """Idempotently add the remove_clone_guard PreToolUse hook to .claude/settings.json."""
-    _register_pretooluse_hook(
-        settings_path,
-        matcher=_matcher_for_scripts("remove_clone_guard.py"),
-        command=_hook_command("remove_clone_guard.py"),
-    )
-
-
-def _register_skill_command_guard_hook(settings_path: Path) -> None:
-    """Idempotently add the skill_command_guard PreToolUse hook to .claude/settings.json.
-
-    This hook shares the same ``run_skill`` matcher as the quota hook, so it
-    appends its command to the existing matcher entry when one already exists.
-    """
-    data = _load_settings_data(settings_path)
-    hooks = data.setdefault("hooks", {})
-    pretooluse: list[dict] = hooks.setdefault("PreToolUse", [])
-
-    MATCHER = _matcher_for_scripts("skill_command_guard.py")
-    COMMAND = _hook_command("skill_command_guard.py")
-
-    # Idempotency: return if command already present anywhere
-    for entry in pretooluse:
-        if any(h.get("command") == COMMAND for h in entry.get("hooks", [])):
-            return
-
-    # Add to existing run_skill matcher entry if one exists, else create a new entry
-    for entry in pretooluse:
-        if entry.get("matcher") == MATCHER:
-            entry["hooks"].append({"type": "command", "command": COMMAND})
-            _write_settings_data(settings_path, data)
-            return
-
-    pretooluse.append(
-        {
-            "matcher": MATCHER,
-            "hooks": [{"type": "command", "command": COMMAND}],
-        }
-    )
+    pretooluse: list[dict] = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
+    for hook_def in HOOK_REGISTRY:
+        hooks_list = [
+            {"type": "command", "command": f"python3 {hooks_dir / script}"}
+            for script in hook_def.scripts
+        ]
+        pretooluse.append({"matcher": hook_def.matcher, "hooks": hooks_list})
     _write_settings_data(settings_path, data)
 
 

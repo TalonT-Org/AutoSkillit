@@ -83,7 +83,7 @@ def test_close_kitchen_removes_gate_file(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            from autoskillit.server.prompts import _open_kitchen_handler, _close_kitchen_handler
+            from autoskillit.server.prompts import _close_kitchen_handler, _open_kitchen_handler
 
             _open_kitchen_handler()
             _close_kitchen_handler()

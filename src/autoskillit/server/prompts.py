@@ -17,6 +17,12 @@ def _open_kitchen_handler() -> None:
 
     _get_ctx().gate.enable()
     logger.info("open_kitchen", gate_state="open")
+    gate_path = Path.cwd() / "temp" / ".kitchen_gate"
+    try:
+        gate_path.parent.mkdir(parents=True, exist_ok=True)
+        gate_path.touch()
+    except OSError:
+        logger.warning("gate_file_write_failed", path=str(gate_path))
 
 
 def _close_kitchen_handler() -> None:
@@ -25,6 +31,11 @@ def _close_kitchen_handler() -> None:
 
     _get_ctx().gate.disable()
     logger.info("close_kitchen", gate_state="closed")
+    gate_path = Path.cwd() / "temp" / ".kitchen_gate"
+    try:
+        gate_path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("gate_file_remove_failed", path=str(gate_path))
 
 
 @mcp.resource("recipe://{name}")

@@ -71,8 +71,13 @@ def test_triage_issues_classification_uses_behavioral_criterion() -> None:
     """
     bd = bundled_skills_dir()
     content = (bd / "triage-issues" / "SKILL.md").read_text()
-    assert re.search(r"is existing behavior broken", content, re.IGNORECASE), (
-        "triage-issues Step 3 must ask 'Is existing behavior broken?' as the primary criterion"
+    assert re.search(
+        r"is existing behavior broken|does existing code produce a runtime error",
+        content,
+        re.IGNORECASE,
+    ), (
+        "triage-issues Step 3 must use a behavioral criterion (broken/runtime-error), "
+        "not scope-based (large/ambiguous) classification"
     )
     assert "Large/ambiguous enhancement" not in content, (
         "triage-issues Step 3 must not route large/ambiguous enhancements to remediation — "

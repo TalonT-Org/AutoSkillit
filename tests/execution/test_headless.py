@@ -1064,6 +1064,48 @@ class TestBuildSkillResultWorktreePath:
         assert sr.worktree_path == "/second/path"
 
 
+class TestWorktreePathOnContextExhaustion:
+    """Contract: worktree_path appears as top-level JSON field on needs_retry."""
+
+    def test_worktree_path_in_json_response_on_context_limit(self):
+        """Full stack: NDJSON with early token → SkillResult → to_json()."""
+        path = "/home/talon/projects/autoskillit-runs/worktrees/impl-fix"
+        assistant = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": f"worktree_path={path}\nbranch_name=impl-fix",
+                },
+            }
+        )
+        result = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "result": "prompt is too long",
+                "session_id": "s1",
+                "errors": ["prompt is too long"],
+            }
+        )
+        ndjson = f"{assistant}\n{result}\n"
+        sub = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1234,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(sub, "", "/test", None)
+        data = json.loads(sr.to_json())
+
+        assert sr.success is False
+        assert data["needs_retry"] is True
+        assert data["worktree_path"] == path
+
+
 class TestBuildSkillResultCompleted:
     """_build_skill_result and _compute_success handle COMPLETED termination correctly."""
 

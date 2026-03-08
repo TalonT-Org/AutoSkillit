@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:f8d5e61308ab6db27c47d28e0c3074ab918b158361a7856fb7c538feed5df7b7 -->
+<!-- autoskillit-recipe-hash: sha256:b8d7f5f907cd7f44279caa3cfdb58e76cf841ad59cc8418a0119dd00668a2921 -->
 <!-- autoskillit-diagram-format: v5 -->
 ## pr-merge-pipeline
 Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
@@ -123,10 +123,11 @@ cleanup_failure  [remove_clone] (retry ×3)
 | source_dir | Path to the source repository to clone and work in | — |
 | run_name | Name prefix for this pipeline run (used in clone directory name) | pr-merge |
 | keep_clone_on_failure | Keep the clone directory when the pipeline fails (true/false) | off |
-| base_branch | Target branch that all PRs are merging into; integration branch is created from this | integration |
 | upstream_branch | Branch to create base_branch from if it does not yet exist on the remote | main |
 | audit | Run /autoskillit:audit-impl after all PRs are merged to check coherency (true/false) | on |
 | plans_dir | Directory where collected plan files are stored for audit-impl | temp/pr-merge-pipeline |
+
+Agent-managed: base_branch
 ### Kitchen Rules
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill and run_cmd.
 - Route to on_failure when a step fails — do not investigate or fix directly.

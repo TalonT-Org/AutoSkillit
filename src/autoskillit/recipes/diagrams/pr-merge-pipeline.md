@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:42926db538a2683df3c802e8e7f65ec04b547f30d4da874a6d8e0ccdd5db0c9b -->
+<!-- autoskillit-recipe-hash: sha256:f8d5e61308ab6db27c47d28e0c3074ab918b158361a7856fb7c538feed5df7b7 -->
 <!-- autoskillit-diagram-format: v5 -->
 ## pr-merge-pipeline
 Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
@@ -11,6 +11,18 @@ clone  [autoskillit.workspace.clone.clone_repo] (retry ×3)
 │  ✗ failure → escalate_stop
 │
 setup_remote  [run_cmd] (retry ×3)
+│  ↓ success → check_integration_exists
+│  ✗ failure → cleanup_failure
+│
+check_integration_exists  [run_cmd] (retry ×3)
+│  ↓ success → analyze_prs
+│  ✗ failure → confirm_create_integration
+│
+❓ confirm_create_integration
+│  ✓ yes  → create_persistent_integration
+│  ✗ no   → escalate_stop
+│
+create_persistent_integration  [run_cmd] (retry ×3)
 │  ↓ success → analyze_prs
 │  ✗ failure → cleanup_failure
 │
@@ -102,7 +114,7 @@ cleanup_failure  [remove_clone] (retry ×3)
 │  ✗ failure → escalate_stop
 │
 ─────────────────────────────────────
-⏹ done  "PR consolidation complete. Integration branch pushed, review PR opened. Human review required before merging to base_branch."
+⏹ done  "PR consolidation complete. Batch branch pushed, review PR opened targeting integration branch. Human review required before merging integration into main."
 ⏹ escalate_stop  "Pipeline failed — human intervention needed. Check the integration branch and temp/pr-merge-pipeline/ for details."
 
 ### Inputs
@@ -111,7 +123,8 @@ cleanup_failure  [remove_clone] (retry ×3)
 | source_dir | Path to the source repository to clone and work in | — |
 | run_name | Name prefix for this pipeline run (used in clone directory name) | pr-merge |
 | keep_clone_on_failure | Keep the clone directory when the pipeline fails (true/false) | off |
-| base_branch | Target branch that all PRs are merging into; integration branch is created from this | main |
+| base_branch | Target branch that all PRs are merging into; integration branch is created from this | integration |
+| upstream_branch | Branch to create base_branch from if it does not yet exist on the remote | main |
 | audit | Run /autoskillit:audit-impl after all PRs are merged to check coherency (true/false) | on |
 | plans_dir | Directory where collected plan files are stored for audit-impl | temp/pr-merge-pipeline |
 ### Kitchen Rules
@@ -119,7 +132,7 @@ cleanup_failure  [remove_clone] (retry ×3)
 - Route to on_failure when a step fails — do not investigate or fix directly.
 - SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before advancing to the next PR. Never batch-assess all PRs before starting merges.
 - SEQUENTIAL EXECUTION: complete full cycle (verify → implement → test → merge_to_integration) per plan part before advancing to the next part or PR.
-- INTEGRATION BRANCH: All PR merges and worktree merges target context.integration_branch, not inputs.base_branch. The base_branch is only used for the final review PR.
+- INTEGRATION BRANCH: Two distinct branches exist. inputs.base_branch is the PERMANENT branch (default: integration) that accumulates AI work across runs — it is never deleted. context.integration_branch is the PER-RUN batch branch (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this pipeline run. All PR merges and worktree merges target context.integration_branch. The final review PR opens from context.integration_branch into inputs.base_branch.
 - PR QUEUE: The agent reads context.pr_order_file once at analyze_prs and maintains an ordered queue. context.current_pr_index (agent-maintained, starts at 0) tracks progress. Advance the index after each successful merge or complex-pr cycle completes.
 - COMPLEX PR PATH: When merge_pr returns needs_plan=true, context.task is set to the conflict_report_path. Pass context.task to make-plan. The plan+implement cycle creates a worktree from the integration branch and merges it back via merge_to_integration.
 - SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly off-limits. Never run any command in source_dir — no git checkout, git fetch, git reset, git pull, run_cmd, run_skill, or any other operation. All work — skill invocations, git operations, file reads — happens exclusively in the clone (work_dir). source_dir is used ONLY to read the remote URL inside push_to_remote.

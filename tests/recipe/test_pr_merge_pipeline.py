@@ -180,3 +180,75 @@ def test_pmp_create_review_pr_passes_four_args(recipe) -> None:
         "context.verdict",
     ]:
         assert arg in cmd, f"create_review_pr skill_command must include {arg}"
+
+
+def test_pmp_base_branch_defaults_to_integration(recipe) -> None:
+    """base_branch ingredient must default to 'integration', not 'main'."""
+    ingredient = recipe.ingredients["base_branch"]
+    assert ingredient.default == "integration"
+
+
+def test_pmp_has_upstream_branch_ingredient(recipe) -> None:
+    """upstream_branch ingredient must exist with default 'main'."""
+    assert "upstream_branch" in recipe.ingredients
+    assert recipe.ingredients["upstream_branch"].default == "main"
+
+
+def test_pmp_setup_remote_routes_to_check_integration_exists(recipe) -> None:
+    """setup_remote.on_success must route to check_integration_exists, not analyze_prs."""
+    assert recipe.steps["setup_remote"].on_success == "check_integration_exists"
+
+
+def test_pmp_has_check_integration_exists_step(recipe) -> None:
+    """check_integration_exists step must exist and use run_cmd."""
+    assert "check_integration_exists" in recipe.steps
+    assert recipe.steps["check_integration_exists"].tool == "run_cmd"
+
+
+def test_pmp_check_integration_exists_cmd_uses_base_branch(recipe) -> None:
+    """check_integration_exists cmd must reference inputs.base_branch."""
+    cmd = recipe.steps["check_integration_exists"].with_args["cmd"]
+    assert "inputs.base_branch" in cmd or "base_branch" in cmd
+
+
+def test_pmp_check_integration_exists_routes_to_analyze_prs_on_success(recipe) -> None:
+    """check_integration_exists must proceed to analyze_prs when branch exists."""
+    assert recipe.steps["check_integration_exists"].on_success == "analyze_prs"
+
+
+def test_pmp_check_integration_exists_routes_to_confirm_on_failure(recipe) -> None:
+    """check_integration_exists must route to confirm step when branch is absent."""
+    assert recipe.steps["check_integration_exists"].on_failure == "confirm_create_integration"
+
+
+def test_pmp_has_confirm_create_integration_step(recipe) -> None:
+    """confirm_create_integration must be a confirm action."""
+    step = recipe.steps["confirm_create_integration"]
+    assert step.action == "confirm"
+
+
+def test_pmp_confirm_create_integration_routes_to_create_on_success(recipe) -> None:
+    """User confirming must proceed to create_persistent_integration."""
+    assert recipe.steps["confirm_create_integration"].on_success == "create_persistent_integration"
+
+
+def test_pmp_confirm_create_integration_routes_to_escalate_on_failure(recipe) -> None:
+    """User declining must route to escalate_stop."""
+    assert recipe.steps["confirm_create_integration"].on_failure == "escalate_stop"
+
+
+def test_pmp_has_create_persistent_integration_step(recipe) -> None:
+    """create_persistent_integration must exist and use run_cmd."""
+    assert "create_persistent_integration" in recipe.steps
+    assert recipe.steps["create_persistent_integration"].tool == "run_cmd"
+
+
+def test_pmp_create_persistent_integration_references_upstream_branch(recipe) -> None:
+    """create_persistent_integration cmd must use inputs.upstream_branch as source."""
+    cmd = recipe.steps["create_persistent_integration"].with_args["cmd"]
+    assert "upstream_branch" in cmd
+
+
+def test_pmp_create_persistent_integration_routes_to_analyze_prs(recipe) -> None:
+    """After creating integration branch, pipeline must proceed to analyze_prs."""
+    assert recipe.steps["create_persistent_integration"].on_success == "analyze_prs"

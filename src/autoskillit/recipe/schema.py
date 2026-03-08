@@ -58,7 +58,7 @@ class StepResultRoute:
 @dataclass
 class RecipeStep:
     tool: str | None = None
-    action: str | None = None
+    action: str | None = None  # Built-in action: "route", "stop", "confirm"
     python: str | None = None
     with_args: dict[str, str] = field(default_factory=dict)
     on_success: str | None = None

@@ -1,5 +1,5 @@
-<!-- autoskillit-recipe-hash: sha256:ad9cb5c9bc405f4636ea19794f8a6b8c29015543b99d688887bf2f668da0a181 -->
-<!-- autoskillit-diagram-format: v4 -->
+<!-- autoskillit-recipe-hash: sha256:f6de7178434861ef185945fea3c951684ccfb87eb8cdf534949cb3fabe0455b9 -->
+<!-- autoskillit-diagram-format: v5 -->
 ## implementation-groups
 Decompose a source document into sequenced implementation groups, then plan, verify, implement, test, and merge each group end-to-end. Use when you have a large document or roadmap to implement via make-groups.
 
@@ -97,12 +97,16 @@ re_push  [push_to_remote] (retry ×3)
 │  ✗ failure → release_issue_failure
 │
 ├── [release_issue_success] (retry ×3)  ← only if inputs.issue_url
-│       ✗ failure → cleanup_success
+│       ✗ failure → confirm_cleanup
 │
 ├── [release_issue_failure] (retry ×3)  ← only if inputs.issue_url
 │       ✗ failure → cleanup_failure
 │
-cleanup_success  [remove_clone] (retry ×3)
+❓ confirm_cleanup
+│  ✓ yes  → delete_clone
+│  ✗ no   → done
+│
+delete_clone  [remove_clone] (retry ×3)
 │  ↓ success → done
 │  ✗ failure → done
 │

@@ -19,7 +19,7 @@ from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 # Diagram format version — bump when rendering logic changes so that
 # existing diagrams are flagged stale even if the recipe YAML hasn't changed.
-_DIAGRAM_FORMAT_VERSION = "v4"
+_DIAGRAM_FORMAT_VERSION = "v5"
 
 
 # ---------------------------------------------------------------------------
@@ -46,6 +46,7 @@ class _LayoutStep:
     on_result_conditions: list[tuple[str, str, bool]] = field(default_factory=list)
     skip_when_false: str | None = None
     note: str = ""  # carries recipe step note for semantic FOR EACH detection
+    is_confirm: bool = False  # True when action == "confirm"
 
 
 @dataclass
@@ -143,6 +144,7 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
             tool_val = "—"
 
         is_terminal = step.action == "stop"
+        is_confirm = step.action == "confirm"
         infra = _is_infrastructure_step(step)
 
         ls = _LayoutStep(
@@ -150,6 +152,7 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
             tool=tool_val,
             is_terminal=is_terminal,
             is_infrastructure=infra,
+            is_confirm=is_confirm,
             message=step.message or "",
             on_success=step.on_success,
             on_failure=step.on_failure,
@@ -269,6 +272,14 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
 
 def _append_step(step: _LayoutStep, lines: list[str], prefix: str) -> None:
     """Append rendering lines for a single step onto *lines*."""
+    if step.is_confirm:
+        # Confirm step: ❓ prefix with yes/no branch labels
+        lines.append(f"{prefix}❓ {step.name}")
+        if step.on_success:
+            lines.append(f"{prefix}│  ✓ yes  → {step.on_success}")
+        if step.on_failure:
+            lines.append(f"{prefix}│  ✗ no   → {step.on_failure}")
+        return
     if step.skip_when_false:
         # Optional step: bracket notation with right-side annotation
         retry_str = ""

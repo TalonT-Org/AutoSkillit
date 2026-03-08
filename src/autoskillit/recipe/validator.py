@@ -90,6 +90,19 @@ def validate_recipe(recipe: Recipe) -> list[str]:
             )
         if step.action == "stop" and not step.message:
             errors.append(f"Terminal step '{step_name}' (action: stop) must have a 'message'.")
+        if step.action == "confirm":
+            if not step.message:
+                errors.append(
+                    f"Confirm step '{step_name}' (action: confirm) must have a 'message'."
+                )
+            if not step.on_success:
+                errors.append(
+                    f"Confirm step '{step_name}' (action: confirm) must have 'on_success'."
+                )
+            if not step.on_failure:
+                errors.append(
+                    f"Confirm step '{step_name}' (action: confirm) must have 'on_failure'."
+                )
 
         # Routing target validation
         for goto_field in ("on_success", "on_failure", "on_context_limit"):

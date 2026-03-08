@@ -1,5 +1,5 @@
-<!-- autoskillit-recipe-hash: sha256:df6ac52b20b6ee20b8f9d3f4c6e8bd86d1079aa80b77a21830dd2338946826e8 -->
-<!-- autoskillit-diagram-format: v4 -->
+<!-- autoskillit-recipe-hash: sha256:57975e4a50ccdd0d9a5910e1a84df6ca0c02edbf9b8c8aa23e119f8bccf6bf5b -->
+<!-- autoskillit-diagram-format: v5 -->
 ## remediation
 Investigate a problem deeply, plan architectural fix, implement in a feature branch, and open a PR.
 
@@ -107,12 +107,16 @@ re_push  [push_to_remote] (retry ×3)
 │  ✗ failure → release_issue_failure
 │
 ├── [release_issue_success] (retry ×3)  ← only if inputs.issue_url
-│       ✗ failure → cleanup_success
+│       ✗ failure → confirm_cleanup
 │
 ├── [release_issue_failure] (retry ×3)  ← only if inputs.issue_url
 │       ✗ failure → cleanup_failure
 │
-cleanup_success  [remove_clone] (retry ×3)
+❓ confirm_cleanup
+│  ✓ yes  → delete_clone
+│  ✗ no   → done
+│
+delete_clone  [remove_clone] (retry ×3)
 │  ↓ success → done
 │  ✗ failure → done
 │

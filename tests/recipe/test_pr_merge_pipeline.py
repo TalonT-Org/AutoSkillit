@@ -1,19 +1,15 @@
-"""Structural assertions for .autoskillit/recipes/pr-merge-pipeline.yaml."""
+"""Structural assertions for the bundled pr-merge-pipeline recipe."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from autoskillit.recipe.io import load_recipe
-
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
 
 @pytest.fixture(scope="module")
 def recipe():
-    return load_recipe(PROJECT_ROOT / ".autoskillit" / "recipes" / "pr-merge-pipeline.yaml")
+    return load_recipe(builtin_recipes_dir() / "pr-merge-pipeline.yaml")
 
 
 def test_pmp_check_impl_plans_step_exists(recipe) -> None:
@@ -106,17 +102,15 @@ def test_pmp_plan_step_captures_all_plan_paths(recipe) -> None:
     """plan step must capture all_plan_paths for accumulation across the PR loop.
 
     Each make-plan invocation (one per complex PR) must contribute its plan_path
-    to context.all_plan_paths via agent-managed comma-append. The capture entry
-    seeds the variable on first execution; the recipe note instructs the agent
-    to append on re-entry rather than overwrite.
+    to context.all_plan_paths via capture_list — which accumulates rather than overwrites.
     """
     step = recipe.steps["plan"]
-    assert "all_plan_paths" in step.capture, (
-        "plan step must capture all_plan_paths — needed so audit_impl receives "
+    assert "all_plan_paths" in step.capture_list, (
+        "plan step must capture all_plan_paths via capture_list — needed so audit_impl receives "
         "explicit plan file paths instead of a directory"
     )
-    assert "${{ result.plan_path }}" in step.capture["all_plan_paths"], (
-        "all_plan_paths must be seeded from result.plan_path on first execution"
+    assert "${{ result.plan_path }}" in step.capture_list["all_plan_paths"], (
+        "all_plan_paths must accumulate result.plan_path on each loop iteration"
     )
 
 
@@ -129,7 +123,7 @@ def test_pmp_audit_impl_uses_all_plan_paths(recipe) -> None:
     """
     step = recipe.steps["audit_impl"]
     cmd = step.with_args["skill_command"]
-    assert "context.all_plan_paths" in cmd, (
+    assert "${{ context.all_plan_paths }}" in cmd, (
         "audit_impl skill_command must reference context.all_plan_paths"
     )
     assert "inputs.plans_dir" not in cmd, (
@@ -146,6 +140,7 @@ def test_pmp_all_plan_paths_available_at_audit_impl(recipe) -> None:
     """
     from autoskillit.recipe.io import iter_steps_with_context
 
+    assert recipe.steps
     for name, _step, available in iter_steps_with_context(recipe):
         if name == "audit_impl":
             assert "all_plan_paths" in available, (
@@ -155,3 +150,44 @@ def test_pmp_all_plan_paths_available_at_audit_impl(recipe) -> None:
             break
     else:
         pytest.fail("audit_impl step not found in recipe")
+
+
+def test_pmp_create_review_pr_uses_run_skill(recipe) -> None:
+    """create_review_pr must use run_skill (not run_cmd)."""
+    step = recipe.steps["create_review_pr"]
+    assert step.tool == "run_skill", (
+        "create_review_pr must use run_skill to invoke /autoskillit:create-review-pr — "
+        "the skill produces rich PR bodies with tables and arch-lens diagrams; "
+        "run_cmd produces a minimal plain text PR"
+    )
+
+
+def test_pmp_create_review_pr_calls_create_review_pr_skill(recipe) -> None:
+    """create_review_pr skill_command must invoke /autoskillit:create-review-pr."""
+    step = recipe.steps["create_review_pr"]
+    cmd = step.with_args.get("skill_command", "")
+    assert "/autoskillit:create-review-pr" in cmd, (
+        "create_review_pr step must call /autoskillit:create-review-pr skill"
+    )
+
+
+def test_pmp_create_review_pr_captures_pr_url(recipe) -> None:
+    """create_review_pr must capture pr_url from the skill result."""
+    step = recipe.steps["create_review_pr"]
+    assert "pr_url" in (step.capture or {}), (
+        "create_review_pr must capture pr_url from result — "
+        "the create-review-pr skill emits pr_url in its output"
+    )
+
+
+def test_pmp_create_review_pr_passes_four_args(recipe) -> None:
+    """skill_command must supply integration_branch, base_branch, pr_order_file, verdict."""
+    step = recipe.steps["create_review_pr"]
+    cmd = step.with_args.get("skill_command", "")
+    for arg in [
+        "context.integration_branch",
+        "inputs.base_branch",
+        "context.pr_order_file",
+        "context.verdict",
+    ]:
+        assert arg in cmd, f"create_review_pr skill_command must include {arg}"

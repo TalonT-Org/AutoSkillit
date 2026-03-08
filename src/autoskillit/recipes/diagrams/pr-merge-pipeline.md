@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:637288ffe16e6ee801c4367e0376dc9a13fd69a73fa8610d06d2d9467a38d3f9 -->
+<!-- autoskillit-recipe-hash: sha256:c4e2a6421251ab68cc03d57444686625946406d72207d5c7903d45bc7e2504cd -->
 <!-- autoskillit-diagram-format: v4 -->
 ## pr-merge-pipeline
 Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
@@ -19,6 +19,10 @@ analyze_prs  [run_skill] (retry ×3)
 │  ✗ failure → cleanup_failure
 │
 create_integration_branch  [run_cmd] (retry ×3)
+│  ↓ success → publish_integration_branch
+│  ✗ failure → cleanup_failure
+│
+publish_integration_branch  [push_to_remote] (retry ×3)
 │  ↓ success → merge_pr
 │  ✗ failure → cleanup_failure
 │
@@ -76,7 +80,7 @@ check_impl_plans  [run_cmd] (retry ×3)
 remediate  [route] (retry ×3)
 │  ↓ success → plan ↑
 │
-create_review_pr  [run_cmd] (retry ×3)
+create_review_pr  [run_skill] (retry ×3)
 │  ↓ success → ci_watch_pr
 │  ✗ failure → cleanup_failure
 │
@@ -106,7 +110,7 @@ cleanup_failure  [remove_clone] (retry ×3)
 | audit | Run /autoskillit:audit-impl after all PRs are merged to check coherency (true/false) | on |
 | plans_dir | Directory where collected plan files are stored for audit-impl | temp/pr-merge-pipeline |
 ### Kitchen Rules
-- NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill and run_cmd.
+- NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill and run_cmd.
 - Route to on_failure when a step fails — do not investigate or fix directly.
 - SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before advancing to the next PR. Never batch-assess all PRs before starting merges.
 - SEQUENTIAL EXECUTION: complete full cycle (verify → implement → test → merge_to_integration) per plan part before advancing to the next part or PR.

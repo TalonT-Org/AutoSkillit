@@ -77,21 +77,14 @@ class TestSkillResolver:
         )
 
     def test_no_hardcoded_username_mentions_in_skill_mds(self) -> None:
-        """No SKILL.md may contain a hardcoded GitHub @-mention in prose."""
+        """No SKILL.md may contain a hardcoded GitHub @-mention in any line (including code fences)."""
         mention_pattern = re.compile(r"@[A-Za-z][A-Za-z0-9_-]{2,}")
         violations: list[str] = []
 
         skills_dir = bundled_skills_dir()
         for skill_md in sorted(skills_dir.rglob("SKILL.md")):
             skill_name = skill_md.parent.name
-            in_fence = False
             for lineno, raw_line in enumerate(skill_md.read_text().splitlines(), start=1):
-                stripped = raw_line.strip()
-                if stripped.startswith("```"):
-                    in_fence = not in_fence
-                    continue
-                if in_fence:
-                    continue
                 for match in mention_pattern.finditer(raw_line):
                     violations.append(f"{skill_name}/SKILL.md:{lineno}: {match.group()!r}")
 

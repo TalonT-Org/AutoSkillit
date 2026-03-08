@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import re
 
-from autoskillit.core import Severity
+from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+
+logger = get_logger(__name__)
 
 _SKILL_NAME_RE = re.compile(r"/autoskillit:([\w-]+)")
 
@@ -22,6 +24,9 @@ def _get_allowed_values_for_skill(skill_name: str) -> dict[str, list[str]]:
     try:
         manifest = load_bundled_manifest()
     except Exception:
+        logger.warning(
+            "unrouted-verdict-value: failed to load bundled manifest; skipping", exc_info=True
+        )
         return {}
     skill_contract = manifest.get("skills", {}).get(skill_name, {})
     result: dict[str, list[str]] = {}

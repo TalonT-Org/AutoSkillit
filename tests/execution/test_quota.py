@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 
@@ -406,3 +407,39 @@ class TestCheckAndSleepResetAtNoneBlocks:
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
         assert result["sleep_seconds"] > 0
+
+
+class TestIntegration:
+    """Integration tests verifying write/read contract between execution.quota and hooks.quota_check."""
+
+    def test_write_cache_then_quota_check_main_reads_it(self, tmp_path, monkeypatch):
+        """Cache written by _write_cache must be readable and actionable by quota_check.main().
+
+        T-INT-1: Catches format drift between _write_cache (execution layer) and
+        _read_quota_cache (hook subprocess layer).
+        """
+        import io
+        from contextlib import redirect_stdout
+
+        from autoskillit.execution.quota import QuotaStatus, _write_cache
+        from autoskillit.hooks.quota_check import main
+
+        cache_path = tmp_path / "quota_cache.json"
+        _write_cache(str(cache_path), QuotaStatus(utilization=95.0, resets_at=None))
+
+        stdin_text = json.dumps({"tool_name": "run_skill"})
+        buf = io.StringIO()
+        with patch("sys.stdin", io.StringIO(stdin_text)):
+            with patch(
+                "autoskillit.hooks.quota_check._DEFAULT_CACHE_PATH",
+                str(cache_path),
+            ):
+                with redirect_stdout(buf):
+                    try:
+                        main()
+                    except SystemExit:
+                        pass
+
+        out = buf.getvalue()
+        data = json.loads(out)
+        assert data["hookSpecificOutput"]["permissionDecision"] == "deny"

@@ -147,3 +147,111 @@ def test_approve_when_stale_cache(tmp_path):
     cache.write_text(json.dumps(payload))
     out = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     assert out.strip() == ""
+
+
+def _write_hook_config(hook_cfg_path: Path, threshold: float, cache_max_age: int, cache_path: str) -> None:
+    """Write a hook config file to the given path."""
+    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    hook_cfg_path.write_text(
+        json.dumps(
+            {
+                "quota_guard": {
+                    "threshold": threshold,
+                    "cache_max_age": cache_max_age,
+                    "cache_path": cache_path,
+                }
+            }
+        )
+    )
+
+
+# T-CFG-1
+def test_quota_check_reads_threshold_from_hook_config(tmp_path, monkeypatch):
+    """Hook must deny when utilization exceeds user-configured threshold from hook config.
+
+    Today: hook ignores hook config file → uses default threshold (90.0) → approves at 60.0.
+    After fix: reads threshold=50.0 from hook config → denies at 60.0 utilization.
+    """
+    monkeypatch.chdir(tmp_path)
+    cache = tmp_path / "custom_cache.json"
+    _write_cache(cache, utilization=60.0)
+    _write_hook_config(
+        tmp_path / "temp" / ".autoskillit_hook_config.json",
+        threshold=50.0,
+        cache_max_age=300,
+        cache_path=str(cache),
+    )
+    out = _run_hook(event={"tool_name": "run_skill"})
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# T-CFG-2
+def test_quota_check_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
+    """Hook must read cache from hook config cache_path when AUTOSKILLIT_QUOTA_CACHE is unset.
+
+    Today: hook uses default path (~/.claude/autoskillit_quota_cache.json) → missing → fail open.
+    After fix: reads cache_path from hook config → finds cache at custom path → denies.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_CACHE", raising=False)
+    custom_cache = tmp_path / "my_custom_cache.json"
+    _write_cache(custom_cache, utilization=95.0)
+    _write_hook_config(
+        tmp_path / "temp" / ".autoskillit_hook_config.json",
+        threshold=90.0,
+        cache_max_age=300,
+        cache_path=str(custom_cache),
+    )
+    out = _run_hook(event={"tool_name": "run_skill"})
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# T-CFG-3
+def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypatch):
+    """AUTOSKILLIT_QUOTA_CACHE env var must take precedence over hook config cache_path.
+
+    Backward-compat regression test: env var path must still win even when hook config is present.
+    """
+    monkeypatch.chdir(tmp_path)
+    correct_cache = tmp_path / "correct_cache.json"
+    _write_cache(correct_cache, utilization=95.0)
+    wrong_cache = tmp_path / "wrong_cache.json"  # not written — should not be read
+    _write_hook_config(
+        tmp_path / "temp" / ".autoskillit_hook_config.json",
+        threshold=90.0,
+        cache_max_age=300,
+        cache_path=str(wrong_cache),
+    )
+    monkeypatch.setenv("AUTOSKILLIT_QUOTA_CACHE", str(correct_cache))
+    out = _run_hook(event={"tool_name": "run_skill"})
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# T-CFG-4
+def test_quota_check_falls_back_to_defaults_without_hook_config(tmp_path):
+    """Without hook config, hook falls back to hard-coded defaults (threshold=90.0).
+
+    Regression test: no regression when kitchen was never opened or hook config was removed.
+    """
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=95.0)
+    out = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# T-CFG-5
+def test_defaults_yaml_cache_max_age_is_300():
+    """defaults.yaml must have quota_guard.cache_max_age: 300 (was 60).
+
+    A 60s TTL is shorter than typical pipeline steps (5-20 min), causing stale-cache
+    fail-open between steps. 300s matches realistic inter-step gaps.
+    """
+    from autoskillit.core import load_yaml, pkg_root
+
+    defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+    assert isinstance(defaults, dict)
+    assert defaults["quota_guard"]["cache_max_age"] == 300

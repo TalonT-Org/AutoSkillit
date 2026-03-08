@@ -1,5 +1,5 @@
-<!-- autoskillit-recipe-hash: sha256:c4e2a6421251ab68cc03d57444686625946406d72207d5c7903d45bc7e2504cd -->
-<!-- autoskillit-diagram-format: v4 -->
+<!-- autoskillit-recipe-hash: sha256:42926db538a2683df3c802e8e7f65ec04b547f30d4da874a6d8e0ccdd5db0c9b -->
+<!-- autoskillit-diagram-format: v5 -->
 ## pr-merge-pipeline
 Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
 
@@ -85,10 +85,14 @@ create_review_pr  [run_skill] (retry ×3)
 │  ✗ failure → cleanup_failure
 │
 ci_watch_pr  [run_cmd] (retry ×3)
-│  ↓ success → cleanup_success
+│  ↓ success → confirm_cleanup
 │  ✗ failure → cleanup_failure
 │
-cleanup_success  [remove_clone] (retry ×3)
+❓ confirm_cleanup
+│  ✓ yes  → delete_clone
+│  ✗ no   → done
+│
+delete_clone  [remove_clone] (retry ×3)
 │  ↓ success → done
 │  ✗ failure → done
 │

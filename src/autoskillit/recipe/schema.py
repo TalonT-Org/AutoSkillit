@@ -19,7 +19,7 @@ class RecipeIngredient:
     default: str | None = None
 
     def __post_init__(self) -> None:
-        self.description = self.description.strip()
+        self.description = self.description.strip().replace("\n", " ")
         if self.default is not None:
             self.default = self.default.strip()
 

@@ -1098,12 +1098,11 @@ def test_diagram_inputs_table_rows_are_single_lines_with_folded_scalars(
     rows = [
         line
         for line in inputs_section.splitlines()
-        if line.startswith("| ") and "Name" not in line and "---" not in line
+        if line.startswith("| ") and not line.startswith("| Name |") and "---" not in line
     ]
     assert rows, "Expected at least one data row in Inputs table"
     for row in rows:
-        assert "\n" not in row, f"Embedded newline found in table row: {row!r}"
-        # Each row must open and close with a pipe
+        assert row.count("|") >= 4, f"Malformed table row (likely split by embedded newline): {row!r}"
         assert row.startswith("| ") and row.endswith(" |"), (
             f"Row is not a complete pipe-table row: {row!r}"
         )
@@ -1143,7 +1142,8 @@ def test_bundled_diagram_inputs_table_has_no_embedded_newlines(
     rows = [
         line
         for line in inputs_section.splitlines()
-        if line.startswith("| ") and "Name" not in line and "---" not in line
+        if line.startswith("| ") and not line.startswith("| Name |") and "---" not in line
     ]
+    assert rows, f"No data rows found in inputs table for {recipe_name}"
     for row in rows:
-        assert "\n" not in row, f"[{recipe_name}] Embedded newline in Inputs table row: {row!r}"
+        assert row.count("|") >= 4, f"[{recipe_name}] Malformed table row (likely split by embedded newline): {row!r}"

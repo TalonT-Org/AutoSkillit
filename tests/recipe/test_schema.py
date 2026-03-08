@@ -6,6 +6,8 @@ import ast
 import dataclasses
 import pathlib
 
+import pytest
+
 
 def test_all_dataclasses_importable() -> None:
     """All dataclasses are importable from recipe.schema."""
@@ -190,12 +192,21 @@ def test_skip_when_false_field_is_parsed_from_yaml() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_recipe_ingredient_description_strips_folded_scalar_newline() -> None:
-    """RecipeIngredient.__post_init__ must strip trailing \\n from folded scalars."""
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("some description text\n", "some description text"),
+        ("First line\nsecond line\n", "First line second line"),
+    ],
+)
+def test_recipe_ingredient_description_strips_folded_scalar_newline(
+    raw: str, expected: str
+) -> None:
+    """RecipeIngredient.__post_init__ must normalize folded-scalar descriptions."""
     from autoskillit.recipe.schema import RecipeIngredient
 
-    ing = RecipeIngredient(description="some description text\n", required=False)
-    assert ing.description == "some description text"
+    ing = RecipeIngredient(description=raw, required=False)
+    assert ing.description == expected
     assert "\n" not in ing.description
 
 

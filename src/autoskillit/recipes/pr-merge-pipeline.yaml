@@ -233,16 +233,62 @@ steps:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
     on_success: next_part_or_next_pr
     on_failure: cleanup_failure
+    on_result:
+      - when: "result.failed_step == 'rebase' and result.state == 'worktree_intact_rebase_aborted'"
+        route: resolve_merge_conflicts
+      - when: "result.failed_step == 'rebase'"
+        route: cleanup_failure
+      - when: "result.failed_step == 'test_gate'"
+        route: cleanup_failure
+      - when: "result.failed_step == 'post_rebase_test_gate'"
+        route: cleanup_failure
     note: >
       Merges the conflict-resolution worktree into the integration branch
       (not inputs.base_branch). After merge, check if more plan_parts remain
       for this PR. If so, return to verify with the next part. If all parts
       are done, go to next_part_or_next_pr.
-      On ANY failure, follow on_failure: cleanup_failure — NEVER use run_cmd
-      as a workaround. A state of worktree_intact_merge_commits_detected
-      means the conflict-resolution plan used git merge --no-ff; clean up
-      the worktree and regenerate the plan using cherry-pick or
-      git checkout -- file approaches.
+      On rebase failure with worktree intact, routes to resolve_merge_conflicts
+      for goal-aware resolution. On dirty-worktree rebase failure or test gate
+      failures, follow on_failure: cleanup_failure.
+      NEVER use run_cmd as a workaround. A state of
+      worktree_intact_merge_commits_detected means the conflict-resolution plan
+      used git merge --no-ff; clean up the worktree and regenerate the plan
+      using cherry-pick or git checkout -- file approaches.
+
+  resolve_merge_conflicts:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.worktree_path }} ${{ context.pr_plan_path }} ${{ context.integration_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "resolve_merge_conflicts"
+    on_success: retry_merge_after_resolution
+    on_failure: cleanup_failure
+    on_result:
+      - when: "result.escalation_required == 'true'"
+        route: cleanup_failure
+    note: >
+      Invoked when merge_worktree fails with a rebase conflict and the worktree
+      is still intact (worktree_intact_rebase_aborted). The skill reads the
+      implementation plan and git history to understand the goals of both sides,
+      resolves conflicts in-place when confidence is HIGH or MEDIUM, and
+      escalates (cleanup_failure) when confidence is LOW. On success, routes
+      to retry_merge_after_resolution to re-attempt the merge without loop-back
+      routing.
+
+  retry_merge_after_resolution:
+    tool: merge_worktree
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+      base_branch: "${{ context.integration_branch }}"
+    capture:
+      cleanup_succeeded: "${{ result.cleanup_succeeded }}"
+    on_success: next_part_or_next_pr
+    on_failure: cleanup_failure
+    note: >
+      Re-attempts merge_worktree after resolve_merge_conflicts has rebased the
+      worktree onto the integration branch. Has no on_result routing back to
+      resolve_merge_conflicts — if this fails, the pipeline escalates without
+      further automated recovery to prevent infinite loops.
 
   fix:
     tool: run_skill

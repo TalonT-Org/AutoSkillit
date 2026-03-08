@@ -26,8 +26,10 @@ from autoskillit.recipe.contracts import (  # noqa: E402
     StaleItem,
     check_contract_staleness,
     generate_recipe_card,
+    get_skill_contract,
     load_bundled_manifest,
     load_recipe_card,
+    resolve_skill_name,
     validate_recipe_cards,
 )
 from autoskillit.recipe.diagrams import (  # noqa: E402
@@ -76,8 +78,10 @@ __all__ = [
     "analyze_dataflow",
     "check_contract_staleness",
     "generate_recipe_card",
+    "get_skill_contract",
     "load_bundled_manifest",
     "load_recipe_card",
+    "resolve_skill_name",
     "validate_recipe_cards",
     "DefaultRecipeRepository",
     "parse_recipe_metadata",

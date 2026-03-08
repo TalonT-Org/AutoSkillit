@@ -238,9 +238,7 @@ skills:
     - name: base_branch
       type: string
       required: true
-    outputs:
-    - name: pr_url
-      type: string
+    outputs: []
     expected_output_patterns:
     - "https://github\\.com/.*/pull/\\d+"
 

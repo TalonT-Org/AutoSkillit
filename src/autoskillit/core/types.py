@@ -636,6 +636,13 @@ class DatabaseReader(Protocol):
 
 
 @runtime_checkable
+class OutputPatternResolver(Protocol):
+    """Protocol for resolving expected output patterns from a skill command."""
+
+    def __call__(self, skill_command: str) -> Sequence[str]: ...
+
+
+@runtime_checkable
 class WorkspaceManager(Protocol):
     """Protocol for directory teardown operations."""
 

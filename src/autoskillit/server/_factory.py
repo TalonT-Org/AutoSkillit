@@ -28,8 +28,8 @@ from autoskillit.pipeline import (
     DefaultTokenLog,
     ToolContext,
 )
-from autoskillit.recipe import DefaultRecipeRepository
-from autoskillit.recipe.contracts import (
+from autoskillit.recipe import (
+    DefaultRecipeRepository,
     get_skill_contract,
     load_bundled_manifest,
     resolve_skill_name,

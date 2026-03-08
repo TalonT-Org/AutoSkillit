@@ -416,8 +416,6 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "open_pr"
       issue_number: "${{ context.issue_number }}"
-    capture:
-      pr_url: "${{ result.pr_url }}"
     on_success: review_pr
     on_failure: release_issue_failure
     optional: true
@@ -426,8 +424,7 @@ steps:
       Runs by default (open_pr=true). Skipped when open_pr=false.
       The feature branch is already published by the push step that precedes this step.
       Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
-      and runs gh pr create. Captures pr_url from the skill's output for final reporting.
-      The skill gracefully degrades if gh is unavailable (outputs empty pr_url, exits 0).
+      and runs gh pr create. The skill gracefully degrades if gh is unavailable.
       MULTI-GROUP: context.all_plan_paths may contain comma-separated plan paths
       accumulated across group iterations. The open-pr skill splits and synthesizes
       PR content from all plans.

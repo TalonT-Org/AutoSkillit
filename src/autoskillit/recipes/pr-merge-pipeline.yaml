@@ -88,7 +88,7 @@ steps:
   check_integration_exists:
     tool: run_cmd
     with:
-      cmd: "git ls-remote --exit-code --heads origin ${{ inputs.base_branch }}"
+      cmd: "git ls-remote --exit-code --heads origin \"${{ inputs.base_branch }}\""
       cwd: "${{ context.work_dir }}"
     on_success: analyze_prs
     on_failure: confirm_create_integration
@@ -116,7 +116,7 @@ steps:
   create_persistent_integration:
     tool: run_cmd
     with:
-      cmd: "git checkout ${{ inputs.upstream_branch }} && git pull && git checkout -b ${{ inputs.base_branch }} && git push origin ${{ inputs.base_branch }}"
+      cmd: "git checkout '${{ inputs.upstream_branch }}' && git pull && git checkout -b '${{ inputs.base_branch }}' && git push origin '${{ inputs.base_branch }}'"
       cwd: "${{ context.work_dir }}"
     on_success: analyze_prs
     on_failure: cleanup_failure

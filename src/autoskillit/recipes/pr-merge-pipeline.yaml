@@ -29,11 +29,6 @@ kitchen_rules:
     orchestrator. All work is delegated through run_skill
     and run_cmd."
   - "Route to on_failure when a step fails — do not investigate or fix directly."
-  - "LINEAR HISTORY: Conflict resolution plans must NEVER use `git merge` (including
-    --no-ff or --no-commit variants). Use `git cherry-pick <commit>` for individual
-    commits or `git checkout <branch> -- <file>` for specific files to apply PR changes.
-    merge_worktree requires linear commit history for rebasing — merge commits cause
-    WORKTREE_INTACT_MERGE_COMMITS_DETECTED failure."
   - "SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before
     advancing to the next PR. Never batch-assess all PRs before starting merges."
   - "SEQUENTIAL EXECUTION: complete full cycle (verify → implement → test →

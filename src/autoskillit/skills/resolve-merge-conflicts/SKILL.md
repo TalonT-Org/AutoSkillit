@@ -8,11 +8,6 @@ description: >
 
 # Resolve Merge Conflicts Skill
 
-Goal-aware resolution of rebase conflicts when merging a conflict-resolution worktree
-back into the integration branch. Reads the implementation plan and git history to
-understand what each side of a conflict was trying to achieve, resolves in-place when
-confidence is HIGH or MEDIUM, and escalates (without partial resolution) when LOW.
-
 ## Arguments (positional)
 
 - `{worktree_path}` — absolute path to the existing worktree (must exist; rebase was aborted cleanly)

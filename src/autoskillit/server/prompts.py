@@ -37,9 +37,11 @@ def _write_hook_config() -> None:
     cfg = _get_ctx().config.quota_guard
     payload = {
         "quota_guard": {
-            "threshold": cfg.threshold,
-            "cache_max_age": cfg.cache_max_age,
-            "cache_path": cfg.cache_path,
+            "threshold": cfg.threshold if cfg.threshold is not None else 90.0,
+            "cache_max_age": cfg.cache_max_age if cfg.cache_max_age is not None else 300,
+            "cache_path": cfg.cache_path
+            if cfg.cache_path is not None
+            else "~/.claude/autoskillit_quota_cache.json",
         }
     }
     hook_cfg_path = Path.cwd() / "temp" / ".autoskillit_hook_config.json"
@@ -62,8 +64,8 @@ async def _open_kitchen_handler() -> None:
         gate_path.touch()
     except OSError:
         logger.warning("gate_file_write_failed", path=str(gate_path))
-    await _prime_quota_cache()
     _write_hook_config()
+    await _prime_quota_cache()
 
 
 def _close_kitchen_handler() -> None:

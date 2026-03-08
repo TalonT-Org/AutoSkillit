@@ -14,8 +14,7 @@ ingredients:
     description: Keep the clone directory when the pipeline fails (true/false)
     default: "false"
   base_branch:
-    description: Target branch that all PRs are merging into; integration branch is created from this
-    default: integration
+    description: Target branch that all PRs are merging into; integration branch is created from this. Pass 'integration' to use the persistent integration branch feature.
   upstream_branch:
     description: Branch to create base_branch from if it does not yet exist on the remote
     default: main

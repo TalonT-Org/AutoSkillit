@@ -182,10 +182,18 @@ def test_pmp_create_review_pr_passes_four_args(recipe) -> None:
         assert arg in cmd, f"create_review_pr skill_command must include {arg}"
 
 
-def test_pmp_base_branch_defaults_to_integration(recipe) -> None:
-    """base_branch ingredient must default to 'integration', not 'main'."""
+def test_pmp_base_branch_has_no_silent_default(recipe) -> None:
+    """base_branch must have no default — callers must specify it explicitly.
+
+    Silently defaulting base_branch to 'integration' would break existing callers
+    that previously relied on 'main' as the target.  Requiring an explicit value
+    forces callers to opt in to the integration-branch feature consciously.
+    """
     ingredient = recipe.ingredients["base_branch"]
-    assert ingredient.default == "integration"
+    assert ingredient.default is None, (
+        "base_branch must not have a default — callers must pass base_branch "
+        "explicitly (e.g. 'integration' or 'main') to avoid silent target changes"
+    )
 
 
 def test_pmp_has_upstream_branch_ingredient(recipe) -> None:

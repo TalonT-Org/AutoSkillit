@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:42926db538a2683df3c802e8e7f65ec04b547f30d4da874a6d8e0ccdd5db0c9b -->
+<!-- autoskillit-recipe-hash: sha256:4f8b833faa03f4ed6154fca13d57754e21f6b634364a2f99a90c148a1da640a4 -->
 <!-- autoskillit-diagram-format: v5 -->
 ## pr-merge-pipeline
 Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
@@ -117,6 +117,7 @@ cleanup_failure  [remove_clone] (retry ×3)
 ### Kitchen Rules
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill and run_cmd.
 - Route to on_failure when a step fails — do not investigate or fix directly.
+- LINEAR HISTORY: Conflict resolution plans must NEVER use `git merge` (including --no-ff or --no-commit variants). Use `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files to apply PR changes. merge_worktree requires linear commit history for rebasing — merge commits cause WORKTREE_INTACT_MERGE_COMMITS_DETECTED failure.
 - SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before advancing to the next PR. Never batch-assess all PRs before starting merges.
 - SEQUENTIAL EXECUTION: complete full cycle (verify → implement → test → merge_to_integration) per plan part before advancing to the next part or PR.
 - INTEGRATION BRANCH: All PR merges and worktree merges target context.integration_branch, not inputs.base_branch. The base_branch is only used for the final review PR.

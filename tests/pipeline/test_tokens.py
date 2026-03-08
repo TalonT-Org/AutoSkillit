@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import fields
+from pathlib import Path
 
 import pytest
 
@@ -237,7 +238,9 @@ class TestDefaultTokenLog:
         assert total["cache_read_input_tokens"] == 33
 
 
-def _write_session(log_root: Path, dir_name: str, tu_data: dict, timestamp: str = "2026-03-07T00:00:00+00:00") -> None:
+def _write_session(
+    log_root: Path, dir_name: str, tu_data: dict, timestamp: str = "2026-03-07T00:00:00+00:00"
+) -> None:
     session_dir = log_root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
     (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
@@ -248,8 +251,19 @@ def _write_session(log_root: Path, dir_name: str, tu_data: dict, timestamp: str 
 
 class TestDefaultTokenLogLoadFromLogDir:
     def test_restores_entries(self, tmp_path):
-        """After writing token_usage.json session files + sessions.jsonl, load_from_log_dir populates the store."""
-        _write_session(tmp_path, "s001", {"step_name": "implement", "input_tokens": 100, "output_tokens": 50, "cache_creation_input_tokens": 10, "cache_read_input_tokens": 5, "timing_seconds": 30.0})
+        """load_from_log_dir populates the store from token_usage.json session files."""
+        _write_session(
+            tmp_path,
+            "s001",
+            {
+                "step_name": "implement",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 10,
+                "cache_read_input_tokens": 5,
+                "timing_seconds": 30.0,
+            },
+        )
         log = DefaultTokenLog()
         n = log.load_from_log_dir(tmp_path)
         assert n == 1
@@ -261,7 +275,18 @@ class TestDefaultTokenLogLoadFromLogDir:
 
     def test_accumulates_into_existing_entries(self, tmp_path):
         """Entries already in the store are summed with loaded data (same step_name merges)."""
-        _write_session(tmp_path, "s001", {"step_name": "implement", "input_tokens": 100, "output_tokens": 50, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "timing_seconds": 0.0})
+        _write_session(
+            tmp_path,
+            "s001",
+            {
+                "step_name": "implement",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 0.0,
+            },
+        )
         log = DefaultTokenLog()
         log.record("implement", {"input_tokens": 200, "output_tokens": 100})
         log.load_from_log_dir(tmp_path)
@@ -271,7 +296,19 @@ class TestDefaultTokenLogLoadFromLogDir:
 
     def test_since_filter_excludes_old_sessions(self, tmp_path):
         """Sessions with timestamp before since are not loaded."""
-        _write_session(tmp_path, "old", {"step_name": "implement", "input_tokens": 999, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "timing_seconds": 0.0}, timestamp="2025-01-01T00:00:00+00:00")
+        _write_session(
+            tmp_path,
+            "old",
+            {
+                "step_name": "implement",
+                "input_tokens": 999,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 0.0,
+            },
+            timestamp="2025-01-01T00:00:00+00:00",
+        )
         log = DefaultTokenLog()
         n = log.load_from_log_dir(tmp_path, since="2026-01-01T00:00:00+00:00")
         assert n == 0
@@ -282,7 +319,11 @@ class TestDefaultTokenLogLoadFromLogDir:
         session_dir = tmp_path / "sessions" / "no-token"
         session_dir.mkdir(parents=True)
         # No token_usage.json written
-        index_entry = {"dir_name": "no-token", "timestamp": "2026-03-07T00:00:00+00:00", "session_id": "no-token"}
+        index_entry = {
+            "dir_name": "no-token",
+            "timestamp": "2026-03-07T00:00:00+00:00",
+            "session_id": "no-token",
+        }
         (tmp_path / "sessions.jsonl").write_text(json.dumps(index_entry) + "\n")
         log = DefaultTokenLog()
         n = log.load_from_log_dir(tmp_path)
@@ -291,7 +332,18 @@ class TestDefaultTokenLogLoadFromLogDir:
     def test_returns_count_of_sessions_loaded(self, tmp_path):
         """Return value equals number of session dirs successfully loaded."""
         for i in range(3):
-            _write_session(tmp_path, f"s{i:03d}", {"step_name": f"step{i}", "input_tokens": 10, "output_tokens": 5, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "timing_seconds": 0.0})
+            _write_session(
+                tmp_path,
+                f"s{i:03d}",
+                {
+                    "step_name": f"step{i}",
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "timing_seconds": 0.0,
+                },
+            )
         log = DefaultTokenLog()
         n = log.load_from_log_dir(tmp_path)
         assert n == 3

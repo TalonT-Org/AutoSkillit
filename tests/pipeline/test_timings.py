@@ -142,7 +142,9 @@ class TestDefaultTimingLog:
         assert log.compute_total()["total_seconds"] == 15.0
 
 
-def _write_timing_session(log_root: Path, dir_name: str, st_data: dict, timestamp: str = "2026-03-07T00:00:00+00:00") -> None:
+def _write_timing_session(
+    log_root: Path, dir_name: str, st_data: dict, timestamp: str = "2026-03-07T00:00:00+00:00"
+) -> None:
     session_dir = log_root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
     (session_dir / "step_timing.json").write_text(json.dumps(st_data))
@@ -169,7 +171,12 @@ class TestDefaultTimingLogLoadFromLogDir:
         """Respects since= timestamp filter (sessions before cutoff excluded)."""
         from autoskillit.pipeline.timings import DefaultTimingLog
 
-        _write_timing_session(tmp_path, "old", {"step_name": "old_step", "total_seconds": 10.0}, timestamp="2025-01-01T00:00:00+00:00")
+        _write_timing_session(
+            tmp_path,
+            "old",
+            {"step_name": "old_step", "total_seconds": 10.0},
+            timestamp="2025-01-01T00:00:00+00:00",
+        )
         log = DefaultTimingLog()
         n = log.load_from_log_dir(tmp_path, since="2026-01-01T00:00:00+00:00")
         assert n == 0
@@ -180,7 +187,9 @@ class TestDefaultTimingLogLoadFromLogDir:
         from autoskillit.pipeline.timings import DefaultTimingLog
 
         for i in range(2):
-            _write_timing_session(tmp_path, f"s{i:03d}", {"step_name": f"step{i}", "total_seconds": float(i + 1)})
+            _write_timing_session(
+                tmp_path, f"s{i:03d}", {"step_name": f"step{i}", "total_seconds": float(i + 1)}
+            )
         log = DefaultTimingLog()
         n = log.load_from_log_dir(tmp_path)
         assert n == 2

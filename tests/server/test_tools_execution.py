@@ -853,14 +853,42 @@ class TestRunHeadlessCoreFlushTelemetry:
     """flush_session_log receives telemetry kwargs when step_name is provided."""
 
     def _make_ndjson_with_usage(self) -> str:
-        asst = json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": 200, "output_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}}, "model": "claude-opus-4-6"})
-        result = json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "done", "session_id": "s1", "usage": {"input_tokens": 200, "output_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}})
+        asst = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "usage": {
+                        "input_tokens": 200,
+                        "output_tokens": 100,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 0,
+                    }
+                },
+                "model": "claude-opus-4-6",
+            }
+        )
+        result = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+                "usage": {
+                    "input_tokens": 200,
+                    "output_tokens": 100,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            }
+        )
         return asst + "\n" + result
 
     @pytest.mark.anyio
     async def test_passes_step_telemetry_to_flush(self, tool_ctx, monkeypatch):
-        """flush_session_log is called with step_name, token_usage, and timing_seconds when step_name is set."""
+        """flush_session_log is called with step_name, token_usage, and timing_seconds."""
         import autoskillit.execution.session_log as sl_mod
+
         calls = []
 
         def mock_flush(**kwargs):
@@ -878,6 +906,7 @@ class TestRunHeadlessCoreFlushTelemetry:
     async def test_flushes_on_success_when_step_name_set(self, tool_ctx, monkeypatch):
         """Successful sessions without proc_snapshots still flush when step_name is provided."""
         import autoskillit.execution.session_log as sl_mod
+
         calls = []
 
         def mock_flush(**kwargs):

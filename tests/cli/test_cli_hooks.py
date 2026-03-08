@@ -180,6 +180,114 @@ def test_hooks_py_covers_full_registry():
         )
 
 
+# T-REG-1
+def test_install_production_order_includes_quota_check(tmp_path, monkeypatch):
+    """install() must register quota_check.py regardless of function call order."""
+    import importlib
+
+    import autoskillit.cli as cli
+
+    settings_path = tmp_path / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+
+    app_module = importlib.import_module("autoskillit.cli._hooks")
+    monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
+    monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
+    monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+
+    _app_mod = importlib.import_module("autoskillit.cli._marketplace")
+    monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    cli.install(scope="local")
+
+    data = json.loads(settings_path.read_text())
+    pretooluse = data.get("hooks", {}).get("PreToolUse", [])
+    all_commands = [h["command"] for e in pretooluse for h in e.get("hooks", [])]
+    assert any("quota_check.py" in c for c in all_commands), (
+        "quota_check.py missing from settings.json after install() — silent drop bug present"
+    )
+
+
+# T-REG-2
+def test_settings_json_matches_hook_registry_after_install(tmp_path, monkeypatch):
+    """After install(), settings.json must contain every script from HOOK_REGISTRY."""
+    import importlib
+
+    import autoskillit.cli as cli
+    from autoskillit.hooks import HOOK_REGISTRY
+
+    settings_path = tmp_path / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+
+    app_module = importlib.import_module("autoskillit.cli._hooks")
+    monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
+    monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
+    monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+
+    _app_mod = importlib.import_module("autoskillit.cli._marketplace")
+    monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    cli.install(scope="local")
+
+    data = json.loads(settings_path.read_text())
+    pretooluse = data.get("hooks", {}).get("PreToolUse", [])
+    for hook_def in HOOK_REGISTRY:
+        matching = [e for e in pretooluse if e.get("matcher") == hook_def.matcher]
+        assert len(matching) == 1, (
+            f"Expected exactly 1 entry for matcher {hook_def.matcher!r}, got {len(matching)}"
+        )
+        entry_commands = [h["command"] for h in matching[0].get("hooks", [])]
+        for script in hook_def.scripts:
+            assert any(script in c for c in entry_commands), (
+                f"Script {script!r} missing from matcher {hook_def.matcher!r} in settings.json"
+            )
+
+
+# T-REG-3
+def test_sync_hooks_to_settings_writes_all_registry_scripts(tmp_path):
+    """sync_hooks_to_settings() writes all HOOK_REGISTRY scripts to settings.json."""
+    from autoskillit.cli._hooks import sync_hooks_to_settings
+    from autoskillit.hooks import HOOK_REGISTRY
+
+    settings = tmp_path / "settings.json"
+    sync_hooks_to_settings(settings)
+
+    data = json.loads(settings.read_text())
+    pretooluse = data["hooks"]["PreToolUse"]
+    assert len(pretooluse) == len(HOOK_REGISTRY), (
+        f"Expected {len(HOOK_REGISTRY)} PreToolUse entries, got {len(pretooluse)}"
+    )
+    all_commands = [h["command"] for e in pretooluse for h in e.get("hooks", [])]
+    for hook_def in HOOK_REGISTRY:
+        for script in hook_def.scripts:
+            assert any(script in c for c in all_commands), (
+                f"Script {script!r} missing from settings.json after sync_hooks_to_settings()"
+            )
+
+
+# T-REG-4
+def test_sync_hooks_to_settings_is_idempotent(tmp_path):
+    """Calling evict + sync twice produces no duplicate entries."""
+    from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks, sync_hooks_to_settings
+    from autoskillit.hooks import HOOK_REGISTRY
+
+    settings = tmp_path / "settings.json"
+    _evict_stale_autoskillit_hooks(settings)
+    sync_hooks_to_settings(settings)
+    _evict_stale_autoskillit_hooks(settings)
+    sync_hooks_to_settings(settings)
+
+    data = json.loads(settings.read_text())
+    pretooluse = data["hooks"]["PreToolUse"]
+    assert len(pretooluse) == len(HOOK_REGISTRY), (
+        f"Duplicate entries after evict+sync twice: {len(pretooluse)} entries"
+    )
+
+
 # HK13
 def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
     """install() must remove all legacy autoskillit hook formats before writing fresh ones."""

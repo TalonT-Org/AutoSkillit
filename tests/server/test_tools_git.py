@@ -107,6 +107,9 @@ class TestMergeWorktree:
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
+        tool_ctx.runner.push(
+            _make_result(0, "", "")
+        )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
         tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
@@ -140,6 +143,9 @@ class TestMergeWorktree:
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
+        tool_ctx.runner.push(
+            _make_result(0, "", "")
+        )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(1, "", "CONFLICT (content): ..."))  # git rebase FAILS
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase --abort
         result = json.loads(await merge_worktree(str(wt), "main"))
@@ -223,6 +229,9 @@ class TestMergeWorktreeCleanupReporting:
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
+        tool_ctx.runner.push(
+            _make_result(0, "", "")
+        )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
         tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
@@ -256,6 +265,9 @@ class TestMergeWorktreeCleanupReporting:
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
+        tool_ctx.runner.push(
+            _make_result(0, "", "")
+        )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
         tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
@@ -309,6 +321,9 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
+        tool_ctx.runner.push(
+            _make_result(0, "", "")
+        )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
         tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
@@ -342,6 +357,9 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
+        tool_ctx.runner.push(
+            _make_result(0, "", "")
+        )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
         tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
@@ -373,6 +391,9 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
+        tool_ctx.runner.push(
+            _make_result(0, "", "")
+        )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
         tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
@@ -464,6 +485,7 @@ class TestMergeWorktreeRemoteTrackingGuard:
         tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))  # test gate
         tool_ctx.runner.push(_make_result())  # fetch
         tool_ctx.runner.push(_make_result())  # ref check passes
+        tool_ctx.runner.push(_make_result())  # git log --merges (no merge commits — step 5.6)
         # Rebase fails with fatal: invalid upstream (bypassed guard scenario)
         tool_ctx.runner.push(
             _make_result(
@@ -493,6 +515,7 @@ class TestMergeWorktreeTiming:
         tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))
         tool_ctx.runner.push(_make_result())
         tool_ctx.runner.push(_make_result())
+        tool_ctx.runner.push(_make_result())  # git log --merges (step 5.6)
         tool_ctx.runner.push(_make_result())
         tool_ctx.runner.push(_make_result())
 
@@ -511,6 +534,7 @@ class TestMergeWorktreeTiming:
         tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))
         tool_ctx.runner.push(_make_result())
         tool_ctx.runner.push(_make_result())
+        tool_ctx.runner.push(_make_result())  # git log --merges (step 5.6)
         tool_ctx.runner.push(_make_result())
         tool_ctx.runner.push(_make_result())
 
@@ -533,3 +557,75 @@ class TestClassifyFixTiming:
         tool_ctx.runner.push(_make_result(stdout="src/other/file.py\n"))
         await classify_fix(str(tmp_path), "main")
         assert tool_ctx.timing_log.get_report() == []
+
+
+class TestMergeWorktreeMergeCommitDetection:
+    """merge_worktree detects merge commits before rebase and returns actionable error."""
+
+    @pytest.mark.anyio
+    async def test_detects_merge_commits_before_rebase(self, tool_ctx, tmp_path):
+        """Step 5.6: merge commits in worktree history abort before rebase with specific error."""
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
+        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (step 5.5)
+        # Step 5.6: git log --merges finds merge commits
+        tool_ctx.runner.push(_make_result(0, "bb481aa Merge PR branch\n", ""))
+
+        result = json.loads(await merge_worktree(str(wt), "main"))
+
+        assert result["failed_step"] == MergeFailedStep.MERGE_COMMITS_DETECTED
+        assert result["state"] == MergeState.WORKTREE_INTACT_MERGE_COMMITS_DETECTED
+        assert "merge_commits" in result
+        assert result["merge_commits"] == ["bb481aa Merge PR branch"]
+
+    @pytest.mark.anyio
+    async def test_merge_commit_error_message_is_actionable(self, tool_ctx, tmp_path):
+        """Step 5.6: error message names cherry-pick, checkout, and forbids run_cmd bypass."""
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))
+        tool_ctx.runner.push(_make_result(0, "bb481aa Merge PR branch\n", ""))
+
+        result = json.loads(await merge_worktree(str(wt), "main"))
+
+        assert "cherry-pick" in result["error"]
+        assert "checkout" in result["error"]
+        assert result["worktree_path"] == str(wt)
+        assert "run_cmd" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_linear_history_passes_merge_commit_check(self, tool_ctx, tmp_path):
+        """Step 5.6: empty git log --merges output allows pipeline to continue to rebase."""
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
+        tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git log --merges returns empty (step 5.6)
+        tool_ctx.runner.push(_make_result(1, "", "CONFLICT (content): ..."))  # rebase fails
+        tool_ctx.runner.push(_make_result(0, "", ""))  # rebase --abort
+
+        result = json.loads(await merge_worktree(str(wt), "main"))
+
+        # Pipeline passed step 5.6 and reached rebase — failed there, not at step 5.6
+        assert result["failed_step"] == MergeFailedStep.REBASE
+        assert result["state"] == MergeState.WORKTREE_INTACT_REBASE_ABORTED

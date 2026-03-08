@@ -233,6 +233,11 @@ steps:
       (not inputs.base_branch). After merge, check if more plan_parts remain
       for this PR. If so, return to verify with the next part. If all parts
       are done, go to next_part_or_next_pr.
+      On ANY failure, follow on_failure: cleanup_failure — NEVER use run_cmd
+      as a workaround. A state of worktree_intact_merge_commits_detected
+      means the conflict-resolution plan used git merge --no-ff; clean up
+      the worktree and regenerate the plan using cherry-pick or
+      git checkout -- file approaches.
 
   fix:
     tool: run_skill

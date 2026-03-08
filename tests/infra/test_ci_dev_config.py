@@ -168,7 +168,9 @@ class TestCIWorkflow:
     def test_ci_push_trigger_includes_integration(self) -> None:
         """CI must trigger on push to integration branch."""
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
-        push_branches = workflow["on"]["push"]["branches"]
+        # PyYAML parses the YAML 'on:' key as Python True (boolean)
+        triggers = workflow.get(True, workflow.get("on", {}))
+        push_branches = triggers["push"]["branches"]
         assert "integration" in push_branches, (
             "CI must trigger on push to integration branch — "
             "this is the permanent accumulator that also needs CI on direct pushes"

@@ -125,7 +125,7 @@ Use `model: "sonnet"` for all subagents.
 
 ### Step 3: Recipe Classification
 
-Classify each issue into a recipe route using the primary behavioral criterion:
+Classify each issue into a recipe route using the primary behavioral criterion — is existing behavior broken?
 
 **Is existing behavior broken?**
 - **Yes** — existing code crashes, raises an exception, returns wrong data, or fails an assertion when executed → `recipe:remediation`

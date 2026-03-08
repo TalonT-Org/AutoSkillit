@@ -201,6 +201,31 @@ async def perform_merge(
             "worktree_path": worktree_path,
         }
 
+    # 5.6. Pre-flight: detect merge commits in worktree history not yet on base branch.
+    # Standard git rebase cannot replay merge commits and fails with a generic error.
+    # Catch this early with a specific, actionable message.
+    mc_rc, mc_out, _ = await _run_git(
+        ["git", "log", "--merges", "--oneline", f"origin/{base_branch}..HEAD"],
+        worktree_path,
+        15,
+        runner,
+    )
+    if mc_rc == 0 and mc_out.strip():
+        merge_list = [line.strip() for line in mc_out.strip().splitlines() if line.strip()]
+        return {
+            "error": (
+                f"Worktree branch contains {len(merge_list)} merge commit(s) not yet in "
+                f"origin/{base_branch}. Standard git rebase cannot replay merge commits. "
+                "The conflict-resolution plan must use 'git cherry-pick' or "
+                "'git checkout <remote> -- <file>' to produce a linear commit history. "
+                "Route this failure to cleanup_failure — do NOT use run_cmd to bypass."
+            ),
+            "failed_step": MergeFailedStep.MERGE_COMMITS_DETECTED,
+            "state": MergeState.WORKTREE_INTACT_MERGE_COMMITS_DETECTED,
+            "merge_commits": merge_list,
+            "worktree_path": worktree_path,
+        }
+
     # 6. Rebase
     rc, _, rebase_stderr = await _run_git(
         ["git", "rebase", "--autostash", f"origin/{base_branch}"], worktree_path, 120, runner

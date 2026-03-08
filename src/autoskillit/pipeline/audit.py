@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from autoskillit.core import FailureRecord, get_logger
+from autoskillit.core import FailureRecord, RetryReason, get_logger
 
 logger = get_logger(__name__)
 
@@ -80,7 +80,7 @@ class DefaultAuditLog:
             if record.needs_retry:
                 count += 1
             else:
-                break  # terminal failure or success sentinel resets the streak
+                break
         return count
 
     def record_success(self, skill_command: str) -> None:
@@ -98,7 +98,7 @@ class DefaultAuditLog:
                 exit_code=0,
                 subtype="success",
                 needs_retry=False,
-                retry_reason="none",
+                retry_reason=RetryReason.NONE.value,
                 stderr="",
             )
         )

@@ -171,7 +171,7 @@ class TestDefaultAuditLogBudget:
         )
         assert log.consecutive_failures("/autoskillit:open-pr") == 1
 
-    def test_record_success_does_not_appear_in_failure_report(self) -> None:
+    def test_record_success_sentinel_visible_in_failure_report(self) -> None:
         """Success sentinels are visible in get_report but with subtype='success'."""
         log = DefaultAuditLog()
         log.record_success("/autoskillit:open-pr")

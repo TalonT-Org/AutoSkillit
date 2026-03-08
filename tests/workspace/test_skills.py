@@ -76,6 +76,31 @@ class TestSkillResolver:
             f"  In test: {sorted(BUNDLED_SKILLS)}"
         )
 
+    def test_no_hardcoded_username_mentions_in_skill_mds(self) -> None:
+        """No SKILL.md may contain a hardcoded GitHub @-mention in prose."""
+        mention_pattern = re.compile(r"@[A-Za-z][A-Za-z0-9_-]{2,}")
+        violations: list[str] = []
+
+        skills_dir = bundled_skills_dir()
+        for skill_md in sorted(skills_dir.rglob("SKILL.md")):
+            skill_name = skill_md.parent.name
+            in_fence = False
+            for lineno, raw_line in enumerate(skill_md.read_text().splitlines(), start=1):
+                stripped = raw_line.strip()
+                if stripped.startswith("```"):
+                    in_fence = not in_fence
+                    continue
+                if in_fence:
+                    continue
+                for match in mention_pattern.finditer(raw_line):
+                    violations.append(f"{skill_name}/SKILL.md:{lineno}: {match.group()!r}")
+
+        assert violations == [], (
+            "Hardcoded GitHub @-mentions found in SKILL.md files. "
+            "Use dynamic derivation (e.g., `gh api user -q .login`) instead:\n"
+            + "\n".join(violations)
+        )
+
     def test_list_all_returns_bundled_skills(self) -> None:
         """list_all returns all bundled skills with source='bundled'."""
         resolver = SkillResolver()

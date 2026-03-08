@@ -127,7 +127,10 @@ Use `model: "sonnet"` for all subagents.
 
 Classify each issue into a recipe route using the primary behavioral criterion:
 
-**Is existing behavior broken?**
+**Does existing code produce a runtime error?**
+
+The key distinction is **broken vs. missing**: is something that used to work now failing, or is something new being requested?
+
 - **Yes** (a runtime bug — something deployed is not working as documented or intended) → `recipe:remediation`
 - **No** (a new feature, enhancement, documentation, refactor, or configuration change) → `recipe:implementation`
 

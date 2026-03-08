@@ -480,8 +480,6 @@ class AuditStore(Protocol):
 
     def clear(self) -> None: ...
 
-    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int: ...
-
 
 @runtime_checkable
 class TokenStore(Protocol):
@@ -502,8 +500,6 @@ class TokenStore(Protocol):
 
     def clear(self) -> None: ...
 
-    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int: ...
-
 
 @runtime_checkable
 class TimingStore(Protocol):
@@ -516,8 +512,6 @@ class TimingStore(Protocol):
     def compute_total(self) -> dict[str, Any]: ...
 
     def clear(self) -> None: ...
-
-    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int: ...
 
 
 @runtime_checkable

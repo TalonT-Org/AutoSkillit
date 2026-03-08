@@ -225,9 +225,10 @@ def test_pmp_retry_merge_after_resolution_routes_to_next_part(recipe):
 
 def test_pmp_retry_merge_no_loop_back_to_resolve(recipe):
     step = recipe.steps["retry_merge_after_resolution"]
-    # Must not have on_result routing back to resolve_merge_conflicts — prevents infinite loop
-    if step.on_result is not None:
-        for condition in step.on_result.conditions:
-            assert condition.route != "resolve_merge_conflicts", (
-                "retry_merge_after_resolution must never route back to resolve_merge_conflicts"
-            )
+    # Must not have on_result routing back to resolve_merge_conflicts — prevents infinite loop.
+    # Collect all conditional routes; assertion runs unconditionally so absence of on_result
+    # (valid state) does not silently pass without executing an assertion.
+    routes = [c.route for c in step.on_result.conditions] if step.on_result is not None else []
+    assert "resolve_merge_conflicts" not in routes, (
+        "retry_merge_after_resolution must never route back to resolve_merge_conflicts"
+    )

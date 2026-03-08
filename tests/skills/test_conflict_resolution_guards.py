@@ -5,16 +5,13 @@ interfaces exist in SKILL.md files and the pr-merge-pipeline recipe, preventing
 silent regression if sections are accidentally removed.
 """
 
-from pathlib import Path
-
 import pytest
 import yaml
 
 from autoskillit.core.paths import pkg_root
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-SKILLS_ROOT = PROJECT_ROOT / "src" / "autoskillit" / "skills"
-RECIPE_PATH = PROJECT_ROOT / "src" / "autoskillit" / "recipes" / "pr-merge-pipeline.yaml"
+SKILLS_ROOT = pkg_root() / "skills"
+RECIPE_PATH = pkg_root() / "recipes" / "pr-merge-pipeline.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -189,16 +186,21 @@ def test_resolve_merge_conflicts_skill_exists():
 
 def test_resolve_merge_conflicts_has_goal_analysis():
     text = _skill_text("resolve-merge-conflicts")
-    assert "goal" in text.lower() or "intent" in text.lower(), (
-        "resolve-merge-conflicts must describe goal/intent-aware analysis"
+    # Check for the structural "Determine intent" section headings, not free-form prose keywords
+    assert "Determine intent" in text, (
+        "resolve-merge-conflicts must contain 'Determine intent' section headings "
+        "describing goal-aware analysis of ours/theirs sides"
     )
 
 
 def test_resolve_merge_conflicts_has_confidence_threshold():
     text = _skill_text("resolve-merge-conflicts")
-    assert "confidence" in text.lower(), (
-        "resolve-merge-conflicts must define a confidence threshold for escalation"
-    )
+    # All three confidence levels must be present — not just any mention of 'confidence'
+    for level in ("HIGH", "MEDIUM", "LOW"):
+        assert level in text, (
+            f"resolve-merge-conflicts must define confidence level {level!r} "
+            "in its confidence threshold table"
+        )
 
 
 def test_resolve_merge_conflicts_has_escalation_output():
@@ -224,9 +226,9 @@ def test_resolve_merge_conflicts_never_runs_full_test_suite():
 
 def test_resolve_merge_conflicts_in_skill_contracts():
     contracts_path = pkg_root() / "recipe" / "skill_contracts.yaml"
-    text = contracts_path.read_text()
-    assert "resolve-merge-conflicts:" in text, (
-        "skill_contracts.yaml must declare resolve-merge-conflicts"
+    contracts = yaml.safe_load(contracts_path.read_text())
+    assert "resolve-merge-conflicts" in contracts.get("skills", {}), (
+        "skill_contracts.yaml must declare resolve-merge-conflicts as a key under 'skills'"
     )
 
 
@@ -251,24 +253,28 @@ def test_merge_to_integration_routes_intact_rebase_to_resolve_skill(pmp_recipe):
     step = pmp_recipe.steps["merge_to_integration"]
     conditions = step.on_result.conditions
     assert conditions, "merge_to_integration on_result must have predicate conditions"
+    # Check the route structurally; the state identifier is a specific enum value, not a
+    # common word, so substring presence is a tight-enough structural anchor.
     rebase_intact_routes = [
         c
         for c in conditions
         if c.when
-        and "rebase" in c.when
         and "worktree_intact_rebase_aborted" in c.when
         and c.route == "resolve_merge_conflicts"
     ]
     assert rebase_intact_routes, (
-        "merge_to_integration must route rebase+intact_rebase_aborted to resolve_merge_conflicts"
+        "merge_to_integration must have a condition with state 'worktree_intact_rebase_aborted' "
+        "routing to resolve_merge_conflicts"
     )
 
 
 def test_merge_to_integration_handles_all_recoverable_steps(pmp_recipe):
     step = pmp_recipe.steps["merge_to_integration"]
     conditions = step.on_result.conditions
-    condition_text = " ".join(c.when or "" for c in conditions)
+    # Check each recoverable step has its own dedicated condition, not a joined text search
     for recoverable in ("rebase", "test_gate", "post_rebase_test_gate"):
-        assert recoverable in condition_text, (
-            f"merge_to_integration on_result must explicitly route failed_step={recoverable!r}"
+        matching = [c for c in conditions if c.when and recoverable in c.when]
+        assert matching, (
+            f"merge_to_integration on_result must have a dedicated condition for "
+            f"failed_step={recoverable!r}"
         )

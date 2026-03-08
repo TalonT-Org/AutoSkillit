@@ -4,6 +4,7 @@ Verifies that recipe steps using skills with declared allowed_values must
 explicitly handle every allowed value in their on_result block — no value
 may silently fall through a catch-all condition.
 """
+
 from __future__ import annotations
 
 from autoskillit.core.types import Severity
@@ -27,16 +28,18 @@ def _catchall_steps() -> dict[str, RecipeStep]:
             tool="run_skill",
             with_args={"skill_command": "/autoskillit:review-pr main main"},
             capture={"verdict": "${{ result.verdict }}"},
-            on_result=StepResultRoute(conditions=[
-                StepResultCondition(
-                    route="fix",
-                    when="${{ result.verdict }} == changes_requested",
-                ),
-                StepResultCondition(
-                    route="done",
-                    when="true",  # needs_human silently falls here
-                ),
-            ]),
+            on_result=StepResultRoute(
+                conditions=[
+                    StepResultCondition(
+                        route="fix",
+                        when="${{ result.verdict }} == changes_requested",
+                    ),
+                    StepResultCondition(
+                        route="done",
+                        when="true",  # needs_human silently falls here
+                    ),
+                ]
+            ),
             on_failure="fix",
         ),
         "fix": RecipeStep(

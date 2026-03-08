@@ -159,13 +159,15 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
 
     # Pre-rebase: pass; post-rebase: fail
     tester = StatefulMockTester(results=[(True, "= 10 passed ="), (False, "= 1 failed =")])
-    # Queue: rev-parse (valid worktree), branch, dirty check, fetch ok, rebase ok
+    # Queue: rev-parse (valid worktree), branch, dirty check, fetch ok,
+    # ref check (5.5), git log --merges (5.6, no merge commits), rebase ok
     # No merge/cleanup queued — gate blocks before those
     conftest_mock_runner.push(_make_result(0, f"{str(tmp_path)}/.git/worktrees/feature", ""))
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
     conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch ok
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check (5.5)
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase ok
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
 

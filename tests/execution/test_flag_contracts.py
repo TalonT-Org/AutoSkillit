@@ -21,12 +21,6 @@ from autoskillit.execution.commands import (
 
 
 class TestClaudeFlagValues:
-    """Assert that every ClaudeFlags constant has the correct string value.
-
-    These tests ARE the contract with the external claude binary. When the
-    claude CLI changes a flag, update the constant value here first, then
-    follow the resulting test failures to update call sites.
-    """
 
     def test_allow_dangerously_skip_permissions_value(self):
         assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS == "--allow-dangerously-skip-permissions"
@@ -64,9 +58,7 @@ class TestClaudeFlagValues:
 # An unknown flag in a command builder immediately fails this test.
 # ---------------------------------------------------------------------------
 
-KNOWN_CLAUDE_FLAGS: frozenset[str] = frozenset(
-    v for v in vars(ClaudeFlags).values() if isinstance(v, str) and v.startswith("-")
-)
+KNOWN_CLAUDE_FLAGS: frozenset[str] = frozenset(ClaudeFlags)
 
 
 def _extract_flags(cmd: list[str]) -> set[str]:
@@ -75,11 +67,6 @@ def _extract_flags(cmd: list[str]) -> set[str]:
 
 
 class TestFlagRegistryAudit:
-    """Every flag produced by a builder must be a registered ClaudeFlags constant.
-
-    If a builder introduces a new flag that isn't in ClaudeFlags, this test
-    fails immediately — forcing the developer to register it before it ships.
-    """
 
     def test_interactive_cmd_flags_are_all_registered(self):
         result = build_interactive_cmd(model="claude-sonnet-4-6")

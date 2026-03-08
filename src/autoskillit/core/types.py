@@ -61,7 +61,7 @@ class RecipeSource(StrEnum):
     BUILTIN = "builtin"
 
 
-class ClaudeFlags:
+class ClaudeFlags(StrEnum):
     """Canonical registry of all claude CLI flags used by autoskillit.
 
     Every flag string that autoskillit passes to the claude binary MUST be

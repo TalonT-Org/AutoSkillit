@@ -128,15 +128,29 @@ Use `model: "sonnet"` for all subagents.
 Classify each issue into a recipe route using the primary behavioral criterion:
 
 **Does existing code produce a runtime error?**
+- **Yes** — existing code crashes, raises an exception, returns wrong data, or fails an assertion when executed → `recipe:remediation`
+- **No** — a capability is missing, a guard doesn't exist yet, a routing path was never built, or behavior needs to be added → `recipe:implementation`
 
-The key distinction is **broken vs. missing**: is something that used to work now failing, or is something new being requested?
+The key distinction is **broken vs. missing**:
+- **Remediation** fixes code that runs and errors. The code exists, it executes, and it produces a wrong result or exception.
+- **Implementation** fills a gap. Nothing existing is broken — the capability, guard, or behavior simply doesn't exist yet. Even if the gap was discovered during a runtime scenario (e.g., an orchestrator made a wrong choice because no guardrail existed), if the fix is "add something new" rather than "fix something that errors", it routes to implementation.
 
-- **Yes** (a runtime bug — something deployed is not working as documented or intended) → `recipe:remediation`
-- **No** (a new feature, enhancement, documentation, refactor, or configuration change) → `recipe:implementation`
+Examples that route to `remediation`:
+- A command that crashes with a traceback
+- An API that returns wrong data (e.g., negative duration from clock regression)
+- A file parser that raises an exception on valid input
+- A test that fails with an assertion error due to a real code bug
 
-Examples that route to `remediation`: a command that crashes, an API that returns wrong data, a file that fails to parse, a test that intermittently panics.
+Examples that route to `implementation`:
+- Adding a new CLI flag, skill, or recipe step
+- Adding a missing return field to a response JSON
+- Adding orchestrator discipline rules or guardrails that don't exist yet
+- A plan/recipe that scoped too narrowly (gap in design, not a crash)
+- Improving error messages, refactoring, writing documentation
+- Adding support for a new file format — regardless of scope or complexity
 
-Examples that route to `implementation`: adding a new CLI flag, improving error messages, refactoring a module, writing documentation, adding support for a new file format — regardless of scope or complexity.
+**Common misclassification: "the orchestrator did the wrong thing"**
+When an LLM orchestrator bypasses routing, retries instead of escalating, or ignores a failure — that is almost always a **gap** (missing guardrail, missing discipline rule), not a runtime error. The orchestrator didn't crash; it made an unguarded choice. Route to `implementation` unless the orchestrator hit an actual exception.
 
 For each issue, record:
 - The assigned route (`implementation` or `remediation`)

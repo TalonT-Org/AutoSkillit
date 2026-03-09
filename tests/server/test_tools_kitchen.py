@@ -209,8 +209,11 @@ async def test_open_kitchen_does_not_write_gate_file(tmp_path, monkeypatch):
 def test_close_kitchen_does_not_produce_gate_file(tmp_path, monkeypatch):
     """_close_kitchen_handler must not interact with any gate file path."""
     monkeypatch.chdir(tmp_path)
-    from autoskillit.server.tools_kitchen import _close_kitchen_handler
+    mock_ctx = _make_mock_ctx()
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools_kitchen import _close_kitchen_handler
 
-    _close_kitchen_handler()
+            _close_kitchen_handler()
     gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
     assert not gate_file.exists()

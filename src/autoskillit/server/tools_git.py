@@ -239,23 +239,34 @@ async def create_unique_branch(
         if rc == 0 and stdout.strip():
             was_unique = False
             suffix = 2
-            while True:
+            _MAX_SUFFIX = 100
+            while suffix <= _MAX_SUFFIX:
                 candidate = f"{base_name}-{suffix}"
                 rc2, stdout2, _ = await _run_subprocess(
                     ["git", "ls-remote", remote, f"refs/heads/{candidate}"],
                     cwd=cwd,
                     timeout=30,
                 )
-                if rc2 == 0 and not stdout2.strip():
+                if rc2 != 0:
+                    branch_name = base_name
+                    break
+                if not stdout2.strip():
                     branch_name = candidate
                     break
                 suffix += 1
 
-        await _run_subprocess(
+        rc_checkout, _, _stderr_checkout = await _run_subprocess(
             ["git", "checkout", "-b", branch_name],
             cwd=cwd,
             timeout=30,
         )
+        if rc_checkout != 0:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": f"git checkout -b {branch_name!r} failed: {_stderr_checkout.strip()}",
+                }
+            )
 
         return json.dumps({"branch_name": branch_name, "was_unique": was_unique})
     finally:

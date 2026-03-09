@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:cfafbc3091e36239d57c5d233fb9c27f63f53c3b341e403336a33ec11e1aff97 -->
+<!-- autoskillit-recipe-hash: sha256:0de8c845bc79e2f22e4cca3376fb9236f4123d426ff25fbee1c9ba59b6a0b77a -->
 <!-- autoskillit-diagram-format: v5 -->
 ## implementation
 Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
@@ -82,7 +82,7 @@ resolve_review  [run_skill] (retry ×2)
 │  ✗ failure → release_issue_failure
 │
 re_push_review  [push_to_remote] (retry ×3)
-│  ↓ success → review_pr ↑
+│  ↓ success → ci_watch
 │  ✗ failure → release_issue_failure
 │
 ├── [ci_watch] (retry ×3)  ← only if inputs.open_pr

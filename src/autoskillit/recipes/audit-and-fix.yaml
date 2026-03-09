@@ -360,12 +360,12 @@ steps:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
-    on_success: review_pr
+    on_success: ci_watch
     on_failure: release_issue_failure
     note: >
       Pushes the review-fixed feature branch back to the remote after resolve_review
-      succeeds. Routes back to review_pr to verify the fixes address the review
-      findings. On push failure, escalates via cleanup_failure.
+      succeeds. Routes to ci_watch to validate via CI (one-shot review gate).
+      On push failure, escalates via release_issue_failure.
 
   ci_watch:
     tool: run_cmd

@@ -1236,9 +1236,9 @@ class TestReviewPrRecipeIntegration:
         """T_RP7: resolve_review.on_success routes to re_push_review."""
         assert recipe.steps["resolve_review"].on_success == "re_push_review"  # type: ignore[attr-defined]
 
-    def test_re_push_review_routes_back_to_review_pr(self, recipe: object) -> None:
-        """T_RP8: re_push_review routes back to review_pr (loop)."""
-        assert recipe.steps["re_push_review"].on_success == "review_pr"  # type: ignore[attr-defined]
+    def test_re_push_review_routes_to_ci_watch(self, recipe: object) -> None:
+        """T_RP8: re_push_review routes to ci_watch (one-shot review gate)."""
+        assert recipe.steps["re_push_review"].on_success == "ci_watch"  # type: ignore[attr-defined]
 
     def test_ci_watch_present(self, recipe: object) -> None:
         """T_RP9: ci_watch step present in all four recipes."""

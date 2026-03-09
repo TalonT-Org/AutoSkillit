@@ -158,7 +158,7 @@ async def run_skill(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if (cmd_error := _validate_skill_command(skill_command)) is not None:  # FRICT-6-1
+    if (cmd_error := _validate_skill_command(skill_command)) is not None:
         return cmd_error
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="run_skill", cwd=cwd)

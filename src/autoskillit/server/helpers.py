@@ -90,12 +90,7 @@ def _require_enabled() -> str | None:
 
 
 def _validate_skill_command(skill_command: str) -> str | None:
-    """Return error JSON if skill_command does not start with '/', None if OK.
-
-    FRICT-6-1: MCP tool-level validation that fires before the hook system,
-    returning a structured gate_error response when plain prose is passed
-    instead of a slash-command invocation.
-    """
+    """Return error JSON if skill_command does not start with '/', None if OK."""
     if not skill_command.strip().startswith("/"):
         return gate_error_result(
             "run_skill requires a slash-command as skill_command.\n"

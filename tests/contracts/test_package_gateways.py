@@ -161,13 +161,14 @@ async def test_migration_check_and_migrate_up_to_date(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_factory_make_context_returns_toolcontext():
+def test_factory_make_context_returns_toolcontext(monkeypatch):
     from autoskillit.config import AutomationConfig
     from autoskillit.core.paths import pkg_root
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.server._factory import make_context
 
+    monkeypatch.delenv("AUTOSKILLIT_KITCHEN_OPEN", raising=False)
     ctx = make_context(AutomationConfig())
     assert isinstance(ctx, ToolContext)
     assert ctx.gate.enabled is False  # starts closed

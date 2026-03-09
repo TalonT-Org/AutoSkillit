@@ -35,7 +35,8 @@ def test_make_context_returns_toolcontext():
     assert isinstance(ctx, ToolContext)
 
 
-def test_make_context_gate_starts_closed():
+def test_make_context_gate_starts_closed(monkeypatch):
+    monkeypatch.delenv("AUTOSKILLIT_KITCHEN_OPEN", raising=False)
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert ctx.gate.enabled is False
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -20,6 +21,9 @@ if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher, HeadlessExecutor
 
 logger = get_logger(__name__)
+
+# Safe session ID pattern: alphanumeric + hyphens + underscores, no path traversal sequences.
+_SAFE_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]*$")
 
 # Fingerprint block delimiters written by the report-bug skill in its response.
 _FINGERPRINT_START = "---bug-fingerprint---"
@@ -214,7 +218,11 @@ async def report_bug(
             f"Report output path: {report_path}"
         )
 
-        log_dir = config.linux_tracing.log_dir
+        log_dir = (
+            getattr(config.linux_tracing, "log_dir", "")
+            if config.linux_tracing is not None
+            else ""
+        )
 
         if severity == "blocking":
             result = await _run_report_session(
@@ -310,6 +318,9 @@ def _read_session_diagnostics(session_id: str, log_dir_override: str) -> dict[st
     if not session_id or session_id.startswith(("no_session_", "crashed_")):
         return None
 
+    if not _SAFE_SESSION_ID_RE.match(session_id):
+        return None
+
     try:
         log_root = resolve_log_dir(log_dir_override)
         session_dir = log_root / "sessions" / session_id
@@ -342,7 +353,7 @@ def _read_session_diagnostics(session_id: str, log_dir_override: str) -> dict[st
             "proc_trace_tail": proc_trace_tail,
         }
     except (OSError, json.JSONDecodeError, ValueError):
-        logger.warning("report_bug diagnostics read failed", session_id=session_id)
+        logger.warning("report_bug diagnostics read failed", session_id=session_id, exc_info=True)
         return None
 
 
@@ -383,7 +394,7 @@ def _format_diagnostics_section(diag: dict[str, Any], condensed: bool = False) -
         return "\n".join(lines)
 
     # Anomalies collapsible block
-    anomalies = diag["anomalies"]
+    anomalies = diag.get("anomalies", [])
     if anomalies:
         rows = "\n".join(
             f"| `{a.get('kind', '?')}` | {a.get('severity', '?')} "
@@ -403,7 +414,7 @@ def _format_diagnostics_section(diag: dict[str, Any], condensed: bool = False) -
         ]
 
     # Proc trace collapsible block
-    proc_trace = diag["proc_trace_tail"]
+    proc_trace = diag.get("proc_trace_tail", [])
     if proc_trace:
         lines += [
             "<details>",

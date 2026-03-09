@@ -1199,8 +1199,8 @@ async def test_report_bug_includes_diagnostics_in_new_issue_body(tool_ctx, tmp_p
     )
 
     assert result["success"] is True
-    # body is the 4th positional arg to create_issue(owner, repo, title, body, labels=...)
-    call_body = github_mock.create_issue.call_args[0][3]
+    _args = github_mock.create_issue.call_args
+    call_body = _args.kwargs.get("body", _args.args[3])
     assert "## Session Diagnostics" in call_body
     assert session_id in call_body
 
@@ -1230,7 +1230,8 @@ async def test_report_bug_includes_condensed_diagnostics_in_duplicate_comment(to
 
     await report_bug(error_context="Test error", cwd=str(tmp_path), severity="blocking")
 
-    comment_body = github_mock.add_comment.call_args[0][3]
+    _args = github_mock.add_comment.call_args
+    comment_body = _args.kwargs.get("body", _args.args[3])
     assert "Session Diagnostics" in comment_body
     assert "<details>" not in comment_body  # condensed — no details blocks
 
@@ -1259,7 +1260,8 @@ async def test_report_bug_proceeds_without_diagnostics_when_session_dir_missing(
 
     assert result["success"] is True
     assert github_mock.create_issue.called
-    call_body = github_mock.create_issue.call_args[0][3]
+    _args = github_mock.create_issue.call_args
+    call_body = _args.kwargs.get("body", _args.args[3])
     assert "## Session Diagnostics" not in call_body  # graceful skip
 
 
@@ -1284,5 +1286,6 @@ async def test_report_bug_skips_diagnostics_for_fallback_session_id(tool_ctx, tm
     )
 
     assert result["success"] is True
-    call_body = github_mock.create_issue.call_args[0][3]
+    _args = github_mock.create_issue.call_args
+    call_body = _args.kwargs.get("body", _args.args[3])
     assert "## Session Diagnostics" not in call_body

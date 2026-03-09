@@ -22,8 +22,8 @@ def test_tool_sets_are_disjoint():
 def test_tool_sets_total_count():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    assert len(GATED_TOOLS) == 18
-    assert len(UNGATED_TOOLS) == 9
+    assert len(GATED_TOOLS) == 19
+    assert len(UNGATED_TOOLS) == 10
 
 
 def test_gated_tools_contains_expected_names():
@@ -48,6 +48,7 @@ def test_gated_tools_contains_expected_names():
         "enrich_issues",
         "claim_issue",
         "release_issue",
+        "wait_for_ci",
     }
     assert GATED_TOOLS == expected
 
@@ -74,6 +75,7 @@ def test_ungated_tools_contains_expected_names():
         "validate_recipe",
         "fetch_github_issue",
         "get_issue_title",
+        "get_ci_status",
     }
     assert UNGATED_TOOLS == expected
 

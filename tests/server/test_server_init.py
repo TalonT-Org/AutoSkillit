@@ -170,6 +170,8 @@ class TestToolRegistration:
             "enrich_issues",
             "claim_issue",
             "release_issue",
+            "wait_for_ci",
+            "get_ci_status",
         }
         assert expected == tool_names
 

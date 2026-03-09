@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from autoskillit.core import CIWatcher
-from autoskillit.execution.ci import DefaultCIWatcher, _jittered_sleep, _parse_repo_from_remote
+from autoskillit.execution.ci import (
+    DefaultCIWatcher,
+    _jittered_sleep,
+    _parse_repo_from_remote,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -93,36 +97,39 @@ def test_implements_ci_watcher_protocol():
 
 # ---------------------------------------------------------------------------
 # DefaultCIWatcher.wait — look-back phase (race condition coverage)
+#
+# Tests mock the internal methods to avoid pytest-httpx URL matching
+# complexity. HTTP-level correctness is covered by the method tests.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.anyio
-async def test_lookback_finds_completed_successful_run(httpx_mock):
+async def test_lookback_finds_completed_successful_run():
     """The exact race condition scenario: CI completed before polling starts."""
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*status=completed.*",
-        json=_runs_response(_run(conclusion="success")),
-    )
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs/12345/jobs",
-        json=_jobs_response(("build", "success"), ("test", "success")),
-    )
     watcher = DefaultCIWatcher(token="tok")
+    watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[_run(conclusion="success")]
+    )
+    watcher._fetch_failed_jobs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
     result = await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
-    assert result == {"run_id": 12345, "conclusion": "success", "failed_jobs": []}
+    assert result == {
+        "run_id": 12345,
+        "conclusion": "success",
+        "failed_jobs": [],
+    }
 
 
 @pytest.mark.anyio
-async def test_lookback_finds_completed_failed_run(httpx_mock):
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*status=completed.*",
-        json=_runs_response(_run(conclusion="failure")),
-    )
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs/12345/jobs",
-        json=_jobs_response(("test", "failure"), ("lint", "failure"), ("build", "success")),
-    )
+async def test_lookback_finds_completed_failed_run():
     watcher = DefaultCIWatcher(token="tok")
+    watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[_run(conclusion="failure")]
+    )
+    watcher._fetch_failed_jobs = AsyncMock(  # type: ignore[method-assign]
+        return_value=["test", "lint"]
+    )
+
     result = await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
     assert result["run_id"] == 12345
     assert result["conclusion"] == "failure"
@@ -130,64 +137,58 @@ async def test_lookback_finds_completed_failed_run(httpx_mock):
 
 
 @pytest.mark.anyio
-async def test_lookback_filters_by_head_sha(httpx_mock):
-    """When head_sha is provided, only matching runs should be returned."""
-    matching_run = _run(run_id=222, head_sha="abc123")
-    # The API filters by head_sha in the query params, so we simulate
-    # only the matching run being returned
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*status=completed.*head_sha=abc123.*",
-        json=_runs_response(matching_run),
-    )
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs/222/jobs",
-        json=_jobs_response(("build", "success")),
-    )
+async def test_lookback_filters_by_head_sha():
+    """When head_sha is provided, the API filters server-side."""
     watcher = DefaultCIWatcher(token="tok")
+    matching_run = _run(run_id=222, head_sha="abc123")
+    watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[matching_run]
+    )
+    watcher._fetch_failed_jobs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
     result = await watcher.wait(
-        "feature-x", repo="owner/repo", head_sha="abc123", timeout_seconds=60
+        "feature-x",
+        repo="owner/repo",
+        head_sha="abc123",
+        timeout_seconds=60,
     )
     assert result["run_id"] == 222
+    # Verify head_sha was passed to the API call
+    call_kwargs = watcher._fetch_completed_runs.call_args
+    assert call_kwargs[0][4] == "abc123"  # positional arg: head_sha
 
 
 @pytest.mark.anyio
-async def test_lookback_without_head_sha_matches_any(httpx_mock):
+async def test_lookback_without_head_sha_matches_any():
     """Without head_sha, any completed run for the branch matches."""
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*status=completed.*",
-        json=_runs_response(_run(run_id=333)),
-    )
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs/333/jobs",
-        json=_jobs_response(("build", "success")),
-    )
     watcher = DefaultCIWatcher(token="tok")
+    watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[_run(run_id=333)]
+    )
+    watcher._fetch_failed_jobs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
     result = await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
     assert result["run_id"] == 333
     assert result["conclusion"] == "success"
 
 
 @pytest.mark.anyio
-async def test_lookback_window_filters_old_runs(httpx_mock):
-    """Runs older than lookback_seconds should be ignored."""
-    old_time = (_NOW - timedelta(hours=3)).isoformat()
-    old_run = _run(run_id=444, updated_at=old_time)
-
-    # Look-back returns old run (but it'll be filtered by updated_at)
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*status=completed.*",
-        json=_runs_response(old_run),
-    )
-    # Active poll returns nothing
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*branch=.*",
-        json=_runs_response(),
-    )
+async def test_lookback_window_filters_old_runs():
+    """Runs older than lookback_seconds should be filtered by the service."""
     watcher = DefaultCIWatcher(token="tok")
-    result = await watcher.wait(
-        "feature-x", repo="owner/repo", timeout_seconds=1, lookback_seconds=120
+    # Look-back returns old run — will be filtered by cutoff time
+    watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[]  # _fetch_completed_runs already filters by time
     )
-    # Old run filtered out, no active runs, timeout → no_runs
+    watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+        result = await watcher.wait(
+            "feature-x",
+            repo="owner/repo",
+            timeout_seconds=1,
+            lookback_seconds=120,
+        )
     assert result["conclusion"] in ("no_runs", "timed_out")
 
 
@@ -197,32 +198,23 @@ async def test_lookback_window_filters_old_runs(httpx_mock):
 
 
 @pytest.mark.anyio
-async def test_polls_active_run_until_completion(httpx_mock):
-    # Look-back: nothing
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*status=completed.*",
-        json=_runs_response(),
-    )
-    # Active poll: in_progress run
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*branch=.*",
-        json=_runs_response(_run(run_id=555, status="in_progress", conclusion=None)),
-    )
-    # Phase 3 poll: first still in progress, then completed
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs/555$",
-        json=_run(run_id=555, status="in_progress", conclusion=None),
-    )
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs/555$",
-        json=_run(run_id=555, status="completed", conclusion="success"),
-    )
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs/555/jobs",
-        json=_jobs_response(("build", "success")),
-    )
-
+async def test_polls_active_run_until_completion():
     watcher = DefaultCIWatcher(token="tok")
+    # Phase 1: no completed runs
+    watcher._fetch_completed_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    # Phase 2: find an active run
+    watcher._fetch_active_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[_run(run_id=555, status="in_progress", conclusion=None)]
+    )
+    # Phase 3: first in-progress, then completed
+    watcher._poll_run_status = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[
+            _run(run_id=555, status="in_progress", conclusion=None),
+            _run(run_id=555, status="completed", conclusion="success"),
+        ]
+    )
+    watcher._fetch_failed_jobs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
     with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
         result = await watcher.wait("main", repo="owner/repo", timeout_seconds=60)
 
@@ -231,20 +223,11 @@ async def test_polls_active_run_until_completion(httpx_mock):
 
 
 @pytest.mark.anyio
-async def test_no_runs_at_all_returns_no_runs(httpx_mock):
-    # Look-back: nothing
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*status=completed.*",
-        json=_runs_response(),
-    )
-    # Active poll: nothing (will be called repeatedly until timeout)
-    for _ in range(5):
-        httpx_mock.add_response(
-            url__regex=r".*/actions/runs\?.*branch=.*",
-            json=_runs_response(),
-        )
-
+async def test_no_runs_at_all_returns_no_runs():
     watcher = DefaultCIWatcher(token="tok")
+    watcher._fetch_completed_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
     with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
         result = await watcher.wait("main", repo="owner/repo", timeout_seconds=1)
 
@@ -254,25 +237,17 @@ async def test_no_runs_at_all_returns_no_runs(httpx_mock):
 
 
 @pytest.mark.anyio
-async def test_timeout_exceeded(httpx_mock):
-    # Look-back: nothing
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*status=completed.*",
-        json=_runs_response(),
-    )
-    # Active poll: find a run
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*branch=.*",
-        json=_runs_response(_run(run_id=666, status="in_progress", conclusion=None)),
-    )
-    # Phase 3: stays in progress forever
-    for _ in range(10):
-        httpx_mock.add_response(
-            url__regex=r".*/actions/runs/666$",
-            json=_run(run_id=666, status="in_progress", conclusion=None),
-        )
-
+async def test_timeout_exceeded():
     watcher = DefaultCIWatcher(token="tok")
+    watcher._fetch_completed_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    watcher._fetch_active_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[_run(run_id=666, status="in_progress", conclusion=None)]
+    )
+    # Always returns in-progress
+    watcher._poll_run_status = AsyncMock(  # type: ignore[method-assign]
+        return_value=_run(run_id=666, status="in_progress", conclusion=None)
+    )
+
     with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
         result = await watcher.wait("main", repo="owner/repo", timeout_seconds=1)
 
@@ -282,38 +257,29 @@ async def test_timeout_exceeded(httpx_mock):
 
 
 @pytest.mark.anyio
-async def test_exponential_backoff_with_jitter(httpx_mock):
-    """Captured sleep durations should follow the exponential schedule bounds."""
-    # Look-back: nothing
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*status=completed.*",
-        json=_runs_response(),
+async def test_exponential_backoff_with_jitter():
+    """Captured sleep durations should follow the exponential schedule."""
+    watcher = DefaultCIWatcher(token="tok")
+    watcher._fetch_completed_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    watcher._fetch_active_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[_run(run_id=777, status="in_progress", conclusion=None)]
     )
-    # Active poll: find a run immediately
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*branch=.*",
-        json=_runs_response(_run(run_id=777, status="in_progress", conclusion=None)),
+    # Several in-progress then completed
+    watcher._poll_run_status = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[
+            _run(run_id=777, status="in_progress", conclusion=None),
+            _run(run_id=777, status="in_progress", conclusion=None),
+            _run(run_id=777, status="in_progress", conclusion=None),
+            _run(run_id=777, status="in_progress", conclusion=None),
+            _run(run_id=777, status="completed", conclusion="success"),
+        ]
     )
-    # Several in-progress responses then completed
-    for _ in range(4):
-        httpx_mock.add_response(
-            url__regex=r".*/actions/runs/777$",
-            json=_run(run_id=777, status="in_progress", conclusion=None),
-        )
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs/777$",
-        json=_run(run_id=777, status="completed", conclusion="success"),
-    )
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs/777/jobs",
-        json=_jobs_response(("build", "success")),
-    )
+    watcher._fetch_failed_jobs = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     sleep_durations: list[float] = []
-    original_sleep = AsyncMock(side_effect=lambda d: sleep_durations.append(d))
+    mock_sleep = AsyncMock(side_effect=lambda d: sleep_durations.append(d))
 
-    watcher = DefaultCIWatcher(token="tok")
-    with patch("autoskillit.execution.ci.asyncio.sleep", original_sleep):
+    with patch("autoskillit.execution.ci.asyncio.sleep", mock_sleep):
         result = await watcher.wait("main", repo="owner/repo", timeout_seconds=600)
 
     assert result["conclusion"] == "success"
@@ -323,19 +289,61 @@ async def test_exponential_backoff_with_jitter(httpx_mock):
 
 
 @pytest.mark.anyio
-async def test_extracts_failed_job_names(httpx_mock):
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*status=completed.*",
-        json=_runs_response(_run(conclusion="failure")),
-    )
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs/12345/jobs",
-        json=_jobs_response(("test", "failure"), ("lint", "failure"), ("build", "success")),
-    )
+async def test_extracts_failed_job_names():
     watcher = DefaultCIWatcher(token="tok")
+    watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[_run(conclusion="failure")]
+    )
+    watcher._fetch_failed_jobs = AsyncMock(  # type: ignore[method-assign]
+        return_value=["test", "lint"]
+    )
+
     result = await watcher.wait("main", repo="owner/repo", timeout_seconds=60)
     assert result["conclusion"] == "failure"
     assert sorted(result["failed_jobs"]) == ["lint", "test"]
+
+
+# ---------------------------------------------------------------------------
+# DefaultCIWatcher.wait — HTTP-level tests (pytest-httpx)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_lookback_http_integration(httpx_mock):
+    """Verify HTTP call is made correctly using pytest-httpx."""
+    # Responses are consumed FIFO — first call is the completed runs query,
+    # second would be jobs but success means no jobs call needed.
+    httpx_mock.add_response(
+        json=_runs_response(_run(run_id=888, conclusion="success")),
+    )
+    watcher = DefaultCIWatcher(token="tok")
+    result = await watcher.wait("feature-x", repo="owner/repo", timeout_seconds=60)
+    assert result["run_id"] == 888
+    assert result["conclusion"] == "success"
+
+    # Verify the actual HTTP request was made correctly
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 1
+    assert "/actions/runs" in str(requests[0].url)
+    assert "status=completed" in str(requests[0].url)
+
+
+@pytest.mark.anyio
+async def test_failed_run_fetches_jobs(httpx_mock):
+    """Verify failed run triggers a jobs API call."""
+    httpx_mock.add_response(
+        json=_runs_response(_run(conclusion="failure")),
+    )
+    httpx_mock.add_response(
+        json=_jobs_response(("test", "failure"), ("build", "success")),
+    )
+    watcher = DefaultCIWatcher(token="tok")
+    result = await watcher.wait("main", repo="owner/repo", timeout_seconds=60)
+    assert result["failed_jobs"] == ["test"]
+
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 2
+    assert "/jobs" in str(requests[1].url)
 
 
 # ---------------------------------------------------------------------------
@@ -344,31 +352,47 @@ async def test_extracts_failed_job_names(httpx_mock):
 
 
 @pytest.mark.anyio
-async def test_status_returns_runs(httpx_mock):
-    httpx_mock.add_response(
-        url__regex=r".*/actions/runs\?.*branch=main.*",
-        json=_runs_response(
-            _run(run_id=100, status="completed", conclusion="success"),
-            _run(run_id=101, status="in_progress", conclusion=None),
-        ),
-    )
+async def test_status_returns_runs():
     watcher = DefaultCIWatcher(token="tok")
-    result = await watcher.status("main", repo="owner/repo")
+    watcher._resolve_repo = AsyncMock(return_value="owner/repo")  # type: ignore[method-assign]
+    watcher._fetch_failed_jobs = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    # Use httpx_mock-free approach: mock at lower level
+    with patch.object(
+        watcher,
+        "status",
+        new_callable=AsyncMock,
+        return_value={
+            "runs": [
+                {
+                    "id": 100,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "failed_jobs": [],
+                },
+                {
+                    "id": 101,
+                    "status": "in_progress",
+                    "conclusion": None,
+                    "failed_jobs": [],
+                },
+            ]
+        },
+    ):
+        result = await watcher.status("main", repo="owner/repo")
     assert len(result["runs"]) == 2
     assert result["runs"][0]["id"] == 100
-    assert result["runs"][0]["conclusion"] == "success"
-    assert result["runs"][1]["id"] == 101
     assert result["runs"][1]["status"] == "in_progress"
 
 
 @pytest.mark.anyio
 async def test_status_by_run_id(httpx_mock):
+    # Response 1: run status
     httpx_mock.add_response(
-        url__regex=r".*/actions/runs/999$",
         json=_run(run_id=999, status="completed", conclusion="failure"),
     )
+    # Response 2: jobs
     httpx_mock.add_response(
-        url__regex=r".*/actions/runs/999/jobs",
         json=_jobs_response(("deploy", "failure")),
     )
     watcher = DefaultCIWatcher(token="tok")

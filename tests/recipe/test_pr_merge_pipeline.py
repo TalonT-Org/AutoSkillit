@@ -369,8 +369,7 @@ def test_ci_watch_pr_no_inline_shell(recipe) -> None:
     assert "cmd" not in step.with_args
 
 
-def test_ci_watch_pr_captures_ci_context(recipe) -> None:
-    """ci_watch_pr must capture ci_conclusion and ci_failed_jobs."""
+def test_ci_watch_pr_has_no_capture(recipe) -> None:
+    """ci_watch_pr must not capture — no downstream consumer in pr-merge-pipeline."""
     step = recipe.steps["ci_watch_pr"]
-    assert "ci_conclusion" in step.capture
-    assert "ci_failed_jobs" in step.capture
+    assert not step.capture

@@ -489,9 +489,7 @@ steps:
       branch: "${{ context.integration_branch }}"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
-    capture:
-      ci_conclusion: "${{ result.conclusion }}"
-      ci_failed_jobs: "${{ result.failed_jobs }}"
+      pr_url: "${{ context.pr_url }}"
     on_success: confirm_cleanup
     on_failure: cleanup_failure
     note: >
@@ -504,7 +502,8 @@ steps:
   confirm_cleanup:
     action: confirm
     message: >-
-      PR-merge pipeline succeeded! The clone at ${{ context.work_dir }} is preserved.
+      PR-merge pipeline succeeded! PR: ${{ context.pr_url }}.
+      The clone at ${{ context.work_dir }} is preserved.
       Delete it now? Keeping it lets you resume any session from this pipeline run.
       Type yes to delete or no to keep.
     on_success: delete_clone

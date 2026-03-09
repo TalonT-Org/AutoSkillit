@@ -472,7 +472,7 @@ steps:
   resolve_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }} — Failed CI jobs: ${{ context.ci_failed_jobs }}"
+      skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }} ${{ context.ci_conclusion }} ${{ context.ci_failed_jobs }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_ci"
     retries: 2

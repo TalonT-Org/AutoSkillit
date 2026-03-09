@@ -757,8 +757,7 @@ async def release_issue(
 def _map_api_reviews(raw: list) -> list:
     """Map gh api pulls/{n}/reviews response (user.login) to {author, state, body}."""
     return [
-        {"author": r["user"]["login"], "state": r["state"], "body": r.get("body", "")}
-        for r in raw
+        {"author": r["user"]["login"], "state": r["state"], "body": r.get("body", "")} for r in raw
     ]
 
 

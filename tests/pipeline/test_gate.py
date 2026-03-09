@@ -90,7 +90,6 @@ def test_ungated_tools_contains_expected_names():
     assert UNGATED_TOOLS == expected
 
 
-
 def test_gate_state_enable_disable_transitions():
     from autoskillit.pipeline.gate import DefaultGateState
 

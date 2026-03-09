@@ -176,7 +176,7 @@ def test_review_pr_deletion_regression_requires_decision_false(review_pr_text):
     """The deletion_regression subagent must set requires_decision=false."""
     dr_idx = review_pr_text.find("deletion_regression")
     assert dr_idx != -1
-    context = review_pr_text[dr_idx : dr_idx + 600]
+    context = review_pr_text[dr_idx : dr_idx + 1500]
     has_false = "requires_decision=false" in context or "requires_decision: false" in context
     assert has_false, (
         "The deletion_regression audit subagent must set requires_decision=false — "

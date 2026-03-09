@@ -20,8 +20,8 @@ from autoskillit.pipeline import (
     read_boot_id,
     read_starttime_ticks,
 )
-from autoskillit.recipe import find_recipe_by_name
 from autoskillit.server import mcp
+from autoskillit.server.helpers import _find_recipe, _prime_quota_cache
 
 _gate_cleanup_registered = False
 
@@ -92,21 +92,6 @@ def _write_hook_config() -> None:
         logger.warning("hook_config_write_failed", path=str(hook_cfg_path))
 
 
-async def _prime_quota_cache() -> None:
-    """Fetch quota from the Anthropic API and write the local cache.
-
-    Called at open_kitchen so the cache is primed before any run_skill hook fires.
-    Fails open: a quota fetch failure must not abort kitchen open.
-    """
-    from autoskillit.execution import check_and_sleep_if_needed
-    from autoskillit.server import _get_ctx, logger
-
-    try:
-        await check_and_sleep_if_needed(_get_ctx().config.quota_guard)
-    except (OSError, ValueError, RuntimeError):
-        logger.warning("quota_prime_failed", exc_info=True)
-
-
 async def _open_kitchen_handler() -> None:
     """Set the tools-enabled flag. Extracted for testability."""
     from autoskillit.server import _get_ctx, logger
@@ -151,7 +136,7 @@ def _close_kitchen_handler() -> None:
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
-    match = find_recipe_by_name(name, Path.cwd())
+    match = _find_recipe(name, Path.cwd())
     if match is None:
         return json.dumps({"error": f"No recipe named '{name}'."})
     return match.path.read_text()

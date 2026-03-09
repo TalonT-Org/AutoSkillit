@@ -350,3 +350,46 @@ def test_hook_allows_when_ttl_expired(tmp_path):
     result = _run_hook(event={"tool_name": "Read"}, gate_file_exists=False, tmp_path=tmp_path)
     assert result == ""  # allowed — TTL expired
     assert not gate_file.exists()
+
+
+# T-SYNC-1
+def test_pipeline_forbidden_tools_matches_hook_registry():
+    """PIPELINE_FORBIDDEN_TOOLS must exactly match the native_tool_guard hook matcher.
+
+    Statically verifies that the HOOK_REGISTRY entry for native_tool_guard.py uses
+    a regex whose alternatives are set-equal to PIPELINE_FORBIDDEN_TOOLS.
+    Any future addition to the constant without updating HOOK_REGISTRY fails immediately.
+    """
+    import re
+
+    from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
+    from autoskillit.hook_registry import HOOK_REGISTRY
+
+    # Find the HOOK_REGISTRY entry that invokes native_tool_guard.py
+    native_guard_matcher: str | None = None
+    for hook_def in HOOK_REGISTRY:
+        if "native_tool_guard.py" in hook_def.scripts:
+            native_guard_matcher = hook_def.matcher
+            break
+
+    assert native_guard_matcher is not None, (
+        "No HOOK_REGISTRY entry found with 'native_tool_guard.py' in scripts. "
+        "Update hook_registry.py to include native_tool_guard.py."
+    )
+
+    # Parse alternatives from ^(A|B|C|...)$ pattern
+    m = re.fullmatch(r"\^\((.+)\)\$", native_guard_matcher)
+    assert m is not None, (
+        f"native_tool_guard matcher {native_guard_matcher!r} does not match "
+        "expected format ^(Tool1|Tool2|...)$. Update HOOK_REGISTRY matcher pattern."
+    )
+
+    matcher_tools = set(m.group(1).split("|"))
+    forbidden_tools = set(PIPELINE_FORBIDDEN_TOOLS)
+
+    assert matcher_tools == forbidden_tools, (
+        "PIPELINE_FORBIDDEN_TOOLS and HOOK_REGISTRY native_tool_guard matcher are out of sync.\n"
+        f"  In constant but not in regex : {sorted(forbidden_tools - matcher_tools)}\n"
+        f"  In regex but not in constant : {sorted(matcher_tools - forbidden_tools)}\n"
+        "Update hook_registry.py HOOK_REGISTRY or core/types.py PIPELINE_FORBIDDEN_TOOLS."
+    )

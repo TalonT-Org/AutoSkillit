@@ -1,5 +1,13 @@
 # test_gate.py — unit tests for _gate.py constants and functions
 
+import sys
+
+import pytest
+
+requires_proc = pytest.mark.skipif(
+    sys.platform != "linux", reason="requires /proc filesystem (Linux only)"
+)
+
 
 def test_gated_tools_is_frozenset():
     from autoskillit.pipeline.gate import GATED_TOOLS
@@ -194,6 +202,7 @@ def _read_current_boot_id() -> str:
     return open("/proc/sys/kernel/random/boot_id").read().strip()
 
 
+@requires_proc
 def test_verify_lease_valid(tmp_path):
     import json
     import os
@@ -218,6 +227,7 @@ def test_verify_lease_valid(tmp_path):
     assert status.removed is False
 
 
+@requires_proc
 def test_verify_lease_pid_reuse(tmp_path):
     import json
     import os
@@ -242,6 +252,7 @@ def test_verify_lease_pid_reuse(tmp_path):
     assert not gate.exists()
 
 
+@requires_proc
 def test_verify_lease_boot_id_mismatch(tmp_path):
     import json
     import os
@@ -266,6 +277,7 @@ def test_verify_lease_boot_id_mismatch(tmp_path):
     assert not gate.exists()
 
 
+@requires_proc
 def test_verify_lease_ttl_expired(tmp_path):
     import json
     import os
@@ -291,6 +303,7 @@ def test_verify_lease_ttl_expired(tmp_path):
     assert not gate.exists()
 
 
+@requires_proc
 def test_verify_lease_dead_pid(tmp_path):
     import json
     from datetime import UTC, datetime
@@ -334,6 +347,7 @@ def test_verify_lease_missing_file(tmp_path):
     assert status.removed is False
 
 
+@requires_proc
 def test_verify_lease_proc_read_fails(tmp_path):
     import json
     import os
@@ -360,6 +374,7 @@ def test_verify_lease_proc_read_fails(tmp_path):
     assert not gate.exists()
 
 
+@requires_proc
 def test_verify_lease_removes_companion_hook_config(tmp_path):
     import json
     from datetime import UTC, datetime

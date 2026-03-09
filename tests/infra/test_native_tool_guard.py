@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import sys
 from contextlib import redirect_stdout
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,6 +13,10 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
+
+requires_proc = pytest.mark.skipif(
+    sys.platform != "linux", reason="requires /proc filesystem (Linux only)"
+)
 
 
 def _read_self_starttime_ticks() -> int:
@@ -73,6 +78,7 @@ def _run_hook(
 
 
 # T1a
+@requires_proc
 def test_denies_read_when_gate_open(tmp_path):
     """Feed a Read tool event with gate file present → deny."""
     out = _run_hook(
@@ -120,6 +126,7 @@ def test_allows_mcp_tool_when_gate_open(tmp_path):
 
 
 # T1d
+@requires_proc
 def test_failopen_on_malformed_input(tmp_path):
     """Feed garbage to stdin → exit 0, no output."""
     out = _run_hook(
@@ -131,6 +138,7 @@ def test_failopen_on_malformed_input(tmp_path):
 
 
 # T1e
+@requires_proc
 @pytest.mark.parametrize("tool_name", PIPELINE_FORBIDDEN_TOOLS)
 def test_denies_all_forbidden_tools(tmp_path, tool_name):
     """Each tool in PIPELINE_FORBIDDEN_TOOLS is denied when gate file exists."""
@@ -172,6 +180,7 @@ def test_hook_allows_when_owning_pid_is_dead(tmp_path):
 
 
 # T-LEASE-3: Hook denies when gate file has live PID with valid identity
+@requires_proc
 def test_hook_denies_when_owning_pid_is_alive(tmp_path):
     """Gate file with live PID and matching identity must deny."""
     gate_dir = tmp_path / ".autoskillit" / "temp"
@@ -253,6 +262,7 @@ def test_hooks_json_commands_have_no_env_vars():
 
 
 # T-LEASE-PID-REUSE: Hook allows when PID alive but starttime mismatch
+@requires_proc
 def test_hook_allows_when_pid_alive_but_starttime_mismatch(tmp_path):
     """PID reuse scenario: PID alive but starttime_ticks wrong → stale → allow."""
     gate_dir = tmp_path / ".autoskillit" / "temp"
@@ -274,6 +284,7 @@ def test_hook_allows_when_pid_alive_but_starttime_mismatch(tmp_path):
 
 
 # T-LEASE-IDENTITY-MATCH: Hook denies when all three identity factors match
+@requires_proc
 def test_hook_denies_when_pid_alive_and_identity_matches(tmp_path):
     """Legitimate lease: PID alive + starttime + boot_id all match → deny."""
     gate_dir = tmp_path / ".autoskillit" / "temp"
@@ -295,6 +306,7 @@ def test_hook_denies_when_pid_alive_and_identity_matches(tmp_path):
 
 
 # T-LEASE-BOOT-ID: Hook allows when boot_id mismatches
+@requires_proc
 def test_hook_allows_when_boot_id_mismatch(tmp_path):
     """Reboot scenario: boot_id wrong → stale → allow."""
     gate_dir = tmp_path / ".autoskillit" / "temp"
@@ -316,6 +328,7 @@ def test_hook_allows_when_boot_id_mismatch(tmp_path):
 
 
 # T-LEASE-TTL: Hook allows when TTL expired
+@requires_proc
 def test_hook_allows_when_ttl_expired(tmp_path):
     """Expired lease: valid identity but opened_at > 24h ago → allow."""
     from datetime import timedelta

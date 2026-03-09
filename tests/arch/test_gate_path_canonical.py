@@ -1,7 +1,8 @@
 """Tests for canonical gate path helpers in pipeline/gate.py.
 
-These tests fail before the helpers exist (gate_file_path, hook_config_path,
-GATE_DIR_COMPONENTS are not yet defined) and pass once Step 2.1 is complete.
+Verifies that gate_file_path, hook_config_path, and GATE_DIR_COMPONENTS
+return paths rooted under .autoskillit/temp/ and that the components constant
+is consistent with the runtime path computation.
 """
 
 from __future__ import annotations

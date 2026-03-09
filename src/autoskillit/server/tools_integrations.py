@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -14,12 +15,15 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import _atomic_write, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess
+from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess, resolve_log_dir
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher, HeadlessExecutor
 
 logger = get_logger(__name__)
+
+# Safe session ID pattern: alphanumeric + hyphens + underscores, no path traversal sequences.
+_SAFE_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]*$")
 
 # Fingerprint block delimiters written by the report-bug skill in its response.
 _FINGERPRINT_START = "---bug-fingerprint---"
@@ -214,6 +218,12 @@ async def report_bug(
             f"Report output path: {report_path}"
         )
 
+        log_dir = (
+            getattr(config.linux_tracing, "log_dir", "")
+            if config.linux_tracing is not None
+            else ""
+        )
+
         if severity == "blocking":
             result = await _run_report_session(
                 skill_command,
@@ -225,6 +235,7 @@ async def report_bug(
                 config,
                 effective_model,
                 step_name,
+                log_dir=log_dir,
             )
             if not result["success"]:
                 await _notify(
@@ -248,6 +259,7 @@ async def report_bug(
                 config,
                 effective_model,
                 step_name,
+                log_dir=log_dir,
             )
         )
         _pending_report_tasks.add(task)
@@ -292,6 +304,142 @@ def _parse_fingerprint(report_text: str) -> str | None:
     return None
 
 
+def _read_session_diagnostics(session_id: str, log_dir_override: str) -> dict[str, Any] | None:
+    """Read session diagnostics from the on-disk log directory.
+
+    Returns a dict with keys: session_id, session_dir, summary, anomalies,
+    proc_trace_tail.  Returns None when:
+    - session_id is empty
+    - session_id is a fallback prefix (no_session_* or crashed_*)
+    - the session directory does not exist on disk
+
+    Never raises.
+    """
+    if not session_id or session_id.startswith(("no_session_", "crashed_")):
+        return None
+
+    if not _SAFE_SESSION_ID_RE.match(session_id):
+        return None
+
+    try:
+        log_root = resolve_log_dir(log_dir_override)
+        session_dir = log_root / "sessions" / session_id
+        if not session_dir.is_dir():
+            return None
+
+        summary: dict[str, Any] = {}
+        summary_path = session_dir / "summary.json"
+        if summary_path.is_file():
+            summary = json.loads(summary_path.read_text())
+
+        anomalies: list[dict[str, Any]] = []
+        anomalies_path = session_dir / "anomalies.jsonl"
+        if anomalies_path.is_file():
+            for line in anomalies_path.read_text().splitlines():
+                if line.strip():
+                    anomalies.append(json.loads(line))
+
+        proc_trace_tail: list[dict[str, Any]] = []
+        proc_trace_path = session_dir / "proc_trace.jsonl"
+        if proc_trace_path.is_file():
+            lines = [ln for ln in proc_trace_path.read_text().splitlines() if ln.strip()]
+            proc_trace_tail = [json.loads(ln) for ln in lines[-10:]]
+
+        return {
+            "session_id": session_id,
+            "session_dir": str(session_dir),
+            "summary": summary,
+            "anomalies": anomalies,
+            "proc_trace_tail": proc_trace_tail,
+        }
+    except (OSError, json.JSONDecodeError, ValueError):
+        logger.warning("report_bug diagnostics read failed", session_id=session_id, exc_info=True)
+        return None
+
+
+def _format_diagnostics_section(diag: dict[str, Any], condensed: bool = False) -> str:
+    """Render session diagnostics as a Markdown section for GitHub issue bodies.
+
+    condensed=False (new issues): full section — metrics table + collapsible
+    anomaly and proc-trace blocks + local path links.
+    condensed=True (duplicate comments): metrics table only, no blocks.
+    """
+    s = diag["summary"]
+    session_id = s.get("session_id", diag["session_id"])
+    duration = s.get("duration_seconds")
+    duration_str = f"{duration:.1f}s" if duration is not None else "—"
+    peak_rss = s.get("peak_rss_kb", 0)
+    peak_oom = s.get("peak_oom_score", 0)
+    anomaly_count = s.get("anomaly_count", 0)
+    termination = s.get("termination_reason", "—")
+    exit_code = s.get("exit_code", "—")
+    claude_code_log: str = s.get("claude_code_log") or ""
+
+    lines: list[str] = [
+        "## Session Diagnostics",
+        "",
+        "| Metric | Value |",
+        "|--------|-------|",
+        f"| Session ID | `{session_id}` |",
+        f"| Duration | {duration_str} |",
+        f"| Peak RSS | {peak_rss} KB |",
+        f"| Peak OOM Score | {peak_oom} |",
+        f"| Anomaly Count | {anomaly_count} |",
+        f"| Termination | {termination} |",
+        f"| Exit Code | {exit_code} |",
+        "",
+    ]
+
+    if condensed:
+        return "\n".join(lines)
+
+    # Anomalies collapsible block
+    anomalies = diag.get("anomalies", [])
+    if anomalies:
+        rows = "\n".join(
+            f"| `{a.get('kind', '?')}` | {a.get('severity', '?')} "
+            f"| {json.dumps(a.get('detail', {}))} |"
+            for a in anomalies
+        )
+        lines += [
+            "<details>",
+            f"<summary>Anomalies ({len(anomalies)})</summary>",
+            "",
+            "| Kind | Severity | Detail |",
+            "|------|----------|--------|",
+            rows,
+            "",
+            "</details>",
+            "",
+        ]
+
+    # Proc trace collapsible block
+    proc_trace = diag.get("proc_trace_tail", [])
+    if proc_trace:
+        lines += [
+            "<details>",
+            f"<summary>Process Trace (last {len(proc_trace)} snapshots)</summary>",
+            "",
+            "```json",
+            json.dumps(proc_trace, indent=2),
+            "```",
+            "",
+            "</details>",
+            "",
+        ]
+
+    # Local path links
+    lines += [
+        "**Local paths:**",
+        f"- Session diagnostics: `{diag['session_dir']}`",
+    ]
+    if claude_code_log:
+        lines.append(f"- Claude Code session log: `{claude_code_log}`")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
 async def _file_or_update_github_issue(
     fingerprint: str,
     error_context: str,
@@ -299,6 +447,7 @@ async def _file_or_update_github_issue(
     report_path: Path,
     github_client: GitHubFetcher,
     config: Any,
+    diag: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """Search for a duplicate issue; comment if found, create if not.
 
@@ -331,10 +480,14 @@ async def _file_or_update_github_issue(
             return {"duplicate": True, "issue_url": issue_url, "comment_added": False}
 
         date_str = datetime.now(UTC).date().isoformat()
+        diag_section = (
+            "\n\n" + _format_diagnostics_section(diag, condensed=True) if diag is not None else ""
+        )
         comment_body = (
             f"**New occurrence auto-reported on {date_str}**\n\n"
             f"**Error context:**\n```\n{error_context}\n```\n\n"
             f"**Local report:** `{report_path}`"
+            f"{diag_section}"
         )
         comment_result = await github_client.add_comment(owner, repo, issue_number, comment_body)
         logger.info(
@@ -349,11 +502,15 @@ async def _file_or_update_github_issue(
         }
 
     # No duplicate — create a new issue.
+    diag_section = (
+        "\n\n" + _format_diagnostics_section(diag, condensed=False) if diag is not None else ""
+    )
+    issue_body = report_text + diag_section
     create_result = await github_client.create_issue(
         owner,
         repo,
         fingerprint or error_context.splitlines()[0][:80],
-        report_text,
+        issue_body,
         labels=labels,
     )
     logger.info("report_bug created issue", success=create_result.get("success"))
@@ -374,6 +531,7 @@ async def _run_report_session(
     config: Any,
     model: str,
     step_name: str,
+    log_dir: str,
 ) -> dict[str, Any]:
     """Run the headless session, write the report, and handle GitHub filing.
 
@@ -398,11 +556,13 @@ async def _run_report_session(
             "report_path": str(report_path),
         }
 
+    diag = _read_session_diagnostics(skill_result.session_id, log_dir)
+
     github: dict[str, Any] = {}
     if cfg.github_filing and github_client is not None and github_client.has_token:
         fingerprint = _parse_fingerprint(report_text) or error_context.splitlines()[0][:80]
         github = await _file_or_update_github_issue(
-            fingerprint, error_context, report_text, report_path, github_client, config
+            fingerprint, error_context, report_text, report_path, github_client, config, diag
         )
     elif cfg.github_filing:
         github = {"skipped": True, "reason": "no_token"}

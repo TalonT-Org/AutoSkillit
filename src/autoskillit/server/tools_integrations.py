@@ -757,14 +757,23 @@ async def release_issue(
 def _map_api_reviews(raw: list) -> list:
     """Map gh api pulls/{n}/reviews response (user.login) to {author, state, body}."""
     return [
-        {"author": r["user"]["login"], "state": r["state"], "body": r.get("body", "")} for r in raw
+        {
+            "author": (r.get("user") or {}).get("login", ""),
+            "state": r["state"],
+            "body": r.get("body", ""),
+        }
+        for r in raw
     ]
 
 
 def _map_pr_view_reviews(data: dict) -> list:
     """Map gh pr view --json reviews response (author.login) to {author, state, body}."""
     return [
-        {"author": r["author"]["login"], "state": r["state"], "body": r.get("body", "")}
+        {
+            "author": (r.get("author") or {}).get("login", ""),
+            "state": r["state"],
+            "body": r.get("body", ""),
+        }
         for r in data.get("reviews", [])
     ]
 

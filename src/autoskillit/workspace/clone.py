@@ -408,7 +408,7 @@ def push_to_remote(
         }
 
     push_result = subprocess.run(
-        ["git", "push", resolved_url, branch],
+        ["git", "push", "-u", "origin", branch],
         cwd=clone_path,
         capture_output=True,
         text=True,

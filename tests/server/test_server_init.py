@@ -527,8 +527,8 @@ class TestGateFileRecovery:
     async def test_initialize_removes_stale_gate_file(self, monkeypatch, tmp_path):
         """_initialize must remove gate files whose owning PID is dead."""
         monkeypatch.chdir(tmp_path)
-        gate_dir = tmp_path / "temp"
-        gate_dir.mkdir()
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
         gate_file = gate_dir / ".kitchen_gate"
         gate_file.write_text(json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"}))
 
@@ -549,10 +549,23 @@ class TestGateFileRecovery:
         import os
 
         monkeypatch.chdir(tmp_path)
-        gate_dir = tmp_path / "temp"
-        gate_dir.mkdir()
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
         gate_file = gate_dir / ".kitchen_gate"
-        gate_file.write_text(json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"}))
+        from datetime import UTC, datetime
+
+        from autoskillit.pipeline.gate import read_boot_id, read_starttime_ticks
+
+        gate_file.write_text(
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "starttime_ticks": read_starttime_ticks(os.getpid()),
+                    "boot_id": read_boot_id(),
+                    "opened_at": datetime.now(UTC).isoformat(),
+                }
+            )
+        )
 
         from autoskillit.server._factory import make_context
         from tests.conftest import MockSubprocessRunner
@@ -569,8 +582,8 @@ class TestGateFileRecovery:
     async def test_initialize_removes_malformed_gate_file(self, monkeypatch, tmp_path):
         """Malformed gate files must be removed at startup."""
         monkeypatch.chdir(tmp_path)
-        gate_dir = tmp_path / "temp"
-        gate_dir.mkdir()
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
         gate_file = gate_dir / ".kitchen_gate"
         gate_file.write_text("not valid json")
 
@@ -584,6 +597,31 @@ class TestGateFileRecovery:
 
         _initialize(ctx)
         assert not gate_file.exists()
+
+    @pytest.mark.anyio
+    async def test_initialize_removes_companion_hook_config_with_stale_gate(
+        self, monkeypatch, tmp_path
+    ):
+        """_initialize must remove both gate file and companion hook config when stale."""
+        monkeypatch.chdir(tmp_path)
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
+        gate_file = gate_dir / ".kitchen_gate"
+        gate_file.write_text(json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"}))
+        companion = gate_dir / ".autoskillit_hook_config.json"
+        companion.write_text("{}")
+
+        from autoskillit.server._factory import make_context
+        from tests.conftest import MockSubprocessRunner
+
+        ctx = make_context(
+            AutomationConfig(), runner=MockSubprocessRunner(), plugin_dir=str(tmp_path)
+        )
+        from autoskillit.server._state import _initialize
+
+        _initialize(ctx)
+        assert not gate_file.exists()
+        assert not companion.exists()
 
 
 class TestConfigDrivenBehavior:

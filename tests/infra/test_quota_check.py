@@ -174,7 +174,7 @@ def test_quota_check_reads_threshold_from_hook_config(tmp_path, monkeypatch):
     cache = tmp_path / "custom_cache.json"
     _write_cache(cache, utilization=60.0)
     _write_hook_config(
-        tmp_path / "temp" / ".autoskillit_hook_config.json",
+        tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json",
         threshold=50.0,
         cache_max_age=300,
         cache_path=str(cache),
@@ -192,7 +192,7 @@ def test_quota_check_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
     custom_cache = tmp_path / "my_custom_cache.json"
     _write_cache(custom_cache, utilization=95.0)
     _write_hook_config(
-        tmp_path / "temp" / ".autoskillit_hook_config.json",
+        tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json",
         threshold=90.0,
         cache_max_age=300,
         cache_path=str(custom_cache),

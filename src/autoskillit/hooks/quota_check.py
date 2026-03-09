@@ -20,15 +20,18 @@ _DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
 _DEFAULT_THRESHOLD = 90.0
 _DEFAULT_CACHE_MAX_AGE = 300  # seconds
 
+HOOK_CONFIG_FILENAME = ".autoskillit_hook_config.json"
+HOOK_DIR_COMPONENTS = (".autoskillit", "temp")
+
 
 def _read_hook_config() -> dict:
-    """Read server-written config from temp/.autoskillit_hook_config.json.
+    """Read server-written config from .autoskillit/temp/.autoskillit_hook_config.json.
 
     Returns the quota_guard section, or {} if the file is absent or unreadable.
     This file is written by open_kitchen and removed by close_kitchen.
     """
     try:
-        config_path = Path.cwd() / "temp" / ".autoskillit_hook_config.json"
+        config_path = Path.cwd().joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME)
         return json.loads(config_path.read_text()).get("quota_guard", {})
     except (OSError, json.JSONDecodeError, AttributeError, TypeError):
         return {}

@@ -145,19 +145,21 @@ def init(
 
 
 @app.command
-def doctor(*, output_json: bool = False):
+def doctor(*, output_json: bool = False, fix: bool = False):
     """Check project setup for common issues.
 
     Parameters
     ----------
     output_json
         Output results as JSON instead of human-readable text.
+    fix
+        Auto-remediate fixable errors (e.g. remove stale gate files).
     """
     from autoskillit.cli._doctor import run_doctor
     from autoskillit.server import _get_plugin_dir
 
     plugin_dir = _get_plugin_dir()
-    run_doctor(output_json=output_json, plugin_dir=plugin_dir)
+    run_doctor(output_json=output_json, plugin_dir=plugin_dir, fix=fix)
 
 
 @app.command

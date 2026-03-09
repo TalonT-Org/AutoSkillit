@@ -4,18 +4,31 @@ from __future__ import annotations
 
 import json
 import shutil
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from autoskillit.core import Severity, is_git_worktree, pkg_root
-from autoskillit.pipeline import GATE_FILENAME, is_pid_alive
+from autoskillit.pipeline import gate_file_path, hook_config_path, verify_lease
 
 
 @dataclass
 class DoctorResult:
+    """Outcome of a single doctor check.
+
+    The ``fix`` field is for **external programmatic callers** that want to
+    inspect results and apply remediation themselves.  ``run_doctor`` does not
+    dispatch ``fix`` — it passes ``fix=True`` directly into each check function,
+    which applies the fix inline and returns an ``OK`` result immediately.
+    External callers (e.g. tests or integrations) may call ``result.fix()``
+    after receiving an ``ERROR`` result from a check function invoked with
+    ``fix=False``.
+    """
+
     severity: Severity
     check: str
     message: str
+    fix: Callable[[], None] | None = field(default=None, repr=False)
 
 
 def _is_plugin_installed() -> bool:
@@ -31,43 +44,41 @@ def _is_plugin_installed() -> bool:
         return False
 
 
-def _check_stale_gate_file(project_root: Path) -> DoctorResult:
-    """Check for stale gate file from a crashed pipeline session."""
-    gate_path = project_root / "temp" / GATE_FILENAME
-    if not gate_path.exists():
+def _check_stale_gate_file(project_root: Path, fix: bool = False) -> DoctorResult:
+    """Check for stale gate file from a crashed pipeline session.
+
+    Delegates to verify_lease() for three-factor identity + TTL validation.
+    Invalid leases are auto-removed by verify_lease() regardless of the fix flag.
+    """
+    gate_path = gate_file_path(project_root)
+    companion = hook_config_path(project_root)
+    status = verify_lease(gate_path, companion)
+
+    if status.valid:
+        return DoctorResult(
+            Severity.OK,
+            "stale_gate_file",
+            "Gate file is live (lease valid)",
+        )
+
+    if status.reason == "no_file":
         return DoctorResult(Severity.OK, "stale_gate_file", "No gate file found")
 
-    try:
-        data = json.loads(gate_path.read_text())
-        pid = data["pid"]
-    except (json.JSONDecodeError, KeyError, TypeError, OSError):
-        return DoctorResult(
-            Severity.ERROR,
-            "stale_gate_file",
-            f"Malformed gate file at {gate_path} — safe to delete",
-        )
-
-    if not is_pid_alive(pid):
-        return DoctorResult(
-            Severity.ERROR,
-            "stale_gate_file",
-            f"Stale gate file at {gate_path} (PID {pid} is dead) — "
-            f"safe to delete. Native tools may be blocked.",
-        )
-
     return DoctorResult(
-        Severity.OK,
+        Severity.WARNING,
         "stale_gate_file",
-        f"Gate file is live (PID {pid} is running)",
+        f"Stale gate file auto-removed ({status.reason}). Native tools unblocked.",
     )
 
 
-def run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> None:
+def run_doctor(
+    *, output_json: bool = False, plugin_dir: str | None = None, fix: bool = False
+) -> None:
     """Check project setup for common issues."""
     results: list[DoctorResult] = []
 
     # Check 0: Stale gate file from crashed pipeline
-    results.append(_check_stale_gate_file(Path.cwd()))
+    results.append(_check_stale_gate_file(Path.cwd(), fix=fix))
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
     stale_servers: list[str] = []

@@ -14,13 +14,12 @@ This module is the authoritative location for:
 
 from __future__ import annotations
 
-import json
 from datetime import UTC
 from pathlib import Path
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import get_logger
-from autoskillit.pipeline import GATE_FILENAME, HOOK_CONFIG_FILENAME, ToolContext, is_pid_alive
+from autoskillit.pipeline import ToolContext, gate_file_path, hook_config_path, verify_lease
 
 logger = get_logger(__name__)
 
@@ -28,29 +27,12 @@ _ctx: ToolContext | None = None
 
 
 def _recover_stale_gate_file() -> None:
-    """Remove gate file if owning process is dead or file is malformed."""
-    gate_path = Path.cwd() / "temp" / GATE_FILENAME
-    if not gate_path.exists():
-        return
-    try:
-        data = json.loads(gate_path.read_text())
-        pid = data["pid"]
-    except (json.JSONDecodeError, KeyError, TypeError, OSError):
-        gate_path.unlink(missing_ok=True)
-        logger.warning("removed_malformed_gate_file", path=str(gate_path))
-        # Also clean up companion hook config file
-        hook_cfg = Path.cwd() / "temp" / HOOK_CONFIG_FILENAME
-        if hook_cfg.exists():
-            hook_cfg.unlink(missing_ok=True)
-        return
-
-    if not is_pid_alive(pid):
-        gate_path.unlink(missing_ok=True)
-        logger.warning("removed_stale_gate_file", pid=pid, path=str(gate_path))
-        # Also clean up companion hook config file
-        hook_cfg = Path.cwd() / "temp" / HOOK_CONFIG_FILENAME
-        if hook_cfg.exists():
-            hook_cfg.unlink(missing_ok=True)
+    """Remove gate file if owning process is dead, identity mismatched, or TTL expired."""
+    gate_path = gate_file_path(Path.cwd())
+    companion = hook_config_path(Path.cwd())
+    status = verify_lease(gate_path, companion)
+    if status.removed:
+        logger.info("recovered_gate_file", reason=status.reason)
 
 
 def _initialize(ctx: ToolContext) -> None:

@@ -113,16 +113,16 @@ PR_ADDITIONS=$(git diff ${MERGE_BASE}...origin/{pr_branch} | grep '^+' | grep -v
 
 **If regressions are found:**
 
-Skip Steps 2 and 3 (do not attempt any merge). Proceed directly to Step 3.5 to classify
-PR files. When writing the conflict report in Step 4, include a `## Deletion Regressions`
-section (see template below) and set `deletion_regression=true` in the Step 5 output.
-
-**If no regressions are found:** Continue to Step 2 / Step 3 as normal. Emit
-`deletion_regression=false` in the Step 5 output.
+Skip direct merge. Proceed to file classification (the PR Changes Inventory section
+below). When writing the conflict report, include a `## Deletion Regressions` section
+(see template below) and set `deletion_regression=true` in the output tokens.
 
 The regression context (list of regressed files/symbols + the commits that deleted them
 on base) must be written to the conflict report so `make-plan` understands that these
 items must NOT be reintroduced in the implementation.
+
+**If no regressions are found:** Continue to Step 2 / Step 3 as normal. Emit
+`deletion_regression=false` in the Step 5 output.
 
 **Gather regression evidence** for each found regression:
 
@@ -137,7 +137,7 @@ git log --diff-filter=M --oneline -p -- {file_path} origin/{base_branch} \
   | head -1
 ```
 
-**Template addition for Step 4 conflict report** — insert after the `## Resolver Contract` section:
+**Template for the conflict report** — add after the `## Resolver Contract` section:
 
 ```markdown
 ## Deletion Regressions

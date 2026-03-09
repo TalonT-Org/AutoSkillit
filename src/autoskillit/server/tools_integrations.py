@@ -843,7 +843,9 @@ async def get_pr_reviews(
             cmd = ["gh", "api", f"repos/{repo}/pulls/{pr_number}/reviews"]
             rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
             if rc != 0:
-                return json.dumps({"success": False, "error": stderr.strip() or "gh command failed"})
+                return json.dumps(
+                    {"success": False, "error": stderr.strip() or "gh command failed"}
+                )
             try:
                 raw = json.loads(stdout)
             except json.JSONDecodeError:
@@ -853,7 +855,9 @@ async def get_pr_reviews(
             cmd = ["gh", "pr", "view", str(pr_number), "--json", "reviews"]
             rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
             if rc != 0:
-                return json.dumps({"success": False, "error": stderr.strip() or "gh command failed"})
+                return json.dumps(
+                    {"success": False, "error": stderr.strip() or "gh command failed"}
+                )
             try:
                 data = json.loads(stdout)
             except json.JSONDecodeError:

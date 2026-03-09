@@ -79,7 +79,7 @@ Code-index tools require **project-relative paths**. Always use paths like:
 
 NOT absolute paths like:
 
-    /home/talon/projects/generic_automation_mcp/src/autoskillit/execution/headless.py
+    /path/to/project/src/autoskillit/execution/headless.py
 
 Agents launched via `run_skill` inherit no code-index state from the parent session — this
 call is mandatory at the start of every headless session that uses code-index tools.

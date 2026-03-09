@@ -12,6 +12,7 @@ from autoskillit.recipe import (
     StaleItem,
     StalenessEntry,
     compute_recipe_hash,
+    find_recipe_by_name,
     load_bundled_manifest,
     read_staleness_cache,
     write_staleness_cache,
@@ -311,3 +312,28 @@ async def _import_and_call(
         return {"success": True, "result": result}
     except (TypeError, ValueError):
         return {"success": True, "result": str(result)}
+
+
+def _find_recipe(name: str, cwd: Path) -> Any:
+    """Look up a recipe by name. Delegates to recipe layer; exposed for tools_kitchen.py.
+
+    tools_kitchen.py (a tools_*.py file) is restricted by REQ-IMP-003 to importing
+    only from autoskillit.core, autoskillit.pipeline, and autoskillit.server.
+    This function provides the architecture-compliant bridge to autoskillit.recipe.
+    """
+    return find_recipe_by_name(name, cwd)
+
+
+async def _prime_quota_cache() -> None:
+    """Fetch quota from the Anthropic API and write the local cache.
+
+    Called at open_kitchen so the cache is primed before any run_skill hook fires.
+    Fails open: a quota fetch failure must not abort kitchen open.
+    """
+    from autoskillit.execution import check_and_sleep_if_needed
+    from autoskillit.server import _get_ctx
+
+    try:
+        await check_and_sleep_if_needed(_get_ctx().config.quota_guard)
+    except (OSError, ValueError, RuntimeError):
+        logger.warning("quota_prime_failed", exc_info=True)

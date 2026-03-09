@@ -61,16 +61,16 @@ class TestServerToolSurfaceContract:
 
     @pytest.mark.anyio
     async def test_open_kitchen_prompt_names_all_forbidden_tools(self):
-        """open_kitchen prompt text must name every forbidden tool with prohibition framing."""
-        from unittest.mock import AsyncMock, patch
+        """open_kitchen tool text must name every forbidden tool with prohibition framing."""
+        from unittest.mock import AsyncMock, MagicMock, patch
 
-        from autoskillit.server.prompts import open_kitchen
+        from autoskillit.server.tools_kitchen import open_kitchen
 
-        with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
-            with patch("autoskillit.server.prompts._write_hook_config"):
-                result = await open_kitchen()
-        content = result.messages[0].content
-        text = content.text if hasattr(content, "text") else str(content)
+        mock_ctx = MagicMock()
+        mock_ctx.enable_components = AsyncMock()
+        with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+            with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                text = await open_kitchen(ctx=mock_ctx)
 
         missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in text]
         assert not missing, f"open_kitchen prompt missing tools: {missing}"

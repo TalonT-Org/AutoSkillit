@@ -804,7 +804,7 @@ class TestCLICook:
 
         cmd = mock_run.call_args[0][0]
         system_prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT) + 1
-        assert "Kitchen is open" in cmd[system_prompt_idx]
+        assert "open_kitchen" in cmd[system_prompt_idx]
 
     def test_cook_picker_out_of_range_exits(
         self,

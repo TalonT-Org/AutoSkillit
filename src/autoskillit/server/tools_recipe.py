@@ -214,7 +214,7 @@ async def validate_recipe(script_path: str) -> str:
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     """Apply pending migration notes to a recipe file.
 

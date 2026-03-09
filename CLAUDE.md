@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 29 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status) with 19 gated behind MCP prompts for user-only activation, and 24 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 31 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 19 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 24 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -163,7 +163,7 @@ src/autoskillit/
 │   ├── __init__.py          #   FastMCP app, _initialize(ctx), version_info(), recipe:// resource handler
 │   ├── git.py               #   Git merge workflow for merge_worktree (perform_merge)
 │   ├── helpers.py           #   Shared server-layer helpers (worktree setup, path utilities)
-│   ├── prompts.py           #   MCP prompt handlers (open_kitchen, close_kitchen)
+│   ├── tools_kitchen.py     #   open_kitchen, close_kitchen tool handlers + recipe:// resource
 │   ├── tools_ci.py          #   wait_for_ci, get_ci_status tool handlers
 │   ├── tools_clone.py       #   clone_repo, remove_clone, push_to_remote tool handlers
 │   ├── tools_execution.py   #   run_cmd, run_python, run_skill tool handlers

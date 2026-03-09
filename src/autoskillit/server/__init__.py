@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """MCP server for orchestrating automated skill-driven workflows.
 
-All tools are gated by default and require the user to type the
-open_kitchen prompt to activate. The prompt name depends on how the
-server is loaded (plugin vs --plugin-dir). This uses MCP prompts
-(user-controlled, model cannot invoke) to set an in-memory flag
-that each tool checks before executing. The gate survives
---dangerously-skip-permissions.
+Kitchen tools (19 gated) are hidden at startup via FastMCP v3
+mcp.disable(tags={'kitchen'}) applied once after all tool modules are
+imported. Each new session sees only the 12 ungated tools (including
+open_kitchen and close_kitchen). Calling the open_kitchen tool reveals
+all 31 tools for that session via ctx.enable_components(tags={'kitchen'}).
+The GateState + .kitchen_gate file mechanism is retained as defense-in-depth.
 
 Transport: stdio (default for FastMCP).
 """
@@ -42,14 +42,18 @@ logger = get_logger(__name__)
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
 from autoskillit.server import (  # noqa: E402, F401
     helpers,
-    prompts,
     tools_ci,
     tools_clone,
     tools_execution,
     tools_git,
     tools_integrations,
+    tools_kitchen,
     tools_recipe,
     tools_status,
     tools_workspace,
 )
 from autoskillit.server._factory import make_context  # noqa: E402, F401
+
+# Apply global visibility transform: all sessions start with kitchen tools hidden.
+# Must appear after all tool module imports so the registered tools are in place.
+mcp.disable(tags={"kitchen"})

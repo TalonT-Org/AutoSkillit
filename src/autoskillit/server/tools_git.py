@@ -16,7 +16,7 @@ from autoskillit.server.helpers import _notify, _require_enabled, _run_subproces
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def merge_worktree(
     worktree_path: str,
     base_branch: str,
@@ -79,7 +79,7 @@ async def merge_worktree(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def classify_fix(
     worktree_path: str,
     base_branch: str,

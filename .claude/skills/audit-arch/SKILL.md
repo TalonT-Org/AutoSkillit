@@ -281,8 +281,8 @@ These apply across all principles when evaluating architectural decisions:
 ## Audit Workflow
 
 1. **Launch parallel subagents** for each principle
-2. **Apply P1 3-question gate** before finalizing any P1 findings — confirm all three questions are YES and the pattern is not on the whitelist
-3. **Apply cross-cutting whitelist** — verify CC-flagged patterns are not error accumulation, validator collections, or facade re-exports
+2. **Apply P1 3-question gate** before finalizing any P1 findings — confirm all three questions are YES and the pattern is not listed under "Non-SSOT Patterns — Do NOT flag these"
+3. **Apply cross-cutting exemptions** — verify CC-flagged patterns are not listed under "Standard patterns that are NOT cross-cutting violations" (error accumulation, validator collections, or facade re-exports)
 4. **Apply severity gate** — CRITICAL requires data loss, security bypass, or correctness bug; downgrade findings that do not meet this bar
 5. **★ Staleness filter** — run `git log --oneline -20` in the project root and scan commit subjects for evidence that any finding was recently resolved. Mark findings as **STALE** (with the resolving commit hash) if evidence exists. Do not remove stale findings — include them in the report with a STALE tag so the user can verify.
 6. **Consolidate findings** by principle and severity

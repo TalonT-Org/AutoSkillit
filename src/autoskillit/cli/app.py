@@ -320,7 +320,7 @@ def workspace_clean(
     force
         Skip the confirmation prompt and delete stale directories immediately.
     """
-    from autoskillit.cli._workspace import run_workspace_clean
+    from autoskillit.cli._workspace import run_workspace_clean  # deferred: avoids scan overhead
 
     run_workspace_clean(dir=dir, force=force)
 

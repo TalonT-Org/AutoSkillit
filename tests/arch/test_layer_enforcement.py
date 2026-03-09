@@ -353,6 +353,19 @@ def test_l2_no_deferred_upward_imports(pkg_name: str) -> None:
     assert not violations, f"Deferred layer violations in {pkg_name}/:\n" + "\n".join(violations)
 
 
+def test_workspace_deferred_import_has_comment() -> None:
+    """P14-F2: deferred import in cli/app.py must carry a rationale comment."""
+    src = (SRC_ROOT / "cli" / "app.py").read_text()
+    for line in src.splitlines():
+        if "from autoskillit.cli._workspace import run_workspace_clean" in line:
+            assert "#" in line, (
+                "P14-F2: deferred import of run_workspace_clean in cli/app.py "
+                "must have an inline comment explaining the deferral rationale"
+            )
+            return
+    pytest.fail("Could not locate the run_workspace_clean deferred import in cli/app.py")
+
+
 # ── Calibration ────────────────────────────────────────────────────────────────
 
 

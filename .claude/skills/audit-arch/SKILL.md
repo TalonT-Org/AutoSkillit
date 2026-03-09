@@ -44,7 +44,7 @@ Before flagging any file read as a P1 violation, ask all three questions. **All 
 
 1. **Two competing authoritative stores?** — Are there two (or more) distinct stores that both claim to hold the same piece of state? If there is only one store (e.g., the file IS the authority, memory is just the working copy), there is no SSOT violation.
 2. **Can they diverge during NORMAL operation?** — Could the two stores hold different values during steady-state operation (not crash/restart/migration)? Startup bootstrapping that only runs once on a cold start is NOT "normal operation" for this test.
-3. **Undocumented winner?** — If the two stores diverge, which one wins? Is that choice undocumented or ambiguous? A system with a documented reconciliation strategy is not a violation.
+3. **Architecturally sound reconciliation?** — If the two stores diverge, which one wins? If the reconciliation strategy makes the file the authoritative source (file is read first, or file "wins" by default), that IS a violation regardless of documentation. Only a strategy where the canonical store (database, API, config manager) takes precedence is compliant. A comment saying "file always wins" is not a reconciliation strategy — it is a description of the violation.
 
 **Non-SSOT Patterns — Do NOT flag these:**
 - **Crash-recovery / bootstrap reads**: One-time startup reconstitution from diagnostic logs, session journals, or crash artifacts. The authoritative source is unavailable at cold-start; the file is a recovery vehicle, not a competing authority.

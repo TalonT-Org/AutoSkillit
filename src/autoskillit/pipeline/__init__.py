@@ -17,12 +17,18 @@ from autoskillit.pipeline.gate import (
     GATE_FILENAME,
     GATED_TOOLS,
     HOOK_CONFIG_FILENAME,
+    LEASE_FIELDS,
+    LEASE_MAX_AGE_HOURS,
     UNGATED_TOOLS,
     DefaultGateState,
+    LeaseStatus,
     gate_error_result,
     gate_file_path,
     hook_config_path,
     is_pid_alive,
+    read_boot_id,
+    read_starttime_ticks,
+    verify_lease,
 )
 from autoskillit.pipeline.timings import DefaultTimingLog, TimingEntry
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
@@ -45,11 +51,17 @@ __all__ = [
     "GATE_FILENAME",
     "GATED_TOOLS",
     "HOOK_CONFIG_FILENAME",
+    "LEASE_FIELDS",
+    "LEASE_MAX_AGE_HOURS",
+    "LeaseStatus",
     "UNGATED_TOOLS",
     "gate_error_result",
     "gate_file_path",
     "hook_config_path",
     "is_pid_alive",
+    "read_boot_id",
+    "read_starttime_ticks",
+    "verify_lease",
     # context
     "ToolContext",
 ]

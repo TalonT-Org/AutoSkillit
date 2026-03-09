@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from autoskillit.core import Severity, is_git_worktree, pkg_root
-from autoskillit.pipeline import gate_file_path, hook_config_path, is_pid_alive
+from autoskillit.pipeline import gate_file_path, hook_config_path, verify_lease
 
 
 @dataclass
@@ -31,18 +31,6 @@ class DoctorResult:
     fix: Callable[[], None] | None = field(default=None, repr=False)
 
 
-def _delete_gate_files(gate_path: Path, hook_cfg: Path) -> None:
-    """Remove gate and hook-config files, ignoring missing-file and permission errors."""
-    try:
-        gate_path.unlink(missing_ok=True)
-    except OSError:
-        pass
-    try:
-        hook_cfg.unlink(missing_ok=True)
-    except OSError:
-        pass
-
-
 def _is_plugin_installed() -> bool:
     """Check if autoskillit is installed as a Claude Code plugin."""
     settings_path = Path.home() / ".claude" / "settings.json"
@@ -57,55 +45,29 @@ def _is_plugin_installed() -> bool:
 
 
 def _check_stale_gate_file(project_root: Path, fix: bool = False) -> DoctorResult:
-    """Check for stale gate file from a crashed pipeline session."""
-    gate_path = gate_file_path(project_root)
-    hook_cfg = hook_config_path(project_root)
+    """Check for stale gate file from a crashed pipeline session.
 
-    if not gate_path.exists():
+    Delegates to verify_lease() for three-factor identity + TTL validation.
+    Invalid leases are auto-removed by verify_lease() regardless of the fix flag.
+    """
+    gate_path = gate_file_path(project_root)
+    companion = hook_config_path(project_root)
+    status = verify_lease(gate_path, companion)
+
+    if status.valid:
+        return DoctorResult(
+            Severity.OK,
+            "stale_gate_file",
+            "Gate file is live (lease valid)",
+        )
+
+    if status.reason == "no_file":
         return DoctorResult(Severity.OK, "stale_gate_file", "No gate file found")
 
-    try:
-        data = json.loads(gate_path.read_text())
-        pid = data["pid"]
-    except (json.JSONDecodeError, KeyError, TypeError, OSError):
-        if fix:
-            _delete_gate_files(gate_path, hook_cfg)
-            return DoctorResult(
-                Severity.OK,
-                "stale_gate_file",
-                f"Removed malformed gate file at {gate_path}.",
-            )
-
-        return DoctorResult(
-            Severity.ERROR,
-            "stale_gate_file",
-            f"Malformed gate file at {gate_path} — safe to delete. "
-            f"Run 'autoskillit doctor --fix'.",
-            fix=lambda: _delete_gate_files(gate_path, hook_cfg),
-        )
-
-    if not is_pid_alive(pid):
-        if fix:
-            _delete_gate_files(gate_path, hook_cfg)
-            return DoctorResult(
-                Severity.OK,
-                "stale_gate_file",
-                f"Removed stale gate file at {gate_path} (PID {pid} was dead).",
-            )
-
-        return DoctorResult(
-            Severity.ERROR,
-            "stale_gate_file",
-            f"Stale gate file at {gate_path} (PID {pid} is dead) — "
-            f"safe to delete. Native tools may be blocked. "
-            f"Run 'autoskillit doctor --fix'.",
-            fix=lambda: _delete_gate_files(gate_path, hook_cfg),
-        )
-
     return DoctorResult(
-        Severity.OK,
+        Severity.WARNING,
         "stale_gate_file",
-        f"Gate file is live (PID {pid} is running)",
+        f"Stale gate file auto-removed ({status.reason}). Native tools unblocked.",
     )
 
 

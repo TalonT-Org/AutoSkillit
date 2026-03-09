@@ -13,7 +13,12 @@ from types import FrameType
 from fastmcp.prompts import Message, PromptResult
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, atomic_write, pkg_root
-from autoskillit.pipeline import gate_file_path, hook_config_path
+from autoskillit.pipeline import (
+    gate_file_path,
+    hook_config_path,
+    read_boot_id,
+    read_starttime_ticks,
+)
 from autoskillit.server import mcp
 
 _gate_cleanup_registered = False
@@ -111,6 +116,8 @@ async def _open_kitchen_handler() -> None:
         gate_path.parent.mkdir(parents=True, exist_ok=True)
         lease = {
             "pid": os.getpid(),
+            "starttime_ticks": read_starttime_ticks(os.getpid()),
+            "boot_id": read_boot_id(),
             "opened_at": datetime.now(UTC).isoformat(),
         }
         atomic_write(gate_path, json.dumps(lease))

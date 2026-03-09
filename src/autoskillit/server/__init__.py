@@ -48,7 +48,7 @@ __all__ = [
 # because tool modules import `mcp` from this package at import time.
 # Apply global visibility transform: all sessions start with kitchen tools hidden.
 # Must appear after all tool module imports so the registered tools are in place.
-import os as _os
+import os  # noqa: E402
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
 from autoskillit.server import (  # noqa: E402, F401
@@ -69,5 +69,5 @@ mcp.disable(tags={"kitchen"})
 
 # Cook sessions (AUTOSKILLIT_KITCHEN_OPEN=1) pre-reveal kitchen tools at module load
 # so the session starts with all 36 tools visible without calling open_kitchen.
-if _os.environ.get("AUTOSKILLIT_KITCHEN_OPEN") == "1":
+if os.environ.get("AUTOSKILLIT_KITCHEN_OPEN") == "1":
     mcp.enable(tags={"kitchen"})

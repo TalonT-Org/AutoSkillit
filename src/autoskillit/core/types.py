@@ -384,6 +384,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "enrich_issues",
         "claim_issue",
         "release_issue",
+        "wait_for_ci",
     }
 )
 
@@ -398,6 +399,7 @@ UNGATED_TOOLS: frozenset[str] = frozenset(
         "validate_recipe",
         "fetch_github_issue",
         "get_issue_title",
+        "get_ci_status",
     }
 )
 
@@ -740,4 +742,33 @@ class GitHubFetcher(Protocol):
         label: str,
         color: str = "ededed",
         description: str = "",
+    ) -> dict[str, Any]: ...
+
+
+@runtime_checkable
+class CIWatcher(Protocol):
+    """Protocol for watching GitHub Actions CI runs.
+
+    Implementations must never raise — all errors must be captured and
+    returned in the result dict with appropriate conclusion values.
+    """
+
+    async def wait(
+        self,
+        branch: str,
+        *,
+        repo: str | None = None,
+        head_sha: str | None = None,
+        timeout_seconds: int = 300,
+        lookback_seconds: int = 120,
+        cwd: str = "",
+    ) -> dict[str, Any]: ...
+
+    async def status(
+        self,
+        branch: str,
+        *,
+        repo: str | None = None,
+        run_id: int | None = None,
+        cwd: str = "",
     ) -> dict[str, Any]: ...

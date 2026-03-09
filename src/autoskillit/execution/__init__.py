@@ -11,6 +11,7 @@ from autoskillit.execution.anomaly_detection import (
     AnomalySeverity,
     detect_anomalies,
 )
+from autoskillit.execution.ci import DefaultCIWatcher
 from autoskillit.execution.commands import (
     ClaudeHeadlessCmd,
     ClaudeInteractiveCmd,
@@ -75,6 +76,8 @@ __all__ = [
     "parse_pytest_summary",
     "check_test_passed",
     "DefaultTestRunner",
+    # ci
+    "DefaultCIWatcher",
     # db
     "execute_readonly_query",
     "DefaultDatabaseReader",

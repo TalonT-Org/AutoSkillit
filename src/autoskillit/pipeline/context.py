@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     AuditStore,
+    CIWatcher,
     CloneManager,
     DatabaseReader,
     GatePolicy,
@@ -54,6 +55,7 @@ class ToolContext:
     workspace_mgr: WorkspaceManager — manages workspace directory teardown
     clone_mgr:     CloneManager — clone-based pipeline run isolation
     github_client: GitHubFetcher — fetches GitHub issue content
+    ci_watcher:    CIWatcher — watches GitHub Actions CI runs
     """
 
     config: AutomationConfig
@@ -71,4 +73,5 @@ class ToolContext:
     workspace_mgr: WorkspaceManager | None = field(default=None)
     clone_mgr: CloneManager | None = field(default=None)
     github_client: GitHubFetcher | None = field(default=None)
+    ci_watcher: CIWatcher | None = field(default=None)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)

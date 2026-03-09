@@ -15,6 +15,7 @@ from typing import Any
 from autoskillit.config import AutomationConfig
 from autoskillit.core import SubprocessRunner, pkg_root
 from autoskillit.execution import (
+    DefaultCIWatcher,
     DefaultDatabaseReader,
     DefaultGitHubFetcher,
     DefaultHeadlessExecutor,
@@ -100,6 +101,7 @@ def make_context(
         workspace_mgr=DefaultWorkspaceManager(),
         clone_mgr=DefaultCloneManager(),
         github_client=DefaultGitHubFetcher(token=github_token),
+        ci_watcher=DefaultCIWatcher(token=github_token),
     )
 
     def _resolve_output_patterns(skill_command: str) -> list[str]:

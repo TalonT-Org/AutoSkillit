@@ -7,9 +7,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
-from autoskillit.execution import resolve_log_dir
-
-__all__ = ["resolve_log_dir"]
 from autoskillit.pipeline import gate_error_result
 from autoskillit.recipe import (
     StaleItem,

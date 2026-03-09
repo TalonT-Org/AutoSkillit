@@ -484,33 +484,22 @@ steps:
     on_failure: cleanup_failure
 
   ci_watch_pr:
-    tool: run_cmd
+    tool: wait_for_ci
     with:
-      cmd: |
-        echo "Review PR: ${{ context.pr_url }}"
-        run_id=""
-        for i in 1 2 3 4 5 6; do
-          run_id=$(gh run list \
-            --branch "${{ context.integration_branch }}" \
-            --limit 1 \
-            --json databaseId,status \
-            --jq '.[] | select(.status != "completed") | .databaseId' \
-            2>/dev/null | head -1)
-          [ -n "$run_id" ] && break
-          sleep 5
-        done
-        [ -n "$run_id" ] || { echo "No active CI run found for branch ${{ context.integration_branch }}"; exit 1; }
-        gh run watch "$run_id" --exit-status
+      branch: "${{ context.integration_branch }}"
+      timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
-      timeout: 150
+    capture:
+      ci_conclusion: "${{ result.conclusion }}"
+      ci_failed_jobs: "${{ result.failed_jobs }}"
     on_success: confirm_cleanup
     on_failure: cleanup_failure
     note: >
-      Polls for an active GitHub Actions run on context.integration_branch for up to 30 s,
-      then watches until completion (timeout: 150 s). The integration branch is opened as a
-      PR for human review — CI failures here indicate the integration branch has problems
-      that the human reviewer should see. No automated remediation; on failure, the clone
-      is preserved via cleanup_failure for manual inspection.
+      Waits for the GitHub Actions CI run on context.integration_branch to complete
+      using the wait_for_ci MCP tool (timeout: 300 s). CI failures here indicate the
+      integration branch has problems that the human reviewer should see. No automated
+      remediation; on failure, the clone is preserved via cleanup_failure for manual
+      inspection.
 
   confirm_cleanup:
     action: confirm

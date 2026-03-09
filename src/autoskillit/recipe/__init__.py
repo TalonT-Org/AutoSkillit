@@ -8,6 +8,7 @@ _logger = get_logger(__name__)
 
 # Rule registration — import triggers @semantic_rule registration.
 from autoskillit.recipe import rules_bypass as _rules_bypass  # noqa: E402 F401
+from autoskillit.recipe import rules_ci as _rules_ci  # noqa: E402 F401
 from autoskillit.recipe import rules_clone as _rules_clone  # noqa: E402 F401
 from autoskillit.recipe import rules_dataflow as _rules_dataflow  # noqa: E402 F401
 from autoskillit.recipe import rules_graph as _rules_graph  # noqa: E402 F401

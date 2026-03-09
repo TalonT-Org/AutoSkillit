@@ -346,13 +346,13 @@ class TestImplementationPipelineStructure:
         assert not any("more_groups" in (c.when or "") for c in conds)
 
     def test_ip_ci_watch_exists_and_is_gated(self, recipe) -> None:
-        """T_CI1: ci_watch step exists, is run_cmd, has skip_when_false: inputs.open_pr,
-        and specifies timeout: 150."""
+        """T_CI1: ci_watch step exists, uses wait_for_ci, has skip_when_false: inputs.open_pr,
+        and specifies timeout_seconds: 300."""
         assert "ci_watch" in recipe.steps
         step = recipe.steps["ci_watch"]
-        assert step.tool == "run_cmd"
+        assert step.tool == "wait_for_ci"
         assert step.skip_when_false == "inputs.open_pr"
-        assert step.with_args.get("timeout") == 150
+        assert step.with_args.get("timeout_seconds") == 300
 
     def test_ip_ci_watch_routing(self, recipe) -> None:
         """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
@@ -361,11 +361,12 @@ class TestImplementationPipelineStructure:
         assert step.on_failure == "resolve_ci"
 
     def test_ip_ci_watch_uses_merge_target(self, recipe) -> None:
-        """T_CI3: ci_watch command references context.merge_target for the branch argument."""
-        cmd = recipe.steps["ci_watch"].with_args["cmd"]
-        assert "context.merge_target" in cmd
-        assert "gh run watch" in cmd
-        assert "--exit-status" in cmd
+        """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""
+        step = recipe.steps["ci_watch"]
+        assert "context.merge_target" in step.with_args["branch"]
+        assert "cmd" not in step.with_args
+        assert "ci_conclusion" in step.capture
+        assert "ci_failed_jobs" in step.capture
 
     def test_ip_resolve_ci_structure(self, recipe) -> None:
         """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
@@ -493,6 +494,59 @@ class TestImplementationGroupsStructure:
         violations = [f for f in findings if f.rule == "push-before-audit"]
         assert len(violations) >= 1
         assert all(v.severity == Severity.WARNING for v in violations)
+
+    def test_ig_ci_watch_exists_and_is_gated(self, recipe) -> None:
+        """T_CI1: ci_watch step exists, uses wait_for_ci, has skip_when_false: inputs.open_pr,
+        and specifies timeout_seconds: 300."""
+        assert "ci_watch" in recipe.steps
+        step = recipe.steps["ci_watch"]
+        assert step.tool == "wait_for_ci"
+        assert step.skip_when_false == "inputs.open_pr"
+        assert step.with_args.get("timeout_seconds") == 300
+
+    def test_ig_ci_watch_routing(self, recipe) -> None:
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
+        step = recipe.steps["ci_watch"]
+        assert step.on_success == "release_issue_success"
+        assert step.on_failure == "resolve_ci"
+
+    def test_ig_ci_watch_uses_merge_target(self, recipe) -> None:
+        """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""
+        step = recipe.steps["ci_watch"]
+        assert "context.merge_target" in step.with_args["branch"]
+        assert "cmd" not in step.with_args
+        assert "ci_conclusion" in step.capture
+        assert "ci_failed_jobs" in step.capture
+
+    def test_ig_resolve_ci_structure(self, recipe) -> None:
+        """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
+        and on_exhausted: release_issue_failure."""
+        assert "resolve_ci" in recipe.steps
+        step = recipe.steps["resolve_ci"]
+        assert step.tool == "run_skill"
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert "resolve-failures" in skill_cmd
+        assert step.retries == 2
+        assert step.on_exhausted == "release_issue_failure"
+
+    def test_ig_resolve_ci_uses_work_dir(self, recipe) -> None:
+        """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
+        cmd = recipe.steps["resolve_ci"].with_args.get("skill_command", "")
+        assert "context.work_dir" in cmd
+
+    def test_ig_re_push_loops_back_to_ci_watch(self, recipe) -> None:
+        """T_CI6: re_push step exists, is push_to_remote, routes on_success back to ci_watch."""
+        assert "re_push" in recipe.steps
+        step = recipe.steps["re_push"]
+        assert step.tool == "push_to_remote"
+        assert step.on_success == "ci_watch"
+        assert step.on_failure == "release_issue_failure"
+
+    def test_ig_re_push_has_explicit_remote_url(self, recipe) -> None:
+        """T_CI7: re_push uses explicit remote_url."""
+        with_args = recipe.steps["re_push"].with_args
+        assert "remote_url" in with_args
+        assert "context.remote_url" in with_args["remote_url"]
 
 
 # ---------------------------------------------------------------------------
@@ -704,13 +758,13 @@ class TestInvestigateFirstStructure:
         )
 
     def test_if_ci_watch_exists_and_is_gated(self, recipe) -> None:
-        """T_CI1: ci_watch step exists, is run_cmd, has skip_when_false: inputs.open_pr,
-        and specifies timeout: 150."""
+        """T_CI1: ci_watch step exists, uses wait_for_ci, has skip_when_false: inputs.open_pr,
+        and specifies timeout_seconds: 300."""
         assert "ci_watch" in recipe.steps
         step = recipe.steps["ci_watch"]
-        assert step.tool == "run_cmd"
+        assert step.tool == "wait_for_ci"
         assert step.skip_when_false == "inputs.open_pr"
-        assert step.with_args.get("timeout") == 150
+        assert step.with_args.get("timeout_seconds") == 300
 
     def test_if_ci_watch_routing(self, recipe) -> None:
         """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
@@ -719,11 +773,12 @@ class TestInvestigateFirstStructure:
         assert step.on_failure == "resolve_ci"
 
     def test_if_ci_watch_uses_merge_target(self, recipe) -> None:
-        """T_CI3: ci_watch command references context.merge_target for the branch argument."""
-        cmd = recipe.steps["ci_watch"].with_args["cmd"]
-        assert "context.merge_target" in cmd
-        assert "gh run watch" in cmd
-        assert "--exit-status" in cmd
+        """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""
+        step = recipe.steps["ci_watch"]
+        assert "context.merge_target" in step.with_args["branch"]
+        assert "cmd" not in step.with_args
+        assert "ci_conclusion" in step.capture
+        assert "ci_failed_jobs" in step.capture
 
     def test_if_resolve_ci_structure(self, recipe) -> None:
         """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
@@ -895,13 +950,13 @@ class TestAuditAndFixStructure:
         )
 
     def test_aaf_ci_watch_exists_and_is_gated(self, recipe) -> None:
-        """T_CI1: ci_watch step exists, is run_cmd, has skip_when_false: inputs.open_pr,
-        and specifies timeout: 150."""
+        """T_CI1: ci_watch step exists, uses wait_for_ci, has skip_when_false: inputs.open_pr,
+        and specifies timeout_seconds: 300."""
         assert "ci_watch" in recipe.steps
         step = recipe.steps["ci_watch"]
-        assert step.tool == "run_cmd"
+        assert step.tool == "wait_for_ci"
         assert step.skip_when_false == "inputs.open_pr"
-        assert step.with_args.get("timeout") == 150
+        assert step.with_args.get("timeout_seconds") == 300
 
     def test_aaf_ci_watch_routing(self, recipe) -> None:
         """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
@@ -910,11 +965,12 @@ class TestAuditAndFixStructure:
         assert step.on_failure == "resolve_ci"
 
     def test_aaf_ci_watch_uses_merge_target(self, recipe) -> None:
-        """T_CI3: ci_watch command references context.merge_target for the branch argument."""
-        cmd = recipe.steps["ci_watch"].with_args["cmd"]
-        assert "context.merge_target" in cmd
-        assert "gh run watch" in cmd
-        assert "--exit-status" in cmd
+        """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""
+        step = recipe.steps["ci_watch"]
+        assert "context.merge_target" in step.with_args["branch"]
+        assert "cmd" not in step.with_args
+        assert "ci_conclusion" in step.capture
+        assert "ci_failed_jobs" in step.capture
 
     def test_aaf_resolve_ci_structure(self, recipe) -> None:
         """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2

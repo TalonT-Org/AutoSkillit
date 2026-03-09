@@ -336,3 +336,41 @@ def test_pmp_retry_merge_routes_dirty_tree_to_commit_dirty(recipe) -> None:
     dirty_tree_routes = [c for c in step.on_result.conditions if c.when and "dirty_tree" in c.when]
     assert len(dirty_tree_routes) == 1
     assert dirty_tree_routes[0].route == "commit_dirty"
+
+
+# ---------------------------------------------------------------------------
+# CI watch PR tests
+# ---------------------------------------------------------------------------
+
+
+def test_ci_watch_pr_exists_with_correct_tool(recipe) -> None:
+    """ci_watch_pr step must use wait_for_ci tool."""
+    assert "ci_watch_pr" in recipe.steps
+    step = recipe.steps["ci_watch_pr"]
+    assert step.tool == "wait_for_ci"
+
+
+def test_ci_watch_pr_uses_integration_branch(recipe) -> None:
+    """ci_watch_pr must use context.integration_branch as the branch parameter."""
+    step = recipe.steps["ci_watch_pr"]
+    assert "context.integration_branch" in step.with_args["branch"]
+
+
+def test_ci_watch_pr_routing(recipe) -> None:
+    """ci_watch_pr on_success -> confirm_cleanup; on_failure -> cleanup_failure."""
+    step = recipe.steps["ci_watch_pr"]
+    assert step.on_success == "confirm_cleanup"
+    assert step.on_failure == "cleanup_failure"
+
+
+def test_ci_watch_pr_no_inline_shell(recipe) -> None:
+    """ci_watch_pr must not contain inline shell commands."""
+    step = recipe.steps["ci_watch_pr"]
+    assert "cmd" not in step.with_args
+
+
+def test_ci_watch_pr_captures_ci_context(recipe) -> None:
+    """ci_watch_pr must capture ci_conclusion and ci_failed_jobs."""
+    step = recipe.steps["ci_watch_pr"]
+    assert "ci_conclusion" in step.capture
+    assert "ci_failed_jobs" in step.capture

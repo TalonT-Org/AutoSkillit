@@ -135,6 +135,8 @@ class SessionSkillManager:
         Returns path to the created skills directory.
         For non-cook sessions, Tier 2 skills get disable-model-invocation injected.
         """
+        if not session_id or "/" in session_id or "\\" in session_id or session_id in (".", ".."):
+            raise ValueError(f"Invalid session_id: {session_id!r}")
         session_skills_dir = self._root / session_id
         session_skills_dir.mkdir(parents=True, exist_ok=True)
         for skill_info in self._provider.list_skills():
@@ -150,6 +152,10 @@ class SessionSkillManager:
 
         Returns True if the file was found and updated, False otherwise.
         """
+        if not session_id or "/" in session_id or "\\" in session_id or session_id in (".", ".."):
+            raise ValueError(f"Invalid session_id: {session_id!r}")
+        if not skill_name or "/" in skill_name or "\\" in skill_name or skill_name in (".", ".."):
+            raise ValueError(f"Invalid skill_name: {skill_name!r}")
         skill_md = self._root / session_id / skill_name / "SKILL.md"
         if not skill_md.exists():
             return False

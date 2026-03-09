@@ -1186,8 +1186,9 @@ async def test_open_kitchen_has_no_update_advisory(tool_ctx):
     assert "decline_recipe_update" not in text
 
 
-def test_initialize_does_not_remove_stale_gate_file(tmp_path, tool_ctx):
+def test_initialize_does_not_remove_stale_gate_file(tmp_path, tool_ctx, monkeypatch):
     """_initialize must not sweep for or remove gate files — that recovery is gone."""
+    monkeypatch.chdir(tmp_path)
     gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
     gate_file.parent.mkdir(parents=True)
     gate_file.write_text('{"pid": 99999999, "opened_at": "2020-01-01T00:00:00+00:00"}')

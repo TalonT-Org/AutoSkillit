@@ -14,8 +14,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import igraph
+
 from autoskillit.core import _atomic_write
-from autoskillit.recipe._analysis import _tight_cycle_bfs
 from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 # Diagram format version — bump when rendering logic changes so that
@@ -127,14 +128,78 @@ def _derive_for_each_label(span_steps: list[_LayoutStep]) -> str:
     return "FOR EACH:"
 
 
-def _classify_steps(recipe: Any) -> StepClassification:
-    """Classify recipe steps by role using tight-cycle BFS.
+def build_recipe_graph(recipe: Any) -> igraph.Graph:
+    """Build a directed igraph.Graph from a Recipe dataclass.
 
-    Builds a success-path-only adjacency (``step.on_success`` edges only) and
-    uses ``_tight_cycle_bfs`` to identify the exact members of each FOR EACH
-    iteration cycle. This replaces the over-inclusive index-span approach which
-    could pull side-leg steps (on_failure / on_context_limit targets) into the
-    horizontal chain where they do not belong.
+    Nodes represent recipe steps. Each vertex carries attributes matching the
+    RecipeStep fields relevant to diagram rendering:
+    - ``name``: step name (str)
+    - ``tool``: tool identifier (str, empty string if None)
+    - ``action``: action identifier (str, empty string if None)
+    - ``note``: step note for semantic gate checks (str)
+    - ``retries``: retry count (int)
+    - ``skip_when_false``: optional condition (str, empty string if None)
+    - ``is_infra``: whether the step is a hidden infrastructure step (bool)
+    - ``is_terminal``: whether the step is a stop action (bool)
+    - ``is_confirm``: whether the step is a confirm action (bool)
+
+    Edges represent routing connections. Each edge carries:
+    - ``edge_type``: one of ``"success"``, ``"failure"``, ``"context_limit"``,
+      ``"result_condition"``, ``"exhausted"``
+    - ``condition``: for ``on_result`` edges, the ``when`` expression; otherwise ``""``
+
+    Args:
+        recipe: The loaded Recipe dataclass.
+
+    Returns:
+        A directed ``igraph.Graph`` with vertex and edge attributes as described.
+    """
+    from autoskillit.recipe._analysis import _extract_routing_edges  # noqa: PLC0415
+
+    step_names = list(recipe.steps.keys())
+    name_to_id: dict[str, int] = {name: i for i, name in enumerate(step_names)}
+
+    g = igraph.Graph(n=len(step_names), directed=True)
+    steps_list = list(recipe.steps.values())
+
+    g.vs["name"] = step_names
+    g.vs["tool"] = [s.tool or "" for s in steps_list]
+    g.vs["action"] = [s.action or "" for s in steps_list]
+    g.vs["note"] = [s.note or "" for s in steps_list]
+    g.vs["retries"] = [s.retries for s in steps_list]
+    g.vs["skip_when_false"] = [s.skip_when_false or "" for s in steps_list]
+    g.vs["is_infra"] = [_is_infrastructure_step(s) for s in steps_list]
+    g.vs["is_terminal"] = [s.action == "stop" for s in steps_list]
+    g.vs["is_confirm"] = [s.action == "confirm" for s in steps_list]
+
+    edges: list[tuple[int, int]] = []
+    edge_types: list[str] = []
+    edge_conditions: list[str] = []
+
+    for name, step in recipe.steps.items():
+        src = name_to_id[name]
+        for edge in _extract_routing_edges(step):
+            if edge.target in name_to_id:
+                edges.append((src, name_to_id[edge.target]))
+                edge_types.append(edge.edge_type)
+                edge_conditions.append(edge.condition or "")
+
+    if edges:
+        g.add_edges(edges, attributes={"edge_type": edge_types, "condition": edge_conditions})
+
+    return g
+
+
+def _classify_steps(recipe: Any) -> StepClassification:
+    """Classify recipe steps by role using igraph's subcomponent analysis.
+
+    Builds an igraph.Graph from the recipe, projects a success-path-only subgraph,
+    then uses igraph.subcomponent(OUT) ∩ igraph.subcomponent(IN) to extract tight
+    cycle membership — replacing the custom _tight_cycle_bfs BFS. Both start and
+    end vertices of the back-edge are always included.
+
+    The semantic gate (plan-iteration note) is unchanged: only back-edges whose
+    source step carries a plan-iteration keyword in its note qualify.
 
     Args:
         recipe: The loaded Recipe dataclass.
@@ -142,62 +207,69 @@ def _classify_steps(recipe: Any) -> StepClassification:
     Returns:
         ``StepClassification`` with classified step sets.
     """
-    success_graph: dict[str, set[str]] = {
-        n: ({s.on_success} if s.on_success else set()) for n, s in recipe.steps.items()
-    }
+    g = build_recipe_graph(recipe)
 
     step_names = list(recipe.steps.keys())
-    step_index: dict[str, int] = {name: i for i, name in enumerate(step_names)}
+    name_to_id: dict[str, int] = {name: i for i, name in enumerate(step_names)}
 
-    # Visible step order (non-infra, non-terminal) — for span comparison
-    vis_names: list[str] = [
-        name
-        for name, step in recipe.steps.items()
+    # Visible step ordering (non-infra, non-terminal) — for back-edge span comparison
+    vis_index: dict[str, int] = {
+        name: i
+        for i, (name, step) in enumerate(recipe.steps.items())
         if not _is_infrastructure_step(step) and step.action != "stop"
-    ]
-    vis_index: dict[str, int] = {name: i for i, name in enumerate(vis_names)}
+    }
 
-    # Find the best qualifying back-edge and compute tight cycle via BFS
+    # Success-only subgraph: keep all vertices so IDs remain stable for cross-referencing
+    success_edge_ids = [e.index for e in g.es if e["edge_type"] == "success"]
+    g_success = g.subgraph_edges(success_edge_ids, delete_vertices=False)
+
+    # Find the best qualifying back-edge and compute tight cycle via igraph subcomponent
     best_span = 1
     best_chain: frozenset[str] = frozenset()
 
     for name, step in recipe.steps.items():
-        idx = step_index.get(name)
-        if idx is None:
+        vi = vis_index.get(name)
+        if vi is None:
             continue
 
-        # Collect all back-edge targets: routes to earlier steps
+        # Semantic gate: require plan-iteration intent in the back-edge source note
+        if not _is_plan_iteration_note(step.note or ""):
+            continue
+
+        # Collect back-edge targets (routes to earlier visible steps)
         back_targets: list[str] = []
         if step.on_success:
-            t_idx = step_index.get(step.on_success)
-            if t_idx is not None and t_idx < idx:
+            t_vi = vis_index.get(step.on_success)
+            if t_vi is not None and t_vi < vi:
                 back_targets.append(step.on_success)
         if step.on_result:
             sr = step.on_result
-            if sr.conditions:
-                for cond in sr.conditions:
-                    t_idx = step_index.get(cond.route)
-                    if t_idx is not None and t_idx < idx:
-                        back_targets.append(cond.route)
-            elif sr.routes:
-                for target in sr.routes.values():
-                    t_idx = step_index.get(target)
-                    if t_idx is not None and t_idx < idx:
-                        back_targets.append(target)
+            for cond in sr.conditions or []:
+                t_vi = vis_index.get(cond.route)
+                if t_vi is not None and t_vi < vi:
+                    back_targets.append(cond.route)
+            for target in (sr.routes or {}).values():
+                t_vi = vis_index.get(target)
+                if t_vi is not None and t_vi < vi:
+                    back_targets.append(target)
 
         for target in back_targets:
-            # Semantic gate: require plan-iteration intent in the back-edge source note
-            if not _is_plan_iteration_note(step.note or ""):
-                continue
-            vi = vis_index.get(name)
-            vj = vis_index.get(target)
-            if vi is None or vj is None or vj >= vi:
-                continue
-            span = vi - vj
+            span = vi - vis_index[target]
             if span <= best_span:
                 continue
-            # Tight cycle via BFS on success-only graph
-            chain = _tight_cycle_bfs(success_graph, start=target, end=name)
+
+            # igraph: cycle members = all vertices reachable from start via success edges,
+            # plus force-include end (which may route back via on_result, not on_success).
+            # This mirrors _tight_cycle_bfs semantics: BFS from start on success-only graph,
+            # don't expand past end, then force-add end.
+            start_id = name_to_id[target]
+            end_id = name_to_id[name]
+
+            reachable_from_start = set(g_success.subcomponent(start_id, mode="OUT"))
+            member_ids = reachable_from_start
+            member_ids.add(end_id)  # Force-include: end routes via on_result, not on_success
+
+            chain = frozenset(g.vs[vid]["name"] for vid in member_ids)
             best_span = span
             best_chain = chain
 

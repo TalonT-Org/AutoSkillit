@@ -10,7 +10,6 @@ Neither contracts.py nor io.py imports _analysis.py, so no cycle exists.
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass
 
 from autoskillit.core import SKILL_TOOLS, get_logger
@@ -170,34 +169,6 @@ def _bfs_reachable(graph: dict[str, set[str]], start: str) -> set[str]:
         visited.add(node)
         queue.extend(graph.get(node, set()))
     return visited
-
-
-def _tight_cycle_bfs(graph: dict[str, set[str]], start: str, end: str) -> frozenset[str]:
-    """Return all steps on the tight success-path cycle from *start* to *end*.
-
-    BFS from *start* through *graph* (a success-path-only adjacency built from
-    ``step.on_success`` edges only). Stops expanding any branch once *end* is
-    visited. Both *start* and *end* are always included in the result.
-
-    The caller is responsible for passing a success-only graph (not
-    ``_build_step_graph`` output, which includes failure and context-limit edges).
-
-    If *end* is not reachable via graph traversal — e.g., because the step uses
-    ``on_result`` rather than ``on_success`` for its happy-path route — *end* is
-    force-included in the return set since it closes the loop by contract.
-    """
-    visited: set[str] = {start}
-    queue: deque[str] = deque([start])
-    while queue:
-        node = queue.popleft()
-        if node == end:
-            continue  # Do not expand past end, but keep processing remaining queue
-        for neighbor in graph.get(node, set()):
-            if neighbor not in visited:
-                visited.add(neighbor)
-                queue.append(neighbor)
-    visited.add(end)
-    return frozenset(visited)
 
 
 def _build_capture_origin_map(recipe: Recipe) -> dict[str, str]:

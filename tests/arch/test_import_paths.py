@@ -6,7 +6,7 @@ REQ-IMP-002: from autoskillit.core.logging/io/types → from autoskillit.core.
 REQ-IMP-003: server/tools_*.py imports from at most autoskillit.core and autoskillit.pipeline.
 REQ-IMP-004: cli/app.py imports from at most autoskillit.core, .config, .pipeline, and .execution.
 REQ-IMP-005: server/git.py only imports autoskillit.core at runtime (TYPE_CHECKING excluded).
-REQ-IMP-006: server/prompts.py has no direct import of DefaultGateState or pipeline.gate.
+REQ-IMP-006: server/tools_kitchen.py has no direct import of DefaultGateState or pipeline.gate.
 """
 
 import ast
@@ -200,13 +200,13 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
 
 
 # ---------------------------------------------------------------------------
-# REQ-IMP-006: server/prompts.py has no direct GateState import
+# REQ-IMP-006: server/tools_kitchen.py has no direct GateState import
 # ---------------------------------------------------------------------------
 
 
 def test_req_imp_006_prompts_no_gate_state_import() -> None:
-    """server/prompts.py must not directly import DefaultGateState or pipeline.gate sub-module."""
-    path = SRC / "server" / "prompts.py"
+    """server/tools_kitchen.py must not directly import DefaultGateState or pipeline.gate."""
+    path = SRC / "server" / "tools_kitchen.py"
     tree = ast.parse(path.read_text())
     violations: list[str] = []
     for node in ast.walk(tree):

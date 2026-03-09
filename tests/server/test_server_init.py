@@ -456,8 +456,7 @@ class TestPromptSchemas:
         for name, tool in tools.items():
             desc = (tool.description or "").lower()
             assert "kitchen" in desc, (
-                f"Tool '{name}' description must contain cooking vocabulary "
-                f"('kitchen'): {desc!r}"
+                f"Tool '{name}' description must contain cooking vocabulary ('kitchen'): {desc!r}"
             )
 
     @pytest.mark.anyio

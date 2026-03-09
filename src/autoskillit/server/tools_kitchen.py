@@ -21,6 +21,7 @@ from autoskillit.pipeline import (
     read_starttime_ticks,
 )
 from autoskillit.server import mcp
+from autoskillit.server.helpers import _find_recipe, _prime_quota_cache
 
 _gate_cleanup_registered = False
 
@@ -63,21 +64,6 @@ def _register_gate_cleanup() -> None:
         pass  # not main thread — atexit + L1/L2 recovery still active
 
     _gate_cleanup_registered = True
-
-
-async def _prime_quota_cache() -> None:
-    """Fetch quota from the Anthropic API and write the local cache.
-
-    Called at open_kitchen so the cache is primed before any run_skill hook fires.
-    Fails open: a quota fetch failure must not abort kitchen open.
-    """
-    from autoskillit.execution import check_and_sleep_if_needed
-    from autoskillit.server import _get_ctx, logger
-
-    try:
-        await check_and_sleep_if_needed(_get_ctx().config.quota_guard)
-    except Exception:
-        logger.warning("quota_prime_failed", exc_info=True)
 
 
 def _write_hook_config() -> None:
@@ -150,9 +136,7 @@ def _close_kitchen_handler() -> None:
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
-    from autoskillit.recipe import find_recipe_by_name
-
-    match = find_recipe_by_name(name, Path.cwd())
+    match = _find_recipe(name, Path.cwd())
     if match is None:
         return json.dumps({"error": f"No recipe named '{name}'."})
     return match.path.read_text()

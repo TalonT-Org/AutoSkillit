@@ -706,9 +706,7 @@ class TestDoctorStaleGateFileAutoRemoval:
         gate_dir = tmp_path / ".autoskillit" / "temp"
         gate_dir.mkdir(parents=True)
         gate_file = gate_dir / ".kitchen_gate"
-        gate_file.write_text(
-            json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00"})
-        )
+        gate_file.write_text(json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00"}))
         result = _check_stale_gate_file(tmp_path, fix=False)
         assert result.severity == Severity.WARNING
         assert "auto-removed" in result.message.lower()

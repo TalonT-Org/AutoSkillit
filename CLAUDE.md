@@ -163,7 +163,7 @@ src/autoskillit/
 │   ├── __init__.py          #   FastMCP app, _initialize(ctx), version_info(), recipe:// resource handler
 │   ├── git.py               #   Git merge workflow for merge_worktree (perform_merge)
 │   ├── helpers.py           #   Shared server-layer helpers (worktree setup, path utilities)
-│   ├── prompts.py           #   MCP prompt handlers (open_kitchen, close_kitchen)
+│   ├── tools_kitchen.py     #   open_kitchen, close_kitchen tool handlers + recipe:// resource
 │   ├── tools_ci.py          #   wait_for_ci, get_ci_status tool handlers
 │   ├── tools_clone.py       #   clone_repo, remove_clone, push_to_remote tool handlers
 │   ├── tools_execution.py   #   run_cmd, run_python, run_skill tool handlers

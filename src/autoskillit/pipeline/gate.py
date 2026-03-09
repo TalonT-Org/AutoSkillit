@@ -32,6 +32,7 @@ class LeaseStatus(NamedTuple):
     reason: str
     removed: bool
 
+
 # Directory components for the gate state directory, relative to project root.
 # Hook scripts (stdlib-only) duplicate this as a local constant validated by arch tests.
 GATE_DIR_COMPONENTS: Final[tuple[str, ...]] = (".autoskillit", "temp")

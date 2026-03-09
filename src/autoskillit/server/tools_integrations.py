@@ -14,7 +14,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import _atomic_write, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess
+from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess, resolve_log_dir
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher, HeadlessExecutor
@@ -309,8 +309,6 @@ def _read_session_diagnostics(session_id: str, log_dir_override: str) -> dict[st
     """
     if not session_id or session_id.startswith(("no_session_", "crashed_")):
         return None
-
-    from autoskillit.execution.session_log import resolve_log_dir
 
     try:
         log_root = resolve_log_dir(log_dir_override)

@@ -1635,4 +1635,4 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond5 = step.on_result.conditions[5]
         assert cond5.when is None
-        assert cond4.route == "done"
+        assert cond5.route == "done"

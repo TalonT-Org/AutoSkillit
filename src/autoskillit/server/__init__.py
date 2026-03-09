@@ -36,6 +36,14 @@ mcp: FastMCP = FastMCP("autoskillit")
 
 logger = get_logger(__name__)
 
+__all__ = [
+    # The FastMCP application instance — primary artifact of this package
+    "mcp",
+    # Public utilities consumed by CLI and tests
+    "version_info",
+    "make_context",
+]
+
 # Import all tool sub-modules to trigger @mcp.tool() registration.
 # These imports must come AFTER mcp, _get_ctx, _get_config are defined
 # because tool modules import `mcp` from this package at import time.

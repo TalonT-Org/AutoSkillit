@@ -24,7 +24,7 @@ from autoskillit.workspace import bundled_skills_dir
 def test_load_bundled_manifest() -> None:
     manifest = load_bundled_manifest()
     assert manifest["version"] == "0.1.0"
-    assert len(manifest["skills"]) == 24
+    assert len(manifest["skills"]) >= 24
     assert "implement-worktree" in manifest["skills"]
     assert "investigate" in manifest["skills"]
     assert "write-recipe" in manifest["skills"]

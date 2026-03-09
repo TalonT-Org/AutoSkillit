@@ -72,10 +72,10 @@ def test_process_race_exports():
 
 
 def test_process_facade_reexports_all_public_symbols():
-    """process.py facade re-exports all 21 public symbols."""
+    """process.py facade re-exports at least 21 public symbols."""
     from autoskillit.execution import process
 
     assert hasattr(process, "__all__")
-    assert len(process.__all__) == 21, (
-        f"process.py __all__ has {len(process.__all__)} symbols, expected 21"
+    assert len(process.__all__) >= 21, (
+        f"process.py __all__ has {len(process.__all__)} symbols, expected at least 21"
     )

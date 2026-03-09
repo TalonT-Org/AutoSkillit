@@ -904,10 +904,21 @@ def test_read_session_diagnostics_returns_none_for_empty_session_id(tmp_path):
     assert result is None
 
 
-def test_read_session_diagnostics_returns_none_for_fallback_session_id(tmp_path):
-    """no_session_* and crashed_* session IDs → None (not meaningful diagnostics)."""
+def test_read_session_diagnostics_returns_none_for_no_session_prefix(tmp_path):
+    """no_session_* session IDs → None (not meaningful diagnostics)."""
     assert _read_session_diagnostics("no_session_2026-01-01T00-00-00", str(tmp_path)) is None
+
+
+def test_read_session_diagnostics_returns_none_for_crashed_prefix(tmp_path):
+    """crashed_* session IDs → None (not meaningful diagnostics)."""
     assert _read_session_diagnostics("crashed_12345_2026-01-01T00-00-00", str(tmp_path)) is None
+
+
+def test_read_session_diagnostics_returns_none_for_path_traversal_session_id(tmp_path):
+    """Path-traversal session IDs blocked by _SAFE_SESSION_ID_RE → None."""
+    assert _read_session_diagnostics("../../../etc/passwd", str(tmp_path)) is None
+    assert _read_session_diagnostics("..%2F..%2Fetc%2Fpasswd", str(tmp_path)) is None
+    assert _read_session_diagnostics("abc/../../etc", str(tmp_path)) is None
 
 
 def test_read_session_diagnostics_returns_none_when_directory_missing(tmp_path):

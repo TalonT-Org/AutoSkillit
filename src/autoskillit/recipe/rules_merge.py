@@ -12,6 +12,7 @@ logger = get_logger(__name__)
 
 _RECOVERABLE_FAILED_STEPS: frozenset[str] = frozenset(
     {
+        MergeFailedStep.DIRTY_TREE,
         MergeFailedStep.TEST_GATE,
         MergeFailedStep.POST_REBASE_TEST_GATE,
         MergeFailedStep.REBASE,

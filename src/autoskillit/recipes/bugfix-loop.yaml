@@ -161,6 +161,8 @@ steps:
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
     on_result:
+      - when: "result.failed_step == 'dirty_tree'"
+        route: assess
       - when: "result.failed_step == 'test_gate'"
         route: assess
       - when: "result.failed_step == 'post_rebase_test_gate'"

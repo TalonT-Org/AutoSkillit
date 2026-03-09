@@ -268,7 +268,18 @@ steps:
       base_branch: "${{ context.merge_target }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-    on_success: push
+    on_result:
+      - when: "result.failed_step == 'dirty_tree'"
+        route: fix
+      - when: "result.failed_step == 'test_gate'"
+        route: fix
+      - when: "result.failed_step == 'post_rebase_test_gate'"
+        route: fix
+      - when: "result.failed_step == 'rebase'"
+        route: fix
+      - when: "result.error"
+        route: release_issue_failure
+      - route: push
     on_failure: release_issue_failure
 
   push:

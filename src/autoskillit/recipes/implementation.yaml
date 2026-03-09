@@ -291,6 +291,8 @@ steps:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
       worktree_path: "${{ result.worktree_path }}"
     on_result:
+      - when: "result.failed_step == 'dirty_tree'"
+        route: fix
       - when: "result.failed_step == 'test_gate'"
         route: fix
       - when: "result.failed_step == 'post_rebase_test_gate'"
@@ -305,7 +307,7 @@ steps:
       After merge, route to next_or_done to process remaining parts before pushing.
       By default (open_pr=true), merge_target is the feature branch named from run_name.
       When open_pr=false, merge_target equals base_branch — merges go directly to base.
-      test_gate failures route to fix (resolve-failures) for recovery;
+      dirty_tree and test_gate failures route to fix (resolve-failures) for recovery;
       all other failures route to cleanup_failure.
 
   push:

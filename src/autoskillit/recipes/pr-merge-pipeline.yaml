@@ -280,6 +280,8 @@ steps:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
     on_failure: cleanup_failure
     on_result:
+      - when: "result.failed_step == 'dirty_tree'"
+        route: fix
       - when: "${{ result.state }} == worktree_intact_rebase_aborted"
         route: resolve_merge_conflicts
       - when: "result.failed_step == 'rebase'"
@@ -327,6 +329,14 @@ steps:
       to retry_merge_after_resolution to re-attempt the merge without loop-back
       routing.
 
+  commit_dirty:
+    tool: run_cmd
+    with:
+      cmd: "git add -A && git commit -m 'chore: commit auto-generated files'"
+      cwd: "${{ context.worktree_path }}"
+    on_success: retry_merge_after_resolution
+    on_failure: cleanup_failure
+
   retry_merge_after_resolution:
     tool: merge_worktree
     with:
@@ -334,7 +344,18 @@ steps:
       base_branch: "${{ context.integration_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-    on_success: next_part_or_next_pr
+    on_result:
+      - when: "result.failed_step == 'dirty_tree'"
+        route: commit_dirty
+      - when: "result.failed_step == 'test_gate'"
+        route: cleanup_failure
+      - when: "result.failed_step == 'post_rebase_test_gate'"
+        route: cleanup_failure
+      - when: "result.failed_step == 'rebase'"
+        route: cleanup_failure
+      - when: "result.error"
+        route: cleanup_failure
+      - route: next_part_or_next_pr
     on_failure: cleanup_failure
     note: >
       Re-attempts merge_worktree after resolve_merge_conflicts has rebased the

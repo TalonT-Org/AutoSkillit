@@ -10,6 +10,7 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 ## When to Use
 
 - MCP orchestrator calls this via `run_skill` after `test_check` returns FAIL
+- MCP orchestrator calls this via `run_skill` when `merge_worktree` returns `dirty_tree`
 - Takes three positional arguments: `{worktree_path} {plan_path} {base_branch}`
 - Remediates test failures only — the orchestrator is responsible for calling `merge_worktree` after verify passes.
 
@@ -44,6 +45,14 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 2. Verify worktree exists and is a valid git worktree
 3. Verify plan file exists and is readable
 4. Check for development environment in worktree, recreate if missing. Use the project's configured `worktree_setup.command`, or: `cd "${worktree_path}" && task install-worktree`
+
+### Step 0.5: Commit Uncommitted Files
+1. Run `git -C {worktree_path} status --porcelain`
+2. If output is non-empty (dirty tree):
+   - Run `git -C {worktree_path} add -A`
+   - Run `git -C {worktree_path} commit -m "chore: commit auto-generated files"`
+   - Log: "Committed {N} uncommitted file(s) before test run"
+3. If output is empty: continue (worktree is clean)
 
 ### Step 1: Understand Context
 1. Read the plan file to understand what was implemented and why

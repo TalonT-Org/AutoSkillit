@@ -174,6 +174,14 @@ steps:
       - route: implement
     on_failure: escalate
 
+  commit_dirty:
+    tool: run_cmd
+    with:
+      cmd: "git add -A && git commit -m 'chore: commit auto-generated files'"
+      cwd: "${{ context.worktree_path }}"
+    on_success: merge
+    on_failure: escalate
+
   merge:
     tool: merge_worktree
     with:
@@ -181,7 +189,18 @@ steps:
       base_branch: "${{ context.feature_branch }}"
     capture:
       cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-    on_success: check_summary
+    on_result:
+      - when: "result.failed_step == 'dirty_tree'"
+        route: commit_dirty
+      - when: "result.failed_step == 'test_gate'"
+        route: escalate
+      - when: "result.failed_step == 'post_rebase_test_gate'"
+        route: escalate
+      - when: "result.failed_step == 'rebase'"
+        route: escalate
+      - when: "result.error"
+        route: escalate
+      - route: check_summary
     on_failure: escalate
 
   check_summary:

@@ -90,24 +90,6 @@ def test_ungated_tools_contains_expected_names():
     assert UNGATED_TOOLS == expected
 
 
-def test_ungated_tools_count_is_12():
-    """open_kitchen and close_kitchen added as ungated tools."""
-    from autoskillit.pipeline.gate import UNGATED_TOOLS
-
-    assert len(UNGATED_TOOLS) == 12
-
-
-def test_open_kitchen_in_ungated_tools():
-    from autoskillit.pipeline.gate import UNGATED_TOOLS
-
-    assert "open_kitchen" in UNGATED_TOOLS
-
-
-def test_close_kitchen_in_ungated_tools():
-    from autoskillit.pipeline.gate import UNGATED_TOOLS
-
-    assert "close_kitchen" in UNGATED_TOOLS
-
 
 def test_gate_state_enable_disable_transitions():
     from autoskillit.pipeline.gate import DefaultGateState

@@ -888,13 +888,14 @@ class TestConfigDrivenBehavior:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(1, "FAIL", ""))  # test gate fails
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
 
-        # Verify the test command was ["make", "test"] (4th call, after porcelain)
-        test_call = tool_ctx.runner.call_args_list[3]
+        # Verify the test command was ["make", "test"] (5th call, after ls-files and porcelain)
+        test_call = tool_ctx.runner.call_args_list[4]
         assert test_call[0] == ["make", "test"]
 
     @pytest.mark.anyio
@@ -966,6 +967,7 @@ class TestSafetyConfigWiring:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         # NO test-check call — skipped
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
@@ -974,7 +976,6 @@ class TestSafetyConfigWiring:
             _make_result(0, "", "")
         )  # git log --merges (step 5.6 — no merge commits)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(
             _make_result(
                 0,
@@ -988,9 +989,9 @@ class TestSafetyConfigWiring:
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert result["merge_succeeded"] is True
 
-        # Verify no test command was called — the 4th call should be git fetch, not test
-        fourth_call_cmd = tool_ctx.runner.call_args_list[3][0]
-        assert fourth_call_cmd == ["git", "fetch", "origin"]
+        # Verify no test command was called — the 5th call should be git fetch, not test
+        fifth_call_cmd = tool_ctx.runner.call_args_list[4][0]
+        assert fifth_call_cmd == ["git", "fetch", "origin"]
 
     @pytest.mark.anyio
     async def test_run_skill_retry_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):

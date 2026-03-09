@@ -103,6 +103,7 @@ class TestMergeWorktree:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
@@ -111,7 +112,6 @@ class TestMergeWorktree:
             _make_result(0, "", "")
         )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(
@@ -139,6 +139,7 @@ class TestMergeWorktree:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
@@ -189,6 +190,7 @@ class TestMergeWorktreeNoBypass:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(
             _make_result(0, "= 3 failed, 97 passed =", "")
@@ -225,6 +227,7 @@ class TestMergeWorktreeCleanupReporting:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
@@ -233,7 +236,6 @@ class TestMergeWorktreeCleanupReporting:
             _make_result(0, "", "")
         )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(
@@ -261,6 +263,7 @@ class TestMergeWorktreeCleanupReporting:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
@@ -269,7 +272,6 @@ class TestMergeWorktreeCleanupReporting:
             _make_result(0, "", "")
         )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(
@@ -296,6 +298,7 @@ class TestMergeWorktreeCleanupReporting:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
         tool_ctx.runner.push(
@@ -317,6 +320,7 @@ class TestMergeWorktreeCleanupWarnings:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
@@ -325,7 +329,6 @@ class TestMergeWorktreeCleanupWarnings:
             _make_result(0, "", "")
         )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
@@ -353,6 +356,7 @@ class TestMergeWorktreeCleanupWarnings:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
@@ -361,7 +365,6 @@ class TestMergeWorktreeCleanupWarnings:
             _make_result(0, "", "")
         )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
@@ -387,6 +390,7 @@ class TestMergeWorktreeCleanupWarnings:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # pre-rebase test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch
@@ -395,7 +399,6 @@ class TestMergeWorktreeCleanupWarnings:
             _make_result(0, "", "")
         )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
@@ -431,6 +434,7 @@ class TestMergeWorktreeRemoteTrackingGuard:
 
         tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))  # rev-parse
         tool_ctx.runner.push(_make_result(stdout="impl/task-01"))  # branch --show-current
+        tool_ctx.runner.push(_make_result())  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result())  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))  # test check
         tool_ctx.runner.push(_make_result())  # git fetch origin
@@ -458,6 +462,7 @@ class TestMergeWorktreeRemoteTrackingGuard:
 
         tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))  # rev-parse
         tool_ctx.runner.push(_make_result(stdout="feat/x"))  # branch
+        tool_ctx.runner.push(_make_result())  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result())  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(stdout="PASS\n= 5 passed ="))  # test-check
         tool_ctx.runner.push(_make_result())  # fetch
@@ -481,6 +486,7 @@ class TestMergeWorktreeRemoteTrackingGuard:
 
         tool_ctx.runner.push(_make_result(stdout="/repo/.git/worktrees/wt"))
         tool_ctx.runner.push(_make_result(stdout="impl/task-01"))
+        tool_ctx.runner.push(_make_result())  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result())  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(stdout="PASS\n= 100 passed ="))  # test gate
         tool_ctx.runner.push(_make_result())  # fetch
@@ -571,6 +577,7 @@ class TestMergeWorktreeMergeCommitDetection:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # test-check
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
@@ -594,6 +601,7 @@ class TestMergeWorktreeMergeCommitDetection:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
         tool_ctx.runner.push(_make_result(0, "", ""))
@@ -616,6 +624,7 @@ class TestMergeWorktreeMergeCommitDetection:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (step 3c)
         tool_ctx.runner.push(_make_result(0, "", ""))
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))
         tool_ctx.runner.push(_make_result(0, "", ""))

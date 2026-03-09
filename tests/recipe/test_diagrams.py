@@ -1209,3 +1209,122 @@ def test_bundled_diagram_inputs_table_has_no_embedded_newlines(
         assert row.count("|") >= 4, (
             f"[{recipe_name}] Malformed table row (likely split by embedded newline): {row!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# T-NEW-1..5: Spec-correctness tests (Part A — graph model unification)
+# ---------------------------------------------------------------------------
+
+
+def _find_for_each_chain_line(content: str) -> str | None:
+    """Return the first horizontal chain line (containing ───) inside a FOR EACH block."""
+    in_block = False
+    for line in content.splitlines():
+        if "┌────┤" in line:
+            in_block = True
+            continue
+        if in_block and "───" in line:
+            return line
+        if "└────┘" in line:
+            break
+    return None
+
+
+def test_tight_cycle_bfs_excludes_side_legs() -> None:
+    """T-NEW-1: _tight_cycle_bfs must return only tight success-path cycle steps.
+
+    Side-leg steps reachable only via on_failure or on_context_limit must NOT
+    appear in the tight cycle returned for implementation.yaml's per-part loop.
+    """
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+    from autoskillit.recipe._analysis import _tight_cycle_bfs  # noqa: PLC0415
+    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+    recipe = load_recipe(pkg_root() / "recipes" / "implementation.yaml")
+    # Build success-path-only adjacency — _tight_cycle_bfs requires this,
+    # NOT _build_step_graph which includes failure/context-limit edges.
+    success_graph = {
+        n: ({s.on_success} if s.on_success else set()) for n, s in recipe.steps.items()
+    }
+    # Per-part loop: next_or_done routes back to verify on success
+    cycle = _tight_cycle_bfs(success_graph, start="verify", end="next_or_done")
+    assert "verify" in cycle
+    assert "implement" in cycle
+    assert "test" in cycle
+    assert "merge" in cycle
+    assert "next_or_done" in cycle
+    # Side legs must NOT be in the tight cycle
+    assert "retry_worktree" not in cycle  # on_context_limit only
+    assert "fix" not in cycle  # on_failure only
+
+
+def test_for_each_chain_excludes_side_leg_steps(tmp_path: Path) -> None:
+    """T-NEW-2: Side-leg steps must not appear as inline ─── chain tokens.
+
+    The horizontal chain inside the FOR EACH block must contain only tight
+    success-path cycle steps. retry_worktree (on_context_limit) and fix
+    (on_failure) must not be chain tokens.
+    """
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    content = generate_recipe_diagram(
+        recipes_dir / "implementation.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
+    )
+    chain_line = _find_for_each_chain_line(content)
+    assert chain_line is not None, "No horizontal chain found in FOR EACH block"
+    assert "retry_worktree" not in chain_line
+    assert "fix" not in chain_line
+    assert "next_or_done" not in chain_line
+    assert "verify" in chain_line
+    assert "implement" in chain_line
+    assert "test" in chain_line
+    assert "merge" in chain_line
+
+
+def test_next_or_done_rendered_as_footer_routing_block(tmp_path: Path) -> None:
+    """T-NEW-3: next_or_done has on_result_conditions — it must appear as a
+    └── footer block with labeled routing paths, not as an inline chain token.
+    """
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    content = generate_recipe_diagram(
+        recipes_dir / "implementation.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
+    )
+    graph_section = _extract_graph_section(content)
+    assert "└──" in graph_section, "No └── footer block for routing step"
+    assert "next_or_done" in graph_section
+    assert "→" in graph_section
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["implementation", "bugfix-loop", "smoke-test", "remediation", "audit-and-fix"],
+)
+def test_terminal_steps_have_no_emoji(recipe_name: str, tmp_path: Path) -> None:
+    """T-NEW-4: Issue #223 requires ASCII only. ⏹ must not appear on terminal steps."""
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    content = generate_recipe_diagram(
+        recipes_dir / f"{recipe_name}.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
+    )
+    assert "⏹" not in content, f"Emoji ⏹ found in {recipe_name} (spec: ASCII only)"
+
+
+def test_flow_line_omitted_when_summary_empty(tmp_path: Path) -> None:
+    """T-NEW-5: When summary is absent, **Flow:** must not appear.
+
+    Emitting '**Flow:** ' (trailing space, blank content) is not in the SKILL.md spec.
+    """
+    yaml_path = tmp_path / "no-summary.yaml"
+    yaml_path.write_text(
+        "name: no-summary\nsteps:\n"
+        "  step1:\n    tool: run_skill\n    with:\n      skill_command: /foo\n"
+        "    on_success: done\n    on_failure: escalate\n"
+        "  done:\n    action: stop\n    message: Done.\n"
+        "  escalate:\n    action: stop\n    message: Failed.\n"
+    )
+    content = generate_recipe_diagram(yaml_path, recipes_dir=tmp_path, out_dir=tmp_path / "out")
+    assert "**Flow:**" not in content

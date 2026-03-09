@@ -41,7 +41,9 @@ async def wait_for_ci(
 
     Returns:
         JSON with run_id, conclusion ("success", "failure", "cancelled",
-        "timed_out", "no_runs"), and failed_jobs list.
+        "action_required", "timed_out", "no_runs", "error", "unknown"),
+        and failed_jobs list. Billing limit errors surface as
+        conclusion="action_required" with failed_jobs=[].
     """
     if (gate := _require_enabled()) is not None:
         return gate

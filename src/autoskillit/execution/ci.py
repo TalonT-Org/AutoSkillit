@@ -194,6 +194,9 @@ class DefaultCIWatcher:
           3. Wait: poll until the found run completes
 
         Returns: {"run_id": int|None, "conclusion": str, "failed_jobs": list[str]}
+        Conclusion values: "success", "failure", "cancelled", "action_required",
+        "timed_out", "no_runs", "error", "unknown". Billing limit errors surface
+        as conclusion="action_required" with failed_jobs=[].
         Never raises.
         """
         owner_repo = await self._resolve_repo(repo, cwd)

@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """MCP server for orchestrating automated skill-driven workflows.
 
-Kitchen tools (19 gated) are hidden at startup via FastMCP v3
+Kitchen tools (24 gated) are hidden at startup via FastMCP v3
 mcp.disable(tags={'kitchen'}) applied once after all tool modules are
 imported. Each new session sees only the 12 ungated tools (including
 open_kitchen and close_kitchen). Calling the open_kitchen tool reveals
 all 36 tools for that session via ctx.enable_components(tags={'kitchen'}).
-The GateState + .kitchen_gate file mechanism is retained as defense-in-depth.
 
 Transport: stdio (default for FastMCP).
 """

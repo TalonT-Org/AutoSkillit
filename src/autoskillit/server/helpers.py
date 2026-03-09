@@ -1,15 +1,12 @@
-"""Gate helpers, dry-walkthrough check, and subprocess wrapper for MCP tools."""
+"""Subprocess wrapper, dry-walkthrough check, and shared helpers for MCP tools."""
 
 from __future__ import annotations
 
-import json
-import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
-from autoskillit.execution import read_boot_id, read_starttime_ticks
 from autoskillit.pipeline import gate_error_result
 from autoskillit.recipe import (
     StaleItem,
@@ -29,74 +26,12 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _HOOK_CONFIG_FILENAME: str = ".autoskillit_hook_config.json"
-_GATE_FILENAME: str = ".kitchen_gate"
 _HOOK_DIR_COMPONENTS: tuple[str, ...] = (".autoskillit", "temp")
 
 
 def _hook_config_path(project_root: Path) -> Path:
     """Return the canonical path to the hook configuration JSON file."""
     return project_root.joinpath(*_HOOK_DIR_COMPONENTS, _HOOK_CONFIG_FILENAME)
-
-
-def _gate_file_path(project_root: Path) -> Path:
-    """Return the canonical path to the kitchen gate file."""
-    return project_root.joinpath(*_HOOK_DIR_COMPONENTS, _GATE_FILENAME)
-
-
-def _is_pid_alive(
-    pid: int,
-    starttime_ticks: int | None = None,
-    boot_id: str | None = None,
-) -> bool:
-    """Return True if the process with pid is the same process that wrote the gate file."""
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        pass  # process exists but we cannot signal it
-
-    if starttime_ticks is not None:
-        current_ticks = read_starttime_ticks(pid)
-        if current_ticks is not None and current_ticks != starttime_ticks:
-            return False  # PID reused
-
-    if boot_id is not None:
-        current_boot = read_boot_id()
-        if current_boot is not None and current_boot != boot_id:
-            return False  # different boot session
-
-    return True
-
-
-def cleanup_stale_gate_file(project_root: Path) -> None:
-    """Remove the gate file and companion hook config if the owning process is gone."""
-    gate_file = _gate_file_path(project_root)
-    hook_config = _hook_config_path(project_root)
-
-    if not gate_file.exists():
-        return
-
-    try:
-        data = json.loads(gate_file.read_text())
-        pid = data.get("pid")
-        starttime_ticks = data.get("starttime_ticks")
-        boot_id = data.get("boot_id")
-    except (json.JSONDecodeError, OSError):
-        # Malformed gate file — remove it and companion
-        try:
-            gate_file.unlink(missing_ok=True)
-            hook_config.unlink(missing_ok=True)
-        except OSError:
-            pass
-        return
-
-    if pid is None or not _is_pid_alive(pid, starttime_ticks, boot_id):
-        try:
-            gate_file.unlink(missing_ok=True)
-            hook_config.unlink(missing_ok=True)
-        except OSError:
-            pass
 
 
 async def _notify(

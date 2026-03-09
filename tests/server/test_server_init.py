@@ -301,8 +301,7 @@ class TestGatedToolAccess:
 
         with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
             with patch.object(tools_kitchen_mod, "_write_hook_config"):
-                with patch.object(tools_kitchen_mod, "_register_gate_cleanup"):
-                    await _open_kitchen_handler()
+                await _open_kitchen_handler()
         _close_kitchen_handler()
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
         assert result["success"] is False
@@ -610,110 +609,6 @@ class TestServerLazyInit:
         monkeypatch.setattr(_state, "_ctx", None)
         with pytest.raises(RuntimeError, match="serve\\(\\) must be called"):
             _state._get_config()
-
-
-class TestGateFileRecovery:
-    """T-RECOVER: _initialize removes stale/malformed gate files at startup."""
-
-    @pytest.mark.anyio
-    async def test_initialize_removes_stale_gate_file(self, monkeypatch, tmp_path):
-        """_initialize must remove gate files whose owning PID is dead."""
-        monkeypatch.chdir(tmp_path)
-        gate_dir = tmp_path / ".autoskillit" / "temp"
-        gate_dir.mkdir(parents=True)
-        gate_file = gate_dir / ".kitchen_gate"
-        gate_file.write_text(json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"}))
-
-        from autoskillit.server._factory import make_context
-        from tests.conftest import MockSubprocessRunner
-
-        ctx = make_context(
-            AutomationConfig(), runner=MockSubprocessRunner(), plugin_dir=str(tmp_path)
-        )
-        from autoskillit.server._state import _initialize
-
-        _initialize(ctx)
-        assert not gate_file.exists()
-
-    @pytest.mark.anyio
-    async def test_initialize_preserves_live_gate_file(self, monkeypatch, tmp_path):
-        """_initialize must NOT remove gate files whose owning PID is alive."""
-        import os
-
-        monkeypatch.chdir(tmp_path)
-        gate_dir = tmp_path / ".autoskillit" / "temp"
-        gate_dir.mkdir(parents=True)
-        gate_file = gate_dir / ".kitchen_gate"
-        from datetime import UTC, datetime
-
-        from autoskillit.execution import read_boot_id, read_starttime_ticks
-
-        gate_file.write_text(
-            json.dumps(
-                {
-                    "pid": os.getpid(),
-                    "starttime_ticks": read_starttime_ticks(os.getpid()),
-                    "boot_id": read_boot_id(),
-                    "opened_at": datetime.now(UTC).isoformat(),
-                }
-            )
-        )
-
-        from autoskillit.server._factory import make_context
-        from tests.conftest import MockSubprocessRunner
-
-        ctx = make_context(
-            AutomationConfig(), runner=MockSubprocessRunner(), plugin_dir=str(tmp_path)
-        )
-        from autoskillit.server._state import _initialize
-
-        _initialize(ctx)
-        assert gate_file.exists()  # still there — owning process is alive
-
-    @pytest.mark.anyio
-    async def test_initialize_removes_malformed_gate_file(self, monkeypatch, tmp_path):
-        """Malformed gate files must be removed at startup."""
-        monkeypatch.chdir(tmp_path)
-        gate_dir = tmp_path / ".autoskillit" / "temp"
-        gate_dir.mkdir(parents=True)
-        gate_file = gate_dir / ".kitchen_gate"
-        gate_file.write_text("not valid json")
-
-        from autoskillit.server._factory import make_context
-        from tests.conftest import MockSubprocessRunner
-
-        ctx = make_context(
-            AutomationConfig(), runner=MockSubprocessRunner(), plugin_dir=str(tmp_path)
-        )
-        from autoskillit.server._state import _initialize
-
-        _initialize(ctx)
-        assert not gate_file.exists()
-
-    @pytest.mark.anyio
-    async def test_initialize_removes_companion_hook_config_with_stale_gate(
-        self, monkeypatch, tmp_path
-    ):
-        """_initialize must remove both gate file and companion hook config when stale."""
-        monkeypatch.chdir(tmp_path)
-        gate_dir = tmp_path / ".autoskillit" / "temp"
-        gate_dir.mkdir(parents=True)
-        gate_file = gate_dir / ".kitchen_gate"
-        gate_file.write_text(json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"}))
-        companion = gate_dir / ".autoskillit_hook_config.json"
-        companion.write_text("{}")
-
-        from autoskillit.server._factory import make_context
-        from tests.conftest import MockSubprocessRunner
-
-        ctx = make_context(
-            AutomationConfig(), runner=MockSubprocessRunner(), plugin_dir=str(tmp_path)
-        )
-        from autoskillit.server._state import _initialize
-
-        _initialize(ctx)
-        assert not gate_file.exists()
-        assert not companion.exists()
 
 
 class TestConfigDrivenBehavior:

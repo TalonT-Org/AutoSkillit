@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import atexit
 import json
-import os
-from datetime import UTC, datetime
 from pathlib import Path
 
 from fastmcp import Context
@@ -13,38 +10,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, atomic_write, pkg_root
 from autoskillit.server import mcp
-from autoskillit.server.helpers import (
-    _find_recipe,
-    _gate_file_path,
-    _hook_config_path,
-    _prime_quota_cache,
-    read_boot_id,
-    read_starttime_ticks,
-)
-
-
-def _register_gate_cleanup() -> None:
-    """Write the gate file and register an atexit handler to remove it on exit."""
-    gate_file = _gate_file_path(pkg_root())
-    try:
-        gate_file.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "pid": os.getpid(),
-            "starttime_ticks": read_starttime_ticks(os.getpid()),
-            "boot_id": read_boot_id(),
-            "opened_at": datetime.now(UTC).isoformat(),
-        }
-        atomic_write(gate_file, json.dumps(payload))
-    except OSError:
-        return
-
-    def _cleanup() -> None:
-        try:
-            gate_file.unlink(missing_ok=True)
-        except OSError:
-            pass
-
-    atexit.register(_cleanup)
+from autoskillit.server.helpers import _find_recipe, _hook_config_path, _prime_quota_cache
 
 
 def _write_hook_config() -> None:
@@ -80,7 +46,6 @@ async def _open_kitchen_handler() -> None:
     _get_ctx().gate.enable()
     logger.info("open_kitchen", gate_state="open")
     _write_hook_config()
-    _register_gate_cleanup()
     await _prime_quota_cache()
 
 

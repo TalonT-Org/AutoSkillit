@@ -189,8 +189,8 @@ async def test_close_kitchen_tool_calls_reset_visibility(tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_does_not_write_gate_file_directly(tmp_path, monkeypatch):
-    """_open_kitchen_handler must not directly write to the gate path (delegates to _register_gate_cleanup)."""
+async def test_open_kitchen_does_not_write_gate_file(tmp_path, monkeypatch):
+    """_open_kitchen_handler must never write a gate file."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.config.quota_guard.threshold = None
@@ -199,10 +199,9 @@ async def test_open_kitchen_does_not_write_gate_file_directly(tmp_path, monkeypa
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._register_gate_cleanup"):
-                    from autoskillit.server.tools_kitchen import _open_kitchen_handler
+                from autoskillit.server.tools_kitchen import _open_kitchen_handler
 
-                    await _open_kitchen_handler()
+                await _open_kitchen_handler()
     gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
     assert not gate_file.exists()
 

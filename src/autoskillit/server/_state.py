@@ -16,7 +16,6 @@ This module is the authoritative location for:
 from __future__ import annotations
 
 from datetime import UTC
-from pathlib import Path
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import get_logger
@@ -31,14 +30,6 @@ def _initialize(ctx: ToolContext) -> None:
     """Set the server's ToolContext. Called by cli/app.py serve() before mcp.run()."""
     global _ctx
     _ctx = ctx
-
-    # Gate file cleanup: remove stale gate files left by crashed sessions.
-    try:
-        from autoskillit.server.helpers import cleanup_stale_gate_file
-
-        cleanup_stale_gate_file(Path.cwd())
-    except Exception:
-        logger.debug("stale_gate_cleanup_at_startup_failed", exc_info=True)
 
     # Recovery sweep: finalize any orphaned tmpfs trace files from crashed sessions.
     try:

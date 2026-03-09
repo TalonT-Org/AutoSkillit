@@ -1212,6 +1212,81 @@ def test_bundled_diagram_inputs_table_has_no_embedded_newlines(
 
 
 # ---------------------------------------------------------------------------
+# T-GRAPH-1..3: igraph builder contract tests
+# ---------------------------------------------------------------------------
+
+
+def test_build_recipe_graph_is_directed(tmp_path: Path) -> None:
+    """T-GRAPH-1: build_recipe_graph returns a directed igraph.Graph."""
+    import igraph  # noqa: PLC0415
+
+    from autoskillit.recipe.diagrams import build_recipe_graph  # noqa: PLC0415
+
+    # Fails with ImportError on current codebase (function doesn't exist yet)
+    yaml_path = tmp_path / "simple.yaml"
+    yaml_path.write_text(
+        "name: simple\nsteps:\n"
+        "  step1:\n    tool: run_skill\n    with:\n      skill_command: /foo\n"
+        "    on_success: done\n    on_failure: escalate\n"
+        "  done:\n    action: stop\n    message: Done.\n"
+        "  escalate:\n    action: stop\n    message: Failed.\n"
+    )
+    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+    recipe = load_recipe(yaml_path)
+    g = build_recipe_graph(recipe)
+    assert isinstance(g, igraph.Graph)
+    assert g.is_directed()
+    assert g.vcount() == 3  # step1, done, escalate
+
+
+def test_build_recipe_graph_vertex_attributes(tmp_path: Path) -> None:
+    """T-GRAPH-2: build_recipe_graph encodes step attributes as vertex attributes."""
+    from autoskillit.recipe.diagrams import build_recipe_graph  # noqa: PLC0415
+
+    yaml_path = tmp_path / "attrs.yaml"
+    yaml_path.write_text(
+        "name: attrs\nsteps:\n"
+        "  step1:\n    tool: run_skill\n    with:\n      skill_command: /foo\n"
+        "    on_success: done\n    on_failure: escalate\n"
+        "  done:\n    action: stop\n    message: Done.\n"
+        "  escalate:\n    action: stop\n    message: Failed.\n"
+    )
+    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+    recipe = load_recipe(yaml_path)
+    g = build_recipe_graph(recipe)
+    names = g.vs["name"]
+    assert "step1" in names
+    assert "done" in names
+    v_done = g.vs.find(name="done")
+    assert v_done["is_terminal"] is True
+    v_step1 = g.vs.find(name="step1")
+    assert v_step1["is_terminal"] is False
+
+
+def test_build_recipe_graph_edge_types(tmp_path: Path) -> None:
+    """T-GRAPH-3: build_recipe_graph encodes routing edge types as edge attributes."""
+    from autoskillit.recipe.diagrams import build_recipe_graph  # noqa: PLC0415
+
+    yaml_path = tmp_path / "edges.yaml"
+    yaml_path.write_text(
+        "name: edges\nsteps:\n"
+        "  step1:\n    tool: run_skill\n    with:\n      skill_command: /foo\n"
+        "    on_success: done\n    on_failure: escalate\n"
+        "  done:\n    action: stop\n    message: Done.\n"
+        "  escalate:\n    action: stop\n    message: Failed.\n"
+    )
+    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+    recipe = load_recipe(yaml_path)
+    g = build_recipe_graph(recipe)
+    edge_types = set(g.es["edge_type"])
+    assert "success" in edge_types
+    assert "failure" in edge_types
+
+
+# ---------------------------------------------------------------------------
 # T-NEW-1..5: Spec-correctness tests (Part A — graph model unification)
 # ---------------------------------------------------------------------------
 
@@ -1230,32 +1305,30 @@ def _find_for_each_chain_line(content: str) -> str | None:
     return None
 
 
-def test_tight_cycle_bfs_excludes_side_legs() -> None:
-    """T-NEW-1: _tight_cycle_bfs must return only tight success-path cycle steps.
+def test_classify_steps_excludes_side_legs() -> None:
+    """T-NEW-1: igraph-based _classify_steps must return only tight success-path cycle members.
 
     Side-leg steps reachable only via on_failure or on_context_limit must NOT
-    appear in the tight cycle returned for implementation.yaml's per-part loop.
+    appear in main_chain for implementation.yaml's per-part loop.
     """
     from autoskillit.core.paths import pkg_root  # noqa: PLC0415
-    from autoskillit.recipe._analysis import _tight_cycle_bfs  # noqa: PLC0415
+    from autoskillit.recipe.diagrams import _classify_steps  # noqa: PLC0415
     from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
 
     recipe = load_recipe(pkg_root() / "recipes" / "implementation.yaml")
-    # Build success-path-only adjacency — _tight_cycle_bfs requires this,
-    # NOT _build_step_graph which includes failure/context-limit edges.
-    success_graph = {
-        n: ({s.on_success} if s.on_success else set()) for n, s in recipe.steps.items()
-    }
-    # Per-part loop: next_or_done routes back to verify on success
-    cycle = _tight_cycle_bfs(success_graph, start="verify", end="next_or_done")
-    assert "verify" in cycle
-    assert "implement" in cycle
-    assert "test" in cycle
-    assert "merge" in cycle
-    assert "next_or_done" in cycle
+    classification = _classify_steps(recipe)
+
+    # Tight cycle members must be present
+    assert "verify" in classification.main_chain
+    assert "implement" in classification.main_chain
+    assert "test" in classification.main_chain
+    assert "merge" in classification.main_chain
+    # next_or_done is the back-edge source — force-included in main_chain
+    assert "next_or_done" in classification.main_chain
+
     # Side legs must NOT be in the tight cycle
-    assert "retry_worktree" not in cycle  # on_context_limit only
-    assert "fix" not in cycle  # on_failure only
+    assert "retry_worktree" not in classification.main_chain  # on_context_limit only
+    assert "fix" not in classification.main_chain  # on_failure only
 
 
 def test_for_each_chain_excludes_side_leg_steps(tmp_path: Path) -> None:

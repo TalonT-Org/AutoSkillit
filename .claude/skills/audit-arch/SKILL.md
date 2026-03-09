@@ -327,7 +327,7 @@ Do NOT flag:
 - Silent data loss or corruption in production code paths
 - Security boundary bypass (auth, isolation, trust boundary violated)
 - Correctness bug that produces wrong results silently
-- **NOT CRITICAL**: Infrastructure patterns that work correctly but read from disk (crash recovery, IPC, caches). Use HIGH or MEDIUM for these if they warrant a finding at all.
+- **NOT CRITICAL** (infrastructure reads that are NOT P1 violations): Infrastructure patterns that work correctly but read from disk (crash recovery, IPC, caches). Use HIGH or MEDIUM for these if they warrant a finding at all. A confirmed P1 SSOT violation — where a file-primary read actively corrupts or overwrites authoritative state — can still be CRITICAL. The P1 3-question gate takes precedence over this callout.
 
 **HIGH:**
 - Lower layers importing from higher layers

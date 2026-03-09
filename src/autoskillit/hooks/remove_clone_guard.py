@@ -66,9 +66,12 @@ def _check_sync(clone_path: str) -> tuple[bool, str]:
         )
         if ls_rc == 0:
             # Branch is on remote — compare SHA to verify fully pushed
-            remote_sha = ls_out.strip().split()[0]
+            parts = ls_out.strip().split()
+            if not parts:
+                return True, ""  # fail-open: ls-remote returned empty output
+            remote_sha = parts[0]
             head_rc, local_sha = _git(clone_path, "rev-parse", "HEAD")
-            if head_rc == 0 and local_sha == remote_sha:
+            if head_rc == 0 and local_sha.strip() == remote_sha:
                 return True, ""  # synced via ls-remote
         # No tracking branch and ls-remote confirms not pushed (rc=2) or error
         return False, (

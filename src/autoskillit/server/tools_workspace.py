@@ -110,7 +110,7 @@ async def reset_test_dir(
 
     from autoskillit.server import _get_config, _get_ctx
 
-    _timing_ctx = _get_ctx()
+    tool_ctx = _get_ctx()
     _start = time.monotonic()
     try:
         if not os.path.isdir(resolved):
@@ -140,7 +140,6 @@ async def reset_test_dir(
                 }
             )
 
-        tool_ctx = _timing_ctx
         if tool_ctx.workspace_mgr is None:
             return json.dumps({"error": "Workspace manager not configured"})
 
@@ -149,7 +148,7 @@ async def reset_test_dir(
         return json.dumps({**cleanup.to_dict(), "forced": force})
     finally:
         if step_name:
-            _timing_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
 @mcp.tool(tags={"automation", "kitchen"})

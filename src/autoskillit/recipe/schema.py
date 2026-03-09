@@ -75,6 +75,7 @@ class RecipeStep:
     optional: bool = False
     skip_when_false: str | None = None
     model: str | None = None
+    description: str = ""
 
 
 @dataclass

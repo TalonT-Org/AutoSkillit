@@ -699,6 +699,119 @@ def test_find_recipe_by_name_returns_info_with_content(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_parse_step_with_key_maps_to_with_args() -> None:
+    """_parse_step maps YAML 'with' key to RecipeStep.with_args."""
+    step = _parse_step({"tool": "claim_issue", "with": {"issue_url": "https://example.com"}})
+    assert step.with_args == {"issue_url": "https://example.com"}
+
+
+def test_parse_step_with_args_key_is_not_read() -> None:
+    """_parse_step does NOT read 'with_args' YAML key — confirms the fix is needed."""
+    step = _parse_step({"tool": "claim_issue", "with_args": {"issue_url": "https://example.com"}})
+    assert step.with_args == {}, "with_args YAML key must not be read — use 'with:' instead"
+
+
+# ---------------------------------------------------------------------------
+# P9-F1: step description field mapping
+# ---------------------------------------------------------------------------
+
+
+def test_parse_step_maps_description_field() -> None:
+    """_parse_step maps 'description' YAML key to RecipeStep.description."""
+    step = _parse_step({"tool": "run_cmd", "description": "Run the build"})
+    assert step.description == "Run the build"
+
+
+def test_parse_step_description_defaults_to_empty_string() -> None:
+    """_parse_step sets description to '' when YAML key absent."""
+    step = _parse_step({"tool": "run_cmd"})
+    assert step.description == ""
+
+
+def test_load_recipe_preserves_step_description(tmp_path: Path) -> None:
+    """End-to-end: load_recipe preserves description: on a step."""
+    import textwrap
+
+    yaml_content = textwrap.dedent("""\
+        name: desc-test
+        kitchen_rules: [rule1]
+        steps:
+          build:
+            tool: run_cmd
+            description: Run the full build suite
+            with:
+              cmd: make all
+    """)
+    recipe_file = tmp_path / "desc-test.yaml"
+    recipe_file.write_text(yaml_content)
+    recipe = load_recipe(recipe_file)
+    assert recipe.steps["build"].description == "Run the full build suite"
+
+
+# ---------------------------------------------------------------------------
+# CC-F4: kitchen_rules non-list raises ValueError
+# ---------------------------------------------------------------------------
+
+
+def test_parse_recipe_kitchen_rules_string_raises() -> None:
+    """_parse_recipe raises ValueError when kitchen_rules is a string."""
+    with pytest.raises(ValueError, match="kitchen_rules"):
+        _parse_recipe(
+            {
+                "name": "bad",
+                "kitchen_rules": "not-a-list",
+                "steps": {"s": {"tool": "run_cmd"}},
+            }
+        )
+
+
+def test_parse_recipe_kitchen_rules_dict_raises() -> None:
+    """_parse_recipe raises ValueError when kitchen_rules is a dict."""
+    with pytest.raises(ValueError, match="kitchen_rules"):
+        _parse_recipe(
+            {
+                "name": "bad",
+                "kitchen_rules": {"rule": "val"},
+                "steps": {"s": {"tool": "run_cmd"}},
+            }
+        )
+
+
+def test_parse_recipe_kitchen_rules_int_raises() -> None:
+    """_parse_recipe raises ValueError when kitchen_rules is an int."""
+    with pytest.raises(ValueError, match="kitchen_rules"):
+        _parse_recipe(
+            {
+                "name": "bad",
+                "kitchen_rules": 42,
+                "steps": {"s": {"tool": "run_cmd"}},
+            }
+        )
+
+
+def test_parse_recipe_kitchen_rules_absent_gives_empty_list() -> None:
+    """_parse_recipe produces kitchen_rules=[] when field absent (existing behavior preserved)."""
+    recipe = _parse_recipe(
+        {
+            "name": "ok",
+            "steps": {"s": {"tool": "run_cmd"}},
+        }
+    )
+    assert recipe.kitchen_rules == []
+
+
+def test_parse_recipe_kitchen_rules_valid_list_accepted() -> None:
+    """_parse_recipe accepts a valid list kitchen_rules."""
+    recipe = _parse_recipe(
+        {
+            "name": "ok",
+            "kitchen_rules": ["rule1", "rule2"],
+            "steps": {"s": {"tool": "run_cmd"}},
+        }
+    )
+    assert recipe.kitchen_rules == ["rule1", "rule2"]
+
+
 def test_bundled_recipes_all_skill_commands_start_with_slash() -> None:
     """All run_skill steps in bundled recipes must have
     skill_command starting with '/' after smoke-task migration."""

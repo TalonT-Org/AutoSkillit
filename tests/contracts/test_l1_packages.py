@@ -68,7 +68,7 @@ def test_failure_record_re_exported_from_pipeline() -> None:
 
 
 def test_execution_db_export() -> None:
-    from autoskillit.execution import _execute_readonly_query  # noqa: F401
+    from autoskillit.execution.db import _execute_readonly_query  # noqa: F401
 
 
 def test_config_settings_all_classes_exported() -> None:

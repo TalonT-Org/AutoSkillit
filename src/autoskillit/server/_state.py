@@ -8,6 +8,7 @@ This module is the authoritative location for:
   - _ctx: the module-level ToolContext singleton
   - _initialize(ctx): called by cli/app.py serve() before mcp.run()
   - _get_ctx(): raises RuntimeError if uninitialized (used by gated tools)
+  - _get_ctx_or_none(): returns None if uninitialized (used by ungated tools)
   - _get_config(): convenience shortcut to _get_ctx().config
   - version_info(): public server version health query
 """
@@ -76,6 +77,14 @@ def _get_ctx() -> ToolContext:
             "serve() must be called before accessing context. "
             "Call server._initialize(ctx) before mcp.run()."
         )
+    return _ctx
+
+
+def _get_ctx_or_none() -> ToolContext | None:
+    """Return the active ToolContext, or None if uninitialized.
+
+    For ungated tools only. Gated tools must use _get_ctx() which raises.
+    """
     return _ctx
 
 

@@ -44,6 +44,49 @@ def test_execute_readonly_query_is_callable():
 
 
 # ---------------------------------------------------------------------------
+# P14-F3: server/__init__.py must declare __all__
+# ---------------------------------------------------------------------------
+
+
+def test_server_all_defined() -> None:
+    import autoskillit.server as m
+
+    assert hasattr(m, "__all__"), "server/__init__.py must declare __all__"
+
+
+def test_server_all_contains_core_exports() -> None:
+    import autoskillit.server as m
+
+    for name in ("mcp", "version_info", "make_context"):
+        assert name in m.__all__, f"'{name}' missing from server.__all__"
+
+
+# ---------------------------------------------------------------------------
+# P14-F4: _delete_directory_contents must not appear in workspace.__all__
+# ---------------------------------------------------------------------------
+
+
+def test_private_name_not_in_workspace_all() -> None:
+    import autoskillit.workspace as m
+
+    assert "_delete_directory_contents" not in m.__all__
+
+
+# ---------------------------------------------------------------------------
+# P14-F5: _execute_readonly_query must not be accessible at execution pkg level
+# ---------------------------------------------------------------------------
+
+
+def test_execute_readonly_query_private_not_at_execution_pkg_level() -> None:
+    import autoskillit.execution as m
+
+    assert not hasattr(m, "_execute_readonly_query"), (
+        "_execute_readonly_query must not be accessible at "
+        "autoskillit.execution package level after import-as fix"
+    )
+
+
+# ---------------------------------------------------------------------------
 # REQ-GWAY-002/003/004: recipe/__init__.py facades
 # ---------------------------------------------------------------------------
 
@@ -272,7 +315,7 @@ def test_package_all_matches_exports() -> None:
     2. Every public name re-exported via relative or autoskillit.* imports in __init__.py
        appears in __all__ (no undeclared exports).
 
-    Packages without __all__ (server, root autoskillit) are skipped.
+    Packages without __all__ (root autoskillit) are skipped.
     """
     import importlib
 
@@ -286,6 +329,7 @@ def test_package_all_matches_exports() -> None:
         "recipe",
         "migration",
         "cli",
+        "server",
     ]
     violations: list[str] = []
 

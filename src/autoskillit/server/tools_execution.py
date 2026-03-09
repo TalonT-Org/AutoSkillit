@@ -47,7 +47,7 @@ async def run_cmd(
 
     from autoskillit.server import _get_ctx
 
-    _timing_ctx = _get_ctx()
+    tool_ctx = _get_ctx()
     _start = time.monotonic()
     try:
         returncode, stdout, stderr = await _run_subprocess(
@@ -72,7 +72,7 @@ async def run_cmd(
         return json.dumps(result)
     finally:
         if step_name:
-            _timing_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
 @mcp.tool(tags={"automation", "kitchen"})

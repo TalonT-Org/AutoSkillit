@@ -274,3 +274,24 @@ def test_format_ingredient_default_folded_scalar_bool() -> None:
         _format_ingredient_default(RecipeIngredient(description="d", default="\n"))
         == "auto-detect"
     )
+
+
+# ---------------------------------------------------------------------------
+# P9-F1: RecipeStep.description field
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_step_has_description_field() -> None:
+    """RecipeStep has a description field defaulting to empty string."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep(tool="run_cmd")
+    assert step.description == ""
+
+
+def test_recipe_step_description_stores_value() -> None:
+    """RecipeStep stores an explicit description value."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep(tool="run_cmd", description="Build the project")
+    assert step.description == "Build the project"

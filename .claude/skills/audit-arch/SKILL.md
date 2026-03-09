@@ -59,7 +59,7 @@ Before flagging any file read as a P1 violation, ask all three questions. **All 
 3. Identify the PRIMARY source: if file is read first and authoritative source synced afterward, file is PRIMARY (violation)
 4. Check write/read symmetry: if system reads back what it wrote (without the TTL/write-through exceptions above), flag it
 
-**Cross-Reference:** Findings discovered while auditing other principles that pass the 3-question test should be reported here as P1 violations.
+**Cross-Reference:** Findings discovered while auditing other principles that answer YES to all three SSOT gate questions should be escalated and reported here as P1 violations.
 
 ---
 

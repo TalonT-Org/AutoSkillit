@@ -13,7 +13,7 @@ from types import FrameType
 from fastmcp.prompts import Message, PromptResult
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, atomic_write, pkg_root
-from autoskillit.pipeline.gate import GATE_FILENAME, HOOK_CONFIG_FILENAME
+from autoskillit.pipeline import GATE_FILENAME, HOOK_CONFIG_FILENAME
 from autoskillit.server import mcp
 
 _gate_cleanup_registered = False
@@ -114,7 +114,7 @@ async def _open_kitchen_handler() -> None:
             "pid": os.getpid(),
             "opened_at": datetime.now(UTC).isoformat(),
         }
-        gate_path.write_text(json.dumps(lease))
+        atomic_write(gate_path, json.dumps(lease))
     except OSError:
         logger.warning("gate_file_write_failed", path=str(gate_path))
     _write_hook_config()

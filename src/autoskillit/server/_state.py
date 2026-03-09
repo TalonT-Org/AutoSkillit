@@ -20,8 +20,7 @@ from pathlib import Path
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import get_logger
-from autoskillit.pipeline import ToolContext
-from autoskillit.pipeline.gate import GATE_FILENAME, HOOK_CONFIG_FILENAME, is_pid_alive
+from autoskillit.pipeline import GATE_FILENAME, HOOK_CONFIG_FILENAME, ToolContext, is_pid_alive
 
 logger = get_logger(__name__)
 

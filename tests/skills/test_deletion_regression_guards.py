@@ -162,9 +162,9 @@ def test_review_pr_has_deletion_regression_audit_subagent(review_pr_text):
 
 def test_review_pr_deletion_regression_subagent_severity_is_critical(review_pr_text):
     """The deletion_regression subagent must flag findings as critical severity."""
-    dr_idx = review_pr_text.find("deletion_regression — Deliberate")
+    dr_idx = review_pr_text.find("7. **deletion_regression**")
     assert dr_idx != -1, (
-        "Could not find '7. deletion_regression — Deliberate' paragraph in review-pr SKILL.md"
+        "Could not find '7. **deletion_regression**' paragraph in review-pr SKILL.md"
     )
     # Look for 'critical' in the surrounding context (within 500 chars)
     context = review_pr_text[dr_idx : dr_idx + 500]

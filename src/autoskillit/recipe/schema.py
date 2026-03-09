@@ -60,6 +60,7 @@ class RecipeStep:
     tool: str | None = None
     action: str | None = None  # Built-in action: "route", "stop", "confirm"
     python: str | None = None
+    constant: str | None = None  # Literal output value — no subprocess or MCP call
     with_args: dict[str, str] = field(default_factory=dict)
     on_success: str | None = None
     on_failure: str | None = None

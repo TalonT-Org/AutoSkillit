@@ -15,11 +15,12 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import _atomic_write
+from autoskillit.recipe._analysis import _build_step_graph, _tight_cycle_bfs
 from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 # Diagram format version — bump when rendering logic changes so that
 # existing diagrams are flagged stale even if the recipe YAML hasn't changed.
-_DIAGRAM_FORMAT_VERSION = "v5"
+_DIAGRAM_FORMAT_VERSION = "v6"
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +51,16 @@ class _LayoutStep:
 
 
 @dataclass
+class StepClassification:
+    """Classification of recipe steps by their role in the FOR EACH iteration cycle."""
+
+    main_chain: frozenset[str]  # Tight-cycle steps → inline chain tokens
+    side_legs: frozenset[str]  # Failure/context-limit only → second row below chain
+    routing_blocks: frozenset[str]  # Pure-routing multi-way steps → └── footer block
+    hidden: frozenset[str]  # Infrastructure + terminal → omitted from diagram
+
+
+@dataclass
 class _LayoutResult:
     """Complete layout for visual rendering."""
 
@@ -59,6 +70,7 @@ class _LayoutResult:
     # FOR EACH iteration block, or None if no loop is detected.
     for_each_range: tuple[int, int] | None = None
     for_each_label: str = "FOR EACH:"  # descriptive label for the FOR EACH box header
+    classification: StepClassification | None = None  # step role classification
 
 
 # ---------------------------------------------------------------------------
@@ -115,23 +127,144 @@ def _derive_for_each_label(span_steps: list[_LayoutStep]) -> str:
     return "FOR EACH:"
 
 
-def _compute_layout(recipe: Any) -> _LayoutResult:
-    """Compute visual layout from a Recipe dataclass."""
+def _classify_steps(recipe: Any, graph: dict[str, set[str]]) -> StepClassification:
+    """Classify recipe steps by role using tight-cycle BFS.
+
+    Builds a success-path-only adjacency (``step.on_success`` edges only) and
+    uses ``_tight_cycle_bfs`` to identify the exact members of each FOR EACH
+    iteration cycle. This replaces the over-inclusive index-span approach which
+    could pull side-leg steps (on_failure / on_context_limit targets) into the
+    horizontal chain where they do not belong.
+
+    Args:
+        recipe: The loaded Recipe dataclass.
+        graph: Full routing adjacency from ``_build_step_graph`` (used for
+            structural reference only — must NOT be passed to ``_tight_cycle_bfs``).
+
+    Returns:
+        ``StepClassification`` with classified step sets.
+    """
+    # Success-path-only adjacency: on_success edges only.
+    # Must NOT use the full graph which includes failure/context-limit edges.
+    success_graph: dict[str, set[str]] = {
+        n: ({s.on_success} if s.on_success else set()) for n, s in recipe.steps.items()
+    }
 
     step_names = list(recipe.steps.keys())
     step_index: dict[str, int] = {name: i for i, name in enumerate(step_names)}
 
-    def _is_back_edge(target: str | None, current_idx: int) -> bool:
-        if target is None:
-            return False
-        idx = step_index.get(target)
-        return idx is not None and idx < current_idx
+    # Visible step order (non-infra, non-terminal) — for span comparison
+    vis_names: list[str] = [
+        name
+        for name, step in recipe.steps.items()
+        if not _is_infrastructure_step(step) and step.action != "stop"
+    ]
+    vis_index: dict[str, int] = {name: i for i, name in enumerate(vis_names)}
+
+    # Find the best qualifying back-edge and compute tight cycle via BFS
+    best_span = 1
+    best_chain: frozenset[str] = frozenset()
+
+    for name, step in recipe.steps.items():
+        idx = step_index.get(name, 0)
+
+        # Collect all back-edge targets: routes to earlier steps
+        back_targets: list[str] = []
+        if step.on_success:
+            t_idx = step_index.get(step.on_success)
+            if t_idx is not None and t_idx < idx:
+                back_targets.append(step.on_success)
+        if step.on_result:
+            sr = step.on_result
+            if sr.conditions:
+                for cond in sr.conditions:
+                    t_idx = step_index.get(cond.route)
+                    if t_idx is not None and t_idx < idx:
+                        back_targets.append(cond.route)
+            elif sr.routes:
+                for target in sr.routes.values():
+                    t_idx = step_index.get(target)
+                    if t_idx is not None and t_idx < idx:
+                        back_targets.append(target)
+
+        for target in back_targets:
+            # Semantic gate: require plan-iteration intent in the back-edge source note
+            if not _is_plan_iteration_note(step.note or ""):
+                continue
+            vi = vis_index.get(name)
+            vj = vis_index.get(target)
+            if vi is None or vj is None or vj >= vi:
+                continue
+            span = vi - vj
+            if span <= best_span:
+                continue
+            # Tight cycle via BFS on success-only graph
+            chain = _tight_cycle_bfs(success_graph, start=target, end=name)
+            best_span = span
+            best_chain = chain
+
+    main_chain = best_chain
+
+    # routing_blocks: pure route-action steps in main_chain with multiple on_result conditions
+    routing_blocks_set: set[str] = set()
+    for mc_name in main_chain:
+        step = recipe.steps.get(mc_name)
+        if step is None:
+            continue
+        if step.action == "route" and step.on_result is not None:
+            nr = step.on_result
+            num_routes = len(nr.conditions) if nr.conditions else len(nr.routes)
+            if num_routes > 1:
+                routing_blocks_set.add(mc_name)
+
+    routing_blocks = frozenset(routing_blocks_set)
+
+    # side_legs: steps reachable from main_chain via on_failure or on_context_limit only
+    side_legs_set: set[str] = set()
+    for mc_name in main_chain:
+        step = recipe.steps.get(mc_name)
+        if step is None:
+            continue
+        for leg_target in [step.on_failure, step.on_context_limit]:
+            if leg_target and leg_target in recipe.steps and leg_target not in main_chain:
+                side_legs_set.add(leg_target)
+
+    side_legs = frozenset(side_legs_set)
+
+    # hidden: infrastructure steps and terminal (action == "stop") steps
+    hidden_set: set[str] = set()
+    for hname, hstep in recipe.steps.items():
+        if _is_infrastructure_step(hstep) or hstep.action == "stop":
+            hidden_set.add(hname)
+
+    hidden = frozenset(hidden_set)
+
+    return StepClassification(
+        main_chain=main_chain,
+        side_legs=side_legs,
+        routing_blocks=routing_blocks,
+        hidden=hidden,
+    )
+
+
+def _compute_layout(recipe: Any) -> _LayoutResult:
+    """Compute visual layout from a Recipe dataclass."""
+
+    # Precompute visible step ordering for back-edge detection.
+    # A back-edge exists when a visible step routes to an earlier visible step.
+    # Visible = non-infrastructure, non-terminal. Uses the same criteria as
+    # _classify_steps.hidden so the two computations agree.
+    vis_pos: dict[str, int] = {
+        name: i
+        for i, (name, step) in enumerate(recipe.steps.items())
+        if not _is_infrastructure_step(step) and step.action != "stop"
+    }
 
     layout_steps: list[_LayoutStep] = []
     back_edges: list[tuple[str, str]] = []
 
     for step_name, step in recipe.steps.items():
-        idx = step_index[step_name]
+        cur_pos = vis_pos.get(step_name, -1)
 
         # Determine tool label — do NOT include model (per spec)
         if step.tool is not None:
@@ -163,25 +296,25 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
             note=step.note or "",
         )
 
-        if _is_back_edge(step.on_success, idx):
+        if step.on_success and 0 <= vis_pos.get(step.on_success, -1) < cur_pos:
             ls.is_back_edge_success = True
-            back_edges.append((step_name, step.on_success))  # type: ignore[arg-type]
-        if _is_back_edge(step.on_failure, idx):
+            back_edges.append((step_name, step.on_success))
+        if step.on_failure and 0 <= vis_pos.get(step.on_failure, -1) < cur_pos:
             ls.is_back_edge_failure = True
-            back_edges.append((step_name, step.on_failure))  # type: ignore[arg-type]
+            back_edges.append((step_name, step.on_failure))
 
         if step.on_result is not None:
             sr = step.on_result
             if sr.conditions:
                 for cond in sr.conditions:
                     when_str = cond.when if cond.when else "(default)"
-                    is_back = _is_back_edge(cond.route, idx)
+                    is_back = 0 <= vis_pos.get(cond.route, -1) < cur_pos
                     ls.on_result_conditions.append((when_str, cond.route, is_back))
                     if is_back:
                         back_edges.append((step_name, cond.route))
             elif sr.routes:
                 for key, target in sr.routes.items():
-                    is_back = _is_back_edge(target, idx)
+                    is_back = 0 <= vis_pos.get(target, -1) < cur_pos
                     ls.on_result_conditions.append((key, target, is_back))
                     if is_back:
                         back_edges.append((step_name, target))
@@ -216,52 +349,32 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
         ]
 
     # Phase 3: Semantic FOR EACH detection.
-    # A back-edge span qualifies as FOR EACH only when at least one step in
-    # the span has a note: field signaling plan-iteration intent.
-    # Structural criterion alone (largest span) is insufficient: CI polling
-    # loops and failure-recovery paths produce back-edges but are not FOR EACH.
-    visible = [s for s in layout_steps if not s.is_infrastructure and not s.is_terminal]
-    vis_index = {s.name: i for i, s in enumerate(visible)}
+    # Use _classify_steps (which calls _tight_cycle_bfs) for precise cycle membership.
+    # This replaces the index-span approach which was over-inclusive: it pulled
+    # side-leg steps (retry_worktree, fix) into the horizontal chain.
+    graph = _build_step_graph(recipe)
+    classification = _classify_steps(recipe, graph)
 
-    best_span = 1
-    best_range: tuple[int, int] | None = None
+    visible = [s for s in layout_steps if s.name not in classification.hidden]
+    vis_names_list = [s.name for s in visible]
+
+    chain_names = [n for n in vis_names_list if n in classification.main_chain]
+    for_each_range: tuple[int, int] | None = None
     best_label = "FOR EACH:"
 
-    for vi, step in enumerate(visible):
-        back_targets: list[str] = []
-        if step.is_back_edge_success and step.on_success:
-            back_targets.append(step.on_success)
-        if step.is_back_edge_failure and step.on_failure:
-            back_targets.append(step.on_failure)
-        back_targets.extend(tgt for _, tgt, is_back in step.on_result_conditions if is_back)
-
-        for target in back_targets:
-            vj = vis_index.get(target)
-            if vj is None or vj >= vi:
-                continue
-            span = vi - vj
-            if span <= best_span:
-                continue
-            # Semantic gate: require plan-iteration intent in the back-edge SOURCE
-            # step's note (visible[vi] — the step that routes back to start the
-            # next iteration). Checking the whole span would falsely accept the
-            # remediate→plan back-edge (span=11) in implementation.yaml because
-            # plan.note mentions "plan_parts", even though that back-edge is a
-            # remediation retry path, not a plan-parts iteration loop.
-            has_intent = _is_plan_iteration_note(visible[vi].note)
-            if has_intent:
-                best_span = span
-                best_range = (vj, vi)
-                span_steps = visible[vj : vi + 1]
-                best_label = _derive_for_each_label(span_steps)
-
-    for_each_range = best_range
+    if chain_names:
+        fe_start_idx = vis_names_list.index(chain_names[0])
+        fe_end_idx = vis_names_list.index(chain_names[-1])
+        for_each_range = (fe_start_idx, fe_end_idx)
+        span_steps = visible[fe_start_idx : fe_end_idx + 1]
+        best_label = _derive_for_each_label(span_steps)
 
     return _LayoutResult(
         steps=layout_steps,
         back_edges=back_edges,
         for_each_range=for_each_range,
         for_each_label=best_label,
+        classification=classification,
     )
 
 
@@ -328,17 +441,24 @@ def _render_for_each_chain(
     inner_steps: list[_LayoutStep],
     lines: list[str],
     label: str = "FOR EACH:",
+    classification: StepClassification | None = None,
 ) -> None:
     """Render FOR EACH inner steps as a horizontal chain with side-leg failure branches.
+
+    When *classification* is provided, only tight-cycle chain steps appear as
+    inline tokens. Pure-routing steps (e.g. next_or_done) are rendered as a
+    ``└──`` footer block after the closing ``└────┘`` line.
 
     Produces:
         ┌────┤ FOR EACH PLAN PART:
         │    │
-        │    step_a (retry ×∞) ─── step_b (retry ×3) ─── step_c (retry ×∞) ↑
+        │    step_a (retry ×∞) ─── step_b (retry ×3) ─── step_c (retry ×∞)
         │         │
         │         ✗ failure → escalate
         │
         └────┘
+        │         └── routing_step: condition  → target ↑
+        │                           condition  → target
 
     This function is structurally incapable of producing vertical step blocks
     (│  ↓ success → ...) because it never calls _append_step(). The horizontal
@@ -347,10 +467,18 @@ def _render_for_each_chain(
     lines.append(f"┌────┤ {label}")
     lines.append("│    │")
 
-    # Build the horizontal chain tokens: join step names with ─── connectors.
-    # inner_steps come from visible[] which already excludes terminal steps.
+    # Determine which steps appear in the chain line.
+    # With classification: main_chain steps excluding pure routing_blocks.
+    # Without classification (fallback): all inner_steps.
+    if classification is not None:
+        chain_step_names = classification.main_chain - classification.routing_blocks
+        chain_steps = [s for s in inner_steps if s.name in chain_step_names]
+    else:
+        chain_steps = inner_steps
+
+    # Build horizontal chain tokens: join step names with ─── connectors.
     chain_tokens: list[str] = []
-    for step in inner_steps:
+    for step in chain_steps:
         if step.skip_when_false:
             token = f"[{step.name}]"
         else:
@@ -366,11 +494,11 @@ def _render_for_each_chain(
     chain_line = " ─── ".join(chain_tokens)
     lines.append(f"│    {chain_line}")
 
-    # Side-leg failure branches: one block per step that has a failure route.
+    # Side-leg failure branches: one block per chain step that has a failure route.
     # Each side-leg hangs below the chain line, indented to the step's position.
     indent_base = 4  # "│    " prefix = 4 chars after the leading │
     cursor = 0
-    for idx, step in enumerate(inner_steps):
+    for idx, step in enumerate(chain_steps):
         failure_routes: list[str] = []
         if step.on_failure:
             suf = " ↑" if step.is_back_edge_failure else ""
@@ -390,6 +518,21 @@ def _render_for_each_chain(
 
     lines.append("│")
     lines.append("└────┘")
+
+    # Routing block footer: pure-routing multi-way steps rendered as └── blocks
+    # after the closing box line.
+    if classification is not None:
+        routing_block_steps = [s for s in inner_steps if s.name in classification.routing_blocks]
+        for rb_step in routing_block_steps:
+            if rb_step.on_result_conditions:
+                first = True
+                for cond_str, target, is_back in rb_step.on_result_conditions:
+                    suf = " ↑" if is_back else ""
+                    if first:
+                        lines.append(f"│         └── {rb_step.name}: {cond_str}  → {target}{suf}")
+                        first = False
+                    else:
+                        lines.append(f"│                          {cond_str}  → {target}{suf}")
 
 
 def _render_visual_flow(layout: _LayoutResult) -> str:
@@ -419,7 +562,12 @@ def _render_visual_flow(layout: _LayoutResult) -> str:
         if fe_start is not None and i == fe_start:
             assert fe_end is not None
             inner_steps = visible[fe_start : fe_end + 1]
-            _render_for_each_chain(inner_steps, lines, label=layout.for_each_label)
+            _render_for_each_chain(
+                inner_steps,
+                lines,
+                label=layout.for_each_label,
+                classification=layout.classification,
+            )
             i = fe_end + 1
             if i < len(visible):
                 lines.append("│")
@@ -437,9 +585,9 @@ def _render_visual_flow(layout: _LayoutResult) -> str:
         lines.append("─────────────────────────────────────")
         for term in terminal:
             if term.message:
-                lines.append(f'⏹ {term.name}  "{term.message}"')
+                lines.append(f'{term.name}  "{term.message}"')
             else:
-                lines.append(f"⏹ {term.name}")
+                lines.append(term.name)
 
     return "\n".join(lines)
 
@@ -514,14 +662,16 @@ def generate_recipe_diagram(
         rules_section = "\n" + "\n".join(rules_lines)
 
     # Assemble full diagram
+    flow_line = (
+        f"**Flow:** {recipe.summary}\n\n" if recipe.summary and recipe.summary.strip() else ""
+    )
     diagram = (
         f"<!-- autoskillit-recipe-hash: {recipe_hash} -->\n"
         f"<!-- autoskillit-diagram-format: {_DIAGRAM_FORMAT_VERSION} -->\n"
         f"## {recipe.name}\n"
         f"{recipe.description}\n"
         f"\n"
-        f"**Flow:** {recipe.summary}\n"
-        f"\n"
+        f"{flow_line}"
         f"### Graph\n"
         f"{flow_diagram}\n"
         f"\n"

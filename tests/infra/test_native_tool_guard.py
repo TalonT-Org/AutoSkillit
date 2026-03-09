@@ -366,16 +366,12 @@ def test_pipeline_forbidden_tools_matches_hook_registry():
     from autoskillit.hook_registry import HOOK_REGISTRY
 
     # Find the HOOK_REGISTRY entry that invokes native_tool_guard.py
-    native_guard_matcher: str | None = None
-    for hook_def in HOOK_REGISTRY:
-        if "native_tool_guard.py" in hook_def.scripts:
-            native_guard_matcher = hook_def.matcher
-            break
-
-    assert native_guard_matcher is not None, (
-        "No HOOK_REGISTRY entry found with 'native_tool_guard.py' in scripts. "
-        "Update hook_registry.py to include native_tool_guard.py."
+    matching = [h for h in HOOK_REGISTRY if "native_tool_guard.py" in h.scripts]
+    assert len(matching) == 1, (
+        f"Expected exactly one HOOK_REGISTRY entry with 'native_tool_guard.py' in scripts, "
+        f"got {len(matching)}. Update hook_registry.py."
     )
+    native_guard_matcher = matching[0].matcher
 
     # Parse alternatives from ^(A|B|C|...)$ pattern
     m = re.fullmatch(r"\^\((.+)\)\$", native_guard_matcher)

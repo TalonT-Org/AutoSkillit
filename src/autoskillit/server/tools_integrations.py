@@ -68,6 +68,7 @@ async def fetch_github_issue(
     """
     from autoskillit.server import _get_config, _get_ctx
 
+    # Ungated read-only query: structlog context binding is intentionally omitted.
     logger.info("fetch_github_issue", issue_url=issue_url, include_comments=include_comments)
 
     tool_ctx = _get_ctx()
@@ -176,93 +177,89 @@ async def report_bug(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="report_bug", cwd=cwd, severity=severity)
-    logger.info("report_bug", error_context=error_context[:80], severity=severity)
-    await _notify(
-        ctx,
-        "info",
-        f"report_bug: {error_context[:60]}",
-        "autoskillit.report_bug",
-        extra={"severity": severity, "cwd": cwd},
-    )
-
-    from autoskillit.server import _get_config, _get_ctx
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.executor is None:
-        return json.dumps({"success": False, "error": "Executor not configured"})
-
-    config = _get_config()
-    cfg = config.report_bug
-
-    # Resolve and create the report directory up front so the path is stable
-    # before the (potentially background) session writes the file.
-    report_dir = (
-        Path(cfg.report_dir)
-        if cfg.report_dir
-        else Path(cwd) / ".autoskillit" / "temp" / "bug-reports"
-    )
-    report_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-    report_path = report_dir / f"{timestamp}_report.md"
-
-    effective_model = model or cfg.model or ""
-    skill_command = (
-        f"/autoskillit:report-bug\n\n"
-        f"Error context:\n{error_context}\n\n"
-        f"Report output path: {report_path}"
-    )
-
-    if severity == "blocking":
-        result = await _run_report_session(
-            skill_command,
-            cwd,
-            report_path,
-            error_context,
-            tool_ctx.executor,
-            tool_ctx.github_client,
-            config,
-            effective_model,
-            step_name,
+    with structlog.contextvars.bound_contextvars(tool="report_bug", cwd=cwd, severity=severity):
+        logger.info("report_bug", error_context=error_context[:80], severity=severity)
+        await _notify(
+            ctx,
+            "info",
+            f"report_bug: {error_context[:60]}",
+            "autoskillit.report_bug",
+            extra={"severity": severity, "cwd": cwd},
         )
-        if not result["success"]:
-            await _notify(
-                ctx,
-                "error",
-                "report_bug session failed",
-                "autoskillit.report_bug",
-                extra={"report_path": str(report_path)},
+
+        from autoskillit.server import _get_config, _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.executor is None:
+            return json.dumps({"success": False, "error": "Executor not configured"})
+
+        config = _get_config()
+        cfg = config.report_bug
+
+        # Resolve and create the report directory up front so the path is stable
+        # before the (potentially background) session writes the file.
+        report_dir = (
+            Path(cfg.report_dir)
+            if cfg.report_dir
+            else Path(cwd) / ".autoskillit" / "temp" / "bug-reports"
+        )
+        report_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+        report_path = report_dir / f"{timestamp}_report.md"
+
+        effective_model = model or cfg.model or ""
+        skill_command = (
+            f"/autoskillit:report-bug\n\n"
+            f"Error context:\n{error_context}\n\n"
+            f"Report output path: {report_path}"
+        )
+
+        if severity == "blocking":
+            result = await _run_report_session(
+                skill_command,
+                cwd,
+                report_path,
+                error_context,
+                tool_ctx.executor,
+                tool_ctx.github_client,
+                config,
+                effective_model,
+                step_name,
             )
-        return json.dumps(result)
+            if not result["success"]:
+                await _notify(
+                    ctx,
+                    "error",
+                    "report_bug session failed",
+                    "autoskillit.report_bug",
+                    extra={"report_path": str(report_path)},
+                )
+            return json.dumps(result)
 
-    # Non-blocking: fire and forget, return immediately.
-    task = asyncio.create_task(
-        _run_report_session(
-            skill_command,
-            cwd,
-            report_path,
-            error_context,
-            tool_ctx.executor,
-            tool_ctx.github_client,
-            config,
-            effective_model,
-            step_name,
+        # Non-blocking: fire and forget, return immediately.
+        task = asyncio.create_task(
+            _run_report_session(
+                skill_command,
+                cwd,
+                report_path,
+                error_context,
+                tool_ctx.executor,
+                tool_ctx.github_client,
+                config,
+                effective_model,
+                step_name,
+            )
         )
-    )
-    _pending_report_tasks.add(task)
-    task.add_done_callback(_pending_report_tasks.discard)
-    return json.dumps({"success": True, "status": "dispatched", "report_path": str(report_path)})
+        _pending_report_tasks.add(task)
+        task.add_done_callback(_pending_report_tasks.discard)
+        return json.dumps(
+            {"success": True, "status": "dispatched", "report_path": str(report_path)}
+        )
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-# P8-F2 split assessment: a split into tools_integrations_report.py and
-# tools_integrations_github.py was evaluated. The shared _extract_block helper
-# below is used by parsers in both proposed groups, creating cross-file coupling
-# for a single low-level primitive. Split deferred until tool count grows and
-# a clean boundary (e.g. a dedicated parsing module) becomes warranted.
 
 
 def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
@@ -651,66 +648,65 @@ async def claim_issue(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="claim_issue", issue_url=issue_url)
-    logger.info("claim_issue", issue_url=issue_url)
+    with structlog.contextvars.bound_contextvars(tool="claim_issue", issue_url=issue_url):
+        logger.info("claim_issue", issue_url=issue_url)
 
-    from autoskillit.server import _get_ctx
+        from autoskillit.server import _get_ctx
 
-    tool_ctx = _get_ctx()
-    if tool_ctx.github_client is None:
-        return json.dumps(
-            {"success": False, "error": "GitHub token required for label management"}
+        tool_ctx = _get_ctx()
+        if tool_ctx.github_client is None:
+            return json.dumps(
+                {"success": False, "error": "GitHub token required for label management"}
+            )
+
+        effective_label = label or tool_ctx.config.github.in_progress_label
+
+        try:
+            owner, repo, issue_number = _parse_issue_ref(issue_url)
+        except ValueError as exc:
+            return json.dumps({"success": False, "error": str(exc)})
+
+        result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
+        if not result.get("success"):
+            return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
+
+        current_labels = _extract_label_names(result.get("labels", []))
+        if effective_label in current_labels:
+            return json.dumps(
+                {
+                    "success": True,
+                    "claimed": False,
+                    "reason": (
+                        f"Issue #{issue_number} already has '{effective_label}' label"
+                        " — another session may be processing it"
+                    ),
+                }
+            )
+
+        await tool_ctx.github_client.ensure_label(
+            owner,
+            repo,
+            effective_label,
+            color="fbca04",
+            description="Issue is actively being processed by a pipeline session",
         )
 
-    effective_label = label or tool_ctx.config.github.in_progress_label
+        add_result = await tool_ctx.github_client.add_labels(
+            owner, repo, issue_number, [effective_label]
+        )
+        if not add_result.get("success"):
+            return json.dumps(
+                {"success": False, "error": add_result.get("error", "add_labels failed")}
+            )
 
-    try:
-        owner, repo, issue_number = _parse_issue_ref(issue_url)
-    except ValueError as exc:
-        return json.dumps({"success": False, "error": str(exc)})
-
-    result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
-    if not result.get("success"):
-        return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
-
-    current_labels = _extract_label_names(result.get("labels", []))
-    if effective_label in current_labels:
         return json.dumps(
             {
                 "success": True,
-                "claimed": False,
-                "reason": (
-                    f"Issue #{issue_number} already has '{effective_label}' label"
-                    " — another session may be processing it"
-                ),
+                "claimed": True,
+                "issue_number": issue_number,
+                "label": effective_label,
             }
         )
-
-    await tool_ctx.github_client.ensure_label(
-        owner,
-        repo,
-        effective_label,
-        color="fbca04",
-        description="Issue is actively being processed by a pipeline session",
-    )
-
-    add_result = await tool_ctx.github_client.add_labels(
-        owner, repo, issue_number, [effective_label]
-    )
-    if not add_result.get("success"):
-        return json.dumps(
-            {"success": False, "error": add_result.get("error", "add_labels failed")}
-        )
-
-    return json.dumps(
-        {
-            "success": True,
-            "claimed": True,
-            "issue_number": issue_number,
-            "label": effective_label,
-        }
-    )
 
 
 @mcp.tool(tags={"automation", "kitchen"})
@@ -733,30 +729,31 @@ async def release_issue(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="release_issue", issue_url=issue_url)
-    logger.info("release_issue", issue_url=issue_url)
+    with structlog.contextvars.bound_contextvars(tool="release_issue", issue_url=issue_url):
+        logger.info("release_issue", issue_url=issue_url)
 
-    from autoskillit.server import _get_ctx
+        from autoskillit.server import _get_ctx
 
-    tool_ctx = _get_ctx()
-    if tool_ctx.github_client is None:
-        return json.dumps(
-            {"success": False, "error": "GitHub token required for label management"}
+        tool_ctx = _get_ctx()
+        if tool_ctx.github_client is None:
+            return json.dumps(
+                {"success": False, "error": "GitHub token required for label management"}
+            )
+
+        effective_label = label or tool_ctx.config.github.in_progress_label
+
+        try:
+            owner, repo, issue_number = _parse_issue_ref(issue_url)
+        except ValueError as exc:
+            return json.dumps({"success": False, "error": str(exc)})
+
+        result = await tool_ctx.github_client.remove_label(
+            owner, repo, issue_number, effective_label
         )
-
-    effective_label = label or tool_ctx.config.github.in_progress_label
-
-    try:
-        owner, repo, issue_number = _parse_issue_ref(issue_url)
-    except ValueError as exc:
-        return json.dumps({"success": False, "error": str(exc)})
-
-    result = await tool_ctx.github_client.remove_label(owner, repo, issue_number, effective_label)
-    return json.dumps(
-        {
-            "success": result.get("success", False),
-            "issue_number": issue_number,
-            "label": effective_label,
-        }
-    )
+        return json.dumps(
+            {
+                "success": result.get("success", False),
+                "issue_number": issue_number,
+                "label": effective_label,
+            }
+        )

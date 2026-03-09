@@ -63,9 +63,6 @@ async def wait_for_ci(
         )
 
     # Infer head_sha from cwd if not provided.
-    # Raw asyncio.create_subprocess_exec is correct here: ToolContext.runner manages
-    # Claude headless sessions, not plumbing commands. A lightweight git read does
-    # not belong in the managed session lifecycle.
     if head_sha is None and cwd:
         try:
             proc = await asyncio.create_subprocess_exec(

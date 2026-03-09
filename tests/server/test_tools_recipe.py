@@ -1390,7 +1390,7 @@ async def test_list_recipes_no_ctx_returns_empty(monkeypatch):
 
     monkeypatch.setattr(_state_mod, "_ctx", None)
     result = json.loads(await list_recipes())
-    assert result == [] or result.get("recipes") == []
+    assert result == []
 
 
 # P5F2-T2

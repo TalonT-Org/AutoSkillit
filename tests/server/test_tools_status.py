@@ -53,8 +53,9 @@ class TestKitchenStatus:
     """kitchen_status tool returns version health info (ungated)."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
+    def _close_kitchen(self, tool_ctx, monkeypatch, tmp_path):
         tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.chdir(tmp_path)
 
     @pytest.mark.anyio
     async def test_status_returns_version_info(self, tool_ctx):
@@ -178,8 +179,11 @@ class TestKitchenStatus:
         self, monkeypatch, tmp_path, tool_ctx
     ):
         """No warning when gate_file_exists and tools_enabled are consistent."""
+        import autoskillit
+
         monkeypatch.chdir(tmp_path)
         tool_ctx.gate = DefaultGateState(enabled=True)
+        tool_ctx.plugin_dir = str(Path(autoskillit.__file__).parent)
         gate_dir = tmp_path / "temp"
         gate_dir.mkdir()
         (gate_dir / ".kitchen_gate").write_text(

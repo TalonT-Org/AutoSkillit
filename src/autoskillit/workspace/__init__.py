@@ -20,6 +20,12 @@ from autoskillit.workspace.clone import (
     push_to_remote,
     remove_clone,
 )
+from autoskillit.workspace.session_skills import (
+    TIER2_SKILLS,
+    DefaultSessionSkillManager,
+    SkillsDirectoryProvider,
+    resolve_ephemeral_root,
+)
 from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
 
 delete_directory_contents = _delete_directory_contents
@@ -30,7 +36,10 @@ __all__ = [
     "classify_remote_url",
     "DefaultCloneManager",
     "DefaultWorkspaceManager",
+    "DefaultSessionSkillManager",
     "SkillResolver",
+    "SkillsDirectoryProvider",
+    "TIER2_SKILLS",
     "bundled_skills_dir",
     "clone_repo",
     "detect_branch",
@@ -39,4 +48,5 @@ __all__ = [
     "detect_unpublished_branch",
     "push_to_remote",
     "remove_clone",
+    "resolve_ephemeral_root",
 ]

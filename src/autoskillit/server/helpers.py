@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
+from autoskillit.execution import resolve_log_dir  # noqa: F401 — used by tools_integrations.py
 from autoskillit.pipeline import gate_error_result
 from autoskillit.recipe import (
     StaleItem,

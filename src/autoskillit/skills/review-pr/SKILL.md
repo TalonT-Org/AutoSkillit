@@ -97,6 +97,62 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 
 Save the diff to `temp/review-pr/diff_{pr_number}.txt`.
 
+### Step 2.5: Deletion Context Pre-Computation
+
+Before spawning audit subagents, compute the deletion context that the
+`deletion_regression` subagent will use. This step runs best-effort: if any command
+fails (e.g., no local git checkout available), set `deletion_context = null` and
+omit the `deletion_regression` subagent from Step 3.
+
+```bash
+# 1. Get the PR's head and base refs
+PR_HEAD=$(gh pr view {pr_number} --json headRefName -q .headRefName)
+PR_BASE=$(gh pr view {pr_number} --json baseRefName -q .baseRefName)
+
+# 2. Derive merge base via GitHub compare API (no local clone required)
+MERGE_BASE=$(
+  gh api repos/{owner}/{repo}/compare/${PR_BASE}...${PR_HEAD} \
+    --jq '.merge_base_commit.sha' 2>/dev/null
+)
+
+# 3. Fetch the base branch locally to run git diff
+git fetch origin ${PR_BASE} 2>/dev/null
+
+# 4. Files deleted from base since branch point
+DELETED_FILES=$(
+  git diff --name-only --diff-filter=D ${MERGE_BASE} origin/${PR_BASE} 2>/dev/null
+)
+
+# 5. PR's changed files (from gh pr view, already available)
+PR_FILES=$(gh pr view {pr_number} --json files -q '[.files[].path] | join(" ")' 2>/dev/null)
+
+# 6. Symbols removed from files this PR modifies
+if [ -n "$PR_FILES" ] && [ -n "$MERGE_BASE" ]; then
+  DELETED_SYMBOLS=$(
+    git diff --diff-filter=M ${MERGE_BASE} origin/${PR_BASE} -- ${PR_FILES} 2>/dev/null \
+      | grep '^-' \
+      | grep -E '^-(def |class |async def )' \
+      | sed 's/^-//' \
+      | sort -u
+  )
+else
+  DELETED_SYMBOLS=""
+fi
+```
+
+Store as `deletion_context`:
+```python
+deletion_context = {
+    "merge_base": MERGE_BASE,
+    "deleted_files": DELETED_FILES.splitlines(),        # list of paths
+    "deleted_symbols": DELETED_SYMBOLS.splitlines(),    # list of "def foo", "class Bar"
+    "pr_base": PR_BASE,
+}
+```
+
+If `MERGE_BASE` is empty or any git command fails, set `deletion_context = null`.
+The `deletion_regression` subagent in Step 3 is omitted when `deletion_context` is null.
+
 ### Step 3: Run Parallel Audit Subagents
 
 Spawn parallel subagents (Task tool, model: sonnet) for each audit dimension.
@@ -109,7 +165,7 @@ findings in JSON format:
     "file": "path/to/file.py",
     "line": 42,
     "severity": "critical|warning|info",
-    "dimension": "arch|tests|defense|bugs|cohesion|slop",
+    "dimension": "arch|tests|defense|bugs|cohesion|slop|deletion_regression",
     "message": "Description of the finding",
     "requires_decision": false
   }
@@ -136,7 +192,12 @@ findings in JSON format:
 6. **slop** — Useless comments, dead code, backward-compat hacks left by AI.
    Check for: commented-out code, TODO without issue refs, over-verbose docstrings.
 
-Subagent prompt template:
+7. **deletion_regression** — Deliberate deletion regression check.
+   Receives the PR diff AND the `deletion_context` (deleted files and symbols computed
+   in Step 2.5). Checks if the PR reintroduces any item from the deletion context.
+   Only spawned when `deletion_context` is non-null.
+
+Subagent prompt template (dimensions 1–6):
 
 > You are reviewing a GitHub PR diff for [{dimension}] issues only.
 > Scope: examine only the diff content provided. Do not fetch or read files outside the diff.
@@ -156,6 +217,34 @@ Subagent prompt template:
 > If no issues found, return an empty array [].
 > Diff content:
 > {diff_content}
+
+Subagent prompt template (dimension 7 — deletion_regression, only when `deletion_context` is non-null):
+
+> You are checking a GitHub PR diff for DELETION REGRESSIONS only.
+> A deletion regression is when a PR reintroduces code (a file, function, or class)
+> that was deliberately deleted from the base branch after the PR was branched.
+>
+> Deletion context (items deleted from {pr_base} since this PR branched at {merge_base}):
+> Deleted files: {deletion_context.deleted_files}
+> Deleted symbols: {deletion_context.deleted_symbols}
+>
+> PR diff:
+> {diff_content}
+>
+> Instructions:
+> - For each deleted file in the deletion context: check if the diff adds or recreates it
+>   (look for `+++ b/{file}` or `diff --git a/{file}` with added lines).
+> - For each deleted symbol (e.g., "def foo", "class Bar"): check if the diff adds it back
+>   (look for `+def foo`, `+class Bar`, or `+async def foo` lines in the diff).
+> - For each regression found, return a finding with:
+>   - severity: "critical"
+>   - dimension: "deletion_regression"
+>   - requires_decision: false
+>   - message: "Deletion regression: '{name}' was deliberately deleted from {pr_base}
+>     but this PR reintroduces it. Remove it."
+> - If no regressions found, return [].
+>
+> Return a JSON array of findings.
 
 ### Step 4: Aggregate and Deduplicate Findings
 

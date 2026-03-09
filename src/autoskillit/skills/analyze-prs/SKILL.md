@@ -33,6 +33,11 @@ complexity, and produce machine-readable output for the `pr-merge-pipeline` reci
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Abort clearly if `gh` CLI is not authenticated
 - Include every open PR targeting base_branch in the output — no PR is silently dropped
+- **Default to parallel batch processing**: When multiple PRs are present, ALWAYS process
+  all analysis tasks (diff fetching, overlap computation, complexity tagging) using parallel
+  subagent batches. Processing PRs one-at-a-time without an explicit user instruction to do
+  so is the wrong default. Up to 8 PRs should be processed in a single parallel batch;
+  launch additional batches for larger sets.
 
 ## Workflow
 
@@ -50,7 +55,8 @@ If `gh` returns an auth error: abort with a clear message.
 
 ### Step 1: Fetch PR Diffs in Parallel
 
-Launch one Explore subagent per PR (up to 8 in parallel; batch if more):
+**ALWAYS launch subagents in parallel** — never process PRs sequentially. Launch one Explore
+subagent per PR (up to 8 simultaneously; batch in groups of 8 if more):
 
 Each subagent fetches:
 - `gh pr diff {number}` — full unified diff

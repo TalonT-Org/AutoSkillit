@@ -14,7 +14,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import _atomic_write, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled
+from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher, HeadlessExecutor
@@ -68,6 +68,7 @@ async def fetch_github_issue(
     """
     from autoskillit.server import _get_config, _get_ctx
 
+    # Ungated read-only query: structlog context binding is intentionally omitted.
     logger.info("fetch_github_issue", issue_url=issue_url, include_comments=include_comments)
 
     tool_ctx = _get_ctx()
@@ -176,83 +177,84 @@ async def report_bug(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="report_bug", cwd=cwd, severity=severity)
-    logger.info("report_bug", error_context=error_context[:80], severity=severity)
-    await _notify(
-        ctx,
-        "info",
-        f"report_bug: {error_context[:60]}",
-        "autoskillit.report_bug",
-        extra={"severity": severity, "cwd": cwd},
-    )
-
-    from autoskillit.server import _get_config, _get_ctx
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.executor is None:
-        return json.dumps({"success": False, "error": "Executor not configured"})
-
-    config = _get_config()
-    cfg = config.report_bug
-
-    # Resolve and create the report directory up front so the path is stable
-    # before the (potentially background) session writes the file.
-    report_dir = (
-        Path(cfg.report_dir)
-        if cfg.report_dir
-        else Path(cwd) / ".autoskillit" / "temp" / "bug-reports"
-    )
-    report_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-    report_path = report_dir / f"{timestamp}_report.md"
-
-    effective_model = model or cfg.model or ""
-    skill_command = (
-        f"/autoskillit:report-bug\n\n"
-        f"Error context:\n{error_context}\n\n"
-        f"Report output path: {report_path}"
-    )
-
-    if severity == "blocking":
-        result = await _run_report_session(
-            skill_command,
-            cwd,
-            report_path,
-            error_context,
-            tool_ctx.executor,
-            tool_ctx.github_client,
-            config,
-            effective_model,
-            step_name,
+    with structlog.contextvars.bound_contextvars(tool="report_bug", cwd=cwd, severity=severity):
+        logger.info("report_bug", error_context=error_context[:80], severity=severity)
+        await _notify(
+            ctx,
+            "info",
+            f"report_bug: {error_context[:60]}",
+            "autoskillit.report_bug",
+            extra={"severity": severity, "cwd": cwd},
         )
-        if not result["success"]:
-            await _notify(
-                ctx,
-                "error",
-                "report_bug session failed",
-                "autoskillit.report_bug",
-                extra={"report_path": str(report_path)},
+
+        from autoskillit.server import _get_config, _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.executor is None:
+            return json.dumps({"success": False, "error": "Executor not configured"})
+
+        config = _get_config()
+        cfg = config.report_bug
+
+        # Resolve and create the report directory up front so the path is stable
+        # before the (potentially background) session writes the file.
+        report_dir = (
+            Path(cfg.report_dir)
+            if cfg.report_dir
+            else Path(cwd) / ".autoskillit" / "temp" / "bug-reports"
+        )
+        report_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+        report_path = report_dir / f"{timestamp}_report.md"
+
+        effective_model = model or cfg.model or ""
+        skill_command = (
+            f"/autoskillit:report-bug\n\n"
+            f"Error context:\n{error_context}\n\n"
+            f"Report output path: {report_path}"
+        )
+
+        if severity == "blocking":
+            result = await _run_report_session(
+                skill_command,
+                cwd,
+                report_path,
+                error_context,
+                tool_ctx.executor,
+                tool_ctx.github_client,
+                config,
+                effective_model,
+                step_name,
             )
-        return json.dumps(result)
+            if not result["success"]:
+                await _notify(
+                    ctx,
+                    "error",
+                    "report_bug session failed",
+                    "autoskillit.report_bug",
+                    extra={"report_path": str(report_path)},
+                )
+            return json.dumps(result)
 
-    # Non-blocking: fire and forget, return immediately.
-    task = asyncio.create_task(
-        _run_report_session(
-            skill_command,
-            cwd,
-            report_path,
-            error_context,
-            tool_ctx.executor,
-            tool_ctx.github_client,
-            config,
-            effective_model,
-            step_name,
+        # Non-blocking: fire and forget, return immediately.
+        task = asyncio.create_task(
+            _run_report_session(
+                skill_command,
+                cwd,
+                report_path,
+                error_context,
+                tool_ctx.executor,
+                tool_ctx.github_client,
+                config,
+                effective_model,
+                step_name,
+            )
         )
-    )
-    _pending_report_tasks.add(task)
-    task.add_done_callback(_pending_report_tasks.discard)
-    return json.dumps({"success": True, "status": "dispatched", "report_path": str(report_path)})
+        _pending_report_tasks.add(task)
+        task.add_done_callback(_pending_report_tasks.discard)
+        return json.dumps(
+            {"success": True, "status": "dispatched", "report_path": str(report_path)}
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -260,17 +262,32 @@ async def report_bug(
 # ---------------------------------------------------------------------------
 
 
-def _parse_fingerprint(report_text: str) -> str | None:
-    """Extract the first non-empty line between fingerprint delimiters."""
+def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
+    """Return all lines between start_delim and end_delim (exclusive).
+
+    Returns an empty list if either delimiter is absent or the block is empty.
+    Lines are returned as-is (no stripping) to preserve JSON-parseable content.
+    """
     in_block = False
-    for line in report_text.splitlines():
-        stripped = line.strip()
-        if stripped == _FINGERPRINT_START:
+    block_lines: list[str] = []
+    for line in text.splitlines():
+        if line.strip() == start_delim:
             in_block = True
             continue
-        if stripped == _FINGERPRINT_END:
-            break
-        if in_block and stripped:
+        if line.strip() == end_delim:
+            if not in_block:
+                return []
+            return block_lines
+        if in_block:
+            block_lines.append(line)
+    return []  # end delimiter never found
+
+
+def _parse_fingerprint(report_text: str) -> str | None:
+    """Extract the first non-empty line between fingerprint delimiters."""
+    for line in _extract_block(report_text, _FINGERPRINT_START, _FINGERPRINT_END):
+        stripped = line.strip()
+        if stripped:
             return stripped
     return None
 
@@ -433,17 +450,7 @@ def _build_prepare_skill_command(
 
 def _parse_prepare_result(response_text: str) -> dict[str, Any]:
     """Extract and JSON-parse the prepare-issue result block from a skill response."""
-    in_block = False
-    block_lines: list[str] = []
-    for line in response_text.splitlines():
-        stripped = line.strip()
-        if stripped == _PREPARE_RESULT_START:
-            in_block = True
-            continue
-        if stripped == _PREPARE_RESULT_END:
-            break
-        if in_block:
-            block_lines.append(line)
+    block_lines = _extract_block(response_text, _PREPARE_RESULT_START, _PREPARE_RESULT_END)
     if not block_lines:
         return {"success": False, "error": "no result block found"}
     try:
@@ -473,17 +480,7 @@ def _build_enrich_skill_command(
 
 def _parse_enrich_result(response_text: str) -> dict[str, Any]:
     """Extract and JSON-parse the enrich-issues result block from a skill response."""
-    in_block = False
-    block_lines: list[str] = []
-    for line in response_text.splitlines():
-        stripped = line.strip()
-        if stripped == _ENRICH_RESULT_START:
-            in_block = True
-            continue
-        if stripped == _ENRICH_RESULT_END:
-            break
-        if in_block:
-            block_lines.append(line)
+    block_lines = _extract_block(response_text, _ENRICH_RESULT_START, _ENRICH_RESULT_END)
     if not block_lines:
         return {"success": False, "error": "no result block found"}
     try:
@@ -651,62 +648,65 @@ async def claim_issue(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    from autoskillit.server import _get_ctx
+    with structlog.contextvars.bound_contextvars(tool="claim_issue", issue_url=issue_url):
+        logger.info("claim_issue", issue_url=issue_url)
 
-    tool_ctx = _get_ctx()
-    if tool_ctx.github_client is None:
-        return json.dumps(
-            {"success": False, "error": "GitHub token required for label management"}
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.github_client is None:
+            return json.dumps(
+                {"success": False, "error": "GitHub token required for label management"}
+            )
+
+        effective_label = label or tool_ctx.config.github.in_progress_label
+
+        try:
+            owner, repo, issue_number = _parse_issue_ref(issue_url)
+        except ValueError as exc:
+            return json.dumps({"success": False, "error": str(exc)})
+
+        result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
+        if not result.get("success"):
+            return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
+
+        current_labels = _extract_label_names(result.get("labels", []))
+        if effective_label in current_labels:
+            return json.dumps(
+                {
+                    "success": True,
+                    "claimed": False,
+                    "reason": (
+                        f"Issue #{issue_number} already has '{effective_label}' label"
+                        " — another session may be processing it"
+                    ),
+                }
+            )
+
+        await tool_ctx.github_client.ensure_label(
+            owner,
+            repo,
+            effective_label,
+            color="fbca04",
+            description="Issue is actively being processed by a pipeline session",
         )
 
-    effective_label = label or tool_ctx.config.github.in_progress_label
+        add_result = await tool_ctx.github_client.add_labels(
+            owner, repo, issue_number, [effective_label]
+        )
+        if not add_result.get("success"):
+            return json.dumps(
+                {"success": False, "error": add_result.get("error", "add_labels failed")}
+            )
 
-    try:
-        owner, repo, issue_number = _parse_issue_ref(issue_url)
-    except ValueError as exc:
-        return json.dumps({"success": False, "error": str(exc)})
-
-    result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
-    if not result.get("success"):
-        return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
-
-    current_labels = _extract_label_names(result.get("labels", []))
-    if effective_label in current_labels:
         return json.dumps(
             {
                 "success": True,
-                "claimed": False,
-                "reason": (
-                    f"Issue #{issue_number} already has '{effective_label}' label"
-                    " — another session may be processing it"
-                ),
+                "claimed": True,
+                "issue_number": issue_number,
+                "label": effective_label,
             }
         )
-
-    await tool_ctx.github_client.ensure_label(
-        owner,
-        repo,
-        effective_label,
-        color="fbca04",
-        description="Issue is actively being processed by a pipeline session",
-    )
-
-    add_result = await tool_ctx.github_client.add_labels(
-        owner, repo, issue_number, [effective_label]
-    )
-    if not add_result.get("success"):
-        return json.dumps(
-            {"success": False, "error": add_result.get("error", "add_labels failed")}
-        )
-
-    return json.dumps(
-        {
-            "success": True,
-            "claimed": True,
-            "issue_number": issue_number,
-            "label": effective_label,
-        }
-    )
 
 
 @mcp.tool(tags={"automation", "kitchen"})
@@ -729,26 +729,174 @@ async def release_issue(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    from autoskillit.server import _get_ctx
+    with structlog.contextvars.bound_contextvars(tool="release_issue", issue_url=issue_url):
+        logger.info("release_issue", issue_url=issue_url)
 
-    tool_ctx = _get_ctx()
-    if tool_ctx.github_client is None:
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.github_client is None:
+            return json.dumps(
+                {"success": False, "error": "GitHub token required for label management"}
+            )
+
+        effective_label = label or tool_ctx.config.github.in_progress_label
+
+        try:
+            owner, repo, issue_number = _parse_issue_ref(issue_url)
+        except ValueError as exc:
+            return json.dumps({"success": False, "error": str(exc)})
+
+        result = await tool_ctx.github_client.remove_label(
+            owner, repo, issue_number, effective_label
+        )
         return json.dumps(
-            {"success": False, "error": "GitHub token required for label management"}
+            {
+                "success": result.get("success", False),
+                "issue_number": issue_number,
+                "label": effective_label,
+            }
         )
 
-    effective_label = label or tool_ctx.config.github.in_progress_label
 
-    try:
-        owner, repo, issue_number = _parse_issue_ref(issue_url)
-    except ValueError as exc:
-        return json.dumps({"success": False, "error": str(exc)})
-
-    result = await tool_ctx.github_client.remove_label(owner, repo, issue_number, effective_label)
-    return json.dumps(
+def _map_api_reviews(raw: list) -> list:
+    """Map gh api pulls/{n}/reviews response (user.login) to {author, state, body}."""
+    return [
         {
-            "success": result.get("success", False),
-            "issue_number": issue_number,
-            "label": effective_label,
+            "author": (r.get("user") or {}).get("login", ""),
+            "state": r["state"],
+            "body": r.get("body", ""),
         }
-    )
+        for r in raw
+    ]
+
+
+def _map_pr_view_reviews(data: dict) -> list:
+    """Map gh pr view --json reviews response (author.login) to {author, state, body}."""
+    return [
+        {
+            "author": (r.get("author") or {}).get("login", ""),
+            "state": r["state"],
+            "body": r.get("body", ""),
+        }
+        for r in data.get("reviews", [])
+    ]
+
+
+async def _close_issues_sequentially(
+    issue_numbers: list[int],
+    comment: str,
+    cwd: str,
+) -> tuple[list[int], list[int]]:
+    """Run gh issue close for each number; return (closed, failed) lists."""
+    closed: list[int] = []
+    failed: list[int] = []
+    for num in issue_numbers:
+        cmd = ["gh", "issue", "close", str(num)]
+        if comment:
+            cmd.extend(["--comment", comment])
+        rc, _, _ = await _run_subprocess(cmd, cwd=cwd, timeout=30)
+        if rc == 0:
+            closed.append(num)
+        else:
+            failed.append(num)
+    return closed, failed
+
+
+@mcp.tool(tags={"automation", "kitchen"})
+async def get_pr_reviews(
+    pr_number: int,
+    cwd: str,
+    repo: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Fetch reviews for a GitHub pull request as a structured list.
+
+    When repo is provided, calls gh api repos/{repo}/pulls/{pr_number}/reviews
+    (returns raw API list with user.login). When repo is omitted, calls
+    gh pr view {pr_number} --json reviews (returns author.login).
+
+    Returns JSON with:
+      - reviews: list of {author, state, body}
+    On gh failure: {"success": false, "error": "..."}
+
+    Args:
+        pr_number: GitHub pull request number.
+        cwd: Working directory for gh commands.
+        repo: Repository as owner/repo. Uses gh api path when provided;
+              uses gh pr view when omitted.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    with structlog.contextvars.bound_contextvars(tool="get_pr_reviews", cwd=cwd):
+        logger.info("get_pr_reviews", pr_number=pr_number, repo=repo)
+        await _notify(
+            ctx,
+            "info",
+            f"get_pr_reviews: #{pr_number}",
+            "autoskillit.get_pr_reviews",
+            extra={"repo": repo},
+        )
+
+        if repo:
+            cmd = ["gh", "api", f"repos/{repo}/pulls/{pr_number}/reviews"]
+            rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
+            if rc != 0:
+                return json.dumps({"success": False, "error": stderr.strip() or "gh command failed"})
+            try:
+                raw = json.loads(stdout)
+            except json.JSONDecodeError:
+                return json.dumps({"success": False, "error": "Failed to parse gh output"})
+            reviews = _map_api_reviews(raw)
+        else:
+            cmd = ["gh", "pr", "view", str(pr_number), "--json", "reviews"]
+            rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
+            if rc != 0:
+                return json.dumps({"success": False, "error": stderr.strip() or "gh command failed"})
+            try:
+                data = json.loads(stdout)
+            except json.JSONDecodeError:
+                return json.dumps({"success": False, "error": "Failed to parse gh output"})
+            reviews = _map_pr_view_reviews(data)
+
+        return json.dumps({"reviews": reviews})
+
+
+@mcp.tool(tags={"automation", "kitchen"})
+async def bulk_close_issues(
+    issue_numbers: list[int],
+    comment: str,
+    cwd: str,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Close multiple GitHub issues, optionally with a comment.
+
+    Runs gh issue close for each number in sequence. Tracks which issues
+    closed successfully and which failed.
+
+    Returns JSON with:
+      - closed: list of issue numbers that closed successfully
+      - failed: list of issue numbers where gh returned non-zero
+    On gate closed: {"success": false, "subtype": "gate_error", ...}
+
+    Args:
+        issue_numbers: List of GitHub issue numbers to close.
+        comment: Optional comment to post when closing. Omitted when empty.
+        cwd: Working directory for gh commands.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    with structlog.contextvars.bound_contextvars(tool="bulk_close_issues", cwd=cwd):
+        logger.info("bulk_close_issues", count=len(issue_numbers))
+        await _notify(
+            ctx,
+            "info",
+            f"bulk_close_issues: {len(issue_numbers)} issue(s)",
+            "autoskillit.bulk_close_issues",
+            extra={},
+        )
+
+        closed, failed = await _close_issues_sequentially(issue_numbers, comment, cwd)
+        return json.dumps({"closed": closed, "failed": failed})

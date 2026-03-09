@@ -123,7 +123,7 @@ steps:
     tool: claim_issue
     optional: true
     skip_when_false: inputs.issue_url
-    with_args:
+    with:
       issue_url: ${{ inputs.issue_url }}
     capture:
       claimed: "${{ result.claimed }}"
@@ -505,7 +505,7 @@ steps:
     tool: release_issue
     optional: true
     skip_when_false: inputs.issue_url
-    with_args:
+    with:
       issue_url: ${{ inputs.issue_url }}
     on_success: confirm_cleanup
     on_failure: confirm_cleanup
@@ -515,7 +515,7 @@ steps:
     tool: release_issue
     optional: true
     skip_when_false: inputs.issue_url
-    with_args:
+    with:
       issue_url: ${{ inputs.issue_url }}
     on_success: cleanup_failure
     on_failure: cleanup_failure

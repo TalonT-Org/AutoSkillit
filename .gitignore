@@ -13,6 +13,9 @@ temp/
 .claude/settings.json
 src/autoskillit/hooks/hooks.json
 
+# Recipe diagrams — regenerated on demand, not versioned source
+src/autoskillit/recipes/diagrams/
+
 # dynaconf secrets files — never commit
 .secrets.*
 .autoskillit/.secrets.*

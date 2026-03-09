@@ -144,7 +144,11 @@ def detect_unpublished_branch(source_dir: str, branch: str) -> bool:
 
 
 def clone_repo(
-    source_dir: str, run_name: str, branch: str = "", strategy: str = ""
+    source_dir: str,
+    run_name: str,
+    branch: str = "",
+    strategy: str = "",
+    remote_url: str = "",
 ) -> dict[str, str]:
     """Clone source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
 
@@ -242,7 +246,7 @@ def clone_repo(
         logger.info("clone_created", clone_path=str(clone_path), source=str(source), branch=branch)
 
     # Resolve real upstream URL once at clone time (INIT_ONLY field)
-    remote_url = ""
+    detected_url = ""
     url_result = subprocess.run(
         ["git", "remote", "get-url", "origin"],
         cwd=str(source),
@@ -250,12 +254,15 @@ def clone_repo(
         text=True,
     )
     if url_result.returncode == 0:
-        remote_url = url_result.stdout.strip()
+        detected_url = url_result.stdout.strip()
 
-    # Enforce invariant: clone.origin == remote_url at creation time (INIT_ONLY field gate)
-    if remote_url:
+    # Use caller-supplied override if provided; fall back to detected source origin
+    effective_url = remote_url if remote_url else detected_url
+
+    # Enforce invariant: clone.origin == effective_url at creation time (INIT_ONLY field gate)
+    if effective_url:
         rewrite_result = subprocess.run(
-            ["git", "remote", "set-url", "origin", remote_url],
+            ["git", "remote", "set-url", "origin", effective_url],
             cwd=str(clone_path),
             capture_output=True,
             text=True,
@@ -264,9 +271,16 @@ def clone_repo(
             logger.warning(
                 "clone_repo_origin_rewrite_failed",
                 clone_path=str(clone_path),
-                remote_url=remote_url,
+                remote_url=effective_url,
                 stderr=rewrite_result.stderr.strip(),
             )
+            if remote_url:
+                return {
+                    "error": "remote_url_rewrite_failed",
+                    "clone_path": str(clone_path),
+                    "remote_url": effective_url,
+                    "stderr": rewrite_result.stderr.strip(),
+                }
 
     # Decontaminate: untrack inherited generated files
     ls_gen = subprocess.run(
@@ -311,7 +325,7 @@ def clone_repo(
         except FileNotFoundError:
             pass
 
-    return {"clone_path": str(clone_path), "source_dir": str(source), "remote_url": remote_url}
+    return {"clone_path": str(clone_path), "source_dir": str(source), "remote_url": effective_url}
 
 
 def remove_clone(clone_path: str, keep: str = "false") -> dict[str, str]:
@@ -408,7 +422,7 @@ def push_to_remote(
         }
 
     push_result = subprocess.run(
-        ["git", "push", resolved_url, branch],
+        ["git", "push", "-u", "origin", branch],
         cwd=clone_path,
         capture_output=True,
         text=True,
@@ -436,9 +450,16 @@ class DefaultCloneManager:
     """Concrete CloneManager that delegates to module-level clone functions."""
 
     def clone_repo(
-        self, source_dir: str, run_name: str, branch: str = "", strategy: str = ""
+        self,
+        source_dir: str,
+        run_name: str,
+        branch: str = "",
+        strategy: str = "",
+        remote_url: str = "",
     ) -> dict[str, str]:
-        return clone_repo(source_dir, run_name, branch=branch, strategy=strategy)
+        return clone_repo(
+            source_dir, run_name, branch=branch, strategy=strategy, remote_url=remote_url
+        )
 
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]:
         return remove_clone(clone_path, keep)

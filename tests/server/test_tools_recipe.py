@@ -1375,3 +1375,60 @@ class TestLoadRecipeDiagram:
         result = json.loads(await load_recipe(name="my-recipe"))
         rules = [s["rule"] for s in result["suggestions"]]
         assert "stale-diagram" in rules
+
+
+# ---------------------------------------------------------------------------
+# P5F2: Accessor pattern tests (ungated tools must use _get_ctx_or_none)
+# ---------------------------------------------------------------------------
+
+
+# P5F2-T1
+@pytest.mark.anyio
+async def test_list_recipes_no_ctx_returns_empty(monkeypatch):
+    """list_recipes returns empty-list JSON when server is uninitialized."""
+    import autoskillit.server._state as _state_mod
+
+    monkeypatch.setattr(_state_mod, "_ctx", None)
+    result = json.loads(await list_recipes())
+    assert result == []
+
+
+# P5F2-T2
+@pytest.mark.anyio
+async def test_load_recipe_no_ctx_returns_error(monkeypatch):
+    """load_recipe returns error JSON when server is uninitialized."""
+    import autoskillit.server._state as _state_mod
+
+    monkeypatch.setattr(_state_mod, "_ctx", None)
+    result = json.loads(await load_recipe(name="anything"))
+    assert "error" in result
+
+
+# P5F2-T3
+@pytest.mark.anyio
+async def test_validate_recipe_no_ctx_returns_error(monkeypatch, tmp_path):
+    """validate_recipe returns invalid JSON when server is uninitialized."""
+    import autoskillit.server._state as _state_mod
+
+    monkeypatch.setattr(_state_mod, "_ctx", None)
+    result = json.loads(await validate_recipe(script_path=str(tmp_path / "x.yaml")))
+    assert result.get("valid") is False
+
+
+# P5F2-T4  (import hygiene check)
+def test_tools_recipe_does_not_import_raw_ctx():
+    """tools_recipe.py must not import _ctx directly from server._state."""
+    import ast
+    import pathlib
+
+    source = (
+        pathlib.Path(__file__).parents[2] / "src/autoskillit/server/tools_recipe.py"
+    ).read_text()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module and "_state" in node.module:
+                names = [alias.name for alias in node.names]
+                assert "_ctx" not in names, (
+                    "tools_recipe.py must not import raw _ctx — use _get_ctx_or_none()"
+                )

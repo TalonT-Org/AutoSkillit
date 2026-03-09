@@ -26,7 +26,6 @@ delete_directory_contents = _delete_directory_contents
 
 __all__ = [
     "CleanupResult",
-    "_delete_directory_contents",
     "delete_directory_contents",
     "classify_remote_url",
     "DefaultCloneManager",

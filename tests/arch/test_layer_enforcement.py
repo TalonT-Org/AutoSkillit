@@ -304,21 +304,22 @@ def test_import_layer_enforcement(pkg_name: str, layer: int) -> None:
 
 @pytest.mark.parametrize(
     "pkg_name",
-    [pkg for pkg, layer in SUBPACKAGE_LAYERS.items() if layer == 2],
+    [pkg for pkg, layer in SUBPACKAGE_LAYERS.items() if layer in {1, 2}],
 )
 def test_l2_no_deferred_upward_imports(pkg_name: str) -> None:
-    """L2 sub-packages must not use deferred imports that violate layer contracts.
+    """L1/L2 sub-packages must not use deferred imports that violate layer contracts.
 
     Extends test_import_layer_enforcement to cover function-body (deferred) imports
     via ast.walk, not just tree.body scans. Mirrors the upward-only rule applied at
-    module level: L2 package (recipe, migration) may not deferred-import an L3 package
-    (server, cli) — always forbidden.
+    module level: L1 packages (config, pipeline, execution, workspace) may not
+    deferred-import an L2+ package; L2 packages (recipe, migration) may not
+    deferred-import an L3 package (server, cli) — always forbidden.
     """
     pkg_dir = SRC_ROOT / pkg_name
     if not pkg_dir.exists():
         pytest.skip(f"{pkg_name}/ not found — prerequisite group not merged")
 
-    pkg_layer = SUBPACKAGE_LAYERS[pkg_name]  # == 2 for all L2 packages
+    pkg_layer = SUBPACKAGE_LAYERS[pkg_name]
     violations: list[str] = []
 
     for py_file in pkg_dir.rglob("*.py"):
@@ -350,6 +351,21 @@ def test_l2_no_deferred_upward_imports(pkg_name: str) -> None:
                     )
 
     assert not violations, f"Deferred layer violations in {pkg_name}/:\n" + "\n".join(violations)
+
+
+def test_workspace_deferred_import_has_comment() -> None:
+    """P14-F2: deferred import in cli/app.py must carry a rationale comment."""
+    src = (SRC_ROOT / "cli" / "app.py").read_text()
+    import_stmt = "from autoskillit.cli._workspace import run_workspace_clean"
+    for line in src.splitlines():
+        if import_stmt in line:
+            after_import = line[line.index(import_stmt) + len(import_stmt) :]
+            assert "#" in after_import, (
+                "P14-F2: deferred import of run_workspace_clean in cli/app.py "
+                "must have an inline comment explaining the deferral rationale"
+            )
+            return
+    pytest.fail("Could not locate the run_workspace_clean deferred import in cli/app.py")
 
 
 # ── Calibration ────────────────────────────────────────────────────────────────
@@ -759,7 +775,7 @@ def test_hook_config_filename_and_dir_match_quota_check():
     """
     import importlib
 
-    from autoskillit.server.tools_kitchen import (
+    from autoskillit.server.helpers import (
         _HOOK_CONFIG_FILENAME,
         _HOOK_DIR_COMPONENTS,
     )

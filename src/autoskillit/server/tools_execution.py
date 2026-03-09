@@ -17,6 +17,7 @@ from autoskillit.server.helpers import (
     _notify,
     _require_enabled,
     _run_subprocess,
+    _validate_skill_command,
 )
 
 logger = get_logger(__name__)
@@ -47,7 +48,7 @@ async def run_cmd(
 
     from autoskillit.server import _get_ctx
 
-    _timing_ctx = _get_ctx()
+    tool_ctx = _get_ctx()
     _start = time.monotonic()
     try:
         returncode, stdout, stderr = await _run_subprocess(
@@ -72,7 +73,7 @@ async def run_cmd(
         return json.dumps(result)
     finally:
         if step_name:
-            _timing_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
 @mcp.tool(tags={"automation", "kitchen"})
@@ -157,6 +158,8 @@ async def run_skill(
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    if (cmd_error := _validate_skill_command(skill_command)) is not None:
+        return cmd_error
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="run_skill", cwd=cwd)
     logger.info("run_skill", command=skill_command[:80], cwd=cwd)

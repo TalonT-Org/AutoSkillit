@@ -23,6 +23,7 @@ async def clone_repo(
     run_name: str,
     branch: str = "",
     strategy: str = "",
+    remote_url: str = "",
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
@@ -44,6 +45,10 @@ async def clone_repo(
         strategy: On uncommitted changes: "" = return warning (default),
                   "proceed" = clone remote committed state only,
                   "clone_local" = copytree (includes working-tree changes).
+        remote_url: Override remote URL for clone's origin. When provided, applied
+                    via 'git remote set-url origin' after cloning, absorbing the need
+                    for a separate git remote set-url step. Empty string (default)
+                    uses the source repo's detected origin.
         step_name: Optional YAML step key for wall-clock timing accumulation.
 
     SOURCE ISOLATION: Once this tool returns, source_dir must not be touched for
@@ -67,6 +72,7 @@ async def clone_repo(
             "run_name": run_name,
             "branch": branch,
             "strategy": strategy,
+            "remote_url": remote_url,
         },
     )
 
@@ -79,7 +85,7 @@ async def clone_repo(
     _start = time.monotonic()
     try:
         result = await asyncio.to_thread(
-            tool_ctx.clone_mgr.clone_repo, source_dir, run_name, branch, strategy
+            tool_ctx.clone_mgr.clone_repo, source_dir, run_name, branch, strategy, remote_url
         )
     except (ValueError, RuntimeError) as exc:
         await _notify(

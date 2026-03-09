@@ -204,6 +204,17 @@ def parse_stdout_json(capsys):
     return _parse
 
 
+@pytest.fixture(autouse=True)
+def _clear_kitchen_open_env(monkeypatch):
+    """Ensure AUTOSKILLIT_KITCHEN_OPEN is unset at the start of every test.
+
+    make_context() reads this env var to decide whether to start with the gate
+    open. Any residual value from the shell environment would silently break
+    tests that assert the gate starts closed.
+    """
+    monkeypatch.delenv("AUTOSKILLIT_KITCHEN_OPEN", raising=False)
+
+
 @pytest.fixture(scope="function")
 def anyio_backend():
     """Lock all @pytest.mark.anyio tests to the asyncio backend."""

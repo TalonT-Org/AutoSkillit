@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 31 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 19 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 24 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 36 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 24 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 24 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -28,6 +28,9 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **No Backward Compatibility Hacks**: No comments about dead code. Remove dead code entirely.
   * **Avoid Redundancy**: Do not duplicate logic or utilities.
   * **Use Current Package Versions**: Web search for current stable versions when adding dependencies.
+  * **Run pre-commit before committing**: Always run `pre-commit run --all-files` before
+    committing. Do not skip this step even when code appears clean — hooks auto-fix
+    formatting and abort the commit, requiring re-stage and retry.
 
 ### **3.2. File System**
 
@@ -44,6 +47,11 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
 
 ### **3.5. Code Index MCP Usage**
 
+  * **Initialize before use**: Always call `set_project_path` with the project root
+    as the first action in any session that will use code-index tools. Without this
+    call, all code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
+    `get_symbol_body`) fail with "Project path not set" and cascade-cancel sibling
+    parallel calls.
   * **Index is locked to the main project root**: The `code-index` MCP server is indexed against the source repo and must never be redirected to a worktree or branch. Its value is for exploration before code changes — at that point any worktree is identical to main, so the index is accurate regardless of where you are working.
   * **Prefer code-index tools over native search tools when exploring the codebase**:
     * `find_files` instead of Glob for in-project file discovery
@@ -99,7 +107,7 @@ src/autoskillit/
 │   ├── defaults.yaml        #   Bundled package defaults (always loaded as first layer)
 │   └── settings.py          #   Dataclass config + dynaconf-backed layered resolution
 ├── pipeline/                # L1 pipeline state sub-package
-│   ├── __init__.py          #   Re-exports ToolContext, GateState, AuditLog, TokenLog
+│   ├── __init__.py          #   Re-exports ToolContext, DefaultGateState, AuditLog, TokenLog
 │   ├── audit.py             #   FailureRecord, AuditLog, _audit_log singleton
 │   ├── context.py           #   ToolContext DI container (config, audit, token_log, gate, plugin_dir, runner)
 │   ├── gate.py              #   DefaultGateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
@@ -167,10 +175,10 @@ src/autoskillit/
 │   ├── tools_ci.py          #   wait_for_ci, get_ci_status tool handlers
 │   ├── tools_clone.py       #   clone_repo, remove_clone, push_to_remote tool handlers
 │   ├── tools_execution.py   #   run_cmd, run_python, run_skill tool handlers
-│   ├── tools_git.py         #   merge_worktree, classify_fix tool handlers
+│   ├── tools_git.py         #   merge_worktree, classify_fix, create_unique_branch, check_pr_mergeable tool handlers
 │   ├── tools_recipe.py      #   migrate_recipe, load_recipe, list_recipes, validate_recipe tool handlers
-│   ├── tools_status.py      #   kitchen_status, get_pipeline_report, get_token_summary tool handlers
-│   ├── tools_integrations.py #  fetch_github_issue, report_bug tool handlers
+│   ├── tools_status.py      #   kitchen_status, get_pipeline_report, get_token_summary, write_telemetry_files tool handlers
+│   ├── tools_integrations.py #  fetch_github_issue, report_bug, get_pr_reviews, bulk_close_issues tool handlers
 │   ├── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace, read_db tool handlers
 │   ├── _factory.py          #   Composition Root: make_context() wires ToolContext
 │   └── _state.py            #   Server state extraction (lazy init, plugin dir resolution)
@@ -221,3 +229,9 @@ src/autoskillit/
 **Session diagnostics logs** are stored globally at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir` in config. Session directories are named by Claude Code session UUID when available (preferred: parsed from stdout, fallback: discovered from JSONL filename via Channel B). When no session ID is available from either source, directories use `no_session_{timestamp}` naming. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
 
 **CRITICAL**: When using subagents, invoke with "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000" to ensure subagents exit when finished.
+
+## 7. Session Diagnostics
+
+**Path components use hyphens, not underscores.** Log directory names and session folder
+names are hyphen-separated. Never assume underscores when constructing or searching for
+log paths — hyphen mismatch causes ENOENT (session f9170655 pattern).

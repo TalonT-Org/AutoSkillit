@@ -18,13 +18,20 @@ from autoskillit.execution.commands import (
     build_headless_cmd,
     build_interactive_cmd,
 )
-from autoskillit.execution.db import DefaultDatabaseReader, _execute_readonly_query
+from autoskillit.execution.db import (
+    DefaultDatabaseReader,
+)
+from autoskillit.execution.db import (
+    _execute_readonly_query as execute_readonly_query,
+)
 from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.execution.headless import DefaultHeadlessExecutor, run_headless_core
 from autoskillit.execution.linux_tracing import (
     LINUX_TRACING_AVAILABLE,
     LinuxTracingHandle,
     ProcSnapshot,
+    read_boot_id,
+    read_starttime_ticks,
     start_linux_tracing,
 )
 from autoskillit.execution.process import (
@@ -48,8 +55,6 @@ from autoskillit.execution.testing import (
     check_test_passed,
     parse_pytest_summary,
 )
-
-execute_readonly_query = _execute_readonly_query
 
 __all__ = [
     # commands
@@ -87,6 +92,8 @@ __all__ = [
     "LINUX_TRACING_AVAILABLE",
     "LinuxTracingHandle",
     "ProcSnapshot",
+    "read_boot_id",
+    "read_starttime_ticks",
     "start_linux_tracing",
     # anomaly_detection
     "detect_anomalies",

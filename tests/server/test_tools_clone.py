@@ -50,7 +50,7 @@ class TestCloneRepoTool:
         mock_mgr.clone_repo.return_value = {"clone_path": "/clone/path", "source_dir": "/src"}
         tool_ctx.clone_mgr = mock_mgr
         await clone_repo(source_dir="/src", run_name="r", branch="dev")
-        mock_mgr.clone_repo.assert_called_once_with("/src", "r", "dev", "")
+        mock_mgr.clone_repo.assert_called_once_with("/src", "r", "dev", "", "")
 
     @pytest.mark.anyio
     async def test_cb18_forwards_strategy_to_clone_manager(self, tool_ctx):
@@ -59,7 +59,29 @@ class TestCloneRepoTool:
         mock_mgr.clone_repo.return_value = {"clone_path": "/clone/path", "source_dir": "/src"}
         tool_ctx.clone_mgr = mock_mgr
         await clone_repo(source_dir="/src", run_name="r", strategy="proceed")
-        mock_mgr.clone_repo.assert_called_once_with("/src", "r", "", "proceed")
+        mock_mgr.clone_repo.assert_called_once_with("/src", "r", "", "proceed", "")
+
+    @pytest.mark.anyio
+    async def test_ru3_forwards_remote_url_to_clone_manager(self, tool_ctx):
+        """T_RU3: remote_url param is forwarded to the underlying clone_repo call."""
+        mock_mgr = MagicMock()
+        mock_mgr.clone_repo.return_value = {
+            "clone_path": "/clone/path",
+            "source_dir": "/src",
+            "remote_url": "https://github.com/example/repo.git",
+        }
+        tool_ctx.clone_mgr = mock_mgr
+        result = json.loads(
+            await clone_repo(
+                source_dir="/src",
+                run_name="r",
+                remote_url="https://github.com/example/repo.git",
+            )
+        )
+        mock_mgr.clone_repo.assert_called_once_with(
+            "/src", "r", "", "", "https://github.com/example/repo.git"
+        )
+        assert result["remote_url"] == "https://github.com/example/repo.git"
 
     @pytest.mark.anyio
     async def test_cb19_returns_uncommitted_changes_result_as_json(self, tool_ctx):

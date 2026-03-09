@@ -174,6 +174,11 @@ class TestToolRegistration:
             "get_ci_status",
             "open_kitchen",
             "close_kitchen",
+            "create_unique_branch",
+            "check_pr_mergeable",
+            "write_telemetry_files",
+            "get_pr_reviews",
+            "bulk_close_issues",
         }
         assert expected == tool_names
 
@@ -296,7 +301,8 @@ class TestGatedToolAccess:
 
         with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
             with patch.object(tools_kitchen_mod, "_write_hook_config"):
-                await _open_kitchen_handler()
+                with patch.object(tools_kitchen_mod, "_register_gate_cleanup"):
+                    await _open_kitchen_handler()
         _close_kitchen_handler()
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
         assert result["success"] is False
@@ -606,6 +612,110 @@ class TestServerLazyInit:
             _state._get_config()
 
 
+class TestGateFileRecovery:
+    """T-RECOVER: _initialize removes stale/malformed gate files at startup."""
+
+    @pytest.mark.anyio
+    async def test_initialize_removes_stale_gate_file(self, monkeypatch, tmp_path):
+        """_initialize must remove gate files whose owning PID is dead."""
+        monkeypatch.chdir(tmp_path)
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
+        gate_file = gate_dir / ".kitchen_gate"
+        gate_file.write_text(json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"}))
+
+        from autoskillit.server._factory import make_context
+        from tests.conftest import MockSubprocessRunner
+
+        ctx = make_context(
+            AutomationConfig(), runner=MockSubprocessRunner(), plugin_dir=str(tmp_path)
+        )
+        from autoskillit.server._state import _initialize
+
+        _initialize(ctx)
+        assert not gate_file.exists()
+
+    @pytest.mark.anyio
+    async def test_initialize_preserves_live_gate_file(self, monkeypatch, tmp_path):
+        """_initialize must NOT remove gate files whose owning PID is alive."""
+        import os
+
+        monkeypatch.chdir(tmp_path)
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
+        gate_file = gate_dir / ".kitchen_gate"
+        from datetime import UTC, datetime
+
+        from autoskillit.execution import read_boot_id, read_starttime_ticks
+
+        gate_file.write_text(
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "starttime_ticks": read_starttime_ticks(os.getpid()),
+                    "boot_id": read_boot_id(),
+                    "opened_at": datetime.now(UTC).isoformat(),
+                }
+            )
+        )
+
+        from autoskillit.server._factory import make_context
+        from tests.conftest import MockSubprocessRunner
+
+        ctx = make_context(
+            AutomationConfig(), runner=MockSubprocessRunner(), plugin_dir=str(tmp_path)
+        )
+        from autoskillit.server._state import _initialize
+
+        _initialize(ctx)
+        assert gate_file.exists()  # still there — owning process is alive
+
+    @pytest.mark.anyio
+    async def test_initialize_removes_malformed_gate_file(self, monkeypatch, tmp_path):
+        """Malformed gate files must be removed at startup."""
+        monkeypatch.chdir(tmp_path)
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
+        gate_file = gate_dir / ".kitchen_gate"
+        gate_file.write_text("not valid json")
+
+        from autoskillit.server._factory import make_context
+        from tests.conftest import MockSubprocessRunner
+
+        ctx = make_context(
+            AutomationConfig(), runner=MockSubprocessRunner(), plugin_dir=str(tmp_path)
+        )
+        from autoskillit.server._state import _initialize
+
+        _initialize(ctx)
+        assert not gate_file.exists()
+
+    @pytest.mark.anyio
+    async def test_initialize_removes_companion_hook_config_with_stale_gate(
+        self, monkeypatch, tmp_path
+    ):
+        """_initialize must remove both gate file and companion hook config when stale."""
+        monkeypatch.chdir(tmp_path)
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
+        gate_file = gate_dir / ".kitchen_gate"
+        gate_file.write_text(json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"}))
+        companion = gate_dir / ".autoskillit_hook_config.json"
+        companion.write_text("{}")
+
+        from autoskillit.server._factory import make_context
+        from tests.conftest import MockSubprocessRunner
+
+        ctx = make_context(
+            AutomationConfig(), runner=MockSubprocessRunner(), plugin_dir=str(tmp_path)
+        )
+        from autoskillit.server._state import _initialize
+
+        _initialize(ctx)
+        assert not gate_file.exists()
+        assert not companion.exists()
+
+
 class TestConfigDrivenBehavior:
     """S1-S10: Verify tools use config instead of hardcoded values."""
 
@@ -783,13 +893,14 @@ class TestConfigDrivenBehavior:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (pre-dirty-tree check)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(1, "FAIL", ""))  # test gate fails
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
 
-        # Verify the test command was ["make", "test"] (4th call, after porcelain)
-        test_call = tool_ctx.runner.call_args_list[3]
+        # Verify the test command was ["make", "test"] (5th call, after ls-files + porcelain)
+        test_call = tool_ctx.runner.call_args_list[4]
         assert test_call[0] == ["make", "test"]
 
     @pytest.mark.anyio
@@ -861,6 +972,7 @@ class TestSafetyConfigWiring:
 
         tool_ctx.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))  # rev-parse
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (pre-dirty-tree check)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         # NO test-check call — skipped
         tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch
@@ -869,7 +981,6 @@ class TestSafetyConfigWiring:
             _make_result(0, "", "")
         )  # git log --merges (step 5.6 — no merge commits)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
         tool_ctx.runner.push(
             _make_result(
                 0,
@@ -883,9 +994,9 @@ class TestSafetyConfigWiring:
         result = json.loads(await merge_worktree(str(wt), "main"))
         assert result["merge_succeeded"] is True
 
-        # Verify no test command was called — the 4th call should be git fetch, not test
-        fourth_call_cmd = tool_ctx.runner.call_args_list[3][0]
-        assert fourth_call_cmd == ["git", "fetch", "origin"]
+        # Verify no test command was called — the 5th call should be git fetch, not test
+        fifth_call_cmd = tool_ctx.runner.call_args_list[4][0]
+        assert fifth_call_cmd == ["git", "fetch", "origin"]
 
     @pytest.mark.anyio
     async def test_run_skill_retry_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
@@ -1184,15 +1295,3 @@ async def test_open_kitchen_has_no_update_advisory(tool_ctx):
     assert "RECIPE UPDATE AVAILABLE" not in text
     assert "accept_recipe_update" not in text
     assert "decline_recipe_update" not in text
-
-
-def test_initialize_does_not_remove_stale_gate_file(tmp_path, tool_ctx, monkeypatch):
-    """_initialize must not sweep for or remove gate files — that recovery is gone."""
-    monkeypatch.chdir(tmp_path)
-    gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
-    gate_file.parent.mkdir(parents=True)
-    gate_file.write_text('{"pid": 99999999, "opened_at": "2020-01-01T00:00:00+00:00"}')
-    from autoskillit.server._state import _initialize
-
-    _initialize(tool_ctx)
-    assert gate_file.exists(), "_initialize must not touch the gate file"

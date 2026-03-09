@@ -57,6 +57,7 @@ async def test_perform_merge_rejects_dirty_worktree(
     fake_wt = str(tmp_path)
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (no tracked generated files)
     conftest_mock_runner.push(_make_result(0, " M hooks.json\n", ""))  # git status --porcelain
 
     result = await perform_merge(
@@ -79,6 +80,7 @@ async def test_perform_merge_dirty_tree_reports_files(
     fake_wt = str(tmp_path)
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (no tracked generated files)
     dirty_output = " M hooks.json\n M .claude/settings.json\n?? untracked.txt\n"
     conftest_mock_runner.push(_make_result(0, dirty_output, ""))  # git status --porcelain
 
@@ -240,7 +242,9 @@ async def test_perform_merge_blocks_on_missing_remote_tracking_ref(
     conftest_mock_runner.push(_make_result(0, str(tmp_path / ".git/worktrees/wt"), ""))
     # Step 3: branch name found
     conftest_mock_runner.push(_make_result(0, "feat/my-feature\n", ""))
-    # Step 3c: dirty tree check (clean)
+    # Step 3c: git ls-files (no tracked generated files)
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    # Step 3d: dirty tree check (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))
     # Step 4: test gate handled by tester (not runner)
     # Step 5: fetch succeeds
@@ -266,23 +270,23 @@ async def test_perform_merge_blocks_on_missing_remote_tracking_ref(
 async def test_perform_merge_strips_tracked_generated_files(
     default_config, conftest_mock_runner, tmp_path
 ):
-    """perform_merge() strips tracked generated files after rebase."""
+    """perform_merge() strips tracked generated files before dirty check and rebase."""
     from autoskillit.server.git import perform_merge
 
     fake_wt = str(tmp_path)
     tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    conftest_mock_runner.push(
+        _make_result(0, "src/autoskillit/hooks/hooks.json\n", "")
+    )  # git ls-files (generated file found) — before dirty check
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git rm --cached
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git commit --no-verify
     conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
     conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
-    conftest_mock_runner.push(
-        _make_result(0, "src/autoskillit/hooks/hooks.json\n", "")
-    )  # git ls-files (generated file found)
-    conftest_mock_runner.push(_make_result(0, "", ""))  # git rm --cached
-    conftest_mock_runner.push(_make_result(0, "", ""))  # git commit --no-verify
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
@@ -293,7 +297,7 @@ async def test_perform_merge_strips_tracked_generated_files(
     )
     assert result.get("merge_succeeded") is True
 
-    # Verify git ls-files was called after rebase
+    # Verify git ls-files was called before dirty check and rebase
     ls_cmds = [args[0] for args in conftest_mock_runner.call_args_list if "ls-files" in args[0]]
     assert len(ls_cmds) == 1
 
@@ -326,12 +330,12 @@ async def test_perform_merge_noop_when_no_generated_files_tracked(
     tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (empty — no generated files)
     conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
     conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
-    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (empty — no generated files)
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
@@ -363,14 +367,9 @@ async def test_perform_merge_fails_on_generated_file_cleanup_error(
     tester = StatefulMockTester(results=[(True, "ok")])
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
-    conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
-    conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
-    conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
-    conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
-    conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(
         _make_result(0, "src/autoskillit/hooks/hooks.json\n", "")
-    )  # git ls-files (generated file found)
+    )  # git ls-files (generated file found) — before dirty check
     conftest_mock_runner.push(_make_result(1, "", "error: pathspec"))  # git rm --cached fails
 
     result = await perform_merge(
@@ -379,3 +378,80 @@ async def test_perform_merge_fails_on_generated_file_cleanup_error(
     assert "error" in result
     assert result["failed_step"] == MergeFailedStep.GENERATED_FILE_CLEANUP
     assert result["state"] == MergeState.WORKTREE_INTACT
+
+
+@pytest.mark.anyio
+async def test_perform_merge_dirty_check_ignores_generated_files(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """Dirty-tree check must pass when only generated-file paths are dirty.
+
+    A worktree with only generated diagram files showing in git status
+    should not block the merge.
+    """
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (no tracked generated files)
+    # git status --porcelain returns only a diagram file as untracked
+    dirty_out = "?? src/autoskillit/recipes/diagrams/implementation.md\n"
+    conftest_mock_runner.push(_make_result(0, dirty_out, ""))  # git status --porcelain
+    conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges
+    conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
+    conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
+    conftest_mock_runner.push(_make_result(0, "", ""))  # merge
+    conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
+    conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
+
+    result = await perform_merge(
+        fake_wt, "main", config=default_config, runner=conftest_mock_runner, tester=tester
+    )
+    assert result.get("merge_succeeded") is True
+    assert "dirty_files" not in result
+
+
+@pytest.mark.anyio
+async def test_perform_merge_strips_generated_files_before_dirty_check(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """Generated file strip must occur before the dirty-tree check and before rebase.
+
+    Verifies call ordering: ls-files → rm --cached → commit → status --porcelain
+    → ... → rebase.
+    """
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
+    conftest_mock_runner.push(
+        _make_result(0, "src/autoskillit/recipes/diagrams/implementation.md\n", "")
+    )  # git ls-files (tracked diagram file found)
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git rm --cached
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git commit --no-verify
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
+    conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
+    conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
+    conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges
+    conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
+    conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
+    conftest_mock_runner.push(_make_result(0, "", ""))  # merge
+    conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
+    conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
+
+    result = await perform_merge(
+        fake_wt, "main", config=default_config, runner=conftest_mock_runner, tester=tester
+    )
+    assert result.get("merge_succeeded") is True
+
+    calls = [args[0] for args in conftest_mock_runner.call_args_list]
+    ls_files_idx = next(i for i, c in enumerate(calls) if "ls-files" in c)
+    status_idx = next(i for i, c in enumerate(calls) if "--porcelain" in c)
+    rebase_idx = next(i for i, c in enumerate(calls) if "rebase" in c and "--autostash" in c)
+    assert ls_files_idx < status_idx < rebase_idx

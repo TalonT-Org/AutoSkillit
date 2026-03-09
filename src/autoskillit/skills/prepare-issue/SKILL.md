@@ -70,7 +70,29 @@ If a candidate with high title overlap is found:
 - Display the candidate (number, title, URL) to the user
 - Ask interactively: **"Comment on #N or create a new issue?"**
 - If comment: `gh issue comment N --body "..."` → emit result block → exit
-- If create new: continue to Step 5
+- If create new: continue to Step 4a
+
+### Step 4a: Show Draft and Confirm
+
+Before creating any new issue, display the proposed title and body to the user and wait
+for explicit approval:
+
+```
+━━━ Draft Issue ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Title: {title}
+
+Body:
+{body}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Create this issue? [Y/n/edit]
+```
+
+- **Y (or Enter):** Proceed to Step 5.
+- **n:** Abort. Output a `prepare-issue-result` block with `"aborted": true` and exit.
+- **edit:** Accept edited title and/or body from the user, redisplay, and re-prompt.
+
+This gate fires for every new-issue creation path. Skip this step when `--issue N` is
+provided (adopting an existing issue) or when `--dry-run` is active.
 
 ### Step 5: Create Issue or Adopt Existing
 
@@ -204,6 +226,8 @@ gh issue edit {issue_number} --add-label "{issue_type}"
 - Apply labels not in the defined set (`recipe:implementation`, `recipe:remediation`, `bug`, `enhancement`)
 - Skip the dedup check when creating a new issue (unless `--issue N` is provided)
 - Proceed past Step 2 (Auth) if `gh auth status` fails
+- Create a GitHub issue without displaying the draft and receiving explicit Y confirmation
+  (unless `--issue N` or `--dry-run` is active)
 
 **ALWAYS:**
 - Confirm repo access with `gh repo view` before any issue operations

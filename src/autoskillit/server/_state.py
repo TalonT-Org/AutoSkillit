@@ -8,6 +8,7 @@ This module is the authoritative location for:
   - _ctx: the module-level ToolContext singleton
   - _initialize(ctx): called by cli/app.py serve() before mcp.run()
   - _get_ctx(): raises RuntimeError if uninitialized (used by gated tools)
+  - _get_ctx_or_none(): returns None if uninitialized (used by ungated tools)
   - _get_config(): convenience shortcut to _get_ctx().config
   - version_info(): public server version health query
 """
@@ -15,6 +16,7 @@ This module is the authoritative location for:
 from __future__ import annotations
 
 from datetime import UTC
+from pathlib import Path
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import get_logger
@@ -29,6 +31,15 @@ def _initialize(ctx: ToolContext) -> None:
     """Set the server's ToolContext. Called by cli/app.py serve() before mcp.run()."""
     global _ctx
     _ctx = ctx
+
+    # Gate file cleanup: remove stale gate files left by crashed sessions.
+    try:
+        from autoskillit.server.helpers import cleanup_stale_gate_file
+
+        cleanup_stale_gate_file(Path.cwd())
+    except Exception:
+        logger.debug("stale_gate_cleanup_at_startup_failed", exc_info=True)
+
     # Recovery sweep: finalize any orphaned tmpfs trace files from crashed sessions.
     try:
         from autoskillit.execution import recover_crashed_sessions
@@ -76,6 +87,14 @@ def _get_ctx() -> ToolContext:
             "serve() must be called before accessing context. "
             "Call server._initialize(ctx) before mcp.run()."
         )
+    return _ctx
+
+
+def _get_ctx_or_none() -> ToolContext | None:
+    """Return the active ToolContext, or None if uninitialized.
+
+    For ungated tools only. Gated tools must use _get_ctx() which raises.
+    """
     return _ctx
 
 

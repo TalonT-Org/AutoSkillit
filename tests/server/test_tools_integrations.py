@@ -13,17 +13,27 @@ from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import UNGATED_TOOLS
 from autoskillit.server.tools_integrations import (
+    _ENRICH_RESULT_END,
+    _ENRICH_RESULT_START,
     _FINGERPRINT_END,
     _FINGERPRINT_START,
+    _PREPARE_RESULT_END,
+    _PREPARE_RESULT_START,
+    _extract_block,
+    _parse_enrich_result,
     _parse_fingerprint,
+    _parse_prepare_result,
+    bulk_close_issues,
     claim_issue,
     enrich_issues,
     fetch_github_issue,
     get_issue_title,
+    get_pr_reviews,
     prepare_issue,
     release_issue,
     report_bug,
 )
+from tests.conftest import _make_result
 
 # ---------------------------------------------------------------------------
 # _parse_fingerprint unit tests
@@ -60,6 +70,82 @@ def test_parse_fingerprint_first_nonempty_line():
         f"{_FINGERPRINT_END}\n"
     )
     assert _parse_fingerprint(report) == "TypeError in execution/headless.py: runner=None"
+
+
+# ---------------------------------------------------------------------------
+# _extract_block unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_extract_block_returns_lines_within_delimiters():
+    text = "preamble\n---start---\nline1\nline2\n---end---\npostamble"
+    assert _extract_block(text, "---start---", "---end---") == ["line1", "line2"]
+
+
+def test_extract_block_no_start_returns_empty():
+    assert _extract_block("no delimiters here", "---start---", "---end---") == []
+
+
+def test_extract_block_no_end_returns_empty():
+    # end delimiter absent — no complete block
+    text = "---start---\nline1\nline2"
+    assert _extract_block(text, "---start---", "---end---") == []
+
+
+def test_extract_block_empty_block_returns_empty_list():
+    text = "---start---\n---end---"
+    assert _extract_block(text, "---start---", "---end---") == []
+
+
+def test_extract_block_preserves_whitespace_in_lines():
+    text = "---start---\n  indented\n---end---"
+    assert _extract_block(text, "---start---", "---end---") == ["  indented"]
+
+
+# ---------------------------------------------------------------------------
+# _parse_prepare_result unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_prepare_result_valid_json():
+    payload = '{"success": true, "issue_url": "https://github.com/x/y/issues/1"}'
+    text = f"{_PREPARE_RESULT_START}\n{payload}\n{_PREPARE_RESULT_END}"
+    result = _parse_prepare_result(text)
+    assert result == {"success": True, "issue_url": "https://github.com/x/y/issues/1"}
+
+
+def test_parse_prepare_result_no_block():
+    result = _parse_prepare_result("no block here")
+    assert result == {"success": False, "error": "no result block found"}
+
+
+def test_parse_prepare_result_invalid_json():
+    text = f"{_PREPARE_RESULT_START}\nnot-json\n{_PREPARE_RESULT_END}"
+    result = _parse_prepare_result(text)
+    assert result == {"success": False, "error": "result block contained invalid JSON"}
+
+
+# ---------------------------------------------------------------------------
+# _parse_enrich_result unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_enrich_result_valid_json():
+    payload = '{"enriched": [42], "skipped_already_enriched": []}'
+    text = f"{_ENRICH_RESULT_START}\n{payload}\n{_ENRICH_RESULT_END}"
+    result = _parse_enrich_result(text)
+    assert result == {"enriched": [42], "skipped_already_enriched": []}
+
+
+def test_parse_enrich_result_no_block():
+    result = _parse_enrich_result("no block here")
+    assert result == {"success": False, "error": "no result block found"}
+
+
+def test_parse_enrich_result_invalid_json():
+    text = f"{_ENRICH_RESULT_START}\nnot-json\n{_ENRICH_RESULT_END}"
+    result = _parse_enrich_result(text)
+    assert result == {"success": False, "error": "result block contained invalid JSON"}
 
 
 # ---------------------------------------------------------------------------
@@ -591,6 +677,28 @@ class TestClaimIssueTool:
         assert result["success"] is True
         assert result["claimed"] is False
 
+    # P5F4-T1
+    @pytest.mark.anyio
+    async def test_claim_issue_binds_structlog_context(self, tool_ctx, monkeypatch):
+        """claim_issue must bind structlog context vars via bound_contextvars."""
+        import contextlib
+
+        import structlog
+
+        captured = {}
+
+        @contextlib.contextmanager
+        def fake_bound_contextvars(**kwargs):
+            captured.update(kwargs)
+            yield
+
+        monkeypatch.setattr(structlog.contextvars, "bound_contextvars", fake_bound_contextvars)
+
+        tool_ctx.github_client = None  # triggers early return after bind
+
+        await claim_issue(issue_url="https://github.com/owner/repo/issues/1")
+        assert captured == {"tool": "claim_issue", "issue_url": "https://github.com/owner/repo/issues/1"}
+
 
 class TestReleaseIssueTool:
     def test_release_issue_is_gated(self):
@@ -623,6 +731,28 @@ class TestReleaseIssueTool:
         assert result["success"] is True
         assert result["issue_number"] == 42
 
+    # P5F4-T2
+    @pytest.mark.anyio
+    async def test_release_issue_binds_structlog_context(self, tool_ctx, monkeypatch):
+        """release_issue must bind structlog context vars via bound_contextvars."""
+        import contextlib
+
+        import structlog
+
+        captured = {}
+
+        @contextlib.contextmanager
+        def fake_bound_contextvars(**kwargs):
+            captured.update(kwargs)
+            yield
+
+        monkeypatch.setattr(structlog.contextvars, "bound_contextvars", fake_bound_contextvars)
+
+        tool_ctx.github_client = None  # triggers early return after bind
+
+        await release_issue(issue_url="https://github.com/owner/repo/issues/1")
+        assert captured == {"tool": "release_issue", "issue_url": "https://github.com/owner/repo/issues/1"}
+
 
 class TestPrepareIssueTool:
     def test_prepare_issue_is_gated(self):
@@ -652,5 +782,104 @@ class TestEnrichIssuesTool:
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         result = json.loads(await enrich_issues())
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+
+
+class TestGetPrReviews:
+    @pytest.mark.anyio
+    async def test_returns_structured_reviews(self, tool_ctx):
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                json.dumps(
+                    [
+                        {"user": {"login": "reviewer1"}, "state": "APPROVED", "body": "LGTM"},
+                        {
+                            "user": {"login": "reviewer2"},
+                            "state": "CHANGES_REQUESTED",
+                            "body": "Fix this",
+                        },
+                    ]
+                ),
+                "",
+            )
+        )
+        result = json.loads(await get_pr_reviews(42, ".", repo="owner/repo"))
+        assert len(result["reviews"]) == 2
+        assert result["reviews"][0] == {"author": "reviewer1", "state": "APPROVED", "body": "LGTM"}
+
+    @pytest.mark.anyio
+    async def test_empty_reviews(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, json.dumps([]), ""))
+        result = json.loads(await get_pr_reviews(42, ".", repo="owner/repo"))
+        assert result["reviews"] == []
+
+    @pytest.mark.anyio
+    async def test_gh_command_failure_returns_error(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(1, "", "could not find PR"))
+        result = json.loads(await get_pr_reviews(99, ".", repo="owner/repo"))
+        assert result["success"] is False
+
+    @pytest.mark.anyio
+    async def test_without_repo_uses_pr_view(self, tool_ctx):
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                json.dumps(
+                    {
+                        "reviews": [
+                            {"author": {"login": "x"}, "state": "APPROVED", "body": ""},
+                        ]
+                    }
+                ),
+                "",
+            )
+        )
+        result = json.loads(await get_pr_reviews(42, "."))
+        assert result["reviews"][0]["author"] == "x"
+
+    @pytest.mark.anyio
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        tool_ctx.gate.disable()
+        result = json.loads(await get_pr_reviews(1, "."))
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+
+
+class TestBulkCloseIssues:
+    @pytest.mark.anyio
+    async def test_closes_all_issues_successfully(self, tool_ctx):
+        for _ in range(3):
+            tool_ctx.runner.push(_make_result(0, "", ""))
+        result = json.loads(await bulk_close_issues([1, 2, 3], "", "."))
+        assert result["closed"] == [1, 2, 3]
+        assert result["failed"] == []
+
+    @pytest.mark.anyio
+    async def test_partial_failure_tracked_per_issue(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(1, "", "not found"))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        result = json.loads(await bulk_close_issues([1, 2, 3], "", "."))
+        assert result["closed"] == [1, 3]
+        assert result["failed"] == [2]
+
+    @pytest.mark.anyio
+    async def test_empty_numbers_list(self, tool_ctx):
+        result = json.loads(await bulk_close_issues([], "", "."))
+        assert result == {"closed": [], "failed": []}
+
+    @pytest.mark.anyio
+    async def test_comment_flag_included_when_provided(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        await bulk_close_issues([7], "Closed by pipeline.", ".")
+        call_cmd = tool_ctx.runner.call_args_list[-1][0]
+        assert "--comment" in call_cmd
+
+    @pytest.mark.anyio
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        tool_ctx.gate.disable()
+        result = json.loads(await bulk_close_issues([1], "", "."))
         assert result["success"] is False
         assert result["subtype"] == "gate_error"

@@ -111,7 +111,7 @@ def test_deny_when_unpushed_commits():
 
 
 def test_deny_when_no_tracking_branch():
-    """keep=false + rev-list fails (no upstream) → deny with explanation."""
+    """keep=false + rev-list fails (no upstream) + ls-remote finds no branch → deny."""
     event = {"tool_input": {"keep": "false", "clone_path": "/some/clone"}}
     out = _run_hook_with_git(
         event,
@@ -119,6 +119,7 @@ def test_deny_when_no_tracking_branch():
             (0, ".git"),  # rev-parse --git-dir
             (0, "feat/thing"),  # rev-parse --abbrev-ref HEAD
             (128, ""),  # rev-list --count (no upstream)
+            (2, ""),  # ls-remote --exit-code origin (no matching ref)
         ],
     )
     data = json.loads(out)
@@ -179,3 +180,40 @@ def test_approve_when_keep_false_string_and_synced():
         ],
     )
     assert out.strip() == ""
+
+
+def test_approve_when_no_upstream_but_sha_matches_remote():
+    """Fallback: no @{upstream} but branch is on remote with matching SHA → approve."""
+    event = {"tool_input": {"keep": "false", "clone_path": "/some/clone"}}
+    sha = "abc1234def5678abc1234def5678abc1234def56"
+    out = _run_hook_with_git(
+        event,
+        git_responses=[
+            (0, ".git"),  # rev-parse --git-dir
+            (0, "feat/thing"),  # rev-parse --abbrev-ref HEAD
+            (128, ""),  # rev-list --count @{upstream}..HEAD → no upstream
+            (0, f"{sha}\trefs/heads/feat/thing\n"),  # ls-remote --exit-code origin
+            (0, sha),  # rev-parse HEAD → matches remote
+        ],
+    )
+    assert out.strip() == ""  # approved silently
+
+
+def test_deny_when_no_upstream_and_not_on_remote():
+    """Fallback: no @{upstream} and branch absent from remote → deny with original message."""
+    event = {"tool_input": {"keep": "false", "clone_path": "/some/clone"}}
+    out = _run_hook_with_git(
+        event,
+        git_responses=[
+            (0, ".git"),  # rev-parse --git-dir
+            (0, "feat/thing"),  # rev-parse --abbrev-ref HEAD
+            (128, ""),  # rev-list --count → no upstream
+            (2, ""),  # ls-remote --exit-code origin (rc=2: no matching ref)
+        ],
+    )
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert (
+        "no remote tracking branch"
+        in data["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    )

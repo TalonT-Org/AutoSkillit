@@ -188,6 +188,40 @@ def test_skip_when_false_field_is_parsed_from_yaml() -> None:
 
 
 # ---------------------------------------------------------------------------
+# RECIPE-8: constant step type
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_step_has_constant_field() -> None:
+    """RecipeStep has a constant field defaulting to None."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep()
+    assert step.constant is None
+
+
+def test_constant_step_parse_from_yaml() -> None:
+    """A constant step is parsed from YAML into RecipeStep.constant."""
+    from autoskillit.recipe.io import _parse_step
+
+    step = _parse_step({"constant": "main"})
+    assert step.constant == "main"
+    assert step.tool is None
+    assert step.action is None
+    assert step.python is None
+
+
+def test_recipe_step_fields_includes_constant() -> None:
+    """RecipeStep field set includes 'constant'."""
+    import dataclasses
+
+    from autoskillit.recipe.schema import RecipeStep
+
+    field_names = {f.name for f in dataclasses.fields(RecipeStep)}
+    assert "constant" in field_names
+
+
+# ---------------------------------------------------------------------------
 # RecipeIngredient normalization tests (Tests 1.1-1.3)
 # ---------------------------------------------------------------------------
 
@@ -240,3 +274,24 @@ def test_format_ingredient_default_folded_scalar_bool() -> None:
         _format_ingredient_default(RecipeIngredient(description="d", default="\n"))
         == "auto-detect"
     )
+
+
+# ---------------------------------------------------------------------------
+# P9-F1: RecipeStep.description field
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_step_has_description_field() -> None:
+    """RecipeStep has a description field defaulting to empty string."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep(tool="run_cmd")
+    assert step.description == ""
+
+
+def test_recipe_step_description_stores_value() -> None:
+    """RecipeStep stores an explicit description value."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep(tool="run_cmd", description="Build the project")
+    assert step.description == "Build the project"

@@ -94,7 +94,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
 
     kitchen_rules = data.get("kitchen_rules", [])
     if not isinstance(kitchen_rules, list):
-        kitchen_rules = []
+        raise ValueError(f"'kitchen_rules' must be a list, got {type(kitchen_rules).__name__!r}")
 
     return Recipe(
         name=name,
@@ -138,6 +138,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         tool=data.get("tool"),
         action=data.get("action"),
         python=data.get("python"),
+        constant=data.get("constant"),
         with_args=data.get("with", {}),
         on_success=data.get("on_success"),
         on_failure=data.get("on_failure"),
@@ -152,6 +153,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         optional=bool(data.get("optional", False)),
         skip_when_false=data.get("skip_when_false"),
         model=data.get("model"),
+        description=data.get("description", ""),
     )
 
 

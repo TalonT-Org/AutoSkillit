@@ -3,7 +3,8 @@
 Rules enforced:
 - gh label create must always include --force (idempotent label management)
 - batch:N labels must not appear in gh issue edit / gh pr edit (internal state boundary)
-- triage-issues classification must use behavioral criterion ("does existing code produce a runtime error?")
+- triage-issues classification must use behavioral criterion
+  ("does existing code produce a runtime error?")
 - triage-issues label application must be opt-out (--no-label), not opt-in (--label)
 """
 

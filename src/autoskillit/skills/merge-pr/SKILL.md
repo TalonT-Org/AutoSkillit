@@ -71,6 +71,91 @@ Fetch the PR branch locally:
 git fetch origin {pr_branch}:{pr_branch} 2>/dev/null || git fetch origin pull/{pr_number}/head:{pr_branch}
 ```
 
+### Step 1.5: Deletion Regression Scan
+
+Before attempting any merge, check whether this PR reintroduces code that was
+deliberately deleted from the base branch after the PR's branch point.
+
+**This step runs for ALL PRs regardless of complexity tag.**
+
+```bash
+# 1. Find the divergence point between this PR and the base branch
+MERGE_BASE=$(git merge-base origin/{base_branch} origin/{pr_branch})
+
+# 2. Files deleted from base since the branch point
+DELETED_FILES=$(git diff --name-only --diff-filter=D ${MERGE_BASE} origin/{base_branch})
+
+# 3. Symbols (functions/classes) removed from files this PR modifies,
+#    relative to base (catches deletions in files that still exist)
+PR_FILES=$(git diff --name-only ${MERGE_BASE}...origin/{pr_branch})
+if [ -n "$PR_FILES" ]; then
+  DELETED_SYMBOLS=$(
+    echo "$PR_FILES" | \
+    git diff --diff-filter=M ${MERGE_BASE} origin/{base_branch} --pathspecs-from-file=- \
+      | grep '^-' \
+      | grep -E '^-(def |class |async def )' \
+      | sed 's/^-//' \
+      | sort -u
+  )
+else
+  DELETED_SYMBOLS=""
+fi
+
+# 4. What the PR adds (relative to the merge base)
+PR_ADDITIONS=$(git diff ${MERGE_BASE}...origin/{pr_branch} | grep '^+' | grep -v '^+++')
+```
+
+**Detect regressions:**
+
+- **File-level regression**: For each path in `DELETED_FILES`, check if
+  `git show origin/{pr_branch}:{file}` succeeds — if yes, the PR re-adds a deleted file.
+- **Symbol-level regression**: For each symbol in `DELETED_SYMBOLS`, check whether
+  `PR_ADDITIONS` contains a matching `def {symbol_name}` or `class {symbol_name}` line.
+
+**If regressions are found:**
+
+Skip direct merge. Proceed to file classification (the PR Changes Inventory section
+below). When writing the conflict report, include a `## Deletion Regressions` section
+(see template below) and set `deletion_regression=true` in the output tokens.
+
+The regression context (list of regressed files/symbols + the commits that deleted them
+on base) must be written to the conflict report so `make-plan` understands that these
+items must NOT be reintroduced in the implementation.
+
+**If no regressions are found:** Continue to Step 2 / Step 3 as normal. Emit
+`deletion_regression=false` in the Step 5 output.
+
+**Gather regression evidence** for each found regression:
+
+```bash
+# For each regressed file: find the commit that deleted it on base
+git log --diff-filter=D --oneline --follow -- {file_path} origin/{base_branch} | head -1
+
+# For each regressed symbol: find the commit that removed it
+git log --diff-filter=M --oneline -p -- {file_path} origin/{base_branch} \
+  | grep -B20 "^-def {symbol_name}\|^-class {symbol_name}" \
+  | grep "^[0-9a-f]\{7,\}" \
+  | head -1
+```
+
+**Template for the conflict report** — add after the `## Resolver Contract` section:
+
+```markdown
+## Deletion Regressions
+
+This PR was branched before the following deliberate deletions landed on `{base_branch}`.
+The PR's changes reintroduce code that was intentionally removed. These MUST NOT be
+preserved during conflict resolution — the deletion is the correct state.
+
+| Deleted item | Type | Deleted by commit | What the PR does |
+|---|---|---|---|
+| `{path or symbol}` | file\|function\|class | `{sha} {commit message}` | Re-adds it |
+
+**Resolver instruction:** Treat each item in this table as Category B (semantic overlap).
+The correct resolution for every regression listed above is to **remove the reintroduced
+code** from the PR's changes, not to restore it. The base branch's deletion is authoritative.
+```
+
 ### Step 2: Complexity Path — `simple`
 
 Attempt direct merge:
@@ -263,6 +348,7 @@ Print a JSON result block to stdout for recipe capture:
 {
     "merged": true,
     "needs_plan": false,
+    "deletion_regression": false,
     "pr_number": 42,
     "pr_branch": "feature/auth",
     "pr_title": "Add user authentication",
@@ -275,10 +361,25 @@ Print a JSON result block to stdout for recipe capture:
 {
     "merged": false,
     "needs_plan": true,
+    "deletion_regression": false,
     "escalation_required": false,
     "pr_number": 47,
     "pr_branch": "feature/db-refactor",
     "pr_title": "Refactor database layer",
+    "conflict_report_path": "temp/pr-merge-pipeline/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+}
+```
+
+**On deletion regression detected:**
+```json
+{
+    "merged": false,
+    "needs_plan": true,
+    "deletion_regression": true,
+    "escalation_required": false,
+    "pr_number": 47,
+    "pr_branch": "feature/stale-branch",
+    "pr_title": "Feature from stale branch",
     "conflict_report_path": "temp/pr-merge-pipeline/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
 }
 ```
@@ -288,6 +389,7 @@ Print a JSON result block to stdout for recipe capture:
 {
     "merged": false,
     "needs_plan": false,
+    "deletion_regression": false,
     "escalation_required": true,
     "pr_number": 47,
     "pr_branch": "feature/db-refactor",
@@ -306,6 +408,7 @@ very last lines of your text output:
 ```
 merged=true
 needs_plan=false
+deletion_regression=false
 pr_number={pr_number}
 pr_branch={pr_branch_name}
 pr_title={pr_title}
@@ -315,6 +418,19 @@ pr_title={pr_title}
 ```
 merged=false
 needs_plan=true
+deletion_regression=false
+escalation_required=false
+pr_number={pr_number}
+pr_branch={pr_branch_name}
+pr_title={pr_title}
+conflict_report_path={absolute_path_to_conflict_plan_file}
+```
+
+**On deletion regression detected:**
+```
+merged=false
+needs_plan=true
+deletion_regression=true
 escalation_required=false
 pr_number={pr_number}
 pr_branch={pr_branch_name}
@@ -326,6 +442,7 @@ conflict_report_path={absolute_path_to_conflict_plan_file}
 ```
 merged=false
 needs_plan=false
+deletion_regression=false
 escalation_required=true
 escalation_reason={human-readable description of why the conflict cannot be resolved automatically}
 pr_number={pr_number}

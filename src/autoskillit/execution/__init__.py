@@ -30,6 +30,8 @@ from autoskillit.execution.linux_tracing import (
     LINUX_TRACING_AVAILABLE,
     LinuxTracingHandle,
     ProcSnapshot,
+    read_boot_id,
+    read_starttime_ticks,
     start_linux_tracing,
 )
 from autoskillit.execution.process import (
@@ -90,6 +92,8 @@ __all__ = [
     "LINUX_TRACING_AVAILABLE",
     "LinuxTracingHandle",
     "ProcSnapshot",
+    "read_boot_id",
+    "read_starttime_ticks",
     "start_linux_tracing",
     # anomaly_detection
     "detect_anomalies",

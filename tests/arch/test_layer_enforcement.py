@@ -775,7 +775,7 @@ def test_hook_config_filename_and_dir_match_quota_check():
     """
     import importlib
 
-    from autoskillit.server.tools_kitchen import (
+    from autoskillit.server.helpers import (
         _HOOK_CONFIG_FILENAME,
         _HOOK_DIR_COMPONENTS,
     )

@@ -646,7 +646,7 @@ class TestGateFileRecovery:
         gate_file = gate_dir / ".kitchen_gate"
         from datetime import UTC, datetime
 
-        from autoskillit.server.tools_kitchen import read_boot_id, read_starttime_ticks
+        from autoskillit.execution import read_boot_id, read_starttime_ticks
 
         gate_file.write_text(
             json.dumps(

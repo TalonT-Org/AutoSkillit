@@ -12,106 +12,19 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, atomic_write, pkg_root
+from autoskillit.execution import read_boot_id, read_starttime_ticks
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _find_recipe, _prime_quota_cache
-
-_HOOK_CONFIG_FILENAME: str = ".autoskillit_hook_config.json"
-_GATE_FILENAME: str = ".kitchen_gate"
-_HOOK_DIR_COMPONENTS: tuple[str, ...] = (".autoskillit", "temp")
-
-
-def _hook_config_path(project_root: Path) -> Path:
-    """Return the canonical path to the hook configuration JSON file."""
-    return project_root.joinpath(*_HOOK_DIR_COMPONENTS, _HOOK_CONFIG_FILENAME)
-
-
-def _gate_file_path(project_root: Path) -> Path:
-    """Return the canonical path to the kitchen gate file."""
-    return project_root.joinpath(*_HOOK_DIR_COMPONENTS, _GATE_FILENAME)
-
-
-def read_boot_id() -> str | None:
-    """Read the system boot ID from /proc/sys/kernel/random/boot_id."""
-    try:
-        return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
-    except OSError:
-        return None
-
-
-def read_starttime_ticks(pid: int) -> int | None:
-    """Read process starttime ticks from /proc/pid/stat."""
-    try:
-        stat = Path(f"/proc/{pid}/stat").read_text()
-        # comm may contain spaces; find the closing paren to parse fields after it
-        after_paren = stat.split(")", 1)
-        if len(after_paren) >= 2:
-            fields = after_paren[1].strip().split()
-            # starttime is field 22 in /proc/stat (0-indexed position 19 after state)
-            return int(fields[19])
-    except (OSError, ValueError, IndexError):
-        pass
-    return None
-
-
-def _is_pid_alive(
-    pid: int,
-    starttime_ticks: int | None = None,
-    boot_id: str | None = None,
-) -> bool:
-    """Return True if the process with pid is the same process that wrote the gate file."""
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        pass  # process exists but we cannot signal it
-
-    if starttime_ticks is not None:
-        current_ticks = read_starttime_ticks(pid)
-        if current_ticks is not None and current_ticks != starttime_ticks:
-            return False  # PID reused
-
-    if boot_id is not None:
-        current_boot = read_boot_id()
-        if current_boot is not None and current_boot != boot_id:
-            return False  # different boot session
-
-    return True
-
-
-def _cleanup_stale_gate_file(project_root: Path) -> None:
-    """Remove the gate file and companion hook config if the owning process is gone."""
-    gate_file = _gate_file_path(project_root)
-    hook_config = _hook_config_path(project_root)
-
-    if not gate_file.exists():
-        return
-
-    try:
-        data = json.loads(gate_file.read_text())
-        pid = data.get("pid")
-        starttime_ticks = data.get("starttime_ticks")
-        boot_id = data.get("boot_id")
-    except (json.JSONDecodeError, OSError):
-        # Malformed gate file — remove it and companion
-        try:
-            gate_file.unlink(missing_ok=True)
-            hook_config.unlink(missing_ok=True)
-        except OSError:
-            pass
-        return
-
-    if pid is None or not _is_pid_alive(pid, starttime_ticks, boot_id):
-        try:
-            gate_file.unlink(missing_ok=True)
-            hook_config.unlink(missing_ok=True)
-        except OSError:
-            pass
+from autoskillit.server.helpers import (
+    _find_recipe,
+    _gate_file_path,
+    _hook_config_path,
+    _prime_quota_cache,
+)
 
 
 def _register_gate_cleanup() -> None:
     """Write the gate file and register an atexit handler to remove it on exit."""
-    gate_file = _gate_file_path(Path.cwd())
+    gate_file = _gate_file_path(pkg_root())
     try:
         gate_file.parent.mkdir(parents=True, exist_ok=True)
         payload = {

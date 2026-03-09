@@ -34,9 +34,9 @@ def _initialize(ctx: ToolContext) -> None:
 
     # Gate file cleanup: remove stale gate files left by crashed sessions.
     try:
-        from autoskillit.server.tools_kitchen import _cleanup_stale_gate_file
+        from autoskillit.server.helpers import cleanup_stale_gate_file
 
-        _cleanup_stale_gate_file(Path.cwd())
+        cleanup_stale_gate_file(Path.cwd())
     except Exception:
         logger.debug("stale_gate_cleanup_at_startup_failed", exc_info=True)
 

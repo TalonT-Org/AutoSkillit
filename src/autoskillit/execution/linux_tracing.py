@@ -35,6 +35,29 @@ if TYPE_CHECKING:
 LINUX_TRACING_AVAILABLE = sys.platform == "linux"
 
 
+def read_boot_id() -> str | None:
+    """Read the system boot ID from /proc/sys/kernel/random/boot_id."""
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    except OSError:
+        return None
+
+
+def read_starttime_ticks(pid: int) -> int | None:
+    """Read process starttime ticks from /proc/pid/stat."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        # comm may contain spaces; find the closing paren to parse fields after it
+        after_paren = stat.split(")", 1)
+        if len(after_paren) >= 2:
+            fields = after_paren[1].strip().split()
+            # starttime is field 22 in /proc/stat (0-indexed position 19 after state)
+            return int(fields[19])
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
 @dataclass(frozen=True)
 class ProcSnapshot:
     """Point-in-time snapshot of process state."""

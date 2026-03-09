@@ -77,13 +77,8 @@ def test_rule_registry_completeness() -> None:
             f"Rule {r.rule_id} has unknown lens {r.lens!r}. Known: {sorted(_KNOWN_LENSES)}"
         )
 
-    # (c) count equals the number of distinct rules enforced by ArchitectureViolationVisitor
-    assert len(RULES) == 7, (
-        f"RULES has {len(RULES)} entries but visitor enforces 7 rules. "
-        "Add a RuleDescriptor for every new visitor rule."
-    )
-
-    # (c cont.) exact set of IDs must match the visitor's rule set
+    # (c) exact set of IDs must match the visitor's rule set
+    # Add a RuleDescriptor for every new visitor rule and update this set.
     expected_ids = frozenset(
         {"ARCH-001", "ARCH-002", "ARCH-003", "ARCH-004", "ARCH-005", "ARCH-006", "ARCH-007"}
     )

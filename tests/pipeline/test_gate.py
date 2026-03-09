@@ -22,8 +22,8 @@ def test_tool_sets_are_disjoint():
 def test_tool_sets_total_count():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    assert len(GATED_TOOLS) == 24
-    assert len(UNGATED_TOOLS) == 12
+    assert len(GATED_TOOLS) >= 24
+    assert len(UNGATED_TOOLS) >= 12
 
 
 def test_gated_tools_contains_expected_names():

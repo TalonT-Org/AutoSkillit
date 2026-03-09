@@ -65,6 +65,25 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 ## Planning Steps
 
+**Step 0 — Code-Index Initialization (required before any code-index tool call)**
+
+Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
+
+```
+mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
+```
+
+Code-index tools require **project-relative paths**. Always use paths like:
+
+    src/autoskillit/execution/headless.py
+
+NOT absolute paths like:
+
+    /path/to/project/src/autoskillit/execution/headless.py
+
+Agents launched via `run_skill` inherit no code-index state from the parent session — this
+call is mandatory at the start of every headless session that uses code-index tools.
+
 1. **Understand related systems and validate details** - Use subagents to study the architecture, how components work together, their purpose, patterns, and standards. Validate any details provided in the task description.
 
 2. **Explore and design approaches** - Use subagents to investigate different ways to solve the problem. Use subagents with web search to research modern solutions, approaches, designs, and architectures relevant to the problem. For each approach, focus on:

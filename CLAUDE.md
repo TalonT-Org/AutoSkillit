@@ -28,6 +28,9 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **No Backward Compatibility Hacks**: No comments about dead code. Remove dead code entirely.
   * **Avoid Redundancy**: Do not duplicate logic or utilities.
   * **Use Current Package Versions**: Web search for current stable versions when adding dependencies.
+  * **Run pre-commit before committing**: Always run `pre-commit run --all-files` before
+    committing. Do not skip this step even when code appears clean — hooks auto-fix
+    formatting and abort the commit, requiring re-stage and retry.
 
 ### **3.2. File System**
 
@@ -44,6 +47,11 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
 
 ### **3.5. Code Index MCP Usage**
 
+  * **Initialize before use**: Always call `set_project_path` with the project root
+    as the first action in any session that will use code-index tools. Without this
+    call, all code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
+    `get_symbol_body`) fail with "Project path not set" and cascade-cancel sibling
+    parallel calls.
   * **Index is locked to the main project root**: The `code-index` MCP server is indexed against the source repo and must never be redirected to a worktree or branch. Its value is for exploration before code changes — at that point any worktree is identical to main, so the index is accurate regardless of where you are working.
   * **Prefer code-index tools over native search tools when exploring the codebase**:
     * `find_files` instead of Glob for in-project file discovery
@@ -221,3 +229,9 @@ src/autoskillit/
 **Session diagnostics logs** are stored globally at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir` in config. Session directories are named by Claude Code session UUID when available (preferred: parsed from stdout, fallback: discovered from JSONL filename via Channel B). When no session ID is available from either source, directories use `no_session_{timestamp}` naming. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.
 
 **CRITICAL**: When using subagents, invoke with "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000" to ensure subagents exit when finished.
+
+## 7. Session Diagnostics
+
+**Path components use hyphens, not underscores.** Log directory names and session folder
+names are hyphen-separated. Never assume underscores when constructing or searching for
+log paths — hyphen mismatch causes ENOENT (session f9170655 pattern).

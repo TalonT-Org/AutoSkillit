@@ -26,7 +26,9 @@ def test_claude_md_code_index_requires_set_project_path() -> None:
     section_start = CLAUDE_MD.index("3.5")
     # Find the next top-level section heading (### 3.) to bound the search
     next_section = CLAUDE_MD.find("### **3.", section_start + 1)
-    section_text = CLAUDE_MD[section_start:next_section] if next_section != -1 else CLAUDE_MD[section_start:]
+    section_text = (
+        CLAUDE_MD[section_start:next_section] if next_section != -1 else CLAUDE_MD[section_start:]
+    )
     assert "set_project_path" in section_text, (
         "CLAUDE.md §3.5 (Code Index MCP Usage) must instruct agents to call "
         "set_project_path before using any code-index tool in a new session (FRICT-1B-3)."
@@ -44,7 +46,9 @@ def test_claude_md_critical_rules_require_precommit() -> None:
     assert "3.1" in CLAUDE_MD, "§3.1 section not found in CLAUDE.md"
     section_start = CLAUDE_MD.index("3.1")
     next_section = CLAUDE_MD.find("### **3.", section_start + 1)
-    section_text = CLAUDE_MD[section_start:next_section] if next_section != -1 else CLAUDE_MD[section_start:]
+    section_text = (
+        CLAUDE_MD[section_start:next_section] if next_section != -1 else CLAUDE_MD[section_start:]
+    )
     assert "pre-commit run --all-files" in section_text, (
         "CLAUDE.md §3.1 (Code and Implementation) must include a Critical Rule "
         "requiring 'pre-commit run --all-files' before committing (FRICT-3A-1)."
@@ -60,8 +64,10 @@ def test_claude_md_session_diagnostics_has_dedicated_heading() -> None:
     """
     lines = CLAUDE_MD.splitlines()
     heading_lines = [
-        line for line in lines
-        if line.startswith("## ") and ("session" in line.lower() or "diagnostics" in line.lower() or "log" in line.lower())
+        line
+        for line in lines
+        if line.startswith("## ")
+        and ("session" in line.lower() or "diagnostics" in line.lower() or "log" in line.lower())
     ]
     assert heading_lines, (
         "CLAUDE.md must have a dedicated ## section heading for session diagnostics "

@@ -15,13 +15,16 @@ def test_generated_files_importable_from_core_paths():
         assert isinstance(entry, str)
 
 
-def test_no_generated_files_tracked():
-    """Generated config files must not be tracked in git.
+def test_diagram_directory_in_generated_files():
+    """Diagram directory must be in GENERATED_FILES so perform_merge strips it."""
+    assert "src/autoskillit/recipes/diagrams/" in GENERATED_FILES, (
+        "src/autoskillit/recipes/diagrams/ must be in GENERATED_FILES. "
+        "Add it to the frozenset in src/autoskillit/core/paths.py."
+    )
 
-    These files contain machine-local absolute paths and are regenerated
-    by ``autoskillit install``. Tracking them causes rebase failures in
-    worktrees when Claude Code plugin loading rewrites the paths.
-    """
+
+def test_no_generated_files_tracked():
+    """Generated config and diagram files must not be tracked in git."""
     result = subprocess.run(
         ["git", "ls-files"],
         capture_output=True,
@@ -29,10 +32,25 @@ def test_no_generated_files_tracked():
         timeout=10,
     )
     tracked = set(result.stdout.splitlines())
-    tracked_generated = [f for f in GENERATED_FILES if f in tracked]
+
+    def _tracked_for_entry(entry: str) -> list[str]:
+        if entry.endswith("/"):
+            return [f for f in tracked if f.startswith(entry)]
+        return [entry] if entry in tracked else []
+
+    tracked_generated = [f for entry in GENERATED_FILES for f in _tracked_for_entry(entry)]
     assert tracked_generated == [], (
         f"Generated files must not be tracked in git: {tracked_generated}. "
-        "Run 'git rm --cached <file>' and add to .gitignore."
+        "Run 'git rm --cached <file>' and ensure the path is in .gitignore."
+    )
+
+
+def test_gitignore_covers_diagram_directory():
+    """Diagram directory must be in .gitignore to prevent accidental commits."""
+    gitignore = Path(".gitignore").read_text()
+    assert "src/autoskillit/recipes/diagrams/" in gitignore, (
+        "Missing .gitignore entry for diagram directory. "
+        "Add 'src/autoskillit/recipes/diagrams/' to .gitignore."
     )
 
 

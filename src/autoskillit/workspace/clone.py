@@ -274,6 +274,13 @@ def clone_repo(
                 remote_url=effective_url,
                 stderr=rewrite_result.stderr.strip(),
             )
+            if remote_url:
+                return {
+                    "error": "remote_url_rewrite_failed",
+                    "clone_path": str(clone_path),
+                    "remote_url": effective_url,
+                    "stderr": rewrite_result.stderr.strip(),
+                }
 
     # Decontaminate: untrack inherited generated files
     ls_gen = subprocess.run(

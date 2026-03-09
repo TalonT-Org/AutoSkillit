@@ -189,3 +189,18 @@ def test_review_pr_dimension_list_includes_deletion_regression(review_pr_text):
     assert "deletion_regression" in review_pr_text, (
         "review-pr/SKILL.md dimension list (arch|tests|...) must include 'deletion_regression'"
     )
+
+
+def test_review_pr_finding_schema_dimension_union_complete(review_pr_text):
+    """The finding schema dimension union in Step 3 must include deletion_regression.
+
+    The broad test (test_review_pr_dimension_list_includes_deletion_regression) passes
+    because 'deletion_regression' appears in the 7th subagent description. This test
+    specifically checks the schema union string in the JSON block to prevent the schema
+    from drifting from the dimension list.
+    """
+    assert "arch|tests|defense|bugs|cohesion|slop|deletion_regression" in review_pr_text, (
+        "The finding schema JSON block in Step 3 must include 'deletion_regression' in "
+        "the pipe-separated dimension union: "
+        "'arch|tests|defense|bugs|cohesion|slop|deletion_regression'"
+    )

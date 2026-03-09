@@ -164,7 +164,7 @@ findings in JSON format:
   {
     "file": "path/to/file.py",
     "line": 42,
-    "dimension": "arch|tests|defense|bugs|cohesion|slop",
+    "dimension": "arch|tests|defense|bugs|cohesion|slop|deletion_regression",
     "severity": "critical|warning|info",
     "message": "Description of the finding",
     "requires_decision": false

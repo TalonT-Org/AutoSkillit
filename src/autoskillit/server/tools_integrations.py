@@ -14,9 +14,8 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import _atomic_write, _parse_issue_ref, get_logger
-from autoskillit.execution import resolve_log_dir
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess
+from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess, resolve_log_dir
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher, HeadlessExecutor

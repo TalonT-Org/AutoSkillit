@@ -25,7 +25,7 @@ ingredients:
     description: Directory for helper agent sessions
     required: true
   audit:
-    description: Run /autoskillit:audit-impl before merge to gate on implementation quality
+    description: Gate merge on audit-impl quality check (true/false)
     default: "true"
 
 steps:

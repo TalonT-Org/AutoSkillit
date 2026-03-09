@@ -89,6 +89,24 @@ def _require_enabled() -> str | None:
     return None
 
 
+def _validate_skill_command(skill_command: str) -> str | None:
+    """Return error JSON if skill_command does not start with '/', None if OK.
+
+    FRICT-6-1: MCP tool-level validation that fires before the hook system,
+    returning a structured gate_error response when plain prose is passed
+    instead of a slash-command invocation.
+    """
+    if not skill_command.strip().startswith("/"):
+        return gate_error_result(
+            "run_skill requires a slash-command as skill_command.\n"
+            f"Got: {skill_command!r}\n"
+            "Expected: skill_command must start with '/' "
+            "(e.g. /autoskillit:investigate, /autoskillit:make-plan, /audit-arch).\n"
+            "Prose task descriptions are not valid skill invocations."
+        )
+    return None
+
+
 async def _apply_triage_gate(
     result: dict[str, Any], name: str, recipe_info: Any = None
 ) -> dict[str, Any]:

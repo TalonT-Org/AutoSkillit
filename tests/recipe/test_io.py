@@ -699,6 +699,18 @@ def test_find_recipe_by_name_returns_info_with_content(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_parse_step_with_key_maps_to_with_args() -> None:
+    """_parse_step maps YAML 'with' key to RecipeStep.with_args."""
+    step = _parse_step({"tool": "claim_issue", "with": {"issue_url": "https://example.com"}})
+    assert step.with_args == {"issue_url": "https://example.com"}
+
+
+def test_parse_step_with_args_key_is_not_read() -> None:
+    """_parse_step does NOT read 'with_args' YAML key — confirms the fix is needed."""
+    step = _parse_step({"tool": "claim_issue", "with_args": {"issue_url": "https://example.com"}})
+    assert step.with_args == {}, "with_args YAML key must not be read — use 'with:' instead"
+
+
 def test_bundled_recipes_all_skill_commands_start_with_slash() -> None:
     """All run_skill steps in bundled recipes must have
     skill_command starting with '/' after smoke-task migration."""

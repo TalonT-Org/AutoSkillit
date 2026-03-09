@@ -382,3 +382,36 @@ class TestClaimReleaseGates:
             assert data["steps"]["ci_watch"]["on_success"] == "release_issue_success", (
                 f"{name}: ci_watch.on_success should be release_issue_success"
             )
+
+    def test_claim_issue_with_args_contains_issue_url(self):
+        """CC-F1: claim_issue.with_args must contain issue_url after parsing.
+
+        Fails when the YAML uses `with_args:` key (bug) because _parse_step
+        reads data.get("with", {}) and returns {} for that key.
+        Passes after renaming to `with:`.
+        """
+        for name in self.RECIPES:
+            recipe = load_recipe(_recipe_path(name))
+            step = recipe.steps["claim_issue"]
+            assert "issue_url" in step.with_args, (
+                f"{name}: claim_issue.with_args missing issue_url — "
+                f"YAML likely uses 'with_args:' instead of 'with:'"
+            )
+
+    def test_release_issue_success_with_args_contains_issue_url(self):
+        """CC-F1: release_issue_success.with_args must contain issue_url after parsing."""
+        for name in self.RECIPES:
+            recipe = load_recipe(_recipe_path(name))
+            step = recipe.steps["release_issue_success"]
+            assert "issue_url" in step.with_args, (
+                f"{name}: release_issue_success.with_args missing issue_url"
+            )
+
+    def test_release_issue_failure_with_args_contains_issue_url(self):
+        """CC-F1: release_issue_failure.with_args must contain issue_url after parsing."""
+        for name in self.RECIPES:
+            recipe = load_recipe(_recipe_path(name))
+            step = recipe.steps["release_issue_failure"]
+            assert "issue_url" in step.with_args, (
+                f"{name}: release_issue_failure.with_args missing issue_url"
+            )

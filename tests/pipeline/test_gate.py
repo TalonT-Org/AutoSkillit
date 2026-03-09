@@ -90,6 +90,15 @@ def test_ungated_tools_contains_expected_names():
     assert UNGATED_TOOLS == expected
 
 
+def test_gate_file_lease_symbols_not_exported():
+    """Lease mechanism symbols must not be importable from pipeline.gate."""
+    import autoskillit.pipeline.gate as gate_module
+
+    for symbol in ("gate_file_path", "hook_config_path", "GATE_FILENAME",
+                   "GATE_DIR_COMPONENTS", "LEASE_FIELDS", "verify_lease",
+                   "LeaseStatus", "is_pid_alive", "read_starttime_ticks", "read_boot_id"):
+        assert not hasattr(gate_module, symbol), f"gate.py still exports {symbol!r}"
+
 
 def test_gate_state_enable_disable_transitions():
     from autoskillit.pipeline.gate import DefaultGateState

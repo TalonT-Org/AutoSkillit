@@ -15,24 +15,14 @@ This module is the authoritative location for:
 from __future__ import annotations
 
 from datetime import UTC
-from pathlib import Path
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import get_logger
-from autoskillit.pipeline import ToolContext, gate_file_path, hook_config_path, verify_lease
+from autoskillit.pipeline import ToolContext
 
 logger = get_logger(__name__)
 
 _ctx: ToolContext | None = None
-
-
-def _recover_stale_gate_file() -> None:
-    """Remove gate file if owning process is dead, identity mismatched, or TTL expired."""
-    gate_path = gate_file_path(Path.cwd())
-    companion = hook_config_path(Path.cwd())
-    status = verify_lease(gate_path, companion)
-    if status.removed:
-        logger.info("recovered_gate_file", reason=status.reason)
 
 
 def _initialize(ctx: ToolContext) -> None:
@@ -52,12 +42,6 @@ def _initialize(ctx: ToolContext) -> None:
             logger.info("Recovered %d crashed session trace(s) from tmpfs", n)
     except Exception:
         logger.debug("recover_crashed_sessions at startup failed", exc_info=True)
-
-    # Gate file recovery: remove stale gate files from crashed pipeline sessions.
-    try:
-        _recover_stale_gate_file()
-    except Exception:
-        logger.debug("recover_stale_gate_file at startup failed", exc_info=True)
 
     # Telemetry recovery: restore token, timing, and audit data from the last 24 hours.
     try:

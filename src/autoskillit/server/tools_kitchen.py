@@ -2,68 +2,23 @@
 
 from __future__ import annotations
 
-import atexit
 import json
-import os
-import signal
-from datetime import UTC, datetime
 from pathlib import Path
-from types import FrameType
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, atomic_write, pkg_root
-from autoskillit.pipeline import (
-    gate_file_path,
-    hook_config_path,
-    read_boot_id,
-    read_starttime_ticks,
-)
 from autoskillit.server import mcp
 from autoskillit.server.helpers import _find_recipe, _prime_quota_cache
 
-_gate_cleanup_registered = False
+_HOOK_CONFIG_FILENAME: str = ".autoskillit_hook_config.json"
+_HOOK_DIR_COMPONENTS: tuple[str, ...] = (".autoskillit", "temp")
 
 
-def _cleanup_gate_file() -> None:
-    """Remove gate file and hook config. Safe to call multiple times."""
-    for path in (gate_file_path(Path.cwd()), hook_config_path(Path.cwd())):
-        try:
-            path.unlink(missing_ok=True)
-        except OSError:
-            pass
-
-
-def _register_gate_cleanup() -> None:
-    global _gate_cleanup_registered
-    if _gate_cleanup_registered:
-        return
-    atexit.register(_cleanup_gate_file)
-
-    # signal.signal() must be called from the main thread — CPython raises
-    # ValueError otherwise. FastMCP stdio transport runs on the main thread,
-    # but guard defensively. If signal registration fails, atexit still covers
-    # normal exit/sys.exit/exceptions, and Layers 1+2 cover SIGKILL/SIGTERM.
-    try:
-        prev_term = signal.getsignal(signal.SIGTERM)
-        prev_int = signal.getsignal(signal.SIGINT)
-
-        def _handle_signal(signum: int, frame: FrameType | None) -> None:
-            _cleanup_gate_file()
-            prev = prev_term if signum == signal.SIGTERM else prev_int
-            if callable(prev):
-                prev(signum, frame)
-            elif prev == signal.SIG_DFL:
-                signal.signal(signum, signal.SIG_DFL)
-                os.kill(os.getpid(), signum)
-
-        signal.signal(signal.SIGTERM, _handle_signal)
-        signal.signal(signal.SIGINT, _handle_signal)
-    except ValueError:
-        pass  # not main thread — atexit + L1/L2 recovery still active
-
-    _gate_cleanup_registered = True
+def _hook_config_path(project_root: Path) -> Path:
+    """Return the canonical path to the hook configuration JSON file."""
+    return project_root.joinpath(*_HOOK_DIR_COMPONENTS, _HOOK_CONFIG_FILENAME)
 
 
 def _write_hook_config() -> None:
@@ -84,7 +39,7 @@ def _write_hook_config() -> None:
             else "~/.claude/autoskillit_quota_cache.json",
         }
     }
-    hook_cfg_path = hook_config_path(Path.cwd())
+    hook_cfg_path = _hook_config_path(Path.cwd())
     try:
         hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(hook_cfg_path, json.dumps(payload))
@@ -98,20 +53,7 @@ async def _open_kitchen_handler() -> None:
 
     _get_ctx().gate.enable()
     logger.info("open_kitchen", gate_state="open")
-    gate_path = gate_file_path(Path.cwd())
-    try:
-        gate_path.parent.mkdir(parents=True, exist_ok=True)
-        lease = {
-            "pid": os.getpid(),
-            "starttime_ticks": read_starttime_ticks(os.getpid()),
-            "boot_id": read_boot_id(),
-            "opened_at": datetime.now(UTC).isoformat(),
-        }
-        atomic_write(gate_path, json.dumps(lease))
-    except OSError:
-        logger.warning("gate_file_write_failed", path=str(gate_path))
     _write_hook_config()
-    _register_gate_cleanup()
     await _prime_quota_cache()
 
 
@@ -121,12 +63,7 @@ def _close_kitchen_handler() -> None:
 
     _get_ctx().gate.disable()
     logger.info("close_kitchen", gate_state="closed")
-    gate_path = gate_file_path(Path.cwd())
-    try:
-        gate_path.unlink(missing_ok=True)
-    except OSError:
-        logger.warning("gate_file_remove_failed", path=str(gate_path))
-    hook_cfg_path = hook_config_path(Path.cwd())
+    hook_cfg_path = _hook_config_path(Path.cwd())
     try:
         hook_cfg_path.unlink(missing_ok=True)
     except OSError:

@@ -284,6 +284,7 @@ class TestSmokeScriptValidation:
             "seed_task",
             "set_feature_branch",
             "create_branch",
+            "commit_dirty",
             "push_feature_branch",
             "investigate",
             "rectify",

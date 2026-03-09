@@ -112,6 +112,29 @@ Total: N issues, M batches. No sessions launched.
 
 Then emit the `---process-issues-result---` block with `"dry_run": true` and exit.
 
+### Step 2a: Batch Scope Confirmation
+
+Before executing any batch, display the full processing plan and confirm scope with the user:
+
+```
+━━━ Process Issues — Batch Scope ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+About to process {N} issues in {M} batches:
+
+BATCH  ISSUE  RECIPE           TITLE
+------ ------ ---------------- ----------------------------------------
+{batch rows from manifest}
+
+Processing mode: sequential within each batch (batches processed in order)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Proceed? [Y/n]
+```
+
+- **Y (or Enter):** Proceed to Step 3.
+- **n:** Abort. Emit `process-issues-result` with `"aborted": true` and exit cleanly.
+
+Skip this step when `--dry-run` is active (Step 2 already prints the plan and exits) or when
+`--batch N` limits scope to a single batch (show only that batch's issues).
+
 ### Step 3: Process Batches
 
 For each batch in **ascending order** (batch 1, then batch 2, etc.):

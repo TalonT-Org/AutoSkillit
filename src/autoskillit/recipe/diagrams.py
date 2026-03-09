@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import _atomic_write
-from autoskillit.recipe._analysis import _build_step_graph, _tight_cycle_bfs
+from autoskillit.recipe._analysis import _tight_cycle_bfs
 from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 # Diagram format version — bump when rendering logic changes so that
@@ -127,7 +127,7 @@ def _derive_for_each_label(span_steps: list[_LayoutStep]) -> str:
     return "FOR EACH:"
 
 
-def _classify_steps(recipe: Any, graph: dict[str, set[str]]) -> StepClassification:
+def _classify_steps(recipe: Any) -> StepClassification:
     """Classify recipe steps by role using tight-cycle BFS.
 
     Builds a success-path-only adjacency (``step.on_success`` edges only) and
@@ -138,14 +138,10 @@ def _classify_steps(recipe: Any, graph: dict[str, set[str]]) -> StepClassificati
 
     Args:
         recipe: The loaded Recipe dataclass.
-        graph: Full routing adjacency from ``_build_step_graph`` (used for
-            structural reference only — must NOT be passed to ``_tight_cycle_bfs``).
 
     Returns:
         ``StepClassification`` with classified step sets.
     """
-    # Success-path-only adjacency: on_success edges only.
-    # Must NOT use the full graph which includes failure/context-limit edges.
     success_graph: dict[str, set[str]] = {
         n: ({s.on_success} if s.on_success else set()) for n, s in recipe.steps.items()
     }
@@ -166,7 +162,9 @@ def _classify_steps(recipe: Any, graph: dict[str, set[str]]) -> StepClassificati
     best_chain: frozenset[str] = frozenset()
 
     for name, step in recipe.steps.items():
-        idx = step_index.get(name, 0)
+        idx = step_index.get(name)
+        if idx is None:
+            continue
 
         # Collect all back-edge targets: routes to earlier steps
         back_targets: list[str] = []
@@ -213,7 +211,9 @@ def _classify_steps(recipe: Any, graph: dict[str, set[str]]) -> StepClassificati
             continue
         if step.action == "route" and step.on_result is not None:
             nr = step.on_result
-            num_routes = len(nr.conditions) if nr.conditions else len(nr.routes)
+            num_routes = (
+                len(nr.conditions) if nr.conditions else (len(nr.routes) if nr.routes else 0)
+            )
             if num_routes > 1:
                 routing_blocks_set.add(mc_name)
 
@@ -352,8 +352,7 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
     # Use _classify_steps (which calls _tight_cycle_bfs) for precise cycle membership.
     # This replaces the index-span approach which was over-inclusive: it pulled
     # side-leg steps (retry_worktree, fix) into the horizontal chain.
-    graph = _build_step_graph(recipe)
-    classification = _classify_steps(recipe, graph)
+    classification = _classify_steps(recipe)
 
     visible = [s for s in layout_steps if s.name not in classification.hidden]
     vis_names_list = [s.name for s in visible]

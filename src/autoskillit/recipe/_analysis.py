@@ -191,7 +191,7 @@ def _tight_cycle_bfs(graph: dict[str, set[str]], start: str, end: str) -> frozen
     while queue:
         node = queue.popleft()
         if node == end:
-            break
+            continue  # Do not expand past end, but keep processing remaining queue
         for neighbor in graph.get(node, set()):
             if neighbor not in visited:
                 visited.add(neighbor)

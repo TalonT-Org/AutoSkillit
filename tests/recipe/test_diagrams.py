@@ -1300,7 +1300,15 @@ def test_next_or_done_rendered_as_footer_routing_block(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "recipe_name",
-    ["implementation", "bugfix-loop", "smoke-test", "remediation", "audit-and-fix"],
+    [
+        "implementation",
+        "bugfix-loop",
+        "smoke-test",
+        "remediation",
+        "audit-and-fix",
+        "implementation-groups",
+        "pr-merge-pipeline",
+    ],
 )
 def test_terminal_steps_have_no_emoji(recipe_name: str, tmp_path: Path) -> None:
     """T-NEW-4: Issue #223 requires ASCII only. ⏹ must not appear on terminal steps."""
@@ -1357,16 +1365,23 @@ def test_bundled_recipe_ingredient_descriptions_are_single_phrase(
         recipes_dir / f"{recipe_name}.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
     )
     in_inputs = False
+    desc_col_idx: int | None = None
     for line in content.splitlines():
         if line.strip().startswith("| Name |"):
+            header_parts = [p.strip() for p in line.split("|") if p.strip()]
+            desc_col_idx = next(
+                (i for i, h in enumerate(header_parts) if h.lower() == "description"), None
+            )
             in_inputs = True
             continue
         if in_inputs and line.startswith("| ---"):
             continue
         if in_inputs and line.startswith("|"):
+            if desc_col_idx is None:
+                continue
             parts = [p.strip() for p in line.split("|") if p.strip()]
-            if len(parts) >= 2:
-                description = parts[1]
+            if len(parts) > desc_col_idx:
+                description = parts[desc_col_idx]
                 assert len(description) <= 80, (
                     f"{recipe_name}: description '{description[:40]}...' "
                     f"is {len(description)} chars (max 80)"

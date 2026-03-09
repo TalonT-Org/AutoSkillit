@@ -1,4 +1,4 @@
-"""Tests for server/prompts.py: open_kitchen and close_kitchen gate management."""
+"""Tests for server/tools_kitchen.py: open_kitchen and close_kitchen gate management."""
 
 from __future__ import annotations
 
@@ -27,9 +27,9 @@ async def test_open_kitchen_enables_gate(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.prompts._write_hook_config"):
-                    from autoskillit.server.prompts import _open_kitchen_handler
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import _open_kitchen_handler
 
                     await _open_kitchen_handler()
 
@@ -46,7 +46,7 @@ def test_close_kitchen_disables_gate(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            from autoskillit.server.prompts import _close_kitchen_handler
+            from autoskillit.server.tools_kitchen import _close_kitchen_handler
 
             _close_kitchen_handler()
 
@@ -61,7 +61,7 @@ def test_close_kitchen_no_file_no_error(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            from autoskillit.server.prompts import _close_kitchen_handler
+            from autoskillit.server.tools_kitchen import _close_kitchen_handler
 
             _close_kitchen_handler()  # Should not raise
 
@@ -75,9 +75,9 @@ async def test_open_kitchen_writes_gate_file(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.prompts._write_hook_config"):
-                    from autoskillit.server.prompts import _open_kitchen_handler
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import _open_kitchen_handler
 
                     await _open_kitchen_handler()
 
@@ -94,9 +94,9 @@ async def test_close_kitchen_removes_gate_file(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.prompts._write_hook_config"):
-                    from autoskillit.server.prompts import (
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import (
                         _close_kitchen_handler,
                         _open_kitchen_handler,
                     )
@@ -118,9 +118,9 @@ async def test_open_kitchen_primes_quota_cache(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.prompts._prime_quota_cache", prime_mock):
-                with patch("autoskillit.server.prompts._write_hook_config"):
-                    from autoskillit.server.prompts import _open_kitchen_handler
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", prime_mock):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import _open_kitchen_handler
 
                     await _open_kitchen_handler()
 
@@ -143,8 +143,8 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     # _write_hook_config (not just one of them).
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx) as mock_get_ctx:
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
-                from autoskillit.server.prompts import _open_kitchen_handler
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                from autoskillit.server.tools_kitchen import _open_kitchen_handler
 
                 await _open_kitchen_handler()
 
@@ -172,8 +172,8 @@ async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
-                from autoskillit.server.prompts import (
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                from autoskillit.server.tools_kitchen import (
                     _close_kitchen_handler,
                     _open_kitchen_handler,
                 )
@@ -190,7 +190,7 @@ def test_open_kitchen_handler_is_async():
     """_open_kitchen_handler must be an async def so it can await _prime_quota_cache."""
     import inspect
 
-    from autoskillit.server.prompts import _open_kitchen_handler
+    from autoskillit.server.tools_kitchen import _open_kitchen_handler
 
     assert inspect.iscoroutinefunction(_open_kitchen_handler), (
         "_open_kitchen_handler must be async"
@@ -206,10 +206,10 @@ async def test_gate_file_contains_lease_metadata(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.prompts._write_hook_config"):
-                    with patch("autoskillit.server.prompts._register_gate_cleanup"):
-                        from autoskillit.server.prompts import _open_kitchen_handler
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    with patch("autoskillit.server.tools_kitchen._register_gate_cleanup"):
+                        from autoskillit.server.tools_kitchen import _open_kitchen_handler
 
                         await _open_kitchen_handler()
 
@@ -230,7 +230,7 @@ def test_atexit_cleanup_removes_gate_file(tmp_path, monkeypatch):
     gate_file = gate_dir / ".kitchen_gate"
     gate_file.write_text(json.dumps({"pid": os.getpid(), "opened_at": "..."}))
 
-    from autoskillit.server.prompts import _cleanup_gate_file
+    from autoskillit.server.tools_kitchen import _cleanup_gate_file
 
     _cleanup_gate_file()
     assert not gate_file.exists()
@@ -241,6 +241,42 @@ def test_atexit_cleanup_noop_when_no_gate_file(tmp_path, monkeypatch):
     """Cleanup must not raise when gate file doesn't exist."""
     monkeypatch.chdir(tmp_path)
 
-    from autoskillit.server.prompts import _cleanup_gate_file
+    from autoskillit.server.tools_kitchen import _cleanup_gate_file
 
     _cleanup_gate_file()  # should not raise
+
+
+# T-VISIBILITY-1: open_kitchen tool calls ctx.enable_components
+@pytest.mark.anyio
+async def test_open_kitchen_tool_calls_enable_components(tmp_path, monkeypatch):
+    """open_kitchen tool must call ctx.enable_components(tags={'kitchen'})."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    await open_kitchen(ctx=mock_ctx)
+
+    mock_ctx.enable_components.assert_called_once_with(tags={"kitchen"})
+
+
+# T-VISIBILITY-2: close_kitchen tool calls ctx.reset_visibility
+@pytest.mark.anyio
+async def test_close_kitchen_tool_calls_reset_visibility(tmp_path, monkeypatch):
+    """close_kitchen tool must call ctx.reset_visibility()."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.reset_visibility = AsyncMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools_kitchen import close_kitchen
+
+            await close_kitchen(ctx=mock_ctx)
+
+    mock_ctx.reset_visibility.assert_called_once()

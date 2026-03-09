@@ -400,6 +400,8 @@ UNGATED_TOOLS: frozenset[str] = frozenset(
         "fetch_github_issue",
         "get_issue_title",
         "get_ci_status",
+        "open_kitchen",  # was prompt, now ungated tool
+        "close_kitchen",  # was prompt, now ungated tool
     }
 )
 

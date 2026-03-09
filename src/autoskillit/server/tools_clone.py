@@ -17,7 +17,7 @@ from autoskillit.server.helpers import _notify, _require_enabled
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def clone_repo(
     source_dir: str,
     run_name: str,
@@ -97,7 +97,7 @@ async def clone_repo(
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def remove_clone(
     clone_path: str,
     keep: str = "false",
@@ -146,7 +146,7 @@ async def remove_clone(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def push_to_remote(
     clone_path: str,
     branch: str,

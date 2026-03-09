@@ -149,7 +149,7 @@ async def get_timing_summary(clear: bool = False) -> str:
     return json.dumps({"steps": steps, "total": total})
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def read_db(
     db_path: str,
     query: str,

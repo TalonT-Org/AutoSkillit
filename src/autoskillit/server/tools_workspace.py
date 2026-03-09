@@ -18,7 +18,7 @@ from autoskillit.server.helpers import _notify, _require_enabled, _run_subproces
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def test_check(
     worktree_path: str,
     step_name: str = "",
@@ -76,7 +76,7 @@ async def test_check(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def reset_test_dir(
     test_dir: str,
     force: bool = False,
@@ -152,7 +152,7 @@ async def reset_test_dir(
             _timing_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str:
     """Runs a configured reset command then deletes directory contents,
     preserving configured directories and the reset guard marker.

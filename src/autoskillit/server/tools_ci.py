@@ -16,7 +16,7 @@ from autoskillit.server.helpers import _notify, _require_enabled
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def wait_for_ci(
     branch: str,
     repo: str | None = None,

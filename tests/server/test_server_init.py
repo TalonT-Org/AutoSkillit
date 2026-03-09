@@ -15,7 +15,7 @@ from autoskillit.config import (
 )
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.helpers import _require_enabled
-from autoskillit.server.prompts import _close_kitchen_handler, _open_kitchen_handler
+from autoskillit.server.tools_kitchen import _close_kitchen_handler, _open_kitchen_handler
 from autoskillit.server.tools_recipe import (
     list_recipes,
     load_recipe,
@@ -132,7 +132,7 @@ class TestVersionInfo:
 
 
 class TestToolRegistration:
-    """All 26 tools are registered on the MCP server."""
+    """All 31 tools are registered on the MCP server."""
 
     def test_all_tools_exist(self):
         from fastmcp.tools import Tool
@@ -172,8 +172,37 @@ class TestToolRegistration:
             "release_issue",
             "wait_for_ci",
             "get_ci_status",
+            "open_kitchen",
+            "close_kitchen",
         }
         assert expected == tool_names
+
+    def test_kitchen_tools_have_both_tags(self):
+        """All gated tools have tags={'automation', 'kitchen'}."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.pipeline.gate import GATED_TOOLS
+        from autoskillit.server import mcp
+
+        components = mcp._local_provider._components
+        for component in components.values():
+            if isinstance(component, Tool) and component.name in GATED_TOOLS:
+                assert "kitchen" in component.tags, f"{component.name} missing 'kitchen' tag"
+                assert "automation" in component.tags, f"{component.name} missing 'automation' tag"
+
+    def test_ungated_tools_lack_kitchen_tag(self):
+        """Ungated tools (including open_kitchen, close_kitchen) have no 'kitchen' tag."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.pipeline.gate import UNGATED_TOOLS
+        from autoskillit.server import mcp
+
+        components = mcp._local_provider._components
+        for component in components.values():
+            if isinstance(component, Tool) and component.name in UNGATED_TOOLS:
+                assert "kitchen" not in component.tags, (
+                    f"{component.name} should not have 'kitchen' tag"
+                )
 
     def test_ungated_tools_docstrings_state_notification_free(self):
         """P5-1: Each ungated tool docstring states it sends no MCP notifications."""
@@ -189,6 +218,38 @@ class TestToolRegistration:
             assert "no MCP" in doc or "no progress notification" in doc.lower(), (
                 f"{tool_fn.__name__} must document notification-free behavior"
             )
+
+
+class TestKitchenVisibility:
+    """FastMCP v3 tag-based visibility: kitchen tools hidden at startup."""
+
+    @pytest.mark.anyio
+    async def test_kitchen_tools_hidden_at_startup(self):
+        """No kitchen tool appears in tools/list for a fresh session."""
+        from fastmcp.client import Client
+
+        from autoskillit.pipeline.gate import GATED_TOOLS
+        from autoskillit.server import mcp
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+            tool_names = {t.name for t in tools}
+            for name in GATED_TOOLS:
+                assert name not in tool_names, f"{name} should be hidden at startup"
+
+    @pytest.mark.anyio
+    async def test_ungated_tools_visible_at_startup(self):
+        """All ungated tools appear in tools/list for a fresh session."""
+        from fastmcp.client import Client
+
+        from autoskillit.pipeline.gate import UNGATED_TOOLS
+        from autoskillit.server import mcp
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+            tool_names = {t.name for t in tools}
+            for name in UNGATED_TOOLS:
+                assert name in tool_names, f"{name} should be visible at startup"
 
 
 class TestGatedToolAccess:
@@ -214,12 +275,12 @@ class TestGatedToolAccess:
         """After open_kitchen prompt handler sets the flag, tools execute normally."""
         from unittest.mock import AsyncMock
 
-        from autoskillit.server import prompts as prompts_mod
+        from autoskillit.server import tools_kitchen as tools_kitchen_mod
         from autoskillit.server.tools_execution import run_cmd
         from tests.conftest import _make_result
 
-        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
-            with patch.object(prompts_mod, "_write_hook_config"):
+        with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(tools_kitchen_mod, "_write_hook_config"):
                 await _open_kitchen_handler()
         tool_ctx.runner.push(_make_result(0, "hello\n", ""))
         result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))
@@ -230,27 +291,73 @@ class TestGatedToolAccess:
         """After close_kitchen prompt handler, tools return error again."""
         from unittest.mock import AsyncMock
 
-        from autoskillit.server import prompts as prompts_mod
+        from autoskillit.server import tools_kitchen as tools_kitchen_mod
         from autoskillit.server.tools_execution import run_cmd
 
-        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
-            with patch.object(prompts_mod, "_write_hook_config"):
-                with patch.object(prompts_mod, "_register_gate_cleanup"):
+        with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(tools_kitchen_mod, "_write_hook_config"):
+                with patch.object(tools_kitchen_mod, "_register_gate_cleanup"):
                     await _open_kitchen_handler()
         _close_kitchen_handler()
         result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
         assert result["success"] is False
         assert result["is_error"] is True
 
-    def test_prompts_registered(self):
-        """open_kitchen and close_kitchen prompts are registered on the server."""
+    def test_kitchen_tools_registered_as_tools(self):
+        """open_kitchen and close_kitchen are registered as tools on the server."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp
+
+        tool_names = {
+            v.name for v in mcp._local_provider._components.values() if isinstance(v, Tool)
+        }
+        assert "open_kitchen" in tool_names
+        assert "close_kitchen" in tool_names
+
+    def test_open_kitchen_registered_as_tool(self):
+        """open_kitchen is a tool, not a prompt."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp
+
+        tool_names = {
+            v.name for v in mcp._local_provider._components.values() if isinstance(v, Tool)
+        }
+        assert "open_kitchen" in tool_names
+
+    def test_close_kitchen_registered_as_tool(self):
+        """close_kitchen is a tool, not a prompt."""
+        from fastmcp.tools import Tool
+
+        from autoskillit.server import mcp
+
+        tool_names = {
+            v.name for v in mcp._local_provider._components.values() if isinstance(v, Tool)
+        }
+        assert "close_kitchen" in tool_names
+
+    def test_no_prompt_named_open_kitchen(self):
+        """open_kitchen is no longer an MCP prompt."""
         from fastmcp.prompts import Prompt
 
         from autoskillit.server import mcp
 
-        prompts = [c for c in mcp._local_provider._components.values() if isinstance(c, Prompt)]
-        prompt_names = {p.name for p in prompts}
-        assert prompt_names == {"open_kitchen", "close_kitchen"}
+        prompt_names = {
+            v.name for v in mcp._local_provider._components.values() if isinstance(v, Prompt)
+        }
+        assert "open_kitchen" not in prompt_names
+
+    def test_no_prompt_named_close_kitchen(self):
+        """close_kitchen is no longer an MCP prompt."""
+        from fastmcp.prompts import Prompt
+
+        from autoskillit.server import mcp
+
+        prompt_names = {
+            v.name for v in mcp._local_provider._components.values() if isinstance(v, Prompt)
+        }
+        assert "close_kitchen" not in prompt_names
 
     @pytest.mark.anyio
     async def test_run_python_gated(self):
@@ -290,10 +397,10 @@ class TestGateTransitionLogs:
     async def test_open_kitchen_logs_gate_open(self, tool_ctx):
         from unittest.mock import AsyncMock
 
-        from autoskillit.server import prompts as prompts_mod
+        from autoskillit.server import tools_kitchen as tools_kitchen_mod
 
-        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
-            with patch.object(prompts_mod, "_write_hook_config"):
+        with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(tools_kitchen_mod, "_write_hook_config"):
                 with structlog.testing.capture_logs() as logs:
                     await _open_kitchen_handler()
         assert any(
@@ -311,18 +418,21 @@ class TestGateTransitionLogs:
 
 
 class TestPromptSchemas:
-    """Prompt descriptions must be accurate, current, and cooking-themed."""
+    """Kitchen tool descriptions must be accurate, current, and cooking-themed."""
 
-    def _get_prompts(self):
-        from fastmcp.prompts import Prompt
+    def _get_kitchen_tools(self):
+        from fastmcp.tools import Tool
 
         from autoskillit.server import mcp
 
+        names = {"open_kitchen", "close_kitchen"}
         return {
-            c.name: c for c in mcp._local_provider._components.values() if isinstance(c, Prompt)
+            c.name: c
+            for c in mcp._local_provider._components.values()
+            if isinstance(c, Tool) and c.name in names
         }
 
-    PROMPT_FORBIDDEN_TERMS = [
+    TOOL_FORBIDDEN_TERMS = [
         "enable_tools",
         "disable_tools",
         "autoskillit_status",
@@ -331,35 +441,37 @@ class TestPromptSchemas:
     ]
 
     def test_prompt_descriptions_contain_no_legacy_terms(self):
-        """Prompt descriptions must not use any pre-rename vocabulary."""
-        prompts = self._get_prompts()
-        for name, prompt in prompts.items():
-            desc = (prompt.description or "").lower()
-            for term in self.PROMPT_FORBIDDEN_TERMS:
+        """Kitchen tool descriptions must not use any pre-rename vocabulary."""
+        tools = self._get_kitchen_tools()
+        for name, tool in tools.items():
+            desc = (tool.description or "").lower()
+            for term in self.TOOL_FORBIDDEN_TERMS:
                 assert term not in desc, (
-                    f"Prompt '{name}' description contains legacy term '{term}': {desc!r}"
+                    f"Tool '{name}' description contains legacy term '{term}': {desc!r}"
                 )
 
     def test_prompt_descriptions_are_cooking_themed(self):
-        """All prompt descriptions must use cooking vocabulary."""
-        prompts = self._get_prompts()
-        for name, prompt in prompts.items():
-            desc = (prompt.description or "").lower()
+        """Kitchen tool descriptions must use cooking vocabulary."""
+        tools = self._get_kitchen_tools()
+        for name, tool in tools.items():
+            desc = (tool.description or "").lower()
             assert "kitchen" in desc, (
-                f"Prompt '{name}' description must contain cooking vocabulary "
+                f"Tool '{name}' description must contain cooking vocabulary "
                 f"('kitchen'): {desc!r}"
             )
 
-    def test_close_kitchen_returns_cooking_confirmation(self, tool_ctx):
+    @pytest.mark.anyio
+    async def test_close_kitchen_returns_cooking_confirmation(self, tool_ctx):
         """close_kitchen must return a cooking-themed closing message."""
-        from autoskillit.server.prompts import _close_kitchen_handler
+        from unittest.mock import AsyncMock, MagicMock
 
-        _close_kitchen_handler()  # ensure closed state
-        prompts = self._get_prompts()
-        result = prompts["close_kitchen"].fn()
-        text = result.messages[0].content.text
-        assert "kitchen" in text.lower(), (
-            f"close_kitchen return message must be cooking-themed: {text!r}"
+        from autoskillit.server.tools_kitchen import close_kitchen
+
+        mock_ctx = MagicMock()
+        mock_ctx.reset_visibility = AsyncMock()
+        result = await close_kitchen(ctx=mock_ctx)
+        assert "kitchen" in result.lower(), (
+            f"close_kitchen return message must be cooking-themed: {result!r}"
         )
 
 
@@ -374,70 +486,75 @@ class TestOpenKitchenVersionReporting:
 
     @staticmethod
     def _prompt_text(result) -> str:
-        """Extract the text content from a PromptResult."""
-        content = result.messages[0].content
-        return content.text if hasattr(content, "text") else str(content)
+        """Extract text from open_kitchen result (now returns str directly)."""
+        return result
 
     @pytest.mark.anyio
     async def test_open_kitchen_instructs_status_call(self):
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
 
-        from autoskillit.server import prompts as prompts_mod
-        from autoskillit.server.prompts import open_kitchen
+        from autoskillit.server import tools_kitchen as tools_kitchen_mod
+        from autoskillit.server.tools_kitchen import open_kitchen
 
-        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
-            with patch.object(prompts_mod, "_write_hook_config"):
-                result = await open_kitchen()
+        mock_ctx = MagicMock()
+        mock_ctx.enable_components = AsyncMock()
+        with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(tools_kitchen_mod, "_write_hook_config"):
+                result = await open_kitchen(ctx=mock_ctx)
         msg = self._prompt_text(result)
         assert "kitchen_status" in msg
 
     @pytest.mark.anyio
     async def test_open_kitchen_carries_orchestrator_contract(self):
-        """open_kitchen prompt must use prohibition framing and name all forbidden tools."""
-        from unittest.mock import AsyncMock
+        """open_kitchen tool must use prohibition framing and name all forbidden tools."""
+        from unittest.mock import AsyncMock, MagicMock
 
         from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
-        from autoskillit.server import prompts as prompts_mod
-        from autoskillit.server.prompts import open_kitchen
+        from autoskillit.server import tools_kitchen as tools_kitchen_mod
+        from autoskillit.server.tools_kitchen import open_kitchen
 
-        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
-            with patch.object(prompts_mod, "_write_hook_config"):
-                result = await open_kitchen()
+        mock_ctx = MagicMock()
+        mock_ctx.enable_components = AsyncMock()
+        with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(tools_kitchen_mod, "_write_hook_config"):
+                result = await open_kitchen(ctx=mock_ctx)
         msg = self._prompt_text(result)
 
         # Must name every forbidden tool
         missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in msg]
-        assert not missing, f"open_kitchen prompt missing forbidden tools: {missing}"
+        assert not missing, f"open_kitchen tool missing forbidden tools: {missing}"
 
         # Must use prohibition framing
         prohibition_terms = ["NEVER", "Do NOT", "MUST NOT", "are prohibited"]
         assert any(term in msg for term in prohibition_terms), (
-            "open_kitchen prompt must use prohibition framing "
+            "open_kitchen tool must use prohibition framing "
             f"(one of {prohibition_terms}), got: {msg[:200]}"
         )
 
         # Must NOT use the conditional escape-hatch phrasing
         assert "During pipeline execution, only use" not in msg, (
-            "open_kitchen prompt must not use conditional 'During pipeline execution, only use' "
+            "open_kitchen tool must not use conditional 'During pipeline execution, only use' "
             "phrasing — the restriction should be unconditional"
         )
 
     @pytest.mark.anyio
     async def test_open_kitchen_still_enables_on_mismatch(self, tmp_path, tool_ctx):
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
 
-        from autoskillit.server import prompts as prompts_mod
-        from autoskillit.server.prompts import open_kitchen
+        from autoskillit.server import tools_kitchen as tools_kitchen_mod
+        from autoskillit.server.tools_kitchen import open_kitchen
 
+        mock_ctx = MagicMock()
+        mock_ctx.enable_components = AsyncMock()
         plugin_dir = tmp_path / ".claude-plugin"
         plugin_dir.mkdir()
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
         tool_ctx.plugin_dir = str(tmp_path)
-        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
-            with patch.object(prompts_mod, "_write_hook_config"):
-                await open_kitchen()
+        with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(tools_kitchen_mod, "_write_hook_config"):
+                await open_kitchen(ctx=mock_ctx)
         assert tool_ctx.gate.enabled is True
 
 
@@ -450,20 +567,21 @@ class TestOpenKitchenSousChef:
 
     @staticmethod
     def _prompt_text(result) -> str:
-        content = result.messages[0].content
-        return content.text if hasattr(content, "text") else str(content)
+        return result
 
     @pytest.mark.anyio
     async def test_sous_chef_rules_injected_at_open_kitchen(self):
         """open_kitchen must include sous-chef global orchestration rules."""
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
 
-        import autoskillit.server.prompts as prompts_mod
-        from autoskillit.server.prompts import open_kitchen
+        import autoskillit.server.tools_kitchen as tools_kitchen_mod
+        from autoskillit.server.tools_kitchen import open_kitchen
 
-        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
-            with patch.object(prompts_mod, "_write_hook_config"):
-                result = await open_kitchen()
+        mock_ctx = MagicMock()
+        mock_ctx.enable_components = AsyncMock()
+        with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(tools_kitchen_mod, "_write_hook_config"):
+                result = await open_kitchen(ctx=mock_ctx)
         text = self._prompt_text(result)
         assert "MULTI-PART PLAN SEQUENCING" in text
         assert "retry-worktree" in text.lower()
@@ -471,15 +589,17 @@ class TestOpenKitchenSousChef:
     @pytest.mark.anyio
     async def test_open_kitchen_degrades_gracefully_without_sous_chef(self, monkeypatch, tmp_path):
         """open_kitchen must not raise when sous-chef/SKILL.md is absent."""
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
 
-        import autoskillit.server.prompts as prompts_mod
-        from autoskillit.server.prompts import open_kitchen
+        import autoskillit.server.tools_kitchen as tools_kitchen_mod
+        from autoskillit.server.tools_kitchen import open_kitchen
 
-        monkeypatch.setattr(prompts_mod, "pkg_root", lambda: tmp_path)
-        with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
-            with patch.object(prompts_mod, "_write_hook_config"):
-                result = await open_kitchen()  # must not raise
+        mock_ctx = MagicMock()
+        mock_ctx.enable_components = AsyncMock()
+        monkeypatch.setattr(tools_kitchen_mod, "pkg_root", lambda: tmp_path)
+        with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(tools_kitchen_mod, "_write_hook_config"):
+                result = await open_kitchen(ctx=mock_ctx)  # must not raise
         text = self._prompt_text(result)
         assert "Kitchen is open" in text
         assert "kitchen_status" in text
@@ -1184,21 +1304,21 @@ def test_server_init_has_no_shim_reexports():
 
 @pytest.mark.anyio
 async def test_open_kitchen_has_no_update_advisory(tool_ctx):
-    """REQ-APP-004: open_kitchen prompt contains no recipe update advisory."""
-    from unittest.mock import AsyncMock
+    """REQ-APP-004: open_kitchen tool contains no recipe update advisory."""
+    from unittest.mock import AsyncMock, MagicMock
 
     from autoskillit.pipeline.gate import DefaultGateState
-    from autoskillit.server import prompts as prompts_mod
-    from autoskillit.server.prompts import open_kitchen
+    from autoskillit.server import tools_kitchen as tools_kitchen_mod
+    from autoskillit.server.tools_kitchen import open_kitchen
 
     # Ensure kitchen is closed before calling open_kitchen
     tool_ctx.gate = DefaultGateState(enabled=False)
-    with patch.object(prompts_mod, "_prime_quota_cache", new=AsyncMock()):
-        with patch.object(prompts_mod, "_write_hook_config"):
-            result = await open_kitchen()
+    mock_ctx = MagicMock()
+    mock_ctx.enable_components = AsyncMock()
+    with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
+        with patch.object(tools_kitchen_mod, "_write_hook_config"):
+            text = await open_kitchen(ctx=mock_ctx)
 
-    content = result.messages[0].content
-    text = content.text if hasattr(content, "text") else str(content)
     assert "RECIPE UPDATE AVAILABLE" not in text
     assert "accept_recipe_update" not in text
     assert "decline_recipe_update" not in text

@@ -140,7 +140,7 @@ async def get_issue_title(issue_url: str) -> str:
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def report_bug(
     error_context: str,
     cwd: str,
@@ -497,7 +497,7 @@ def _parse_enrich_result(response_text: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def prepare_issue(
     title: str,
     body: str,
@@ -563,7 +563,7 @@ async def prepare_issue(
     )
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def enrich_issues(
     issue_number: int | None = None,
     batch: int | None = None,
@@ -629,7 +629,7 @@ async def enrich_issues(
     return json.dumps(parsed)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def claim_issue(
     issue_url: str,
     label: str | None = None,
@@ -709,7 +709,7 @@ async def claim_issue(
     )
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation", "kitchen"})
 async def release_issue(
     issue_url: str,
     label: str | None = None,

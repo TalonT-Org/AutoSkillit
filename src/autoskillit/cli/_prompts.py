@@ -148,8 +148,8 @@ def _build_open_kitchen_prompt() -> str:
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
-        "Kitchen is open. AutoSkillit tools are ready for service. "
-        "Call the kitchen_status tool now to display version "
+        "Call the open_kitchen tool now to open the AutoSkillit kitchen and gain access to "
+        "all automation tools. Then call the kitchen_status tool to display version "
         "and health information to the user.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "

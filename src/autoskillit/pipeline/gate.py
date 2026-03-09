@@ -167,8 +167,8 @@ class DefaultGateState:
 
 _DEFAULT_GATE_MESSAGE = (
     "AutoSkillit tools are not enabled. "
-    "User must type the open_kitchen prompt to activate. "
-    "Check the MCP prompt list for the exact name."
+    "Call the open_kitchen tool to activate (visible in your tool list). "
+    "Kitchen tools are hidden at startup and revealed per-session when open_kitchen is called."
 )
 
 

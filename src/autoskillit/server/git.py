@@ -31,6 +31,21 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _is_generated_path(file_path: str) -> bool:
+    """Return True if file_path matches any GENERATED_FILES entry.
+
+    Handles both exact-path entries (e.g. 'src/autoskillit/hooks/hooks.json')
+    and directory-prefix entries ending with '/' (e.g. 'src/autoskillit/recipes/diagrams/').
+    """
+    for entry in GENERATED_FILES:
+        if entry.endswith("/"):
+            if file_path.startswith(entry):
+                return True
+        elif file_path == entry:
+            return True
+    return False
+
+
 def _filter_changed_files(stdout: str, prefixes: list[str]) -> tuple[list[str], list[str]]:
     """Parse git diff stdout into (changed_files, critical_files).
 
@@ -132,22 +147,64 @@ async def perform_merge(
             "worktree_path": worktree_path,
         }
 
-    # 3c. Dirty tree check — reject worktrees with uncommitted changes
+    # 3c. Strip tracked generated files before dirty-tree check and rebase.
+    # Moving this before the rebase prevents conflicts for in-flight branches
+    # that already committed generated files (e.g. diagram files).
+    ls_rc, ls_out, _ = await _run_git(
+        ["git", "ls-files", "--", *sorted(GENERATED_FILES)], worktree_path, 10, runner
+    )
+    tracked_generated = [f.strip() for f in ls_out.splitlines() if f.strip()]
+    if tracked_generated:
+        rm_rc, _, rm_stderr = await _run_git(
+            ["git", "rm", "--cached", "--ignore-unmatch", "--", *tracked_generated],
+            worktree_path,
+            10,
+            runner,
+        )
+        if rm_rc != 0:
+            return {
+                "error": f"Failed to untrack generated files: {rm_stderr}",
+                "failed_step": MergeFailedStep.GENERATED_FILE_CLEANUP,
+                "state": MergeState.WORKTREE_INTACT,
+                "worktree_path": worktree_path,
+            }
+        commit_rc, _, commit_stderr = await _run_git(
+            ["git", "commit", "--no-verify", "-m", "chore: untrack generated files"],
+            worktree_path,
+            10,
+            runner,
+        )
+        if commit_rc != 0:
+            return {
+                "error": f"Failed to commit generated file cleanup: {commit_stderr}",
+                "failed_step": MergeFailedStep.GENERATED_FILE_CLEANUP,
+                "state": MergeState.WORKTREE_INTACT,
+                "worktree_path": worktree_path,
+            }
+
+    # 3d. Dirty-tree check — reject worktrees with uncommitted non-generated changes.
+    # Generated file paths (matching GENERATED_FILES) are filtered out before
+    # failing: they may appear as untracked after the strip above, and after
+    # FRICT-3B-1 they will be gitignored, but filtering here is a belt-and-suspenders
+    # guard for worktrees on older commits that predate the .gitignore update.
     dirty_rc, dirty_out, _ = await _run_git(
         ["git", "status", "--porcelain"], worktree_path, 10, runner
     )
     if dirty_rc == 0 and dirty_out.strip():
-        dirty_files = [line.strip() for line in dirty_out.strip().splitlines()]
-        return {
-            "error": (
-                f"Worktree has {len(dirty_files)} dirty file(s). "
-                "All changes must be committed before merge."
-            ),
-            "dirty_files": dirty_files,
-            "failed_step": MergeFailedStep.DIRTY_TREE,
-            "state": MergeState.WORKTREE_DIRTY,
-            "worktree_path": worktree_path,
-        }
+        all_dirty = [line.strip() for line in dirty_out.strip().splitlines()]
+        # Porcelain format: "XY path" — strip the 2-char status code + space
+        dirty_files = [line for line in all_dirty if not _is_generated_path(line[3:])]
+        if dirty_files:
+            return {
+                "error": (
+                    f"Worktree has {len(dirty_files)} dirty file(s). "
+                    "All changes must be committed before merge."
+                ),
+                "dirty_files": dirty_files,
+                "failed_step": MergeFailedStep.DIRTY_TREE,
+                "state": MergeState.WORKTREE_DIRTY,
+                "worktree_path": worktree_path,
+            }
 
     # 4. Test gate
     if config.safety.test_gate_on_merge:
@@ -252,39 +309,6 @@ async def perform_merge(
             **({"abort_failed": True, "abort_stderr": abort_stderr} if abort_failed else {}),
         }
 
-    # 6.1. Strip tracked generated files — prevents worktree-path contamination
-    ls_rc, ls_out, _ = await _run_git(
-        ["git", "ls-files", "--", *sorted(GENERATED_FILES)], worktree_path, 10, runner
-    )
-    tracked_generated = [f.strip() for f in ls_out.splitlines() if f.strip()]
-    if tracked_generated:
-        rm_rc, _, rm_stderr = await _run_git(
-            ["git", "rm", "--cached", "--ignore-unmatch", "--", *tracked_generated],
-            worktree_path,
-            10,
-            runner,
-        )
-        if rm_rc != 0:
-            return {
-                "error": f"Failed to untrack generated files: {rm_stderr}",
-                "failed_step": MergeFailedStep.GENERATED_FILE_CLEANUP,
-                "state": MergeState.WORKTREE_INTACT,
-                "worktree_path": worktree_path,
-            }
-        commit_rc, _, commit_stderr = await _run_git(
-            ["git", "commit", "--no-verify", "-m", "chore: untrack generated files"],
-            worktree_path,
-            10,
-            runner,
-        )
-        if commit_rc != 0:
-            return {
-                "error": f"Failed to commit generated file cleanup: {commit_stderr}",
-                "failed_step": MergeFailedStep.GENERATED_FILE_CLEANUP,
-                "state": MergeState.WORKTREE_INTACT,
-                "worktree_path": worktree_path,
-            }
-
     # 6.5. Post-rebase test gate — re-tests the rebased commits before merging
     if tester is not None and config.safety.test_gate_on_merge:
         passed, _ = await tester.run(Path(worktree_path))
@@ -344,7 +368,7 @@ async def perform_merge(
 
     # 9. Cleanup
     wt_rc, _, wt_stderr = await _run_git(
-        ["git", "worktree", "remove", worktree_path], main_repo, 30, runner
+        ["git", "worktree", "remove", "--force", worktree_path], main_repo, 30, runner
     )
     if wt_rc != 0:
         logger.warning(

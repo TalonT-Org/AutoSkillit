@@ -75,5 +75,6 @@ GENERATED_FILES: frozenset[str] = frozenset(
     {
         "src/autoskillit/hooks/hooks.json",
         ".claude/settings.json",
+        "src/autoskillit/recipes/diagrams/",
     }
 )

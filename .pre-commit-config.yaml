@@ -30,7 +30,7 @@ repos:
         name: Block generated config files from being committed
         entry: "Machine-generated file — must not be committed. Run 'autoskillit install' to regenerate."
         language: fail
-        files: '(src/autoskillit/hooks/hooks\.json|\.claude/settings\.json)$'
+        files: '(src/autoskillit/hooks/hooks\.json|\.claude/settings\.json|src/autoskillit/recipes/diagrams/)'
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.0

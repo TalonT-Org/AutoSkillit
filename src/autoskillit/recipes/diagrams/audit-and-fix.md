@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:9dade3bf5f790df127f25ed21845a493af27d3415cb1a960442c04edf47cdd4a -->
+<!-- autoskillit-recipe-hash: sha256:197b49474355088544db9099926d2bdc024b72176969e3645de796ac6f33e1aa -->
 <!-- autoskillit-diagram-format: v5 -->
 ## audit-and-fix
 Audit codebase, investigate findings, plan fixes, implement in a feature branch, and open a PR.
@@ -52,7 +52,12 @@ fix  [run_skill] (retry ×3)
 │  ⌛ context limit → test
 │
 merge  [merge_worktree] (retry ×3)
-│  ↓ success → push
+│  result.failed_step == 'dirty_tree' → fix ↑
+│  result.failed_step == 'test_gate' → fix ↑
+│  result.failed_step == 'post_rebase_test_gate' → fix ↑
+│  result.failed_step == 'rebase' → fix ↑
+│  result.error → release_issue_failure
+│  (default) → push
 │  ✗ failure → release_issue_failure
 │
 push  [push_to_remote] (retry ×3)

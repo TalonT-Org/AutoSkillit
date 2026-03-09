@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:02b965e606fd79e5bd327cc611f28a39458c0457e5efa853c149e8e2f100af26 -->
+<!-- autoskillit-recipe-hash: sha256:bace166a8f72148050be4a2272acfe564f4f8152bc0bf3632610797f341a7d01 -->
 <!-- autoskillit-diagram-format: v5 -->
 ## smoke-test
 End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
@@ -39,8 +39,17 @@ classify  [classify_fix] (retry ×3)
 │  (default) → implement ↑
 │  ✗ failure → escalate
 │
+commit_dirty  [run_cmd] (retry ×3)
+│  ↓ success → merge
+│  ✗ failure → escalate
+│
 merge  [merge_worktree] (retry ×3)
-│  ↓ success → check_summary
+│  result.failed_step == 'dirty_tree' → commit_dirty ↑
+│  result.failed_step == 'test_gate' → escalate
+│  result.failed_step == 'post_rebase_test_gate' → escalate
+│  result.failed_step == 'rebase' → escalate
+│  result.error → escalate
+│  (default) → check_summary
 │  ✗ failure → escalate
 │
 check_summary  [autoskillit.smoke_utils.check_bug_report_non_empty] (retry ×3)

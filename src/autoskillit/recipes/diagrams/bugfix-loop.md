@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:707f143e6a17bbf14baaa891ea0086f313534ccc5a96487904f00ad2b7b447c9 -->
+<!-- autoskillit-recipe-hash: sha256:309442a2c69e9612854f0a0a53283b0aed894d30d29fd8c849fc7ca655cbde25 -->
 <!-- autoskillit-diagram-format: v5 -->
 ## bugfix-loop
 End-to-end test with automatic bug fixing in isolated worktrees.
@@ -55,6 +55,7 @@ remediate  [route] (retry ×3)
 │  ↓ success → plan ↑
 │
 merge  [merge_worktree] (retry ×3)
+│  result.failed_step == 'dirty_tree' → assess ↑
 │  result.failed_step == 'test_gate' → assess ↑
 │  result.failed_step == 'post_rebase_test_gate' → assess ↑
 │  result.failed_step == 'rebase' → assess ↑

@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:2bf09256e8a0c3f69c7e9e9652d1d9a7ede6825fc4ab316cc6d58459f1c6af00 -->
+<!-- autoskillit-recipe-hash: sha256:7b3100a4c2f9ac16da0050b1d9b91da3b81e79a9c41b908add0a0f06688eb04b -->
 <!-- autoskillit-diagram-format: v5 -->
 ## implementation-groups
 Decompose a source document into sequenced implementation groups, then plan, verify, implement, test, and merge each group end-to-end. Use when you have a large document or roadmap to implement via make-groups.
@@ -43,6 +43,7 @@ group  [run_skill] (retry ×3)
 │                                                                                                                            ✗ failure → fix
 │                                                                                                                                                │
 │                                                                                                                                                ✗ failure → release_issue_failure
+│                                                                                                                                                result.failed_step == 'dirty_tree' → fix
 │                                                                                                                                                result.failed_step == 'test_gate' → fix
 │                                                                                                                                                result.failed_step == 'post_rebase_test_gate' → fix
 │                                                                                                                                                result.failed_step == 'rebase' → fix
@@ -83,7 +84,7 @@ resolve_review  [run_skill] (retry ×2)
 │  ✗ failure → release_issue_failure
 │
 re_push_review  [push_to_remote] (retry ×3)
-│  ↓ success → review_pr ↑
+│  ↓ success → ci_watch
 │  ✗ failure → release_issue_failure
 │
 ├── [ci_watch] (retry ×3)  ← only if inputs.open_pr

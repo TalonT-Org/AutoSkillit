@@ -697,8 +697,7 @@ class TestClaimIssueTool:
         tool_ctx.github_client = None  # triggers early return after bind
 
         await claim_issue(issue_url="https://github.com/owner/repo/issues/1")
-        assert captured != {}
-        assert captured.get("tool") == "claim_issue"
+        assert captured == {"tool": "claim_issue", "issue_url": "https://github.com/owner/repo/issues/1"}
 
 
 class TestReleaseIssueTool:
@@ -735,21 +734,24 @@ class TestReleaseIssueTool:
     # P5F4-T2
     @pytest.mark.anyio
     async def test_release_issue_binds_structlog_context(self, tool_ctx, monkeypatch):
-        """release_issue must clear and bind structlog context vars."""
+        """release_issue must bind structlog context vars via bound_contextvars."""
+        import contextlib
+
         import structlog
 
         captured = {}
 
-        def fake_bind(**kwargs):
+        @contextlib.contextmanager
+        def fake_bound_contextvars(**kwargs):
             captured.update(kwargs)
+            yield
 
-        monkeypatch.setattr(structlog.contextvars, "clear_contextvars", lambda: None)
-        monkeypatch.setattr(structlog.contextvars, "bind_contextvars", fake_bind)
+        monkeypatch.setattr(structlog.contextvars, "bound_contextvars", fake_bound_contextvars)
 
         tool_ctx.github_client = None  # triggers early return after bind
 
         await release_issue(issue_url="https://github.com/owner/repo/issues/1")
-        assert captured.get("tool") == "release_issue"
+        assert captured == {"tool": "release_issue", "issue_url": "https://github.com/owner/repo/issues/1"}
 
 
 class TestPrepareIssueTool:

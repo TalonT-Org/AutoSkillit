@@ -29,7 +29,7 @@ _CANDIDATE_ROOTS: list[Path] = [
     Path("/tmp"),
 ]
 
-_FM_PATTERN = re.compile(r"^---\n(.*?)\n---\n?(.*)", re.DOTALL)
+_FM_PATTERN = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
 
 
 def resolve_ephemeral_root() -> Path:
@@ -85,6 +85,8 @@ def _remove_disable_model_invocation(content: str) -> str:
     fm_text = re.sub(r"\ndisable-model-invocation:.*", "", fm_text)
     fm_text = re.sub(r"^disable-model-invocation:.*\n?", "", fm_text, flags=re.MULTILINE)
     fm_text = fm_text.rstrip("\n")
+    if not fm_text.strip():
+        return body
     return f"---\n{fm_text}\n---\n{body}"
 
 
@@ -135,7 +137,13 @@ class DefaultSessionSkillManager:
         Returns path to the created skills directory.
         For non-cook sessions, Tier 2 skills get disable-model-invocation injected.
         """
-        if not session_id or "/" in session_id or "\\" in session_id or session_id in (".", ".."):
+        if (
+            not session_id
+            or "\x00" in session_id
+            or "/" in session_id
+            or "\\" in session_id
+            or session_id in (".", "..")
+        ):
             raise ValueError(f"Invalid session_id: {session_id!r}")
         session_skills_dir = self._root / session_id
         session_skills_dir.mkdir(parents=True, exist_ok=True)
@@ -152,7 +160,13 @@ class DefaultSessionSkillManager:
 
         Returns True if the file was found and updated, False otherwise.
         """
-        if not session_id or "/" in session_id or "\\" in session_id or session_id in (".", ".."):
+        if (
+            not session_id
+            or "\x00" in session_id
+            or "/" in session_id
+            or "\\" in session_id
+            or session_id in (".", "..")
+        ):
             raise ValueError(f"Invalid session_id: {session_id!r}")
         if not skill_name or "/" in skill_name or "\\" in skill_name or skill_name in (".", ".."):
             raise ValueError(f"Invalid skill_name: {skill_name!r}")

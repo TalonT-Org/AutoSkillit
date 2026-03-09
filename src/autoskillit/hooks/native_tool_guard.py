@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 GATE_STATE_FILENAME = ".kitchen_gate"
+GATE_DIR_COMPONENTS = (".autoskillit", "temp")
 
 
 def _is_pid_alive(pid: int) -> bool:
@@ -27,7 +28,7 @@ def _is_pid_alive(pid: int) -> bool:
 
 
 def main() -> None:
-    gate_path = Path.cwd() / "temp" / GATE_STATE_FILENAME
+    gate_path = Path.cwd().joinpath(*GATE_DIR_COMPONENTS, GATE_STATE_FILENAME)
 
     # Parse stdin — fail-open on any error
     try:

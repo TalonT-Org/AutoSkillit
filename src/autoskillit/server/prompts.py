@@ -13,7 +13,7 @@ from types import FrameType
 from fastmcp.prompts import Message, PromptResult
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, atomic_write, pkg_root
-from autoskillit.pipeline import GATE_FILENAME, HOOK_CONFIG_FILENAME
+from autoskillit.pipeline import gate_file_path, hook_config_path
 from autoskillit.server import mcp
 
 _gate_cleanup_registered = False
@@ -21,8 +21,7 @@ _gate_cleanup_registered = False
 
 def _cleanup_gate_file() -> None:
     """Remove gate file and hook config. Safe to call multiple times."""
-    for filename in (GATE_FILENAME, HOOK_CONFIG_FILENAME):
-        path = Path.cwd() / "temp" / filename
+    for path in (gate_file_path(Path.cwd()), hook_config_path(Path.cwd())):
         try:
             path.unlink(missing_ok=True)
         except OSError:
@@ -93,7 +92,7 @@ def _write_hook_config() -> None:
             else "~/.claude/autoskillit_quota_cache.json",
         }
     }
-    hook_cfg_path = Path.cwd() / "temp" / HOOK_CONFIG_FILENAME
+    hook_cfg_path = hook_config_path(Path.cwd())
     try:
         hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(hook_cfg_path, json.dumps(payload))
@@ -107,7 +106,7 @@ async def _open_kitchen_handler() -> None:
 
     _get_ctx().gate.enable()
     logger.info("open_kitchen", gate_state="open")
-    gate_path = Path.cwd() / "temp" / GATE_FILENAME
+    gate_path = gate_file_path(Path.cwd())
     try:
         gate_path.parent.mkdir(parents=True, exist_ok=True)
         lease = {
@@ -128,12 +127,12 @@ def _close_kitchen_handler() -> None:
 
     _get_ctx().gate.disable()
     logger.info("close_kitchen", gate_state="closed")
-    gate_path = Path.cwd() / "temp" / GATE_FILENAME
+    gate_path = gate_file_path(Path.cwd())
     try:
         gate_path.unlink(missing_ok=True)
     except OSError:
         logger.warning("gate_file_remove_failed", path=str(gate_path))
-    hook_cfg_path = Path.cwd() / "temp" / HOOK_CONFIG_FILENAME
+    hook_cfg_path = hook_config_path(Path.cwd())
     try:
         hook_cfg_path.unlink(missing_ok=True)
     except OSError:

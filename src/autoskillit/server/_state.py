@@ -20,7 +20,7 @@ from pathlib import Path
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import get_logger
-from autoskillit.pipeline import GATE_FILENAME, HOOK_CONFIG_FILENAME, ToolContext, is_pid_alive
+from autoskillit.pipeline import ToolContext, gate_file_path, hook_config_path, is_pid_alive
 
 logger = get_logger(__name__)
 
@@ -29,7 +29,7 @@ _ctx: ToolContext | None = None
 
 def _recover_stale_gate_file() -> None:
     """Remove gate file if owning process is dead or file is malformed."""
-    gate_path = Path.cwd() / "temp" / GATE_FILENAME
+    gate_path = gate_file_path(Path.cwd())
     if not gate_path.exists():
         return
     try:
@@ -39,7 +39,7 @@ def _recover_stale_gate_file() -> None:
         gate_path.unlink(missing_ok=True)
         logger.warning("removed_malformed_gate_file", path=str(gate_path))
         # Also clean up companion hook config file
-        hook_cfg = Path.cwd() / "temp" / HOOK_CONFIG_FILENAME
+        hook_cfg = hook_config_path(Path.cwd())
         if hook_cfg.exists():
             hook_cfg.unlink(missing_ok=True)
         return
@@ -48,7 +48,7 @@ def _recover_stale_gate_file() -> None:
         gate_path.unlink(missing_ok=True)
         logger.warning("removed_stale_gate_file", pid=pid, path=str(gate_path))
         # Also clean up companion hook config file
-        hook_cfg = Path.cwd() / "temp" / HOOK_CONFIG_FILENAME
+        hook_cfg = hook_config_path(Path.cwd())
         if hook_cfg.exists():
             hook_cfg.unlink(missing_ok=True)
 

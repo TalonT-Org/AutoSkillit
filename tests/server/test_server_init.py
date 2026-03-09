@@ -527,8 +527,8 @@ class TestGateFileRecovery:
     async def test_initialize_removes_stale_gate_file(self, monkeypatch, tmp_path):
         """_initialize must remove gate files whose owning PID is dead."""
         monkeypatch.chdir(tmp_path)
-        gate_dir = tmp_path / "temp"
-        gate_dir.mkdir()
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
         gate_file = gate_dir / ".kitchen_gate"
         gate_file.write_text(json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"}))
 
@@ -549,8 +549,8 @@ class TestGateFileRecovery:
         import os
 
         monkeypatch.chdir(tmp_path)
-        gate_dir = tmp_path / "temp"
-        gate_dir.mkdir()
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
         gate_file = gate_dir / ".kitchen_gate"
         gate_file.write_text(json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"}))
 
@@ -569,8 +569,8 @@ class TestGateFileRecovery:
     async def test_initialize_removes_malformed_gate_file(self, monkeypatch, tmp_path):
         """Malformed gate files must be removed at startup."""
         monkeypatch.chdir(tmp_path)
-        gate_dir = tmp_path / "temp"
-        gate_dir.mkdir()
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
         gate_file = gate_dir / ".kitchen_gate"
         gate_file.write_text("not valid json")
 

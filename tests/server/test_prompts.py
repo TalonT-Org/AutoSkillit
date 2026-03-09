@@ -34,7 +34,7 @@ async def test_open_kitchen_enables_gate(tmp_path, monkeypatch):
                     await _open_kitchen_handler()
 
     mock_ctx.gate.enable.assert_called_once()
-    gate_file = tmp_path / "temp" / ".kitchen_gate"
+    gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
     assert gate_file.exists(), "Gate file must be written by open_kitchen for native_tool_guard"
 
 
@@ -81,7 +81,7 @@ async def test_open_kitchen_writes_gate_file(tmp_path, monkeypatch):
 
                     await _open_kitchen_handler()
 
-    gate_file = tmp_path / "temp" / ".kitchen_gate"
+    gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
     assert gate_file.exists(), "Gate file must exist after open_kitchen for hook subprocess access"
 
 
@@ -104,7 +104,7 @@ async def test_close_kitchen_removes_gate_file(tmp_path, monkeypatch):
                     await _open_kitchen_handler()
                     _close_kitchen_handler()
 
-    gate_file = tmp_path / "temp" / ".kitchen_gate"
+    gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
     assert not gate_file.exists(), "Gate file must be removed by close_kitchen"
 
 
@@ -152,7 +152,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
         "_get_ctx must be called in both _open_kitchen_handler and _write_hook_config; "
         "if call_count < 2 the patch did not cover _write_hook_config's deferred import"
     )
-    hook_cfg = tmp_path / "temp" / ".autoskillit_hook_config.json"
+    hook_cfg = tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json"
     assert hook_cfg.exists(), "Hook config file must be written by open_kitchen"
     data = json.loads(hook_cfg.read_text())
     assert data["quota_guard"]["threshold"] == 85.0
@@ -181,7 +181,7 @@ async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
                 await _open_kitchen_handler()
                 _close_kitchen_handler()
 
-    hook_cfg = tmp_path / "temp" / ".autoskillit_hook_config.json"
+    hook_cfg = tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json"
     assert not hook_cfg.exists(), "Hook config must be removed by close_kitchen"
 
 
@@ -213,7 +213,7 @@ async def test_gate_file_contains_lease_metadata(tmp_path, monkeypatch):
 
                         await _open_kitchen_handler()
 
-    gate_path = tmp_path / "temp" / ".kitchen_gate"
+    gate_path = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
     data = json.loads(gate_path.read_text())
     assert "pid" in data
     assert "opened_at" in data
@@ -225,8 +225,8 @@ async def test_gate_file_contains_lease_metadata(tmp_path, monkeypatch):
 def test_atexit_cleanup_removes_gate_file(tmp_path, monkeypatch):
     """The registered atexit function must remove the gate file."""
     monkeypatch.chdir(tmp_path)
-    gate_dir = tmp_path / "temp"
-    gate_dir.mkdir()
+    gate_dir = tmp_path / ".autoskillit" / "temp"
+    gate_dir.mkdir(parents=True)
     gate_file = gate_dir / ".kitchen_gate"
     gate_file.write_text(json.dumps({"pid": os.getpid(), "opened_at": "..."}))
 

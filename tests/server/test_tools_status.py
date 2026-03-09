@@ -144,8 +144,8 @@ class TestKitchenStatus:
     async def test_kitchen_status_reports_gate_file_exists(self, monkeypatch, tmp_path, tool_ctx):
         """kitchen_status must include gate_file_exists field."""
         monkeypatch.chdir(tmp_path)
-        gate_dir = tmp_path / "temp"
-        gate_dir.mkdir()
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
         (gate_dir / ".kitchen_gate").write_text(
             json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"})
         )
@@ -164,8 +164,8 @@ class TestKitchenStatus:
         """When gate_file_exists=True but tools_enabled=False, emit warning."""
         monkeypatch.chdir(tmp_path)
         tool_ctx.gate = DefaultGateState(enabled=False)
-        gate_dir = tmp_path / "temp"
-        gate_dir.mkdir()
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
         (gate_dir / ".kitchen_gate").write_text(
             json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"})
         )
@@ -184,8 +184,8 @@ class TestKitchenStatus:
         monkeypatch.chdir(tmp_path)
         tool_ctx.gate = DefaultGateState(enabled=True)
         tool_ctx.plugin_dir = str(Path(autoskillit.__file__).parent)
-        gate_dir = tmp_path / "temp"
-        gate_dir.mkdir()
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
         (gate_dir / ".kitchen_gate").write_text(
             json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"})
         )
@@ -193,6 +193,24 @@ class TestKitchenStatus:
         assert result["tools_enabled"] is True
         assert result["gate_file_exists"] is True
         assert "warning" not in result
+
+    @pytest.mark.anyio
+    async def test_kitchen_status_stale_warning_references_correct_path(
+        self, monkeypatch, tmp_path, tool_ctx
+    ):
+        """Split-brain warning must reference .autoskillit/temp/ not temp/."""
+        monkeypatch.chdir(tmp_path)
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
+        (gate_dir / ".kitchen_gate").write_text(
+            json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"})
+        )
+        result = json.loads(await kitchen_status())
+        warning = result.get("warning", "")
+        assert ".autoskillit/temp/.kitchen_gate" in warning, (
+            f"Warning must reference .autoskillit/temp/.kitchen_gate, got: {warning!r}"
+        )
 
 
 class TestGetPipelineReport:

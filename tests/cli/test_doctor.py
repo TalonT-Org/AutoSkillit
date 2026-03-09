@@ -601,8 +601,8 @@ class TestDoctorStaleGateFile:
         from autoskillit.cli._doctor import _check_stale_gate_file
         from autoskillit.core import Severity
 
-        gate_dir = tmp_path / "temp"
-        gate_dir.mkdir()
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
         (gate_dir / ".kitchen_gate").write_text(
             json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"})
         )
@@ -623,8 +623,8 @@ class TestDoctorStaleGateFile:
         from autoskillit.cli._doctor import _check_stale_gate_file
         from autoskillit.core import Severity
 
-        gate_dir = tmp_path / "temp"
-        gate_dir.mkdir()
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
         (gate_dir / ".kitchen_gate").write_text(
             json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"})
         )
@@ -636,8 +636,8 @@ class TestDoctorStaleGateFile:
         from autoskillit.cli._doctor import _check_stale_gate_file
         from autoskillit.core import Severity
 
-        gate_dir = tmp_path / "temp"
-        gate_dir.mkdir()
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
         (gate_dir / ".kitchen_gate").write_text("not json")
         result = _check_stale_gate_file(tmp_path)
         assert result.severity == Severity.ERROR

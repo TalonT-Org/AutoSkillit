@@ -13,12 +13,15 @@ from autoskillit.pipeline.audit import (
 )
 from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.gate import (
+    GATE_DIR_COMPONENTS,
     GATE_FILENAME,
     GATED_TOOLS,
     HOOK_CONFIG_FILENAME,
     UNGATED_TOOLS,
     DefaultGateState,
     gate_error_result,
+    gate_file_path,
+    hook_config_path,
     is_pid_alive,
 )
 from autoskillit.pipeline.timings import DefaultTimingLog, TimingEntry
@@ -38,11 +41,14 @@ __all__ = [
     "TokenEntry",
     # gate
     "DefaultGateState",
+    "GATE_DIR_COMPONENTS",
     "GATE_FILENAME",
     "GATED_TOOLS",
     "HOOK_CONFIG_FILENAME",
     "UNGATED_TOOLS",
     "gate_error_result",
+    "gate_file_path",
+    "hook_config_path",
     "is_pid_alive",
     # context
     "ToolContext",

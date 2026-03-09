@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.core import Severity, is_git_worktree, pkg_root
-from autoskillit.pipeline import GATE_FILENAME, is_pid_alive
+from autoskillit.pipeline import gate_file_path, is_pid_alive
 
 
 @dataclass
@@ -33,7 +33,7 @@ def _is_plugin_installed() -> bool:
 
 def _check_stale_gate_file(project_root: Path) -> DoctorResult:
     """Check for stale gate file from a crashed pipeline session."""
-    gate_path = project_root / "temp" / GATE_FILENAME
+    gate_path = gate_file_path(project_root)
     if not gate_path.exists():
         return DoctorResult(Severity.OK, "stale_gate_file", "No gate file found")
 

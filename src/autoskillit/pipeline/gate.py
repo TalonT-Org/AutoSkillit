@@ -13,12 +13,27 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Final
 
 from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 
 GATE_FILENAME: Final[str] = ".kitchen_gate"
 HOOK_CONFIG_FILENAME: Final[str] = ".autoskillit_hook_config.json"
+
+# Directory components for the gate state directory, relative to project root.
+# Hook scripts (stdlib-only) duplicate this as a local constant validated by arch tests.
+GATE_DIR_COMPONENTS: Final[tuple[str, ...]] = (".autoskillit", "temp")
+
+
+def gate_file_path(project_root: Path) -> Path:
+    """Return the canonical path to the kitchen gate lease file."""
+    return project_root.joinpath(*GATE_DIR_COMPONENTS, GATE_FILENAME)
+
+
+def hook_config_path(project_root: Path) -> Path:
+    """Return the canonical path to the hook configuration JSON file."""
+    return project_root.joinpath(*GATE_DIR_COMPONENTS, HOOK_CONFIG_FILENAME)
 
 
 def is_pid_alive(pid: int) -> bool:

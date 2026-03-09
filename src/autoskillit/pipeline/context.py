@@ -21,6 +21,7 @@ from autoskillit.core import (
     MigrationService,
     OutputPatternResolver,
     RecipeRepository,
+    SkillSessionManager,
     SubprocessRunner,
     TestRunner,
     TimingStore,
@@ -39,23 +40,24 @@ class ToolContext:
 
     Fields
     ------
-    config:        AutomationConfig loaded from .autoskillit/config.yaml
-    audit:         AuditStore — records pipeline failures
-    token_log:     TokenStore — per-step token tracking
-    timing_log:    TimingStore — per-step wall-clock duration tracking
-    gate:          GatePolicy — enables/disables gated tools
-    plugin_dir:    Absolute path string to the autoskillit package directory
-    runner:        SubprocessRunner implementation (DefaultSubprocessRunner in production,
-                   MockSubprocessRunner in tests)
-    executor:      HeadlessExecutor — runs headless Claude Code sessions
-    tester:        TestRunner — runs the project test suite
-    recipes:       RecipeRepository — loads and lists pipeline recipes
-    migrations:    MigrationService — applies versioned migration notes to recipes
-    db_reader:     DatabaseReader — executes read-only SQLite queries
-    workspace_mgr: WorkspaceManager — manages workspace directory teardown
-    clone_mgr:     CloneManager — clone-based pipeline run isolation
-    github_client: GitHubFetcher — fetches GitHub issue content
-    ci_watcher:    CIWatcher — watches GitHub Actions CI runs
+    config:               AutomationConfig loaded from .autoskillit/config.yaml
+    audit:                AuditStore — records pipeline failures
+    token_log:            TokenStore — per-step token tracking
+    timing_log:           TimingStore — per-step wall-clock duration tracking
+    gate:                 GatePolicy — enables/disables gated tools
+    plugin_dir:           Absolute path string to the autoskillit package directory
+    runner:               SubprocessRunner implementation (DefaultSubprocessRunner in production,
+                          MockSubprocessRunner in tests)
+    executor:             HeadlessExecutor — runs headless Claude Code sessions
+    tester:               TestRunner — runs the project test suite
+    recipes:              RecipeRepository — loads and lists pipeline recipes
+    migrations:           MigrationService — applies versioned migration notes to recipes
+    db_reader:            DatabaseReader — executes read-only SQLite queries
+    workspace_mgr:        WorkspaceManager — manages workspace directory teardown
+    clone_mgr:            CloneManager — clone-based pipeline run isolation
+    github_client:        GitHubFetcher — fetches GitHub issue content
+    ci_watcher:           CIWatcher — watches GitHub Actions CI runs
+    session_skill_manager: SkillSessionManager — manages per-session ephemeral skill dirs
     """
 
     config: AutomationConfig
@@ -75,3 +77,4 @@ class ToolContext:
     github_client: GitHubFetcher | None = field(default=None)
     ci_watcher: CIWatcher | None = field(default=None)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
+    session_skill_manager: SkillSessionManager | None = field(default=None)

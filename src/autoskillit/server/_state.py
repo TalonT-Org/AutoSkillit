@@ -70,6 +70,15 @@ def _initialize(ctx: ToolContext) -> None:
     except Exception:
         logger.warning("telemetry_recovery_at_startup_failed", exc_info=True)
 
+    # Session skill cleanup: remove ephemeral skill dirs from previous server runs.
+    if ctx.session_skill_manager is not None:
+        try:
+            removed = ctx.session_skill_manager.cleanup_stale()
+            if removed:
+                logger.info("session_skill_cleanup", extra={"removed": removed})
+        except Exception:
+            logger.warning("session_skill_cleanup_failed", exc_info=True)
+
 
 def _get_ctx() -> ToolContext:
     """Return the active ToolContext. Raises if _initialize() has not been called."""

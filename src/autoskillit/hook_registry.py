@@ -28,6 +28,10 @@ HOOK_REGISTRY: list[HookDef] = [
         matcher="mcp__.*autoskillit.*__remove_clone",
         scripts=["remove_clone_guard.py"],
     ),
+    HookDef(
+        matcher=r"mcp__.*autoskillit.*__open_kitchen.*",
+        scripts=["open_kitchen_guard.py"],
+    ),
 ]
 
 

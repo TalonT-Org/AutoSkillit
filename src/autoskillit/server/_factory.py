@@ -35,7 +35,13 @@ from autoskillit.recipe import (
     load_bundled_manifest,
     resolve_skill_name,
 )
-from autoskillit.workspace import DefaultCloneManager, DefaultWorkspaceManager
+from autoskillit.workspace import (
+    DefaultCloneManager,
+    DefaultWorkspaceManager,
+    SessionSkillManager,
+    SkillsDirectoryProvider,
+    resolve_ephemeral_root,
+)
 
 # Sentinel: distinguish "caller passed runner=None explicitly" from "not provided"
 _UNSET: Any = object()
@@ -87,6 +93,11 @@ def make_context(
     gate = DefaultGateState(enabled=False)
     if os.environ.get("AUTOSKILLIT_KITCHEN_OPEN") == "1":
         gate.enable()
+
+    provider = SkillsDirectoryProvider()
+    ephemeral_root = resolve_ephemeral_root()
+    session_mgr = SessionSkillManager(provider, ephemeral_root)
+
     ctx = ToolContext(
         config=config,
         audit=DefaultAuditLog(),
@@ -102,6 +113,7 @@ def make_context(
         clone_mgr=DefaultCloneManager(),
         github_client=DefaultGitHubFetcher(token=github_token),
         ci_watcher=DefaultCIWatcher(token=github_token),
+        session_skill_manager=session_mgr,
     )
 
     def _resolve_output_patterns(skill_command: str) -> list[str]:

@@ -11,12 +11,13 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled
+from autoskillit.server.helpers import _notify, _require_enabled, track_response_size
 
 logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("wait_for_ci")
 async def wait_for_ci(
     branch: str,
     repo: str | None = None,
@@ -111,6 +112,7 @@ async def wait_for_ci(
 
 
 @mcp.tool(tags={"automation"})
+@track_response_size("get_ci_status")
 async def get_ci_status(
     branch: str | None = None,
     run_id: int | None = None,

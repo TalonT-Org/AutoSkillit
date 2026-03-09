@@ -11,12 +11,18 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import RestartScope, get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess
+from autoskillit.server.helpers import (
+    _notify,
+    _require_enabled,
+    _run_subprocess,
+    track_response_size,
+)
 
 logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("merge_worktree")
 async def merge_worktree(
     worktree_path: str,
     base_branch: str,
@@ -80,6 +86,7 @@ async def merge_worktree(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("classify_fix")
 async def classify_fix(
     worktree_path: str,
     base_branch: str,
@@ -180,6 +187,7 @@ async def classify_fix(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("create_unique_branch")
 async def create_unique_branch(
     slug: str,
     issue_number: int | None,
@@ -275,6 +283,7 @@ async def create_unique_branch(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("check_pr_mergeable")
 async def check_pr_mergeable(
     pr_number: int,
     cwd: str,

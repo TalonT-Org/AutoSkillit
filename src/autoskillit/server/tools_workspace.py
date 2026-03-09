@@ -13,12 +13,18 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger, truncate_text
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess
+from autoskillit.server.helpers import (
+    _notify,
+    _require_enabled,
+    _run_subprocess,
+    track_response_size,
+)
 
 logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("test_check")
 async def test_check(
     worktree_path: str,
     step_name: str = "",
@@ -77,6 +83,7 @@ async def test_check(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("reset_test_dir")
 async def reset_test_dir(
     test_dir: str,
     force: bool = False,
@@ -152,6 +159,7 @@ async def reset_test_dir(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("reset_workspace")
 async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str:
     """Runs a configured reset command then deletes directory contents,
     preserving configured directories and the reset guard marker.

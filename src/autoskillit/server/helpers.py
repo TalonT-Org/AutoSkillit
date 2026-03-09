@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import functools
+import json
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -82,6 +84,57 @@ def _get_config():  # type: ignore[return]
     from autoskillit.server._state import _get_config as _cfg_fn
 
     return _cfg_fn()
+
+
+def _get_ctx_or_none():  # type: ignore[return]
+    """Deferred import of _get_ctx_or_none from _state to avoid circular imports."""
+    from autoskillit.server._state import _get_ctx_or_none as _ctx_none_fn
+
+    return _ctx_none_fn()
+
+
+def track_response_size(tool_name: str):
+    """Decorator: measure the JSON string size of a tool response and record to response_log.
+
+    Apply BELOW @mcp.tool() so the wrapped function is what FastMCP registers:
+
+        @mcp.tool(tags={"automation"})
+        @track_response_size("get_token_summary")
+        async def get_token_summary(...) -> str:
+            ...
+    """
+
+    def decorator(fn):
+        @functools.wraps(fn)
+        async def wrapper(*args, **kwargs):
+            result = await fn(*args, **kwargs)
+            try:
+                ctx = _get_ctx_or_none()
+                if ctx is not None:
+                    response_str = result if isinstance(result, str) else json.dumps(result)
+                    threshold = ctx.config.mcp_response.alert_threshold_tokens
+                    exceeded = ctx.response_log.record(
+                        tool_name, response_str, alert_threshold_tokens=threshold
+                    )
+                    if exceeded:
+                        from fastmcp import Context as FmcpContext
+
+                        mcp_ctx = next((a for a in args if isinstance(a, FmcpContext)), None)
+                        if mcp_ctx is not None:
+                            await _notify(
+                                mcp_ctx,
+                                "info",
+                                f"MCP tool '{tool_name}' response exceeded "
+                                f"{threshold} estimated token threshold",
+                                logger_name="autoskillit.server.response_size",
+                            )
+            except Exception:
+                pass  # never interfere with tool execution
+            return result
+
+        return wrapper
+
+    return decorator
 
 
 def _require_enabled() -> str | None:

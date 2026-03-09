@@ -18,12 +18,14 @@ from autoskillit.server.helpers import (
     _require_enabled,
     _run_subprocess,
     _validate_skill_command,
+    track_response_size,
 )
 
 logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("run_cmd")
 async def run_cmd(
     cmd: str,
     cwd: str,
@@ -77,6 +79,7 @@ async def run_cmd(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("run_python")
 async def run_python(
     callable: str,
     args: dict[str, object] | None = None,
@@ -123,6 +126,7 @@ async def run_python(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("run_skill")
 async def run_skill(
     skill_command: str,
     cwd: str,

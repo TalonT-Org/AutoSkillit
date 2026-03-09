@@ -193,6 +193,17 @@ async def write_telemetry_files(
     if (gate := _require_enabled()) is not None:
         return gate
 
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="write_telemetry_files", output_dir=output_dir)
+    logger.info("write_telemetry_files", output_dir=output_dir)
+    await _notify(
+        ctx,
+        "info",
+        f"write_telemetry_files: {output_dir}",
+        "autoskillit.write_telemetry_files",
+        extra={"output_dir": output_dir},
+    )
+
     from autoskillit.server import _get_ctx
 
     tool_ctx = _get_ctx()

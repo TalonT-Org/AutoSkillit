@@ -14,10 +14,33 @@ from autoskillit.pipeline import gate_file_path, hook_config_path, is_pid_alive
 
 @dataclass
 class DoctorResult:
+    """Outcome of a single doctor check.
+
+    The ``fix`` field is for **external programmatic callers** that want to
+    inspect results and apply remediation themselves.  ``run_doctor`` does not
+    dispatch ``fix`` — it passes ``fix=True`` directly into each check function,
+    which applies the fix inline and returns an ``OK`` result immediately.
+    External callers (e.g. tests or integrations) may call ``result.fix()``
+    after receiving an ``ERROR`` result from a check function invoked with
+    ``fix=False``.
+    """
+
     severity: Severity
     check: str
     message: str
     fix: Callable[[], None] | None = field(default=None, repr=False)
+
+
+def _delete_gate_files(gate_path: Path, hook_cfg: Path) -> None:
+    """Remove gate and hook-config files, ignoring missing-file and permission errors."""
+    try:
+        gate_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+    try:
+        hook_cfg.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def _is_plugin_installed() -> bool:
@@ -46,39 +69,29 @@ def _check_stale_gate_file(project_root: Path, fix: bool = False) -> DoctorResul
         pid = data["pid"]
     except (json.JSONDecodeError, KeyError, TypeError, OSError):
         if fix:
-            gate_path.unlink(missing_ok=True)
-            hook_cfg.unlink(missing_ok=True)
+            _delete_gate_files(gate_path, hook_cfg)
             return DoctorResult(
                 Severity.OK,
                 "stale_gate_file",
                 f"Removed malformed gate file at {gate_path}.",
             )
 
-        def _apply_malformed_fix() -> None:
-            gate_path.unlink(missing_ok=True)
-            hook_cfg.unlink(missing_ok=True)
-
         return DoctorResult(
             Severity.ERROR,
             "stale_gate_file",
             f"Malformed gate file at {gate_path} — safe to delete. "
             f"Run 'autoskillit doctor --fix'.",
-            fix=_apply_malformed_fix,
+            fix=lambda: _delete_gate_files(gate_path, hook_cfg),
         )
 
     if not is_pid_alive(pid):
         if fix:
-            gate_path.unlink(missing_ok=True)
-            hook_cfg.unlink(missing_ok=True)
+            _delete_gate_files(gate_path, hook_cfg)
             return DoctorResult(
                 Severity.OK,
                 "stale_gate_file",
                 f"Removed stale gate file at {gate_path} (PID {pid} was dead).",
             )
-
-        def _apply_stale_fix() -> None:
-            gate_path.unlink(missing_ok=True)
-            hook_cfg.unlink(missing_ok=True)
 
         return DoctorResult(
             Severity.ERROR,
@@ -86,7 +99,7 @@ def _check_stale_gate_file(project_root: Path, fix: bool = False) -> DoctorResul
             f"Stale gate file at {gate_path} (PID {pid} is dead) — "
             f"safe to delete. Native tools may be blocked. "
             f"Run 'autoskillit doctor --fix'.",
-            fix=_apply_stale_fix,
+            fix=lambda: _delete_gate_files(gate_path, hook_cfg),
         )
 
     return DoctorResult(

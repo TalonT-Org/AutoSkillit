@@ -418,11 +418,10 @@ class TestCLICook:
         tools_idx = cmd.index(ClaudeFlags.TOOLS)
         assert cmd[tools_idx + 1] == "AskUserQuestion"
         assert ClaudeFlags.APPEND_SYSTEM_PROMPT in cmd
-        # Interactive: must have --allow-dangerously-skip-permissions, no -p, no
-        # --dangerously-skip-permissions
-        assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS in cmd
+        # Interactive cook: must have --dangerously-skip-permissions, no -p
+        assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS in cmd
         assert ClaudeFlags.PRINT not in cmd
-        assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS not in cmd
+        assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS not in cmd
         # Interactive passthrough: no capture_output, no stdin
         kwargs = mock_run.call_args[1] if mock_run.call_args[1] else {}
         assert "capture_output" not in kwargs
@@ -582,13 +581,13 @@ class TestCLICook:
         assert not input_called, "input() must not be called when recipe name is provided"
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_uses_allow_dangerously_skip_permissions(
+    def test_cook_uses_dangerously_skip_permissions(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cook passes --allow-dangerously-skip-permissions to claude."""
+        """cook passes --dangerously-skip-permissions to claude."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -602,7 +601,7 @@ class TestCLICook:
         cli.cook("test-script")
 
         cmd = mock_run.call_args[0][0]
-        assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS in cmd
+        assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS in cmd
 
     @patch("autoskillit.cli.subprocess.run")
     def test_cook_env_has_kitchen_open(

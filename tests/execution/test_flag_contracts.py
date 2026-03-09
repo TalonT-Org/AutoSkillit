@@ -86,8 +86,8 @@ class TestFlagRegistryAudit:
 
     def test_interactive_cmd_uses_correct_permission_flag(self):
         result = build_interactive_cmd()
-        assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS in result.cmd
-        assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS not in result.cmd
+        assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS in result.cmd
+        assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS not in result.cmd
 
     def test_headless_cmd_uses_correct_permission_flag(self):
         result = build_headless_cmd("test prompt")

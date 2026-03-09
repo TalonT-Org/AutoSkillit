@@ -16,13 +16,13 @@ class TestBuildInteractiveCmd:
         result = build_interactive_cmd()
         assert isinstance(result, ClaudeInteractiveCmd)
 
-    def test_includes_allow_dangerously_skip_permissions(self) -> None:
+    def test_includes_dangerously_skip_permissions(self) -> None:
         result = build_interactive_cmd()
-        assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS in result.cmd
+        assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS in result.cmd
 
-    def test_does_not_include_dangerously_skip_permissions(self) -> None:
+    def test_does_not_include_allow_dangerously_skip_permissions(self) -> None:
         result = build_interactive_cmd()
-        assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS not in result.cmd
+        assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS not in result.cmd
 
     def test_does_not_include_prompt_flag(self) -> None:
         result = build_interactive_cmd()

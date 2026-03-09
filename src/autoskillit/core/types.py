@@ -77,9 +77,11 @@ class ClaudeFlags(StrEnum):
       2. Follow the failing tests in test_flag_contracts.py to update call sites.
     """
 
-    # Permission bypass — mode-dependent (never use the wrong one for the wrong mode)
-    ALLOW_DANGEROUSLY_SKIP_PERMISSIONS = "--allow-dangerously-skip-permissions"  # interactive only
-    DANGEROUSLY_SKIP_PERMISSIONS = "--dangerously-skip-permissions"  # headless only
+    # Permission bypass
+    ALLOW_DANGEROUSLY_SKIP_PERMISSIONS = (
+        "--allow-dangerously-skip-permissions"  # enables option without activating
+    )
+    DANGEROUSLY_SKIP_PERMISSIONS = "--dangerously-skip-permissions"  # actually bypasses all checks
 
     # Prompt / execution mode
     PRINT = "-p"

@@ -391,25 +391,31 @@ class TestCloneRepoRemoteUrlOverride:
         subprocess.run(["git", "clone", str(bare), str(source)], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(source), "config", "user.email", "t@t.com"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         subprocess.run(
             ["git", "-C", str(source), "config", "user.name", "T"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         (source / "f.txt").write_text("x")
         subprocess.run(["git", "-C", str(source), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(source), "commit", "-m", "init"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         src_branch = subprocess.run(
             ["git", "-C", str(source), "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
         subprocess.run(
             ["git", "-C", str(source), "push", "origin", src_branch],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         return source, bare
 
@@ -426,7 +432,8 @@ class TestCloneRepoRemoteUrlOverride:
             actual_origin = subprocess.run(
                 ["git", "remote", "get-url", "origin"],
                 cwd=str(clone_path),
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             ).stdout.strip()
             assert actual_origin == override_url
             assert result["remote_url"] == override_url
@@ -445,7 +452,8 @@ class TestCloneRepoRemoteUrlOverride:
             actual_origin = subprocess.run(
                 ["git", "remote", "get-url", "origin"],
                 cwd=str(clone_path),
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             ).stdout.strip()
             # Without override, origin should equal the detected source origin (bare remote path)
             assert actual_origin == result["remote_url"]

@@ -450,7 +450,9 @@ class DefaultCloneManager:
         strategy: str = "",
         remote_url: str = "",
     ) -> dict[str, str]:
-        return clone_repo(source_dir, run_name, branch=branch, strategy=strategy, remote_url=remote_url)
+        return clone_repo(
+            source_dir, run_name, branch=branch, strategy=strategy, remote_url=remote_url
+        )
 
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]:
         return remove_clone(clone_path, keep)

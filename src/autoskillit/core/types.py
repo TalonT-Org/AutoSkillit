@@ -387,6 +387,11 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "claim_issue",
         "release_issue",
         "wait_for_ci",
+        "create_unique_branch",
+        "write_telemetry_files",
+        "get_pr_reviews",
+        "bulk_close_issues",
+        "check_pr_mergeable",
     }
 )
 

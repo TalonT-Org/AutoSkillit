@@ -20,6 +20,7 @@ from autoskillit.server.tools_status import (
     get_timing_summary,
     get_token_summary,
     kitchen_status,
+    write_telemetry_files,
 )
 from tests.conftest import _make_result
 
@@ -593,3 +594,44 @@ class TestTelemetryRecoveryData:
         result = json.loads(await get_pipeline_report())
         assert result["total_failures"] == 1
         assert result["failures"][0]["skill_command"] == "/autoskillit:implement-worktree"
+
+
+class TestWriteTelemetryFiles:
+    @pytest.mark.anyio
+    async def test_writes_token_summary_markdown(self, tool_ctx, tmp_path):
+        tool_ctx.token_log.record(
+            "step1",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+        )
+        result = json.loads(await write_telemetry_files(str(tmp_path)))
+        path = Path(result["token_summary_path"])
+        assert path.exists()
+        assert "step1" in path.read_text()
+        assert "100" in path.read_text()
+
+    @pytest.mark.anyio
+    async def test_writes_timing_summary_markdown(self, tool_ctx, tmp_path):
+        tool_ctx.timing_log.record("step1", 12.5)
+        result = json.loads(await write_telemetry_files(str(tmp_path)))
+        path = Path(result["timing_summary_path"])
+        assert path.exists()
+        assert "step1" in path.read_text()
+
+    @pytest.mark.anyio
+    async def test_creates_output_dir_if_missing(self, tool_ctx, tmp_path):
+        out = str(tmp_path / "nested" / "telemetry")
+        result = json.loads(await write_telemetry_files(out))
+        assert Path(result["token_summary_path"]).exists()
+        assert Path(result["timing_summary_path"]).exists()
+
+    @pytest.mark.anyio
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        tool_ctx.gate.disable()
+        result = json.loads(await write_telemetry_files("/tmp"))
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"

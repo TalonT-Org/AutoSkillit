@@ -16,14 +16,17 @@ from autoskillit.server.tools_integrations import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
     _parse_fingerprint,
+    bulk_close_issues,
     claim_issue,
     enrich_issues,
     fetch_github_issue,
     get_issue_title,
+    get_pr_reviews,
     prepare_issue,
     release_issue,
     report_bug,
 )
+from tests.conftest import _make_result
 
 # ---------------------------------------------------------------------------
 # _parse_fingerprint unit tests
@@ -652,5 +655,110 @@ class TestEnrichIssuesTool:
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         result = json.loads(await enrich_issues())
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+
+
+class TestGetPrReviews:
+    @pytest.mark.anyio
+    async def test_returns_structured_reviews(self, tool_ctx):
+        import json as _j
+
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                _j.dumps(
+                    [
+                        {"user": {"login": "reviewer1"}, "state": "APPROVED", "body": "LGTM"},
+                        {
+                            "user": {"login": "reviewer2"},
+                            "state": "CHANGES_REQUESTED",
+                            "body": "Fix this",
+                        },
+                    ]
+                ),
+                "",
+            )
+        )
+        result = json.loads(await get_pr_reviews(42, ".", repo="owner/repo"))
+        assert len(result["reviews"]) == 2
+        assert result["reviews"][0] == {"author": "reviewer1", "state": "APPROVED", "body": "LGTM"}
+
+    @pytest.mark.anyio
+    async def test_empty_reviews(self, tool_ctx):
+        import json as _j
+
+        tool_ctx.runner.push(_make_result(0, _j.dumps([]), ""))
+        result = json.loads(await get_pr_reviews(42, ".", repo="owner/repo"))
+        assert result["reviews"] == []
+
+    @pytest.mark.anyio
+    async def test_gh_command_failure_returns_error(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(1, "", "could not find PR"))
+        result = json.loads(await get_pr_reviews(99, ".", repo="owner/repo"))
+        assert result["success"] is False
+
+    @pytest.mark.anyio
+    async def test_without_repo_uses_pr_view(self, tool_ctx):
+        import json as _j
+
+        tool_ctx.runner.push(
+            _make_result(
+                0,
+                _j.dumps(
+                    {
+                        "reviews": [
+                            {"author": {"login": "x"}, "state": "APPROVED", "body": ""},
+                        ]
+                    }
+                ),
+                "",
+            )
+        )
+        result = json.loads(await get_pr_reviews(42, "."))
+        assert result["reviews"][0]["author"] == "x"
+
+    @pytest.mark.anyio
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        tool_ctx.gate.disable()
+        result = json.loads(await get_pr_reviews(1, "."))
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+
+
+class TestBulkCloseIssues:
+    @pytest.mark.anyio
+    async def test_closes_all_issues_successfully(self, tool_ctx):
+        for _ in range(3):
+            tool_ctx.runner.push(_make_result(0, "", ""))
+        result = json.loads(await bulk_close_issues([1, 2, 3], "", "."))
+        assert result["closed"] == [1, 2, 3]
+        assert result["failed"] == []
+
+    @pytest.mark.anyio
+    async def test_partial_failure_tracked_per_issue(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(1, "", "not found"))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        result = json.loads(await bulk_close_issues([1, 2, 3], "", "."))
+        assert result["closed"] == [1, 3]
+        assert result["failed"] == [2]
+
+    @pytest.mark.anyio
+    async def test_empty_numbers_list(self, tool_ctx):
+        result = json.loads(await bulk_close_issues([], "", "."))
+        assert result == {"closed": [], "failed": []}
+
+    @pytest.mark.anyio
+    async def test_comment_flag_included_when_provided(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        await bulk_close_issues([7], "Closed by pipeline.", ".")
+        call_cmd = tool_ctx.runner.call_args_list[-1][0]
+        assert "--comment" in call_cmd
+
+    @pytest.mark.anyio
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        tool_ctx.gate.disable()
+        result = json.loads(await bulk_close_issues([1], "", "."))
         assert result["success"] is False
         assert result["subtype"] == "gate_error"

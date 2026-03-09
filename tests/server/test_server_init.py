@@ -174,6 +174,11 @@ class TestToolRegistration:
             "get_ci_status",
             "open_kitchen",
             "close_kitchen",
+            "create_unique_branch",
+            "check_pr_mergeable",
+            "write_telemetry_files",
+            "get_pr_reviews",
+            "bulk_close_issues",
         }
         assert expected == tool_names
 

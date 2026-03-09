@@ -11,7 +11,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import get_logger
+from autoskillit.core import _atomic_write, get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import _notify, _require_enabled
 
@@ -147,6 +147,74 @@ async def get_timing_summary(clear: bool = False) -> str:
     if clear:
         _get_ctx().timing_log.clear()
     return json.dumps({"steps": steps, "total": total})
+
+
+def _format_token_summary(steps: list) -> str:
+    """Render token log entries as a markdown string."""
+    lines = ["# Token Summary\n\n"]
+    for step in steps:
+        lines.append(f"## {step['step_name']}\n\n")
+        lines.append(f"- input_tokens: {step['input_tokens']}\n")
+        lines.append(f"- output_tokens: {step['output_tokens']}\n")
+        lines.append(
+            f"- cache_creation_input_tokens: {step['cache_creation_input_tokens']}\n"
+        )
+        lines.append(
+            f"- cache_read_input_tokens: {step['cache_read_input_tokens']}\n"
+        )
+        lines.append(f"- invocation_count: {step['invocation_count']}\n\n")
+    return "".join(lines)
+
+
+def _format_timing_summary(steps: list) -> str:
+    """Render timing log entries as a markdown string."""
+    lines = ["# Timing Summary\n\n"]
+    for step in steps:
+        lines.append(f"## {step['step_name']}\n\n")
+        lines.append(f"- total_seconds: {step['total_seconds']}\n")
+        lines.append(f"- invocation_count: {step['invocation_count']}\n\n")
+    return "".join(lines)
+
+
+@mcp.tool(tags={"automation", "kitchen"})
+async def write_telemetry_files(
+    output_dir: str,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Write token and timing telemetry summaries as markdown files.
+
+    Reads the current session's token log and timing log and writes two
+    markdown files to output_dir, creating the directory if needed.
+
+    Returns JSON with:
+      - token_summary_path: absolute path to the written token_summary.md
+      - timing_summary_path: absolute path to the written timing_summary.md
+    On gate closed: {"success": false, "subtype": "gate_error", ...}
+
+    Args:
+        output_dir: Directory to write the markdown files into.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    token_path = out / "token_summary.md"
+    _atomic_write(token_path, _format_token_summary(tool_ctx.token_log.get_report()))
+
+    timing_path = out / "timing_summary.md"
+    _atomic_write(timing_path, _format_timing_summary(tool_ctx.timing_log.get_report()))
+
+    return json.dumps(
+        {
+            "token_summary_path": str(token_path),
+            "timing_summary_path": str(timing_path),
+        }
+    )
 
 
 @mcp.tool(tags={"automation", "kitchen"})

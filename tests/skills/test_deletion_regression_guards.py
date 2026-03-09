@@ -39,7 +39,7 @@ def test_merge_pr_deletion_scan_uses_merge_base(merge_pr_text):
     step_15_idx = merge_pr_text.find("Step 1.5")
     assert step_15_idx != -1
     # Find extent of step 1.5 (up to Step 2)
-    step_2_idx = merge_pr_text.find("Step 2", step_15_idx)
+    step_2_idx = merge_pr_text.find("### Step 2", step_15_idx)
     step_15_section = (
         merge_pr_text[step_15_idx:step_2_idx] if step_2_idx != -1 else merge_pr_text[step_15_idx:]
     )
@@ -52,7 +52,7 @@ def test_merge_pr_deletion_scan_uses_diff_filter_D(merge_pr_text):
     """Step 1.5 must detect files deleted from the base branch since the branch point."""
     step_15_idx = merge_pr_text.find("Step 1.5")
     assert step_15_idx != -1
-    step_2_idx = merge_pr_text.find("Step 2", step_15_idx)
+    step_2_idx = merge_pr_text.find("### Step 2", step_15_idx)
     step_15_section = (
         merge_pr_text[step_15_idx:step_2_idx] if step_2_idx != -1 else merge_pr_text[step_15_idx:]
     )
@@ -66,7 +66,7 @@ def test_merge_pr_deletion_scan_forces_conflict_report_path(merge_pr_text):
     """Step 1.5 must force the conflict report path when regressions are detected."""
     step_15_idx = merge_pr_text.find("Step 1.5")
     assert step_15_idx != -1
-    step_2_idx = merge_pr_text.find("Step 2", step_15_idx)
+    step_2_idx = merge_pr_text.find("### Step 2", step_15_idx)
     step_15_section = (
         merge_pr_text[step_15_idx:step_2_idx] if step_2_idx != -1 else merge_pr_text[step_15_idx:]
     )
@@ -162,8 +162,10 @@ def test_review_pr_has_deletion_regression_audit_subagent(review_pr_text):
 
 def test_review_pr_deletion_regression_subagent_severity_is_critical(review_pr_text):
     """The deletion_regression subagent must flag findings as critical severity."""
-    dr_idx = review_pr_text.find("deletion_regression")
-    assert dr_idx != -1
+    dr_idx = review_pr_text.find("deletion_regression — Deliberate")
+    assert dr_idx != -1, (
+        "Could not find '7. deletion_regression — Deliberate' paragraph in review-pr SKILL.md"
+    )
     # Look for 'critical' in the surrounding context (within 500 chars)
     context = review_pr_text[dr_idx : dr_idx + 500]
     assert "critical" in context.lower(), (

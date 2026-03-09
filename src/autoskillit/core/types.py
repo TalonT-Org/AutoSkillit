@@ -789,7 +789,7 @@ class CIWatcher(Protocol):
 
 
 @runtime_checkable
-class SkillSessionManager(Protocol):
+class SessionSkillManager(Protocol):
     """Protocol for managing per-session ephemeral skill directories."""
 
     def init_session(self, session_id: str, *, cook_session: bool = False) -> Path: ...

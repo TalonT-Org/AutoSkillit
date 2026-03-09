@@ -21,7 +21,7 @@ from autoskillit.core import (
     MigrationService,
     OutputPatternResolver,
     RecipeRepository,
-    SkillSessionManager,
+    SessionSkillManager,
     SubprocessRunner,
     TestRunner,
     TimingStore,
@@ -57,7 +57,7 @@ class ToolContext:
     clone_mgr:            CloneManager — clone-based pipeline run isolation
     github_client:        GitHubFetcher — fetches GitHub issue content
     ci_watcher:           CIWatcher — watches GitHub Actions CI runs
-    session_skill_manager: SkillSessionManager — manages per-session ephemeral skill dirs
+    session_skill_manager: SessionSkillManager — manages per-session ephemeral skill dirs
     """
 
     config: AutomationConfig
@@ -77,4 +77,4 @@ class ToolContext:
     github_client: GitHubFetcher | None = field(default=None)
     ci_watcher: CIWatcher | None = field(default=None)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
-    session_skill_manager: SkillSessionManager | None = field(default=None)
+    session_skill_manager: SessionSkillManager | None = field(default=None)

@@ -139,6 +139,22 @@ class TestKitchenStatus:
         status = json.loads(await kitchen_status())
         assert status["github_token_configured"] is False
 
+    @pytest.mark.anyio
+    async def test_kitchen_status_has_no_gate_file_exists_field(self, tool_ctx):
+        """kitchen_status must not report gate_file_exists."""
+        result = json.loads(await kitchen_status())
+        assert "gate_file_exists" not in result
+
+    @pytest.mark.anyio
+    async def test_kitchen_status_has_no_split_brain_warning(self, tool_ctx, tmp_path):
+        """A file at the old gate path must not trigger any warning in kitchen_status."""
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
+        (gate_dir / ".kitchen_gate").write_text("{}")
+        result_str = json.dumps(json.loads(await kitchen_status()))
+        assert "stale" not in result_str.lower()
+        assert "gate_file" not in result_str.lower()
+
 
 class TestGetPipelineReport:
     """get_pipeline_report is ungated and returns accumulated failures."""

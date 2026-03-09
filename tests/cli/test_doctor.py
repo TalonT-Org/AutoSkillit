@@ -594,7 +594,6 @@ class TestGroupFDoctor:
         assert r.check == "test"
 
 
-
 class TestDoctorResultFixField:
     """T1: DoctorResult has an optional fix callable field."""
 
@@ -633,7 +632,6 @@ class TestDoctorResultFixField:
             assert "fix" not in entry
 
 
-
 class TestDoctorFixFlag:
     """T3: doctor CLI accepts fix parameter (infrastructure for future checks)."""
 
@@ -643,3 +641,16 @@ class TestDoctorFixFlag:
 
         sig = inspect.signature(cli.doctor)
         assert "fix" in sig.parameters
+
+
+def test_stale_gate_check_absent_from_doctor_output(tmp_path, monkeypatch, capsys):
+    """Doctor must not report a stale_gate_file check."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    from autoskillit import cli
+
+    cli.doctor(output_json=True)
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    check_names = {r["check"] for r in data["results"]}
+    assert "stale_gate_file" not in check_names

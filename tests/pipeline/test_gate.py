@@ -86,9 +86,18 @@ def test_gate_file_lease_symbols_not_exported():
     """Lease mechanism symbols must not be importable from pipeline.gate."""
     import autoskillit.pipeline.gate as gate_module
 
-    for symbol in ("gate_file_path", "hook_config_path", "GATE_FILENAME",
-                   "GATE_DIR_COMPONENTS", "LEASE_FIELDS", "verify_lease",
-                   "LeaseStatus", "is_pid_alive", "read_starttime_ticks", "read_boot_id"):
+    for symbol in (
+        "gate_file_path",
+        "hook_config_path",
+        "GATE_FILENAME",
+        "GATE_DIR_COMPONENTS",
+        "LEASE_FIELDS",
+        "verify_lease",
+        "LeaseStatus",
+        "is_pid_alive",
+        "read_starttime_ticks",
+        "read_boot_id",
+    ):
         assert not hasattr(gate_module, symbol), f"gate.py still exports {symbol!r}"
 
 
@@ -168,4 +177,3 @@ def test_gate_imports_only_from_core():
                     assert "autoskillit" not in alias.name, (
                         "gate.py must not use bare autoskillit imports"
                     )
-

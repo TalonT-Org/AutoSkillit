@@ -102,7 +102,7 @@ src/autoskillit/
 │   ├── __init__.py          #   Re-exports ToolContext, GateState, AuditLog, TokenLog
 │   ├── audit.py             #   FailureRecord, AuditLog, _audit_log singleton
 │   ├── context.py           #   ToolContext DI container (config, audit, token_log, gate, plugin_dir, runner)
-│   ├── gate.py              #   GateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
+│   ├── gate.py              #   DefaultGateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
 │   ├── timings.py           #   TimingEntry, DefaultTimingLog — per-step wall-clock accumulation
 │   └── tokens.py            #   TokenEntry, TokenLog, _token_log singleton
 ├── execution/               # L1 execution sub-package
@@ -185,7 +185,6 @@ src/autoskillit/
 ├── hooks/                   # Claude Code PreToolUse hook scripts
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration (auto-discovered by Claude Code)
-│   ├── native_tool_guard.py #   PreToolUse hook — blocks native tools when kitchen gate file exists
 │   ├── quota_check.py       #   Quota guard hook — blocks run_skill when threshold exceeded
 │   ├── remove_clone_guard.py #  Remove-clone guard — denies remove_clone calls with keep != "true"
 │   ├── skill_cmd_check.py   #   PreToolUse hook — validates skill_command path argument format

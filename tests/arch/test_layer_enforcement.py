@@ -742,3 +742,9 @@ class TestVersionArchitecture:
         assert "from autoskillit.version import version_info" in src
 
 
+def test_native_tool_guard_absent_from_hook_registry():
+    """native_tool_guard.py must not be registered as a Claude Code hook."""
+    from autoskillit.hook_registry import HOOK_REGISTRY
+
+    all_scripts = [s for h in HOOK_REGISTRY for s in h.scripts]
+    assert "native_tool_guard.py" not in all_scripts

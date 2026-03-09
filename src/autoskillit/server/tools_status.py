@@ -30,18 +30,14 @@ async def kitchen_status() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
-    from autoskillit.pipeline import gate_file_path
     from autoskillit.server import _get_config, _get_ctx, version_info
 
     info = version_info()
-    gate_path = gate_file_path(Path.cwd())
-    gate_file_exists = gate_path.exists()
     status = {
         "package_version": info["package_version"],
         "plugin_json_version": info["plugin_json_version"],
         "versions_match": info["match"],
         "tools_enabled": _get_ctx().gate.enabled,
-        "gate_file_exists": gate_file_exists,
     }
     if not info["match"]:
         status["warning"] = (
@@ -49,14 +45,6 @@ async def kitchen_status() -> str:
             f"plugin.json reports {info['plugin_json_version']}. "
             f"Run `autoskillit doctor` for details or "
             f"`autoskillit install` to refresh the plugin cache."
-        )
-    # Split-brain warning: disk says open but memory says closed
-    elif gate_file_exists and not _get_ctx().gate.enabled:
-        _gate_rel = str(gate_path.relative_to(Path.cwd()))
-        status["warning"] = (
-            f"Stale gate file detected at {_gate_rel} — "
-            "native tools may be blocked. Run close_kitchen or "
-            "delete the file to resolve."
         )
     status["token_usage_verbosity"] = _get_config().token_usage.verbosity
     status["quota_guard_enabled"] = _get_config().quota_guard.enabled

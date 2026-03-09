@@ -36,11 +36,12 @@ async def list_recipes() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
-    from autoskillit.server._state import _ctx
+    from autoskillit.server import _get_ctx_or_none
 
-    if _ctx is None or _ctx.recipes is None:
+    tool_ctx = _get_ctx_or_none()
+    if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps([])
-    result = _ctx.recipes.list_all(Path.cwd())
+    result = tool_ctx.recipes.list_all(Path.cwd())
     return json.dumps(result)
 
 
@@ -169,13 +170,14 @@ async def load_recipe(name: str) -> str:
     ``suggestions`` (list of semantic findings, possibly empty) keys.
     On error: JSON with ``error`` key.
     """
-    from autoskillit.server._state import _ctx
+    from autoskillit.server import _get_ctx_or_none
 
-    if _ctx is None or _ctx.recipes is None:
+    tool_ctx = _get_ctx_or_none()
+    if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"error": "Server not initialized"})
-    suppressed = _ctx.config.migration.suppressed
-    result = _ctx.recipes.load_and_validate(name, Path.cwd(), suppressed=suppressed)
-    recipe_info = _ctx.recipes.find(name, Path.cwd())
+    suppressed = tool_ctx.config.migration.suppressed
+    result = tool_ctx.recipes.load_and_validate(name, Path.cwd(), suppressed=suppressed)
+    recipe_info = tool_ctx.recipes.find(name, Path.cwd())
     return json.dumps(await _apply_triage_gate(result, name, recipe_info=recipe_info))
 
 
@@ -206,11 +208,12 @@ async def validate_recipe(script_path: str) -> str:
     Args:
         script_path: Absolute path to the .yaml recipe file to validate.
     """
-    from autoskillit.server._state import _ctx
+    from autoskillit.server import _get_ctx_or_none
 
-    if _ctx is None or _ctx.recipes is None:
+    tool_ctx = _get_ctx_or_none()
+    if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"valid": False, "errors": ["Server not initialized"]})
-    result = _ctx.recipes.validate_from_path(Path(script_path))
+    result = tool_ctx.recipes.validate_from_path(Path(script_path))
     return json.dumps(result)
 
 

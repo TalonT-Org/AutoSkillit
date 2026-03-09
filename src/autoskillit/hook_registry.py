@@ -28,10 +28,6 @@ HOOK_REGISTRY: list[HookDef] = [
         matcher="mcp__.*autoskillit.*__remove_clone",
         scripts=["remove_clone_guard.py"],
     ),
-    HookDef(
-        matcher="^(Read|Write|Edit|Bash|Glob|Grep|Agent|WebFetch|WebSearch|NotebookEdit)$",
-        scripts=["native_tool_guard.py"],
-    ),
 ]
 
 

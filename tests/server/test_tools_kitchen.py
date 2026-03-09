@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -21,7 +20,7 @@ def _make_mock_ctx():
 # T2a
 @pytest.mark.anyio
 async def test_open_kitchen_enables_gate(tmp_path, monkeypatch):
-    """After _open_kitchen_handler(), gate is enabled and gate file is written."""
+    """After _open_kitchen_handler(), gate is enabled."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
 
@@ -34,8 +33,6 @@ async def test_open_kitchen_enables_gate(tmp_path, monkeypatch):
                     await _open_kitchen_handler()
 
     mock_ctx.gate.enable.assert_called_once()
-    gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
-    assert gate_file.exists(), "Gate file must be written by open_kitchen for native_tool_guard"
 
 
 # T2b
@@ -64,48 +61,6 @@ def test_close_kitchen_no_file_no_error(tmp_path, monkeypatch):
             from autoskillit.server.tools_kitchen import _close_kitchen_handler
 
             _close_kitchen_handler()  # Should not raise
-
-
-# T-GATE-1
-@pytest.mark.anyio
-async def test_open_kitchen_writes_gate_file(tmp_path, monkeypatch):
-    """open_kitchen must write temp/.kitchen_gate so native_tool_guard.py can read it."""
-    monkeypatch.chdir(tmp_path)
-    mock_ctx = _make_mock_ctx()
-
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import _open_kitchen_handler
-
-                    await _open_kitchen_handler()
-
-    gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
-    assert gate_file.exists(), "Gate file must exist after open_kitchen for hook subprocess access"
-
-
-# T-GATE-2
-@pytest.mark.anyio
-async def test_close_kitchen_removes_gate_file(tmp_path, monkeypatch):
-    """close_kitchen must remove temp/.kitchen_gate written by open_kitchen."""
-    monkeypatch.chdir(tmp_path)
-    mock_ctx = _make_mock_ctx()
-
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import (
-                        _close_kitchen_handler,
-                        _open_kitchen_handler,
-                    )
-
-                    await _open_kitchen_handler()
-                    _close_kitchen_handler()
-
-    gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
-    assert not gate_file.exists(), "Gate file must be removed by close_kitchen"
 
 
 # T-CACHE-1
@@ -197,55 +152,6 @@ def test_open_kitchen_handler_is_async():
     )
 
 
-# T-LEASE-1: Gate file contains valid JSON with pid and opened_at
-@pytest.mark.anyio
-async def test_gate_file_contains_lease_metadata(tmp_path, monkeypatch):
-    """Gate file must be a JSON lease, not a bare sentinel."""
-    monkeypatch.chdir(tmp_path)
-    mock_ctx = _make_mock_ctx()
-
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    with patch("autoskillit.server.tools_kitchen._register_gate_cleanup"):
-                        from autoskillit.server.tools_kitchen import _open_kitchen_handler
-
-                        await _open_kitchen_handler()
-
-    gate_path = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
-    data = json.loads(gate_path.read_text())
-    assert "pid" in data
-    assert "opened_at" in data
-    assert data["pid"] == os.getpid()
-    assert isinstance(data["opened_at"], str)  # ISO 8601
-
-
-# T-SIGNAL-1: atexit handler removes gate file
-def test_atexit_cleanup_removes_gate_file(tmp_path, monkeypatch):
-    """The registered atexit function must remove the gate file."""
-    monkeypatch.chdir(tmp_path)
-    gate_dir = tmp_path / ".autoskillit" / "temp"
-    gate_dir.mkdir(parents=True)
-    gate_file = gate_dir / ".kitchen_gate"
-    gate_file.write_text(json.dumps({"pid": os.getpid(), "opened_at": "..."}))
-
-    from autoskillit.server.tools_kitchen import _cleanup_gate_file
-
-    _cleanup_gate_file()
-    assert not gate_file.exists()
-
-
-# T-SIGNAL-2: atexit handler is no-op when no gate file
-def test_atexit_cleanup_noop_when_no_gate_file(tmp_path, monkeypatch):
-    """Cleanup must not raise when gate file doesn't exist."""
-    monkeypatch.chdir(tmp_path)
-
-    from autoskillit.server.tools_kitchen import _cleanup_gate_file
-
-    _cleanup_gate_file()  # should not raise
-
-
 # T-VISIBILITY-1: open_kitchen tool calls ctx.enable_components
 @pytest.mark.anyio
 async def test_open_kitchen_tool_calls_enable_components(tmp_path, monkeypatch):
@@ -280,3 +186,34 @@ async def test_close_kitchen_tool_calls_reset_visibility(tmp_path, monkeypatch):
             await close_kitchen(ctx=mock_ctx)
 
     mock_ctx.reset_visibility.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_does_not_write_gate_file(tmp_path, monkeypatch):
+    """_open_kitchen_handler must not write any file to the gate path."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.config.quota_guard.threshold = None
+    mock_ctx.config.quota_guard.cache_max_age = None
+    mock_ctx.config.quota_guard.cache_path = None
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                from autoskillit.server.tools_kitchen import _open_kitchen_handler
+
+                await _open_kitchen_handler()
+    gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
+    assert not gate_file.exists()
+
+
+def test_close_kitchen_does_not_produce_gate_file(tmp_path, monkeypatch):
+    """_close_kitchen_handler must not interact with any gate file path."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools_kitchen import _close_kitchen_handler
+
+            _close_kitchen_handler()
+    gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
+    assert not gate_file.exists()

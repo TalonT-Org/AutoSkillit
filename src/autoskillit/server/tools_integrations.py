@@ -651,6 +651,10 @@ async def claim_issue(
     if (gate := _require_enabled()) is not None:
         return gate
 
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="claim_issue", issue_url=issue_url)
+    logger.info("claim_issue", issue_url=issue_url)
+
     from autoskillit.server import _get_ctx
 
     tool_ctx = _get_ctx()
@@ -728,6 +732,10 @@ async def release_issue(
     """
     if (gate := _require_enabled()) is not None:
         return gate
+
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="release_issue", issue_url=issue_url)
+    logger.info("release_issue", issue_url=issue_url)
 
     from autoskillit.server import _get_ctx
 

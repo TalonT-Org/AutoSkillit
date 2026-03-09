@@ -581,10 +581,11 @@ class TestGroupFDoctor:
             *, output_json: bool = False, plugin_dir: str | None = None, fix: bool = False
         ) -> None:
             called_with["output_json"] = output_json
+            called_with["fix"] = fix
 
         monkeypatch.setattr(_doctor, "run_doctor", mock_run_doctor)
         cli.doctor(output_json=True)
-        assert called_with == {"output_json": True}
+        assert called_with == {"output_json": True, "fix": False}
 
     def test_severity_and_doctorresult_in_doctor_module(self):
         """Severity and DoctorResult must be importable from autoskillit.cli._doctor."""
@@ -672,7 +673,10 @@ class TestDoctorResultFixField:
 
     def test_doctor_result_fix_not_in_json_output(self, tmp_path, monkeypatch, capsys):
         """fix callable must not appear in --output-json serialization."""
+        import autoskillit.server._state as _state
+
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(_state, "_get_plugin_dir", lambda: None)
         monkeypatch.chdir(tmp_path)
         cli.doctor(output_json=True)
         captured = capsys.readouterr()

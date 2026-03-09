@@ -79,7 +79,8 @@ class TestSkillResolver:
         )
 
     def test_no_hardcoded_username_mentions_in_skill_mds(self) -> None:
-        """No SKILL.md may contain a hardcoded GitHub @-mention in any line (including code fences)."""
+        """No SKILL.md may contain a hardcoded GitHub @-mention in any line
+        (including code fences)."""
         # Negative lookbehind prevents matching email local-parts (e.g. noreply@anthropic.com)
         # and decorator-like patterns where @ follows alphanumeric or dot.
         mention_pattern = re.compile(r"(?<![a-zA-Z0-9.])@[A-Za-z][A-Za-z0-9_-]{2,}")

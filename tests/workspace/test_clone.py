@@ -378,6 +378,90 @@ class TestCloneOriginContract:
             shutil.rmtree(clone_path.parent, ignore_errors=True)
 
 
+class TestCloneRepoRemoteUrlOverride:
+    """Tests for the remote_url parameter on clone_repo (T_RU1, T_RU2)."""
+
+    def _make_source_with_bare_remote(self, tmp_path: Path) -> tuple[Path, Path]:
+        """Helper: create a bare remote and source repo pointing to it."""
+        bare = tmp_path / "bare.git"
+        bare.mkdir()
+        subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+
+        source = tmp_path / "source"
+        subprocess.run(["git", "clone", str(bare), str(source)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        (source / "f.txt").write_text("x")
+        subprocess.run(["git", "-C", str(source), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(source), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        src_branch = subprocess.run(
+            ["git", "-C", str(source), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(source), "push", "origin", src_branch],
+            check=True,
+            capture_output=True,
+        )
+        return source, bare
+
+    def test_clone_repo_remote_url_override_applied(self, tmp_path: Path) -> None:
+        """When remote_url is provided, clone's origin is set to that URL (T_RU1)."""
+        source, _bare = self._make_source_with_bare_remote(tmp_path)
+        override_url = "https://github.com/example/repo.git"
+
+        result = clone_repo(str(source), "test-run", strategy="proceed", remote_url=override_url)
+        assert "clone_path" in result
+        clone_path = Path(result["clone_path"])
+
+        try:
+            actual_origin = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            assert actual_origin == override_url
+            assert result["remote_url"] == override_url
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    def test_clone_repo_without_remote_url_uses_detected(self, tmp_path: Path) -> None:
+        """Without remote_url, clone uses the source's detected origin (T_RU2)."""
+        source, bare = self._make_source_with_bare_remote(tmp_path)
+
+        result = clone_repo(str(source), "test-run", strategy="proceed")
+        assert "clone_path" in result
+        clone_path = Path(result["clone_path"])
+
+        try:
+            actual_origin = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            # Without override, origin should equal the detected source origin (bare remote path)
+            assert actual_origin == result["remote_url"]
+            assert str(bare) in actual_origin
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+
 class TestRemoveClone:
     def test_keep_false_removes_directory(self, git_repo: Path) -> None:
         result = clone_repo(str(git_repo), "test")

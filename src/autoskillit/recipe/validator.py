@@ -75,9 +75,13 @@ def validate_recipe(recipe: Recipe) -> list[str]:
     step_names = set(recipe.steps.keys())
 
     for step_name, step in recipe.steps.items():
-        discriminators = [d for d in ("tool", "action", "python") if getattr(step, d) is not None]
+        discriminators = [
+            d for d in ("tool", "action", "python", "constant") if getattr(step, d) is not None
+        ]
         if len(discriminators) == 0:
-            errors.append(f"Step '{step_name}' must have 'tool', 'action', or 'python'.")
+            errors.append(
+                f"Step '{step_name}' must have 'tool', 'action', 'python', or 'constant'."
+            )
         if len(discriminators) > 1:
             errors.append(
                 f"Step '{step_name}' has multiple discriminators "
@@ -156,8 +160,11 @@ def validate_recipe(recipe: Recipe) -> list[str]:
                         )
 
     # Validate capture values: must contain ${{ result.* }} expressions
+    # (constant steps use literal capture values — no template expression needed)
     for step_name, step in recipe.steps.items():
         for cap_key, cap_val in step.capture.items():
+            if step.constant is not None:
+                continue
             all_refs = _TEMPLATE_REF_RE.findall(cap_val)
             if not all_refs:
                 errors.append(

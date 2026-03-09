@@ -177,3 +177,154 @@ async def classify_fix(
     finally:
         if step_name:
             _timing_ctx.timing_log.record(step_name, time.monotonic() - _start)
+
+
+@mcp.tool(tags={"automation", "kitchen"})
+async def create_unique_branch(
+    slug: str,
+    issue_number: int | None,
+    remote: str,
+    cwd: str,
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Derive a unique branch name and create it locally.
+
+    Uses {slug}-{issue_number} as the base name, or {slug} when issue_number
+    is None. Checks the remote for conflicts via git ls-remote; appends -2,
+    -3, ... until a unique name is found. On ls-remote auth failure or other
+    non-zero exit, proceeds with the base name without suffixing.
+
+    Returns JSON with:
+      - branch_name: the final branch name created
+      - was_unique: True if the base name was unused on remote, False if a
+                    suffix was appended
+
+    Args:
+        slug: Branch name prefix (e.g. "feat-my-feature").
+        issue_number: GitHub issue number appended to slug, or None.
+        remote: Git remote to check for existing branches (e.g. "origin").
+        cwd: Working directory for git commands.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="create_unique_branch", cwd=cwd)
+    logger.info("create_unique_branch", slug=slug, issue_number=issue_number, remote=remote)
+    await _notify(
+        ctx,
+        "info",
+        f"create_unique_branch: {slug}",
+        "autoskillit.create_unique_branch",
+        extra={"remote": remote},
+    )
+
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+    _start = time.monotonic()
+
+    base_name = f"{slug}-{issue_number}" if issue_number is not None else slug
+    branch_name = base_name
+    was_unique = True
+
+    try:
+        rc, stdout, _ = await _run_subprocess(
+            ["git", "ls-remote", remote, f"refs/heads/{branch_name}"],
+            cwd=cwd,
+            timeout=30,
+        )
+
+        if rc == 0 and stdout.strip():
+            was_unique = False
+            suffix = 2
+            _MAX_SUFFIX = 100
+            while suffix <= _MAX_SUFFIX:
+                candidate = f"{base_name}-{suffix}"
+                rc2, stdout2, _ = await _run_subprocess(
+                    ["git", "ls-remote", remote, f"refs/heads/{candidate}"],
+                    cwd=cwd,
+                    timeout=30,
+                )
+                if rc2 != 0:
+                    branch_name = base_name
+                    break
+                if not stdout2.strip():
+                    branch_name = candidate
+                    break
+                suffix += 1
+
+        rc_checkout, _, _stderr_checkout = await _run_subprocess(
+            ["git", "checkout", "-b", branch_name],
+            cwd=cwd,
+            timeout=30,
+        )
+        if rc_checkout != 0:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": f"git checkout -b {branch_name!r} failed: {_stderr_checkout.strip()}",
+                }
+            )
+
+        return json.dumps({"branch_name": branch_name, "was_unique": was_unique})
+    finally:
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+
+
+@mcp.tool(tags={"automation", "kitchen"})
+async def check_pr_mergeable(
+    pr_number: int,
+    cwd: str,
+    repo: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Check whether a GitHub PR is mergeable.
+
+    Wraps gh pr view --json mergeable,mergeStateStatus. Returns a structured
+    result without requiring the caller to parse gh JSON.
+
+    Returns JSON with:
+      - mergeable: True when gh reports "MERGEABLE", False otherwise
+      - merge_state_status: raw mergeStateStatus string (e.g. "CLEAN", "DIRTY")
+    On gh failure: {"success": false, "error": "..."}
+
+    Args:
+        pr_number: GitHub pull request number.
+        cwd: Working directory for gh commands.
+        repo: Repository as owner/repo. Passed as -R flag when provided.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="check_pr_mergeable", cwd=cwd)
+    logger.info("check_pr_mergeable", pr_number=pr_number, repo=repo)
+    await _notify(
+        ctx,
+        "info",
+        f"check_pr_mergeable: #{pr_number}",
+        "autoskillit.check_pr_mergeable",
+        extra={"repo": repo},
+    )
+
+    cmd = ["gh", "pr", "view", str(pr_number), "--json", "mergeable,mergeStateStatus"]
+    if repo:
+        cmd.extend(["-R", repo])
+
+    rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
+    if rc != 0:
+        return json.dumps({"success": False, "error": stderr.strip() or "gh command failed"})
+
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError:
+        return json.dumps({"success": False, "error": "Failed to parse gh output"})
+
+    return json.dumps(
+        {
+            "mergeable": data.get("mergeable") == "MERGEABLE",
+            "merge_state_status": data.get("mergeStateStatus", ""),
+        }
+    )

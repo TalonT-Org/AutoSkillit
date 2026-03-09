@@ -1002,3 +1002,53 @@ class TestConfirmAction:
         )
         errors = validate_recipe(recipe)
         assert any("nonexistent_step" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# RECIPE-8: constant step type — structural validation
+# ---------------------------------------------------------------------------
+
+
+class TestConstantStepValidation:
+    def test_constant_step_is_valid_discriminator(self) -> None:
+        """A step with only constant set passes structural validation."""
+        recipe = _make_workflow({"step1": {"constant": "main", "on_success": "done"}})
+        errors = validate_recipe(recipe)
+        assert errors == []
+
+    def test_constant_step_rejected_with_tool(self) -> None:
+        """constant + tool on same step is rejected (multiple discriminators)."""
+        recipe = _make_workflow(
+            {"step1": {"constant": "main", "tool": "run_cmd", "on_success": "done"}}
+        )
+        errors = validate_recipe(recipe)
+        assert any("multiple discriminators" in e for e in errors)
+
+    def test_constant_step_capture_allows_literal_values(self) -> None:
+        """constant step capture values may be plain strings (no result.* required)."""
+        step_data = {
+            "constant": "main",
+            "capture": {"merge_target": "main"},
+            "on_success": "done",
+        }
+        recipe = _make_workflow({"step1": step_data})
+        errors = validate_recipe(recipe)
+        assert errors == []
+
+    def test_non_constant_step_capture_still_requires_template(self) -> None:
+        """Non-constant step capture still requires ${{ result.* }} expression."""
+        step_data = {
+            "tool": "run_cmd",
+            "with": {"command": "echo hi"},
+            "capture": {"out": "literal_no_template"},
+            "on_success": "done",
+        }
+        recipe = _make_workflow({"step1": step_data})
+        errors = validate_recipe(recipe)
+        assert any("result." in e for e in errors)
+
+    def test_step_without_any_discriminator_still_rejected(self) -> None:
+        """A step with no discriminator (no tool/action/python/constant) is invalid."""
+        recipe = _make_workflow({"step1": {"on_success": "done"}})
+        errors = validate_recipe(recipe)
+        assert any("must have" in e for e in errors)

@@ -138,6 +138,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         tool=data.get("tool"),
         action=data.get("action"),
         python=data.get("python"),
+        constant=data.get("constant"),
         with_args=data.get("with", {}),
         on_success=data.get("on_success"),
         on_failure=data.get("on_failure"),

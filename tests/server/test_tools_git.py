@@ -10,7 +10,12 @@ import structlog.testing
 
 from autoskillit.config import AutomationConfig, ClassifyFixConfig
 from autoskillit.core.types import MergeFailedStep, MergeState, RestartScope
-from autoskillit.server.tools_git import classify_fix, merge_worktree
+from autoskillit.server.tools_git import (
+    check_pr_mergeable,
+    classify_fix,
+    create_unique_branch,
+    merge_worktree,
+)
 from tests.conftest import _make_result
 
 
@@ -629,3 +634,100 @@ class TestMergeWorktreeMergeCommitDetection:
         # Pipeline passed step 5.6 and reached rebase — failed there, not at step 5.6
         assert result["failed_step"] == MergeFailedStep.REBASE
         assert result["state"] == MergeState.WORKTREE_INTACT_REBASE_ABORTED
+
+
+class TestCreateUniqueBranch:
+    @pytest.mark.anyio
+    async def test_creates_branch_when_unique(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ls-remote: empty = absent
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git checkout -b
+        result = json.loads(await create_unique_branch("feat-foo", 42, "origin", "."))
+        assert result["branch_name"] == "feat-foo-42"
+        assert result["was_unique"] is True
+
+    @pytest.mark.anyio
+    async def test_appends_suffix_when_branch_exists_on_remote(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "abc123\trefs/heads/feat-foo-42\n", ""))  # exists
+        tool_ctx.runner.push(_make_result(0, "", ""))  # -2 not found
+        tool_ctx.runner.push(_make_result(0, "", ""))  # checkout -b feat-foo-42-2
+        result = json.loads(await create_unique_branch("feat-foo", 42, "origin", "."))
+        assert result["branch_name"] == "feat-foo-42-2"
+        assert result["was_unique"] is False
+
+    @pytest.mark.anyio
+    async def test_ls_remote_auth_failure_falls_back_gracefully(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(128, "", "fatal: Authentication failed"))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # checkout proceeds with base name
+        result = json.loads(await create_unique_branch("feat-foo", 42, "origin", "."))
+        assert result["branch_name"] == "feat-foo-42"
+        assert result["was_unique"] is True
+
+    @pytest.mark.anyio
+    async def test_no_issue_uses_slug_only(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        result = json.loads(await create_unique_branch("feat-bar", None, "origin", "."))
+        assert result["branch_name"] == "feat-bar"
+
+    @pytest.mark.anyio
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        tool_ctx.gate.disable()
+        result = json.loads(await create_unique_branch("foo", 1, "origin", "."))
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+
+    @pytest.mark.anyio
+    async def test_timing_recorded_when_step_name_provided(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        await create_unique_branch("feat-x", 1, "origin", ".", step_name="branch_step")
+        assert any(e["step_name"] == "branch_step" for e in tool_ctx.timing_log.get_report())
+
+
+class TestCheckPrMergeable:
+    @pytest.mark.anyio
+    async def test_mergeable_pr(self, tool_ctx):
+        tool_ctx.runner.push(
+            _make_result(
+                0, json.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}), ""
+            )
+        )
+        result = json.loads(await check_pr_mergeable(42, "."))
+        assert result["mergeable"] is True
+        assert result["merge_state_status"] == "CLEAN"
+
+    @pytest.mark.anyio
+    async def test_conflicting_pr_is_not_mergeable(self, tool_ctx):
+        tool_ctx.runner.push(
+            _make_result(
+                0, json.dumps({"mergeable": "CONFLICTING", "mergeStateStatus": "DIRTY"}), ""
+            )
+        )
+        result = json.loads(await check_pr_mergeable(42, "."))
+        assert result["mergeable"] is False
+        assert result["merge_state_status"] == "DIRTY"
+
+    @pytest.mark.anyio
+    async def test_gh_command_failure_returns_error(self, tool_ctx):
+        tool_ctx.runner.push(_make_result(1, "", "pr not found"))
+        result = json.loads(await check_pr_mergeable(99, "."))
+        assert result["success"] is False
+
+    @pytest.mark.anyio
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        tool_ctx.gate.disable()
+        result = json.loads(await check_pr_mergeable(1, "."))
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+
+    @pytest.mark.anyio
+    async def test_repo_flag_passed_to_gh(self, tool_ctx):
+        tool_ctx.runner.push(
+            _make_result(
+                0, json.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}), ""
+            )
+        )
+        result = json.loads(await check_pr_mergeable(42, ".", repo="owner/myrepo"))
+        call_cmd = tool_ctx.runner.call_args_list[-1][0]
+        assert "-R" in call_cmd
+        assert result["mergeable"] is True

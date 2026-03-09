@@ -188,6 +188,40 @@ def test_skip_when_false_field_is_parsed_from_yaml() -> None:
 
 
 # ---------------------------------------------------------------------------
+# RECIPE-8: constant step type
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_step_has_constant_field() -> None:
+    """RecipeStep has a constant field defaulting to None."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep()
+    assert step.constant is None
+
+
+def test_constant_step_parse_from_yaml() -> None:
+    """A constant step is parsed from YAML into RecipeStep.constant."""
+    from autoskillit.recipe.io import _parse_step
+
+    step = _parse_step({"constant": "main"})
+    assert step.constant == "main"
+    assert step.tool is None
+    assert step.action is None
+    assert step.python is None
+
+
+def test_recipe_step_fields_includes_constant() -> None:
+    """RecipeStep field set includes 'constant'."""
+    import dataclasses
+
+    from autoskillit.recipe.schema import RecipeStep
+
+    field_names = {f.name for f in dataclasses.fields(RecipeStep)}
+    assert "constant" in field_names
+
+
+# ---------------------------------------------------------------------------
 # RecipeIngredient normalization tests (Tests 1.1-1.3)
 # ---------------------------------------------------------------------------
 

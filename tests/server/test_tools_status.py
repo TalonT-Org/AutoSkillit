@@ -162,8 +162,11 @@ class TestKitchenStatus:
     @pytest.mark.anyio
     async def test_kitchen_status_warns_on_split_brain(self, monkeypatch, tmp_path, tool_ctx):
         """When gate_file_exists=True but tools_enabled=False, emit warning."""
+        import autoskillit
+
         monkeypatch.chdir(tmp_path)
         tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.plugin_dir = str(Path(autoskillit.__file__).parent)
         gate_dir = tmp_path / ".autoskillit" / "temp"
         gate_dir.mkdir(parents=True)
         (gate_dir / ".kitchen_gate").write_text(
@@ -199,8 +202,11 @@ class TestKitchenStatus:
         self, monkeypatch, tmp_path, tool_ctx
     ):
         """Split-brain warning must reference .autoskillit/temp/ not temp/."""
+        import autoskillit
+
         monkeypatch.chdir(tmp_path)
         tool_ctx.gate = DefaultGateState(enabled=False)
+        tool_ctx.plugin_dir = str(Path(autoskillit.__file__).parent)
         gate_dir = tmp_path / ".autoskillit" / "temp"
         gate_dir.mkdir(parents=True)
         (gate_dir / ".kitchen_gate").write_text(

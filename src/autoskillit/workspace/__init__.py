@@ -22,7 +22,7 @@ from autoskillit.workspace.clone import (
 )
 from autoskillit.workspace.session_skills import (
     TIER2_SKILLS,
-    SessionSkillManager,
+    DefaultSessionSkillManager,
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
 )
@@ -36,7 +36,7 @@ __all__ = [
     "classify_remote_url",
     "DefaultCloneManager",
     "DefaultWorkspaceManager",
-    "SessionSkillManager",
+    "DefaultSessionSkillManager",
     "SkillResolver",
     "SkillsDirectoryProvider",
     "TIER2_SKILLS",

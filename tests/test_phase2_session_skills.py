@@ -12,13 +12,15 @@ import yaml
 
 from autoskillit.workspace.session_skills import (
     TIER2_SKILLS,
-    SessionSkillManager,
+    DefaultSessionSkillManager,
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
 )
 
 
-def test_resolve_ephemeral_root_returns_writable_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_ephemeral_root_returns_writable_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     root = resolve_ephemeral_root()
     assert root.exists()
     assert root.is_dir()
@@ -71,7 +73,7 @@ def test_provider_does_not_inject_for_cook_session() -> None:
 
 def test_session_skill_manager_creates_ephemeral_dir(tmp_path: Path) -> None:
     provider = SkillsDirectoryProvider()
-    mgr = SessionSkillManager(provider, ephemeral_root=tmp_path)
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     session_path = mgr.init_session("test-session-abc", cook_session=False)
     assert session_path.exists()
     assert session_path.is_dir()
@@ -81,7 +83,7 @@ def test_session_skill_manager_creates_ephemeral_dir(tmp_path: Path) -> None:
 
 def test_session_manager_injects_disable_for_tier2(tmp_path: Path) -> None:
     provider = SkillsDirectoryProvider()
-    mgr = SessionSkillManager(provider, ephemeral_root=tmp_path)
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     session_path = mgr.init_session("test-session-xyz", cook_session=False)
     open_kitchen_md = session_path / "open-kitchen" / "SKILL.md"
     assert open_kitchen_md.exists()
@@ -94,7 +96,7 @@ def test_session_manager_injects_disable_for_tier2(tmp_path: Path) -> None:
 
 def test_session_manager_no_flag_for_cook_session(tmp_path: Path) -> None:
     provider = SkillsDirectoryProvider()
-    mgr = SessionSkillManager(provider, ephemeral_root=tmp_path)
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     session_path = mgr.init_session("cook-session-123", cook_session=True)
     open_kitchen_md = session_path / "open-kitchen" / "SKILL.md"
     content = open_kitchen_md.read_text()
@@ -106,7 +108,7 @@ def test_session_manager_no_flag_for_cook_session(tmp_path: Path) -> None:
 
 def test_activate_tier2_removes_flag(tmp_path: Path) -> None:
     provider = SkillsDirectoryProvider()
-    mgr = SessionSkillManager(provider, ephemeral_root=tmp_path)
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     mgr.init_session("session-toggle", cook_session=False)
     result = mgr.activate_tier2("session-toggle", "open-kitchen")
     assert result is True
@@ -120,7 +122,7 @@ def test_activate_tier2_removes_flag(tmp_path: Path) -> None:
 
 def test_cleanup_stale_removes_old_dirs(tmp_path: Path) -> None:
     provider = SkillsDirectoryProvider()
-    mgr = SessionSkillManager(provider, ephemeral_root=tmp_path)
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     stale_dir = tmp_path / "stale-session"
     stale_dir.mkdir()
     os.utime(stale_dir, (time.time() - 90000, time.time() - 90000))  # 25h old

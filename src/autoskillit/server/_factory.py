@@ -37,8 +37,8 @@ from autoskillit.recipe import (
 )
 from autoskillit.workspace import (
     DefaultCloneManager,
+    DefaultSessionSkillManager,
     DefaultWorkspaceManager,
-    SessionSkillManager,
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
 )
@@ -96,7 +96,7 @@ def make_context(
 
     provider = SkillsDirectoryProvider()
     ephemeral_root = resolve_ephemeral_root()
-    session_mgr = SessionSkillManager(provider, ephemeral_root)
+    session_mgr = DefaultSessionSkillManager(provider, ephemeral_root)
 
     ctx = ToolContext(
         config=config,

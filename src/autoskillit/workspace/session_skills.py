@@ -3,7 +3,7 @@
 Provides three components:
   - resolve_ephemeral_root(): platform-aware writable dir discovery
   - SkillsDirectoryProvider: tier-aware skill content provider
-  - SessionSkillManager: manages per-session ephemeral skill directories
+  - DefaultSessionSkillManager: manages per-session ephemeral skill directories
 """
 
 from __future__ import annotations
@@ -118,7 +118,7 @@ class SkillsDirectoryProvider:
         return content
 
 
-class SessionSkillManager:
+class DefaultSessionSkillManager:
     """Manages per-session ephemeral skill directories."""
 
     def __init__(

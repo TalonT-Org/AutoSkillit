@@ -1328,3 +1328,48 @@ def test_flow_line_omitted_when_summary_empty(tmp_path: Path) -> None:
     )
     content = generate_recipe_diagram(yaml_path, recipes_dir=tmp_path, out_dir=tmp_path / "out")
     assert "**Flow:**" not in content
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "implementation",
+        "bugfix-loop",
+        "smoke-test",
+        "remediation",
+        "audit-and-fix",
+        "implementation-groups",
+        "pr-merge-pipeline",
+    ],
+)
+def test_bundled_recipe_ingredient_descriptions_are_single_phrase(
+    recipe_name: str, tmp_path: Path
+) -> None:
+    """T-NEW-6: Spec 'Keep descriptions short — one phrase, not a sentence.'
+
+    Every ingredient description rendered into the diagram Inputs table must be
+    ≤ 80 characters.  Multi-sentence folded-YAML scalars must NOT appear verbatim.
+    """
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    content = generate_recipe_diagram(
+        recipes_dir / f"{recipe_name}.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
+    )
+    in_inputs = False
+    for line in content.splitlines():
+        if line.strip().startswith("| Name |"):
+            in_inputs = True
+            continue
+        if in_inputs and line.startswith("| ---"):
+            continue
+        if in_inputs and line.startswith("|"):
+            parts = [p.strip() for p in line.split("|") if p.strip()]
+            if len(parts) >= 2:
+                description = parts[1]
+                assert len(description) <= 80, (
+                    f"{recipe_name}: description '{description[:40]}...' "
+                    f"is {len(description)} chars (max 80)"
+                )
+        elif in_inputs and not line.startswith("|"):
+            break

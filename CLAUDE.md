@@ -134,9 +134,10 @@ src/autoskillit/
 │   ├── session.py           #   ClaudeSessionResult, SkillResult, extract_token_usage
 │   └── testing.py           #   Pytest output parsing and pass/fail adjudication
 ├── workspace/               # L1 workspace sub-package
-│   ├── __init__.py          #   Re-exports CleanupResult, SkillResolver, clone_repo, remove_clone, push_to_remote
+│   ├── __init__.py          #   Re-exports CleanupResult, SkillResolver, SessionSkillManager, clone_repo, remove_clone, push_to_remote
 │   ├── cleanup.py           #   Directory teardown utilities (CleanupResult, preserve list)
 │   ├── clone.py             #   Clone-based run isolation: clone_repo, remove_clone, push_to_remote
+│   ├── session_skills.py    #   Per-session ephemeral skill dirs (SkillsDirectoryProvider, SessionSkillManager, TIER2_SKILLS, resolve_ephemeral_root)
 │   └── skills.py            #   Bundled skill listing (SkillResolver)
 ├── recipe/                  # L2 recipe sub-package
 │   ├── __init__.py          #   Re-exports Recipe, RecipeStep, validate_recipe, load_recipe, etc.
@@ -196,7 +197,8 @@ src/autoskillit/
 │   ├── quota_check.py       #   Quota guard hook — blocks run_skill when threshold exceeded
 │   ├── remove_clone_guard.py #  Remove-clone guard — denies remove_clone calls with keep != "true"
 │   ├── skill_cmd_check.py   #   PreToolUse hook — validates skill_command path argument format
-│   └── skill_command_guard.py #  PreToolUse hook — blocks run_skill with non-slash skill_command
+│   ├── skill_command_guard.py #  PreToolUse hook — blocks run_skill with non-slash skill_command
+│   └── open_kitchen_guard.py #  PreToolUse hook — blocks open_kitchen from headless sessions
 ├── migrations/              # Data: versioned migration YAML notes
 │   └── __init__.py
 ├── recipes/                 # Bundled recipe YAML definitions

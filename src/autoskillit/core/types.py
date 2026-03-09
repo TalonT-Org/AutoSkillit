@@ -786,3 +786,14 @@ class CIWatcher(Protocol):
         run_id: int | None = None,
         cwd: str = "",
     ) -> dict[str, Any]: ...
+
+
+@runtime_checkable
+class SessionSkillManager(Protocol):
+    """Protocol for managing per-session ephemeral skill directories."""
+
+    def init_session(self, session_id: str, *, cook_session: bool = False) -> Path: ...
+
+    def activate_tier2(self, session_id: str, skill_name: str) -> bool: ...
+
+    def cleanup_stale(self, max_age_seconds: int = 86400) -> int: ...

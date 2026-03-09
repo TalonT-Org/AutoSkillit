@@ -403,9 +403,11 @@ async def run_headless_core(
         if add_dir:
             cmd.extend([ClaudeFlags.ADD_DIR, add_dir])
 
+        env_vars = ["AUTOSKILLIT_HEADLESS=1"]
         delay_ms = cfg.exit_after_stop_delay_ms
         if delay_ms > 0:
-            cmd = ["env", f"CLAUDE_CODE_EXIT_AFTER_STOP_DELAY={delay_ms}"] + cmd
+            env_vars.append(f"CLAUDE_CODE_EXIT_AFTER_STOP_DELAY={delay_ms}")
+        cmd = ["env"] + env_vars + cmd
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold

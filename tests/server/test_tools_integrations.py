@@ -662,12 +662,10 @@ class TestEnrichIssuesTool:
 class TestGetPrReviews:
     @pytest.mark.anyio
     async def test_returns_structured_reviews(self, tool_ctx):
-        import json as _j
-
         tool_ctx.runner.push(
             _make_result(
                 0,
-                _j.dumps(
+                json.dumps(
                     [
                         {"user": {"login": "reviewer1"}, "state": "APPROVED", "body": "LGTM"},
                         {
@@ -686,9 +684,7 @@ class TestGetPrReviews:
 
     @pytest.mark.anyio
     async def test_empty_reviews(self, tool_ctx):
-        import json as _j
-
-        tool_ctx.runner.push(_make_result(0, _j.dumps([]), ""))
+        tool_ctx.runner.push(_make_result(0, json.dumps([]), ""))
         result = json.loads(await get_pr_reviews(42, ".", repo="owner/repo"))
         assert result["reviews"] == []
 
@@ -700,12 +696,10 @@ class TestGetPrReviews:
 
     @pytest.mark.anyio
     async def test_without_repo_uses_pr_view(self, tool_ctx):
-        import json as _j
-
         tool_ctx.runner.push(
             _make_result(
                 0,
-                _j.dumps(
+                json.dumps(
                     {
                         "reviews": [
                             {"author": {"login": "x"}, "state": "APPROVED", "body": ""},

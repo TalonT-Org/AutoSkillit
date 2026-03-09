@@ -687,10 +687,10 @@ class TestCreateUniqueBranch:
 class TestCheckPrMergeable:
     @pytest.mark.anyio
     async def test_mergeable_pr(self, tool_ctx):
-        import json as _j
-
         tool_ctx.runner.push(
-            _make_result(0, _j.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}), "")
+            _make_result(
+                0, json.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}), ""
+            )
         )
         result = json.loads(await check_pr_mergeable(42, "."))
         assert result["mergeable"] is True
@@ -698,11 +698,9 @@ class TestCheckPrMergeable:
 
     @pytest.mark.anyio
     async def test_conflicting_pr_is_not_mergeable(self, tool_ctx):
-        import json as _j
-
         tool_ctx.runner.push(
             _make_result(
-                0, _j.dumps({"mergeable": "CONFLICTING", "mergeStateStatus": "DIRTY"}), ""
+                0, json.dumps({"mergeable": "CONFLICTING", "mergeStateStatus": "DIRTY"}), ""
             )
         )
         result = json.loads(await check_pr_mergeable(42, "."))
@@ -724,10 +722,10 @@ class TestCheckPrMergeable:
 
     @pytest.mark.anyio
     async def test_repo_flag_passed_to_gh(self, tool_ctx):
-        import json as _j
-
         tool_ctx.runner.push(
-            _make_result(0, _j.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}), "")
+            _make_result(
+                0, json.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}), ""
+            )
         )
         result = json.loads(await check_pr_mergeable(42, ".", repo="owner/myrepo"))
         call_cmd = tool_ctx.runner.call_args_list[-1][0]

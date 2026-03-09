@@ -6,6 +6,8 @@ from pathlib import Path
 
 from autoskillit.core.paths import GENERATED_FILES
 
+REPO_ROOT = Path(__file__).parent.parent.parent
+
 
 def test_generated_files_importable_from_core_paths():
     """GENERATED_FILES is importable from autoskillit.core.paths and is a frozenset[str]."""
@@ -47,7 +49,7 @@ def test_no_generated_files_tracked():
 
 def test_gitignore_covers_diagram_directory():
     """Diagram directory must be in .gitignore to prevent accidental commits."""
-    gitignore = Path(".gitignore").read_text()
+    gitignore = (REPO_ROOT / ".gitignore").read_text()
     assert "src/autoskillit/recipes/diagrams/" in gitignore, (
         "Missing .gitignore entry for diagram directory. "
         "Add 'src/autoskillit/recipes/diagrams/' to .gitignore."
@@ -56,14 +58,14 @@ def test_gitignore_covers_diagram_directory():
 
 def test_gitignore_covers_generated_paths():
     """`.gitignore` must have patterns for all generated config files."""
-    gitignore = Path(".gitignore").read_text()
+    gitignore = (REPO_ROOT / ".gitignore").read_text()
     for path in GENERATED_FILES:
         assert path in gitignore, f"Missing .gitignore entry for generated file: {path}"
 
 
 def test_generated_files_covers_precommit_pattern():
     """Every entry in GENERATED_FILES must match the no-generated-configs pre-commit pattern."""
-    config_text = Path(".pre-commit-config.yaml").read_text()
+    config_text = (REPO_ROOT / ".pre-commit-config.yaml").read_text()
     # Extract the files: pattern from the no-generated-configs hook
     match = re.search(r"id:\s*no-generated-configs.*?files:\s*'([^']+)'", config_text, re.DOTALL)
     assert match, "Could not find no-generated-configs hook with files: pattern"

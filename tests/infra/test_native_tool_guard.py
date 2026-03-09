@@ -171,13 +171,22 @@ def test_hook_allows_when_owning_pid_is_dead(tmp_path):
     assert not gate_file.exists()  # stale file was removed
 
 
-# T-LEASE-3: Hook denies when gate file has live PID
+# T-LEASE-3: Hook denies when gate file has live PID with valid identity
 def test_hook_denies_when_owning_pid_is_alive(tmp_path):
-    """Gate file with live PID (current process) must deny."""
+    """Gate file with live PID and matching identity must deny."""
     gate_dir = tmp_path / ".autoskillit" / "temp"
     gate_dir.mkdir(parents=True)
     gate_file = gate_dir / ".kitchen_gate"
-    gate_file.write_text(json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"}))
+    gate_file.write_text(
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "starttime_ticks": _read_self_starttime_ticks(),
+                "boot_id": _read_current_boot_id(),
+                "opened_at": datetime.now(UTC).isoformat(),
+            }
+        )
+    )
     result = _run_hook(event={"tool_name": "Read"}, gate_file_exists=False, tmp_path=tmp_path)
     data = json.loads(result)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"

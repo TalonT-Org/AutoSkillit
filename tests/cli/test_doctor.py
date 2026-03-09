@@ -600,7 +600,7 @@ class TestDoctorStaleGateFile:
     """Doctor check for stale gate files from crashed pipeline sessions."""
 
     def test_doctor_detects_stale_gate_file(self, tmp_path):
-        """Doctor check must detect a gate file with a dead PID."""
+        """Doctor check must detect and auto-remove a gate file with a dead PID."""
         from autoskillit.cli._doctor import _check_stale_gate_file
         from autoskillit.core import Severity
 
@@ -610,8 +610,8 @@ class TestDoctorStaleGateFile:
             json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"})
         )
         result = _check_stale_gate_file(tmp_path)
-        assert result.severity == Severity.ERROR
-        assert "stale" in result.message.lower() or "dead" in result.message.lower()
+        assert result.severity == Severity.WARNING
+        assert "auto-removed" in result.message.lower()
 
     def test_doctor_passes_when_no_gate_file(self, tmp_path):
         """Doctor check must pass when no gate file exists."""
@@ -622,20 +622,30 @@ class TestDoctorStaleGateFile:
         assert result.severity == Severity.OK
 
     def test_doctor_passes_when_gate_file_is_live(self, tmp_path):
-        """Doctor check must pass when gate file has a live PID."""
+        """Doctor check must pass when gate file has a live PID with valid identity."""
+        from datetime import UTC, datetime
+
         from autoskillit.cli._doctor import _check_stale_gate_file
         from autoskillit.core import Severity
+        from autoskillit.pipeline.gate import read_boot_id, read_starttime_ticks
 
         gate_dir = tmp_path / ".autoskillit" / "temp"
         gate_dir.mkdir(parents=True)
         (gate_dir / ".kitchen_gate").write_text(
-            json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"})
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "starttime_ticks": read_starttime_ticks(os.getpid()),
+                    "boot_id": read_boot_id(),
+                    "opened_at": datetime.now(UTC).isoformat(),
+                }
+            )
         )
         result = _check_stale_gate_file(tmp_path)
         assert result.severity == Severity.OK
 
     def test_doctor_detects_malformed_gate_file(self, tmp_path):
-        """Doctor check must detect a gate file that isn't valid JSON."""
+        """Doctor check must detect and auto-remove a malformed gate file."""
         from autoskillit.cli._doctor import _check_stale_gate_file
         from autoskillit.core import Severity
 
@@ -643,8 +653,8 @@ class TestDoctorStaleGateFile:
         gate_dir.mkdir(parents=True)
         (gate_dir / ".kitchen_gate").write_text("not json")
         result = _check_stale_gate_file(tmp_path)
-        assert result.severity == Severity.ERROR
-        assert "malformed" in result.message.lower()
+        assert result.severity == Severity.WARNING
+        assert "auto-removed" in result.message.lower()
 
 
 class TestDoctorResultFixField:
@@ -685,27 +695,27 @@ class TestDoctorResultFixField:
             assert "fix" not in entry
 
 
-class TestDoctorStaleGateFileFixParam:
-    """T2: _check_stale_gate_file returns fix callable and applies fix inline."""
+class TestDoctorStaleGateFileAutoRemoval:
+    """verify_lease() auto-removes invalid leases — fix param is a no-op for gate files."""
 
-    def test_stale_gate_check_returns_fix_callable(self, tmp_path):
-        """_check_stale_gate_file must return a DoctorResult with a populated fix callable
-        when the gate file is stale (dead PID)."""
+    def test_stale_gate_auto_removed_regardless_of_fix_flag(self, tmp_path):
+        """Dead PID lease is auto-removed by verify_lease() even without fix=True."""
         from autoskillit.cli._doctor import _check_stale_gate_file
         from autoskillit.core import Severity
 
         gate_dir = tmp_path / ".autoskillit" / "temp"
         gate_dir.mkdir(parents=True)
-        (gate_dir / ".kitchen_gate").write_text(
+        gate_file = gate_dir / ".kitchen_gate"
+        gate_file.write_text(
             json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00"})
         )
         result = _check_stale_gate_file(tmp_path, fix=False)
-        assert result.severity == Severity.ERROR
-        assert result.fix is not None
-        assert callable(result.fix)
+        assert result.severity == Severity.WARNING
+        assert "auto-removed" in result.message.lower()
+        assert not gate_file.exists()
 
-    def test_stale_gate_check_fix_kwarg_removes_file(self, tmp_path):
-        """_check_stale_gate_file(fix=True) must delete the stale gate file and return OK."""
+    def test_stale_gate_fix_true_also_auto_removes(self, tmp_path):
+        """fix=True behaves the same — verify_lease() handles removal."""
         from autoskillit.cli._doctor import _check_stale_gate_file
         from autoskillit.core import Severity
 
@@ -714,24 +724,36 @@ class TestDoctorStaleGateFileFixParam:
         gate_file = gate_dir / ".kitchen_gate"
         gate_file.write_text(json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00"}))
         result = _check_stale_gate_file(tmp_path, fix=True)
-        assert result.severity == Severity.OK
+        assert result.severity == Severity.WARNING
         assert not gate_file.exists()
 
-    def test_stale_gate_check_fix_does_not_remove_live_file(self, tmp_path):
-        """fix=True must NOT remove a gate file owned by a live PID."""
+    def test_stale_gate_check_does_not_remove_live_file(self, tmp_path):
+        """Valid lease with live PID and matching identity is preserved."""
+        from datetime import UTC, datetime
+
         from autoskillit.cli._doctor import _check_stale_gate_file
         from autoskillit.core import Severity
+        from autoskillit.pipeline.gate import read_boot_id, read_starttime_ticks
 
         gate_dir = tmp_path / ".autoskillit" / "temp"
         gate_dir.mkdir(parents=True)
         gate_file = gate_dir / ".kitchen_gate"
-        gate_file.write_text(json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00"}))
+        gate_file.write_text(
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "starttime_ticks": read_starttime_ticks(os.getpid()),
+                    "boot_id": read_boot_id(),
+                    "opened_at": datetime.now(UTC).isoformat(),
+                }
+            )
+        )
         result = _check_stale_gate_file(tmp_path, fix=True)
-        assert result.severity == Severity.OK  # live PID → no error, no fix needed
-        assert gate_file.exists()  # file NOT removed
+        assert result.severity == Severity.OK
+        assert gate_file.exists()
 
-    def test_stale_gate_check_malformed_fix_removes_file(self, tmp_path):
-        """fix=True must remove a malformed (non-JSON) gate file."""
+    def test_stale_gate_malformed_auto_removed(self, tmp_path):
+        """Malformed (non-JSON) gate file is auto-removed by verify_lease()."""
         from autoskillit.cli._doctor import _check_stale_gate_file
         from autoskillit.core import Severity
 
@@ -740,15 +762,15 @@ class TestDoctorStaleGateFileFixParam:
         gate_file = gate_dir / ".kitchen_gate"
         gate_file.write_text("not-json")
         result = _check_stale_gate_file(tmp_path, fix=True)
-        assert result.severity == Severity.OK
+        assert result.severity == Severity.WARNING
         assert not gate_file.exists()
 
 
 class TestDoctorFixFlag:
-    """T3: doctor(fix=True) applies the fix and reports updated state."""
+    """T3: doctor CLI accepts fix parameter (infrastructure for future checks)."""
 
     def test_doctor_fix_flag_removes_stale_gate_file(self, tmp_path, monkeypatch):
-        """doctor(fix=True) must delete a stale gate file."""
+        """doctor(fix=True) auto-removes stale gate file via verify_lease()."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         gate_dir = tmp_path / ".autoskillit" / "temp"

@@ -828,39 +828,39 @@ async def get_pr_reviews(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="get_pr_reviews", cwd=cwd)
-    logger.info("get_pr_reviews", pr_number=pr_number, repo=repo)
-    await _notify(
-        ctx,
-        "info",
-        f"get_pr_reviews: #{pr_number}",
-        "autoskillit.get_pr_reviews",
-        extra={"repo": repo},
-    )
 
-    if repo:
-        cmd = ["gh", "api", f"repos/{repo}/pulls/{pr_number}/reviews"]
-        rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
-        if rc != 0:
-            return json.dumps({"success": False, "error": stderr.strip() or "gh command failed"})
-        try:
-            raw = json.loads(stdout)
-        except json.JSONDecodeError:
-            return json.dumps({"success": False, "error": "Failed to parse gh output"})
-        reviews = _map_api_reviews(raw)
-    else:
-        cmd = ["gh", "pr", "view", str(pr_number), "--json", "reviews"]
-        rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
-        if rc != 0:
-            return json.dumps({"success": False, "error": stderr.strip() or "gh command failed"})
-        try:
-            data = json.loads(stdout)
-        except json.JSONDecodeError:
-            return json.dumps({"success": False, "error": "Failed to parse gh output"})
-        reviews = _map_pr_view_reviews(data)
+    with structlog.contextvars.bound_contextvars(tool="get_pr_reviews", cwd=cwd):
+        logger.info("get_pr_reviews", pr_number=pr_number, repo=repo)
+        await _notify(
+            ctx,
+            "info",
+            f"get_pr_reviews: #{pr_number}",
+            "autoskillit.get_pr_reviews",
+            extra={"repo": repo},
+        )
 
-    return json.dumps({"reviews": reviews})
+        if repo:
+            cmd = ["gh", "api", f"repos/{repo}/pulls/{pr_number}/reviews"]
+            rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
+            if rc != 0:
+                return json.dumps({"success": False, "error": stderr.strip() or "gh command failed"})
+            try:
+                raw = json.loads(stdout)
+            except json.JSONDecodeError:
+                return json.dumps({"success": False, "error": "Failed to parse gh output"})
+            reviews = _map_api_reviews(raw)
+        else:
+            cmd = ["gh", "pr", "view", str(pr_number), "--json", "reviews"]
+            rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
+            if rc != 0:
+                return json.dumps({"success": False, "error": stderr.strip() or "gh command failed"})
+            try:
+                data = json.loads(stdout)
+            except json.JSONDecodeError:
+                return json.dumps({"success": False, "error": "Failed to parse gh output"})
+            reviews = _map_pr_view_reviews(data)
+
+        return json.dumps({"reviews": reviews})
 
 
 @mcp.tool(tags={"automation", "kitchen"})
@@ -887,16 +887,16 @@ async def bulk_close_issues(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="bulk_close_issues", cwd=cwd)
-    logger.info("bulk_close_issues", count=len(issue_numbers))
-    await _notify(
-        ctx,
-        "info",
-        f"bulk_close_issues: {len(issue_numbers)} issue(s)",
-        "autoskillit.bulk_close_issues",
-        extra={},
-    )
 
-    closed, failed = await _close_issues_sequentially(issue_numbers, comment, cwd)
-    return json.dumps({"closed": closed, "failed": failed})
+    with structlog.contextvars.bound_contextvars(tool="bulk_close_issues", cwd=cwd):
+        logger.info("bulk_close_issues", count=len(issue_numbers))
+        await _notify(
+            ctx,
+            "info",
+            f"bulk_close_issues: {len(issue_numbers)} issue(s)",
+            "autoskillit.bulk_close_issues",
+            extra={},
+        )
+
+        closed, failed = await _close_issues_sequentially(issue_numbers, comment, cwd)
+        return json.dumps({"closed": closed, "failed": failed})

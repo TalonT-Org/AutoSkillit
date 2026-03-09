@@ -577,7 +577,9 @@ class TestGroupFDoctor:
 
         called_with: dict = {}
 
-        def mock_run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> None:
+        def mock_run_doctor(
+            *, output_json: bool = False, plugin_dir: str | None = None, fix: bool = False
+        ) -> None:
             called_with["output_json"] = output_json
 
         monkeypatch.setattr(_doctor, "run_doctor", mock_run_doctor)
@@ -642,3 +644,119 @@ class TestDoctorStaleGateFile:
         result = _check_stale_gate_file(tmp_path)
         assert result.severity == Severity.ERROR
         assert "malformed" in result.message.lower()
+
+
+class TestDoctorResultFixField:
+    """T1: DoctorResult has an optional fix callable field."""
+
+    def test_doctor_result_has_fix_field(self):
+        """DoctorResult must have an optional fix callable field."""
+        from autoskillit.cli._doctor import DoctorResult
+        from autoskillit.core import Severity
+
+        # Can be constructed without fix
+        r = DoctorResult(severity=Severity.OK, check="x", message="y")
+        assert r.fix is None
+
+        # Can be constructed with fix and it is callable
+        called = []
+        r_with_fix = DoctorResult(
+            severity=Severity.ERROR,
+            check="x",
+            message="y",
+            fix=lambda: called.append(1),
+        )
+        assert callable(r_with_fix.fix)
+        r_with_fix.fix()
+        assert called == [1]
+
+    def test_doctor_result_fix_not_in_json_output(self, tmp_path, monkeypatch, capsys):
+        """fix callable must not appear in --output-json serialization."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        for entry in data["results"]:
+            assert "fix" not in entry
+
+
+class TestDoctorStaleGateFileFixParam:
+    """T2: _check_stale_gate_file returns fix callable and applies fix inline."""
+
+    def test_stale_gate_check_returns_fix_callable(self, tmp_path):
+        """_check_stale_gate_file must return a DoctorResult with a populated fix callable
+        when the gate file is stale (dead PID)."""
+        from autoskillit.cli._doctor import _check_stale_gate_file
+        from autoskillit.core import Severity
+
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
+        (gate_dir / ".kitchen_gate").write_text(
+            json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00"})
+        )
+        result = _check_stale_gate_file(tmp_path, fix=False)
+        assert result.severity == Severity.ERROR
+        assert result.fix is not None
+        assert callable(result.fix)
+
+    def test_stale_gate_check_fix_kwarg_removes_file(self, tmp_path):
+        """_check_stale_gate_file(fix=True) must delete the stale gate file and return OK."""
+        from autoskillit.cli._doctor import _check_stale_gate_file
+        from autoskillit.core import Severity
+
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
+        gate_file = gate_dir / ".kitchen_gate"
+        gate_file.write_text(json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00"}))
+        result = _check_stale_gate_file(tmp_path, fix=True)
+        assert result.severity == Severity.OK
+        assert not gate_file.exists()
+
+    def test_stale_gate_check_fix_does_not_remove_live_file(self, tmp_path):
+        """fix=True must NOT remove a gate file owned by a live PID."""
+        from autoskillit.cli._doctor import _check_stale_gate_file
+        from autoskillit.core import Severity
+
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
+        gate_file = gate_dir / ".kitchen_gate"
+        gate_file.write_text(json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00"}))
+        result = _check_stale_gate_file(tmp_path, fix=True)
+        assert result.severity == Severity.OK  # live PID → no error, no fix needed
+        assert gate_file.exists()  # file NOT removed
+
+    def test_stale_gate_check_malformed_fix_removes_file(self, tmp_path):
+        """fix=True must remove a malformed (non-JSON) gate file."""
+        from autoskillit.cli._doctor import _check_stale_gate_file
+        from autoskillit.core import Severity
+
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
+        gate_file = gate_dir / ".kitchen_gate"
+        gate_file.write_text("not-json")
+        result = _check_stale_gate_file(tmp_path, fix=True)
+        assert result.severity == Severity.OK
+        assert not gate_file.exists()
+
+
+class TestDoctorFixFlag:
+    """T3: doctor(fix=True) applies the fix and reports updated state."""
+
+    def test_doctor_fix_flag_removes_stale_gate_file(self, tmp_path, monkeypatch):
+        """doctor(fix=True) must delete a stale gate file."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        gate_dir = tmp_path / ".autoskillit" / "temp"
+        gate_dir.mkdir(parents=True)
+        gate_file = gate_dir / ".kitchen_gate"
+        gate_file.write_text(json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00"}))
+        cli.doctor(fix=True)
+        assert not gate_file.exists()
+
+    def test_doctor_command_accepts_fix_parameter(self):
+        """doctor CLI command must expose a fix parameter."""
+        import inspect
+
+        sig = inspect.signature(cli.doctor)
+        assert "fix" in sig.parameters

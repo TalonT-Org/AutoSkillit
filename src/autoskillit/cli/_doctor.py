@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import shutil
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from autoskillit.core import Severity, is_git_worktree, pkg_root
-from autoskillit.pipeline import gate_file_path, is_pid_alive
+from autoskillit.pipeline import gate_file_path, hook_config_path, is_pid_alive
 
 
 @dataclass
@@ -16,6 +17,7 @@ class DoctorResult:
     severity: Severity
     check: str
     message: str
+    fix: Callable[[], None] | None = field(default=None, repr=False)
 
 
 def _is_plugin_installed() -> bool:
@@ -31,9 +33,11 @@ def _is_plugin_installed() -> bool:
         return False
 
 
-def _check_stale_gate_file(project_root: Path) -> DoctorResult:
+def _check_stale_gate_file(project_root: Path, fix: bool = False) -> DoctorResult:
     """Check for stale gate file from a crashed pipeline session."""
     gate_path = gate_file_path(project_root)
+    hook_cfg = hook_config_path(project_root)
+
     if not gate_path.exists():
         return DoctorResult(Severity.OK, "stale_gate_file", "No gate file found")
 
@@ -41,18 +45,48 @@ def _check_stale_gate_file(project_root: Path) -> DoctorResult:
         data = json.loads(gate_path.read_text())
         pid = data["pid"]
     except (json.JSONDecodeError, KeyError, TypeError, OSError):
+        if fix:
+            gate_path.unlink(missing_ok=True)
+            hook_cfg.unlink(missing_ok=True)
+            return DoctorResult(
+                Severity.OK,
+                "stale_gate_file",
+                f"Removed malformed gate file at {gate_path}.",
+            )
+
+        def _apply_malformed_fix() -> None:
+            gate_path.unlink(missing_ok=True)
+            hook_cfg.unlink(missing_ok=True)
+
         return DoctorResult(
             Severity.ERROR,
             "stale_gate_file",
-            f"Malformed gate file at {gate_path} — safe to delete",
+            f"Malformed gate file at {gate_path} — safe to delete. "
+            f"Run 'autoskillit doctor --fix'.",
+            fix=_apply_malformed_fix,
         )
 
     if not is_pid_alive(pid):
+        if fix:
+            gate_path.unlink(missing_ok=True)
+            hook_cfg.unlink(missing_ok=True)
+            return DoctorResult(
+                Severity.OK,
+                "stale_gate_file",
+                f"Removed stale gate file at {gate_path} (PID {pid} was dead).",
+            )
+
+        def _apply_stale_fix() -> None:
+            gate_path.unlink(missing_ok=True)
+            hook_cfg.unlink(missing_ok=True)
+
         return DoctorResult(
             Severity.ERROR,
             "stale_gate_file",
             f"Stale gate file at {gate_path} (PID {pid} is dead) — "
-            f"safe to delete. Native tools may be blocked.",
+            f"safe to delete. Native tools may be blocked. "
+            f"Run 'autoskillit doctor --fix'.",
+            fix=_apply_stale_fix,
         )
 
     return DoctorResult(
@@ -62,12 +96,14 @@ def _check_stale_gate_file(project_root: Path) -> DoctorResult:
     )
 
 
-def run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> None:
+def run_doctor(
+    *, output_json: bool = False, plugin_dir: str | None = None, fix: bool = False
+) -> None:
     """Check project setup for common issues."""
     results: list[DoctorResult] = []
 
     # Check 0: Stale gate file from crashed pipeline
-    results.append(_check_stale_gate_file(Path.cwd()))
+    results.append(_check_stale_gate_file(Path.cwd(), fix=fix))
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
     stale_servers: list[str] = []

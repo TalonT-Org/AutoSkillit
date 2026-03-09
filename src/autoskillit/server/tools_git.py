@@ -120,7 +120,7 @@ async def classify_fix(
     from autoskillit.server import _get_config, _get_ctx
     from autoskillit.server.git import _filter_changed_files
 
-    _timing_ctx = _get_ctx()
+    tool_ctx = _get_ctx()
     _start = time.monotonic()
     try:
         returncode, stdout, stderr = await _run_subprocess(
@@ -176,4 +176,4 @@ async def classify_fix(
         )
     finally:
         if step_name:
-            _timing_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

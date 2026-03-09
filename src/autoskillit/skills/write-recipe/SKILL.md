@@ -258,7 +258,7 @@ summary: make-plan > dry-walk > implement > test > merge
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
     Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
-    orchestrator. All work is delegated through run_skill/run_skill_retry."
+    orchestrator. All work is delegated through run_skill."
   - "Route to on_failure when a step fails — do not investigate directly."
 
 ingredients:
@@ -447,7 +447,7 @@ When converting old `.claude/commands/` or `.claude/skills/` Markdown recipes to
 | Hardcoded paths in SETUP | `required: true` inputs (never hardcode paths) |
 | `PIPELINE:` numbered steps | `steps:` keyed by descriptive name |
 | `run_skill("/skill-name ...", cwd=...)` | `tool: run_skill` with `with: {skill_command: "...", cwd: "..."}` |
-| `run_skill_retry(...)` | `tool: run_skill` with `retries:` field |
+| `run_skill(...)` with retry | `tool: run_skill` with `retries:` field |
 | `→ ESCALATE` / prose failure routing | `on_failure: escalate` |
 | `PASS → next step` | `on_success: next_step` |
 | `FAIL → fix attempt` | `on_failure: fix` |

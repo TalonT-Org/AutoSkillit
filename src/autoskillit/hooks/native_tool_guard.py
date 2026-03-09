@@ -1,17 +1,29 @@
 """PreToolUse hook: blocks native Claude Code tools when the kitchen gate is open.
 
 Matched only against native tool names via the hooks.json matcher regex.
-When the gate file exists (kitchen is open), denies the call. When absent, allows it.
+When the gate file exists with a valid lease whose PID is alive, denies the call.
 Fail-open on any error to avoid blocking normal development.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
 GATE_STATE_FILENAME = ".kitchen_gate"
+
+
+def _is_pid_alive(pid: int) -> bool:
+    """Check if a process with the given PID is running (stdlib only)."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists but can't signal
 
 
 def main() -> None:
@@ -26,7 +38,27 @@ def main() -> None:
     if not gate_path.exists():
         sys.exit(0)  # Kitchen closed — allow
 
-    # Kitchen is open — deny native tool
+    # Read and validate the gate lease
+    try:
+        data = json.loads(gate_path.read_text())
+        pid = data["pid"]
+    except (json.JSONDecodeError, KeyError, TypeError, OSError, ValueError):
+        # Malformed or unreadable — fail-open, remove stale file
+        try:
+            gate_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        sys.exit(0)
+
+    if not _is_pid_alive(pid):
+        # Owning process is dead — stale lease
+        try:
+            gate_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        sys.exit(0)
+
+    # PID is alive — gate is valid, deny native tool
     print(
         json.dumps(
             {

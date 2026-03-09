@@ -14,15 +14,44 @@ This module is the authoritative location for:
 
 from __future__ import annotations
 
+import json
 from datetime import UTC
+from pathlib import Path
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import get_logger
 from autoskillit.pipeline import ToolContext
+from autoskillit.pipeline.gate import GATE_FILENAME, HOOK_CONFIG_FILENAME, is_pid_alive
 
 logger = get_logger(__name__)
 
 _ctx: ToolContext | None = None
+
+
+def _recover_stale_gate_file() -> None:
+    """Remove gate file if owning process is dead or file is malformed."""
+    gate_path = Path.cwd() / "temp" / GATE_FILENAME
+    if not gate_path.exists():
+        return
+    try:
+        data = json.loads(gate_path.read_text())
+        pid = data["pid"]
+    except (json.JSONDecodeError, KeyError, TypeError, OSError):
+        gate_path.unlink(missing_ok=True)
+        logger.warning("removed_malformed_gate_file", path=str(gate_path))
+        # Also clean up companion hook config file
+        hook_cfg = Path.cwd() / "temp" / HOOK_CONFIG_FILENAME
+        if hook_cfg.exists():
+            hook_cfg.unlink(missing_ok=True)
+        return
+
+    if not is_pid_alive(pid):
+        gate_path.unlink(missing_ok=True)
+        logger.warning("removed_stale_gate_file", pid=pid, path=str(gate_path))
+        # Also clean up companion hook config file
+        hook_cfg = Path.cwd() / "temp" / HOOK_CONFIG_FILENAME
+        if hook_cfg.exists():
+            hook_cfg.unlink(missing_ok=True)
 
 
 def _initialize(ctx: ToolContext) -> None:
@@ -42,6 +71,12 @@ def _initialize(ctx: ToolContext) -> None:
             logger.info("Recovered %d crashed session trace(s) from tmpfs", n)
     except Exception:
         logger.debug("recover_crashed_sessions at startup failed", exc_info=True)
+
+    # Gate file recovery: remove stale gate files from crashed pipeline sessions.
+    try:
+        _recover_stale_gate_file()
+    except Exception:
+        logger.debug("recover_stale_gate_file at startup failed", exc_info=True)
 
     # Telemetry recovery: restore token, timing, and audit data from the last 24 hours.
     try:

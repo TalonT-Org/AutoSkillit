@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -194,3 +195,52 @@ def test_open_kitchen_handler_is_async():
     assert inspect.iscoroutinefunction(_open_kitchen_handler), (
         "_open_kitchen_handler must be async"
     )
+
+
+# T-LEASE-1: Gate file contains valid JSON with pid and opened_at
+@pytest.mark.anyio
+async def test_gate_file_contains_lease_metadata(tmp_path, monkeypatch):
+    """Gate file must be a JSON lease, not a bare sentinel."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.prompts._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.prompts._write_hook_config"):
+                    with patch("autoskillit.server.prompts._register_gate_cleanup"):
+                        from autoskillit.server.prompts import _open_kitchen_handler
+
+                        await _open_kitchen_handler()
+
+    gate_path = tmp_path / "temp" / ".kitchen_gate"
+    data = json.loads(gate_path.read_text())
+    assert "pid" in data
+    assert "opened_at" in data
+    assert data["pid"] == os.getpid()
+    assert isinstance(data["opened_at"], str)  # ISO 8601
+
+
+# T-SIGNAL-1: atexit handler removes gate file
+def test_atexit_cleanup_removes_gate_file(tmp_path, monkeypatch):
+    """The registered atexit function must remove the gate file."""
+    monkeypatch.chdir(tmp_path)
+    gate_dir = tmp_path / "temp"
+    gate_dir.mkdir()
+    gate_file = gate_dir / ".kitchen_gate"
+    gate_file.write_text(json.dumps({"pid": os.getpid(), "opened_at": "..."}))
+
+    from autoskillit.server.prompts import _cleanup_gate_file
+
+    _cleanup_gate_file()
+    assert not gate_file.exists()
+
+
+# T-SIGNAL-2: atexit handler is no-op when no gate file
+def test_atexit_cleanup_noop_when_no_gate_file(tmp_path, monkeypatch):
+    """Cleanup must not raise when gate file doesn't exist."""
+    monkeypatch.chdir(tmp_path)
+
+    from autoskillit.server.prompts import _cleanup_gate_file
+
+    _cleanup_gate_file()  # should not raise

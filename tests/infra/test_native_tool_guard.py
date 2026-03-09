@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -32,7 +33,9 @@ def _run_hook(
         fake_cwd = tmp_path
         if gate_file_exists:
             (fake_cwd / "temp").mkdir(parents=True, exist_ok=True)
-            (fake_cwd / "temp" / ".kitchen_gate").write_text("12345")
+            (fake_cwd / "temp" / ".kitchen_gate").write_text(
+                json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"})
+            )
     else:
         fake_cwd = Path("/nonexistent/path/that/has/no/gate/file")
 
@@ -132,6 +135,54 @@ def test_allows_askuserquestion_when_gate_open(tmp_path):
     which is the mechanism that keeps it unblocked.
     """
     assert "AskUserQuestion" not in PIPELINE_FORBIDDEN_TOOLS
+
+
+# T-LEASE-2: Hook allows when gate file has dead PID
+def test_hook_allows_when_owning_pid_is_dead(tmp_path):
+    """Stale gate file with dead PID must be auto-removed and tool allowed."""
+    gate_dir = tmp_path / "temp"
+    gate_dir.mkdir()
+    gate_file = gate_dir / ".kitchen_gate"
+    gate_file.write_text(json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"}))
+    result = _run_hook(event={"tool_name": "Read"}, gate_file_exists=False, tmp_path=tmp_path)
+    assert result == ""  # allowed
+    assert not gate_file.exists()  # stale file was removed
+
+
+# T-LEASE-3: Hook denies when gate file has live PID
+def test_hook_denies_when_owning_pid_is_alive(tmp_path):
+    """Gate file with live PID (current process) must deny."""
+    gate_dir = tmp_path / "temp"
+    gate_dir.mkdir()
+    gate_file = gate_dir / ".kitchen_gate"
+    gate_file.write_text(json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"}))
+    result = _run_hook(event={"tool_name": "Read"}, gate_file_exists=False, tmp_path=tmp_path)
+    data = json.loads(result)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# T-LEASE-4: Hook allows when gate file is malformed JSON (fail-open)
+def test_hook_allows_when_gate_file_is_malformed(tmp_path):
+    """Malformed gate file must fail-open and remove the file."""
+    gate_dir = tmp_path / "temp"
+    gate_dir.mkdir()
+    gate_file = gate_dir / ".kitchen_gate"
+    gate_file.write_text("not json")
+    result = _run_hook(event={"tool_name": "Read"}, gate_file_exists=False, tmp_path=tmp_path)
+    assert result == ""  # allowed (fail-open)
+    assert not gate_file.exists()  # malformed file was removed
+
+
+# T-LEASE-5: Hook allows when gate file is empty (legacy bare sentinel)
+def test_hook_allows_when_gate_file_is_empty_sentinel(tmp_path):
+    """Empty gate file (legacy format) must fail-open and remove the file."""
+    gate_dir = tmp_path / "temp"
+    gate_dir.mkdir()
+    gate_file = gate_dir / ".kitchen_gate"
+    gate_file.touch()  # empty — legacy bare sentinel
+    result = _run_hook(event={"tool_name": "Read"}, gate_file_exists=False, tmp_path=tmp_path)
+    assert result == ""  # allowed (fail-open)
+    assert not gate_file.exists()  # legacy file was removed
 
 
 # T6a

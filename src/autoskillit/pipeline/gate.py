@@ -11,9 +11,25 @@ without violating layer ordering.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
+from typing import Final
 
 from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
+
+GATE_FILENAME: Final[str] = ".kitchen_gate"
+HOOK_CONFIG_FILENAME: Final[str] = ".autoskillit_hook_config.json"
+
+
+def is_pid_alive(pid: int) -> bool:
+    """Check if a process with the given PID is running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # process exists but we can't signal it
 
 
 @dataclass(slots=True)

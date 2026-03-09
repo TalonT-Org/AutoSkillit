@@ -248,7 +248,7 @@ async def create_unique_branch(
                     timeout=30,
                 )
                 if rc2 != 0:
-                    branch_name = base_name
+                    branch_name = candidate
                     break
                 if not stdout2.strip():
                     branch_name = candidate

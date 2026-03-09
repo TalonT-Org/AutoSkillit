@@ -669,7 +669,12 @@ class CloneManager(Protocol):
     """Protocol for clone-based pipeline run isolation."""
 
     def clone_repo(
-        self, source_dir: str, run_name: str, branch: str = "", strategy: str = ""
+        self,
+        source_dir: str,
+        run_name: str,
+        branch: str = "",
+        strategy: str = "",
+        remote_url: str = "",
     ) -> dict[str, str]: ...
 
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]: ...

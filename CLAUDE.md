@@ -181,6 +181,7 @@ src/autoskillit/
 │   ├── _init_helpers.py     #   Init command helpers: interactive prompts and workspace marker
 │   ├── _marketplace.py      #   Plugin install/upgrade marketplace operations
 │   ├── _prompts.py          #   Orchestrator prompt builder for recipe execution
+│   ├── _workspace.py        #   workspace clean implementation (run_workspace_clean)
 │   └── app.py               #   CLI: serve, init, config show, skills, recipes, workspace, doctor
 ├── hooks/                   # Claude Code PreToolUse hook scripts
 │   ├── __init__.py

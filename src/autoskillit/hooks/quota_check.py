@@ -18,6 +18,9 @@ from pathlib import Path
 
 _DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
 _DEFAULT_THRESHOLD = 90.0
+# Intentional: 300 s TTL means a pipeline step may start when quota is actually exhausted
+# but the cache still reads below threshold. Avoiding unnecessary API calls is preferable
+# to marginal freshness — the next live fetch corrects state when the step fails the check.
 _DEFAULT_CACHE_MAX_AGE = 300  # seconds
 
 HOOK_CONFIG_FILENAME = ".autoskillit_hook_config.json"

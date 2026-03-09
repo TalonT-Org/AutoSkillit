@@ -320,6 +320,9 @@ def workspace_clean(
     force
         Skip the confirmation prompt and delete stale directories immediately.
     """
+    # run_workspace_clean is intentionally not in cli/__init__.py's public surface.
+    # It is an internal implementation detail of this command, not a standalone API.
+    # All command handlers in app.py follow this deferred-import pattern.
     from autoskillit.cli._workspace import run_workspace_clean
 
     run_workspace_clean(dir=dir, force=force)

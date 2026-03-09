@@ -9,7 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from autoskillit import __version__
+from autoskillit import (
+    __version__,
+)  # safe: autoskillit.__init__ only calls importlib.metadata.version()
 from autoskillit.core import (
     RetryReason,
     SkillResult,

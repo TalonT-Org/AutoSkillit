@@ -841,10 +841,26 @@ class TestAuditAndFixStructure:
 
     def test_aaf6_merge_step_routes_to_push(self, recipe) -> None:
         """T_AAF6: merge step must route to push on success."""
-        assert recipe.steps["merge"].on_success == "push", (
+        merge = recipe.steps["merge"]
+        # With on_result, success is the default (unconditional) route
+        default_routes = [c for c in merge.on_result.conditions if c.when is None]
+        assert len(default_routes) == 1
+        assert default_routes[0].route == "push", (
             "merge step must route to push — the push step propagates the merged branch "
             "from the clone back to the upstream remote"
         )
+
+    def test_aaf7_merge_routes_dirty_tree_to_fix(self, recipe) -> None:
+        """T_AAF7: merge step must route dirty_tree to fix (not release_issue_failure)."""
+        merge = recipe.steps["merge"]
+        assert merge.on_result is not None, (
+            "merge step must use on_result with predicate conditions "
+            "to handle recoverable merge failures"
+        )
+        conditions = merge.on_result.conditions
+        dirty_tree_routes = [c for c in conditions if c.when and "dirty_tree" in c.when]
+        assert len(dirty_tree_routes) == 1
+        assert dirty_tree_routes[0].route == "fix"
 
     def test_create_branch_does_not_use_run_name_verbatim(self, recipe) -> None:
         """create_branch must not use inputs.run_name as the full branch name."""

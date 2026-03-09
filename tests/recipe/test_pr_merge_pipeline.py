@@ -298,7 +298,10 @@ def test_pmp_retry_merge_after_resolution_uses_merge_worktree(recipe):
 
 def test_pmp_retry_merge_after_resolution_routes_to_next_part(recipe):
     step = recipe.steps["retry_merge_after_resolution"]
-    assert step.on_success == "next_part_or_next_pr"
+    # With on_result, success is the default (unconditional) route
+    default_routes = [c for c in step.on_result.conditions if c.when is None]
+    assert len(default_routes) == 1
+    assert default_routes[0].route == "next_part_or_next_pr"
 
 
 def test_pmp_retry_merge_no_loop_back_to_resolve(recipe):
@@ -307,3 +310,29 @@ def test_pmp_retry_merge_no_loop_back_to_resolve(recipe):
     assert "resolve_merge_conflicts" not in routes, (
         "retry_merge_after_resolution must never route back to resolve_merge_conflicts"
     )
+
+
+def test_pmp_merge_to_integration_routes_dirty_tree_to_fix(recipe) -> None:
+    """merge_to_integration must route dirty_tree to fix."""
+    step = recipe.steps["merge_to_integration"]
+    assert step.on_result is not None
+    dirty_tree_routes = [c for c in step.on_result.conditions if c.when and "dirty_tree" in c.when]
+    assert len(dirty_tree_routes) == 1
+    assert dirty_tree_routes[0].route == "fix"
+
+
+def test_pmp_commit_dirty_step_exists(recipe) -> None:
+    """commit_dirty step must exist and route to retry_merge_after_resolution."""
+    assert "commit_dirty" in recipe.steps
+    step = recipe.steps["commit_dirty"]
+    assert step.tool == "run_cmd"
+    assert step.on_success == "retry_merge_after_resolution"
+
+
+def test_pmp_retry_merge_routes_dirty_tree_to_commit_dirty(recipe) -> None:
+    """retry_merge_after_resolution must route dirty_tree to commit_dirty."""
+    step = recipe.steps["retry_merge_after_resolution"]
+    assert step.on_result is not None
+    dirty_tree_routes = [c for c in step.on_result.conditions if c.when and "dirty_tree" in c.when]
+    assert len(dirty_tree_routes) == 1
+    assert dirty_tree_routes[0].route == "commit_dirty"

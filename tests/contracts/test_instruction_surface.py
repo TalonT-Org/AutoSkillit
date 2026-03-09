@@ -366,6 +366,19 @@ class TestPathArgSkillsContract:
         )
 
 
+class TestResolveFailuresDirtyTreeContract:
+    """resolve-failures SKILL.md must document dirty tree pre-check."""
+
+    def test_resolve_failures_mentions_dirty_tree(self):
+        skill_md = (
+            _project_root() / "src" / "autoskillit" / "skills" / "resolve-failures" / "SKILL.md"
+        )
+        content = skill_md.read_text()
+        assert "dirty" in content.lower() or "uncommitted" in content.lower(), (
+            "resolve-failures SKILL.md must document the dirty tree pre-check step"
+        )
+
+
 def test_claude_md_documents_all_source_modules() -> None:
     """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
 

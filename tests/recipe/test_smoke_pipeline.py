@@ -197,6 +197,13 @@ class SmokeExecutor:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(scope="module")
+def smoke_recipe():
+    from autoskillit.recipe.io import load_recipe as _load_recipe
+
+    return _load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
+
+
 @pytest.fixture()
 def smoke_script_path() -> Path:
     return SMOKE_SCRIPT
@@ -422,6 +429,14 @@ class TestSmokeScriptValidation:
         pipeline = yaml.safe_load(SMOKE_SCRIPT.read_text())
         assess_cmd = pipeline["steps"]["assess"]["with"]["skill_command"]
         assert "bug_report.json" in assess_cmd
+
+
+def test_smoke_commit_dirty_step_exists(smoke_recipe) -> None:
+    """commit_dirty step must exist and route back to merge."""
+    assert "commit_dirty" in smoke_recipe.steps
+    step = smoke_recipe.steps["commit_dirty"]
+    assert step.tool == "run_cmd"
+    assert step.on_success == "merge"
 
 
 # ---------------------------------------------------------------------------

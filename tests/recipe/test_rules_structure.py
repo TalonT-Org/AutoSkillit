@@ -1383,6 +1383,7 @@ class TestMergeRoutingIncompleteRule:
         """RMR1: ERROR when test_gate is not explicitly routed."""
         recipe = self._make_merge_step(
             [
+                {"when": "result.failed_step == 'dirty_tree'", "route": "recover"},
                 {"when": "result.failed_step == 'post_rebase_test_gate'", "route": "recover"},
                 {"when": "result.failed_step == 'rebase'", "route": "recover"},
                 {"when": "result.error", "route": "escalate"},
@@ -1398,6 +1399,7 @@ class TestMergeRoutingIncompleteRule:
         """RMR2: ERROR when post_rebase_test_gate is not explicitly routed."""
         recipe = self._make_merge_step(
             [
+                {"when": "result.failed_step == 'dirty_tree'", "route": "recover"},
                 {"when": "result.failed_step == 'test_gate'", "route": "recover"},
                 {"when": "result.failed_step == 'rebase'", "route": "recover"},
                 {"when": "result.error", "route": "escalate"},
@@ -1413,6 +1415,7 @@ class TestMergeRoutingIncompleteRule:
         """RMR3: ERROR when rebase is not explicitly routed."""
         recipe = self._make_merge_step(
             [
+                {"when": "result.failed_step == 'dirty_tree'", "route": "recover"},
                 {"when": "result.failed_step == 'test_gate'", "route": "recover"},
                 {"when": "result.failed_step == 'post_rebase_test_gate'", "route": "recover"},
                 {"when": "result.error", "route": "escalate"},
@@ -1424,8 +1427,24 @@ class TestMergeRoutingIncompleteRule:
         assert len(errors) == 1
         assert "rebase" in errors[0].message
 
-    def test_rmr4_clears_when_all_three_covered(self):
+    def test_rmr4_clears_when_all_four_covered(self):
         """RMR4: No finding when all recoverable values are explicitly routed."""
+        recipe = self._make_merge_step(
+            [
+                {"when": "result.failed_step == 'dirty_tree'", "route": "recover"},
+                {"when": "result.failed_step == 'test_gate'", "route": "recover"},
+                {"when": "result.failed_step == 'post_rebase_test_gate'", "route": "recover"},
+                {"when": "result.failed_step == 'rebase'", "route": "recover"},
+                {"when": "result.error", "route": "escalate"},
+                {"route": "done"},
+            ]
+        )
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.rule == "merge-routing-incomplete"]
+        assert errors == []
+
+    def test_rmr7_fires_when_dirty_tree_missing(self):
+        """RMR7: ERROR when dirty_tree is not explicitly routed."""
         recipe = self._make_merge_step(
             [
                 {"when": "result.failed_step == 'test_gate'", "route": "recover"},
@@ -1437,7 +1456,8 @@ class TestMergeRoutingIncompleteRule:
         )
         findings = run_semantic_rules(recipe)
         errors = [f for f in findings if f.rule == "merge-routing-incomplete"]
-        assert errors == []
+        assert len(errors) == 1
+        assert "dirty_tree" in errors[0].message
 
     def test_rmr5_does_not_fire_for_non_merge_worktree_step(self):
         """RMR5: Rule is scoped to merge_worktree steps only."""

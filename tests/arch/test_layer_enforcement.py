@@ -807,3 +807,30 @@ def test_hook_config_filename_and_dir_match_quota_check():
         f"quota_check HOOK_DIR_COMPONENTS {hook_dir!r} != "
         f"canonical parent parts {canonical_parent_parts!r}"
     )
+
+
+def test_gate_lease_fields_match_hook():
+    """LEASE_FIELDS in gate.py must match LEASE_FIELDS in native_tool_guard.py."""
+    from autoskillit.pipeline.gate import LEASE_FIELDS
+
+    hook_src = (SRC_ROOT / "hooks" / "native_tool_guard.py").read_text()
+    tree = ast.parse(hook_src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "LEASE_FIELDS":
+                    assert isinstance(node.value, ast.Call), (
+                        "LEASE_FIELDS must be a frozenset(...) call"
+                    )
+                    assert isinstance(node.value.func, ast.Name)
+                    assert node.value.func.id == "frozenset"
+                    set_arg = node.value.args[0]
+                    assert isinstance(set_arg, ast.Set)
+                    hook_fields = {
+                        elt.value for elt in set_arg.elts if isinstance(elt, ast.Constant)
+                    }
+                    assert hook_fields == LEASE_FIELDS, (
+                        f"Hook LEASE_FIELDS {hook_fields} != canonical {LEASE_FIELDS}"
+                    )
+                    return
+    pytest.fail("LEASE_FIELDS not found in native_tool_guard.py")

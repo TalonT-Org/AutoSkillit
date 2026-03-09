@@ -6,11 +6,24 @@ import io
 import json
 import os
 from contextlib import redirect_stdout
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
+
+
+def _read_self_starttime_ticks() -> int:
+    """Read the current process's starttime ticks from /proc/self/stat."""
+    raw = open("/proc/self/stat").read()
+    after_comm = raw[raw.rfind(")") + 1 :]
+    return int(after_comm.split()[19])
+
+
+def _read_current_boot_id() -> str:
+    """Read the current boot_id."""
+    return open("/proc/sys/kernel/random/boot_id").read().strip()
 
 
 def _run_hook(
@@ -33,8 +46,17 @@ def _run_hook(
         fake_cwd = tmp_path
         if gate_file_exists:
             (fake_cwd / ".autoskillit" / "temp").mkdir(parents=True, exist_ok=True)
+            starttime_ticks = _read_self_starttime_ticks()
+            boot_id = _read_current_boot_id()
             (fake_cwd / ".autoskillit" / "temp" / ".kitchen_gate").write_text(
-                json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"})
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "starttime_ticks": starttime_ticks,
+                        "boot_id": boot_id,
+                        "opened_at": datetime.now(UTC).isoformat(),
+                    }
+                )
             )
     else:
         fake_cwd = Path("/nonexistent/path/that/has/no/gate/file")
@@ -219,3 +241,90 @@ def test_hooks_json_commands_have_no_env_vars():
         for hook in entry.get("hooks", []):
             cmd = hook["command"]
             assert "${" not in cmd, f"Hook command contains env var substitution: {cmd}"
+
+
+# T-LEASE-PID-REUSE: Hook allows when PID alive but starttime mismatch
+def test_hook_allows_when_pid_alive_but_starttime_mismatch(tmp_path):
+    """PID reuse scenario: PID alive but starttime_ticks wrong → stale → allow."""
+    gate_dir = tmp_path / ".autoskillit" / "temp"
+    gate_dir.mkdir(parents=True)
+    gate_file = gate_dir / ".kitchen_gate"
+    gate_file.write_text(
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "starttime_ticks": 0,
+                "boot_id": _read_current_boot_id(),
+                "opened_at": datetime.now(UTC).isoformat(),
+            }
+        )
+    )
+    result = _run_hook(event={"tool_name": "Read"}, gate_file_exists=False, tmp_path=tmp_path)
+    assert result == ""  # allowed — PID reuse detected
+    assert not gate_file.exists()
+
+
+# T-LEASE-IDENTITY-MATCH: Hook denies when all three identity factors match
+def test_hook_denies_when_pid_alive_and_identity_matches(tmp_path):
+    """Legitimate lease: PID alive + starttime + boot_id all match → deny."""
+    gate_dir = tmp_path / ".autoskillit" / "temp"
+    gate_dir.mkdir(parents=True)
+    gate_file = gate_dir / ".kitchen_gate"
+    gate_file.write_text(
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "starttime_ticks": _read_self_starttime_ticks(),
+                "boot_id": _read_current_boot_id(),
+                "opened_at": datetime.now(UTC).isoformat(),
+            }
+        )
+    )
+    result = _run_hook(event={"tool_name": "Read"}, gate_file_exists=False, tmp_path=tmp_path)
+    data = json.loads(result)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# T-LEASE-BOOT-ID: Hook allows when boot_id mismatches
+def test_hook_allows_when_boot_id_mismatch(tmp_path):
+    """Reboot scenario: boot_id wrong → stale → allow."""
+    gate_dir = tmp_path / ".autoskillit" / "temp"
+    gate_dir.mkdir(parents=True)
+    gate_file = gate_dir / ".kitchen_gate"
+    gate_file.write_text(
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "starttime_ticks": _read_self_starttime_ticks(),
+                "boot_id": "00000000-0000-0000-0000-000000000000",
+                "opened_at": datetime.now(UTC).isoformat(),
+            }
+        )
+    )
+    result = _run_hook(event={"tool_name": "Read"}, gate_file_exists=False, tmp_path=tmp_path)
+    assert result == ""  # allowed — boot_id mismatch
+    assert not gate_file.exists()
+
+
+# T-LEASE-TTL: Hook allows when TTL expired
+def test_hook_allows_when_ttl_expired(tmp_path):
+    """Expired lease: valid identity but opened_at > 24h ago → allow."""
+    from datetime import timedelta
+
+    gate_dir = tmp_path / ".autoskillit" / "temp"
+    gate_dir.mkdir(parents=True)
+    gate_file = gate_dir / ".kitchen_gate"
+    old_time = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
+    gate_file.write_text(
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "starttime_ticks": _read_self_starttime_ticks(),
+                "boot_id": _read_current_boot_id(),
+                "opened_at": old_time,
+            }
+        )
+    )
+    result = _run_hook(event={"tool_name": "Read"}, gate_file_exists=False, tmp_path=tmp_path)
+    assert result == ""  # allowed — TTL expired
+    assert not gate_file.exists()

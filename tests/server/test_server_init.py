@@ -303,60 +303,28 @@ class TestGatedToolAccess:
         assert result["success"] is False
         assert result["is_error"] is True
 
-    def test_kitchen_tools_registered_as_tools(self):
+    @pytest.mark.anyio
+    async def test_kitchen_tools_registered_as_tools(self):
         """open_kitchen and close_kitchen are registered as tools on the server."""
-        from fastmcp.tools import Tool
+        from fastmcp.client import Client
 
         from autoskillit.server import mcp
 
-        tool_names = {
-            v.name for v in mcp._local_provider._components.values() if isinstance(v, Tool)
-        }
+        async with Client(mcp) as client:
+            tool_names = {t.name for t in await client.list_tools()}
         assert "open_kitchen" in tool_names
         assert "close_kitchen" in tool_names
 
-    def test_open_kitchen_registered_as_tool(self):
-        """open_kitchen is a tool, not a prompt."""
-        from fastmcp.tools import Tool
+    @pytest.mark.anyio
+    async def test_kitchen_tools_not_registered_as_prompts(self):
+        """open_kitchen and close_kitchen are tools, not MCP prompts."""
+        from fastmcp.client import Client
 
         from autoskillit.server import mcp
 
-        tool_names = {
-            v.name for v in mcp._local_provider._components.values() if isinstance(v, Tool)
-        }
-        assert "open_kitchen" in tool_names
-
-    def test_close_kitchen_registered_as_tool(self):
-        """close_kitchen is a tool, not a prompt."""
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp
-
-        tool_names = {
-            v.name for v in mcp._local_provider._components.values() if isinstance(v, Tool)
-        }
-        assert "close_kitchen" in tool_names
-
-    def test_no_prompt_named_open_kitchen(self):
-        """open_kitchen is no longer an MCP prompt."""
-        from fastmcp.prompts import Prompt
-
-        from autoskillit.server import mcp
-
-        prompt_names = {
-            v.name for v in mcp._local_provider._components.values() if isinstance(v, Prompt)
-        }
+        async with Client(mcp) as client:
+            prompt_names = {p.name for p in await client.list_prompts()}
         assert "open_kitchen" not in prompt_names
-
-    def test_no_prompt_named_close_kitchen(self):
-        """close_kitchen is no longer an MCP prompt."""
-        from fastmcp.prompts import Prompt
-
-        from autoskillit.server import mcp
-
-        prompt_names = {
-            v.name for v in mcp._local_provider._components.values() if isinstance(v, Prompt)
-        }
         assert "close_kitchen" not in prompt_names
 
     @pytest.mark.anyio
@@ -417,7 +385,7 @@ class TestGateTransitionLogs:
         )
 
 
-class TestPromptSchemas:
+class TestKitchenToolSchemas:
     """Kitchen tool descriptions must be accurate, current, and cooking-themed."""
 
     def _get_kitchen_tools(self):
@@ -440,7 +408,7 @@ class TestPromptSchemas:
         "bugfix-loop",
     ]
 
-    def test_prompt_descriptions_contain_no_legacy_terms(self):
+    def test_tool_descriptions_contain_no_legacy_terms(self):
         """Kitchen tool descriptions must not use any pre-rename vocabulary."""
         tools = self._get_kitchen_tools()
         for name, tool in tools.items():
@@ -450,7 +418,7 @@ class TestPromptSchemas:
                     f"Tool '{name}' description contains legacy term '{term}': {desc!r}"
                 )
 
-    def test_prompt_descriptions_are_cooking_themed(self):
+    def test_tool_descriptions_are_cooking_themed(self):
         """Kitchen tool descriptions must use cooking vocabulary."""
         tools = self._get_kitchen_tools()
         for name, tool in tools.items():

@@ -12,13 +12,14 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, atomic_write, pkg_root
-from autoskillit.execution import read_boot_id, read_starttime_ticks
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _find_recipe,
     _gate_file_path,
     _hook_config_path,
     _prime_quota_cache,
+    read_boot_id,
+    read_starttime_ticks,
 )
 
 

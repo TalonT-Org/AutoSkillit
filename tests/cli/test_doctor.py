@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 from unittest.mock import patch
@@ -255,6 +256,7 @@ class TestCLIDoctor:
         data = json.loads(captured.out)
         check_names = {r["check"] for r in data["results"]}
         expected = {
+            "stale_gate_file",
             "stale_mcp_servers",
             "duplicate_mcp_server",
             "plugin_metadata",
@@ -589,3 +591,54 @@ class TestGroupFDoctor:
         r = DoctorResult(severity=Severity.OK, check="test", message="ok")
         assert r.severity == Severity.OK
         assert r.check == "test"
+
+
+class TestDoctorStaleGateFile:
+    """Doctor check for stale gate files from crashed pipeline sessions."""
+
+    def test_doctor_detects_stale_gate_file(self, tmp_path):
+        """Doctor check must detect a gate file with a dead PID."""
+        from autoskillit.cli._doctor import _check_stale_gate_file
+        from autoskillit.core import Severity
+
+        gate_dir = tmp_path / "temp"
+        gate_dir.mkdir()
+        (gate_dir / ".kitchen_gate").write_text(
+            json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"})
+        )
+        result = _check_stale_gate_file(tmp_path)
+        assert result.severity == Severity.ERROR
+        assert "stale" in result.message.lower() or "dead" in result.message.lower()
+
+    def test_doctor_passes_when_no_gate_file(self, tmp_path):
+        """Doctor check must pass when no gate file exists."""
+        from autoskillit.cli._doctor import _check_stale_gate_file
+        from autoskillit.core import Severity
+
+        result = _check_stale_gate_file(tmp_path)
+        assert result.severity == Severity.OK
+
+    def test_doctor_passes_when_gate_file_is_live(self, tmp_path):
+        """Doctor check must pass when gate file has a live PID."""
+        from autoskillit.cli._doctor import _check_stale_gate_file
+        from autoskillit.core import Severity
+
+        gate_dir = tmp_path / "temp"
+        gate_dir.mkdir()
+        (gate_dir / ".kitchen_gate").write_text(
+            json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"})
+        )
+        result = _check_stale_gate_file(tmp_path)
+        assert result.severity == Severity.OK
+
+    def test_doctor_detects_malformed_gate_file(self, tmp_path):
+        """Doctor check must detect a gate file that isn't valid JSON."""
+        from autoskillit.cli._doctor import _check_stale_gate_file
+        from autoskillit.core import Severity
+
+        gate_dir = tmp_path / "temp"
+        gate_dir.mkdir()
+        (gate_dir / ".kitchen_gate").write_text("not json")
+        result = _check_stale_gate_file(tmp_path)
+        assert result.severity == Severity.ERROR
+        assert "malformed" in result.message.lower()

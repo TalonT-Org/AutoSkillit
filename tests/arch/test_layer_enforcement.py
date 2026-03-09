@@ -740,3 +740,23 @@ class TestVersionArchitecture:
         src = (SRC_ROOT / "cli" / "_doctor.py").read_text()
         assert "from autoskillit.server import version_info" not in src
         assert "from autoskillit.version import version_info" in src
+
+
+def test_gate_filename_constant_matches_hook():
+    """The hook's GATE_STATE_FILENAME must match the canonical GATE_FILENAME."""
+    from autoskillit.pipeline import GATE_FILENAME
+
+    hook_src = (SRC_ROOT / "hooks" / "native_tool_guard.py").read_text()
+    tree = ast.parse(hook_src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "GATE_STATE_FILENAME":
+                    assert isinstance(node.value, ast.Constant), (
+                        "GATE_STATE_FILENAME must be a literal constant"
+                    )
+                    assert node.value.value == GATE_FILENAME, (
+                        f"Hook constant '{node.value.value}' != canonical '{GATE_FILENAME}'"
+                    )
+                    return
+    pytest.fail("GATE_STATE_FILENAME not found in native_tool_guard.py")

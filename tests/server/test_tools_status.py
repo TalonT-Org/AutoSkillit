@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import anyio
@@ -137,6 +138,57 @@ class TestKitchenStatus:
         monkeypatch.setenv("GITHUB_TOKEN", "set-after-construction")
         status = json.loads(await kitchen_status())
         assert status["github_token_configured"] is False
+
+    @pytest.mark.anyio
+    async def test_kitchen_status_reports_gate_file_exists(self, monkeypatch, tmp_path, tool_ctx):
+        """kitchen_status must include gate_file_exists field."""
+        monkeypatch.chdir(tmp_path)
+        gate_dir = tmp_path / "temp"
+        gate_dir.mkdir()
+        (gate_dir / ".kitchen_gate").write_text(
+            json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"})
+        )
+        result = json.loads(await kitchen_status())
+        assert result["gate_file_exists"] is True
+
+    @pytest.mark.anyio
+    async def test_kitchen_status_reports_no_gate_file(self, monkeypatch, tmp_path, tool_ctx):
+        """kitchen_status must report gate_file_exists=False when no gate file."""
+        monkeypatch.chdir(tmp_path)
+        result = json.loads(await kitchen_status())
+        assert result["gate_file_exists"] is False
+
+    @pytest.mark.anyio
+    async def test_kitchen_status_warns_on_split_brain(self, monkeypatch, tmp_path, tool_ctx):
+        """When gate_file_exists=True but tools_enabled=False, emit warning."""
+        monkeypatch.chdir(tmp_path)
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        gate_dir = tmp_path / "temp"
+        gate_dir.mkdir()
+        (gate_dir / ".kitchen_gate").write_text(
+            json.dumps({"pid": 999999999, "opened_at": "2026-01-01T00:00:00Z"})
+        )
+        result = json.loads(await kitchen_status())
+        assert result["tools_enabled"] is False
+        assert result["gate_file_exists"] is True
+        assert "stale" in result.get("warning", "").lower()
+
+    @pytest.mark.anyio
+    async def test_kitchen_status_no_warning_when_consistent(
+        self, monkeypatch, tmp_path, tool_ctx
+    ):
+        """No warning when gate_file_exists and tools_enabled are consistent."""
+        monkeypatch.chdir(tmp_path)
+        tool_ctx.gate = DefaultGateState(enabled=True)
+        gate_dir = tmp_path / "temp"
+        gate_dir.mkdir()
+        (gate_dir / ".kitchen_gate").write_text(
+            json.dumps({"pid": os.getpid(), "opened_at": "2026-01-01T00:00:00Z"})
+        )
+        result = json.loads(await kitchen_status())
+        assert result["tools_enabled"] is True
+        assert result["gate_file_exists"] is True
+        assert "warning" not in result
 
 
 class TestGetPipelineReport:

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.core import Severity, is_git_worktree, pkg_root
+from autoskillit.pipeline import GATE_FILENAME, is_pid_alive
 
 
 @dataclass
@@ -30,9 +31,43 @@ def _is_plugin_installed() -> bool:
         return False
 
 
+def _check_stale_gate_file(project_root: Path) -> DoctorResult:
+    """Check for stale gate file from a crashed pipeline session."""
+    gate_path = project_root / "temp" / GATE_FILENAME
+    if not gate_path.exists():
+        return DoctorResult(Severity.OK, "stale_gate_file", "No gate file found")
+
+    try:
+        data = json.loads(gate_path.read_text())
+        pid = data["pid"]
+    except (json.JSONDecodeError, KeyError, TypeError, OSError):
+        return DoctorResult(
+            Severity.ERROR,
+            "stale_gate_file",
+            f"Malformed gate file at {gate_path} — safe to delete",
+        )
+
+    if not is_pid_alive(pid):
+        return DoctorResult(
+            Severity.ERROR,
+            "stale_gate_file",
+            f"Stale gate file at {gate_path} (PID {pid} is dead) — "
+            f"safe to delete. Native tools may be blocked.",
+        )
+
+    return DoctorResult(
+        Severity.OK,
+        "stale_gate_file",
+        f"Gate file is live (PID {pid} is running)",
+    )
+
+
 def run_doctor(*, output_json: bool = False, plugin_dir: str | None = None) -> None:
     """Check project setup for common issues."""
     results: list[DoctorResult] = []
+
+    # Check 0: Stale gate file from crashed pipeline
+    results.append(_check_stale_gate_file(Path.cwd()))
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
     stale_servers: list[str] = []

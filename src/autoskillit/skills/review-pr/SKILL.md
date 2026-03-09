@@ -99,10 +99,10 @@ Save the diff to `temp/review-pr/diff_{pr_number}.txt`.
 
 ### Step 2.5: Deletion Context Pre-Computation
 
-Before spawning audit subagents, compute the deletion context that the
-`deletion_regression` subagent will use. This step runs best-effort: if any command
+Before spawning audit subagents, compute the deletion context for the parallel
+deletion regression audit. This step runs best-effort: if any command
 fails (e.g., no local git checkout available), set `deletion_context = null` and
-omit the `deletion_regression` subagent from Step 3.
+the deletion regression dimension is skipped in the parallel audit phase.
 
 ```bash
 # 1. Get the PR's head and base refs
@@ -151,7 +151,7 @@ deletion_context = {
 ```
 
 If `MERGE_BASE` is empty or any git command fails, set `deletion_context = null`.
-The `deletion_regression` subagent in Step 3 is omitted when `deletion_context` is null.
+The parallel deletion regression audit is skipped when `deletion_context` is null.
 
 ### Step 3: Run Parallel Audit Subagents
 
@@ -164,8 +164,8 @@ findings in JSON format:
   {
     "file": "path/to/file.py",
     "line": 42,
+    "dimension": "arch|tests|defense|bugs|cohesion|slop",
     "severity": "critical|warning|info",
-    "dimension": "arch|tests|defense|bugs|cohesion|slop|deletion_regression",
     "message": "Description of the finding",
     "requires_decision": false
   }
@@ -192,9 +192,10 @@ findings in JSON format:
 6. **slop** — Useless comments, dead code, backward-compat hacks left by AI.
    Check for: commented-out code, TODO without issue refs, over-verbose docstrings.
 
-7. **deletion_regression** — Deliberate deletion regression check.
-   Receives the PR diff AND the `deletion_context` (deleted files and symbols computed
-   in Step 2.5). Checks if the PR reintroduces any item from the deletion context.
+7. **deletion_regression** — Deliberate deletion regression check: severity: "critical",
+   requires_decision: false for every finding. Cross-references the PR diff against
+   `deletion_context` (deleted files and symbols computed in Step 2.5) to detect code
+   that was intentionally removed from the base branch but re-added by this PR.
    Only spawned when `deletion_context` is non-null.
 
 Subagent prompt template (dimensions 1–6):

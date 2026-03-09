@@ -41,9 +41,7 @@ def test_merge_pr_deletion_scan_uses_merge_base(merge_pr_text):
     # Find extent of step 1.5 (up to Step 2)
     step_2_idx = merge_pr_text.find("Step 2", step_15_idx)
     step_15_section = (
-        merge_pr_text[step_15_idx:step_2_idx]
-        if step_2_idx != -1
-        else merge_pr_text[step_15_idx:]
+        merge_pr_text[step_15_idx:step_2_idx] if step_2_idx != -1 else merge_pr_text[step_15_idx:]
     )
     assert "merge-base" in step_15_section, (
         "Step 1.5 must use 'git merge-base' to determine the PR's branch divergence point"
@@ -56,9 +54,7 @@ def test_merge_pr_deletion_scan_uses_diff_filter_D(merge_pr_text):
     assert step_15_idx != -1
     step_2_idx = merge_pr_text.find("Step 2", step_15_idx)
     step_15_section = (
-        merge_pr_text[step_15_idx:step_2_idx]
-        if step_2_idx != -1
-        else merge_pr_text[step_15_idx:]
+        merge_pr_text[step_15_idx:step_2_idx] if step_2_idx != -1 else merge_pr_text[step_15_idx:]
     )
     assert "--diff-filter=D" in step_15_section, (
         "Step 1.5 must use '--diff-filter=D' to enumerate files deleted from the "
@@ -72,9 +68,7 @@ def test_merge_pr_deletion_scan_forces_conflict_report_path(merge_pr_text):
     assert step_15_idx != -1
     step_2_idx = merge_pr_text.find("Step 2", step_15_idx)
     step_15_section = (
-        merge_pr_text[step_15_idx:step_2_idx]
-        if step_2_idx != -1
-        else merge_pr_text[step_15_idx:]
+        merge_pr_text[step_15_idx:step_2_idx] if step_2_idx != -1 else merge_pr_text[step_15_idx:]
     )
     # Must instruct skipping the direct merge and writing a conflict report
     has_conflict_report_route = (
@@ -159,9 +153,7 @@ def test_review_pr_has_deletion_regression_audit_subagent(review_pr_text):
     assert step_3_idx != -1
     step_4_idx = review_pr_text.find("Step 4", step_3_idx)
     step_3_section = (
-        review_pr_text[step_3_idx:step_4_idx]
-        if step_4_idx != -1
-        else review_pr_text[step_3_idx:]
+        review_pr_text[step_3_idx:step_4_idx] if step_4_idx != -1 else review_pr_text[step_3_idx:]
     )
     assert "deletion_regression" in step_3_section, (
         "Step 3 must include a 'deletion_regression' audit dimension as a parallel subagent"
@@ -185,9 +177,7 @@ def test_review_pr_deletion_regression_requires_decision_false(review_pr_text):
     dr_idx = review_pr_text.find("deletion_regression")
     assert dr_idx != -1
     context = review_pr_text[dr_idx : dr_idx + 600]
-    has_false = (
-        "requires_decision=false" in context or "requires_decision: false" in context
-    )
+    has_false = "requires_decision=false" in context or "requires_decision: false" in context
     assert has_false, (
         "The deletion_regression audit subagent must set requires_decision=false — "
         "deletion regressions are clear bugs with clear fixes, not design trade-offs"

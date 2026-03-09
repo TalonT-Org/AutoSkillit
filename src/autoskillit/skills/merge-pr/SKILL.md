@@ -111,14 +111,14 @@ PR_ADDITIONS=$(git diff ${MERGE_BASE}...origin/{pr_branch} | grep '^+' | grep -v
 - **Symbol-level regression**: For each symbol in `DELETED_SYMBOLS`, check whether
   `PR_ADDITIONS` contains a matching `def {symbol_name}` or `class {symbol_name}` line.
 
-**If no regressions are found:** Continue to Step 2 / Step 3 as normal. Emit
-`deletion_regression=false` in the Step 5 output.
-
 **If regressions are found:**
 
 Skip Steps 2 and 3 (do not attempt any merge). Proceed directly to Step 3.5 to classify
 PR files. When writing the conflict report in Step 4, include a `## Deletion Regressions`
 section (see template below) and set `deletion_regression=true` in the Step 5 output.
+
+**If no regressions are found:** Continue to Step 2 / Step 3 as normal. Emit
+`deletion_regression=false` in the Step 5 output.
 
 The regression context (list of regressed files/symbols + the commits that deleted them
 on base) must be written to the conflict report so `make-plan` understands that these

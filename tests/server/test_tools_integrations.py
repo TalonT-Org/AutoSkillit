@@ -697,7 +697,10 @@ class TestClaimIssueTool:
         tool_ctx.github_client = None  # triggers early return after bind
 
         await claim_issue(issue_url="https://github.com/owner/repo/issues/1")
-        assert captured == {"tool": "claim_issue", "issue_url": "https://github.com/owner/repo/issues/1"}
+        assert captured == {
+            "tool": "claim_issue",
+            "issue_url": "https://github.com/owner/repo/issues/1",
+        }
 
 
 class TestReleaseIssueTool:
@@ -751,7 +754,10 @@ class TestReleaseIssueTool:
         tool_ctx.github_client = None  # triggers early return after bind
 
         await release_issue(issue_url="https://github.com/owner/repo/issues/1")
-        assert captured == {"tool": "release_issue", "issue_url": "https://github.com/owner/repo/issues/1"}
+        assert captured == {
+            "tool": "release_issue",
+            "issue_url": "https://github.com/owner/repo/issues/1",
+        }
 
 
 class TestPrepareIssueTool:

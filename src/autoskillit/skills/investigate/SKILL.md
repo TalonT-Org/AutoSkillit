@@ -63,6 +63,30 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 ## Investigation Workflow
 
+**Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
+exist (e.g., plan file arguments, `temp/investigate/` reports, external file references), use
+`Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
+sibling parallel-call cancellations.
+
+### Step 0.5 — Code-Index Initialization (required before any code-index tool call)
+
+Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
+
+```
+mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
+```
+
+Code-index tools require **project-relative paths**. Always use paths like:
+
+    src/autoskillit/execution/headless.py
+
+NOT absolute paths like:
+
+    /home/talon/projects/generic_automation_mcp/src/autoskillit/execution/headless.py
+
+Agents launched via `run_skill` inherit no code-index state from the parent session — this
+call is mandatory at the start of every headless session that uses code-index tools.
+
 ### Step 1: Parse the Investigation Target
 
 Identify what needs investigation:

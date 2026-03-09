@@ -139,6 +139,24 @@ For each phase:
 
 Where practical, delegate test updates to subagents to keep main conversation context lean.
 
+### Step 4.5: Pre-Implementation Checklist
+
+Before running the test suite, confirm the following to prevent avoidable test-fix cycles:
+
+- [ ] **CLAUDE.md architecture section** — if new modules, sub-packages, or files were added,
+  the `## Architecture` section in CLAUDE.md reflects them
+- [ ] **Recipe diagrams** — if any recipe YAML file was added or modified, either regenerate
+  diagrams (`task diagrams`) or confirm new diagram files are listed in `.gitignore`
+- [ ] **Tool registrations** — if new MCP tools were added, they appear in `GATED_TOOLS` or
+  `UNGATED_TOOLS` in `src/autoskillit/pipeline/gate.py`
+- [ ] **Skill registrations** — if new skills were added, they are discoverable by
+  `SkillResolver` (present in `src/autoskillit/skills/`) and listed in CLAUDE.md's skills section
+- [ ] **Count-based test assertions** — if tool, skill, or rule counts have changed, update any
+  `assert len(...) ==` assertions in the test suite before running `task test-all`
+
+This checklist exists because these categories produce avoidable test-fix cycles: a single
+missed registration generates 5–30 cascading test failures that require a second commit to fix.
+
 ### Step 5: Final Verification
 
 Run the project's code quality checks and test suite from the worktree.

@@ -54,6 +54,18 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 
 Extract `project_dir` from the prompt. Invocation: `/autoskillit:setup-project {project_dir}`. If missing, abort: "Usage: `/autoskillit:setup-project /absolute/path/to/project`". Resolve to absolute path. Verify the directory exists.
 
+**Validate project_dir before exploring:** Confirm `{project_dir}` exists and is a git
+repository before launching subagents:
+
+```bash
+ls "{project_dir}"
+git -C "{project_dir}" rev-parse --is-inside-work-tree
+```
+
+If the directory does not exist or is not a git repo, stop immediately and report the error to
+the user. Do not assume any internal paths (`src/`, `tests/`, etc.) exist until the directory
+structure has been verified in Step 1.
+
 Then prompt the user:
 
 > "Would you like me to also scan your Claude Code conversation history for this project to identify recurring patterns that could become recipes?"

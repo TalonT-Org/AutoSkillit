@@ -44,7 +44,31 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
    `/autoskillit:resolve-failures <worktree_path> <plan_path> <base_branch>`
 2. Verify worktree exists and is a valid git worktree
 3. Verify plan file exists and is readable
+
+   **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
+   exist (e.g., plan file arguments, `temp/investigate/` reports, external file references), use
+   `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
+   sibling parallel-call cancellations.
 4. Check for development environment in worktree, recreate if missing. Use the project's configured `worktree_setup.command`, or: `cd "${worktree_path}" && task install-worktree`
+
+### Step 0.3 — Code-Index Initialization (required before any code-index tool call)
+
+Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
+
+```
+mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
+```
+
+Code-index tools require **project-relative paths**. Always use paths like:
+
+    src/autoskillit/execution/headless.py
+
+NOT absolute paths like:
+
+    /home/talon/projects/generic_automation_mcp/src/autoskillit/execution/headless.py
+
+Agents launched via `run_skill` inherit no code-index state from the parent session — this
+call is mandatory at the start of every headless session that uses code-index tools.
 
 ### Step 0.5: Commit Uncommitted Files
 1. Run `git -C {worktree_path} status --porcelain`

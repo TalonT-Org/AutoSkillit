@@ -7,8 +7,10 @@ These encode behavioral contracts derived from friction analysis (issue #250):
 - FRICT-5-1: path-existence verification
 - FRICT-5-3: external repo path validation
 """
+
+
 import pytest
-from pathlib import Path
+
 from autoskillit.core.paths import pkg_root
 
 

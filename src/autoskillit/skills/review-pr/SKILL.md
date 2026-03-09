@@ -54,6 +54,25 @@ escalation_user=$(gh api user -q .login 2>/dev/null || echo "")
 If `escalation_user` is non-empty, set `escalation_user_mention="@${escalation_user}"`.
 If empty (gh unavailable or not authenticated), set `escalation_user_mention=""`.
 
+### Step 0.5 — Code-Index Initialization (required before any code-index tool call)
+
+Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
+
+```
+mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
+```
+
+Code-index tools require **project-relative paths**. Always use paths like:
+
+    src/autoskillit/execution/headless.py
+
+NOT absolute paths like:
+
+    /home/talon/projects/generic_automation_mcp/src/autoskillit/execution/headless.py
+
+Agents launched via `run_skill` inherit no code-index state from the parent session — this
+call is mandatory at the start of every headless session that uses code-index tools.
+
 ### Step 1: Find the Open PR
 
 ```bash

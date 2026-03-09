@@ -219,11 +219,7 @@ async def report_bug(
             f"Report output path: {report_path}"
         )
 
-        log_dir = (
-            getattr(config.linux_tracing, "log_dir", "")
-            if config.linux_tracing is not None
-            else ""
-        )
+        log_dir = config.linux_tracing.log_dir if config.linux_tracing is not None else ""
 
         if severity == "blocking":
             result = await _run_report_session(

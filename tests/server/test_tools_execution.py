@@ -310,7 +310,8 @@ class TestRunSkillInjectsCompletionDirective:
         await run_skill("/investigate foo", "/tmp")
 
         cmd = tool_ctx.runner.call_args_list[-1][0]
-        # The prompt argument is at index 5 (shifted by 3 env tokens: env + AUTOSKILLIT_HEADLESS=1 + delay)
+        # The prompt argument is at index 5
+        # (shifted by 3 env tokens: env + AUTOSKILLIT_HEADLESS=1 + delay)
         skill_arg = cmd[5]
         assert "%%ORDER_UP%%" in skill_arg
         assert "ORCHESTRATION DIRECTIVE" in skill_arg
@@ -331,7 +332,7 @@ class TestRunSkillInjectsCompletionDirective:
 
 
 class TestRunSkillEnvPrefix:
-    """run_skill always injects AUTOSKILLIT_HEADLESS=1 and optionally CLAUDE_CODE_EXIT_AFTER_STOP_DELAY."""
+    """run_skill always injects AUTOSKILLIT_HEADLESS=1 and optionally CLAUDE_CODE_EXIT_AFTER_STOP_DELAY."""  # noqa: E501
 
     @pytest.mark.anyio
     async def test_default_delay_prepends_env_to_cmd(self, tool_ctx):

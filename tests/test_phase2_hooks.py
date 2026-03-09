@@ -41,5 +41,9 @@ def test_open_kitchen_guard_allows_human_session() -> None:
         text=True,
         env=env_without_headless,
     )
-    response = json.loads(result.stdout) if result.stdout.strip() else {}
-    assert "hookSpecificOutput" not in response or response["hookSpecificOutput"].get("permissionDecision") != "deny"
+    assert result.returncode == 0, (
+        f"Hook exited non-zero: {result.returncode}\nstderr: {result.stderr}"
+    )
+    assert not result.stdout.strip(), (
+        f"Hook must emit no output for non-headless sessions, got: {result.stdout!r}"
+    )

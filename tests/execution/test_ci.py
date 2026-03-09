@@ -400,3 +400,29 @@ async def test_status_by_run_id(httpx_mock):
     assert len(result["runs"]) == 1
     assert result["runs"][0]["conclusion"] == "failure"
     assert result["runs"][0]["failed_jobs"] == ["deploy"]
+
+
+# ---------------------------------------------------------------------------
+# TOOL-2: Billing-error (action_required) coverage
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_billing_error_surfaced_distinctly(httpx_mock):
+    """action_required conclusion passes through as distinct value, not mapped to failure.
+
+    Billing limit errors surface as conclusion="action_required" with failed_jobs=[].
+    The jobs endpoint must NOT be called (no /jobs HTTP request).
+    """
+    httpx_mock.add_response(
+        json=_runs_response(_run(run_id=777, conclusion="action_required")),
+    )
+    watcher = DefaultCIWatcher(token="tok")
+    result = await watcher.wait("main", repo="owner/repo", timeout_seconds=60)
+    assert result["conclusion"] == "action_required"
+    assert result["failed_jobs"] == []
+
+    # Jobs endpoint must not be called for action_required (no job-level failures)
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 1
+    assert "/jobs" not in str(requests[0].url)

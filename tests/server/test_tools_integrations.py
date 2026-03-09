@@ -13,9 +13,16 @@ from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import UNGATED_TOOLS
 from autoskillit.server.tools_integrations import (
+    _ENRICH_RESULT_END,
+    _ENRICH_RESULT_START,
     _FINGERPRINT_END,
     _FINGERPRINT_START,
+    _PREPARE_RESULT_END,
+    _PREPARE_RESULT_START,
+    _extract_block,
+    _parse_enrich_result,
     _parse_fingerprint,
+    _parse_prepare_result,
     claim_issue,
     enrich_issues,
     fetch_github_issue,
@@ -60,6 +67,82 @@ def test_parse_fingerprint_first_nonempty_line():
         f"{_FINGERPRINT_END}\n"
     )
     assert _parse_fingerprint(report) == "TypeError in execution/headless.py: runner=None"
+
+
+# ---------------------------------------------------------------------------
+# _extract_block unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_extract_block_returns_lines_within_delimiters():
+    text = "preamble\n---start---\nline1\nline2\n---end---\npostamble"
+    assert _extract_block(text, "---start---", "---end---") == ["line1", "line2"]
+
+
+def test_extract_block_no_start_returns_empty():
+    assert _extract_block("no delimiters here", "---start---", "---end---") == []
+
+
+def test_extract_block_no_end_returns_empty():
+    # end delimiter absent — no complete block
+    text = "---start---\nline1\nline2"
+    assert _extract_block(text, "---start---", "---end---") == []
+
+
+def test_extract_block_empty_block_returns_empty_list():
+    text = "---start---\n---end---"
+    assert _extract_block(text, "---start---", "---end---") == []
+
+
+def test_extract_block_preserves_whitespace_in_lines():
+    text = "---start---\n  indented\n---end---"
+    assert _extract_block(text, "---start---", "---end---") == ["  indented"]
+
+
+# ---------------------------------------------------------------------------
+# _parse_prepare_result unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_prepare_result_valid_json():
+    payload = '{"success": true, "issue_url": "https://github.com/x/y/issues/1"}'
+    text = f"{_PREPARE_RESULT_START}\n{payload}\n{_PREPARE_RESULT_END}"
+    result = _parse_prepare_result(text)
+    assert result == {"success": True, "issue_url": "https://github.com/x/y/issues/1"}
+
+
+def test_parse_prepare_result_no_block():
+    result = _parse_prepare_result("no block here")
+    assert result == {"success": False, "error": "no result block found"}
+
+
+def test_parse_prepare_result_invalid_json():
+    text = f"{_PREPARE_RESULT_START}\nnot-json\n{_PREPARE_RESULT_END}"
+    result = _parse_prepare_result(text)
+    assert result == {"success": False, "error": "result block contained invalid JSON"}
+
+
+# ---------------------------------------------------------------------------
+# _parse_enrich_result unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_enrich_result_valid_json():
+    payload = '{"enriched": [42], "skipped_already_enriched": []}'
+    text = f"{_ENRICH_RESULT_START}\n{payload}\n{_ENRICH_RESULT_END}"
+    result = _parse_enrich_result(text)
+    assert result == {"enriched": [42], "skipped_already_enriched": []}
+
+
+def test_parse_enrich_result_no_block():
+    result = _parse_enrich_result("no block here")
+    assert result == {"success": False, "error": "no result block found"}
+
+
+def test_parse_enrich_result_invalid_json():
+    text = f"{_ENRICH_RESULT_START}\nnot-json\n{_ENRICH_RESULT_END}"
+    result = _parse_enrich_result(text)
+    assert result == {"success": False, "error": "result block contained invalid JSON"}
 
 
 # ---------------------------------------------------------------------------

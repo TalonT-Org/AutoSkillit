@@ -258,19 +258,39 @@ async def report_bug(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+# P8-F2 split assessment: a split into tools_integrations_report.py and
+# tools_integrations_github.py was evaluated. The shared _extract_block helper
+# below is used by parsers in both proposed groups, creating cross-file coupling
+# for a single low-level primitive. Split deferred until tool count grows and
+# a clean boundary (e.g. a dedicated parsing module) becomes warranted.
+
+
+def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
+    """Return all lines between start_delim and end_delim (exclusive).
+
+    Returns an empty list if either delimiter is absent or the block is empty.
+    Lines are returned as-is (no stripping) to preserve JSON-parseable content.
+    """
+    in_block = False
+    block_lines: list[str] = []
+    for line in text.splitlines():
+        if line.strip() == start_delim:
+            in_block = True
+            continue
+        if line.strip() == end_delim:
+            if not in_block:
+                return []
+            return block_lines
+        if in_block:
+            block_lines.append(line)
+    return []  # end delimiter never found
 
 
 def _parse_fingerprint(report_text: str) -> str | None:
     """Extract the first non-empty line between fingerprint delimiters."""
-    in_block = False
-    for line in report_text.splitlines():
+    for line in _extract_block(report_text, _FINGERPRINT_START, _FINGERPRINT_END):
         stripped = line.strip()
-        if stripped == _FINGERPRINT_START:
-            in_block = True
-            continue
-        if stripped == _FINGERPRINT_END:
-            break
-        if in_block and stripped:
+        if stripped:
             return stripped
     return None
 
@@ -433,17 +453,7 @@ def _build_prepare_skill_command(
 
 def _parse_prepare_result(response_text: str) -> dict[str, Any]:
     """Extract and JSON-parse the prepare-issue result block from a skill response."""
-    in_block = False
-    block_lines: list[str] = []
-    for line in response_text.splitlines():
-        stripped = line.strip()
-        if stripped == _PREPARE_RESULT_START:
-            in_block = True
-            continue
-        if stripped == _PREPARE_RESULT_END:
-            break
-        if in_block:
-            block_lines.append(line)
+    block_lines = _extract_block(response_text, _PREPARE_RESULT_START, _PREPARE_RESULT_END)
     if not block_lines:
         return {"success": False, "error": "no result block found"}
     try:
@@ -473,17 +483,7 @@ def _build_enrich_skill_command(
 
 def _parse_enrich_result(response_text: str) -> dict[str, Any]:
     """Extract and JSON-parse the enrich-issues result block from a skill response."""
-    in_block = False
-    block_lines: list[str] = []
-    for line in response_text.splitlines():
-        stripped = line.strip()
-        if stripped == _ENRICH_RESULT_START:
-            in_block = True
-            continue
-        if stripped == _ENRICH_RESULT_END:
-            break
-        if in_block:
-            block_lines.append(line)
+    block_lines = _extract_block(response_text, _ENRICH_RESULT_START, _ENRICH_RESULT_END)
     if not block_lines:
         return {"success": False, "error": "no result block found"}
     try:

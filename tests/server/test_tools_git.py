@@ -183,8 +183,10 @@ class TestMergeWorktreeNoBypass:
     @pytest.mark.anyio
     async def test_skip_test_gate_parameter_rejected(self):
         """merge_worktree does not accept skip_test_gate parameter."""
-        with pytest.raises(TypeError, match="skip_test_gate"):
-            await merge_worktree("/tmp/wt", "main", skip_test_gate=True)
+        result = json.loads(await merge_worktree("/tmp/wt", "main", skip_test_gate=True))
+        assert result["success"] is False
+        assert result["subtype"] == "tool_exception"
+        assert "skip_test_gate" in result["error"]
 
     @pytest.mark.anyio
     async def test_internal_gate_cross_validates_output(self, tool_ctx, tmp_path):

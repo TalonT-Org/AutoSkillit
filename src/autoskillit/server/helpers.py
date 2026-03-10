@@ -110,7 +110,18 @@ def track_response_size(
     def decorator(fn: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
         @functools.wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            result = await fn(*args, **kwargs)
+            try:
+                result = await fn(*args, **kwargs)
+            except Exception as exc:
+                result = json.dumps(
+                    {
+                        "success": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "exit_code": -1,
+                        "subtype": "tool_exception",
+                    }
+                )
+                logger.exception("Unhandled exception in tool %s", tool_name)
             try:
                 ctx = _get_ctx_or_none()
                 if ctx is not None:

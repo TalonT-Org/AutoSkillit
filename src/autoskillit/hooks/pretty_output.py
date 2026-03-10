@@ -69,6 +69,9 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         result = data.get("result", "")
         if result:
             lines.append(f"\nresult:\n{result}")
+        stderr = (data.get("stderr") or "").strip()
+        if stderr:
+            lines.extend(["", "### stderr", stderr])
         return "\n".join(lines)
 
     # Interactive mode
@@ -172,32 +175,39 @@ def _fmt_test_check(data: dict, _pipeline: bool) -> str:
     if raw_output:
         filtered = _filter_pytest_output(raw_output)
         lines.extend(["", "### Output", filtered])
+    error = data.get("error", "")
+    if error:
+        lines.extend(["", f"error: {error}"])
     return "\n".join(lines)
 
 
 def _fmt_merge_worktree(data: dict, _pipeline: bool) -> str:
     """Format merge_worktree result as Markdown-KV."""
+    succeeded = data.get("merge_succeeded")
     has_error = "error" in data
-    mark = _CROSS_MARK if has_error else _CHECK_MARK
-    status = "FAIL" if has_error else "OK"
+
+    if succeeded:
+        mark = _CHECK_MARK
+        status = "OK"
+    elif has_error:
+        mark = _CROSS_MARK
+        status = "FAIL"
+    else:
+        mark = _CROSS_MARK
+        status = "UNKNOWN"
+
     lines = [f"## merge_worktree {mark} {status}", ""]
-    if has_error:
-        lines.append(f"error: {data['error']}")
-    failed_step = data.get("failed_step")
-    if failed_step:
-        lines.append(f"failed_step: {failed_step}")
-    state = data.get("state")
-    if state:
-        lines.append(f"state: {state}")
-    merged = data.get("merged")
-    if merged is not None:
-        lines.append(f"merged: {merged}")
-    worktree_path = data.get("worktree_path", "")
-    if worktree_path:
-        lines.append(f"worktree_path: {worktree_path}")
-    branch = data.get("branch")
-    if branch:
-        lines.append(f"branch: {branch}")
+    for key, val in data.items():
+        if isinstance(val, list):
+            lines.append(f"{key}:")
+            for item in val:
+                lines.append(f"  - {item}")
+        elif isinstance(val, dict):
+            continue
+        elif key == "stderr":
+            continue
+        else:
+            lines.append(f"{key}: {val}")
     stderr = (data.get("stderr") or "").strip()
     if stderr:
         lines.extend(["", "### stderr", stderr])
@@ -266,13 +276,34 @@ def _fmt_kitchen_status(data: dict, _pipeline: bool) -> str:
 
 def _fmt_clone_repo(data: dict, _pipeline: bool) -> str:
     """Format clone_repo result as Markdown-KV."""
+    is_warning = "uncommitted_changes" in data or "unpublished_branch" in data
     has_error = "error" in data
-    mark = _CROSS_MARK if has_error else _CHECK_MARK
-    lines = [f"## clone_repo {mark} {'FAIL' if has_error else 'OK'}", ""]
-    for key in ("clone_path", "source_dir", "remote_url", "error"):
-        if key in data:
-            lines.append(f"{key}: {data[key]}")
+
+    if is_warning:
+        mark = "\u26a0"
+        status = "WARNING"
+    elif has_error:
+        mark = _CROSS_MARK
+        status = "FAIL"
+    else:
+        mark = _CHECK_MARK
+        status = "OK"
+
+    lines = [f"## clone_repo {mark} {status}", ""]
+    for key, val in data.items():
+        if isinstance(val, (dict, list)):
+            continue
+        lines.append(f"{key}: {val}")
     return "\n".join(lines)
+
+
+def _fmt_tool_exception(data: dict, pipeline: bool) -> str:
+    """Format a tool_exception response with full diagnostics."""
+    error = data.get("error", "unknown error")
+    exit_code = data.get("exit_code", -1)
+    if pipeline:
+        return f"TOOL EXCEPTION [{exit_code}]: {error}"
+    return f"## {_CROSS_MARK} Tool Exception\n\nerror: {error}\nexit_code: {exit_code}"
 
 
 def _fmt_gate_error(data: dict, _pipeline: bool) -> str:
@@ -283,12 +314,38 @@ def _fmt_gate_error(data: dict, _pipeline: bool) -> str:
 
 
 def _fmt_generic(short_name: str, data: dict, _pipeline: bool) -> str:
-    """Generic key-value formatter for unrecognized tools."""
+    """Generic key-value formatter for tools without dedicated formatters."""
     lines = [f"## {short_name}", ""]
     for key, val in data.items():
-        if isinstance(val, (dict, list)):
-            continue  # skip nested structures
-        lines.append(f"{key}: {val}")
+        if isinstance(val, list):
+            if not val:
+                lines.append(f"{key}: []")
+            elif all(isinstance(item, str) for item in val):
+                lines.append(f"{key}:")
+                for item in val[:20]:
+                    lines.append(f"  - {item}")
+                if len(val) > 20:
+                    lines.append(f"  ... and {len(val) - 20} more")
+            else:
+                compact = json.dumps(val, separators=(",", ":"))
+                if len(compact) > 500:
+                    compact = compact[:500] + "..."
+                lines.append(f"{key}: {compact}")
+        elif isinstance(val, dict):
+            if not val:
+                lines.append(f"{key}: {{}}")
+            else:
+                lines.append(f"{key}:")
+                for k, v in val.items():
+                    if isinstance(v, (dict, list)):
+                        compact = json.dumps(v, separators=(",", ":"))
+                        if len(compact) > 200:
+                            compact = compact[:200] + "..."
+                        lines.append(f"  {k}: {compact}")
+                    else:
+                        lines.append(f"  {k}: {v}")
+        else:
+            lines.append(f"{key}: {val}")
     return "\n".join(lines)
 
 
@@ -320,6 +377,9 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
     # Gate error: any tool can return this
     if data.get("subtype") == "gate_error":
         return _fmt_gate_error(data, pipeline)
+
+    if data.get("subtype") == "tool_exception":
+        return _fmt_tool_exception(data, pipeline)
 
     short_name = _extract_tool_short_name(tool_name)
     formatter = _FORMATTERS.get(short_name)

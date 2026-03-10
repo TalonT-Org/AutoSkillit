@@ -418,10 +418,10 @@ class TestLoadRecipeExceptionHandling:
         )
 
     @pytest.mark.anyio
-    async def test_unexpected_exception_propagates(
+    async def test_unexpected_exception_returns_structured_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Unexpected exceptions (not in specific catches) must propagate, not be swallowed."""
+        """Unexpected exceptions are caught by the exception boundary."""
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
@@ -432,8 +432,10 @@ class TestLoadRecipeExceptionHandling:
             "autoskillit.recipe._api.run_semantic_rules",
             side_effect=AttributeError("programming error"),
         ):
-            with pytest.raises(AttributeError, match="programming error"):
-                await load_recipe(name="test")
+            result = json.loads(await load_recipe(name="test"))
+        assert result["success"] is False
+        assert result["subtype"] == "tool_exception"
+        assert "programming error" in result["error"]
 
 
 class TestValidateRecipeTool:

@@ -12,7 +12,6 @@ from autoskillit.pipeline.fidelity import (
     is_valid_fidelity_finding,
 )
 
-
 # ---------------------------------------------------------------------------
 # extract_linked_issues — PR body and commit messages
 # ---------------------------------------------------------------------------

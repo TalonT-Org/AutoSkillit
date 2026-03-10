@@ -8,7 +8,6 @@ from autoskillit.pipeline.gate import GATED_TOOLS, DefaultGateState
 from autoskillit.server.tools_ci import set_commit_status
 from tests.conftest import _make_result
 
-
 # ---------------------------------------------------------------------------
 # Gate membership
 # ---------------------------------------------------------------------------

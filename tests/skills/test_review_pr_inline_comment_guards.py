@@ -18,16 +18,13 @@ SKILL_PATH = (
 )
 
 
-def _text() -> str:
-    return SKILL_PATH.read_text()
+SKILL_TEXT = SKILL_PATH.read_text()
 
 
 def test_skill_describes_hunk_range_parsing():
     """SKILL.md must describe parsing @@ hunk headers to extract valid line ranges."""
-    text = _text()
-    has_hunk_parse = "@@" in text and any(
-        kw in text.lower() for kw in ["hunk", "valid_line", "line_range"]
-    )
+    text = SKILL_TEXT
+    has_hunk_parse = any(kw in text.lower() for kw in ["hunk", "valid_line", "line_range"])
     assert has_hunk_parse, (
         "review-pr/SKILL.md must describe parsing @@ hunk headers from the diff "
         "to build valid line ranges for the GitHub Reviews API."
@@ -36,7 +33,7 @@ def test_skill_describes_hunk_range_parsing():
 
 def test_step6_describes_hunk_filtering_before_post():
     """Step 6 (or adjacent step) must describe filtering findings against hunk ranges."""
-    text = _text().lower()
+    text = SKILL_TEXT.lower()
     assert any(kw in text for kw in ["hunk", "valid_line", "in-hunk"]), (
         "review-pr/SKILL.md must describe filtering/validating findings against diff "
         "hunk ranges before the batch review POST."
@@ -45,9 +42,20 @@ def test_step6_describes_hunk_filtering_before_post():
 
 def test_subagent_prompt_includes_diff_line_guidance():
     """Subagent prompt must instruct subagents to report only diff-visible line numbers."""
-    text = _text().lower()
+    text = SKILL_TEXT
+    prompt_marker = "Subagent prompt template"
+    prompt_start = text.find(prompt_marker)
+    assert prompt_start != -1, (
+        "review-pr/SKILL.md must contain a 'Subagent prompt template' section."
+    )
+    next_section = text.find("\n###", prompt_start + len(prompt_marker))
+    prompt_section = (
+        text[prompt_start:next_section].lower()
+        if next_section != -1
+        else text[prompt_start:].lower()
+    )
     assert any(
-        kw in text
+        kw in prompt_section
         for kw in [
             "diff hunk",
             "visible in the diff",
@@ -64,7 +72,7 @@ def test_subagent_prompt_includes_diff_line_guidance():
 
 def test_fallback_does_not_use_markdown_table():
     """Fallback body must not use a markdown table (overflows for long messages)."""
-    text = _text()
+    text = SKILL_TEXT
     assert "| Line | Severity | Dimension | Message |" not in text, (
         "review-pr/SKILL.md fallback body must not use a 4-column markdown table. "
         "Long message content causes horizontal overflow. Use a bullet-list format."
@@ -73,12 +81,11 @@ def test_fallback_does_not_use_markdown_table():
 
 def test_fallback_attempts_individual_comment_posting():
     """Fallback must attempt individual per-finding comment posting before summary dump."""
-    text = _text()
+    text = SKILL_TEXT
     assert any(
         kw in text
         for kw in [
             "pulls/{pr_number}/comments",
-            "pulls/{number}/comments",
             "individual comment",
             "per-finding",
             "per finding",
@@ -103,7 +110,7 @@ def test_step6_uses_input_flag_not_field_for_comments():
     To verify this test is effective: temporarily remove '--input -' from
     SKILL.md and confirm this test fails. Then restore it.
     """
-    text = _text()
+    text = SKILL_TEXT
     assert "--input -" in text, (
         "review-pr/SKILL.md Step 6 must prescribe '--input -' for the reviews POST. "
         "Using '--field' for the comments array creates one array entry per flag "
@@ -121,12 +128,12 @@ def test_step6_does_not_prescribe_deprecated_position_field():
     To verify: add '"position":' to the Step 6 jq block in SKILL.md and
     confirm this test fails. Then restore it.
     """
-    text = _text()
+    text = SKILL_TEXT
     step6_start = text.find("### Step 6")
     step7_start = text.find("### Step 7")
-    step6_section = (
-        text[step6_start:step7_start] if step6_start != -1 and step7_start != -1 else text
-    )
+    assert step6_start != -1, "SKILL.md must contain a '### Step 6' heading"
+    assert step7_start != -1, "SKILL.md must contain a '### Step 7' heading"
+    step6_section = text[step6_start:step7_start]
     # 'position' as a JSON key in the payload (e.g. "position": or position: )
     assert not re.search(r'"position"\s*:', step6_section), (
         "review-pr/SKILL.md Step 6 comments payload must not include a 'position' "
@@ -143,7 +150,7 @@ def test_step6_payload_includes_side_right():
     To verify: remove 'side' from the jq block in SKILL.md and confirm this
     test fails. Then restore it.
     """
-    text = _text()
+    text = SKILL_TEXT
     assert re.search(r"side.*RIGHT", text), (
         "review-pr/SKILL.md Step 6 comment objects must include side: 'RIGHT' "
         "to anchor comments to the new-file side of the diff."
@@ -156,7 +163,7 @@ def test_step6_documents_event_mapping():
     approved → APPROVE, needs_human → COMMENT, changes_requested → REQUEST_CHANGES.
     Guarded here to prevent accidental mapping errors in future edits.
     """
-    text = _text()
+    text = SKILL_TEXT
     assert "APPROVE" in text and "REQUEST_CHANGES" in text, (
         "review-pr/SKILL.md Step 6 must document the verdict-to-event mapping: "
         "approved → APPROVE, changes_requested → REQUEST_CHANGES."

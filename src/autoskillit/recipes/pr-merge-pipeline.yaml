@@ -55,6 +55,11 @@ kitchen_rules:
     All work — skill invocations, git operations, file reads — happens
     exclusively in the clone (work_dir). source_dir is used ONLY to read
     the remote URL inside push_to_remote."
+  - "NEVER push inside the PR merge loop. The only push steps are
+    publish_integration_branch (before the loop) and push_integration_branch
+    (after all PRs are merged). Inserting run_cmd git push calls inside the
+    merge loop is an anti-pattern that wastes remote operations and was
+    responsible for 8 redundant pushes in session 91bd85c1."
 
 steps:
   clone:
@@ -77,6 +82,7 @@ steps:
     with:
       cmd: "git remote set-url origin \"$(git -C ${{ inputs.source_dir }} remote get-url origin)\""
       cwd: "${{ context.work_dir }}"
+      step_name: "setup_remote"
     on_success: check_integration_exists
     on_failure: cleanup_failure
     note: >
@@ -89,6 +95,7 @@ steps:
     with:
       cmd: "git ls-remote --exit-code --heads origin \"${{ inputs.base_branch }}\""
       cwd: "${{ context.work_dir }}"
+      step_name: "check_integration_exists"
     on_success: analyze_prs
     on_failure: confirm_create_integration
     note: >
@@ -117,6 +124,7 @@ steps:
     with:
       cmd: "git checkout '${{ inputs.upstream_branch }}' && git pull && git checkout -b '${{ inputs.base_branch }}' && git push origin '${{ inputs.base_branch }}'"
       cwd: "${{ context.work_dir }}"
+      step_name: "create_persistent_integration"
     on_success: analyze_prs
     on_failure: cleanup_failure
     note: >
@@ -148,6 +156,7 @@ steps:
     with:
       cmd: "git checkout ${{ inputs.base_branch }} && git pull && git checkout -b ${{ context.integration_branch }}"
       cwd: "${{ context.work_dir }}"
+      step_name: "create_integration_branch"
     on_success: publish_integration_branch
     on_failure: cleanup_failure
     note: >
@@ -334,6 +343,7 @@ steps:
     with:
       cmd: "git add -A && git commit -m 'chore: commit auto-generated files'"
       cwd: "${{ context.worktree_path }}"
+      step_name: "commit_dirty"
     on_success: retry_merge_after_resolution
     on_failure: cleanup_failure
 
@@ -396,21 +406,23 @@ steps:
       3. If all PRs processed → push_integration_branch.
 
   push_integration_branch:
-    tool: run_cmd
+    tool: push_to_remote
     with:
-      cmd: "git push --set-upstream origin ${{ context.integration_branch }}"
-      cwd: "${{ context.work_dir }}"
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.integration_branch }}"
     on_success: collect_artifacts
     on_failure: cleanup_failure
     note: >
-      Pushes the updated integration branch to origin after all PR merges complete,
-      so the remote reflects the full merged state before opening the review PR.
+      Single push after ALL PR merges complete. Uses push_to_remote MCP tool
+      (consistent with all other push steps) rather than run_cmd git push.
 
   collect_artifacts:
     tool: run_cmd
     with:
       cmd: "mkdir -p ${{ inputs.plans_dir }} && find temp/make-plan/ -name '*_plan_*.md' -exec cp {} ${{ inputs.plans_dir }}/ \\; 2>/dev/null || true"
       cwd: "${{ context.work_dir }}"
+      step_name: "collect_artifacts"
     on_success: check_impl_plans
     on_failure: check_impl_plans
     note: >
@@ -424,6 +436,7 @@ steps:
     with:
       cmd: "find ${{ inputs.plans_dir }} -maxdepth 1 -name '*_plan_*.md' ! -name 'pr_analysis_plan_*.md' 2>/dev/null | wc -l | tr -d ' \n'"
       cwd: "${{ context.work_dir }}"
+      step_name: "check_impl_plans"
     on_result:
       - when: "${{ result.stdout | trim }} == 0"
         route: create_review_pr
@@ -491,13 +504,28 @@ steps:
       cwd: "${{ context.work_dir }}"
       pr_url: "${{ context.pr_url }}"
     on_success: confirm_cleanup
-    on_failure: cleanup_failure
+    on_failure: diagnose_ci_pr
     note: >
       Waits for the GitHub Actions CI run on context.integration_branch to complete
       using the wait_for_ci MCP tool (timeout: 300 s). CI failures here indicate the
       integration branch has problems that the human reviewer should see. No automated
-      remediation; on failure, the clone is preserved via cleanup_failure for manual
-      inspection.
+      remediation; on failure, routes to diagnose_ci_pr to capture logs before
+      cleanup_failure preserves the clone for manual inspection.
+
+  diagnose_ci_pr:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:diagnose-ci ${{ context.integration_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "diagnose_ci_pr"
+    capture:
+      diagnosis_path: "${{ result.diagnosis_path }}"
+    on_success: cleanup_failure
+    on_failure: cleanup_failure
+    note: >
+      Runs when ci_watch_pr reports CI failure on the integration branch.
+      Fetches logs and writes a diagnosis to temp/diagnose-ci/ for human inspection.
+      Always routes to cleanup_failure — no automated remediation for integration CI.
 
   confirm_cleanup:
     action: confirm

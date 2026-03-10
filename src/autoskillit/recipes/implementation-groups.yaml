@@ -16,7 +16,7 @@ ingredients:
     default: "impl"
   base_branch:
     description: Branch to merge into (defaults to current branch)
-    default: main
+    default: integration
   review_approach:
     description: Run /review-approach before implementation? (true/false)
     default: "false"

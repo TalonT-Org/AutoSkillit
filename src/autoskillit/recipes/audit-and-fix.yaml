@@ -37,7 +37,7 @@ ingredients:
     default: "audit-fix"
   base_branch:
     description: Branch to branch off of and PR target
-    default: main
+    default: integration
   audit_type:
     description: Type of audit to run (arch, tests, cohesion, defense-standards)
     default: arch

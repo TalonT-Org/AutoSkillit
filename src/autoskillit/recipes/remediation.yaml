@@ -88,6 +88,7 @@ steps:
     with:
       cmd: "printf '%s' '${{ inputs.base_branch }}'"
       cwd: "${{ context.work_dir }}"
+      step_name: "set_merge_target"
     capture:
       merge_target: "${{ result.stdout }}"
     on_success: get_issue_title
@@ -129,11 +130,11 @@ steps:
       claimed: "${{ result.claimed }}"
     on_result:
       - when: "${{ result.claimed }} == true"
-        route: create_branch
+        route: compute_branch
       - route: escalate_stop
     on_failure: escalate_stop
 
-  create_branch:
+  compute_branch:
     tool: run_cmd
     with:
       cmd: >-
@@ -141,35 +142,38 @@ steps:
         RUN="${{ inputs.run_name }}" &&
         PREFIX="${SLUG:-$RUN}" &&
         ISSUE="${{ context.issue_number }}" &&
-        REMOTE="${{ context.remote_url }}" &&
         if [ -n "$ISSUE" ]; then
-          BRANCH="${PREFIX}/${ISSUE}"
+          printf '%s' "${PREFIX}/${ISSUE}"
         else
-          BRANCH="${PREFIX}/$(date +%Y%m%d)"
-        fi &&
-        CANDIDATE="$BRANCH" &&
-        i=1 &&
-        while git ls-remote --heads "$REMOTE" "$CANDIDATE" 2>/dev/null | grep -q .; do
-          CANDIDATE="${BRANCH}-${i}" &&
-          i=$((i + 1))
-        done &&
-        git checkout -b "$CANDIDATE" &&
-        printf '%s' "$CANDIDATE"
+          printf '%s' "${PREFIX}/$(date +%Y%m%d)"
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "compute_branch"
+    capture:
+      proposed_branch: "${{ result.stdout | trim }}"
+    on_success: create_branch
+    on_failure: release_issue_failure
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Computes the proposed branch name from slug/issue or slug/date — no git operations.
+      Result is passed to create_branch for atomic collision check and checkout.
+
+  create_branch:
+    tool: create_unique_branch
+    with:
+      base_branch_name: "${{ context.proposed_branch }}"
       cwd: "${{ context.work_dir }}"
     capture:
-      merge_target: "${{ result.stdout }}"
+      merge_target: "${{ result.branch_name }}"
     on_success: push_merge_target
     on_failure: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Computes a unique branch name and checks out the branch.
-      When context.issue_slug is available (from get_issue_title), it is used as
-      the branch prefix (e.g. fix-merge-conflict-triage/42). Falls back to
-      inputs.run_name when no issue URL is provided (e.g. investigate/20260304).
-      Checks the remote for existing branches with the same name and appends
-      -1, -2, etc. for collision avoidance. Captures the final branch name as
-      merge_target, overriding the fallback set by set_merge_target.
+      Atomic branch creation: ls-remote collision check → checkout -b. Uses the
+      create_unique_branch MCP tool so the orchestrator cannot insert extra git fetch
+      or checkout calls between the collision check and branch creation.
 
   push_merge_target:
     tool: push_to_remote
@@ -458,7 +462,7 @@ steps:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
     on_success: release_issue_success
-    on_failure: resolve_ci
+    on_failure: diagnose_ci
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
@@ -467,12 +471,31 @@ steps:
       (conclusion + failed job names) for downstream resolve_ci.
       Skipped when open_pr=false — no remote feature branch is opened in that mode.
       On success, the pipeline is done — cleanup_success removes the clone.
-      On failure, resolve_ci receives ci_failed_jobs context for targeted fixes.
+      On failure, routes to diagnose_ci which fetches CI logs before resolve_ci.
+
+  diagnose_ci:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "diagnose_ci"
+      ci_failed_jobs: "${{ context.ci_failed_jobs }}"
+    capture:
+      diagnosis_path: "${{ result.diagnosis_path }}"
+    on_success: resolve_ci
+    on_failure: resolve_ci
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and writes
+      a structured diagnosis to temp/diagnose-ci/. Routes to resolve_ci on success
+      OR failure (best-effort: resolve-failures proceeds even without a diagnosis).
+      diagnosis_path is passed to resolve_ci for targeted remediation context.
 
   resolve_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }} ${{ context.ci_conclusion }} ${{ context.ci_failed_jobs }}"
+      skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }} ${{ context.ci_conclusion }} ${{ context.ci_failed_jobs }} ${{ context.diagnosis_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_ci"
     retries: 2

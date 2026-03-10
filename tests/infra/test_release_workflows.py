@@ -32,6 +32,14 @@ def _uv_version_pins(workflow: dict) -> list[str]:
     return pins
 
 
+def _find_step(job: dict, name_fragment: str) -> dict | None:
+    """Return the first step whose name contains name_fragment (case-insensitive)."""
+    return next(
+        (s for s in job.get("steps", []) if name_fragment.lower() in s.get("name", "").lower()),
+        None,
+    )
+
+
 # ── version-bump.yml ──────────────────────────────────────────────────────────
 
 
@@ -120,14 +128,23 @@ class TestVersionBumpWorkflow:
 
     def test_syncs_main_into_integration(self):
         """Workflow must attempt to merge/sync main into integration."""
-        text = VERSION_BUMP_WORKFLOW.read_text()
-        assert "integration" in text
-        assert "ff-only" in text or "fast-forward" in text.lower() or "merge" in text
+        wf = _load(VERSION_BUMP_WORKFLOW)
+        job = next(iter(wf.get("jobs", {}).values()))
+        sync_step = _find_step(job, "sync")
+        assert sync_step is not None, "Workflow must have a sync step"
+        run_block = sync_step.get("run", "")
+        assert "git checkout integration" in run_block
+        assert "git merge --ff-only" in run_block
 
     def test_fallback_sync_pr_creation(self):
         """Workflow must open a PR when fast-forward fails."""
-        text = VERSION_BUMP_WORKFLOW.read_text()
-        assert "gh pr create" in text or "pr create" in text
+        wf = _load(VERSION_BUMP_WORKFLOW)
+        job = next(iter(wf.get("jobs", {}).values()))
+        sync_step = _find_step(job, "sync")
+        assert sync_step is not None, "Workflow must have a sync step"
+        run_block = sync_step.get("run", "")
+        assert "gh pr create" in run_block
+        assert "--base integration" in run_block
 
     def test_checkout_uses_main_ref(self):
         """Checkout step must pin to the main branch, not the detached PR merge ref."""
@@ -196,16 +213,21 @@ class TestReleaseWorkflow:
 
     def test_minor_version_bump_logic(self):
         """Release workflow must increment the minor version and reset patch to 0."""
-        text = RELEASE_WORKFLOW.read_text()
-        # Must reference MINOR increment and reset PATCH to 0
-        assert "MINOR" in text
-        assert ".0" in text
+        wf = _load(RELEASE_WORKFLOW)
+        job = next(iter(wf.get("jobs", {}).values()))
+        version_step = next(
+            (s for s in job.get("steps", []) if s.get("id") == "version"),
+            None,
+        )
+        assert version_step is not None, "Workflow must have a step with id: version"
+        run_block = version_step.get("run", "")
+        assert "MINOR + 1" in run_block, "Must increment MINOR by 1"
+        assert ".$((MINOR + 1)).0" in run_block, "Must reset patch to 0 in new version string"
 
     def test_creates_annotated_git_tag(self):
         """Release workflow must create an annotated tag (git tag -a)."""
         text = RELEASE_WORKFLOW.read_text()
-        assert "git tag" in text
-        assert "-a" in text or "annotated" in text.lower()
+        assert "git tag -a" in text
 
     def test_tag_uses_v_prefix(self):
         """Release tag must use vX.Y.0 format."""

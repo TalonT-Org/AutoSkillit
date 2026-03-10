@@ -29,6 +29,7 @@ steps:
     with:
       cmd: "git init -b main && git commit --allow-empty -m 'initial' && touch .autoskillit-workspace"
       cwd: "${{ inputs.workspace }}"
+      step_name: "setup"
     on_success: setup_remote
     on_failure: escalate
 
@@ -41,6 +42,7 @@ steps:
         git remote add origin "$REMOTE" &&
         printf '%s' "$REMOTE"
       cwd: "${{ inputs.workspace }}"
+      step_name: "setup_remote"
     capture:
       remote_url: "${{ result.stdout }}"
     on_success: seed_task
@@ -54,6 +56,7 @@ steps:
     with:
       cmd: "echo 'Create ok.txt with content OK' > task.txt"
       cwd: "${{ inputs.workspace }}"
+      step_name: "seed_task"
     on_success: set_feature_branch
     on_failure: escalate
 
@@ -62,6 +65,7 @@ steps:
     with:
       cmd: "printf '%s' '${{ inputs.base_branch }}'"
       cwd: "${{ inputs.workspace }}"
+      step_name: "set_feature_branch"
     capture:
       feature_branch: "${{ result.stdout }}"
     on_success: create_branch
@@ -82,6 +86,7 @@ steps:
         echo '[]' > bug_report.json &&
         printf '%s' "$BRANCH"
       cwd: ${{ inputs.workspace }}
+      step_name: "create_branch"
     capture:
       feature_branch: "${{ result.stdout }}"
     on_success: investigate
@@ -124,6 +129,7 @@ steps:
     with:
       cmd: "printf '%s' '${{ inputs.workspace }}/.claude/worktrees/smoke-impl'"
       cwd: "${{ inputs.workspace }}"
+      step_name: "set_worktree_path"
     capture:
       worktree_path: "${{ result.stdout }}"
     on_success: test
@@ -179,6 +185,7 @@ steps:
     with:
       cmd: "git add -A && git commit -m 'chore: commit auto-generated files'"
       cwd: "${{ context.worktree_path }}"
+      step_name: "commit_dirty"
     on_success: merge
     on_failure: escalate
 

@@ -245,23 +245,22 @@ class TestImplementationPipelineStructure:
         assert create_branch.skip_when_false == "inputs.open_pr"
 
     def test_create_branch_does_not_use_run_name_verbatim(self, recipe) -> None:
-        """create_branch must not use inputs.run_name as the full branch name."""
-        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        """compute_branch must not use inputs.run_name as the full branch name."""
+        cmd = recipe.steps["compute_branch"].with_args["cmd"]
         assert "git checkout -b ${{ inputs.run_name }} &&" not in cmd
 
     def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
-        """create_branch must check remote for existing branches."""
-        cmd = recipe.steps["create_branch"].with_args["cmd"]
-        assert "git ls-remote" in cmd
+        """create_branch must use create_unique_branch tool (which always checks ls-remote)."""
+        assert recipe.steps["create_branch"].tool == "create_unique_branch"
 
     def test_create_branch_references_issue_number(self, recipe) -> None:
-        """create_branch cmd must reference context.issue_number for branch naming."""
-        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        """compute_branch cmd must reference context.issue_number for branch naming."""
+        cmd = recipe.steps["compute_branch"].with_args["cmd"]
         assert "context.issue_number" in cmd
 
     def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
-        """create_branch must use inputs.run_name as a prefix in branch naming."""
-        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        """compute_branch must use inputs.run_name as a prefix in branch naming."""
+        cmd = recipe.steps["compute_branch"].with_args["cmd"]
         assert "inputs.run_name" in cmd
 
     def test_ip_main_push_step_not_reachable_after_open_pr(self, recipe) -> None:
@@ -355,10 +354,10 @@ class TestImplementationPipelineStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_ip_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> diagnose_ci."""
         step = recipe.steps["ci_watch"]
         assert step.on_success == "release_issue_success"
-        assert step.on_failure == "resolve_ci"
+        assert step.on_failure == "diagnose_ci"
 
     def test_ip_ci_watch_uses_merge_target(self, recipe) -> None:
         """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""
@@ -505,10 +504,10 @@ class TestImplementationGroupsStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_ig_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> diagnose_ci."""
         step = recipe.steps["ci_watch"]
         assert step.on_success == "release_issue_success"
-        assert step.on_failure == "resolve_ci"
+        assert step.on_failure == "diagnose_ci"
 
     def test_ig_ci_watch_uses_merge_target(self, recipe) -> None:
         """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""
@@ -705,23 +704,22 @@ class TestInvestigateFirstStructure:
         )
 
     def test_create_branch_does_not_use_run_name_verbatim(self, recipe) -> None:
-        """create_branch must not use inputs.run_name as the full branch name."""
-        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        """compute_branch must not use inputs.run_name as the full branch name."""
+        cmd = recipe.steps["compute_branch"].with_args["cmd"]
         assert "git checkout -b ${{ inputs.run_name }} &&" not in cmd
 
     def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
-        """create_branch must check remote for existing branches."""
-        cmd = recipe.steps["create_branch"].with_args["cmd"]
-        assert "git ls-remote" in cmd
+        """create_branch must use create_unique_branch tool (which always checks ls-remote)."""
+        assert recipe.steps["create_branch"].tool == "create_unique_branch"
 
     def test_create_branch_references_issue_number(self, recipe) -> None:
-        """create_branch cmd must reference context.issue_number for branch naming."""
-        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        """compute_branch cmd must reference context.issue_number for branch naming."""
+        cmd = recipe.steps["compute_branch"].with_args["cmd"]
         assert "context.issue_number" in cmd
 
     def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
-        """create_branch must use inputs.run_name as a prefix in branch naming."""
-        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        """compute_branch must use inputs.run_name as a prefix in branch naming."""
+        cmd = recipe.steps["compute_branch"].with_args["cmd"]
         assert "inputs.run_name" in cmd
 
     def test_if_c1_implement_uses_no_merge_skill(self, recipe) -> None:
@@ -767,10 +765,10 @@ class TestInvestigateFirstStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_if_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> diagnose_ci."""
         step = recipe.steps["ci_watch"]
         assert step.on_success == "release_issue_success"
-        assert step.on_failure == "resolve_ci"
+        assert step.on_failure == "diagnose_ci"
 
     def test_if_ci_watch_uses_merge_target(self, recipe) -> None:
         """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""
@@ -918,23 +916,22 @@ class TestAuditAndFixStructure:
         assert dirty_tree_routes[0].route == "fix"
 
     def test_create_branch_does_not_use_run_name_verbatim(self, recipe) -> None:
-        """create_branch must not use inputs.run_name as the full branch name."""
-        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        """compute_branch must not use inputs.run_name as the full branch name."""
+        cmd = recipe.steps["compute_branch"].with_args["cmd"]
         assert "git checkout -b ${{ inputs.run_name }} &&" not in cmd
 
     def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
-        """create_branch must check remote for existing branches."""
-        cmd = recipe.steps["create_branch"].with_args["cmd"]
-        assert "git ls-remote" in cmd
+        """create_branch must use create_unique_branch tool (which always checks ls-remote)."""
+        assert recipe.steps["create_branch"].tool == "create_unique_branch"
 
     def test_create_branch_references_issue_number(self, recipe) -> None:
-        """create_branch cmd must reference context.issue_number for branch naming."""
-        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        """compute_branch cmd must reference context.issue_number for branch naming."""
+        cmd = recipe.steps["compute_branch"].with_args["cmd"]
         assert "context.issue_number" in cmd
 
     def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
-        """create_branch must use inputs.run_name as a prefix in branch naming."""
-        cmd = recipe.steps["create_branch"].with_args["cmd"]
+        """compute_branch must use inputs.run_name as a prefix in branch naming."""
+        cmd = recipe.steps["compute_branch"].with_args["cmd"]
         assert "inputs.run_name" in cmd
 
     def test_audit_and_fix_investigate_captures_investigation_path(self, recipe) -> None:
@@ -959,10 +956,10 @@ class TestAuditAndFixStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_aaf_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> resolve_ci."""
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> diagnose_ci."""
         step = recipe.steps["ci_watch"]
         assert step.on_success == "release_issue_success"
-        assert step.on_failure == "resolve_ci"
+        assert step.on_failure == "diagnose_ci"
 
     def test_aaf_ci_watch_uses_merge_target(self, recipe) -> None:
         """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""

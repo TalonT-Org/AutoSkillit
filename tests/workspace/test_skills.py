@@ -16,6 +16,7 @@ BUNDLED_SKILLS = [
     "close-kitchen",
     "collapse-issues",
     "create-review-pr",
+    "diagnose-ci",
     "dry-walkthrough",
     "enrich-issues",
     "implement-worktree",
@@ -309,3 +310,10 @@ class TestSkillResolver:
         all_names = {s.name for s in resolver.list_all()}
         expected = set(BUNDLED_SKILLS) - INTERNAL_SKILLS
         assert all_names == expected
+
+    def test_diagnose_ci_skill_is_resolvable(self) -> None:
+        """AP1: SkillResolver must find the diagnose-ci bundled skill."""
+        resolver = SkillResolver()
+        info = resolver.resolve("diagnose-ci")
+        assert info is not None
+        assert info.path.exists()

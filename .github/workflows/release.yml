@@ -58,14 +58,17 @@ jobs:
       - name: Regenerate uv.lock
         run: uv lock
 
-      - name: Commit version bump to stable
+      - name: Commit and push version bump to stable
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
-          git diff --cached --quiet && echo "Nothing to commit" && exit 0
-          git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
-          git push origin stable
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+          else
+            git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
+            git push origin stable
+          fi
 
       - name: Create annotated git tag
         run: |

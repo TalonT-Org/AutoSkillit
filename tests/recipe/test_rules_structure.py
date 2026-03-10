@@ -282,7 +282,7 @@ class TestOutdatedScriptVersionRule:
         "script_ver,installed_ver,expected_count",
         [
             ("0.1.0", "0.2.0", 1),  # MSR1: below installed → fires
-            ("0.2.0", "0.2.0", 0),  # MSR2: matches → does not fire
+            ("0.2.0", "0.2.0", 0),  # MSR2: matches installed → does not fire
             (None, "0.2.0", 1),  # MSR3: None → fires
             ("0.1.0", "0.2.0", 1),  # MSR4: also fires (same as MSR1; severity checked separately)
         ],
@@ -291,8 +291,12 @@ class TestOutdatedScriptVersionRule:
         self, monkeypatch: pytest.MonkeyPatch, script_ver, installed_ver, expected_count
     ) -> None:
         import autoskillit
+        import autoskillit.core.types as _core_types
+        import autoskillit.recipe.rules_inputs as _rules_mod
 
         monkeypatch.setattr(autoskillit, "__version__", installed_ver)
+        monkeypatch.setattr(_core_types, "AUTOSKILLIT_INSTALLED_VERSION", installed_ver)
+        monkeypatch.setattr(_rules_mod, "AUTOSKILLIT_INSTALLED_VERSION", installed_ver)
         wf = _make_workflow(
             {
                 "do_thing": {"tool": "run_cmd", "on_success": "done"},
@@ -307,8 +311,12 @@ class TestOutdatedScriptVersionRule:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         import autoskillit
+        import autoskillit.core.types as _core_types
+        import autoskillit.recipe.rules_inputs as _rules_mod
 
         monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
+        monkeypatch.setattr(_core_types, "AUTOSKILLIT_INSTALLED_VERSION", "0.2.0")
+        monkeypatch.setattr(_rules_mod, "AUTOSKILLIT_INSTALLED_VERSION", "0.2.0")
         wf = _make_workflow(
             {
                 "do_thing": {"tool": "run_cmd", "on_success": "done"},

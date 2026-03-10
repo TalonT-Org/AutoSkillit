@@ -28,6 +28,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **No Backward Compatibility Hacks**: No comments about dead code. Remove dead code entirely.
   * **Avoid Redundancy**: Do not duplicate logic or utilities.
   * **Use Current Package Versions**: Web search for current stable versions when adding dependencies.
+  * **Version Bumps**: When bumping the package version, update `pyproject.toml`, `.claude-plugin/plugin.json`, and run `uv lock`; then search tests for hardcoded version strings (e.g. `AUTOSKILLIT_INSTALLED_VERSION` monkeypatches) and update them.
   * **Run pre-commit before committing**: Always run `pre-commit run --all-files` before
     committing. Do not skip this step even when code appears clean — hooks auto-fix
     formatting and abort the commit, requiring re-stage and retry.

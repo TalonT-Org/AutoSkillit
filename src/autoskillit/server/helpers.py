@@ -129,7 +129,11 @@ def track_response_size(tool_name: str):
                                 logger_name="autoskillit.server.response_size",
                             )
             except Exception:
-                pass  # never interfere with tool execution
+                logger.warning(
+                    "track_response_size_failed",
+                    tool_name=tool_name,
+                    exc_info=True,
+                )
             return result
 
         return wrapper

@@ -111,6 +111,7 @@ src/autoskillit/
 │   ├── audit.py             #   FailureRecord, AuditLog, _audit_log singleton
 │   ├── context.py           #   ToolContext DI container (config, audit, token_log, gate, plugin_dir, runner)
 │   ├── gate.py              #   DefaultGateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
+│   ├── mcp_response.py      #   McpResponseEntry, DefaultMcpResponseLog — per-tool response size tracking
 │   ├── timings.py           #   TimingEntry, DefaultTimingLog — per-step wall-clock accumulation
 │   └── tokens.py            #   TokenEntry, TokenLog, _token_log singleton
 ├── execution/               # L1 execution sub-package

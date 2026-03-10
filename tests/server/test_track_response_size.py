@@ -28,7 +28,7 @@ class TestTrackResponseSize:
                 response_log=log,
                 config=MagicMock(mcp_response=MagicMock(alert_threshold_tokens=0)),
             )
-            result = asyncio.get_event_loop().run_until_complete(fake_handler())
+            result = asyncio.run(fake_handler())
 
         assert result == response_str
         report = log.get_report()
@@ -52,7 +52,7 @@ class TestTrackResponseSize:
                 response_log=log,
                 config=MagicMock(mcp_response=MagicMock(alert_threshold_tokens=0)),
             )
-            result = asyncio.get_event_loop().run_until_complete(fake_handler())
+            result = asyncio.run(fake_handler())
 
         assert result == response_dict  # original value returned unchanged
         report = log.get_report()
@@ -68,7 +68,7 @@ class TestTrackResponseSize:
             return "response"
 
         with patch("autoskillit.server.helpers._get_ctx_or_none", return_value=None):
-            result = asyncio.get_event_loop().run_until_complete(fake_handler())
+            result = asyncio.run(fake_handler())
 
         assert result == "response"  # no error raised
 
@@ -81,4 +81,4 @@ class TestTrackResponseSize:
             raise ValueError("something went wrong")
 
         with pytest.raises(ValueError, match="something went wrong"):
-            asyncio.get_event_loop().run_until_complete(bad_handler())
+            asyncio.run(bad_handler())

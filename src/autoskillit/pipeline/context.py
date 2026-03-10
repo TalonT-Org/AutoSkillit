@@ -18,6 +18,7 @@ from autoskillit.core import (
     GatePolicy,
     GitHubFetcher,
     HeadlessExecutor,
+    McpResponseStore,
     MigrationService,
     OutputPatternResolver,
     RecipeRepository,
@@ -45,7 +46,7 @@ class ToolContext:
     audit:                AuditStore — records pipeline failures
     token_log:            TokenStore — per-step token tracking
     timing_log:           TimingStore — per-step wall-clock duration tracking
-    response_log:         DefaultMcpResponseLog — per-tool MCP response size tracking
+    response_log:         McpResponseStore — per-tool MCP response size tracking
     gate:                 GatePolicy — enables/disables gated tools
     plugin_dir:           Absolute path string to the autoskillit package directory
     runner:               SubprocessRunner implementation (DefaultSubprocessRunner in production,
@@ -69,7 +70,7 @@ class ToolContext:
     gate: GatePolicy
     plugin_dir: str
     runner: SubprocessRunner | None
-    response_log: DefaultMcpResponseLog = field(default_factory=DefaultMcpResponseLog)
+    response_log: McpResponseStore = field(default_factory=DefaultMcpResponseLog)
     executor: HeadlessExecutor | None = field(default=None)
     tester: TestRunner | None = field(default=None)
     recipes: RecipeRepository | None = field(default=None)

@@ -66,9 +66,10 @@ async def test_set_commit_status_posts_pending(tool_ctx):
 
     # Verify the POST call went to the right endpoint
     post_call = tool_ctx.runner.call_args_list[1]
-    cmd = post_call[0]
-    assert "/repos/owner/repo/statuses/deadbeef" in cmd
-    assert "pending" in cmd
+    cmd = post_call[0]  # list of str
+    cmd_str = " ".join(cmd)
+    assert "/repos/owner/repo/statuses/deadbeef" in cmd_str
+    assert "pending" in cmd_str
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +94,7 @@ async def test_set_commit_status_posts_success(tool_ctx):
     assert result["state"] == "success"
     assert result["context"] == "autoskillit/ai-review"
 
-    post_cmd = tool_ctx.runner.call_args_list[1][0]
+    post_cmd = " ".join(tool_ctx.runner.call_args_list[1][0])
     assert "success" in post_cmd
 
 
@@ -118,7 +119,7 @@ async def test_set_commit_status_posts_failure(tool_ctx):
     assert result["success"] is True
     assert result["state"] == "failure"
 
-    post_cmd = tool_ctx.runner.call_args_list[1][0]
+    post_cmd = " ".join(tool_ctx.runner.call_args_list[1][0])
     assert "failure" in post_cmd
 
 

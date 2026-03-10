@@ -114,7 +114,9 @@ src/autoskillit/
 │   ├── gate.py              #   DefaultGateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
 │   ├── mcp_response.py      #   McpResponseEntry, DefaultMcpResponseLog — per-tool response size tracking
 │   ├── timings.py           #   TimingEntry, DefaultTimingLog — per-step wall-clock accumulation
-│   └── tokens.py            #   TokenEntry, TokenLog, _token_log singleton
+│   ├── tokens.py            #   TokenEntry, TokenLog, _token_log singleton
+│   ├── pr_gates.py          #   PR eligibility gates: is_ci_passing, is_review_passing, partition_prs
+│   └── fidelity.py          #   Fidelity helpers: extract_linked_issues, is_valid_fidelity_finding
 ├── execution/               # L1 execution sub-package
 │   ├── __init__.py          #   Re-exports public surface
 │   ├── commands.py          #   ClaudeInteractiveCmd/ClaudeHeadlessCmd builders

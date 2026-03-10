@@ -229,9 +229,3 @@ def test_resolve_merge_conflicts_in_skill_contracts():
     assert "resolve-merge-conflicts" in contracts.get("skills", {}), (
         "skill_contracts.yaml must declare resolve-merge-conflicts as a key under 'skills'"
     )
-
-
-# ── Recipe routing for merge_to_integration was removed in issue #289 Part B ──
-# merge_to_integration, resolve_merge_conflicts, retry_merge_after_resolution,
-# and commit_dirty are all removed — replaced by the GitHub-API merge sequence.
-# Guards for those steps have been removed accordingly.

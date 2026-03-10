@@ -279,6 +279,7 @@ class SubprocessRunner(Protocol):
         *,
         cwd: Path,
         timeout: float,
+        env: dict[str, str] | None = None,
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,
@@ -370,6 +371,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
     {
         "run_cmd",
         "run_python",
+        "run_recipe",
         "read_db",
         "run_skill",
         "test_check",

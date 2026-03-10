@@ -29,10 +29,10 @@ def _run_hook(
     event: dict | None = None,
     raw_stdin: str | None = None,
     cache_path: Path | None = None,
-) -> str:
+) -> tuple[str, int]:
     """Run quota_check.main() with synthetic stdin and optional cache file.
 
-    Returns captured stdout (empty string = approve, JSON string = deny).
+    Returns (stdout, exit_code). stdout empty = approve, JSON string = deny.
     """
     from autoskillit.hooks.quota_check import main
 
@@ -54,13 +54,14 @@ def _run_hook(
     for p in patches[1:]:
         ctx_stack = _nested(ctx_stack, p)
 
+    exit_code = 0
     with _apply_patches(patches):
         with redirect_stdout(buf):
             try:
                 main()
-            except SystemExit:
-                pass
-    return buf.getvalue()
+            except SystemExit as e:
+                exit_code = e.code if e.code is not None else 0
+    return buf.getvalue(), exit_code
 
 
 class _apply_patches:
@@ -87,7 +88,7 @@ def _nested(cm1, cm2):
 def test_deny_when_utilization_above_threshold(tmp_path):
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0)
-    out = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
 
@@ -95,7 +96,7 @@ def test_deny_when_utilization_above_threshold(tmp_path):
 def test_deny_message_contains_sleep_seconds(tmp_path):
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0)
-    out = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     data = json.loads(out)
     reason = data["hookSpecificOutput"]["permissionDecisionReason"]
     assert "Sleep" in reason
@@ -105,34 +106,34 @@ def test_deny_message_contains_sleep_seconds(tmp_path):
 def test_approve_when_utilization_below_threshold(tmp_path):
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=50.0)
-    out = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     assert out.strip() == ""
 
 
 def test_approve_when_cache_missing(tmp_path):
     cache = tmp_path / "nonexistent" / "quota_cache.json"
-    out = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     assert out.strip() == ""
 
 
 def test_approve_when_cache_corrupt(tmp_path):
     cache = tmp_path / "quota_cache.json"
     cache.write_text("not-json-{{{")
-    out = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     assert out.strip() == ""
 
 
 def test_approve_on_malformed_stdin(tmp_path):
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0)
-    out = _run_hook(raw_stdin="not-json", cache_path=cache)
+    out, _ = _run_hook(raw_stdin="not-json", cache_path=cache)
     assert out.strip() == ""
 
 
 def test_deny_output_is_valid_json(tmp_path):
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0)
-    out = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     parsed = json.loads(out)
     assert "hookSpecificOutput" in parsed
 
@@ -145,7 +146,7 @@ def test_approve_when_stale_cache(tmp_path):
         "five_hour": {"utilization": 99.0, "resets_at": None},
     }
     cache.write_text(json.dumps(payload))
-    out = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     assert out.strip() == ""
 
 
@@ -179,7 +180,7 @@ def test_quota_check_reads_threshold_from_hook_config(tmp_path, monkeypatch):
         cache_max_age=300,
         cache_path=str(cache),
     )
-    out = _run_hook(event={"tool_name": "run_skill"})
+    out, _ = _run_hook(event={"tool_name": "run_skill"})
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
 
@@ -197,7 +198,7 @@ def test_quota_check_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
         cache_max_age=300,
         cache_path=str(custom_cache),
     )
-    out = _run_hook(event={"tool_name": "run_skill"})
+    out, _ = _run_hook(event={"tool_name": "run_skill"})
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
 
@@ -219,7 +220,7 @@ def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypa
         cache_path=str(wrong_cache),
     )
     monkeypatch.setenv("AUTOSKILLIT_QUOTA_CACHE", str(correct_cache))
-    out = _run_hook(event={"tool_name": "run_skill"})
+    out, _ = _run_hook(event={"tool_name": "run_skill"})
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
 
@@ -233,9 +234,112 @@ def test_quota_check_falls_back_to_defaults_without_hook_config(tmp_path, monkey
     monkeypatch.chdir(tmp_path)
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0)
-    out = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# T1
+def test_quota_event_approved_written_to_log(tmp_path, monkeypatch):
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=50.0)
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    events = [
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+    ]
+    assert len(events) == 1
+    assert events[0]["event"] == "approved"
+    assert events[0]["utilization"] == 50.0
+    assert events[0]["threshold"] == 90.0
+    assert "ts" in events[0]
+
+
+# T2
+def test_quota_event_blocked_written_to_log(tmp_path, monkeypatch):
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=95.0)
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    events = [
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+    ]
+    assert len(events) == 1
+    ev = events[0]
+    assert ev["event"] == "blocked"
+    assert ev["utilization"] == 95.0
+    assert ev["threshold"] == 90.0
+    assert isinstance(ev["sleep_seconds"], int)
+    assert ev["sleep_seconds"] > 0
+    assert "ts" in ev
+
+
+# T3
+def test_quota_event_cache_miss_written_to_log(tmp_path, monkeypatch):
+    missing_cache = tmp_path / "nonexistent" / "cache.json"
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    _run_hook(event={"tool_name": "run_skill"}, cache_path=missing_cache)
+    events = [
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+    ]
+    assert len(events) == 1
+    assert events[0]["event"] == "cache_miss"
+    assert "ts" in events[0]
+
+
+# T4
+def test_quota_event_stale_cache_writes_cache_miss(tmp_path, monkeypatch):
+    cache = tmp_path / "cache.json"
+    payload = {
+        "fetched_at": "2020-01-01T00:00:00+00:00",
+        "five_hour": {"utilization": 99.0, "resets_at": None},
+    }
+    cache.write_text(json.dumps(payload))
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    events = [
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+    ]
+    assert events[0]["event"] == "cache_miss"
+
+
+# T5
+def test_quota_event_parse_error_on_malformed_utilization(tmp_path, monkeypatch):
+    cache = tmp_path / "cache.json"
+    # Valid JSON but utilization is not a float
+    cache.write_text(
+        json.dumps(
+            {
+                "fetched_at": datetime.now(UTC).isoformat(),
+                "five_hour": {"utilization": "not-a-number", "resets_at": None},
+            }
+        )
+    )
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    events = [
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+    ]
+    assert events[0]["event"] == "parse_error"
+
+
+# T6
+def test_quota_event_no_crash_when_log_dir_unresolvable(tmp_path, monkeypatch):
+    """Hook must still complete normally when log write fails (fail-open)."""
+    cache = tmp_path / "cache.json"
+    _write_cache(cache, utilization=50.0)
+    # Point log dir to a file path (not a directory) — mkdir will fail
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "not_a_dir.txt"))
+    (tmp_path / "not_a_dir.txt").write_text("blocker")
+    out, exit_code = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    # Hook still approves — no crash, no output
+    assert out.strip() == ""
+    assert exit_code == 0
 
 
 # T-CFG-5

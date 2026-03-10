@@ -97,6 +97,21 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 
 Save the diff to `temp/review-pr/diff_{pr_number}.txt`.
 
+### Step 2.7: Parse Diff Hunk Ranges
+
+Parse the saved diff to extract valid new-file line ranges per file. These ranges
+define which `line` values are valid for the GitHub Reviews API batch POST.
+
+For each `+++ b/{path}` header in the diff, collect all subsequent `@@ -a,b +c,d @@`
+hunk headers. From each hunk header, `c` is the starting new-file line and `d` is
+the hunk's new-file line count (if absent, count is 1). When `d=0` (pure deletion
+hunk, e.g. `+0,0`), skip the hunk — it has no new-file lines to anchor to.
+Otherwise the valid range for that hunk is `[c, c + d - 1]`.
+
+Build `VALID_LINE_RANGES` — a map of file path → list of `(start, end)` tuples.
+Store in memory for use in Steps 4 and 6.
+If the diff is empty or parsing fails, leave `VALID_LINE_RANGES` empty (no filtering).
+
 ### Step 2.5: Deletion Context Pre-Computation
 
 Before spawning audit subagents, compute the deletion context for the parallel
@@ -215,6 +230,12 @@ Subagent prompt template (dimensions 1–6):
 > Set requires_decision=false for ALL bugs, style issues, or anything with a
 > clear fix, regardless of severity. When in doubt, set requires_decision=false.
 >
+> The `line` value must be a line number visible in the diff hunks shown above.
+> Report only lines from `+` (added) or ` ` (context) lines within a `@@` hunk block.
+> Do not report absolute file line numbers that do not appear in this diff.
+> If the finding cannot be anchored to a line visible in the diff, use the nearest
+> `+` or context line in the same hunk.
+>
 > If no issues found, return an empty array [].
 > Diff content:
 > {diff_content}
@@ -251,7 +272,15 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
 
 1. Collect all subagent JSON responses
 2. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
-3. Bucket by actionability:
+3. Partition findings against `VALID_LINE_RANGES` (built in Step 2.7):
+   - `FILTERED_FINDINGS`: findings whose `(file, line)` falls within any hunk range for
+     that file. These are in-hunk and safe to post as inline comments in Step 6.
+   - `UNPOSTABLE_FINDINGS`: findings whose `line` is not in any hunk range for their file.
+     Log a warning for each. These are included in the summary fallback body only.
+   - If `VALID_LINE_RANGES` is empty, all findings are `FILTERED_FINDINGS`.
+4. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
+   combined), so unpostable findings still contribute to the `changes_requested` verdict.
+5. Bucket by actionability (applied to combined findings):
    - `actionable_findings` — requires_decision=false AND severity in ("critical", "warning")
    - `decision_findings` — requires_decision=true (any severity)
    - `info_findings` — severity == "info" AND requires_decision=false
@@ -288,13 +317,17 @@ For each finding, `line` is the finding's `line` value (the line number in the n
 `side` is always `RIGHT` (referring to the right-hand side of the diff — additions and context
 in the updated file).
 
+Build `COMMENTS_JSON` from `FILTERED_FINDINGS` only (not `UNPOSTABLE_FINDINGS`). All findings
+in `FILTERED_FINDINGS` have been validated against `VALID_LINE_RANGES` in Step 4, so they are
+safe to post as inline comments.
+
 Build a proper JSON payload where each comment is a complete object, then post via `--input -`.
 The `--field` approach creates one array entry per flag (not one object per comment), so it must
 not be used for the `comments` array:
 
 ```bash
-# Build comments JSON array — each element is a complete object
-COMMENTS_JSON=$(jq -n --argjson findings "$FINDINGS_JSON" '
+# Build comments JSON array from FILTERED_FINDINGS only
+COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" '
   $findings | map({
     path: .file,
     line: .line,
@@ -318,33 +351,49 @@ Event mapping:
 - `needs_human` → `COMMENT`
 - `changes_requested` → `REQUEST_CHANGES`
 
-**Fallback (if the `gh api` call fails):**
+**Fallback Tier 1 — Individual Comments (if batch POST fails):**
 
-Post a per-file structured summary using `gh pr review --comment`. Group all findings by file and
-format each group as a markdown section:
+Attempt to post each finding from `FILTERED_FINDINGS` individually via:
+
+```bash
+COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
+
+# For each finding in FILTERED_FINDINGS:
+gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
+  --method POST \
+  --field path="{finding.file}" \
+  --field line={finding.line} \
+  --field side="RIGHT" \
+  --field commit_id="$COMMIT_ID" \
+  --field body="[{finding.severity}] {finding.dimension}: {finding.message}"
+```
+
+Individual POSTs are not atomic — one failure does not block others.
+If at least one per-finding comment succeeds, proceed to Step 7.
+
+**Fallback Tier 2 — Bullet-List Summary Dump (if all individual posts fail):**
+
+Post ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`) via:
+
+```bash
+gh pr review {pr_number} --comment --body "{summary_markdown}"
+```
+
+Format each file's findings as a bullet list (not a markdown table):
 
 ```
 ## AutoSkillit Review Findings
 
 **Verdict:** {verdict}
 
-### {file_path_1}
-| Line | Severity | Dimension | Message |
-|------|----------|-----------|---------|
-| {line} | {severity} | {dimension} | {message} |
-...
+### path/to/file.py
+- **L{line}** [{severity}/{dimension}]: {message, truncated to 120 chars}
 
-### {file_path_2}
-| Line | Severity | Dimension | Message |
-...
+### path/to/other.py
+- **L{line}** [{severity}/{dimension}]: {message, truncated to 120 chars}
 ```
 
-Post this structured comment with:
-```bash
-gh pr review {pr_number} --comment --body "{structured_findings_markdown}"
-```
-
-This preserves per-file grouping even when inline anchoring is unavailable.
+This bullet-list format avoids horizontal overflow from long message content.
 
 ### Step 7: Submit Summary Review
 

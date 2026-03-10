@@ -15,6 +15,10 @@ def is_ci_passing(checks: list[dict]) -> bool:
     A PR fails the CI gate if any check has:
     - conclusion=None (in-progress / not yet complete)
     - conclusion not in {success, skipped, neutral} (failure, cancelled, etc.)
+
+    An empty checks list returns True by design: a PR with no CI configured has
+    no failing checks and is not blocked. Callers that require at least one check
+    must enforce that precondition before calling this function.
     """
     for check in checks:
         conclusion = check.get("conclusion")
@@ -26,7 +30,12 @@ def is_ci_passing(checks: list[dict]) -> bool:
 
 
 def is_review_passing(reviews: list[dict]) -> bool:
-    """Return True if no unresolved CHANGES_REQUESTED reviews exist."""
+    """Return True if no unresolved CHANGES_REQUESTED reviews exist.
+
+    An empty reviews list returns True by design: a PR with no reviews is not
+    blocked. This means unreviewed PRs pass the gate. Callers that require at
+    least one approval must enforce that precondition before calling this function.
+    """
     return not any(r.get("state") == "CHANGES_REQUESTED" for r in reviews)
 
 
@@ -34,7 +43,7 @@ def partition_prs(
     prs: list[dict],
     checks_by_number: dict[int, list[dict]],
     reviews_by_number: dict[int, list[dict]],
-) -> dict:
+) -> dict[str, list[dict]]:
     """Partition PRs into eligible, ci_blocked, and review_blocked lists.
 
     Each PR in ``prs`` must have at minimum: ``number`` (int) and ``title`` (str).
@@ -49,7 +58,9 @@ def partition_prs(
     review_blocked: list[dict] = []
 
     for pr in prs:
-        number = pr["number"]
+        number = pr.get("number")
+        if number is None:
+            raise KeyError(f"PR dict missing required 'number' field: {pr!r}")
         title = pr.get("title", "")
 
         checks = checks_by_number.get(number, [])

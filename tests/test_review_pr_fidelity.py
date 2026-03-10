@@ -164,14 +164,12 @@ def test_fidelity_finding_unknown_severity_invalid():
 
 
 def test_fidelity_skipped_when_no_linked_issues():
-    """No fidelity subagent spawns when linked issue list is empty.
+    """extract_linked_issues returns [] for PRs with no Closes/Fixes/Resolves refs.
 
-    This is a behavioural contract: extract_linked_issues returning []
-    is the signal to skip fidelity subagent launch.
+    The fidelity skip condition is len(linked_issues) == 0. This test confirms
+    that a PR body without issue references produces an empty list, which is the
+    signal the review-pr skill uses to skip fidelity subagent launch.
     """
     pr_body = "This PR adds a minor cleanup, no issue references."
     linked = extract_linked_issues(pr_body)
-    # When the list is empty, the skill skips fidelity subagent
     assert linked == []
-    should_spawn_fidelity_agent = len(linked) > 0
-    assert should_spawn_fidelity_agent is False

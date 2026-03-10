@@ -94,6 +94,10 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
 
 def run_doctor(*, output_json: bool = False, fix: bool = False) -> None:
     """Check project setup for common issues."""
+    from autoskillit.cli._marketplace import _clear_plugin_cache
+
+    _clear_plugin_cache()
+
     results: list[DoctorResult] = []
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths

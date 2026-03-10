@@ -632,6 +632,18 @@ class TestDoctorFixFlag:
         assert "fix" in sig.parameters
 
 
+def test_doctor_clears_plugin_cache(tmp_path, monkeypatch, capsys):
+    """Doctor must clear the plugin cache on every run."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+    cache_dir.mkdir(parents=True)
+    (cache_dir / "0.3.0" / "hooks").mkdir(parents=True)
+    (cache_dir / "0.3.0" / "hooks" / "pretty_output.py").write_text("# stale")
+    cli.doctor()
+    assert not cache_dir.exists()
+
+
 def test_stale_gate_check_absent_from_doctor_output(tmp_path, monkeypatch, capsys):
     """Doctor must not report a stale_gate_file check."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)

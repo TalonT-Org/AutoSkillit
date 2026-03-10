@@ -27,6 +27,15 @@ import structlog
 
 PACKAGE_LOGGER_NAME = "autoskillit"
 
+# Ensure all module-level get_logger() calls return lazy proxies rather than
+# fully-resolved loggers.  Without this, loggers created before
+# configure_logging() bind to stdout + ConsoleRenderer (structlog defaults),
+# which fatally corrupts the MCP stdio transport.
+structlog.configure(
+    cache_logger_on_first_use=True,
+    logger_factory=structlog.WriteLoggerFactory(file=sys.stderr),
+)
+
 
 def get_logger(name: str | None = None) -> Any:
     """Return a structlog BoundLogger for the given module name.

@@ -181,7 +181,7 @@ class TestCLIInit:
         data = json.loads(claude_json.read_text())
         assert "autoskillit" in data["mcpServers"]
         assert data["mcpServers"]["autoskillit"]["command"] == "autoskillit"
-        assert data["mcpServers"]["autoskillit"]["args"] == ["serve"]
+        assert data["mcpServers"]["autoskillit"]["args"] == []
 
     # CI-SCOPE-2
     def test_init_registers_hooks_in_settings_json(

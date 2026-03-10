@@ -48,10 +48,10 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
 
     from autoskillit.config import load_config
     from autoskillit.core import configure_logging, get_logger
-    from autoskillit.server import _initialize, make_context, mcp
 
     # Phase 1: Early init at INFO (or DEBUG if --verbose) — ensures logging
-    # works for config load errors.
+    # works for config load errors.  MUST run before importing
+    # autoskillit.server so that module-level loggers resolve to stderr.
     cli_level = _stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO
     configure_logging(
         level=cli_level,
@@ -75,6 +75,10 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
             json_output=json_output,
             stream=sys.stderr,
         )
+
+    # Import server AFTER logging is configured so module-level loggers
+    # resolve to stderr+JSON, not stdout+ConsoleRenderer (structlog default).
+    from autoskillit.server import _initialize, make_context, mcp
 
     project_path = project_dir / ".autoskillit" / "config.yaml"
     user_path = Path.home() / ".autoskillit" / "config.yaml"
@@ -138,6 +142,17 @@ def init(
         print(f"Config written to: {config_path}")
 
     _register_all(scope, project_dir)
+
+
+@app.command
+def install(
+    *,
+    scope: Annotated[str, Parameter(help="Registration scope: user, project, or local")] = "user",
+):
+    """Install the plugin for Claude Code and refresh the cache."""
+    from autoskillit.cli._marketplace import install as _install
+
+    _install(scope=scope)
 
 
 @app.command

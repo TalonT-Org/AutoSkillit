@@ -88,7 +88,7 @@ def _register_mcp_server(claude_json_path: Path) -> None:
     data["mcpServers"]["autoskillit"] = {
         "type": "stdio",
         "command": "autoskillit",
-        "args": ["serve"],
+        "args": [],
     }
     _atomic_write(claude_json_path, json.dumps(data, indent=2))
 

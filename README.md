@@ -1,135 +1,105 @@
 # AutoSkillit
 
-A stateless workflow engine that turns your skills into scriptable components. Write simple YAML recipes that chain skills as reusable steps.
+<!-- banner image here (owner will add) -->
 
-Skills are focused tasks (planning, implementing, testing, investigating). Recipes are instructions that tell the AI how to chain them together. The YAML format is a convention for consistency and sharing, but there's nothing strict about it. Anything you could tell a person to do, you can put in a recipe. The only limit is whether the AI can understand what you want.
+Automated development pipelines for Claude Code. Give it a task, get back a tested PR.
 
-<!-- TODO: banner -->
+<!-- demo recording here (owner will add) -->
 
-<!-- TODO: demo -->
+## Install
 
-## Prerequisites
+```bash
+curl -fsSL https://raw.githubusercontent.com/TalonT-Org/AutoSkillit/stable/install.sh | sh
+```
 
-- Python 3.11+
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and on PATH
+Or manually: `uv tool install "git+https://github.com/TalonT-Org/AutoSkillit.git@stable" && autoskillit install`
 
 ## Quick Start
 
-### 1. Install
-
 ```bash
-git clone https://github.com/talontechnologies/autoskillit.git
-cd autoskillit
-uv pip install -e .
-autoskillit install
-```
-
-`install` registers AutoSkillit as a Claude Code plugin. It loads automatically in every session after this. No per-project wiring needed.
-
-### 2. Set up your project
-
-```bash
+# 1. Set up your project
 cd your-project
 autoskillit init
-```
 
-This creates `.autoskillit/config.yaml` with your test command, the only setting most projects need. For a guided setup that detects your tools and generates tailored recipes, use `/autoskillit:setup-project` inside Claude Code.
-
-### 3. Run your first pipeline
-
-```bash
-autoskillit cook
-```
-
-This launches Claude Code with the kitchen already open. Select a recipe, provide the inputs, and the orchestrator handles the rest. You can also specify a recipe directly:
-
-```bash
+# 2. Run the implementation pipeline
 autoskillit cook implementation
 ```
 
-## How It Works
-
-AutoSkillit is a **stateless workflow engine**. The recipe defines the script. The AI is the state manager.
-
-A **skill** is a focused task: "make a plan", "implement in a worktree", "investigate test failures". Each skill runs in its own headless session with full tool access. On its own, a skill is a one-shot capability.
-
-A **recipe** turns skills into a script. It tells the AI what steps to run, what inputs to collect, and what to do when something succeeds or fails. The YAML format is a convention, not a constraint. The AI interprets the recipe and decides how to execute it.
-
-When you run `autoskillit cook`, an orchestrating agent reads the recipe and drives the workflow. It never does the actual work itself. It just passes inputs to each skill, reads the result, and moves to the next step. All the real work (reading code, writing code, running tests) happens inside separate headless skill sessions, each with their own context window.
-
-This means the orchestrator's context window stays small. It only ever holds the recipe, the current step's result, and enough routing information to decide what comes next. Workflows have run for 48+ hours without approaching context limits, because the orchestrator never accumulates the content of the skills it delegates to.
-
-### Example: The Implementation Pipeline
-
-The bundled `implementation` recipe automates the full development cycle:
+That's it. Describe what you want to build, and AutoSkillit handles the rest:
 
 ```
-clone > plan > verify > implement > test > merge > push
+Plan ─── Verify ─── Implement ─── Test ─── Merge ─── Push ─── PR ─── Review
+ │                     │            │                          │
+ │                     ▼            ▼                          ▼
+ │               Dry-walkthrough  Worktree               7 parallel
+ │               validates plan   isolation              audit bots
+ ▼
+Deep codebase
+analysis with
+arch diagrams
 ```
 
-Give it a task description or a GitHub issue URL, and it:
+## What Happens
 
-- Clones your repo into an isolated directory
-- Creates a detailed implementation plan
-- Validates the plan with a dry walkthrough
-- Implements changes in a git worktree
-- Runs your test suite
-- Merges on success, pushes, and opens a PR
+When you run `autoskillit cook implementation`:
 
-If tests fail, it automatically routes to a fix skill that diagnoses and resolves the failures before retrying.
+1. **You describe the task** — or paste a GitHub issue URL
+2. **AutoSkillit clones your repo** into an isolated directory (your working tree is never touched)
+3. **A plan is created** — deep codebase analysis, architecture diagrams, test-first design
+4. **The plan is verified** — a dry walkthrough catches gaps before any code is written
+5. **Code is implemented** in a git worktree, committed, and tested
+6. **If tests fail**, a fix skill diagnoses and resolves failures automatically
+7. **Changes are merged, pushed**, and a PR is opened
+8. **The PR is reviewed** by 7 parallel audit subagents checking architecture, tests, bugs, defense, cohesion, slop, and deletion regressions
+9. **CI is monitored** — if it fails, AutoSkillit diagnoses and fixes
+
+The orchestrator never reads or writes code itself. Every step runs in a separate
+headless session with its own context window, so pipelines can run for hours without
+hitting context limits.
+
+## Key Features
+
+**Zero Footprint by Default** — AutoSkillit exposes 36 MCP tools, but only 12 lightweight tools are visible in a normal Claude Code session. The other 24 pipeline tools stay hidden until you explicitly open the kitchen. This means AutoSkillit never pollutes your context window or wastes tokens on tool descriptions you aren't using. When you need the full pipeline, one command reveals everything.
+
+**Clone Isolation** — All pipeline work happens in a cloned copy of your repo. Your working tree and uncommitted changes are never touched.
+
+**Dry-Walkthrough Gate** — Every plan is validated against the actual codebase before implementation begins. Missing files, wrong function signatures, and broken assumptions are caught and fixed in the plan — not discovered during implementation.
+
+**7-Dimension PR Review** — The `review-pr` skill runs 7 parallel audit subagents: architecture layering, test quality, defensive coding, bug patterns, cohesion, AI slop detection, and deletion regression checks. Each posts inline GitHub comments on the PR.
+
+**Contract Cards** — Static analysis of recipe dataflow. Each skill declares its inputs and outputs; contract cards verify that every step has the data it needs before the pipeline runs.
 
 ## Bundled Recipes
 
 | Recipe | What it automates |
 |--------|-------------------|
-| `implementation` | Plan, verify, implement, test, merge, and push |
-| `bugfix-loop` | Test, investigate, plan, implement, verify, and merge |
-| `remediation` | Investigate-first approach for issues needing diagnosis |
-| `audit-and-fix` | Audit, investigate, rectify, implement, test, and merge |
-| `smoke-test` | Integration self-test of the orchestration path |
+| `implementation` | Plan → verify → implement → test → merge → PR → review |
+| `bugfix-loop` | Test → investigate → plan → implement → verify → merge |
+| `remediation` | Investigate → plan → verify → implement → test → merge → PR |
+| `audit-and-fix` | Audit → investigate → plan → implement → test → merge → PR |
+| `implementation-groups` | Decompose large docs → sequenced group implementation |
+| `batch-implementation` | Implement multiple GitHub issues sharing clone setup overhead |
+| `pr-merge-pipeline` | Analyze open PRs → merge in order → single integration PR |
+| `smoke-test` | Integration self-test of the orchestration engine |
 
-```bash
-autoskillit recipes list              # list available recipes
-autoskillit recipes show bugfix-loop  # inspect a recipe's YAML
-```
-
-Project recipes in `.autoskillit/recipes/` override bundled ones with the same name. Generate custom recipes with `/autoskillit:write-recipe` or `/autoskillit:setup-project`.
-
-## CLI Reference
+## CLI Quick Reference
 
 | Command | Purpose |
 |---------|---------|
 | `autoskillit install` | Register plugin with Claude Code |
-| `autoskillit init` | Create project config (`.autoskillit/config.yaml`) |
+| `autoskillit init` | Create project config |
 | `autoskillit cook [recipe]` | Launch a pipeline |
-| `autoskillit doctor` | Check setup for common issues |
-| `autoskillit recipes list` | List available recipes |
-| `autoskillit skills list` | List all 24 bundled skills |
-| `autoskillit config show` | Show resolved configuration |
-| `autoskillit migrate` | Check for outdated recipes |
+| `autoskillit doctor` | Check setup health |
+| `autoskillit chefs-hat` | Launch Claude with all 36 skills as slash commands |
 
-## Configuration
+## Documentation
 
-`autoskillit init` writes a `.autoskillit/config.yaml` with your test command:
-
-```yaml
-test_check:
-  command: ["pytest", "-v"]
-```
-
-Config resolves in layers: package defaults < user config (`~/.autoskillit/config.yaml`) < project config (`.autoskillit/config.yaml`). View the result with `autoskillit config show`.
-
-See [docs/configuration.md](docs/configuration.md) for the full reference covering model selection, worktree setup, quota guard, GitHub integration, and safety settings.
-
-## Safety
-
-AutoSkillit is designed around defense in depth:
-
-- **Tool gating**: 16 tools are locked until you run the `/open_kitchen` command
-- **Test gate**: code must pass tests before merge, no bypass
-- **Dry-walkthrough gate**: plans are verified before implementation begins
-- **Clone isolation**: pipeline work happens in cloned directories, not your working tree
-- **Process cleanup**: all subprocess trees are cleaned up after sessions
+- **[Installation](docs/installation.md)** — Prerequisites, manual install, troubleshooting
+- **[Getting Started](docs/getting-started.md)** — Full tutorial with the implementation recipe
+- **[Recipes](docs/recipes.md)** — All recipes with flow diagrams and input reference
+- **[Architecture](docs/architecture.md)** — Gating, clone isolation, headless sessions, hooks
+- **[CLI Reference](docs/cli-reference.md)** — All commands and options
+- **[Configuration](docs/configuration.md)** — Layered config, all settings, examples
 
 ## License
 

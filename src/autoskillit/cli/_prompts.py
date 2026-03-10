@@ -104,18 +104,18 @@ ROUTING RULES — MANDATORY:
   required arguments. The downstream skill does the actual work.
 
 FAILURE PREDICATES — when to follow on_failure:
-- test_check: {{"passed": false}}
-- merge_worktree: "error" key present in response
-- run_cmd: {{"success": false}}
-- run_skill: {{"success": false}}
-- classify_fix: "error" key present in response
+- test_check: "passed: False" in output
+- merge_worktree: "error:" line present in output
+- run_cmd: "success: False" in output
+- run_skill: "success: False" in output
+- classify_fix: "error:" line present in output
 
 TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
-- Tool-level failure (run_skill: {{"success": false}}): Follow on_failure. This fires
+- Tool-level failure (run_skill returns "success: False"): Follow on_failure. This fires
   BEFORE any result object exists. on_result conditions are NOT evaluated.
-- Skill-level error (result.error present): Follow the matching on_result condition.
-  This fires only when run_skill completes and returns a result object with an error field.
-- When a step has no on_failure declared and the tool returns success: false, this is a
+- Skill-level error ("error:" line present in result): Follow the matching on_result
+  condition. This fires only when run_skill completes and returns a result with an error line.
+- When a step has no on_failure declared and the tool returns "success: False", this is a
   recipe authoring error. Stop the pipeline and report the missing route.
 
 OPTIONAL STEP SEMANTICS:

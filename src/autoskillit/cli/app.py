@@ -10,7 +10,10 @@ import subprocess
 import sys
 from datetime import UTC
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
+
+if TYPE_CHECKING:
+    from autoskillit.recipe import RecipeInfo
 
 from cyclopts import App, Parameter
 
@@ -23,13 +26,6 @@ from autoskillit.cli._init_helpers import (
 )
 from autoskillit.core import ClaudeFlags, RecipeSource, _atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
-from autoskillit.recipe import (
-    check_diagram_staleness,
-    find_recipe_by_name,
-    generate_recipe_diagram,
-    list_recipes,
-    load_recipe_diagram,
-)
 
 app = App(
     name="autoskillit",
@@ -361,6 +357,8 @@ def recipes_list():
 @recipes_app.command(name="show")
 def recipes_show(name: str):
     """Print the YAML content of a named recipe."""
+    from autoskillit.recipe import find_recipe_by_name
+
     match = find_recipe_by_name(name, Path.cwd())
     if match is None:
         print(f"No recipe named '{name}'.", file=sys.stderr)
@@ -368,7 +366,7 @@ def recipes_show(name: str):
     print(match.path.read_text())
 
 
-def _recipes_dir_for(info: object) -> Path:
+def _recipes_dir_for(info: RecipeInfo) -> Path:
     if getattr(info, "source", None) == RecipeSource.BUILTIN:
         return pkg_root() / "recipes"
     return Path.cwd() / ".autoskillit" / "recipes"
@@ -383,6 +381,8 @@ def recipes_render(name: str | None = None) -> None:
     name
         Name of a single recipe to render. Renders all recipes if omitted.
     """
+    from autoskillit.recipe import find_recipe_by_name, generate_recipe_diagram, list_recipes
+
     if name is not None:
         match = find_recipe_by_name(name, Path.cwd())
         if match is None:
@@ -431,6 +431,15 @@ def cook(recipe: str | None = None):
         Name of the recipe (from .autoskillit/recipes/). Prompts if omitted.
     """
     from autoskillit.cli._prompts import _build_orchestrator_prompt
+    from autoskillit.recipe import (
+        check_diagram_staleness,
+        find_recipe_by_name,
+        generate_recipe_diagram,
+        list_recipes,
+        load_recipe,
+        load_recipe_diagram,
+        validate_recipe,
+    )
 
     if os.environ.get("CLAUDECODE"):
         print("ERROR: 'cook' cannot run inside a Claude Code session.")
@@ -466,7 +475,6 @@ def cook(recipe: str | None = None):
             recipe = resolved.name
 
     from autoskillit.core import YAMLError
-    from autoskillit.recipe import validate_recipe
 
     _match = find_recipe_by_name(recipe, Path.cwd())
     if _match is None:
@@ -482,10 +490,8 @@ def cook(recipe: str | None = None):
     recipe_yaml = _match.path.read_text()
 
     # Validate recipe before launching session
-    from autoskillit.recipe import load_recipe as _load_for_cook
-
     try:
-        parsed = _load_for_cook(_match.path)
+        parsed = load_recipe(_match.path)
     except YAMLError as exc:
         print(f"Recipe YAML parse error: {exc}")
         sys.exit(1)
@@ -503,8 +509,8 @@ def cook(recipe: str | None = None):
     if check_diagram_staleness(_match.name, _rdir, _match.path):
         try:
             generate_recipe_diagram(_match.path, _rdir)
-        except OSError:
-            pass
+        except OSError as exc:
+            print(f"Warning: diagram generation failed: {exc}", file=sys.stderr)
     diagram = load_recipe_diagram(_match.name, _rdir)
     _launch_cook_session(_build_orchestrator_prompt(recipe_yaml, diagram=diagram))
 

@@ -39,7 +39,7 @@ def test_dry_walkthrough_has_historical_regression_step(skill_text: str) -> None
 
 def test_dry_walkthrough_historical_step_positioned_after_step4(skill_text: str) -> None:
     """Step 4.5 must appear after Step 4 and before Step 5 in the file."""
-    step_4_idx = skill_text.find("### Step 4")
+    step_4_idx = skill_text.find("### Step 4:")
     step_45_idx = skill_text.find("Step 4.5")
     step_5_idx = skill_text.find("### Step 5")
     assert step_4_idx != -1 and step_45_idx != -1 and step_5_idx != -1

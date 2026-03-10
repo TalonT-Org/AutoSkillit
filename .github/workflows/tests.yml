@@ -16,11 +16,11 @@ jobs:
       - name: Compute OS matrix
         id: set-matrix
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "integration" ]] || \
-             [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/integration" ]]; then
-            echo 'matrix=["ubuntu-latest"]' >> $GITHUB_OUTPUT
-          else
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "stable" ]] || \
+             [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/stable" ]]; then
             echo 'matrix=["ubuntu-latest","macos-15"]' >> $GITHUB_OUTPUT
+          else
+            echo 'matrix=["ubuntu-latest"]' >> $GITHUB_OUTPUT
           fi
 
       - uses: actions/checkout@v4

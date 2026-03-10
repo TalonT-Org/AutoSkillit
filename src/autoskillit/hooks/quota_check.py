@@ -23,6 +23,8 @@ _DEFAULT_CACHE_MAX_AGE = 300  # seconds
 HOOK_CONFIG_FILENAME = ".autoskillit_hook_config.json"
 HOOK_DIR_COMPONENTS = (".autoskillit", "temp")
 
+_AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
+
 
 def _read_hook_config() -> dict:
     """Read server-written config from .autoskillit/temp/.autoskillit_hook_config.json.
@@ -53,6 +55,43 @@ def _read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
         return None
 
 
+def _resolve_quota_log_dir() -> Path | None:
+    """Resolve the autoskillit log root directory. Returns None on any error.
+
+    Priority: AUTOSKILLIT_LOG_DIR env var > platform default.
+    Mirrors the logic in execution/session_log.py:resolve_log_dir().
+    """
+    try:
+        override = os.environ.get(_AUTOSKILLIT_LOG_DIR_ENV)
+        if override:
+            return Path(override)
+        if sys.platform == "darwin":
+            return Path.home() / "Library" / "Application Support" / "autoskillit" / "logs"
+        xdg = os.environ.get("XDG_DATA_HOME")
+        if xdg:
+            return Path(xdg) / "autoskillit" / "logs"
+        return Path.home() / ".local" / "share" / "autoskillit" / "logs"
+    except Exception:
+        return None
+
+
+def _write_quota_log_event(event: dict, log_dir: Path | None) -> None:
+    """Append a quota guard event to quota_events.jsonl at the log root.
+
+    Silently no-ops on any error — hook observability must never block run_skill.
+    Event schema: {ts, event, threshold, utilization?, sleep_seconds?, resets_at?, cache_path?}
+    """
+    if log_dir is None:
+        return
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(event) + "\n"
+        with open(log_dir / "quota_events.jsonl", "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass  # Never block the hook on logging failure
+
+
 def main() -> None:
     try:
         raw = sys.stdin.read()
@@ -75,14 +114,34 @@ def main() -> None:
         or hook_config.get("cache_path")
         or _DEFAULT_CACHE_PATH
     )
+    log_dir = _resolve_quota_log_dir()
+    ts = datetime.now(UTC).isoformat()
 
     cache = _read_quota_cache(cache_path_str, cache_max_age)
     if cache is None:
+        _write_quota_log_event(
+            {
+                "ts": ts,
+                "event": "cache_miss",
+                "threshold": threshold,
+                "cache_path": cache_path_str,
+            },
+            log_dir,
+        )
         sys.exit(0)  # no fresh cache — fail open
 
     try:
         utilization = float(cache["five_hour"]["utilization"])
     except (KeyError, ValueError, TypeError):
+        _write_quota_log_event(
+            {
+                "ts": ts,
+                "event": "parse_error",
+                "threshold": threshold,
+                "cache_path": cache_path_str,
+            },
+            log_dir,
+        )
         sys.exit(0)  # malformed cache — fail open
 
     if utilization >= threshold:
@@ -98,6 +157,17 @@ def main() -> None:
         else:
             n = 60
 
+        _write_quota_log_event(
+            {
+                "ts": ts,
+                "event": "blocked",
+                "threshold": threshold,
+                "utilization": utilization,
+                "sleep_seconds": n,
+                "resets_at": resets_at_str,
+            },
+            log_dir,
+        )
         print(
             json.dumps(
                 {
@@ -112,6 +182,16 @@ def main() -> None:
                     }
                 }
             )
+        )
+    else:
+        _write_quota_log_event(
+            {
+                "ts": ts,
+                "event": "approved",
+                "threshold": threshold,
+                "utilization": utilization,
+            },
+            log_dir,
         )
     sys.exit(0)  # exit 0 so Claude Code parses the JSON decision
 

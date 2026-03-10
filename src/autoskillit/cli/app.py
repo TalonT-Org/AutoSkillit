@@ -21,12 +21,13 @@ from autoskillit.cli._init_helpers import (
     _prompt_test_command,
     _register_all,
 )
-from autoskillit.core import ClaudeFlags, _atomic_write, pkg_root
+from autoskillit.core import ClaudeFlags, RecipeSource, _atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
-from autoskillit.recipe import list_recipes
-from autoskillit.recipe.diagrams import (
+from autoskillit.recipe import (
     check_diagram_staleness,
+    find_recipe_by_name,
     generate_recipe_diagram,
+    list_recipes,
     load_recipe_diagram,
 )
 
@@ -360,8 +361,6 @@ def recipes_list():
 @recipes_app.command(name="show")
 def recipes_show(name: str):
     """Print the YAML content of a named recipe."""
-    from autoskillit.recipe import find_recipe_by_name
-
     match = find_recipe_by_name(name, Path.cwd())
     if match is None:
         print(f"No recipe named '{name}'.", file=sys.stderr)
@@ -370,9 +369,6 @@ def recipes_show(name: str):
 
 
 def _recipes_dir_for(info: object) -> Path:
-    """Return the recipes directory for a RecipeInfo object."""
-    from autoskillit.core import RecipeSource
-
     if getattr(info, "source", None) == RecipeSource.BUILTIN:
         return pkg_root() / "recipes"
     return Path.cwd() / ".autoskillit" / "recipes"
@@ -387,20 +383,15 @@ def recipes_render(name: str | None = None) -> None:
     name
         Name of a single recipe to render. Renders all recipes if omitted.
     """
-    from autoskillit.recipe import find_recipe_by_name
-
-    project_dir = Path.cwd()
-
     if name is not None:
-        match = find_recipe_by_name(name, project_dir)
+        match = find_recipe_by_name(name, Path.cwd())
         if match is None:
             print(f"Recipe '{name}' not found.", file=sys.stderr)
             sys.exit(1)
         generate_recipe_diagram(match.path, _recipes_dir_for(match))
         print(f"Rendered: {name}")
     else:
-        result = list_recipes(project_dir)
-        for info in result.items:
+        for info in list_recipes(Path.cwd()).items:
             generate_recipe_diagram(info.path, _recipes_dir_for(info))
             print(f"Rendered: {info.name}")
 
@@ -475,7 +466,7 @@ def cook(recipe: str | None = None):
             recipe = resolved.name
 
     from autoskillit.core import YAMLError
-    from autoskillit.recipe import find_recipe_by_name, validate_recipe
+    from autoskillit.recipe import validate_recipe
 
     _match = find_recipe_by_name(recipe, Path.cwd())
     if _match is None:
@@ -508,14 +499,12 @@ def cook(recipe: str | None = None):
         for err in errors:
             print(f"  - {err}")
         sys.exit(1)
-
     _rdir = _recipes_dir_for(_match)
     if check_diagram_staleness(_match.name, _rdir, _match.path):
         try:
             generate_recipe_diagram(_match.path, _rdir)
-        except Exception:
-            pass  # best-effort — session still launches without diagram
-
+        except OSError:
+            pass
     diagram = load_recipe_diagram(_match.name, _rdir)
     _launch_cook_session(_build_orchestrator_prompt(recipe_yaml, diagram=diagram))
 

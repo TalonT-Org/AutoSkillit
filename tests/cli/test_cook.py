@@ -656,7 +656,7 @@ class TestCLICook:
         monkeypatch.chdir(tmp_path)
 
         with (
-            patch("autoskillit.recipe.find_recipe_by_name", return_value=MagicMock()),
+            patch("autoskillit.cli.app.find_recipe_by_name", return_value=MagicMock()),
             patch("autoskillit.recipe.load_recipe", side_effect=YAMLError("bad yaml")),
             pytest.raises(SystemExit) as exc_info,
         ):
@@ -677,7 +677,7 @@ class TestCLICook:
         monkeypatch.chdir(tmp_path)
 
         with (
-            patch("autoskillit.recipe.find_recipe_by_name", return_value=MagicMock()),
+            patch("autoskillit.cli.app.find_recipe_by_name", return_value=MagicMock()),
             patch("autoskillit.recipe.load_recipe", side_effect=ValueError("bad structure")),
             pytest.raises(SystemExit) as exc_info,
         ):

@@ -886,4 +886,4 @@ def test_fmt_get_token_summary_includes_elapsed_seconds():
     rendered = data["hookSpecificOutput"]["updatedMCPToolOutput"]
     # Must include step name and elapsed time
     assert "implement" in rendered
-    assert "123.4s" in rendered or "t:123.4s" in rendered
+    assert "t:123.4s" in rendered

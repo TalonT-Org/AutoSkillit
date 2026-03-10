@@ -886,6 +886,114 @@ class TestCLICook:
         assert exc_info.value.code == 1
 
 
+class TestCookDiagram:
+    """T3: cook command loads and injects recipe diagram into system prompt."""
+
+    def _setup_recipe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        """Write test recipe to scripts_dir and chdir."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        return scripts_dir
+
+    # T3-A
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_system_prompt_contains_diagram_when_fresh(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """cook injects diagram into system prompt when diagram is fresh (not stale)."""
+        import importlib
+        import sys
+
+        _app_mod = sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        self._setup_recipe(tmp_path, monkeypatch)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        monkeypatch.setattr(_app_mod, "check_diagram_staleness", lambda *a, **kw: False)
+        monkeypatch.setattr(
+            _app_mod, "load_recipe_diagram", lambda *a, **kw: "## Flow\nA → B"
+        )
+
+        cli.cook("test-script")
+
+        cmd = mock_run.call_args[0][0]
+        prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
+        system_prompt = cmd[prompt_idx + 1]
+        assert "## Flow" in system_prompt
+        assert "A → B" in system_prompt
+        assert "FIRST ACTION" in system_prompt
+
+    # T3-B
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_regenerates_diagram_when_stale(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """cook calls generate_recipe_diagram when staleness check returns True."""
+        import importlib
+        import sys
+
+        _app_mod = sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        self._setup_recipe(tmp_path, monkeypatch)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        monkeypatch.setattr(_app_mod, "check_diagram_staleness", lambda *a, **kw: True)
+        generate_called = []
+
+        def _fake_generate(*a: object, **kw: object) -> str:
+            generate_called.append(1)
+            return "## Flow"
+
+        monkeypatch.setattr(_app_mod, "generate_recipe_diagram", _fake_generate)
+        monkeypatch.setattr(
+            _app_mod, "load_recipe_diagram", lambda *a, **kw: "## Flow"
+        )
+
+        cli.cook("test-script")
+
+        assert len(generate_called) == 1, "generate_recipe_diagram must be called once when stale"
+
+    # T3-C
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_works_when_diagram_is_none(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """cook launches session successfully even when no diagram is available."""
+        import importlib
+        import sys
+
+        _app_mod = sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        self._setup_recipe(tmp_path, monkeypatch)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        monkeypatch.setattr(_app_mod, "check_diagram_staleness", lambda *a, **kw: False)
+        monkeypatch.setattr(_app_mod, "load_recipe_diagram", lambda *a, **kw: None)
+
+        cli.cook("test-script")
+
+        mock_run.assert_called_once()
+
+
 class TestRecipesCLI:
     def test_recipes_list_outputs_names(self, capsys: pytest.CaptureFixture) -> None:
         """recipes list prints at least one recipe name to stdout."""

@@ -1174,3 +1174,82 @@ class TestCloneDecontamination:
             assert (clone_path / ".git").is_dir()
         finally:
             shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+
+class TestCloneRemoteUrlResolution:
+    """T1: clone_repo resolves remote URL before cloning when origin is configured."""
+
+    # T1-A
+    def test_clone_uses_remote_url_as_clone_source(
+        self, local_with_remote: Path, bare_remote: Path
+    ) -> None:
+        """clone_repo uses the remote URL (not the local path) as git clone source."""
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run",
+            wraps=subprocess.run,
+        ) as spy:
+            result = clone_repo(
+                str(local_with_remote), "test", branch="main", strategy="proceed"
+            )
+        clone_path = Path(result["clone_path"])
+        try:
+            clone_calls = [
+                call
+                for call in spy.call_args_list
+                if call[0]
+                and isinstance(call[0][0], list)
+                and call[0][0][:2] == ["git", "clone"]
+            ]
+            assert len(clone_calls) == 1, (
+                f"Expected exactly one git clone call, got {len(clone_calls)}"
+            )
+            clone_args = clone_calls[0][0][0]
+            # source is second-to-last positional arg (before clone_path)
+            clone_source = clone_args[-2]
+            assert clone_source == str(bare_remote), (
+                f"Expected clone source to be remote URL {bare_remote!r}, "
+                f"got {clone_source!r} (local path was used instead)"
+            )
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    # T1-B
+    def test_clone_falls_back_to_local_when_no_remote(self, git_repo: Path) -> None:
+        """clone_repo falls back to local path when no remote origin is configured."""
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run",
+            wraps=subprocess.run,
+        ) as spy:
+            result = clone_repo(str(git_repo), "test", strategy="proceed")
+        clone_path = Path(result["clone_path"])
+        try:
+            clone_calls = [
+                call
+                for call in spy.call_args_list
+                if call[0]
+                and isinstance(call[0][0], list)
+                and call[0][0][:2] == ["git", "clone"]
+            ]
+            assert len(clone_calls) == 1
+            clone_args = clone_calls[0][0][0]
+            clone_source = clone_args[-2]
+            assert clone_source == str(git_repo), (
+                f"Expected local path fallback {git_repo!r}, got {clone_source!r}"
+            )
+            assert "clone_path" in result
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    # T1-C
+    def test_clone_result_remote_url_correct_after_remote_clone(
+        self, local_with_remote: Path, bare_remote: Path
+    ) -> None:
+        """clone_repo result['remote_url'] equals the remote URL after cloning."""
+        result = clone_repo(
+            str(local_with_remote), "test", branch="main", strategy="proceed"
+        )
+        clone_path = Path(result["clone_path"])
+        try:
+            assert result["remote_url"] == str(bare_remote)
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)

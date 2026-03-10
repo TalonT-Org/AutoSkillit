@@ -300,6 +300,9 @@ steps:
       Pushes the conflict-resolution worktree branch to origin so GitHub can run CI.
       Uses --force-with-lease to prevent clobbering concurrent updates.
       context.worktree_branch_name is captured from implement step output (result.branch_name).
+      Both a lease violation (concurrent push) and a network failure route to
+      cleanup_failure — the recipe cannot distinguish between the two, so no safe
+      retry is possible without re-evaluating the worktree state.
 
   create_conflict_pr:
     tool: run_cmd
@@ -320,6 +323,10 @@ steps:
     note: >
       Creates a GitHub PR from the worktree branch into the integration batch branch.
       Captures conflict_pr_number for the subsequent gh pr merge call.
+      The --json number --jq '.number' flags constrain gh output to a bare integer,
+      but if gh emits unexpected warnings to stdout the trimmed value may be malformed
+      and propagate silently to merge_conflict_pr. Verify conflict_pr_number is a
+      non-empty integer before use.
 
   wait_for_conflict_ci:
     tool: wait_for_ci

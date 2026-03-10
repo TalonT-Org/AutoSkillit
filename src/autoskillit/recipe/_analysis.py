@@ -10,7 +10,7 @@ Neither contracts.py nor io.py imports _analysis.py, so no cycle exists.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import igraph
 
@@ -197,6 +197,7 @@ class ValidationContext:
     recipe: Recipe
     step_graph: dict[str, set[str]]
     dataflow: DataFlowReport
+    available_recipes: frozenset[str] = field(default_factory=frozenset)
 
 
 # ---------------------------------------------------------------------------
@@ -532,7 +533,11 @@ def analyze_dataflow(
     return DataFlowReport(warnings=warnings, summary=summary)
 
 
-def make_validation_context(recipe: Recipe) -> ValidationContext:
+def make_validation_context(
+    recipe: Recipe,
+    *,
+    available_recipes: frozenset[str] = frozenset(),
+) -> ValidationContext:
     """Build a ``ValidationContext`` from a recipe.
 
     Constructs the step graph and data-flow report once so that semantic
@@ -540,4 +545,9 @@ def make_validation_context(recipe: Recipe) -> ValidationContext:
     """
     step_graph = _build_step_graph(recipe)
     dataflow = analyze_dataflow(recipe, step_graph=step_graph)
-    return ValidationContext(recipe=recipe, step_graph=step_graph, dataflow=dataflow)
+    return ValidationContext(
+        recipe=recipe,
+        step_graph=step_graph,
+        dataflow=dataflow,
+        available_recipes=available_recipes,
+    )

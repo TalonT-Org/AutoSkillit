@@ -133,6 +133,16 @@ ACTION: CONFIRM STEP SEMANTICS:
   route to the step's on_success target.
 - If the user declines (answers no, skip, keep, cancel, or similar negative),
   route to the step's on_failure target.
+
+RECIPE COMPOSITION — run_recipe steps:
+- When you reach a step with `tool: run_recipe`, call the run_recipe MCP tool with:
+    name=<value of with.name>
+    cwd=<value of with.cwd>
+    ingredients=<JSON string of remaining with: args, after resolving ${{{{ }}}} refs>
+    step_name=<step YAML key>
+- Failure predicate: identical to run_skill — "success: False" in output.
+- capture:, on_result, on_failure, on_context_limit work identically to run_skill steps.
+- Do NOT investigate a sub-recipe failure — follow on_failure.
 {sous_chef_content}
 --- RECIPE ---
 {script_yaml}

@@ -158,6 +158,7 @@ src/autoskillit/
 │   ├── rules_graph.py       #   Semantic rules for step graph reachability and cycles
 │   ├── rules_inputs.py      #   Semantic rules for ingredient/version validation
 │   ├── rules_merge.py       #   Semantic rules for merge_worktree routing completeness
+│   ├── rules_recipe.py      #   Semantic rules for run_recipe step composition contracts (unknown-sub-recipe)
 │   ├── rules_tools.py       #   Semantic rules for MCP tool name validity (unknown-tool rule)
 │   ├── rules_verdict.py     #   Semantic rules for skill verdict routing completeness (unrouted-verdict-value)
 │   ├── rules_worktree.py    #   Semantic rules for worktree retry lifecycle

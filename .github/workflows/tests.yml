@@ -2,8 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [main, integration]
+    branches: [main]
   pull_request:
+    branches: [main, integration]
 
 jobs:
   preflight:

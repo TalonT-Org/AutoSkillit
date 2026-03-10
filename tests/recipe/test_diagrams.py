@@ -1216,24 +1216,31 @@ def test_bundled_diagram_inputs_table_has_no_embedded_newlines(
 # ---------------------------------------------------------------------------
 
 
+_SIMPLE_GRAPH_YAML = (
+    "name: simple\nsteps:\n"
+    "  step1:\n    tool: run_skill\n    with:\n      skill_command: /foo\n"
+    "    on_success: done\n    on_failure: escalate\n"
+    "  done:\n    action: stop\n    message: Done.\n"
+    "  escalate:\n    action: stop\n    message: Failed.\n"
+)
+
+
+def _load_simple_recipe(tmp_path: Path):  # type: ignore[no-untyped-def]
+    """Write _SIMPLE_GRAPH_YAML to a temp file and load it as a Recipe."""
+    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+    yaml_path = tmp_path / "simple.yaml"
+    yaml_path.write_text(_SIMPLE_GRAPH_YAML)
+    return load_recipe(yaml_path)
+
+
 def test_build_recipe_graph_is_directed(tmp_path: Path) -> None:
     """T-GRAPH-1: build_recipe_graph returns a directed igraph.Graph."""
     import igraph  # noqa: PLC0415
 
     from autoskillit.recipe.diagrams import build_recipe_graph  # noqa: PLC0415
 
-    # Fails with ImportError on current codebase (function doesn't exist yet)
-    yaml_path = tmp_path / "simple.yaml"
-    yaml_path.write_text(
-        "name: simple\nsteps:\n"
-        "  step1:\n    tool: run_skill\n    with:\n      skill_command: /foo\n"
-        "    on_success: done\n    on_failure: escalate\n"
-        "  done:\n    action: stop\n    message: Done.\n"
-        "  escalate:\n    action: stop\n    message: Failed.\n"
-    )
-    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
-
-    recipe = load_recipe(yaml_path)
+    recipe = _load_simple_recipe(tmp_path)
     g = build_recipe_graph(recipe)
     assert isinstance(g, igraph.Graph)
     assert g.is_directed()
@@ -1244,17 +1251,7 @@ def test_build_recipe_graph_vertex_attributes(tmp_path: Path) -> None:
     """T-GRAPH-2: build_recipe_graph encodes step attributes as vertex attributes."""
     from autoskillit.recipe.diagrams import build_recipe_graph  # noqa: PLC0415
 
-    yaml_path = tmp_path / "attrs.yaml"
-    yaml_path.write_text(
-        "name: attrs\nsteps:\n"
-        "  step1:\n    tool: run_skill\n    with:\n      skill_command: /foo\n"
-        "    on_success: done\n    on_failure: escalate\n"
-        "  done:\n    action: stop\n    message: Done.\n"
-        "  escalate:\n    action: stop\n    message: Failed.\n"
-    )
-    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
-
-    recipe = load_recipe(yaml_path)
+    recipe = _load_simple_recipe(tmp_path)
     g = build_recipe_graph(recipe)
     names = g.vs["name"]
     assert "step1" in names
@@ -1269,17 +1266,7 @@ def test_build_recipe_graph_edge_types(tmp_path: Path) -> None:
     """T-GRAPH-3: build_recipe_graph encodes routing edge types as edge attributes."""
     from autoskillit.recipe.diagrams import build_recipe_graph  # noqa: PLC0415
 
-    yaml_path = tmp_path / "edges.yaml"
-    yaml_path.write_text(
-        "name: edges\nsteps:\n"
-        "  step1:\n    tool: run_skill\n    with:\n      skill_command: /foo\n"
-        "    on_success: done\n    on_failure: escalate\n"
-        "  done:\n    action: stop\n    message: Done.\n"
-        "  escalate:\n    action: stop\n    message: Failed.\n"
-    )
-    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
-
-    recipe = load_recipe(yaml_path)
+    recipe = _load_simple_recipe(tmp_path)
     g = build_recipe_graph(recipe)
     edge_types = set(g.es["edge_type"])
     assert "success" in edge_types
@@ -1427,8 +1414,9 @@ def test_next_or_done_rendered_as_footer_routing_block(tmp_path: Path) -> None:
         recipes_dir / "implementation.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
     )
     graph_section = _extract_graph_section(content)
-    assert "└──" in graph_section, "No └── footer block for routing step"
-    assert "next_or_done" in graph_section
+    assert "└── next_or_done" in graph_section, (
+        "next_or_done must appear on a └── footer line, not as an inline chain token"
+    )
     assert "→" in graph_section
 
 

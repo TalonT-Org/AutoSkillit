@@ -7,15 +7,17 @@ derive from this registry.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from autoskillit.core import pkg_root
 
 
 @dataclass(frozen=True)
 class HookDef:
-    """A single PreToolUse hook group: matcher pattern + ordered script list."""
+    """A single hook group: event type, matcher pattern, and ordered script list."""
 
     matcher: str
+    event_type: Literal["PreToolUse", "PostToolUse"] = "PreToolUse"
     scripts: list[str] = field(default_factory=list)
 
 
@@ -32,20 +34,25 @@ HOOK_REGISTRY: list[HookDef] = [
         matcher=r"mcp__.*autoskillit.*__open_kitchen.*",
         scripts=["open_kitchen_guard.py"],
     ),
+    HookDef(
+        event_type="PostToolUse",
+        matcher="mcp__.*autoskillit.*",
+        scripts=["pretty_output.py"],
+    ),
 ]
 
 
 def generate_hooks_json() -> dict:
     """Generate the hooks.json structure from HOOK_REGISTRY using absolute paths."""
     hooks_dir = pkg_root() / "hooks"
-    entries = []
+    by_event: dict[str, list] = {}
     for hook_def in HOOK_REGISTRY:
-        hooks_list = [
-            {
-                "type": "command",
-                "command": f"python3 {hooks_dir / script}",
-            }
-            for script in hook_def.scripts
-        ]
-        entries.append({"matcher": hook_def.matcher, "hooks": hooks_list})
-    return {"hooks": {"PreToolUse": entries}}
+        entry = {
+            "matcher": hook_def.matcher,
+            "hooks": [
+                {"type": "command", "command": f"python3 {hooks_dir / script}"}
+                for script in hook_def.scripts
+            ],
+        }
+        by_event.setdefault(hook_def.event_type, []).append(entry)
+    return {"hooks": by_event}

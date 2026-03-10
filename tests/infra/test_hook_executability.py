@@ -52,12 +52,13 @@ def test_hook_registry_matches_generated_hooks_json() -> None:
     """Every hook in HOOK_REGISTRY must appear in generate_hooks_json() output and vice versa."""
     data = generate_hooks_json()
     generated_pairs: set[tuple[str, str]] = set()
-    for entry in data["hooks"]["PreToolUse"]:
-        matcher = entry["matcher"]
-        for hook in entry["hooks"]:
-            cmd = hook["command"]
-            script_name = cmd.split("/")[-1]
-            generated_pairs.add((matcher, script_name))
+    for event_entries in data.get("hooks", {}).values():
+        for entry in event_entries:
+            matcher = entry["matcher"]
+            for hook in entry["hooks"]:
+                cmd = hook["command"]
+                script_name = cmd.split("/")[-1]
+                generated_pairs.add((matcher, script_name))
 
     registry_pairs: set[tuple[str, str]] = set()
     for hook_def in HOOK_REGISTRY:

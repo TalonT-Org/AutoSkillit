@@ -30,6 +30,7 @@ jobs:
       - name: Compute new patch version
         id: version
         run: |
+          set -euo pipefail
           CURRENT=$(python3 -c "
           import tomllib, pathlib
           print(tomllib.loads(pathlib.Path('pyproject.toml').read_bytes())['project']['version'])
@@ -41,9 +42,16 @@ jobs:
 
       - name: Update pyproject.toml
         run: |
-          sed -i \
-            "s/^version = \"${{ steps.version.outputs.old }}\"/version = \"${{ steps.version.outputs.new }}\"/" \
-            pyproject.toml
+          python3 - <<'EOF'
+          import pathlib, os
+          p = pathlib.Path("pyproject.toml")
+          old_ver = f'version = "{os.environ["OLD_VERSION"]}"'
+          new_ver = f'version = "{os.environ["NEW_VERSION"]}"'
+          p.write_text(p.read_text().replace(old_ver, new_ver, 1))
+          EOF
+        env:
+          OLD_VERSION: ${{ steps.version.outputs.old }}
+          NEW_VERSION: ${{ steps.version.outputs.new }}
 
       - name: Update plugin.json
         run: |
@@ -62,6 +70,7 @@ jobs:
 
       - name: Commit and push version bump to main
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
@@ -75,7 +84,8 @@ jobs:
       - name: Sync main into integration
         id: sync
         run: |
-          git fetch origin integration
+          set -euo pipefail
+          git fetch origin main integration
           git checkout integration
 
           if git merge --ff-only origin/main; then

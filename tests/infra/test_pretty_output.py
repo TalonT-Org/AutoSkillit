@@ -132,10 +132,10 @@ def test_hook_fail_open_on_missing_tool_response():
 
 
 # PHK-6
-def test_format_run_skill_success():
+def test_format_run_skill_success(tmp_path):
     """run_skill success response must contain tool name, checkmark, and success field."""
     event = _make_run_skill_event(success=True)
-    out, _ = _run_hook(event=event)
+    out, _ = _run_hook(event=event, cwd=tmp_path)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "run_skill" in text
     assert "\u2713" in text  # ✓
@@ -143,7 +143,7 @@ def test_format_run_skill_success():
 
 
 # PHK-7
-def test_format_run_skill_failure_with_retry():
+def test_format_run_skill_failure_with_retry(tmp_path):
     """run_skill failure with retry must show cross, retry fields, and worktree_path."""
     event = _make_run_skill_event(
         success=False,
@@ -151,7 +151,7 @@ def test_format_run_skill_failure_with_retry():
         retry_reason="budget_exhausted",
         worktree_path="/tmp/wt/fix-abc",
     )
-    out, _ = _run_hook(event=event)
+    out, _ = _run_hook(event=event, cwd=tmp_path)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "\u2717" in text  # ✗
     assert "needs_retry: True" in text
@@ -180,7 +180,7 @@ def test_format_run_skill_gate_error():
 
 
 # PHK-9
-def test_format_run_cmd_success_shows_stdout():
+def test_format_run_cmd_success_shows_stdout(tmp_path):
     """run_cmd success must show tool name, checkmark, stdout content."""
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__run_cmd",
@@ -188,7 +188,7 @@ def test_format_run_cmd_success_shows_stdout():
             {"success": True, "exit_code": 0, "stdout": "hello\nworld\n", "stderr": ""}
         ),
     }
-    out, _ = _run_hook(event=event)
+    out, _ = _run_hook(event=event, cwd=tmp_path)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "run_cmd" in text
     assert "\u2713" in text  # ✓
@@ -198,7 +198,7 @@ def test_format_run_cmd_success_shows_stdout():
 
 
 # PHK-10
-def test_format_run_cmd_failure_shows_stderr():
+def test_format_run_cmd_failure_shows_stderr(tmp_path):
     """run_cmd failure must show cross and stderr content."""
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__run_cmd",
@@ -206,7 +206,7 @@ def test_format_run_cmd_failure_shows_stderr():
             {"success": False, "exit_code": 1, "stdout": "", "stderr": "No such file"}
         ),
     }
-    out, _ = _run_hook(event=event)
+    out, _ = _run_hook(event=event, cwd=tmp_path)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "\u2717" in text  # ✗
     assert "stderr" in text
@@ -431,7 +431,7 @@ def test_fmt_run_cmd_tool_exception_shows_diagnostic():
     }
     out, _ = _run_hook(event=event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "tool_exception" in text.lower() or "Tool Exception" in text
+    assert "tool exception" in text.lower()
     assert "RuntimeError: boom" in text
     assert "FAIL []" not in text
 
@@ -605,7 +605,7 @@ def test_tool_exception_subtype_routed_before_formatter():
     }
     out, _ = _run_hook(event=event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "tool_exception" in text.lower() or "Tool Exception" in text
+    assert "tool exception" in text.lower()
     assert "OSError: disk full" in text
 
 
@@ -698,3 +698,155 @@ def test_fmt_generic_deeply_nested_truncated():
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "nested" in text
     assert "deep" in text
+
+
+# ---------------------------------------------------------------------------
+# Production-realistic tests: Claude Code wraps MCP text in {"result": "..."}
+# ---------------------------------------------------------------------------
+
+
+def _wrap_for_claude_code(payload: dict) -> str:
+    """Simulate Claude Code's PostToolUse wrapping of MCP text content.
+
+    Claude Code takes the MCP text response and nests it inside
+    {"result": "<json-string>"} before passing to PostToolUse hooks.
+    """
+    return json.dumps({"result": json.dumps(payload)})
+
+
+# PHK-34
+def test_wrapped_run_cmd_success(tmp_path):
+    """Wrapped run_cmd success must unwrap and show checkmark, exit_code, stdout."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__run_cmd",
+        "tool_response": _wrap_for_claude_code(
+            {"success": True, "exit_code": 0, "stdout": "file1.py\nfile2.py\n", "stderr": ""}
+        ),
+    }
+    out, _ = _run_hook(event=event, cwd=tmp_path)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "\u2713" in text
+    assert "success: True" in text
+    assert "exit_code: 0" in text
+    assert "file1.py" in text
+    assert "file2.py" in text
+
+
+# PHK-35
+def test_wrapped_run_cmd_failure(tmp_path):
+    """Wrapped run_cmd failure must unwrap and show cross, exit_code, stderr."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__run_cmd",
+        "tool_response": _wrap_for_claude_code(
+            {"success": False, "exit_code": 127, "stdout": "", "stderr": "command not found"}
+        ),
+    }
+    out, _ = _run_hook(event=event, cwd=tmp_path)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "\u2717" in text
+    assert "FAIL" in text
+    assert "exit_code: 127" in text
+    assert "command not found" in text
+
+
+# PHK-36
+def test_wrapped_run_skill_success(tmp_path):
+    """Wrapped run_skill success must unwrap and show all fields."""
+    payload = {
+        "success": True,
+        "result": "Implementation complete.",
+        "session_id": "abc123",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+        "token_usage": None,
+        "worktree_path": "",
+    }
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__run_skill",
+        "tool_response": _wrap_for_claude_code(payload),
+    }
+    out, _ = _run_hook(event=event, cwd=tmp_path)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "\u2713" in text
+    assert "success: True" in text
+    assert "session_id: abc123" in text
+
+
+# PHK-37
+def test_wrapped_kitchen_status(tmp_path):
+    """Wrapped kitchen_status must unwrap and show status fields."""
+    payload = {
+        "package_version": "0.3.1",
+        "plugin_json_version": "0.3.1",
+        "versions_match": True,
+        "tools_enabled": True,
+        "token_usage_verbosity": "summary",
+        "quota_guard_enabled": True,
+        "github_token_configured": True,
+        "github_default_repo": "acme/myrepo",
+    }
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__kitchen_status",
+        "tool_response": _wrap_for_claude_code(payload),
+    }
+    out, _ = _run_hook(event=event, cwd=tmp_path)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "kitchen_status" in text
+    assert "package_version" in text
+    assert "tools_enabled" in text
+
+
+# PHK-38
+def test_wrapped_plain_text_result_passes_through(tmp_path):
+    """Plain text result envelope must not crash — passes through to generic."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__open_kitchen",
+        "tool_response": json.dumps(
+            {"result": "Kitchen is open. AutoSkillit tools are ready for service."}
+        ),
+    }
+    out, _ = _run_hook(event=event, cwd=tmp_path)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "open_kitchen" in text
+    assert "Kitchen is open" in text
+
+
+# PHK-39
+def test_wrapped_gate_error_still_detected(tmp_path):
+    """Wrapped gate_error subtype must unwrap and route to gate_error formatter."""
+    payload = {
+        "subtype": "gate_error",
+        "result": "Kitchen is closed.",
+        "success": False,
+        "is_error": True,
+    }
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__run_skill",
+        "tool_response": _wrap_for_claude_code(payload),
+    }
+    out, _ = _run_hook(event=event, cwd=tmp_path)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "Gate Error" in text
+
+
+# PHK-40
+def test_wrapped_tool_exception_still_detected(tmp_path):
+    """Wrapped tool_exception subtype must unwrap and route to exception formatter."""
+    payload = {
+        "subtype": "tool_exception",
+        "error": "TimeoutError: process hung",
+        "exit_code": -1,
+        "success": False,
+    }
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__run_cmd",
+        "tool_response": _wrap_for_claude_code(payload),
+    }
+    out, _ = _run_hook(event=event, cwd=tmp_path)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "tool exception" in text.lower()
+    assert "TimeoutError: process hung" in text

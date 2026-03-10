@@ -119,8 +119,7 @@ def init(
         Registration scope for hooks: "user" or "project".
     """
     if scope not in ("user", "project"):
-        print(f"Error: --scope must be 'user' or 'project', got '{scope}'")
-        raise SystemExit(1)
+        raise SystemExit(f"Error: --scope must be 'user' or 'project', got '{scope}'")
     project_dir = Path.cwd()
     config_dir = project_dir / ".autoskillit"
     config_dir.mkdir(exist_ok=True)
@@ -490,14 +489,8 @@ def cook(recipe: str | None = None):
     _launch_cook_session(_build_orchestrator_prompt(recipe_yaml))
 
 
-@app.command(name="chefs-hat")
+@app.command(name="chefs-hat", alias="chef")
 def _chefs_hat_cmd() -> None:
-    """Launch Claude with all bundled AutoSkillit skills as slash commands."""
-    chefs_hat()
-
-
-@app.command(name="chef")
-def _chef_cmd() -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
     chefs_hat()
 

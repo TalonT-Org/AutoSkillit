@@ -166,15 +166,21 @@ def run_doctor(*, output_json: bool = False, fix: bool = False) -> None:
         results.append(DoctorResult(Severity.OK, "project_config", "Project config exists"))
 
     # Check 5: Version consistency — package version must match plugin.json
-    from autoskillit.version import version_info
+    import importlib.metadata
+    import importlib.resources as _ir
 
-    vi = version_info()
-    if vi["match"]:
+    pkg_version = importlib.metadata.version("autoskillit")
+    plugin_json_path = Path(str(_ir.files("autoskillit"))) / ".claude-plugin" / "plugin.json"
+    try:
+        plugin_version = json.loads(plugin_json_path.read_text()).get("version")
+    except (json.JSONDecodeError, OSError):
+        plugin_version = None
+    if plugin_version == pkg_version:
         results.append(
             DoctorResult(
                 Severity.OK,
                 "version_consistency",
-                f"Version {vi['package_version']} installed",
+                f"Version {pkg_version} installed",
             )
         )
     else:
@@ -182,8 +188,8 @@ def run_doctor(*, output_json: bool = False, fix: bool = False) -> None:
             DoctorResult(
                 Severity.WARNING,
                 "version_consistency",
-                f"Package version {vi['package_version']} does not match "
-                f"plugin.json {vi['plugin_json_version']}. Reinstall autoskillit to fix.",
+                f"Package version {pkg_version} does not match "
+                f"plugin.json {plugin_version!r}. Reinstall autoskillit to fix.",
             )
         )
 

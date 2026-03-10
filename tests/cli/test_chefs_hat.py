@@ -76,7 +76,9 @@ class TestChefsHat:
         monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
         monkeypatch.setattr(subprocess, "run", fake_run)
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
-        app(["chef"])
+        with pytest.raises(SystemExit) as exc_info:
+            app(["chef"])
+        assert exc_info.value.code == 0
         assert "--add-dir" in captured_cmd
 
     # CH-4

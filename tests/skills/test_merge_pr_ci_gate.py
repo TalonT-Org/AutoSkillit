@@ -1,4 +1,5 @@
 """Guards for the gh-pr-merge CI gate introduced in Part B of issue #289."""
+
 from __future__ import annotations
 
 from autoskillit.core.paths import pkg_root

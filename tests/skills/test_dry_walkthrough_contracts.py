@@ -9,19 +9,20 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 
-SKILL_PATH = pkg_root() / "skills" / "dry-walkthrough" / "SKILL.md"
-
 
 @pytest.fixture(scope="module")
 def skill_text() -> str:
-    return SKILL_PATH.read_text()
+    skill_path = pkg_root() / "skills" / "dry-walkthrough" / "SKILL.md"
+    assert skill_path.exists(), f"SKILL.md not found at {skill_path}"
+    return skill_path.read_text()
 
 
 @pytest.fixture(scope="module")
 def step_45_section(skill_text: str) -> str:
     """Extract only the Step 4.5 section text."""
     step_45_idx = skill_text.find("Step 4.5")
-    assert step_45_idx != -1, "Step 4.5 not found in dry-walkthrough SKILL.md"
+    if step_45_idx == -1:
+        pytest.fail("Step 4.5 not found in dry-walkthrough SKILL.md")
     step_5_idx = skill_text.find("### Step 5", step_45_idx)
     if step_5_idx != -1:
         return skill_text[step_45_idx:step_5_idx]

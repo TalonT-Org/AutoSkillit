@@ -52,7 +52,7 @@ class _LayoutStep:
 
 
 @dataclass
-class StepClassification:
+class _StepClassification:
     """Classification of recipe steps by their role in the FOR EACH iteration cycle."""
 
     main_chain: frozenset[str]  # Tight-cycle steps → inline chain tokens
@@ -71,7 +71,7 @@ class _LayoutResult:
     # FOR EACH iteration block, or None if no loop is detected.
     for_each_range: tuple[int, int] | None = None
     for_each_label: str = "FOR EACH:"  # descriptive label for the FOR EACH box header
-    classification: StepClassification | None = None  # step role classification
+    classification: _StepClassification | None = None  # step role classification
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +106,7 @@ def _derive_for_each_label(span_steps: list[_LayoutStep]) -> str:
     return "FOR EACH:"
 
 
-def _classify_steps(recipe: Recipe) -> StepClassification:
+def _classify_steps(recipe: Recipe) -> _StepClassification:
     """Classify recipe steps by role using igraph's subcomponent analysis.
 
     Builds an igraph.Graph from the recipe, projects a success-path-only subgraph,
@@ -122,7 +122,7 @@ def _classify_steps(recipe: Recipe) -> StepClassification:
         recipe: The loaded Recipe dataclass.
 
     Returns:
-        ``StepClassification`` with classified step sets.
+        ``_StepClassification`` with classified step sets.
     """
     g = build_recipe_graph(recipe)
 
@@ -231,7 +231,7 @@ def _classify_steps(recipe: Recipe) -> StepClassification:
 
     hidden = frozenset(hidden_set)
 
-    return StepClassification(
+    return _StepClassification(
         main_chain=main_chain,
         side_legs=side_legs,
         routing_blocks=routing_blocks,
@@ -432,7 +432,7 @@ def _render_for_each_chain(
     inner_steps: list[_LayoutStep],
     lines: list[str],
     label: str = "FOR EACH:",
-    classification: StepClassification | None = None,
+    classification: _StepClassification | None = None,
 ) -> None:
     """Render FOR EACH inner steps as a horizontal chain with side-leg failure branches.
 

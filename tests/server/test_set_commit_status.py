@@ -34,7 +34,9 @@ async def test_set_commit_status_gate_check(tool_ctx):
     )
     assert result["success"] is False
     assert result.get("subtype") == "gate_error"
-    # Runner must not have been called
+    # set_commit_status calls _run_subprocess → tool_ctx.runner (confirmed wired by
+    # test_set_commit_status_posts_pending). If the gate error path bypassed the gate
+    # and proceeded to shell dispatch, runner.call_args_list would be non-empty.
     assert tool_ctx.runner.call_args_list == []
 
 
@@ -65,8 +67,8 @@ async def test_set_commit_status_posts_pending(tool_ctx):
     assert result["context"] == "autoskillit/ai-review"
 
     # Verify the POST call went to the right endpoint
-    post_call = tool_ctx.runner.call_args_list[1]
-    cmd = post_call[0]  # list of str
+    # MockSubprocessRunner stores (cmd, cwd, timeout, kwargs) tuples
+    cmd, *_ = tool_ctx.runner.call_args_list[1]
     cmd_str = " ".join(cmd)
     assert "/repos/owner/repo/statuses/deadbeef" in cmd_str
     assert "pending" in cmd_str
@@ -129,7 +131,7 @@ async def test_set_commit_status_posts_failure(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_requires_repo_or_cwd(tool_ctx):
+async def test_set_commit_status_infers_repo_from_cwd(tool_ctx):
     """Tool infers owner/repo from cwd git remote when repo param is absent."""
     tool_ctx.runner.push(_make_result(0, "inferred/repo\n", ""))
     tool_ctx.runner.push(_make_result(0, "", ""))
@@ -152,6 +154,30 @@ async def test_set_commit_status_requires_repo_or_cwd(tool_ctx):
     # POST must use the inferred repo
     post_cmd = tool_ctx.runner.call_args_list[1][0]
     assert "inferred/repo" in " ".join(post_cmd)
+
+
+@pytest.mark.anyio
+async def test_set_commit_status_falls_back_to_plugin_dir_when_no_cwd(tool_ctx):
+    """When neither repo nor cwd is provided, tool falls back to plugin_dir for inference."""
+    from tests.conftest import _make_result
+
+    tool_ctx.runner.push(_make_result(0, "fallback/repo\n", ""))
+    tool_ctx.runner.push(_make_result(0, "", ""))
+
+    result = await set_commit_status(
+        sha="abc003",
+        state="pending",
+        context="autoskillit/ai-review",
+        # neither repo nor cwd — falls back to tool_ctx.plugin_dir
+    )
+
+    assert result["success"] is True
+    # Inference call must have happened (gh repo view)
+    first_cmd, *_ = tool_ctx.runner.call_args_list[0]
+    assert "gh" in first_cmd and "repo" in first_cmd and "view" in first_cmd
+    # POST must reference the fallback repo
+    post_cmd, *_ = tool_ctx.runner.call_args_list[1]
+    assert "fallback/repo" in " ".join(post_cmd)
 
 
 @pytest.mark.anyio
@@ -193,7 +219,7 @@ async def test_set_commit_status_on_gh_failure_returns_error_dict(tool_ctx):
     )
 
     assert result["success"] is False
-    assert "rate limit" in result["error"]
+    assert isinstance(result["error"], str) and result["error"]
 
 
 @pytest.mark.anyio

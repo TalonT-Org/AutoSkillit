@@ -7,6 +7,7 @@ derive from this registry.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from autoskillit.core import pkg_root
 
@@ -16,7 +17,7 @@ class HookDef:
     """A single hook group: event type, matcher pattern, and ordered script list."""
 
     matcher: str
-    event_type: str = "PreToolUse"
+    event_type: Literal["PreToolUse", "PostToolUse"] = "PreToolUse"
     scripts: list[str] = field(default_factory=list)
 
 

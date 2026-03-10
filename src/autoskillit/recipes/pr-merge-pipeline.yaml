@@ -520,12 +520,14 @@ steps:
       step_name: "diagnose_ci_pr"
     capture:
       diagnosis_path: "${{ result.diagnosis_path }}"
-    on_success: cleanup_failure
+    on_result:
+      - route: cleanup_failure
     on_failure: cleanup_failure
     note: >
       Runs when ci_watch_pr reports CI failure on the integration branch.
       Fetches logs and writes a diagnosis to temp/diagnose-ci/ for human inspection.
-      Always routes to cleanup_failure — no automated remediation for integration CI.
+      diagnosis_path is captured for observability. Always routes to cleanup_failure
+      — no automated remediation for integration CI.
 
   confirm_cleanup:
     action: confirm

@@ -57,7 +57,7 @@ class TestImplementationPipelineIssueUrl:
     def test_create_branch_uses_slug_fallback(self):
         """create_branch shell uses ${SLUG:-$RUN} pattern."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
-        cmd = data["steps"]["create_branch"]["with"]["cmd"]
+        cmd = data["steps"]["compute_branch"]["with"]["cmd"]
         assert "SLUG" in cmd
         assert "${SLUG:-" in cmd
 
@@ -144,7 +144,7 @@ class TestInvestigateFirstIssueUrl:
     def test_create_branch_uses_slug_fallback(self):
         """create_branch shell uses ${SLUG:-$RUN} pattern."""
         data = yaml.safe_load(_recipe_path("remediation").read_text())
-        cmd = data["steps"]["create_branch"]["with"]["cmd"]
+        cmd = data["steps"]["compute_branch"]["with"]["cmd"]
         assert "SLUG" in cmd
         assert "${SLUG:-" in cmd
 
@@ -230,7 +230,7 @@ class TestAuditAndFixIssueUrl:
     def test_create_branch_uses_slug_fallback(self):
         """create_branch shell uses ${SLUG:-$RUN} pattern."""
         data = yaml.safe_load(_recipe_path("audit-and-fix").read_text())
-        cmd = data["steps"]["create_branch"]["with"]["cmd"]
+        cmd = data["steps"]["compute_branch"]["with"]["cmd"]
         assert "SLUG" in cmd
         assert "${SLUG:-" in cmd
 
@@ -302,7 +302,7 @@ class TestImplementationGroupsIssueTitle:
 
     def test_create_branch_uses_slug_fallback(self):
         data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
-        cmd = data["steps"]["create_branch"]["with"]["cmd"]
+        cmd = data["steps"]["compute_branch"]["with"]["cmd"]
         assert "SLUG" in cmd
         assert "${SLUG:-" in cmd
 
@@ -346,8 +346,8 @@ class TestClaimReleaseGates:
             step = data["steps"]["claim_issue"]
             routes = step.get("on_result", [])
             true_routes = [r["route"] for r in routes if r.get("when", "").endswith("== true")]
-            assert "create_branch" in true_routes, (
-                f"{name}: claim_issue should route to create_branch when claimed==true"
+            assert "compute_branch" in true_routes, (
+                f"{name}: claim_issue should route to compute_branch when claimed==true"
             )
 
     def test_release_issue_steps_present(self):

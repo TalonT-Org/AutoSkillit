@@ -5,7 +5,7 @@ description: >
   claim_issue → compute_branch → create_branch → implement → push → open_pr_step →
   release_issue_success. Reduces redundant setup from O(n) to O(1).
   TODO #237: Full loop state accumulation pending write_telemetry_files tool landing.
-summary: clone > capture_base_sha > set_merge_target > [per issue: get_issue_title > claim_issue > compute_branch > create_branch > implement > push_merge_target > open_pr_step > release_issue_success] > delete_clone
+summary: "clone > capture_base_sha > set_merge_target > [per issue: get_issue_title > claim_issue > compute_branch > create_branch > implement > push_merge_target > open_pr_step > release_issue_success] > delete_clone"
 autoskillit_version: "0.3.0"
 
 ingredients:
@@ -32,6 +32,18 @@ ingredients:
   audit:
     description: Run /autoskillit:audit-impl after all issues are implemented (true/false)
     default: "false"
+  current_issue_url:
+    description: >
+      Set per-iteration by the orchestrator from the issues_file manifest.
+      The orchestrator overwrites this before each loop iteration.
+      TODO #237: Replace with loop mechanism once write_telemetry_files lands.
+    default: ""
+  current_issue_task:
+    description: >
+      Set per-iteration by the orchestrator from the issues_file manifest.
+      The orchestrator overwrites this before each loop iteration.
+      TODO #237: Replace with loop mechanism once write_telemetry_files lands.
+    default: ""
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -78,13 +90,12 @@ steps:
       cmd: "git -C ${{ context.work_dir }} rev-parse ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "capture_base_sha"
-    capture:
-      base_sha: "${{ result.stdout | trim }}"
     on_success: set_merge_target
     on_failure: escalate_stop
     note: >
-      Captures the SHA of base_branch once before any per-issue work begins.
-      Shared across all issues — no need to re-capture per issue.
+      Verifies base_branch exists in the clone. The SHA output is not captured
+      in this skeleton — it will be captured and used by audit_impl once the
+      full implement cycle is added after TODO #237 lands.
 
   set_merge_target:
     tool: run_cmd
@@ -103,36 +114,36 @@ steps:
   get_issue_title:
     tool: get_issue_title
     with:
-      issue_url: "${{ context.current_issue_url }}"
+      issue_url: "${{ inputs.current_issue_url }}"
     capture:
       issue_number: "${{ result.number }}"
-      issue_title: "${{ result.title }}"
       issue_slug: "${{ result.slug }}"
     on_success: claim_issue
-    on_failure: next_or_done_issue
+    on_failure: cleanup_failure
     optional: true
-    skip_when_false: "context.current_issue_url"
+    skip_when_false: "inputs.current_issue_url"
     note: >
-      Fetches title and slug for the current issue in the loop.
-      context.current_issue_url is set by the agent from the issues_file manifest
-      before routing here. On failure, skip to next_or_done_issue.
+      Fetches number and slug for the current issue in the loop.
+      inputs.current_issue_url is set by the orchestrator from the issues_file
+      manifest before routing here. On failure, route to cleanup_failure to
+      abort the batch — a GitHub API failure here is not recoverable per-issue.
 
   claim_issue:
     tool: claim_issue
     optional: true
-    skip_when_false: "context.current_issue_url"
+    skip_when_false: "inputs.current_issue_url"
     with:
-      issue_url: "${{ context.current_issue_url }}"
+      issue_url: "${{ inputs.current_issue_url }}"
     capture:
       claimed: "${{ result.claimed }}"
     on_result:
       - when: "${{ result.claimed }} == true"
         route: compute_branch
       - route: next_or_done_issue
-    on_failure: next_or_done_issue
+    on_failure: release_issue_failure
     note: >
-      Claims the issue to prevent parallel work. On failure or if already claimed,
-      skip to the next issue via next_or_done_issue.
+      Claims the issue to prevent parallel work. If already claimed, routes to
+      next_or_done_issue via on_result. On failure, release the issue and proceed.
 
   compute_branch:
     tool: run_cmd
@@ -184,17 +195,21 @@ steps:
   implement:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:make-plan ${{ context.current_issue_task }}"
+      skill_command: "/autoskillit:make-plan ${{ inputs.current_issue_task }}"
       cwd: "${{ context.work_dir }}"
       step_name: "implement"
-      issue_url: "${{ context.current_issue_url }}"
+      issue_url: "${{ inputs.current_issue_url }}"
     capture:
       plan_path: "${{ result.plan_path }}"
+    capture_list:
+      plan_parts: "${{ result.plan_parts }}"
     on_success: open_pr_step
     on_failure: release_issue_failure
     note: >
-      Runs make-plan for this issue's task. context.current_issue_task is the
+      Runs make-plan for this issue's task. inputs.current_issue_task is the
       'task' field from the issues_file entry for the current issue.
+      After make-plan completes, glob plan_dir for *_part_*.md or single plan
+      file — plan_parts contains the full ordered list of part files.
       TODO #237: Full implement-worktree + test + merge cycle will be added
       after write_telemetry_files lands to support per-iteration state accumulation.
       This step currently produces the plan only.
@@ -215,20 +230,20 @@ steps:
   release_issue_success:
     tool: release_issue
     optional: true
-    skip_when_false: "context.current_issue_url"
+    skip_when_false: "inputs.current_issue_url"
     with:
-      issue_url: "${{ context.current_issue_url }}"
+      issue_url: "${{ inputs.current_issue_url }}"
     on_success: next_or_done_issue
     on_failure: next_or_done_issue
 
   release_issue_failure:
     tool: release_issue
     optional: true
-    skip_when_false: "context.current_issue_url"
+    skip_when_false: "inputs.current_issue_url"
     with:
-      issue_url: "${{ context.current_issue_url }}"
+      issue_url: "${{ inputs.current_issue_url }}"
     on_success: next_or_done_issue
-    on_failure: next_or_done_issue
+    on_failure: cleanup_failure
 
   next_or_done_issue:
     action: route

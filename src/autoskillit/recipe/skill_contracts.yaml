@@ -1,5 +1,23 @@
 version: 0.1.0
 skills:
+  diagnose-ci:
+    inputs:
+    - name: branch
+      type: string
+      required: true
+    - name: run_id
+      type: string
+      required: false
+    - name: ci_failed_jobs
+      type: string
+      required: false
+    outputs:
+    - name: diagnosis_path
+      type: file_path
+    - name: failure_type
+      type: string
+    - name: is_fixable
+      type: string
   resolve-failures:
     inputs:
     - name: worktree_path

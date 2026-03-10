@@ -181,10 +181,10 @@ async def classify_fix(
 
 @mcp.tool(tags={"automation", "kitchen"})
 async def create_unique_branch(
-    cwd: str,
     slug: str = "",
     issue_number: int | None = None,
     remote: str = "origin",
+    cwd: str = ".",
     base_branch_name: str | None = None,
     step_name: str = "",
     ctx: Context = CurrentContext(),

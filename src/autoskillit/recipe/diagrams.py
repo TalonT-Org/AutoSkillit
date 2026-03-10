@@ -194,9 +194,10 @@ def _classify_steps(recipe: Any) -> StepClassification:
     """Classify recipe steps by role using igraph's subcomponent analysis.
 
     Builds an igraph.Graph from the recipe, projects a success-path-only subgraph,
-    then uses igraph.subcomponent(OUT) ∩ igraph.subcomponent(IN) to extract tight
-    cycle membership — replacing the custom _tight_cycle_bfs BFS. Both start and
-    end vertices of the back-edge are always included.
+    then uses igraph.subcomponent(start, OUT) to find all success-reachable steps,
+    plus force-includes the back-edge source. No subcomponent(IN) intersection is
+    applied — see inline comment at the assignment site for the rationale. Both
+    start and end vertices of the back-edge are always included.
 
     The semantic gate (plan-iteration note) is unchanged: only back-edges whose
     source step carries a plan-iteration keyword in its note qualify.
@@ -259,9 +260,13 @@ def _classify_steps(recipe: Any) -> StepClassification:
                 continue
 
             # igraph: cycle members = all vertices reachable from start via success edges,
-            # plus force-include end (which may route back via on_result, not on_success).
-            # This mirrors _tight_cycle_bfs semantics: BFS from start on success-only graph,
-            # don't expand past end, then force-add end.
+            # plus force-include end (which routes back via on_result in existing recipes).
+            # Deliberately no subcomponent(end, IN) intersection: when the back-edge uses
+            # on_result, subcomponent(end, IN) in g_success = {end} only (no step has
+            # on_success: end), so intersecting collapses member_ids to empty. The formula
+            # member_ids = reachable_from_start | {end_id} correctly mirrors _tight_cycle_bfs
+            # (BFS from start via success, force-add end). Single-on_success grammar also
+            # guarantees no branching in g_success, so dead-end branches cannot exist.
             start_id = name_to_id[target]
             end_id = name_to_id[name]
 

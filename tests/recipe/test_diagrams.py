@@ -1331,6 +1331,67 @@ def test_classify_steps_excludes_side_legs() -> None:
     assert "fix" not in classification.main_chain  # on_failure only
 
 
+def test_classify_steps_on_result_back_edge_includes_full_chain(tmp_path: Path) -> None:
+    """T-NEW-7: When the path to the back-edge source uses on_result (not on_success),
+    all success-reachable steps from start must appear in main_chain.
+
+    Minimal recipe:
+        step_a --on_success--> step_b --on_result--> step_c --on_result--> step_a
+
+    g_success contains: step_a → step_b (only — step_b has no on_success)
+    subcomponent(step_a, OUT) in g_success = {step_a, step_b}
+    subcomponent(step_c, IN) in g_success = {step_c}  (no step has on_success: step_c)
+    Intersection = {} — after force-add: main_chain = {step_c} only — WRONG.
+
+    Current code uses subcomponent(OUT) + force-add (no intersection) → CORRECT:
+    main_chain = {step_a, step_b, step_c}.
+
+    This test fails if the intersection is ever erroneously applied.
+    """
+    from autoskillit.recipe.diagrams import _classify_steps  # noqa: PLC0415
+    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+    yaml_path = tmp_path / "on-result-loop.yaml"
+    yaml_path.write_text(
+        "name: on-result-loop\n"
+        "steps:\n"
+        "  step_a:\n"
+        "    tool: run_skill\n"
+        "    with:\n"
+        "      skill_command: /foo\n"
+        "      cwd: .\n"
+        "    on_success: step_b\n"
+        "    on_failure: stop1\n"
+        "  step_b:\n"
+        "    tool: run_skill\n"
+        "    with:\n"
+        "      skill_command: /bar\n"
+        "      cwd: .\n"
+        "    on_result:\n"
+        "      - route: step_c\n"
+        "    on_failure: stop1\n"
+        "  step_c:\n"
+        "    note: 'for each plan part'\n"
+        "    action: route\n"
+        "    on_result:\n"
+        '      - when: "result.next == more"\n'
+        "        route: step_a\n"
+        "      - route: stop1\n"
+        "  stop1:\n"
+        "    action: stop\n"
+        "    message: Done.\n"
+    )
+    recipe = load_recipe(yaml_path)
+    classification = _classify_steps(recipe)
+
+    # All steps on the success path from step_a must be in main_chain.
+    # If the intersection were applied: subcomponent(step_c, IN) = {step_c} only,
+    # intersection = {}, force-add → main_chain = {step_c} — these assertions would fail.
+    assert "step_a" in classification.main_chain
+    assert "step_b" in classification.main_chain
+    assert "step_c" in classification.main_chain  # force-included as back-edge source
+
+
 def test_for_each_chain_excludes_side_leg_steps(tmp_path: Path) -> None:
     """T-NEW-2: Side-leg steps must not appear as inline ─── chain tokens.
 

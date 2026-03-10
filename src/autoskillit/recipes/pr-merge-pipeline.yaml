@@ -1,7 +1,7 @@
 name: pr-merge-pipeline
 description: Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
 summary: "clone > setup_remote > analyze_prs > create_integration_branch > [loop per PR: merge_pr or (plan > verify > implement > test > push_worktree_branch > create_conflict_pr > wait_for_conflict_ci > merge_conflict_pr)] > push_integration_branch > collect_artifacts > check_impl_plans > (audit_impl?) > create_review_pr > cleanup"
-autoskillit_version: "0.2.0"
+autoskillit_version: "0.3.0"
 
 ingredients:
   source_dir:

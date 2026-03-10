@@ -215,26 +215,24 @@ class TestCIWorkflow:
             s
             for s in steps
             if any(kw in str(s.get("run", "")) for kw in ("base_ref", "github.ref"))
-            and "integration" in str(s.get("run", ""))
+            and "stable" in str(s.get("run", ""))
         ]
         assert matrix_steps, (
             "preflight must have a step that branches on github.base_ref (for PRs) "
             "or github.ref (for pushes) to produce the os-matrix output"
         )
 
-    def test_ci_integration_target_produces_ubuntu_only_matrix(self) -> None:
-        """The integration branch must produce a single-element ubuntu matrix."""
+    def test_ci_stable_target_produces_dual_os_matrix(self) -> None:
+        """The stable branch must produce a dual-element ubuntu+macos matrix."""
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
         steps = workflow["jobs"]["preflight"]["steps"]
         for step in steps:
             run = step.get("run", "")
-            if "integration" in run and ("base_ref" in run or "github.ref" in run):
-                assert '["ubuntu-latest"]' in run, (
-                    "When branch targets integration, matrix must contain ubuntu-latest only"
-                )
+            if "stable" in run and ("base_ref" in run or "github.ref" in run):
+                assert "macos" in run, "When branch targets stable, matrix must include macOS"
                 break
         else:
-            pytest.fail("No step computes integration-specific matrix in preflight")
+            pytest.fail("No step computes stable-specific matrix in preflight")
 
     def test_ci_push_trigger_includes_stable(self) -> None:
         """CI must trigger on push to stable branch.

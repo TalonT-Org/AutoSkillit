@@ -1,9 +1,7 @@
 """Tests for the unknown-sub-recipe semantic rule."""
 
-import pytest
-
 from autoskillit.core import Severity
-from autoskillit.recipe._analysis import ValidationContext, make_validation_context
+from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
 

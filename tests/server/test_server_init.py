@@ -179,6 +179,7 @@ class TestToolRegistration:
             "write_telemetry_files",
             "get_pr_reviews",
             "bulk_close_issues",
+            "set_commit_status",
         }
         assert expected == tool_names
 

@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 36 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 24 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 24 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 37 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 25 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 24 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -114,7 +114,9 @@ src/autoskillit/
 │   ├── gate.py              #   DefaultGateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
 │   ├── mcp_response.py      #   McpResponseEntry, DefaultMcpResponseLog — per-tool response size tracking
 │   ├── timings.py           #   TimingEntry, DefaultTimingLog — per-step wall-clock accumulation
-│   └── tokens.py            #   TokenEntry, TokenLog, _token_log singleton
+│   ├── tokens.py            #   TokenEntry, TokenLog, _token_log singleton
+│   ├── pr_gates.py          #   PR eligibility gates: is_ci_passing, is_review_passing, partition_prs
+│   └── fidelity.py          #   Fidelity helpers: extract_linked_issues, is_valid_fidelity_finding
 ├── execution/               # L1 execution sub-package
 │   ├── __init__.py          #   Re-exports public surface
 │   ├── commands.py          #   ClaudeInteractiveCmd/ClaudeHeadlessCmd builders

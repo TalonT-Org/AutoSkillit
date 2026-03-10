@@ -54,6 +54,7 @@ def test_gated_tools_contains_expected_names():
         "get_pr_reviews",
         "bulk_close_issues",
         "check_pr_mergeable",
+        "set_commit_status",
     }
     assert GATED_TOOLS == expected
 

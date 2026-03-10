@@ -1,9 +1,10 @@
-"""MCP tool handlers: wait_for_ci (gated), get_ci_status (ungated)."""
+"""MCP tool handlers: wait_for_ci (gated), get_ci_status (ungated), set_commit_status (gated)."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+from typing import Literal
 
 import structlog
 from fastmcp import Context
@@ -11,7 +12,12 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, track_response_size
+from autoskillit.server.helpers import (
+    _notify,
+    _require_enabled,
+    _run_subprocess,
+    track_response_size,
+)
 
 logger = get_logger(__name__)
 
@@ -109,6 +115,85 @@ async def wait_for_ci(
     )
 
     return json.dumps(result)
+
+
+@mcp.tool(tags={"kitchen", "automation"})
+@track_response_size("set_commit_status")
+async def set_commit_status(
+    sha: str,
+    state: Literal["pending", "success", "failure", "error"],
+    context: str,
+    description: str = "",
+    target_url: str = "",
+    repo: str = "",
+    cwd: str = "",
+) -> dict[str, object]:
+    """Post a GitHub Commit Status to a commit SHA.
+
+    Use to implement review-first gating: post `pending` when review starts,
+    then `success` or `failure` when it completes. Combine with a required
+    status check in branch protection to block merge until the review resolves.
+
+    Args:
+        sha: Full commit SHA to attach the status to.
+        state: One of: pending, success, failure, error.
+        context: Status context label (e.g. "autoskillit/ai-review").
+        description: Short human-readable status description (max 140 chars).
+        target_url: Optional URL linking to review details.
+        repo: owner/repo format. Inferred from `cwd` git remote if absent.
+        cwd: Working directory for repo inference. Defaults to plugin_dir.
+    """
+    if (gate := _require_enabled()) is not None:
+        return json.loads(gate)  # type: ignore[return-value]
+
+    if not sha:
+        return {"success": False, "error": "sha must not be empty"}
+    if not context:
+        return {"success": False, "error": "context must not be empty"}
+    if len(description) > 140:
+        return {
+            "success": False,
+            "error": f"description exceeds 140 chars ({len(description)} chars)",
+        }
+
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+    effective_cwd = cwd or tool_ctx.plugin_dir or "."
+
+    # Resolve owner/repo if not provided
+    owner_repo = repo
+    if not owner_repo:
+        rc, stdout, stderr = await _run_subprocess(
+            ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
+            cwd=effective_cwd,
+            timeout=30.0,
+        )
+        if rc != 0:
+            return {"success": False, "error": f"Could not infer owner/repo: {stderr}"}
+        owner_repo = stdout.strip()
+
+    cmd = [
+        "gh",
+        "api",
+        "--method",
+        "POST",
+        f"/repos/{owner_repo}/statuses/{sha}",
+        "-f",
+        f"state={state}",
+        "-f",
+        f"context={context}",
+        "-f",
+        f"description={description}",
+    ]
+    if target_url:
+        cmd += ["-f", f"target_url={target_url}"]
+
+    rc, _stdout, stderr = await _run_subprocess(cmd, cwd=effective_cwd, timeout=30.0)
+    if rc != 0:
+        return {"success": False, "error": stderr}
+
+    return {"success": True, "sha": sha, "state": state, "context": context}
 
 
 @mcp.tool(tags={"automation"})

@@ -75,7 +75,7 @@ def _resolve_quota_log_dir() -> Path | None:
         return None
 
 
-def _write_quota_event(event: dict, log_dir: "Path | None") -> None:
+def _write_quota_log_event(event: dict, log_dir: Path | None) -> None:
     """Append a quota guard event to quota_events.jsonl at the log root.
 
     Silently no-ops on any error — hook observability must never block run_skill.
@@ -119,7 +119,7 @@ def main() -> None:
 
     cache = _read_quota_cache(cache_path_str, cache_max_age)
     if cache is None:
-        _write_quota_event(
+        _write_quota_log_event(
             {
                 "ts": ts,
                 "event": "cache_miss",
@@ -133,7 +133,7 @@ def main() -> None:
     try:
         utilization = float(cache["five_hour"]["utilization"])
     except (KeyError, ValueError, TypeError):
-        _write_quota_event(
+        _write_quota_log_event(
             {
                 "ts": ts,
                 "event": "parse_error",
@@ -157,7 +157,7 @@ def main() -> None:
         else:
             n = 60
 
-        _write_quota_event(
+        _write_quota_log_event(
             {
                 "ts": ts,
                 "event": "blocked",
@@ -184,7 +184,7 @@ def main() -> None:
             )
         )
     else:
-        _write_quota_event(
+        _write_quota_log_event(
             {
                 "ts": ts,
                 "event": "approved",

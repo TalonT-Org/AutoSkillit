@@ -97,15 +97,16 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 
 Save the diff to `temp/review-pr/diff_{pr_number}.txt`.
 
-### Step 2.6: Parse Diff Hunk Ranges
+### Step 2.7: Parse Diff Hunk Ranges
 
 Parse the saved diff to extract valid new-file line ranges per file. These ranges
 define which `line` values are valid for the GitHub Reviews API batch POST.
 
 For each `+++ b/{path}` header in the diff, collect all subsequent `@@ -a,b +c,d @@`
 hunk headers. From each hunk header, `c` is the starting new-file line and `d` is
-the hunk's new-file line count (if absent, count is 1). The valid range for that
-hunk is `[c, c + d - 1]`.
+the hunk's new-file line count (if absent, count is 1). When `d=0` (pure deletion
+hunk, e.g. `+0,0`), skip the hunk — it has no new-file lines to anchor to.
+Otherwise the valid range for that hunk is `[c, c + d - 1]`.
 
 Build `VALID_LINE_RANGES` — a map of file path → list of `(start, end)` tuples.
 Store in memory for use in Steps 4 and 6.
@@ -271,7 +272,7 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
 
 1. Collect all subagent JSON responses
 2. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
-3. Partition findings against `VALID_LINE_RANGES` (built in Step 2.6):
+3. Partition findings against `VALID_LINE_RANGES` (built in Step 2.7):
    - `FILTERED_FINDINGS`: findings whose `(file, line)` falls within any hunk range for
      that file. These are in-hunk and safe to post as inline comments in Step 6.
    - `UNPOSTABLE_FINDINGS`: findings whose `line` is not in any hunk range for their file.
@@ -326,7 +327,7 @@ not be used for the `comments` array:
 
 ```bash
 # Build comments JSON array from FILTERED_FINDINGS only
-COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS_JSON" '
+COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" '
   $findings | map({
     path: .file,
     line: .line,

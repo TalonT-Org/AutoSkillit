@@ -1449,3 +1449,37 @@ def test_no_bundled_recipe_auto_deletes_on_success() -> None:
                         f"{recipe_name}: {name} (keep=false) is reachable via on_success "
                         f"from unguarded (non-confirm) steps: {violations}"
                     )
+
+
+# ---------------------------------------------------------------------------
+# TestBaseBranchDefaults
+# ---------------------------------------------------------------------------
+
+
+class TestBaseBranchDefaults:
+    @pytest.mark.parametrize(
+        "recipe_name",
+        [
+            "implementation",
+            "audit-and-fix",
+            "remediation",
+            "bugfix-loop",
+            "implementation-groups",
+            "batch-implementation",
+        ],
+    )
+    def test_recipe_base_branch_defaults_to_integration(self, recipe_name: str) -> None:
+        """All non-exempt bundled recipes must default base_branch to 'integration'."""
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        assert recipe.ingredients["base_branch"].default == "integration", (
+            f"{recipe_name}.yaml: base_branch default must be 'integration', not 'main' — "
+            "update to reflect the new 3-tier branching model"
+        )
+
+    def test_smoke_test_base_branch_remains_main(self) -> None:
+        """smoke-test.yaml must keep base_branch default 'main' — isolated scratch repo context."""
+        recipe = load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
+        assert recipe.ingredients["base_branch"].default == "main", (
+            "smoke-test.yaml creates a fresh git repo initialized with 'main' — "
+            "its base_branch default must stay 'main'"
+        )

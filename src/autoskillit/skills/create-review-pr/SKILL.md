@@ -22,7 +22,7 @@ PR, and output `pr_url=<url>`.
 /autoskillit:create-review-pr {integration_branch} {base_branch} {pr_order_file} [audit_verdict]
 ```
 
-- `integration_branch` — integration branch name (e.g. `integration/pr-merge-20250228-143052`)
+- `integration_branch` — integration branch name (e.g. `pr-batch/pr-merge-20250228-143052`)
 - `base_branch` — PR target branch (e.g. `main`)
 - `pr_order_file` — absolute path to JSON produced by `analyze-prs`
 - `audit_verdict` (optional) — `GO`, `NO GO`, or empty string when audit was skipped

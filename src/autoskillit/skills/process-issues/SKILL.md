@@ -197,7 +197,7 @@ Processing X issues:
      and fetches full content internally)
    - `issue_url`: the constructed issue URL
    - `run_name`: `"feature"` (implementation) or `"fix"` (remediation)
-   - `base_branch`: `"main"` (or read `git rev-parse --abbrev-ref HEAD`)
+   - `base_branch`: `"integration"` (or read `git rev-parse --abbrev-ref HEAD`)
    - `open_pr`: `"true"`
    - `audit`: `"true"`
    - `review_approach`: `"false"`

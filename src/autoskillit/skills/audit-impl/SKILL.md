@@ -30,7 +30,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
   stable after merge_worktree destroys named refs); a branch name is also accepted for
   standalone invocations. A live worktree path is accepted for legacy use (Step 0 extracts
   the branch name automatically).
-- `base_branch` — branch to diff against (default: `main`)
+- `base_branch` — branch to diff against (default: `integration`)
 
 ## Critical Constraints
 

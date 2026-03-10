@@ -31,7 +31,11 @@ from autoskillit.core import (
     claude_code_project_dir,
     get_logger,
 )
-from autoskillit.execution.commands import build_headless_cmd, build_subrecipe_cmd
+from autoskillit.execution.commands import (
+    build_headless_cmd,
+    build_subrecipe_cmd,
+    build_subrecipe_prompt,
+)
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
     ClaudeSessionResult,
@@ -550,8 +554,6 @@ async def run_subrecipe_session(
     Builds a prompt with pre-supplied ingredients and runs a headless Claude session
     with AUTOSKILLIT_KITCHEN_OPEN=1 so the gate is pre-enabled at import time.
     """
-    from autoskillit.cli._prompts import build_subrecipe_prompt
-
     cfg = ctx.config.run_skill
     prompt = build_subrecipe_prompt(recipe_yaml, ingredients_json)
     if cfg.completion_marker:

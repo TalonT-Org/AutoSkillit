@@ -146,6 +146,7 @@ class TestToolRegistration:
             "run_cmd",
             "run_python",
             "run_skill",
+            "run_recipe",
             "test_check",
             "reset_test_dir",
             "classify_fix",

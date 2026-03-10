@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 
 # MK1
 def test_marketplace_module_exists():
@@ -49,8 +51,6 @@ def test_install_not_defined_in_app_module():
 # MK-DEP-1
 def test_install_not_registered_as_cli_command():
     """autoskillit install is not a registered CLI command."""
-    import pytest
-
     from autoskillit import cli
 
     with pytest.raises(SystemExit) as exc_info:
@@ -62,8 +62,6 @@ def test_install_not_registered_as_cli_command():
 # MK-DEP-2
 def test_upgrade_not_registered_as_cli_command():
     """autoskillit upgrade is not a registered CLI command."""
-    import pytest
-
     from autoskillit import cli
 
     with pytest.raises(SystemExit) as exc_info:

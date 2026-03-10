@@ -13,12 +13,13 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import _atomic_write, get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled
+from autoskillit.server.helpers import _notify, _require_enabled, track_response_size
 
 logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"automation"})
+@track_response_size("kitchen_status")
 async def kitchen_status() -> str:
     """Return version health and configuration status for the running server.
 
@@ -57,6 +58,7 @@ async def kitchen_status() -> str:
 
 
 @mcp.tool(tags={"automation"})
+@track_response_size("get_pipeline_report")
 async def get_pipeline_report(clear: bool = False) -> str:
     """Return accumulated run_skill failures since last clear.
 
@@ -87,6 +89,7 @@ async def get_pipeline_report(clear: bool = False) -> str:
 
 
 @mcp.tool(tags={"automation"})
+@track_response_size("get_token_summary")
 async def get_token_summary(clear: bool = False) -> str:
     """Return accumulated run_skill token usage grouped by step name.
 
@@ -106,14 +109,28 @@ async def get_token_summary(clear: bool = False) -> str:
     """
     from autoskillit.server import _get_ctx
 
-    steps = _get_ctx().token_log.get_report()
-    total = _get_ctx().token_log.compute_total()
+    ctx = _get_ctx()
+    steps = ctx.token_log.get_report()
+    total = ctx.token_log.compute_total()
+    mcp_report = ctx.response_log.get_report()
+    mcp_total = ctx.response_log.compute_total()
     if clear:
-        _get_ctx().token_log.clear()
-    return json.dumps({"steps": steps, "total": total})
+        ctx.token_log.clear()
+        ctx.response_log.clear()
+    return json.dumps(
+        {
+            "steps": steps,
+            "total": total,
+            "mcp_responses": {
+                "steps": mcp_report,
+                "total": mcp_total,
+            },
+        }
+    )
 
 
 @mcp.tool(tags={"automation"})
+@track_response_size("get_timing_summary")
 async def get_timing_summary(clear: bool = False) -> str:
     """Return accumulated wall-clock timing grouped by step name.
 
@@ -161,6 +178,7 @@ def _format_timing_summary(steps: list) -> str:
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("write_telemetry_files")
 async def write_telemetry_files(
     output_dir: str,
     ctx: Context = CurrentContext(),
@@ -204,15 +222,24 @@ async def write_telemetry_files(
     timing_path = out / "timing_summary.md"
     _atomic_write(timing_path, _format_timing_summary(tool_ctx.timing_log.get_report()))
 
+    mcp_path = out / "mcp_response_metrics.json"
+    mcp_data = {
+        "steps": tool_ctx.response_log.get_report(),
+        "total": tool_ctx.response_log.compute_total(),
+    }
+    _atomic_write(mcp_path, json.dumps(mcp_data, indent=2))
+
     return json.dumps(
         {
             "token_summary_path": str(token_path),
             "timing_summary_path": str(timing_path),
+            "mcp_response_metrics_path": str(mcp_path),
         }
     )
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("read_db")
 async def read_db(
     db_path: str,
     query: str,

@@ -12,12 +12,13 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled
+from autoskillit.server.helpers import _notify, _require_enabled, track_response_size
 
 logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("clone_repo")
 async def clone_repo(
     source_dir: str,
     run_name: str,
@@ -104,6 +105,7 @@ async def clone_repo(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("remove_clone")
 async def remove_clone(
     clone_path: str,
     keep: str = "false",
@@ -153,6 +155,7 @@ async def remove_clone(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("push_to_remote")
 async def push_to_remote(
     clone_path: str,
     branch: str,

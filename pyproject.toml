@@ -32,6 +32,12 @@ dev = [
     "packaging>=25.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/TalonT-Org/AutoSkillit"
+Repository = "https://github.com/TalonT-Org/AutoSkillit"
+Documentation = "https://github.com/TalonT-Org/AutoSkillit/tree/stable/docs"
+"Bug Tracker" = "https://github.com/TalonT-Org/AutoSkillit/issues"
+
 [project.scripts]
 autoskillit = "autoskillit.cli:main"
 

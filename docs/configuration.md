@@ -1,5 +1,18 @@
 # Configuration Reference
 
+## Quick Start
+
+Most projects only need one setting — the test command:
+
+    cd your-project
+    autoskillit init
+
+This creates `.autoskillit/config.yaml` with the test command you provide.
+Everything else has sensible defaults. See [Getting Started](getting-started.md)
+for a full tutorial.
+
+## Layered Resolution
+
 AutoSkillit uses layered YAML configuration. Resolution order (last wins):
 
 1. Package defaults (`autoskillit/config/defaults.yaml`)
@@ -18,7 +31,7 @@ AUTOSKILLIT_QUOTA_GUARD__ENABLED=false        # disables quota guard
 
 This is useful for CI pipelines or per-session overrides without touching config files.
 
-Partial configs are fine. Unset fields keep their defaults. View the resolved config with `autoskillit config show`.
+Partial configs are fine. Unset fields keep their defaults. View the resolved config with [`autoskillit config show`](cli-reference.md#autoskillit-config-show).
 
 ## Test Command
 
@@ -96,6 +109,47 @@ github:
 ```
 
 Token goes in `.autoskillit/.secrets.yaml` (never commit).
+
+## Branching
+
+```yaml
+branching:
+  default_base_branch: integration   # default base branch for recipes
+```
+
+Most projects should set this to `main`:
+
+```yaml
+branching:
+  default_base_branch: main
+```
+
+## Session Diagnostics (Linux)
+
+```yaml
+linux_tracing:
+  enabled: true           # default: true
+  proc_interval: 5.0      # seconds between snapshots
+  log_dir: ""             # empty = platform default
+  tmpfs_path: "/dev/shm"  # RAM-backed path for crash resilience
+```
+
+See [Session Diagnostics](developer.md#session-diagnostics-logging) for details on log output.
+
+## Headless Sessions
+
+```yaml
+run_skill:
+  timeout: 7200            # 2-hour session timeout (seconds)
+  stale_threshold: 1200    # 20 minutes of no output before declaring stale
+```
+
+## MCP Response Tracking
+
+```yaml
+mcp_response:
+  alert_threshold_tokens: 2000   # warn when tool responses exceed this token estimate
+```
 
 ## Safety and Gates
 

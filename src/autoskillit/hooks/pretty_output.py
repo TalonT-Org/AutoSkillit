@@ -223,17 +223,17 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
         lines.append("")
         lines.append(f"total_in: {_fmt_tokens(total.get('input_tokens', 0))}")
         lines.append(f"total_out: {_fmt_tokens(total.get('output_tokens', 0))}")
-        lines.append(
-            f"total_cached: {_fmt_tokens(total.get('cache_read_input_tokens', 0) + total.get('cache_creation_input_tokens', 0))}"
+        cache_tokens = total.get("cache_read_input_tokens", 0) + total.get(
+            "cache_creation_input_tokens", 0
         )
+        lines.append(f"total_cached: {_fmt_tokens(cache_tokens)}")
     mcp = data.get("mcp_responses", {})
     mcp_total = mcp.get("total", {})
     if mcp_total:
         lines.append("")
         lines.append(f"mcp_invocations: {mcp_total.get('total_invocations', 0)}")
-        lines.append(
-            f"mcp_response_tokens: ~{_fmt_tokens(mcp_total.get('total_estimated_response_tokens', 0))}"
-        )
+        est_tokens = mcp_total.get("total_estimated_response_tokens", 0)
+        lines.append(f"mcp_response_tokens: ~{_fmt_tokens(est_tokens)}")
     return "\n".join(lines)
 
 

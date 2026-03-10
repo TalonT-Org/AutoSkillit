@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import io
 import json
-from contextlib import redirect_stdout
+from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -29,24 +29,18 @@ def _run_hook(
     exit_code = 0
     buf = io.StringIO()
 
-    patches = [patch("sys.stdin", io.StringIO(stdin_text))]
-    if cwd is not None:
-        patches.append(patch("autoskillit.hooks.pretty_output.Path.cwd", return_value=cwd))
+    with ExitStack() as stack:
+        stack.enter_context(patch("sys.stdin", io.StringIO(stdin_text)))
+        stack.enter_context(redirect_stdout(buf))
+        if cwd is not None:
+            stack.enter_context(
+                patch("autoskillit.hooks.pretty_output.Path.cwd", return_value=cwd)
+            )
+        try:
+            main()
+        except SystemExit as e:
+            exit_code = e.code if e.code is not None else 0
 
-    with patch.multiple("sys", stdin=io.StringIO(stdin_text)):
-        with redirect_stdout(buf):
-            try:
-                with (
-                    patch("sys.stdin", io.StringIO(stdin_text)),
-                    *(
-                        [patch("autoskillit.hooks.pretty_output.Path.cwd", return_value=cwd)]
-                        if cwd is not None
-                        else []
-                    ),
-                ):
-                    main()
-            except SystemExit as e:
-                exit_code = e.code if e.code is not None else 0
     return buf.getvalue(), exit_code
 
 
@@ -96,7 +90,9 @@ def test_hook_emits_posttooluse_event_name():
     """Hook output JSON must have hookSpecificOutput.hookEventName == 'PostToolUse'."""
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__run_cmd",
-        "tool_response": json.dumps({"success": True, "exit_code": 0, "stdout": "hi", "stderr": ""}),
+        "tool_response": json.dumps(
+            {"success": True, "exit_code": 0, "stdout": "hi", "stderr": ""}
+        ),
     }
     out, _ = _run_hook(event=event)
     assert out.strip(), "Expected non-empty output"
@@ -109,7 +105,9 @@ def test_hook_emits_updated_mcp_tool_output_field():
     """Hook output must have non-empty hookSpecificOutput.updatedMCPToolOutput."""
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__run_cmd",
-        "tool_response": json.dumps({"success": True, "exit_code": 0, "stdout": "hi", "stderr": ""}),
+        "tool_response": json.dumps(
+            {"success": True, "exit_code": 0, "stdout": "hi", "stderr": ""}
+        ),
     }
     out, _ = _run_hook(event=event)
     data = json.loads(out)
@@ -167,7 +165,12 @@ def test_format_run_skill_gate_error():
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__run_skill",
         "tool_response": json.dumps(
-            {"success": False, "subtype": "gate_error", "is_error": True, "result": "Kitchen is closed."}
+            {
+                "success": False,
+                "subtype": "gate_error",
+                "is_error": True,
+                "result": "Kitchen is closed.",
+            }
         ),
     }
     out, _ = _run_hook(event=event)

@@ -193,14 +193,15 @@ src/autoskillit/
 │   ├── _marketplace.py      #   Plugin install/upgrade marketplace operations
 │   ├── _prompts.py          #   Orchestrator prompt builder for recipe execution
 │   └── app.py               #   CLI: serve, init, config show, skills, recipes, workspace, doctor
-├── hooks/                   # Claude Code PreToolUse hook scripts
+├── hooks/                   # Claude Code PreToolUse and PostToolUse hook scripts
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration (auto-discovered by Claude Code)
 │   ├── quota_check.py       #   Quota guard hook — blocks run_skill when threshold exceeded
 │   ├── remove_clone_guard.py #  Remove-clone guard — denies remove_clone calls with keep != "true"
 │   ├── skill_cmd_check.py   #   PreToolUse hook — validates skill_command path argument format
 │   ├── skill_command_guard.py #  PreToolUse hook — blocks run_skill with non-slash skill_command
-│   └── open_kitchen_guard.py #  PreToolUse hook — blocks open_kitchen from headless sessions
+│   ├── open_kitchen_guard.py #  PreToolUse hook — blocks open_kitchen from headless sessions
+│   └── pretty_output.py     #   PostToolUse hook — reformats MCP JSON responses as Markdown-KV
 ├── migrations/              # Data: versioned migration YAML notes
 │   └── __init__.py
 ├── recipes/                 # Bundled recipe YAML definitions

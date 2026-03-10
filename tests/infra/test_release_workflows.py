@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 VERSION_BUMP_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "version-bump.yml"
@@ -17,8 +16,10 @@ RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+
 def _load(path: Path) -> dict:
     return yaml.safe_load(path.read_text())
+
 
 def _uv_version_pins(workflow: dict) -> list[str]:
     """Return all uv-version values declared in setup-uv steps."""
@@ -33,6 +34,7 @@ def _uv_version_pins(workflow: dict) -> list[str]:
 
 # ── version-bump.yml ──────────────────────────────────────────────────────────
 
+
 class TestVersionBumpWorkflow:
     def test_workflow_file_exists(self):
         assert VERSION_BUMP_WORKFLOW.exists(), (
@@ -41,14 +43,16 @@ class TestVersionBumpWorkflow:
 
     def test_triggered_on_pull_request_closed_to_main(self):
         wf = _load(VERSION_BUMP_WORKFLOW)
-        pr_trigger = wf.get("on", {}).get("pull_request", {})
+        # PyYAML parses 'on:' as boolean True (YAML 1.1); use True as key
+        pr_trigger = wf.get(True, {}).get("pull_request", {})
         assert "closed" in pr_trigger.get("types", [])
         assert "main" in pr_trigger.get("branches", [])
 
     def test_not_triggered_on_push(self):
         """Version-bump is PR-event-based, not push-based."""
         wf = _load(VERSION_BUMP_WORKFLOW)
-        assert "push" not in wf.get("on", {}), (
+        # PyYAML parses 'on:' as boolean True (YAML 1.1); use True as key
+        assert "push" not in wf.get(True, {}), (
             "version-bump.yml must not have a push trigger — it is PR-event-based"
         )
 
@@ -84,9 +88,7 @@ class TestVersionBumpWorkflow:
 
     def test_uv_version_consistent_with_tests_yml(self):
         """uv version pin must match the pin used in tests.yml."""
-        tests_wf = yaml.safe_load(
-            (REPO_ROOT / ".github" / "workflows" / "tests.yml").read_text()
-        )
+        tests_wf = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "tests.yml").read_text())
         bump_wf = _load(VERSION_BUMP_WORKFLOW)
         tests_pins = _uv_version_pins(tests_wf)
         bump_pins = _uv_version_pins(bump_wf)
@@ -137,22 +139,20 @@ class TestVersionBumpWorkflow:
         )
         assert checkout_step is not None
         ref = checkout_step.get("with", {}).get("ref", "")
-        assert "main" in ref, (
-            "Checkout must use ref: main (not the default detached PR merge ref)"
-        )
+        assert "main" in ref, "Checkout must use ref: main (not the default detached PR merge ref)"
 
 
 # ── release.yml ───────────────────────────────────────────────────────────────
 
+
 class TestReleaseWorkflow:
     def test_workflow_file_exists(self):
-        assert RELEASE_WORKFLOW.exists(), (
-            f"release workflow not found at {RELEASE_WORKFLOW}"
-        )
+        assert RELEASE_WORKFLOW.exists(), f"release workflow not found at {RELEASE_WORKFLOW}"
 
     def test_triggered_on_pull_request_closed_to_stable(self):
         wf = _load(RELEASE_WORKFLOW)
-        pr_trigger = wf.get("on", {}).get("pull_request", {})
+        # PyYAML parses 'on:' as boolean True (YAML 1.1); use True as key
+        pr_trigger = wf.get(True, {}).get("pull_request", {})
         assert "closed" in pr_trigger.get("types", [])
         assert "stable" in pr_trigger.get("branches", [])
 
@@ -175,9 +175,7 @@ class TestReleaseWorkflow:
         assert all(p for p in pins)
 
     def test_uv_version_consistent_with_tests_yml(self):
-        tests_wf = yaml.safe_load(
-            (REPO_ROOT / ".github" / "workflows" / "tests.yml").read_text()
-        )
+        tests_wf = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "tests.yml").read_text())
         release_wf = _load(RELEASE_WORKFLOW)
         tests_pins = _uv_version_pins(tests_wf)
         release_pins = _uv_version_pins(release_wf)

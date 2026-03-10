@@ -237,7 +237,7 @@ class TestCIWorkflow:
         """
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
         triggers = workflow.get(True, workflow.get("on", {}))
-        push_branches = triggers["push"]["branches"]
+        push_branches = triggers.get("push", {}).get("branches", [])
         assert "stable" in push_branches, (
             "CI must trigger on push to stable branch — add 'stable' to push.branches in tests.yml"
         )

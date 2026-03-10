@@ -224,7 +224,7 @@ async def create_unique_branch(
         return gate
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="create_unique_branch", cwd=cwd)
-    _display = base_branch_name if base_branch_name is not None else slug
+    _display = base_branch_name if base_branch_name else slug
     logger.info(
         "create_unique_branch",
         slug=slug,
@@ -245,8 +245,15 @@ async def create_unique_branch(
     tool_ctx = _get_ctx()
     _start = time.monotonic()
 
-    if base_branch_name is not None:
+    if base_branch_name:
         base_name = base_branch_name
+    elif not slug:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "create_unique_branch requires either base_branch_name or slug",
+            }
+        )
     else:
         base_name = f"{slug}-{issue_number}" if issue_number is not None else slug
     branch_name = base_name

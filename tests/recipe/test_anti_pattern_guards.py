@@ -51,6 +51,9 @@ def test_implementation_groups_ci_failure_routes_to_diagnose_ci():
     recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
     assert recipe.steps["ci_watch"].on_failure == "diagnose_ci"
     assert "diagnose_ci" in recipe.steps
+    diag = recipe.steps["diagnose_ci"]
+    assert diag.tool == "run_skill"
+    assert "diagnosis_path" in diag.capture
 
 
 def test_implementation_create_branch_uses_create_unique_branch_tool():
@@ -72,9 +75,11 @@ def test_pr_merge_pipeline_no_run_cmd_push():
 
 
 def test_pr_merge_pipeline_has_no_loop_push_kitchen_rule():
-    """AP2: pr-merge-pipeline.yaml must have explicit kitchen rule forbidding loop pushes."""
+    """AP2: pr-merge-pipeline.yaml push_to_remote must only appear in the designated push steps."""
     raw = yaml.safe_load((builtin_recipes_dir() / "pr-merge-pipeline.yaml").read_text())
-    rules = " ".join(raw.get("kitchen_rules", []))
-    assert "NEVER push inside the" in rules or "no intermediate push" in rules.lower(), (
-        "pr-merge-pipeline must have a kitchen rule prohibiting pushes inside the merge loop"
+    steps = raw.get("steps", {})
+    push_steps = {name for name, step in steps.items() if step.get("tool") == "push_to_remote"}
+    unexpected = push_steps - {"publish_integration_branch", "push_integration_branch"}
+    assert not unexpected, (
+        f"push_to_remote found in unexpected steps (loop pushes are prohibited): {unexpected}"
     )

@@ -504,30 +504,29 @@ steps:
       cwd: "${{ context.work_dir }}"
       pr_url: "${{ context.pr_url }}"
     on_success: confirm_cleanup
-    on_failure: diagnose_ci_pr
+    on_failure: diagnose_ci
     note: >
       Waits for the GitHub Actions CI run on context.integration_branch to complete
       using the wait_for_ci MCP tool (timeout: 300 s). CI failures here indicate the
       integration branch has problems that the human reviewer should see. No automated
-      remediation; on failure, routes to diagnose_ci_pr to capture logs before
+      remediation; on failure, routes to diagnose_ci to capture logs before
       cleanup_failure preserves the clone for manual inspection.
 
-  diagnose_ci_pr:
+  diagnose_ci:
     tool: run_skill
     with:
       skill_command: "/autoskillit:diagnose-ci ${{ context.integration_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "diagnose_ci_pr"
+      step_name: "diagnose_ci"
     capture:
       diagnosis_path: "${{ result.diagnosis_path }}"
-    on_result:
-      - route: cleanup_failure
+    on_success: cleanup_failure
     on_failure: cleanup_failure
     note: >
       Runs when ci_watch_pr reports CI failure on the integration branch.
       Fetches logs and writes a diagnosis to temp/diagnose-ci/ for human inspection.
-      diagnosis_path is captured for observability. Always routes to cleanup_failure
-      — no automated remediation for integration CI.
+      diagnosis_path is captured for observability — no automated remediation for
+      integration CI, so always routes to cleanup_failure.
 
   confirm_cleanup:
     action: confirm

@@ -701,8 +701,10 @@ class TestCreateUniqueBranch:
         assert result["branch_name"] == "impl/238"
         # ls-remote must check the exact base_branch_name, not slug-issue composition
         ls_remote_cmd = next(
-            args[0] for args in tool_ctx.runner.call_args_list if "ls-remote" in args[0]
+            (args[0] for args in tool_ctx.runner.call_args_list if "ls-remote" in args[0]),
+            None,
         )
+        assert ls_remote_cmd is not None, "No ls-remote subprocess call found"
         assert any("impl/238" in arg for arg in ls_remote_cmd)
 
 

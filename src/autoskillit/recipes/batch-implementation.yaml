@@ -162,10 +162,23 @@ steps:
       step_name: "compute_branch"
     capture:
       proposed_branch: "${{ result.stdout | trim }}"
-    on_success: create_branch
+    on_success: checkout_base
     on_failure: release_issue_failure
     note: >
       Computes the proposed branch name for this issue — no git operations.
+
+  checkout_base:
+    tool: run_cmd
+    with:
+      cmd: "git -C ${{ context.work_dir }} checkout ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "checkout_base"
+    on_success: create_branch
+    on_failure: release_issue_failure
+    note: >
+      Resets the clone to base_branch before creating each issue's feature branch.
+      Without this, each iteration branches from the previous issue's HEAD, stacking
+      branches instead of branching independently from base_branch.
 
   create_branch:
     tool: create_unique_branch
@@ -248,14 +261,14 @@ steps:
   next_or_done_issue:
     action: route
     on_result:
-      - when: "${{ result.next }} == more_issues"
+      - when: "${{ inputs.current_issue_url }} != ''"
         route: get_issue_title
       - route: confirm_cleanup
     note: >
-      Routing step — no tool call. The agent evaluates what comes next:
-      1. If more issues remain in issues_file → advance context.current_issue_url
-         and context.current_issue_task to the next entry, then route to get_issue_title.
-      2. If all issues are processed → route to confirm_cleanup.
+      Routing step — no tool call. The orchestrator advances current_issue_url
+      to the next entry before routing here. The agent evaluates what comes next:
+      1. If inputs.current_issue_url is non-empty → more issues remain, route to get_issue_title.
+      2. If inputs.current_issue_url is empty → all issues processed, route to confirm_cleanup.
 
   confirm_cleanup:
     action: confirm

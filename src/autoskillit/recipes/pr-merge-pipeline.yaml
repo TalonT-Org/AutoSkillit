@@ -338,7 +338,7 @@ steps:
   merge_conflict_pr:
     tool: run_cmd
     with:
-      cmd: "gh pr merge ${{ context.conflict_pr_number }} --squash --delete-branch"
+      cmd: "gh pr merge \"${{ context.conflict_pr_number }}\" --squash --delete-branch"
       cwd: "${{ context.work_dir }}"
       step_name: "merge_conflict_pr"
     on_success: next_part_or_next_pr

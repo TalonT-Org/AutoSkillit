@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+__all__ = ["McpResponseEntry", "DefaultMcpResponseLog"]
+
 
 @dataclass
 class McpResponseEntry:
@@ -27,9 +29,6 @@ class McpResponseEntry:
             "estimated_response_tokens": self.estimated_response_tokens,
             "invocation_count": self.invocation_count,
         }
-
-
-__all__ = ["McpResponseEntry", "DefaultMcpResponseLog"]
 
 
 class DefaultMcpResponseLog:

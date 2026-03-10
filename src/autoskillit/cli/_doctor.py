@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.metadata
 import json
 import shutil
 from collections.abc import Callable
@@ -43,11 +42,17 @@ def _check_mcp_server_registered() -> DoctorResult:
         )
     try:
         data = json.loads(claude_json.read_text())
-    except (json.JSONDecodeError, OSError):
+    except OSError as exc:
         return DoctorResult(
             severity=Severity.ERROR,
             check="mcp_server_registered",
-            message="~/.claude.json is not valid JSON.",
+            message=f"~/.claude.json could not be read: {exc}",
+        )
+    except json.JSONDecodeError as exc:
+        return DoctorResult(
+            severity=Severity.ERROR,
+            check="mcp_server_registered",
+            message=f"~/.claude.json is not valid JSON: {exc}",
         )
     if "autoskillit" not in data.get("mcpServers", {}):
         return DoctorResult(
@@ -91,9 +96,21 @@ def run_doctor(*, output_json: bool = False, fix: bool = False) -> None:
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
     stale_servers: list[str] = []
+    _stale_parse_error = False
     claude_json = Path.home() / ".claude.json"
     if claude_json.is_file():
-        data = json.loads(claude_json.read_text())
+        try:
+            data = json.loads(claude_json.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            results.append(
+                DoctorResult(
+                    Severity.ERROR,
+                    "stale_mcp_servers",
+                    f"~/.claude.json could not be parsed: {exc}",
+                )
+            )
+            _stale_parse_error = True
+            data = {}
         servers = data.get("mcpServers", {})
         for name, entry in servers.items():
             cmd = entry.get("command", "")
@@ -110,13 +127,14 @@ def run_doctor(*, output_json: bool = False, fix: bool = False) -> None:
                     f"MCP server '{name}' command not found: {cmd}. "
                     f"Remove with: claude mcp remove --scope user {name}"
                 )
-    if stale_servers:
-        for msg in stale_servers:
-            results.append(DoctorResult(Severity.ERROR, "stale_mcp_servers", msg))
-    else:
-        results.append(
-            DoctorResult(Severity.OK, "stale_mcp_servers", "No stale MCP servers detected")
-        )
+    if not _stale_parse_error:
+        if stale_servers:
+            for msg in stale_servers:
+                results.append(DoctorResult(Severity.ERROR, "stale_mcp_servers", msg))
+        else:
+            results.append(
+                DoctorResult(Severity.OK, "stale_mcp_servers", "No stale MCP servers detected")
+            )
 
     # Check 2: MCP server registered in ~/.claude.json
     results.append(_check_mcp_server_registered())
@@ -147,15 +165,27 @@ def run_doctor(*, output_json: bool = False, fix: bool = False) -> None:
     else:
         results.append(DoctorResult(Severity.OK, "project_config", "Project config exists"))
 
-    # Check 5: Version consistency
-    pkg_version = importlib.metadata.version("autoskillit")
-    results.append(
-        DoctorResult(
-            Severity.OK,
-            "version_consistency",
-            f"Version {pkg_version} installed",
+    # Check 5: Version consistency — package version must match plugin.json
+    from autoskillit.version import version_info
+
+    vi = version_info()
+    if vi["match"]:
+        results.append(
+            DoctorResult(
+                Severity.OK,
+                "version_consistency",
+                f"Version {vi['package_version']} installed",
+            )
         )
-    )
+    else:
+        results.append(
+            DoctorResult(
+                Severity.WARNING,
+                "version_consistency",
+                f"Package version {vi['package_version']} does not match "
+                f"plugin.json {vi['plugin_json_version']}. Reinstall autoskillit to fix.",
+            )
+        )
 
     # Check 6: Hook executability — validates scripts from the canonical registry
     from autoskillit.hooks import generate_hooks_json

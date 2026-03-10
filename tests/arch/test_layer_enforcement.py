@@ -752,10 +752,11 @@ class TestVersionArchitecture:
                     pytest.fail(f"version.py must not import autoskillit.{parts[1]}")
 
     def test_doctor_imports_version_not_server(self):
-        """cli/_doctor.py must import version_info from autoskillit.version, not server."""
+        """cli/_doctor.py must not import version_info from autoskillit.server."""
         src = (SRC_ROOT / "cli" / "_doctor.py").read_text()
         assert "from autoskillit.server import version_info" not in src
-        assert "from autoskillit.version import version_info" in src
+        # Doctor uses importlib.metadata for version info (not autoskillit.version)
+        assert "importlib.metadata" in src
 
 
 def test_native_tool_guard_absent_from_hook_registry():

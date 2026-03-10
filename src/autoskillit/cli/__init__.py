@@ -11,13 +11,6 @@ from pathlib import Path  # noqa: F401 — tests patch autoskillit.cli.Path.home
 
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli._init_helpers import _prompt_recipe_choice
-from autoskillit.cli._marketplace import (
-    _clear_plugin_cache,
-    _ensure_marketplace,
-    _print_next_steps,
-    install,
-    upgrade,
-)
 from autoskillit.cli._prompts import (
     _OPEN_KITCHEN_CHOICE,
     _build_open_kitchen_prompt,
@@ -28,6 +21,7 @@ from autoskillit.cli.app import (
     _generate_config_yaml,
     _prompt_test_command,
     app,
+    chefs_hat,
     config_app,
     config_show,
     cook,
@@ -52,21 +46,18 @@ __all__ = [
     "_OPEN_KITCHEN_CHOICE",
     "_build_open_kitchen_prompt",
     "_build_orchestrator_prompt",
-    "_clear_plugin_cache",
     "_claude_settings_path",
-    "_ensure_marketplace",
     "_generate_config_yaml",
-    "_print_next_steps",
     "_prompt_recipe_choice",
     "_prompt_test_command",
     "_resolve_recipe_input",
     "app",
+    "chefs_hat",
     "config_app",
     "config_show",
     "cook",
     "doctor",
     "init",
-    "install",
     "main",
     "migrate",
     "quota_status",
@@ -77,7 +68,6 @@ __all__ = [
     "serve",
     "skills_app",
     "skills_list",
-    "upgrade",
     "workspace_app",
     "workspace_clean",
     "workspace_init",

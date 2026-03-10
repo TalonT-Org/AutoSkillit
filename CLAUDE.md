@@ -186,6 +186,7 @@ src/autoskillit/
 │   └── _state.py            #   Server state extraction (lazy init, plugin dir resolution)
 ├── cli/                     # L3 CLI sub-package
 │   ├── __init__.py          #   Re-exports main entry point
+│   ├── _chefs_hat.py        #   chefs-hat command: ephemeral skill session launcher (claude --add-dir)
 │   ├── _doctor.py           #   Doctor command -- 7 project setup checks
 │   ├── _hooks.py            #   Unified PreToolUse hook registration helpers
 │   ├── _init_helpers.py     #   Init command helpers: interactive prompts and workspace marker

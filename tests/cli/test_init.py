@@ -29,6 +29,7 @@ class TestCLIInit:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         cli.init(test_command="pytest -v")
         assert (tmp_path / ".autoskillit").is_dir()
 
@@ -37,6 +38,7 @@ class TestCLIInit:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         cli.init(test_command="pytest -v")
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         assert config_path.is_file()
@@ -49,6 +51,7 @@ class TestCLIInit:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         with patch("autoskillit.cli.app._prompt_test_command", return_value=["npm", "test"]):
             cli.init()
         config_path = tmp_path / ".autoskillit" / "config.yaml"
@@ -60,6 +63,7 @@ class TestCLIInit:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_path = config_dir / "config.yaml"
@@ -91,6 +95,7 @@ class TestCLIInit:
 
     def test_init_force_overwrites(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_path = config_dir / "config.yaml"
@@ -131,6 +136,7 @@ class TestCLIInit:
     ) -> None:
         """init writes a config file containing commented advanced sections."""
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         cli.init(test_command="pytest -v")
 
         config_path = tmp_path / ".autoskillit" / "config.yaml"
@@ -143,6 +149,7 @@ class TestCLIInit:
     ) -> None:
         """--test-command combined with --force overwrites existing config."""
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text("old: true\n")
@@ -155,11 +162,81 @@ class TestCLIInit:
     def test_init_idempotent_rerun(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Running init twice is safe — config preserved on second run."""
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         cli.init(test_command="pytest -v")
         config_before = (tmp_path / ".autoskillit" / "config.yaml").read_text()
         # Re-run init — should not overwrite without --force
         cli.init(test_command="pytest -v")
         assert (tmp_path / ".autoskillit" / "config.yaml").read_text() == config_before
+
+    # CI-SCOPE-1
+    def test_init_registers_mcp_server_in_claude_json(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """init --scope user writes mcpServers.autoskillit to ~/.claude.json."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cli.init(scope="user", test_command="task test-all")
+        claude_json = tmp_path / ".claude.json"
+        data = json.loads(claude_json.read_text())
+        assert "autoskillit" in data["mcpServers"]
+        assert data["mcpServers"]["autoskillit"]["command"] == "autoskillit"
+        assert data["mcpServers"]["autoskillit"]["args"] == ["serve"]
+
+    # CI-SCOPE-2
+    def test_init_registers_hooks_in_settings_json(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """init --scope user registers all HOOK_REGISTRY hooks in settings.json."""
+        from autoskillit.hook_registry import HOOK_REGISTRY
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cli.init(scope="user", test_command="task test-all")
+        settings_path = tmp_path / ".claude" / "settings.json"
+        data = json.loads(settings_path.read_text())
+        registered = " ".join(
+            cmd
+            for entry in data["hooks"]["PreToolUse"]
+            for hook in entry.get("hooks", [])
+            for cmd in [hook.get("command", "")]
+        )
+        for hdef in HOOK_REGISTRY:
+            for script in hdef.scripts:
+                assert script in registered, f"Expected hook script {script!r} to be registered"
+
+    # CI-SCOPE-3
+    def test_init_idempotent_no_duplicates(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Running init twice does not duplicate mcpServers.autoskillit or hook entries."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cli.init(scope="user", test_command="task test-all")
+        cli.init(scope="user", test_command="task test-all")
+        claude_json = tmp_path / ".claude.json"
+        data = json.loads(claude_json.read_text())
+        assert list(data["mcpServers"].keys()).count("autoskillit") == 1
+        settings_path = tmp_path / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text())
+        pretooluse = settings.get("hooks", {}).get("PreToolUse", [])
+        matchers = [e.get("matcher", "") for e in pretooluse]
+        # No duplicate matchers (run_skill appears exactly once)
+        run_skill_count = sum(1 for m in matchers if "run_skill" in m)
+        assert run_skill_count == 1
+
+    # CI-SCOPE-4
+    def test_init_default_scope_is_user(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """init without --scope defaults to user scope (writes to ~/.claude.json)."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        monkeypatch.chdir(project_dir)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cli.init(test_command="task test-all")
+        # MCP server should be registered to user home, not project dir
+        assert (tmp_path / ".claude.json").exists()
 
 
 class TestEnsureProjectTemp:

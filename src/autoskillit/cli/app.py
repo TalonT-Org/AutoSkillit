@@ -14,10 +14,12 @@ from typing import Annotated
 
 from cyclopts import App, Parameter
 
+from autoskillit.cli._chefs_hat import chefs_hat
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _generate_config_yaml,
     _prompt_test_command,
+    _register_all,
 )
 from autoskillit.core import ClaudeFlags, _atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
@@ -100,11 +102,12 @@ def init(
     *,
     force: bool = False,
     test_command: str | None = None,
+    scope: Annotated[str, Parameter(help="Registration scope: user or project")] = "user",
 ):
     """Initialize autoskillit for a project.
 
-    Creates .autoskillit/config.yaml. Bundled skills are served automatically
-    via the MCP server — no installation needed.
+    Creates .autoskillit/config.yaml, registers the MCP server in ~/.claude.json,
+    and registers hooks in settings.json.
 
     Parameters
     ----------
@@ -112,9 +115,11 @@ def init(
         Overwrite existing config without prompting.
     test_command
         Test command string for non-interactive init (e.g. "pytest -v").
+    scope
+        Registration scope for hooks: "user" or "project".
     """
-    from autoskillit.core import ensure_project_temp
-
+    if scope not in ("user", "project"):
+        raise SystemExit(f"Error: --scope must be 'user' or 'project', got '{scope}'")
     project_dir = Path.cwd()
     config_dir = project_dir / ".autoskillit"
     config_dir.mkdir(exist_ok=True)
@@ -132,16 +137,7 @@ def init(
         _atomic_write(config_path, _generate_config_yaml(cmd_parts))
         print(f"Config written to: {config_path}")
 
-    ensure_project_temp(project_dir)
-
-    print("\nReady! Start Claude Code and open the kitchen:")
-    print("  claude")
-    from autoskillit.cli._doctor import _is_plugin_installed
-
-    if _is_plugin_installed():
-        print("  /mcp__plugin_autoskillit_autoskillit__open_kitchen")
-    else:
-        print("  /mcp__autoskillit__open_kitchen")
+    _register_all(scope, project_dir)
 
 
 @app.command
@@ -156,10 +152,8 @@ def doctor(*, output_json: bool = False, fix: bool = False):
         Auto-remediate fixable errors (e.g. remove stale gate files).
     """
     from autoskillit.cli._doctor import run_doctor
-    from autoskillit.server import _get_plugin_dir
 
-    plugin_dir = _get_plugin_dir()
-    run_doctor(output_json=output_json, plugin_dir=plugin_dir, fix=fix)
+    run_doctor(output_json=output_json, fix=fix)
 
 
 @app.command
@@ -493,6 +487,12 @@ def cook(recipe: str | None = None):
         sys.exit(1)
 
     _launch_cook_session(_build_orchestrator_prompt(recipe_yaml))
+
+
+@app.command(name="chefs-hat", alias="chef")
+def _chefs_hat_cmd() -> None:
+    """Launch Claude with all bundled AutoSkillit skills as slash commands."""
+    chefs_hat()
 
 
 def main() -> None:

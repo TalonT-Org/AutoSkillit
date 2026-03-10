@@ -143,6 +143,11 @@ class McpResponseConfig:
     alert_threshold_tokens: int = 2000
 
 
+@dataclass
+class BranchingConfig:
+    default_base_branch: str = "integration"
+
+
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -173,6 +178,7 @@ class AutomationConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     linux_tracing: LinuxTracingConfig = field(default_factory=LinuxTracingConfig)
     mcp_response: McpResponseConfig = field(default_factory=McpResponseConfig)
+    branching: BranchingConfig = field(default_factory=BranchingConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -206,6 +212,7 @@ class AutomationConfig:
         lg = sec("logging")
         lt = sec("linux_tracing")
         mr = sec("mcp_response")
+        br = sec("branching")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -224,6 +231,7 @@ class AutomationConfig:
         _lg = _field_defaults(LoggingConfig)
         _lt = _field_defaults(LinuxTracingConfig)
         _mr = _field_defaults(McpResponseConfig)
+        _br = _field_defaults(BranchingConfig)
 
         return cls(
             test_check=TestCheckConfig(
@@ -313,6 +321,11 @@ class AutomationConfig:
             mcp_response=McpResponseConfig(
                 alert_threshold_tokens=int(
                     val(mr, "alert_threshold_tokens", _mr["alert_threshold_tokens"])
+                ),
+            ),
+            branching=BranchingConfig(
+                default_base_branch=str(
+                    val(br, "default_base_branch", _br["default_base_branch"])
                 ),
             ),
         )

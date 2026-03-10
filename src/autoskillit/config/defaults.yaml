@@ -88,3 +88,6 @@ linux_tracing:
 
 mcp_response:
   alert_threshold_tokens: 2000
+
+branching:
+  default_base_branch: integration

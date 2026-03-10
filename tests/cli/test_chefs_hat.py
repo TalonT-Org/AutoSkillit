@@ -5,7 +5,6 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,58 +14,86 @@ from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 
 class TestChefsHat:
     # CH-1
-    def test_chefs_hat_init_session_cook(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_chefs_hat_init_session_cook(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         """chefs-hat calls init_session with cook_session=True."""
         captured: dict = {}
+        fake_skills_dir = tmp_path / "fake-skills"
+        fake_skills_dir.mkdir()
 
         def fake_init_session(self, session_id: str, *, cook_session: bool = False) -> Path:
             captured["cook_session"] = cook_session
-            return Path("/tmp/fake-skills")
+            return fake_skills_dir
 
         monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
-        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: None)
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0})())
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
         cli.chefs_hat()
         assert captured["cook_session"] is True
 
     # CH-2
-    def test_chefs_hat_launches_claude_add_dir(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_chefs_hat_launches_claude_add_dir(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         """chefs-hat passes --add-dir <skills_dir> to the subprocess."""
         captured_cmd: list = []
-        fake_skills_dir = Path("/tmp/fake-skills-ch2")
+        fake_skills_dir = tmp_path / "fake-skills-ch2"
+        fake_skills_dir.mkdir()
 
         def fake_init_session(self, session_id: str, *, cook_session: bool = False) -> Path:
             return fake_skills_dir
 
+        def fake_run(cmd, **kw):
+            captured_cmd.extend(cmd)
+            return type("R", (), {"returncode": 0})()
+
         monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
-        monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: captured_cmd.extend(cmd))
+        monkeypatch.setattr(subprocess, "run", fake_run)
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
         cli.chefs_hat()
         assert "--add-dir" in captured_cmd
         assert str(fake_skills_dir) in captured_cmd
 
     # CH-3
-    def test_chef_alias_works(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """chef alias is registered in app.py alongside chefs-hat."""
-        import importlib
-        from pathlib import Path as _Path
+    def test_chef_alias_invokes_chefs_hat(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """chef alias invokes the chefs-hat behavior via the CLI."""
+        from autoskillit.cli.app import app
 
-        _app_mod = importlib.import_module("autoskillit.cli.app")
-        src = _Path(_app_mod.__file__).read_text()
-        assert 'name="chef"' in src or "name='chef'" in src, (
-            "Expected 'chef' to be registered as a command name in app.py"
-        )
-
-    # CH-4
-    def test_chefs_hat_sets_kitchen_open_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """chefs-hat sets AUTOSKILLIT_KITCHEN_OPEN=1 in the subprocess env."""
-        captured_env: dict = {}
+        captured_cmd: list = []
+        fake_skills_dir = tmp_path / "fake-skills-ch3"
+        fake_skills_dir.mkdir()
 
         def fake_init_session(self, session_id: str, *, cook_session: bool = False) -> Path:
-            return Path("/tmp/fake-skills-ch4")
+            return fake_skills_dir
+
+        def fake_run(cmd, **kw):
+            captured_cmd.extend(cmd)
+            return type("R", (), {"returncode": 0})()
+
+        monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
+        app(["chef"])
+        assert "--add-dir" in captured_cmd
+
+    # CH-4
+    def test_chefs_hat_sets_kitchen_open_env(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """chefs-hat sets AUTOSKILLIT_KITCHEN_OPEN=1 in the subprocess env."""
+        captured_env: dict = {}
+        fake_skills_dir = tmp_path / "fake-skills-ch4"
+        fake_skills_dir.mkdir()
+
+        def fake_init_session(self, session_id: str, *, cook_session: bool = False) -> Path:
+            return fake_skills_dir
 
         def fake_subprocess_run(cmd, **kwargs):
             captured_env.update(kwargs.get("env", {}))
+            return type("R", (), {"returncode": 0})()
 
         monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
         monkeypatch.setattr(subprocess, "run", fake_subprocess_run)

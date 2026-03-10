@@ -143,6 +143,31 @@ def detect_unpublished_branch(source_dir: str, branch: str) -> bool:
     return ls_remote.returncode == 2
 
 
+def _resolve_clone_source(source: Path, branch: str, detected_url: str) -> str:
+    """Select the clone source for the ``proceed`` git-clone strategy.
+
+    Prefers the remote URL when source has an origin configured and the
+    branch (if specified) is confirmed present on the remote. Falls back
+    to the local path for local-only branches, repos without a remote, or
+    when network commands time out. Not used by the ``clone_local`` strategy,
+    which always copies directly from the local filesystem path.
+    """
+    if not detected_url:
+        return str(source)
+    if branch:
+        try:
+            ls = subprocess.run(
+                ["git", "ls-remote", "--exit-code", "--heads", detected_url, branch],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            return str(source)
+        return detected_url if ls.returncode == 0 else str(source)
+    return detected_url
+
+
 def clone_repo(
     source_dir: str,
     run_name: str,
@@ -168,10 +193,11 @@ def clone_repo(
     committed state only) or strategy="clone_local" (copytree — includes working-tree
     changes).
 
-    The git clone is performed from the remote URL when source_dir has an origin
-    configured (auto-detected via ``git remote get-url origin``). This ensures the
-    clone is always pulled from the upstream rather than a local filesystem path.
-    Falls back to cloning from the local path when no remote is configured.
+    When using the ``proceed`` strategy, the git clone is performed from the remote
+    URL when source_dir has an origin configured and (if branch is given) the branch
+    is confirmed present on the remote. Falls back to the local path for local-only
+    branches or when no remote is configured. The ``clone_local`` strategy always
+    copies directly from the local filesystem path regardless of remote configuration.
 
     After this function returns, source_dir is off-limits except for push_to_remote
     reading its remote URL. See module docstring for the full SOURCE ISOLATION contract.
@@ -233,36 +259,27 @@ def clone_repo(
     clone_path = runs_parent / f"{run_name}-{timestamp}"
     runs_parent.mkdir(parents=True, exist_ok=True)
 
-    # Resolve remote URL BEFORE cloning so the clone is performed directly from
-    # the upstream rather than the local filesystem path.
-    _pre_url_result = subprocess.run(
-        ["git", "remote", "get-url", "origin"],
-        cwd=str(source),
-        capture_output=True,
-        text=True,
+    try:
+        _pre_url_result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=str(source),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        _pre_url_result = None
+    detected_url = (
+        _pre_url_result.stdout.strip()
+        if _pre_url_result is not None and _pre_url_result.returncode == 0
+        else ""
     )
-    detected_url = _pre_url_result.stdout.strip() if _pre_url_result.returncode == 0 else ""
-    # Use remote URL as clone source when the branch is confirmed present there.
-    # Falls back to local path when remote has no such branch (prevents failures
-    # for local-only branches or repos with unpushed commits).
-    clone_source = str(source)
-    if detected_url:
-        if branch:
-            _ls = subprocess.run(
-                ["git", "ls-remote", "--exit-code", "--heads", detected_url, branch],
-                capture_output=True,
-                text=True,
-            )
-            if _ls.returncode == 0:
-                clone_source = detected_url
-        else:
-            # No branch restriction — clone remote default branch
-            clone_source = detected_url
 
     if strategy == "clone_local":
         shutil.copytree(str(source), str(clone_path))
         logger.info("clone_created_local_copy", clone_path=str(clone_path), source=str(source))
     else:
+        clone_source = _resolve_clone_source(source, branch, detected_url)
         cmd = ["git", "clone"]
         if branch:
             cmd += ["--branch", branch]

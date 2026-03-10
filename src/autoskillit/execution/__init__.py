@@ -18,7 +18,6 @@ from autoskillit.execution.commands import (
     build_headless_cmd,
     build_interactive_cmd,
     build_subrecipe_cmd,
-    build_subrecipe_prompt,
 )
 from autoskillit.execution.db import (
     DefaultDatabaseReader,
@@ -69,7 +68,6 @@ __all__ = [
     "build_interactive_cmd",
     "build_headless_cmd",
     "build_subrecipe_cmd",
-    "build_subrecipe_prompt",
     # process
     "DefaultSubprocessRunner",
     "run_managed_async",

@@ -441,9 +441,10 @@ async def _run_subrecipe(
     only from autoskillit.core, autoskillit.pipeline, and autoskillit.server.
     This function provides the architecture-compliant bridge to autoskillit.execution.
     """
-    return await _run_subrecipe_session_fn(
-        recipe_yaml, ingredients_json, cwd, ctx, step_name=step_name
-    )
+    from autoskillit.cli._prompts import build_subrecipe_prompt
+
+    prompt = build_subrecipe_prompt(recipe_yaml, ingredients_json)
+    return await _run_subrecipe_session_fn(prompt, cwd, ctx, step_name=step_name)
 
 
 async def _prime_quota_cache() -> None:

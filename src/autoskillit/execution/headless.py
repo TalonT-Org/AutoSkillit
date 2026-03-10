@@ -34,7 +34,6 @@ from autoskillit.core import (
 from autoskillit.execution.commands import (
     build_headless_cmd,
     build_subrecipe_cmd,
-    build_subrecipe_prompt,
 )
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
@@ -468,6 +467,8 @@ async def run_headless_core(
                     )
                 except Exception:
                     logger.debug("flush_session_log during crash failed", exc_info=True)
+        if _result is None:
+            raise RuntimeError("runner() did not return a result — cannot build SkillResult")
         _elapsed = time.monotonic() - _start_mono
         _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
         result = dataclasses.replace(  # type: ignore[arg-type]
@@ -541,8 +542,7 @@ async def run_headless_core(
 
 
 async def run_subrecipe_session(
-    recipe_yaml: str,
-    ingredients_json: str,
+    prompt: str,
     cwd: str,
     ctx: ToolContext,
     *,
@@ -551,11 +551,23 @@ async def run_subrecipe_session(
 ) -> SkillResult:
     """Launch a headless sub-recipe orchestrator session and return SkillResult.
 
-    Builds a prompt with pre-supplied ingredients and runs a headless Claude session
-    with AUTOSKILLIT_KITCHEN_OPEN=1 so the gate is pre-enabled at import time.
+    Accepts a pre-built prompt (built by build_subrecipe_prompt in cli/_prompts.py)
+    and runs a headless Claude session with AUTOSKILLIT_KITCHEN_OPEN=1 so the gate
+    is pre-enabled at import time.
     """
+    if not Path(cwd).is_dir():
+        return SkillResult(
+            success=False,
+            result=f"cwd does not exist or is not a directory: {cwd}",
+            session_id="",
+            subtype="error",
+            is_error=True,
+            exit_code=-1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
     cfg = ctx.config.run_skill
-    prompt = build_subrecipe_prompt(recipe_yaml, ingredients_json)
     if cfg.completion_marker:
         prompt = _inject_completion_directive(prompt, cfg.completion_marker)
 
@@ -604,6 +616,8 @@ async def run_subrecipe_session(
             except Exception:
                 logger.debug("flush_session_log during crash failed", exc_info=True)
 
+    if _result is None:
+        raise RuntimeError("runner() did not return a result — cannot build SkillResult")
     _elapsed = time.monotonic() - _start_mono
     _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
     result = dataclasses.replace(  # type: ignore[arg-type]

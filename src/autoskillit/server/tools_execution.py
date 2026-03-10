@@ -216,36 +216,9 @@ async def run_skill(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
-async def run_recipe(
-    recipe_name: str,
-    ingredients_json: str = "{}",
-    cwd: str = "",
-    model: str = "",
-    step_name: str = "",
-) -> str:
-    """Run a sub-recipe as a nested pipeline session.
-
-    Launches a headless Claude session pre-configured as a sub-recipe orchestrator.
-    The session receives all ingredient values and begins execution immediately
-    without prompting for input.
-
-    Args:
-        recipe_name: Name or path of the recipe to execute.
-        ingredients_json: JSON object of ingredient key-value pairs.
-        cwd: Working directory for the sub-recipe session.
-        model: Model override (e.g. "sonnet", "opus"). Empty = use config default.
-        step_name: Optional step key for token/timing accumulation.
-    """
-    if (gate := _require_enabled()) is not None:
-        return gate
-    return json.dumps({"success": False, "error": "run_recipe is not yet implemented (Part B)"})
-
-
 __all__ = [
     "PIPELINE_FORBIDDEN_TOOLS",
     "run_cmd",
     "run_python",
     "run_skill",
-    "run_recipe",
 ]

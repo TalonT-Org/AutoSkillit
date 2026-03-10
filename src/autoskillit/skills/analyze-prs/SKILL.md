@@ -32,7 +32,7 @@ complexity, and produce machine-readable output for the `pr-merge-pipeline` reci
 - Use subagents to fetch PR data in parallel
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Abort clearly if `gh` CLI is not authenticated
-- Include every open PR targeting base_branch in the output — no PR is silently dropped
+- Include every open PR targeting base_branch in the output — no PR is silently dropped (blocked PRs appear in ci_blocked_prs / review_blocked_prs arrays, not in the ordered prs list)
 - **Default to parallel batch processing**: When multiple PRs are present, ALWAYS process
   all analysis tasks (diff fetching, overlap computation, complexity tagging) using parallel
   subagent batches. Processing PRs one-at-a-time without an explicit user instruction to do
@@ -72,6 +72,54 @@ Each subagent returns:
 - `deletions`: int
 - `test_files_changed`: list of test file paths (files matching `test_*.py`, `*_test.py`, `*.test.*`, `tests/**`)
 - `requirements_section`: str — the `## Requirements` section extracted from the PR body, or `""` if not present
+
+### Step 1.5: Filter PRs by CI and Review Status
+
+After fetching all PR diffs, filter the candidate list before building the overlap matrix.
+PRs that fail either gate are reported in the manifest but excluded from merge ordering.
+
+```bash
+ELIGIBLE_PRS=()
+CI_BLOCKED_PRS=()      # [{number, title, reason}]
+REVIEW_BLOCKED_PRS=()  # [{number, title, reason}]
+
+for PR in "${ALL_PRS[@]}"; do
+  PR_NUM=$(echo "$PR" | jq -r .number)
+  PR_TITLE=$(echo "$PR" | jq -r .title)
+
+  # --- CI Gate ---
+  CI_CHECKS=$(gh pr checks "$PR_NUM" --json name,status,conclusion 2>/dev/null \
+    || echo "[]")
+  FAILING=$(echo "$CI_CHECKS" | jq '[.[] | select(
+    .conclusion != null and
+    .conclusion != "success" and
+    .conclusion != "skipped" and
+    .conclusion != "neutral"
+  )] | length')
+  IN_PROGRESS=$(echo "$CI_CHECKS" | jq '[.[] | select(.conclusion == null)] | length')
+
+  if [ "$FAILING" -gt 0 ] || [ "$IN_PROGRESS" -gt 0 ]; then
+    REASON="CI failing: ${FAILING} failed, ${IN_PROGRESS} in-progress"
+    CI_BLOCKED_PRS+=("{\"number\":${PR_NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
+    continue
+  fi
+
+  # --- Review Gate ---
+  REVIEWS=$(gh pr view "$PR_NUM" --json reviews -q '.reviews // []')
+  CHANGES_REQUESTED=$(echo "$REVIEWS" | jq '[.[] | select(.state == "CHANGES_REQUESTED")] | length')
+
+  if [ "$CHANGES_REQUESTED" -gt 0 ]; then
+    REASON="${CHANGES_REQUESTED} unresolved CHANGES_REQUESTED review(s)"
+    REVIEW_BLOCKED_PRS+=("{\"number\":${PR_NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
+    continue
+  fi
+
+  ELIGIBLE_PRS+=("$PR")
+done
+```
+
+All subsequent steps (overlap matrix, topo sort, PR ordering) operate on `ELIGIBLE_PRS` only.
+`CI_BLOCKED_PRS` and `REVIEW_BLOCKED_PRS` are written to the manifest in Step 5.
 
 ### Step 2: Build File Overlap Matrix
 
@@ -146,9 +194,17 @@ Ensure `temp/pr-merge-pipeline/` exists.
             "deletions": 45,
             "overlap_with_pr_numbers": [42]
         }
+    ],
+    "ci_blocked_prs": [
+        {"number": 99, "title": "Broken CI PR", "reason": "CI failing: 1 failed, 0 in-progress"}
+    ],
+    "review_blocked_prs": [
+        {"number": 88, "title": "Needs changes PR", "reason": "2 unresolved CHANGES_REQUESTED review(s)"}
     ]
 }
 ```
+
+`pr_count` reflects the number of **eligible** PRs (i.e., `${#ELIGIBLE_PRS[@]}`).
 
 **5b. Human-readable analysis plan:** `temp/pr-merge-pipeline/pr_analysis_plan_{ts}.md`
 
@@ -167,6 +223,18 @@ This file is named `*_plan_*.md` so `audit-impl` can discover it as the baseline
 1. PR #{number} — "{title}" (complexity: simple)
 2. PR #{number} — "{title}" (complexity: needs_check)
 ...
+
+## Excluded PRs
+
+### CI-Blocked ({ci_blocked_count})
+| PR | Title | Reason |
+|----|-------|--------|
+| #{number} | {title} | CI failing: 1 failed, 0 in-progress |
+
+### Review-Blocked ({review_blocked_count})
+| PR | Title | Reason |
+|----|-------|--------|
+| #{number} | {title} | 2 unresolved CHANGES_REQUESTED review(s) |
 
 ## File Overlap Matrix
 
@@ -227,9 +295,11 @@ structured output tokens as the very last lines of your text output:
 pr_order_file={absolute_path_to_pr_order_json}
 analysis_file={absolute_path_to_pr_analysis_plan_md}
 integration_branch={integration_branch_name}
-pr_count={total_pr_count}
+pr_count={eligible_pr_count}
 simple_count={simple_pr_count}
 needs_check_count={needs_check_pr_count}
+ci_blocked_count={ci_blocked_pr_count}
+review_blocked_count={review_blocked_pr_count}
 ```
 
 ## Related Skills

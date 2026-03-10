@@ -73,6 +73,18 @@ NOT absolute paths like:
 Agents launched via `run_skill` inherit no code-index state from the parent session — this
 call is mandatory at the start of every headless session that uses code-index tools.
 
+### Step 0.8: Initialize Commit Status Variables
+
+```bash
+# PR_SHA and OWNER_REPO are not yet resolved — populated in Step 2
+# These variables are used in Step 2 (post pending) and Step 7.5 (post final status)
+PR_SHA=""
+OWNER_REPO=""
+```
+
+The pending commit status is posted in Step 2 once `PR_SHA` and `OWNER_REPO` are resolved.
+This step is best-effort: failures in status posting never block the review.
+
 ### Step 1: Find the Open PR
 
 ```bash
@@ -92,10 +104,51 @@ If `gh` is unavailable or not authenticated, or no PR is found:
 gh pr diff {pr_number}
 
 # Get owner/repo
-gh repo view --json nameWithOwner -q .nameWithOwner
+OWNER_REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+
+# Get head SHA for commit status (used in Steps 0.8 and 7.5)
+PR_SHA=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
+
+# Post pending status (best-effort — never blocks review)
+if [ -n "$PR_SHA" ] && [ -n "$OWNER_REPO" ]; then
+  gh api --method POST "/repos/${OWNER_REPO}/statuses/${PR_SHA}" \
+    -f state=pending \
+    -f context="autoskillit/ai-review" \
+    -f description="AI code review in progress" \
+    --silent || true
+fi
 ```
 
 Save the diff to `temp/review-pr/diff_{pr_number}.txt`.
+
+### Step 2.8: Extract Linked Issues
+
+Extract GitHub issue numbers referenced by `Closes`, `Fixes`, or `Resolves` keywords
+from the PR body and commit messages:
+
+```bash
+PR_BODY=$(gh pr view {pr_number} --json body -q .body)
+PR_COMMITS=$(gh pr view {pr_number} --json commits -q '[.commits[].messageHeadline] | join("\n")')
+
+LINKED_ISSUES=$(printf '%s\n' "$PR_BODY" "$PR_COMMITS" \
+  | grep -oiE '(closes|fixes|resolves)[[:space:]]+#[0-9]+' \
+  | grep -oE '[0-9]+' \
+  | sort -u)
+```
+
+For each issue number in `LINKED_ISSUES`, fetch issue content:
+
+```bash
+# For each issue_number in LINKED_ISSUES:
+gh issue view {issue_number} --json title,body,comments \
+  -q '{number: {issue_number}, title:.title, body:.body, comments:[.comments[].body]}'
+```
+
+Store all fetched objects as `LINKED_ISSUE_DATA` — a JSON array of
+`{number, title, body, comments}` objects.
+
+If `LINKED_ISSUES` is empty, set `LINKED_ISSUE_DATA="[]"` and skip fidelity
+subagent spawning in Step 3.
 
 ### Step 2.7: Parse Diff Hunk Ranges
 
@@ -213,6 +266,11 @@ findings in JSON format:
    that was intentionally removed from the base branch but re-added by this PR.
    Only spawned when `deletion_context` is non-null.
 
+8. **fidelity** — Requirements fidelity check: compares the PR diff against linked
+   GitHub issue requirements. Reports gaps (unaddressed requirements, severity: critical)
+   and drift (unrequested changes, severity: warning). Only spawned when `LINKED_ISSUES`
+   is non-empty (i.e., `LINKED_ISSUE_DATA != "[]"`).
+
 Subagent prompt template (dimensions 1–6):
 
 > You are reviewing a GitHub PR diff for [{dimension}] issues only.
@@ -239,6 +297,30 @@ Subagent prompt template (dimensions 1–6):
 > If no issues found, return an empty array [].
 > Diff content:
 > {diff_content}
+
+Subagent prompt template (dimension 8 — fidelity, only when `LINKED_ISSUE_DATA != "[]"`):
+
+> You are reviewing a PR diff for fidelity against linked GitHub issues.
+>
+> **Linked issues:** `{LINKED_ISSUE_DATA}`
+> **PR diff:** `{DIFF_CONTENT}`
+>
+> For each linked issue, identify:
+> - **Gaps**: Requirements or acceptance criteria in the issue that the diff does not address. Severity: `critical`.
+> - **Drift**: Significant changes in the diff with no justification in any linked issue. Severity: `warning`.
+>
+> Return a JSON array. Each element:
+> ```json
+> {"file": "path/to/file.py", "line": N, "dimension": "fidelity",
+>  "severity": "critical|warning", "message": "...", "requires_decision": false}
+> ```
+>
+> For gaps where no specific file/line is relevant, use `"file": ""` and `"line": 0`.
+> Return `[]` if the diff faithfully addresses all issues with no unwarranted drift.
+
+**Fidelity aggregation:** Fidelity findings with `file: ""` and `line: 0` are added to
+`UNPOSTABLE_FINDINGS` (they appear in the summary body, not as inline comments). All
+other fidelity findings go through normal `VALID_LINE_RANGES` filtering.
 
 Subagent prompt template (dimension 7 — deletion_regression, only when `deletion_context` is non-null):
 
@@ -407,6 +489,39 @@ gh pr review {pr_number} --request-changes --body "AutoSkillit review found {N} 
 # needs_human
 gh pr review {pr_number} --comment --body "AutoSkillit review: uncertain trade-offs detected. {escalation_user_mention} Please review. See inline comments."
 ```
+
+### Step 7.5: Post Final Commit Status
+
+Resolve and post the final commit status based on the verdict. Best-effort — never blocks review.
+
+```bash
+if [ -n "$PR_SHA" ] && [ -n "$OWNER_REPO" ]; then
+  case "$VERDICT" in
+    approved)
+      STATUS_STATE="success"
+      STATUS_DESC="AI review approved — no blocking issues found"
+      ;;
+    changes_requested)
+      STATUS_STATE="failure"
+      STATUS_DESC="AI review: changes required (${#ACTIONABLE_FINDINGS[@]} blocking issues)"
+      ;;
+    needs_human)
+      STATUS_STATE="pending"
+      STATUS_DESC="AI review: human decision required for trade-off findings"
+      ;;
+  esac
+
+  gh api --method POST "/repos/${OWNER_REPO}/statuses/${PR_SHA}" \
+    -f state="$STATUS_STATE" \
+    -f context="autoskillit/ai-review" \
+    -f description="$STATUS_DESC" \
+    --silent || true
+fi
+```
+
+`needs_human` maps to `pending` (not `success`) because the human hasn't yet acted —
+the status gate remains unresolved until a human approves or resolve-review addresses
+the decision-point findings.
 
 ### Step 8: Write Summary and Emit Verdict
 

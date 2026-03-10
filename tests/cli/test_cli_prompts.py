@@ -48,9 +48,7 @@ def test_build_orchestrator_prompt_includes_diagram():
     """Prompt includes diagram content and FIRST ACTION instruction when diagram supplied."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
-    result = _build_orchestrator_prompt(
-        "name: my-recipe\n", diagram="## Flow\n```\nA → B\n```"
-    )
+    result = _build_orchestrator_prompt("name: my-recipe\n", diagram="## Flow\n```\nA → B\n```")
     assert "## Flow" in result
     assert "A → B" in result
     assert "FIRST ACTION" in result

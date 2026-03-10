@@ -1188,17 +1188,13 @@ class TestCloneRemoteUrlResolution:
             "autoskillit.workspace.clone.subprocess.run",
             wraps=subprocess.run,
         ) as spy:
-            result = clone_repo(
-                str(local_with_remote), "test", branch="main", strategy="proceed"
-            )
+            result = clone_repo(str(local_with_remote), "test", branch="main", strategy="proceed")
         clone_path = Path(result["clone_path"])
         try:
             clone_calls = [
                 call
                 for call in spy.call_args_list
-                if call[0]
-                and isinstance(call[0][0], list)
-                and call[0][0][:2] == ["git", "clone"]
+                if call[0] and isinstance(call[0][0], list) and call[0][0][:2] == ["git", "clone"]
             ]
             assert len(clone_calls) == 1, (
                 f"Expected exactly one git clone call, got {len(clone_calls)}"
@@ -1226,9 +1222,7 @@ class TestCloneRemoteUrlResolution:
             clone_calls = [
                 call
                 for call in spy.call_args_list
-                if call[0]
-                and isinstance(call[0][0], list)
-                and call[0][0][:2] == ["git", "clone"]
+                if call[0] and isinstance(call[0][0], list) and call[0][0][:2] == ["git", "clone"]
             ]
             assert len(clone_calls) == 1
             clone_args = clone_calls[0][0][0]
@@ -1245,9 +1239,7 @@ class TestCloneRemoteUrlResolution:
         self, local_with_remote: Path, bare_remote: Path
     ) -> None:
         """clone_repo result['remote_url'] equals the remote URL after cloning."""
-        result = clone_repo(
-            str(local_with_remote), "test", branch="main", strategy="proceed"
-        )
+        result = clone_repo(str(local_with_remote), "test", branch="main", strategy="proceed")
         clone_path = Path(result["clone_path"])
         try:
             assert result["remote_url"] == str(bare_remote)

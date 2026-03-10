@@ -919,9 +919,7 @@ class TestCookDiagram:
             args=[], returncode=0, stdout="", stderr=""
         )
         monkeypatch.setattr(_app_mod, "check_diagram_staleness", lambda *a, **kw: False)
-        monkeypatch.setattr(
-            _app_mod, "load_recipe_diagram", lambda *a, **kw: "## Flow\nA → B"
-        )
+        monkeypatch.setattr(_app_mod, "load_recipe_diagram", lambda *a, **kw: "## Flow\nA → B")
 
         cli.cook("test-script")
 
@@ -959,9 +957,7 @@ class TestCookDiagram:
             return "## Flow"
 
         monkeypatch.setattr(_app_mod, "generate_recipe_diagram", _fake_generate)
-        monkeypatch.setattr(
-            _app_mod, "load_recipe_diagram", lambda *a, **kw: "## Flow"
-        )
+        monkeypatch.setattr(_app_mod, "load_recipe_diagram", lambda *a, **kw: "## Flow")
 
         cli.cook("test-script")
 

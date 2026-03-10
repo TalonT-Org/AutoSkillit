@@ -214,4 +214,4 @@ def _print_next_steps() -> None:
     print("\nNext steps:")
     print("  1. cd into your project and run: autoskillit init")
     print("  2. Start Claude Code: claude")
-    print("  3. Open the kitchen: /mcp__plugin_autoskillit_autoskillit__open_kitchen")
+    print("  3. Open the kitchen: /autoskillit:open-kitchen")

@@ -24,6 +24,11 @@ from autoskillit.cli._init_helpers import (
 from autoskillit.core import ClaudeFlags, _atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
 from autoskillit.recipe import list_recipes
+from autoskillit.recipe.diagrams import (
+    check_diagram_staleness,
+    generate_recipe_diagram,
+    load_recipe_diagram,
+)
 
 app = App(
     name="autoskillit",
@@ -364,6 +369,15 @@ def recipes_show(name: str):
     print(match.path.read_text())
 
 
+def _recipes_dir_for(info: object) -> Path:
+    """Return the recipes directory for a RecipeInfo object."""
+    from autoskillit.core import RecipeSource
+
+    if getattr(info, "source", None) == RecipeSource.BUILTIN:
+        return pkg_root() / "recipes"
+    return Path.cwd() / ".autoskillit" / "recipes"
+
+
 @recipes_app.command(name="render")
 def recipes_render(name: str | None = None) -> None:
     """Pre-generate flow diagram(s) for recipe(s).
@@ -373,27 +387,21 @@ def recipes_render(name: str | None = None) -> None:
     name
         Name of a single recipe to render. Renders all recipes if omitted.
     """
-    from autoskillit.core import RecipeSource
-    from autoskillit.recipe import find_recipe_by_name, generate_recipe_diagram, list_recipes
+    from autoskillit.recipe import find_recipe_by_name
 
     project_dir = Path.cwd()
-
-    def _recipes_dir(info: object) -> Path:
-        if getattr(info, "source", None) == RecipeSource.BUILTIN:
-            return pkg_root() / "recipes"
-        return project_dir / ".autoskillit" / "recipes"
 
     if name is not None:
         match = find_recipe_by_name(name, project_dir)
         if match is None:
             print(f"Recipe '{name}' not found.", file=sys.stderr)
             sys.exit(1)
-        generate_recipe_diagram(match.path, _recipes_dir(match))
+        generate_recipe_diagram(match.path, _recipes_dir_for(match))
         print(f"Rendered: {name}")
     else:
         result = list_recipes(project_dir)
         for info in result.items:
-            generate_recipe_diagram(info.path, _recipes_dir(info))
+            generate_recipe_diagram(info.path, _recipes_dir_for(info))
             print(f"Rendered: {info.name}")
 
 
@@ -501,7 +509,15 @@ def cook(recipe: str | None = None):
             print(f"  - {err}")
         sys.exit(1)
 
-    _launch_cook_session(_build_orchestrator_prompt(recipe_yaml))
+    _rdir = _recipes_dir_for(_match)
+    if check_diagram_staleness(_match.name, _rdir, _match.path):
+        try:
+            generate_recipe_diagram(_match.path, _rdir)
+        except Exception:
+            pass  # best-effort — session still launches without diagram
+
+    diagram = load_recipe_diagram(_match.name, _rdir)
+    _launch_cook_session(_build_orchestrator_prompt(recipe_yaml, diagram=diagram))
 
 
 @app.command(name="chefs-hat", alias="chef")

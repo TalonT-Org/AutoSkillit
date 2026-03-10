@@ -7,6 +7,7 @@ and commit messages, then launch a fidelity audit subagent.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 _LINKED_ISSUE_PATTERN = re.compile(
     r"(?:closes|fixes|resolves)\s+#(\d+)",
@@ -35,7 +36,7 @@ def extract_linked_issues(text: str) -> list[str]:
     return sorted(set(numbers), key=int)
 
 
-def is_valid_fidelity_finding(finding: dict) -> bool:
+def is_valid_fidelity_finding(finding: dict[str, Any]) -> bool:
     """Return True if a finding dict has the correct fidelity format.
 
     Required fields:
@@ -51,6 +52,7 @@ def is_valid_fidelity_finding(finding: dict) -> bool:
         and finding.get("severity") in _VALID_FIDELITY_SEVERITIES
         and isinstance(finding.get("file"), str)
         and isinstance(finding.get("line"), int)
+        and not isinstance(finding.get("line"), bool)
         and isinstance(finding.get("message"), str)
         and isinstance(finding.get("requires_decision"), bool)
     )

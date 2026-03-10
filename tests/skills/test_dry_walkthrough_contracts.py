@@ -121,7 +121,8 @@ def test_dry_walkthrough_historical_step_actionable_vs_informational(step_45_sec
 def test_dry_walkthrough_step7_has_historical_context_section(skill_text: str) -> None:
     """Step 7 terminal output template must include a ### Historical Context section."""
     step_7_idx = skill_text.find("### Step 7")
-    assert step_7_idx != -1
+    if step_7_idx == -1:
+        pytest.fail("'### Step 7' heading not found in dry-walkthrough SKILL.md")
     step_7_section = skill_text[step_7_idx:]
     assert "Historical Context" in step_7_section, (
         "Step 7 terminal output template must include a '### Historical Context' "

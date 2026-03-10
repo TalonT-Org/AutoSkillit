@@ -1,6 +1,6 @@
 ---
 name: merge-pr
-description: Merge a single PR into the current integration branch. For simple PRs, attempts direct git merge. For needs_check PRs, re-assesses complexity against the current integration branch state before deciding whether to merge directly or return needs_plan=true with a conflict report. Use inside the pr-merge-pipeline loop.
+description: Merge a single PR into the integration branch. For simple PRs, uses gh pr merge --squash --auto to enforce GitHub's required status checks. For needs_check PRs, re-assesses complexity and returns needs_plan=true with a conflict report when conflicts are detected. Use inside the pr-merge-pipeline loop.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -34,16 +34,16 @@ conflicts from earlier merges in the queue.
 
 **NEVER:**
 - Modify any source code files directly (conflict resolution is handled by `make-plan` + `implement-worktree-no-merge`)
-- Push to any remote branch
+- Use `git merge` to merge the PR into the integration branch — always use `gh pr merge --squash --auto`
 - Close or comment on the PR
-- Leave the git working tree in a dirty state — always abort failed merges before exiting
+- Leave the git working tree in a dirty state
 - Create files outside `temp/pr-merge-pipeline/` directory
 
 **ALWAYS:**
-- Run `git status` before and after any merge attempt to verify clean state
-- Run `git merge --abort` if a merge leaves conflicts, before returning `needs_plan=true`
-- Fetch the PR branch from remote before attempting merge
-- Use the current working directory's HEAD branch as the merge target (the integration branch)
+- Run `git status` before any operation to verify clean state
+- Use `gh pr merge {pr_number} --squash --auto` for the simple path — this enforces GitHub's required status checks (Preflight + Ubuntu) before the merge executes
+- Poll `gh pr view {pr_number} --json state,mergedAt` to confirm the merge completed
+- Fetch the PR branch from remote before the deletion regression scan and conflict analysis
 
 ## Workflow
 
@@ -156,23 +156,30 @@ The correct resolution for every regression listed above is to **remove the rein
 code** from the PR's changes, not to restore it. The base branch's deletion is authoritative.
 ```
 
-### Step 2: Complexity Path — `simple`
+### Step 2: Simple Path — gh pr merge
 
-Attempt direct merge:
+Queue the merge on GitHub using auto-merge so that the integration branch ruleset
+(Preflight + Ubuntu required status checks) is enforced before GitHub executes the merge:
 
 ```bash
-git merge --no-ff origin/{pr_branch} -m "Merge PR #{pr_number}: {pr_title}"
+gh pr merge {pr_number} --squash --auto
 ```
 
-**If merge succeeds (exit code 0, no conflicts):**
-- Verify working tree is clean: `git status --porcelain`
-- Report success → return `merged=true, needs_plan=false`
+**After queuing, poll until the PR is merged or until timeout:**
 
-**If merge produces conflicts:**
-- This is unexpected for a `simple` PR but must be handled
-- Record which files conflicted: `git diff --name-only --diff-filter=U`
-- Abort the merge: `git merge --abort`
-- Fall through to conflict report (same as `needs_check` complex path below)
+```bash
+gh pr view {pr_number} --json state,mergedAt
+```
+
+- Poll interval: 30 seconds, timeout: 600 seconds (10 minutes)
+- If `state == "MERGED"`: return `merged=true, needs_plan=false`
+- If PR state transitions to `CLOSED` unexpectedly (CI failed and auto-merge was
+  cancelled): return `merged=false` with an error message describing the CI failure
+  so the pipeline can route to cleanup_failure
+- Do NOT fall back to local git merge. If `gh pr merge` exits non-zero because
+  GitHub detected a merge conflict (e.g. "Merge conflict" error), treat this as
+  conflict detection: return `needs_plan=true` with `conflict_report_path` set so
+  the pipeline routes to the complex worktree path.
 
 ### Step 3: Complexity Path — `needs_check` (Re-assessment)
 
@@ -343,7 +350,7 @@ After implementation:
 
 Print a JSON result block to stdout for recipe capture:
 
-**On successful direct merge:**
+**On successful GitHub auto-merge (simple path, `state == "MERGED"`):**
 ```json
 {
     "merged": true,
@@ -356,7 +363,7 @@ Print a JSON result block to stdout for recipe capture:
 }
 ```
 
-**On complex / conflict detected:**
+**On complex / conflict detected (including when `gh pr merge` reports a GitHub-side conflict):**
 ```json
 {
     "merged": false,
@@ -369,6 +376,11 @@ Print a JSON result block to stdout for recipe capture:
     "conflict_report_path": "temp/pr-merge-pipeline/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
 }
 ```
+
+When `gh pr merge --squash --auto` itself exits non-zero due to a GitHub-side conflict,
+treat this as a complex-path trigger: write the conflict report and return `needs_plan=true`
+with `conflict_report_path` set. The pipeline then routes to make-plan → implement-worktree-no-merge
+→ push_worktree_branch → create_conflict_pr → wait_for_conflict_ci → merge_conflict_pr.
 
 **On deletion regression detected:**
 ```json
@@ -404,7 +416,7 @@ Exit 0 in all cases — `needs_plan=true` and `escalation_required=true` are rou
 After printing the result block, emit the following structured output tokens as the
 very last lines of your text output:
 
-**On successful direct merge:**
+**On successful GitHub auto-merge:**
 ```
 merged=true
 needs_plan=false

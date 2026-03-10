@@ -276,7 +276,7 @@ git checkout -b feature/{topic}
 
 Then run each group through the pipeline using the feature branch as `base_branch` for all
 `merge_worktree` calls. The `/autoskillit:audit-impl` skill accepts the manifest as input
-and audits all groups at once as the final gate before merging the feature branch to `main`.
+and audits all groups at once as the final gate before merging the feature branch to `integration`.
 
 Use the `group-implementation` bundled workflow to automate this — it creates the feature
 branch, runs the group loop, and gates on audit before signalling merge-ready.

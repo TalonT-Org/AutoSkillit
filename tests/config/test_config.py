@@ -532,3 +532,25 @@ class TestDynaconfIntegration:
 
         cfg = GitHubConfig()
         assert cfg.in_progress_label == "in-progress"
+
+
+class TestBranchingConfig:
+    def test_branching_config_default_base_branch_is_integration(self) -> None:
+        """BranchingConfig must default default_base_branch to 'integration'."""
+        from autoskillit.config.settings import BranchingConfig
+
+        assert BranchingConfig().default_base_branch == "integration"
+
+    def test_automation_config_has_branching_field(self) -> None:
+        """AutomationConfig must expose a BranchingConfig as .branching."""
+        from autoskillit.config.settings import AutomationConfig
+
+        cfg = AutomationConfig()
+        assert cfg.branching.default_base_branch == "integration"
+
+    def test_branching_config_is_overridable(self) -> None:
+        """BranchingConfig.default_base_branch must accept override values."""
+        from autoskillit.config.settings import BranchingConfig
+
+        cfg = BranchingConfig(default_base_branch="main")
+        assert cfg.default_base_branch == "main"

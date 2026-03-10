@@ -43,7 +43,7 @@ ingredients:
     default: ""
   base_branch:
     description: Branch to branch off of and PR target
-    default: main
+    default: integration
   audit:
     description: Gate merge on audit-impl quality check (true/false)
     default: "true"

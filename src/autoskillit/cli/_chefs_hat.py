@@ -26,4 +26,9 @@ def chefs_hat() -> None:
     skills_dir = session_mgr.init_session(session_id, cook_session=True)
 
     env = {**os.environ, "AUTOSKILLIT_KITCHEN_OPEN": "1"}
-    subprocess.run(["claude", "--add-dir", str(skills_dir)], env=env)
+    try:
+        result = subprocess.run(["claude", "--add-dir", str(skills_dir)], env=env)
+        if result.returncode != 0:
+            raise SystemExit(result.returncode)
+    finally:
+        shutil.rmtree(skills_dir, ignore_errors=True)

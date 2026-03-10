@@ -1,0 +1,83 @@
+name: Release — Minor Version Bump and Tag
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [stable]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stable
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          uv-version: "0.9.21"
+
+      - name: Compute new minor version
+        id: version
+        run: |
+          CURRENT=$(python3 -c "
+          import tomllib, pathlib
+          print(tomllib.loads(pathlib.Path('pyproject.toml').read_bytes())['project']['version'])
+          ")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          NEW="$MAJOR.$((MINOR + 1)).0"
+          echo "old=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Update pyproject.toml
+        run: |
+          sed -i \
+            "s/^version = \"${{ steps.version.outputs.old }}\"/version = \"${{ steps.version.outputs.new }}\"/" \
+            pyproject.toml
+
+      - name: Update plugin.json
+        run: |
+          python3 - <<'EOF'
+          import json, pathlib, os
+          p = pathlib.Path("src/autoskillit/.claude-plugin/plugin.json")
+          data = json.loads(p.read_text())
+          data["version"] = os.environ["NEW_VERSION"]
+          p.write_text(json.dumps(data, indent=2) + "\n")
+          EOF
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new }}
+
+      - name: Regenerate uv.lock
+        run: uv lock
+
+      - name: Commit version bump to stable
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
+          git diff --cached --quiet && echo "Nothing to commit" && exit 0
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
+          git push origin stable
+
+      - name: Create annotated git tag
+        run: |
+          git tag -a "${{ steps.version.outputs.tag }}" \
+            -m "Release ${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create GitHub Release
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "Release ${{ steps.version.outputs.tag }}" \
+            --generate-notes \
+            --target stable
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

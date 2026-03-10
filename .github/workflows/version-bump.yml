@@ -1,0 +1,99 @@
+name: Auto Patch Version Bump
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-and-sync:
+    if: >
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.ref == 'integration'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          uv-version: "0.9.21"
+
+      - name: Compute new patch version
+        id: version
+        run: |
+          CURRENT=$(python3 -c "
+          import tomllib, pathlib
+          print(tomllib.loads(pathlib.Path('pyproject.toml').read_bytes())['project']['version'])
+          ")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          NEW="$MAJOR.$MINOR.$((PATCH + 1))"
+          echo "old=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Update pyproject.toml
+        run: |
+          sed -i \
+            "s/^version = \"${{ steps.version.outputs.old }}\"/version = \"${{ steps.version.outputs.new }}\"/" \
+            pyproject.toml
+
+      - name: Update plugin.json
+        run: |
+          python3 - <<'EOF'
+          import json, pathlib, os
+          p = pathlib.Path("src/autoskillit/.claude-plugin/plugin.json")
+          data = json.loads(p.read_text())
+          data["version"] = os.environ["NEW_VERSION"]
+          p.write_text(json.dumps(data, indent=2) + "\n")
+          EOF
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new }}
+
+      - name: Regenerate uv.lock
+        run: uv lock
+
+      - name: Commit and push version bump to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
+          git diff --cached --quiet && echo "Nothing to commit" && exit 0
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
+          git push origin main
+
+      - name: Sync main into integration
+        run: |
+          git fetch origin integration
+          git checkout integration
+
+          if git merge --ff-only origin/main; then
+            git push origin integration
+            echo "sync=fast-forwarded" >> "$GITHUB_OUTPUT"
+          else
+            EXISTING=$(gh pr list \
+              --head main \
+              --base integration \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty')
+            if [ -z "$EXISTING" ]; then
+              gh pr create \
+                --head main \
+                --base integration \
+                --title "chore: sync main → integration after version bump" \
+                --body "Automated sync PR: fast-forward merge was not possible (integration has diverged from main). Please resolve and merge."
+              echo "sync=pr-opened" >> "$GITHUB_OUTPUT"
+            else
+              echo "sync=pr-exists (#$EXISTING)" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

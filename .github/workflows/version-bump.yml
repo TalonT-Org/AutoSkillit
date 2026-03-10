@@ -65,11 +65,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
-          git diff --cached --quiet && echo "Nothing to commit" && exit 0
-          git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
-          git push origin main
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+          else
+            git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
+            git push origin main
+          fi
 
       - name: Sync main into integration
+        id: sync
         run: |
           git fetch origin integration
           git checkout integration

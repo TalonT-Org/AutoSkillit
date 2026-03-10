@@ -34,7 +34,7 @@ def _is_autoskillit_hook_command(command: str) -> bool:
 
 
 def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
-    """Remove all autoskillit-related PreToolUse entries from settings.json.
+    """Remove all autoskillit-related hook entries from settings.json (all event types).
 
     This is a destructive-then-rebuild approach: evict everything autoskillit-
     related, then let sync_hooks_to_settings() write canonical entries fresh.
@@ -42,20 +42,18 @@ def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
     """
     data = _load_settings_data(settings_path)
     hooks = data.get("hooks", {})
-    pretooluse: list[dict] = hooks.get("PreToolUse", [])
-    if not pretooluse:
-        return
-
-    cleaned = []
-    for entry in pretooluse:
-        entry_hooks = entry.get("hooks", [])
-        non_autoskillit = [
-            h for h in entry_hooks if not _is_autoskillit_hook_command(h.get("command", ""))
-        ]
-        if non_autoskillit:
-            entry["hooks"] = non_autoskillit
-            cleaned.append(entry)
-    hooks["PreToolUse"] = cleaned
+    for event_type in list(hooks.keys()):
+        event_list: list[dict] = hooks.get(event_type, [])
+        cleaned = []
+        for entry in event_list:
+            entry_hooks = entry.get("hooks", [])
+            non_autoskillit = [
+                h for h in entry_hooks if not _is_autoskillit_hook_command(h.get("command", ""))
+            ]
+            if non_autoskillit:
+                entry["hooks"] = non_autoskillit
+                cleaned.append(entry)
+        hooks[event_type] = cleaned
     _write_settings_data(settings_path, data)
 
 
@@ -63,18 +61,18 @@ def sync_hooks_to_settings(settings_path: Path) -> None:
     """Write all HOOK_REGISTRY hooks to settings.json.
 
     Must be called after _evict_stale_autoskillit_hooks() — assumes no
-    autoskillit entries are present in PreToolUse when this function runs.
-    Each HookDef becomes one entry with all its scripts as ordered commands.
+    autoskillit entries are present when this function runs.
+    Each HookDef becomes one entry under its event_type with all its scripts as ordered commands.
     """
     hooks_dir = pkg_root() / "hooks"
     data = _load_settings_data(settings_path)
-    pretooluse: list[dict] = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
     for hook_def in HOOK_REGISTRY:
+        event_list: list[dict] = data.setdefault("hooks", {}).setdefault(hook_def.event_type, [])
         hooks_list = [
             {"type": "command", "command": f"python3 {hooks_dir / script}"}
             for script in hook_def.scripts
         ]
-        pretooluse.append({"matcher": hook_def.matcher, "hooks": hooks_list})
+        event_list.append({"matcher": hook_def.matcher, "hooks": hooks_list})
     _write_settings_data(settings_path, data)
 
 

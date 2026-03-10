@@ -197,7 +197,8 @@ class TestCLIInit:
         data = json.loads(settings_path.read_text())
         registered = " ".join(
             cmd
-            for entry in data["hooks"]["PreToolUse"]
+            for event_entries in data["hooks"].values()
+            for entry in event_entries
             for hook in entry.get("hooks", [])
             for cmd in [hook.get("command", "")]
         )

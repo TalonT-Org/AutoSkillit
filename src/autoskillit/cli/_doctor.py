@@ -71,7 +71,9 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
     data = _load_settings_data(settings_path)
     registered = " ".join(
         hook.get("command", "")
-        for entry in data.get("hooks", {}).get("PreToolUse", [])
+        for event_entries in data.get("hooks", {}).values()
+        if isinstance(event_entries, list)
+        for entry in event_entries
         for hook in entry.get("hooks", [])
     )
     missing = [

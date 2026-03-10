@@ -38,7 +38,7 @@ async def merge_worktree(
 
     Args:
         worktree_path: Absolute path to the git worktree.
-        base_branch: Branch to merge into (e.g. "main").
+        base_branch: Branch to merge into (e.g. "integration").
         step_name: Optional YAML step key for wall-clock timing accumulation.
     """
     if (gate := _require_enabled()) is not None:

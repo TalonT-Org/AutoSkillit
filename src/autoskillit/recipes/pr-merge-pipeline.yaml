@@ -567,7 +567,7 @@ steps:
 
   done:
     action: stop
-    message: "PR consolidation complete. Batch branch pushed, review PR opened targeting integration branch. Human review required before merging integration into main."
+    message: "PR consolidation complete. Create PR from integration → main when ready for human review."
 
   escalate_stop:
     action: stop

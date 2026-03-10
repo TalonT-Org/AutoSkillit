@@ -1501,10 +1501,17 @@ class TestDevSprintRecipe:
         assert not validate_recipe(recipe), "Structural validation errors found"
 
     def test_ds3_no_semantic_errors(self, recipe) -> None:
-        """DS3: dev-sprint has no semantic ERROR findings."""
-        from autoskillit.core.types import Severity
+        """DS3: dev-sprint has no semantic ERROR findings.
 
-        errors = [f for f in run_semantic_rules(recipe) if f.severity == Severity.ERROR]
+        Passes available_recipes so unknown-sub-recipe rule fires on misspelled names.
+        """
+        from autoskillit.core.types import Severity
+        from autoskillit.recipe._analysis import make_validation_context
+        from autoskillit.recipe.io import list_recipes
+
+        bundled_names = frozenset(r.name for r in list_recipes(builtin_recipes_dir()).items)
+        ctx = make_validation_context(recipe, available_recipes=bundled_names)
+        errors = [f for f in run_semantic_rules(ctx) if f.severity == Severity.ERROR]
         assert not errors, f"Semantic errors: {errors}"
 
     def test_ds4_has_run_recipe_composition_step(self, recipe) -> None:

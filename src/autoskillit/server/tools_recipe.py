@@ -275,7 +275,20 @@ async def run_recipe(
             stderr="",
         ).to_json()
 
-    recipe_yaml = recipe_info.path.read_text()
+    try:
+        recipe_yaml = recipe_info.path.read_text()
+    except OSError as exc:
+        return SkillResult(
+            success=False,
+            result=f"Failed to read recipe file '{recipe_info.path}': {exc}",
+            session_id="",
+            subtype="error",
+            is_error=True,
+            exit_code=-1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        ).to_json()
     result = await _run_subrecipe(
         recipe_yaml=recipe_yaml,
         ingredients_json=ingredients,

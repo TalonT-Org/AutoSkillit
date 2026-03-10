@@ -6,7 +6,9 @@ import json as _json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, pkg_root
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, pkg_root
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from autoskillit.recipe.loader import RecipeInfo
@@ -21,6 +23,10 @@ def build_subrecipe_prompt(recipe_yaml: str, ingredients_json: str) -> str:
     try:
         ingredients = _json.loads(ingredients_json) if ingredients_json else {}
     except _json.JSONDecodeError:
+        logger.warning(
+            "build_subrecipe_prompt: malformed ingredients_json, falling back to {}",
+            ingredients_json=ingredients_json,
+        )
         ingredients = {}
 
     sous_chef_content = ""

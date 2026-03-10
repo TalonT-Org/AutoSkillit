@@ -270,8 +270,7 @@ def _classify_steps(recipe: Any) -> StepClassification:
             start_id = name_to_id[target]
             end_id = name_to_id[name]
 
-            reachable_from_start = set(g_success.subcomponent(start_id, mode="OUT"))
-            member_ids = reachable_from_start
+            member_ids = set(g_success.subcomponent(start_id, mode="OUT"))
             member_ids.add(end_id)  # Force-include: end routes via on_result, not on_success
 
             chain = frozenset(g.vs[vid]["name"] for vid in member_ids)
@@ -601,6 +600,10 @@ def _render_for_each_chain(
         routing_block_steps = [s for s in inner_steps if s.name in classification.routing_blocks]
         for rb_step in routing_block_steps:
             if rb_step.on_result_conditions:
+                # Continuation lines must align with the condition column on the first line.
+                # First-line prefix: "│         └── {name}: " = 1 + 9 + 4 + len(name) + 2 chars.
+                # Continuation indent after "│": 9 + 4 + len(name) + 2 = 15 + len(name) spaces.
+                continuation_indent = " " * (15 + len(rb_step.name))
                 first = True
                 for cond_str, target, is_back in rb_step.on_result_conditions:
                     suf = " ↑" if is_back else ""
@@ -608,7 +611,7 @@ def _render_for_each_chain(
                         lines.append(f"│         └── {rb_step.name}: {cond_str}  → {target}{suf}")
                         first = False
                     else:
-                        lines.append(f"│                          {cond_str}  → {target}{suf}")
+                        lines.append(f"│{continuation_indent}{cond_str}  → {target}{suf}")
 
 
 def _render_visual_flow(layout: _LayoutResult) -> str:

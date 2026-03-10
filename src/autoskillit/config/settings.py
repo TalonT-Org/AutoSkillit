@@ -142,13 +142,6 @@ class LinuxTracingConfig:
 class McpResponseConfig:
     alert_threshold_tokens: int = 2000
 
-    @classmethod
-    def from_dynaconf(cls, settings: Any) -> McpResponseConfig:
-        mcp = settings.get("mcp_response", {})
-        return cls(
-            alert_threshold_tokens=int(mcp.get("alert_threshold_tokens", 2000)),
-        )
-
 
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""

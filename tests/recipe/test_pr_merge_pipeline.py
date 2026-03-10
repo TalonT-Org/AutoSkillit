@@ -262,80 +262,72 @@ def test_pmp_create_persistent_integration_routes_to_analyze_prs(recipe) -> None
     assert recipe.steps["create_persistent_integration"].on_success == "analyze_prs"
 
 
-def test_pmp_resolve_merge_conflicts_step_exists(recipe):
-    assert "resolve_merge_conflicts" in recipe.steps
-
-
-def test_pmp_resolve_merge_conflicts_is_run_skill(recipe):
-    step = recipe.steps["resolve_merge_conflicts"]
-    assert step.tool == "run_skill"
-
-
-def test_pmp_resolve_merge_conflicts_calls_correct_skill(recipe):
-    step = recipe.steps["resolve_merge_conflicts"]
-    cmd = step.with_args.get("skill_command", "")
-    assert "/autoskillit:resolve-merge-conflicts" in cmd
-
-
-def test_pmp_resolve_merge_conflicts_routes_to_retry_merge(recipe):
-    step = recipe.steps["resolve_merge_conflicts"]
-    assert step.on_result is not None
-    fallthrough_routes = [c for c in step.on_result.conditions if c.when is None]
-    routes = {c.route for c in fallthrough_routes}
-    assert "retry_merge_after_resolution" in routes, (
-        "resolve_merge_conflicts fallthrough must route to retry_merge_after_resolution"
+def test_pmp_merge_to_integration_removed(recipe) -> None:
+    """merge_to_integration step must be removed — replaced by GitHub-API merge sequence."""
+    assert "merge_to_integration" not in recipe.steps, (
+        "merge_to_integration step still exists but must be replaced by the "
+        "push_worktree_branch → create_conflict_pr → wait_for_conflict_ci"
+        " → merge_conflict_pr sequence"
     )
 
 
-def test_pmp_retry_merge_after_resolution_step_exists(recipe):
-    assert "retry_merge_after_resolution" in recipe.steps
-
-
-def test_pmp_retry_merge_after_resolution_uses_merge_worktree(recipe):
-    step = recipe.steps["retry_merge_after_resolution"]
-    assert step.tool == "merge_worktree"
-
-
-def test_pmp_retry_merge_after_resolution_routes_to_next_part(recipe):
-    step = recipe.steps["retry_merge_after_resolution"]
-    # With on_result, success is the default (unconditional) route
-    default_routes = [c for c in step.on_result.conditions if c.when is None]
-    assert len(default_routes) == 1
-    assert default_routes[0].route == "next_part_or_next_pr"
-
-
-def test_pmp_retry_merge_no_loop_back_to_resolve(recipe):
-    step = recipe.steps["retry_merge_after_resolution"]
-    routes = [c.route for c in step.on_result.conditions] if step.on_result is not None else []
-    assert "resolve_merge_conflicts" not in routes, (
-        "retry_merge_after_resolution must never route back to resolve_merge_conflicts"
+def test_pmp_resolve_merge_conflicts_removed(recipe) -> None:
+    """resolve_merge_conflicts step must be removed — it was only reachable from
+    merge_to_integration (worktree_intact_rebase_aborted), which is also removed."""
+    assert "resolve_merge_conflicts" not in recipe.steps, (
+        "resolve_merge_conflicts still exists but must be removed — "
+        "merge_to_integration (its only trigger) is gone in the GitHub-API merge flow"
     )
 
 
-def test_pmp_merge_to_integration_routes_dirty_tree_to_fix(recipe) -> None:
-    """merge_to_integration must route dirty_tree to fix."""
-    step = recipe.steps["merge_to_integration"]
-    assert step.on_result is not None
-    dirty_tree_routes = [c for c in step.on_result.conditions if c.when and "dirty_tree" in c.when]
-    assert len(dirty_tree_routes) == 1
-    assert dirty_tree_routes[0].route == "fix"
+def test_pmp_commit_dirty_removed(recipe) -> None:
+    """commit_dirty step must be removed — only reachable from resolve_merge_conflicts
+    and retry_merge_after_resolution, both of which are removed."""
+    assert "commit_dirty" not in recipe.steps, (
+        "commit_dirty still exists but must be removed — "
+        "all steps that route to it are removed in the GitHub-API merge flow"
+    )
 
 
-def test_pmp_commit_dirty_step_exists(recipe) -> None:
-    """commit_dirty step must exist and route to retry_merge_after_resolution."""
-    assert "commit_dirty" in recipe.steps
-    step = recipe.steps["commit_dirty"]
+def test_pmp_has_push_worktree_branch_step(recipe) -> None:
+    """push_worktree_branch step must exist to push the resolved worktree branch."""
+    assert "push_worktree_branch" in recipe.steps, (
+        "push_worktree_branch step is missing — required to push the conflict-resolution "
+        "worktree branch to origin before creating a PR for GitHub-API merge"
+    )
+
+
+def test_pmp_has_create_conflict_pr_step(recipe) -> None:
+    """create_conflict_pr step must exist to open a GitHub PR for the worktree branch."""
+    assert "create_conflict_pr" in recipe.steps, (
+        "create_conflict_pr step is missing — conflict resolution worktrees must be merged "
+        "via GitHub PR (not local git) to enforce CI status checks"
+    )
+    step = recipe.steps["create_conflict_pr"]
     assert step.tool == "run_cmd"
-    assert step.on_success == "retry_merge_after_resolution"
+    cmd = step.with_args.get("cmd", "")
+    assert "gh pr create" in cmd
 
 
-def test_pmp_retry_merge_routes_dirty_tree_to_commit_dirty(recipe) -> None:
-    """retry_merge_after_resolution must route dirty_tree to commit_dirty."""
-    step = recipe.steps["retry_merge_after_resolution"]
-    assert step.on_result is not None
-    dirty_tree_routes = [c for c in step.on_result.conditions if c.when and "dirty_tree" in c.when]
-    assert len(dirty_tree_routes) == 1
-    assert dirty_tree_routes[0].route == "commit_dirty"
+def test_pmp_has_wait_for_conflict_ci_step(recipe) -> None:
+    """wait_for_conflict_ci step must exist and use the wait_for_ci MCP tool."""
+    assert "wait_for_conflict_ci" in recipe.steps, (
+        "wait_for_conflict_ci step is missing — CI must pass on the worktree branch "
+        "before the conflict PR can be merged"
+    )
+    assert recipe.steps["wait_for_conflict_ci"].tool == "wait_for_ci"
+
+
+def test_pmp_has_merge_conflict_pr_step(recipe) -> None:
+    """merge_conflict_pr step must exist and use gh pr merge --squash."""
+    assert "merge_conflict_pr" in recipe.steps, (
+        "merge_conflict_pr step is missing — final merge of conflict-resolution PR"
+    )
+    step = recipe.steps["merge_conflict_pr"]
+    assert step.tool == "run_cmd"
+    cmd = step.with_args.get("cmd", "")
+    assert "gh pr merge" in cmd
+    assert "--squash" in cmd
 
 
 # ---------------------------------------------------------------------------

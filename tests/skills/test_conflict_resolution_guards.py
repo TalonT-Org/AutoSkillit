@@ -231,46 +231,7 @@ def test_resolve_merge_conflicts_in_skill_contracts():
     )
 
 
-# ── New: recipe routing for merge_to_integration ────────────────────────────
-
-
-@pytest.fixture(scope="module")
-def pmp_recipe():
-    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-
-    return load_recipe(builtin_recipes_dir() / "pr-merge-pipeline.yaml")
-
-
-def test_merge_to_integration_has_on_result(pmp_recipe):
-    step = pmp_recipe.steps["merge_to_integration"]
-    assert step.on_result is not None, (
-        "merge_to_integration must have on_result routing for recoverable failures"
-    )
-
-
-def test_merge_to_integration_routes_intact_rebase_to_resolve_skill(pmp_recipe):
-    step = pmp_recipe.steps["merge_to_integration"]
-    conditions = step.on_result.conditions
-    assert conditions, "merge_to_integration on_result must have predicate conditions"
-    rebase_intact_routes = [
-        c
-        for c in conditions
-        if c.when
-        and "worktree_intact_rebase_aborted" in c.when
-        and c.route == "resolve_merge_conflicts"
-    ]
-    assert rebase_intact_routes, (
-        "merge_to_integration must have a condition with state 'worktree_intact_rebase_aborted' "
-        "routing to resolve_merge_conflicts"
-    )
-
-
-def test_merge_to_integration_handles_all_recoverable_steps(pmp_recipe):
-    step = pmp_recipe.steps["merge_to_integration"]
-    conditions = step.on_result.conditions
-    for recoverable in ("rebase", "test_gate", "post_rebase_test_gate"):
-        matching = [c for c in conditions if c.when and recoverable in c.when]
-        assert matching, (
-            f"merge_to_integration on_result must have a dedicated condition for "
-            f"failed_step={recoverable!r}"
-        )
+# ── Recipe routing for merge_to_integration was removed in issue #289 Part B ──
+# merge_to_integration, resolve_merge_conflicts, retry_merge_after_resolution,
+# and commit_dirty are all removed — replaced by the GitHub-API merge sequence.
+# Guards for those steps have been removed accordingly.

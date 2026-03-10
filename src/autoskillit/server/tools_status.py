@@ -163,7 +163,8 @@ def _format_token_summary(steps: list) -> str:
         lines.append(f"- output_tokens: {step['output_tokens']}\n")
         lines.append(f"- cache_creation_input_tokens: {step['cache_creation_input_tokens']}\n")
         lines.append(f"- cache_read_input_tokens: {step['cache_read_input_tokens']}\n")
-        lines.append(f"- invocation_count: {step['invocation_count']}\n\n")
+        lines.append(f"- invocation_count: {step['invocation_count']}\n")
+        lines.append(f"- elapsed_seconds: {step['elapsed_seconds']}\n\n")
     return "".join(lines)
 
 

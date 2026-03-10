@@ -238,6 +238,108 @@ def test_quota_check_falls_back_to_defaults_without_hook_config(tmp_path, monkey
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+# T1
+def test_quota_event_approved_written_to_log(tmp_path, monkeypatch):
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=50.0)
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    events = [
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+    ]
+    assert len(events) == 1
+    assert events[0]["event"] == "approved"
+    assert events[0]["utilization"] == 50.0
+    assert events[0]["threshold"] == 90.0
+    assert "ts" in events[0]
+
+
+# T2
+def test_quota_event_blocked_written_to_log(tmp_path, monkeypatch):
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=95.0)
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    events = [
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+    ]
+    assert len(events) == 1
+    ev = events[0]
+    assert ev["event"] == "blocked"
+    assert ev["utilization"] == 95.0
+    assert ev["threshold"] == 90.0
+    assert isinstance(ev["sleep_seconds"], int)
+    assert ev["sleep_seconds"] > 0
+    assert "ts" in ev
+
+
+# T3
+def test_quota_event_cache_miss_written_to_log(tmp_path, monkeypatch):
+    missing_cache = tmp_path / "nonexistent" / "cache.json"
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    _run_hook(event={"tool_name": "run_skill"}, cache_path=missing_cache)
+    events = [
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+    ]
+    assert len(events) == 1
+    assert events[0]["event"] == "cache_miss"
+    assert "ts" in events[0]
+
+
+# T4
+def test_quota_event_stale_cache_writes_cache_miss(tmp_path, monkeypatch):
+    cache = tmp_path / "cache.json"
+    payload = {
+        "fetched_at": "2020-01-01T00:00:00+00:00",
+        "five_hour": {"utilization": 99.0, "resets_at": None},
+    }
+    cache.write_text(json.dumps(payload))
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    events = [
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+    ]
+    assert events[0]["event"] == "cache_miss"
+
+
+# T5
+def test_quota_event_parse_error_on_malformed_utilization(tmp_path, monkeypatch):
+    cache = tmp_path / "cache.json"
+    # Valid JSON but utilization is not a float
+    cache.write_text(
+        json.dumps(
+            {
+                "fetched_at": datetime.now(UTC).isoformat(),
+                "five_hour": {"utilization": "not-a-number", "resets_at": None},
+            }
+        )
+    )
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    events = [
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+    ]
+    assert events[0]["event"] == "parse_error"
+
+
+# T6
+def test_quota_event_no_crash_when_log_dir_unresolvable(tmp_path, monkeypatch):
+    """Hook must still complete normally when log write fails (fail-open)."""
+    cache = tmp_path / "cache.json"
+    _write_cache(cache, utilization=50.0)
+    # Point log dir to a file path (not a directory) — mkdir will fail
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "not_a_dir.txt"))
+    (tmp_path / "not_a_dir.txt").write_text("blocker")
+    out = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    # Hook still approves — no crash, no output
+    assert out.strip() == ""
+
+
 # T-CFG-5
 def test_defaults_yaml_cache_max_age_is_300():
     """defaults.yaml must have quota_guard.cache_max_age: 300 (was 60).

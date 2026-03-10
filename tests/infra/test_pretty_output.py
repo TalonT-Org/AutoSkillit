@@ -346,10 +346,10 @@ def test_format_get_token_summary_compact():
     out, _ = _run_hook(event=event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "token_summary" in text
-    # Assert specific compact line format: name xN [in:Xk out:Xk cached:XM]
-    assert "investigate x1 [in:45.2k out:12.8k cached:1.2M]" in text
-    assert "make_plan x2 [in:30.0k out:8.0k cached:500.0k]" in text
-    assert "implement x1 [in:60.0k out:15.0k cached:2.0M]" in text
+    # Assert specific compact line format: name xN [in:Xk out:Xk cached:XM t:Xs]
+    assert "investigate x1 [in:45.2k out:12.8k cached:1.2M t:0.0s]" in text
+    assert "make_plan x2 [in:30.0k out:8.0k cached:500.0k t:0.0s]" in text
+    assert "implement x1 [in:60.0k out:15.0k cached:2.0M t:0.0s]" in text
     assert "total_in:" in text
     assert "total_out:" in text
     assert "total_cached:" in text
@@ -850,3 +850,40 @@ def test_wrapped_tool_exception_still_detected(tmp_path):
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "tool exception" in text.lower()
     assert "TimeoutError: process hung" in text
+
+
+# T7
+def test_fmt_get_token_summary_includes_elapsed_seconds():
+    """_fmt_get_token_summary must include elapsed time in each step line."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__get_token_summary",
+        "tool_response": json.dumps(
+            {
+                "steps": [
+                    {
+                        "step_name": "implement",
+                        "input_tokens": 5000,
+                        "output_tokens": 1200,
+                        "cache_creation_input_tokens": 200,
+                        "cache_read_input_tokens": 3000,
+                        "invocation_count": 2,
+                        "elapsed_seconds": 123.4,
+                    }
+                ],
+                "total": {
+                    "input_tokens": 5000,
+                    "output_tokens": 1200,
+                    "cache_creation_input_tokens": 200,
+                    "cache_read_input_tokens": 3000,
+                    "total_elapsed_seconds": 123.4,
+                },
+                "mcp_responses": {"steps": [], "total": {}},
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    data = json.loads(out)
+    rendered = data["hookSpecificOutput"]["updatedMCPToolOutput"]
+    # Must include step name and elapsed time
+    assert "implement" in rendered
+    assert "123.4s" in rendered or "t:123.4s" in rendered

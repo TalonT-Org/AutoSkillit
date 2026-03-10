@@ -572,3 +572,24 @@ class TestWriteTelemetryFiles:
         result = json.loads(await write_telemetry_files("/tmp"))
         assert result["success"] is False
         assert result["subtype"] == "gate_error"
+
+
+# T8
+def test_format_token_summary_includes_elapsed_seconds():
+    from autoskillit.server.tools_status import _format_token_summary
+
+    steps = [
+        {
+            "step_name": "plan",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_creation_input_tokens": 100,
+            "cache_read_input_tokens": 200,
+            "invocation_count": 1,
+            "elapsed_seconds": 45.7,
+        }
+    ]
+    result = _format_token_summary(steps)
+    assert "plan" in result
+    assert "elapsed_seconds" in result
+    assert "45.7" in result

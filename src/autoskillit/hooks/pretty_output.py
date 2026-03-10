@@ -229,7 +229,8 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
         cached = _fmt_tokens(
             step.get("cache_read_input_tokens", 0) + step.get("cache_creation_input_tokens", 0)
         )
-        lines.append(f"{name} x{count} [in:{inp} out:{out} cached:{cached}]")
+        elapsed = step.get("elapsed_seconds", 0.0)
+        lines.append(f"{name} x{count} [in:{inp} out:{out} cached:{cached} t:{elapsed:.1f}s]")
     total = data.get("total", {})
     if total:
         lines.append("")

@@ -35,7 +35,7 @@ def _resolve_recipe_input(raw: str, available: list[RecipeInfo]) -> RecipeInfo |
     return next((r for r in available if r.name == raw), None)
 
 
-def _build_orchestrator_prompt(script_yaml: str) -> str:
+def _build_orchestrator_prompt(script_yaml: str, diagram: str | None = None) -> str:
     """Build the --append-system-prompt content for a cook session."""
     # Inject sous-chef global orchestration rules (graceful degradation if absent)
     sous_chef_content = ""
@@ -43,10 +43,20 @@ def _build_orchestrator_prompt(script_yaml: str) -> str:
     if _sous_chef_path.exists():
         sous_chef_content = "\n\n" + _sous_chef_path.read_text()
 
+    diagram_section = ""
+    if diagram:
+        diagram_section = f"\n\nRECIPE DIAGRAM (pre-generated):\n{diagram}\n"
+
     return f"""\
 You are a pipeline orchestrator. Execute the recipe below step-by-step.
 
-1. Present the recipe to the user using the preview format below
+FIRST ACTION — before prompting for any inputs, execute these steps in order:
+1. Display the full recipe overview using the preview format below:
+   - The recipe diagram above (if present)
+   - Recipe name, description, and flow summary
+   - Ingredients table (user-supplied vs agent-managed)
+   - Step overview with routing, retry, and capture info
+   - Kitchen rules
 2. Prompt for input values using AskUserQuestion
 3. Execute the pipeline steps by calling MCP tools directly
 
@@ -132,7 +142,7 @@ ACTION: CONFIRM STEP SEMANTICS:
   route to the step's on_success target.
 - If the user declines (answers no, skip, keep, cancel, or similar negative),
   route to the step's on_failure target.
-{sous_chef_content}
+{diagram_section}{sous_chef_content}
 --- RECIPE ---
 {script_yaml}
 --- END RECIPE ---

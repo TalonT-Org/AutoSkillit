@@ -10,7 +10,10 @@ import subprocess
 import sys
 from datetime import UTC
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
+
+if TYPE_CHECKING:
+    from autoskillit.recipe import RecipeInfo
 
 from cyclopts import App, Parameter
 
@@ -21,9 +24,8 @@ from autoskillit.cli._init_helpers import (
     _prompt_test_command,
     _register_all,
 )
-from autoskillit.core import ClaudeFlags, _atomic_write, pkg_root
+from autoskillit.core import ClaudeFlags, RecipeSource, _atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
-from autoskillit.recipe import list_recipes
 
 app = App(
     name="autoskillit",
@@ -364,6 +366,12 @@ def recipes_show(name: str):
     print(match.path.read_text())
 
 
+def _recipes_dir_for(info: RecipeInfo) -> Path:
+    if getattr(info, "source", None) == RecipeSource.BUILTIN:
+        return pkg_root() / "recipes"
+    return Path.cwd() / ".autoskillit" / "recipes"
+
+
 @recipes_app.command(name="render")
 def recipes_render(name: str | None = None) -> None:
     """Pre-generate flow diagram(s) for recipe(s).
@@ -373,27 +381,18 @@ def recipes_render(name: str | None = None) -> None:
     name
         Name of a single recipe to render. Renders all recipes if omitted.
     """
-    from autoskillit.core import RecipeSource
     from autoskillit.recipe import find_recipe_by_name, generate_recipe_diagram, list_recipes
 
-    project_dir = Path.cwd()
-
-    def _recipes_dir(info: object) -> Path:
-        if getattr(info, "source", None) == RecipeSource.BUILTIN:
-            return pkg_root() / "recipes"
-        return project_dir / ".autoskillit" / "recipes"
-
     if name is not None:
-        match = find_recipe_by_name(name, project_dir)
+        match = find_recipe_by_name(name, Path.cwd())
         if match is None:
             print(f"Recipe '{name}' not found.", file=sys.stderr)
             sys.exit(1)
-        generate_recipe_diagram(match.path, _recipes_dir(match))
+        generate_recipe_diagram(match.path, _recipes_dir_for(match))
         print(f"Rendered: {name}")
     else:
-        result = list_recipes(project_dir)
-        for info in result.items:
-            generate_recipe_diagram(info.path, _recipes_dir(info))
+        for info in list_recipes(Path.cwd()).items:
+            generate_recipe_diagram(info.path, _recipes_dir_for(info))
             print(f"Rendered: {info.name}")
 
 
@@ -432,6 +431,15 @@ def cook(recipe: str | None = None):
         Name of the recipe (from .autoskillit/recipes/). Prompts if omitted.
     """
     from autoskillit.cli._prompts import _build_orchestrator_prompt
+    from autoskillit.recipe import (
+        check_diagram_staleness,
+        find_recipe_by_name,
+        generate_recipe_diagram,
+        list_recipes,
+        load_recipe,
+        load_recipe_diagram,
+        validate_recipe,
+    )
 
     if os.environ.get("CLAUDECODE"):
         print("ERROR: 'cook' cannot run inside a Claude Code session.")
@@ -467,7 +475,6 @@ def cook(recipe: str | None = None):
             recipe = resolved.name
 
     from autoskillit.core import YAMLError
-    from autoskillit.recipe import find_recipe_by_name, validate_recipe
 
     _match = find_recipe_by_name(recipe, Path.cwd())
     if _match is None:
@@ -483,10 +490,8 @@ def cook(recipe: str | None = None):
     recipe_yaml = _match.path.read_text()
 
     # Validate recipe before launching session
-    from autoskillit.recipe import load_recipe as _load_for_cook
-
     try:
-        parsed = _load_for_cook(_match.path)
+        parsed = load_recipe(_match.path)
     except YAMLError as exc:
         print(f"Recipe YAML parse error: {exc}")
         sys.exit(1)
@@ -500,8 +505,14 @@ def cook(recipe: str | None = None):
         for err in errors:
             print(f"  - {err}")
         sys.exit(1)
-
-    _launch_cook_session(_build_orchestrator_prompt(recipe_yaml))
+    _rdir = _recipes_dir_for(_match)
+    if check_diagram_staleness(_match.name, _rdir, _match.path):
+        try:
+            generate_recipe_diagram(_match.path, _rdir)
+        except OSError as exc:
+            print(f"Warning: diagram generation failed: {exc}", file=sys.stderr)
+    diagram = load_recipe_diagram(_match.name, _rdir)
+    _launch_cook_session(_build_orchestrator_prompt(recipe_yaml, diagram=diagram))
 
 
 @app.command(name="chefs-hat", alias="chef")

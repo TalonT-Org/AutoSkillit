@@ -8,14 +8,14 @@ ingredients:
     description: Path to source document for group decomposition
     required: true
   source_dir:
-    description: Path to the source repository (auto-detected if empty)
+    description: Remote URL for source repo (auto-detected from git origin if empty)
     required: false
     default: ""
   run_name:
     description: Pipeline run name prefix (used in branch and clone naming)
     default: "impl"
   base_branch:
-    description: Branch to merge into (defaults to current branch)
+    description: Integration branch to merge into (defaults to integration)
     default: integration
   review_approach:
     description: Run /review-approach before implementation? (true/false)

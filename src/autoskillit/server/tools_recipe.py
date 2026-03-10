@@ -12,12 +12,18 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import get_logger
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _apply_triage_gate, _notify, _require_enabled
+from autoskillit.server.helpers import (
+    _apply_triage_gate,
+    _notify,
+    _require_enabled,
+    track_response_size,
+)
 
 logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"automation"})
+@track_response_size("list_recipes")
 async def list_recipes() -> str:
     """List available recipes from .autoskillit/recipes/.
 
@@ -46,6 +52,7 @@ async def list_recipes() -> str:
 
 
 @mcp.tool(tags={"automation"})
+@track_response_size("load_recipe")
 async def load_recipe(name: str) -> str:
     """Load a recipe by name and return its raw YAML content.
 
@@ -182,6 +189,7 @@ async def load_recipe(name: str) -> str:
 
 
 @mcp.tool(tags={"automation"})
+@track_response_size("validate_recipe")
 async def validate_recipe(script_path: str) -> str:
     """Validate a recipe YAML file against the recipe schema.
 
@@ -218,6 +226,7 @@ async def validate_recipe(script_path: str) -> str:
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("migrate_recipe")
 async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     """Apply pending migration notes to a recipe file.
 

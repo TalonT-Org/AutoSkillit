@@ -11,12 +11,18 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import RestartScope, get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess
+from autoskillit.server.helpers import (
+    _notify,
+    _require_enabled,
+    _run_subprocess,
+    track_response_size,
+)
 
 logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("merge_worktree")
 async def merge_worktree(
     worktree_path: str,
     base_branch: str,
@@ -80,6 +86,7 @@ async def merge_worktree(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("classify_fix")
 async def classify_fix(
     worktree_path: str,
     base_branch: str,
@@ -180,20 +187,31 @@ async def classify_fix(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("create_unique_branch")
 async def create_unique_branch(
-    slug: str,
-    issue_number: int | None,
-    remote: str,
-    cwd: str,
+    slug: str = "",
+    issue_number: int | None = None,
+    remote: str = "origin",
+    cwd: str = ".",
+    base_branch_name: str | None = None,
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Derive a unique branch name and create it locally.
 
-    Uses {slug}-{issue_number} as the base name, or {slug} when issue_number
-    is None. Checks the remote for conflicts via git ls-remote; appends -2,
-    -3, ... until a unique name is found. On ls-remote auth failure or other
-    non-zero exit, proceeds with the base name without suffixing.
+    Two invocation paths:
+
+    1. **base_branch_name path** (new): provide ``base_branch_name`` to use it
+       directly as the base name, bypassing slug+issue_number composition.
+       The ls-remote collision check and -2/-3 suffix logic still apply.
+
+    2. **slug+issue path** (legacy): provide ``slug`` (required) and optionally
+       ``issue_number``. Base name is ``{slug}-{issue_number}`` when
+       ``issue_number`` is set, or ``{slug}`` when ``None``.
+
+    Checks the remote for conflicts via git ls-remote; appends -2, -3, ...
+    until a unique name is found. On ls-remote auth failure or other non-zero
+    exit, proceeds with the base name without suffixing.
 
     Returns JSON with:
       - branch_name: the final branch name created
@@ -201,21 +219,31 @@ async def create_unique_branch(
                     suffix was appended
 
     Args:
-        slug: Branch name prefix (e.g. "feat-my-feature").
-        issue_number: GitHub issue number appended to slug, or None.
-        remote: Git remote to check for existing branches (e.g. "origin").
         cwd: Working directory for git commands.
+        slug: Branch name prefix (e.g. "feat-my-feature"). Required when
+              base_branch_name is not provided.
+        issue_number: GitHub issue number appended to slug, or None.
+        remote: Git remote to check for existing branches (default: "origin").
+        base_branch_name: When provided, use this directly as the base name
+                          instead of composing from slug+issue_number.
         step_name: Optional YAML step key for wall-clock timing accumulation.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="create_unique_branch", cwd=cwd)
-    logger.info("create_unique_branch", slug=slug, issue_number=issue_number, remote=remote)
+    _display = base_branch_name if base_branch_name else slug
+    logger.info(
+        "create_unique_branch",
+        slug=slug,
+        issue_number=issue_number,
+        remote=remote,
+        base_branch_name=base_branch_name,
+    )
     await _notify(
         ctx,
         "info",
-        f"create_unique_branch: {slug}",
+        f"create_unique_branch: {_display}",
         "autoskillit.create_unique_branch",
         extra={"remote": remote},
     )
@@ -225,7 +253,17 @@ async def create_unique_branch(
     tool_ctx = _get_ctx()
     _start = time.monotonic()
 
-    base_name = f"{slug}-{issue_number}" if issue_number is not None else slug
+    if base_branch_name:
+        base_name = base_branch_name
+    elif not slug:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "create_unique_branch requires either base_branch_name or slug",
+            }
+        )
+    else:
+        base_name = f"{slug}-{issue_number}" if issue_number is not None else slug
     branch_name = base_name
     was_unique = True
 
@@ -275,6 +313,7 @@ async def create_unique_branch(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("check_pr_mergeable")
 async def check_pr_mergeable(
     pr_number: int,
     cwd: str,

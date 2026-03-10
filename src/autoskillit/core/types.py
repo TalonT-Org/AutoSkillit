@@ -584,6 +584,25 @@ class TimingStore(Protocol):
 
 
 @runtime_checkable
+class McpResponseStore(Protocol):
+    """Protocol for per-tool MCP response size accumulation."""
+
+    def record(
+        self,
+        tool_name: str,
+        response: str,
+        *,
+        alert_threshold_tokens: int = 0,
+    ) -> bool: ...
+
+    def get_report(self) -> list[dict[str, Any]]: ...
+
+    def compute_total(self) -> dict[str, Any]: ...
+
+    def clear(self) -> None: ...
+
+
+@runtime_checkable
 class TestRunner(Protocol):
     """Protocol for running a test suite and reporting pass/fail."""
 

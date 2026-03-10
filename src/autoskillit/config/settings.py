@@ -138,6 +138,11 @@ class LinuxTracingConfig:
     tmpfs_path: str = "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
 
 
+@dataclass
+class McpResponseConfig:
+    alert_threshold_tokens: int = 2000
+
+
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -167,6 +172,7 @@ class AutomationConfig:
     report_bug: ReportBugConfig = field(default_factory=ReportBugConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     linux_tracing: LinuxTracingConfig = field(default_factory=LinuxTracingConfig)
+    mcp_response: McpResponseConfig = field(default_factory=McpResponseConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -199,6 +205,7 @@ class AutomationConfig:
         rb = sec("report_bug")
         lg = sec("logging")
         lt = sec("linux_tracing")
+        mr = sec("mcp_response")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -216,6 +223,7 @@ class AutomationConfig:
         _rb = _field_defaults(ReportBugConfig)
         _lg = _field_defaults(LoggingConfig)
         _lt = _field_defaults(LinuxTracingConfig)
+        _mr = _field_defaults(McpResponseConfig)
 
         return cls(
             test_check=TestCheckConfig(
@@ -301,6 +309,11 @@ class AutomationConfig:
                 proc_interval=float(val(lt, "proc_interval", _lt["proc_interval"])),
                 log_dir=str(val(lt, "log_dir", _lt["log_dir"])),
                 tmpfs_path=str(val(lt, "tmpfs_path", _lt["tmpfs_path"])),
+            ),
+            mcp_response=McpResponseConfig(
+                alert_threshold_tokens=int(
+                    val(mr, "alert_threshold_tokens", _mr["alert_threshold_tokens"])
+                ),
             ),
         )
 

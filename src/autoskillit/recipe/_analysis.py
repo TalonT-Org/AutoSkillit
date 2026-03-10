@@ -12,12 +12,112 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import igraph
+
 from autoskillit.core import SKILL_TOOLS, get_logger
 from autoskillit.recipe.contracts import _CONTEXT_REF_RE, _RESULT_CAPTURE_RE
 from autoskillit.recipe.io import iter_steps_with_context  # noqa: F401 — re-exported for rules
 from autoskillit.recipe.schema import DataFlowReport, DataFlowWarning, Recipe, RecipeStep
 
 logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Infrastructure step classification (shared with diagrams rendering)
+# ---------------------------------------------------------------------------
+
+
+def _is_infrastructure_step(step: RecipeStep) -> bool:
+    """Return True if *step* is a plumbing step that should be hidden from diagrams.
+
+    Infrastructure steps are ``run_cmd`` steps whose sole purpose is capturing
+    or setting a context value (git rev-parse, printf, echo one-liners).
+    They add no user-visible behaviour to the pipeline flow.
+    """
+    if step.tool != "run_cmd":
+        return False
+    note_lower = (step.note or "").lower()
+    cmd = ""
+    if step.with_args and isinstance(step.with_args, dict):
+        cmd = step.with_args.get("cmd", "") or ""
+    return (
+        "capture" in note_lower
+        or "set" in note_lower
+        or "printf" in cmd
+        or "git rev-parse" in cmd
+        or (cmd.strip().startswith("echo") and "\n" not in cmd)
+    )
+
+
+# ---------------------------------------------------------------------------
+# igraph recipe graph builder
+# ---------------------------------------------------------------------------
+
+
+def build_recipe_graph(recipe: Recipe) -> igraph.Graph:
+    """Build a directed igraph.Graph from a Recipe dataclass.
+
+    Nodes represent recipe steps. Each vertex carries attributes matching the
+    RecipeStep fields relevant to diagram rendering:
+    - ``name``: step name (str)
+    - ``tool``: tool identifier (str, empty string if None)
+    - ``action``: action identifier (str, empty string if None)
+    - ``note``: step note for semantic gate checks (str)
+    - ``retries``: retry count (int)
+    - ``skip_when_false``: optional condition (str, empty string if None)
+    - ``is_infra``: whether the step is a hidden infrastructure step (bool)
+    - ``is_terminal``: whether the step is a stop action (bool)
+    - ``is_confirm``: whether the step is a confirm action (bool)
+
+    Edges represent routing connections. Each edge carries:
+    - ``edge_type``: one of ``"success"``, ``"failure"``, ``"context_limit"``,
+      ``"result_condition"``, ``"exhausted"``
+    - ``condition``: for ``on_result`` edges, the ``when`` expression; otherwise ``""``
+
+    Args:
+        recipe: The loaded Recipe dataclass.
+
+    Returns:
+        A directed ``igraph.Graph`` with vertex and edge attributes as described.
+    """
+    step_names = list(recipe.steps.keys())
+    name_to_id: dict[str, int] = {name: i for i, name in enumerate(step_names)}
+
+    g = igraph.Graph(n=len(step_names), directed=True)
+    steps_list = list(recipe.steps.values())
+
+    g.vs["name"] = step_names
+    g.vs["tool"] = [s.tool or "" for s in steps_list]
+    g.vs["action"] = [s.action or "" for s in steps_list]
+    g.vs["note"] = [s.note or "" for s in steps_list]
+    g.vs["retries"] = [s.retries for s in steps_list]
+    g.vs["skip_when_false"] = [s.skip_when_false or "" for s in steps_list]
+    g.vs["is_infra"] = [_is_infrastructure_step(s) for s in steps_list]
+    g.vs["is_terminal"] = [s.action == "stop" for s in steps_list]
+    g.vs["is_confirm"] = [s.action == "confirm" for s in steps_list]
+
+    edges: list[tuple[int, int]] = []
+    edge_types: list[str] = []
+    edge_conditions: list[str] = []
+
+    for name, step in recipe.steps.items():
+        src = name_to_id[name]
+        for edge in _extract_routing_edges(step):
+            if edge.target in name_to_id:
+                edges.append((src, name_to_id[edge.target]))
+                edge_types.append(edge.edge_type)
+                edge_conditions.append(edge.condition or "")
+            else:
+                logger.warning(
+                    "build_recipe_graph: step %r references unknown target %r — edge skipped",
+                    name,
+                    edge.target,
+                )
+
+    if edges:
+        g.add_edges(edges, attributes={"edge_type": edge_types, "condition": edge_conditions})
+
+    return g
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +450,13 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                 # from dead-output prevents the two rules from conflicting.
                 cap_val = step.capture.get(cap_key, "")
                 if step.tool == "merge_worktree" and "result.cleanup_succeeded" in str(cap_val):
+                    continue
+                # Exempt diagnose-ci diagnosis_path captures: in recipes without a resolve_ci
+                # step (e.g. pr-merge-pipeline), diagnosis_path is captured for observability
+                # only — no downstream automated remediation consumes it.
+                if cap_key == "diagnosis_path" and "diagnose-ci" in step.with_args.get(
+                    "skill_command", ""
+                ):
                     continue
                 warnings.append(
                     DataFlowWarning(

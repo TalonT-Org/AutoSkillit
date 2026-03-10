@@ -18,6 +18,7 @@ from autoskillit.pipeline.gate import (
     DefaultGateState,
     gate_error_result,
 )
+from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog, McpResponseEntry
 from autoskillit.pipeline.timings import DefaultTimingLog, TimingEntry
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
 
@@ -27,6 +28,9 @@ __all__ = [
     "FailureRecord",
     "STDERR_MAX_LEN",
     "COMMAND_MAX_LEN",
+    # mcp_response
+    "DefaultMcpResponseLog",
+    "McpResponseEntry",
     # timings
     "DefaultTimingLog",
     "TimingEntry",

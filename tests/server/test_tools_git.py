@@ -692,6 +692,21 @@ class TestCreateUniqueBranch:
         await create_unique_branch("feat-x", 1, "origin", ".", step_name="branch_step")
         assert any(e["step_name"] == "branch_step" for e in tool_ctx.timing_log.get_report())
 
+    @pytest.mark.anyio
+    async def test_create_unique_branch_uses_base_branch_name_when_provided(self, tool_ctx):
+        """AP3: when base_branch_name is provided, use it directly as the base."""
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ls-remote: empty = absent
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git checkout -b
+        result = json.loads(await create_unique_branch(base_branch_name="impl/238", cwd="."))
+        assert result["branch_name"] == "impl/238"
+        # ls-remote must check the exact base_branch_name, not slug-issue composition
+        ls_remote_cmd = next(
+            (args[0] for args in tool_ctx.runner.call_args_list if "ls-remote" in args[0]),
+            None,
+        )
+        assert ls_remote_cmd is not None, "No ls-remote subprocess call found"
+        assert any("impl/238" in arg for arg in ls_remote_cmd)
+
 
 class TestCheckPrMergeable:
     @pytest.mark.anyio

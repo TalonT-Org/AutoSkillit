@@ -15,7 +15,13 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import _atomic_write, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess, resolve_log_dir
+from autoskillit.server.helpers import (
+    _notify,
+    _require_enabled,
+    _run_subprocess,
+    resolve_log_dir,
+    track_response_size,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher, HeadlessExecutor
@@ -42,6 +48,7 @@ _pending_report_tasks: set[asyncio.Task[Any]] = set()
 
 
 @mcp.tool(tags={"automation"})
+@track_response_size("fetch_github_issue")
 async def fetch_github_issue(
     issue_url: str,
     include_comments: bool = True,
@@ -105,6 +112,7 @@ async def fetch_github_issue(
 
 
 @mcp.tool(tags={"automation"})
+@track_response_size("get_issue_title")
 async def get_issue_title(issue_url: str) -> str:
     """Fetch only the title and slug for a GitHub issue — no body, no comments.
 
@@ -146,6 +154,7 @@ async def get_issue_title(issue_url: str) -> str:
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("report_bug")
 async def report_bug(
     error_context: str,
     cwd: str,
@@ -651,6 +660,7 @@ def _parse_enrich_result(response_text: str) -> dict[str, Any]:
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("prepare_issue")
 async def prepare_issue(
     title: str,
     body: str,
@@ -717,6 +727,7 @@ async def prepare_issue(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("enrich_issues")
 async def enrich_issues(
     issue_number: int | None = None,
     batch: int | None = None,
@@ -783,6 +794,7 @@ async def enrich_issues(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("claim_issue")
 async def claim_issue(
     issue_url: str,
     label: str | None = None,
@@ -866,6 +878,7 @@ async def claim_issue(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("release_issue")
 async def release_issue(
     issue_url: str,
     label: str | None = None,
@@ -960,6 +973,7 @@ async def _close_issues_sequentially(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("get_pr_reviews")
 async def get_pr_reviews(
     pr_number: int,
     cwd: str,
@@ -1024,6 +1038,7 @@ async def get_pr_reviews(
 
 
 @mcp.tool(tags={"automation", "kitchen"})
+@track_response_size("bulk_close_issues")
 async def bulk_close_issues(
     issue_numbers: list[int],
     comment: str,

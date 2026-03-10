@@ -10,7 +10,12 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, atomic_write, pkg_root
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _find_recipe, _hook_config_path, _prime_quota_cache
+from autoskillit.server.helpers import (
+    _find_recipe,
+    _hook_config_path,
+    _prime_quota_cache,
+    track_response_size,
+)
 
 
 def _write_hook_config() -> None:
@@ -72,6 +77,7 @@ def get_recipe(name: str) -> str:
 
 
 @mcp.tool(tags={"automation"})
+@track_response_size("open_kitchen")
 async def open_kitchen(ctx: Context = CurrentContext()) -> str:
     """Open the AutoSkillit kitchen for service."""
     await _open_kitchen_handler()
@@ -110,6 +116,7 @@ async def open_kitchen(ctx: Context = CurrentContext()) -> str:
 
 
 @mcp.tool(tags={"automation"})
+@track_response_size("close_kitchen")
 async def close_kitchen(ctx: Context = CurrentContext()) -> str:
     """Close the AutoSkillit kitchen."""
     _close_kitchen_handler()

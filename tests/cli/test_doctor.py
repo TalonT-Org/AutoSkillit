@@ -69,6 +69,7 @@ class TestCLIDoctor:
                 {
                     "mcpServers": {
                         "other-server": {"type": "stdio", "command": str(fake_bin)},
+                        "autoskillit": {"type": "stdio", "command": "autoskillit"},
                     }
                 }
             )
@@ -79,6 +80,16 @@ class TestCLIDoctor:
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
             "test_check:\n  command: ['pytest']\n"
         )
+        # Register hooks so hook_registration check passes
+        # Use explicit path (tmp_path already monkeypatched as Path.home())
+        from autoskillit.cli._hooks import (
+            _evict_stale_autoskillit_hooks,
+            sync_hooks_to_settings,
+        )
+
+        settings_path = tmp_path / ".claude" / "settings.json"
+        _evict_stale_autoskillit_hooks(settings_path)
+        sync_hooks_to_settings(settings_path)
         with patch(
             "autoskillit.cli.shutil.which",
             side_effect=lambda cmd: (
@@ -140,29 +151,6 @@ class TestCLIDoctor:
         severities = {r["severity"] for r in data["results"]}
         assert severities <= {"ok", "warning", "error"}
 
-    def test_doctor_warns_version_mismatch(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
-        tool_ctx,
-    ) -> None:
-        """doctor reports error when plugin.json version differs from package."""
-        plugin_dir = tmp_path / "fake_plugin" / ".claude-plugin"
-        plugin_dir.mkdir(parents=True)
-        (plugin_dir / "plugin.json").write_text(
-            json.dumps({"name": "autoskillit", "version": "0.0.0"})
-        )
-        tool_ctx.plugin_dir = str(tmp_path / "fake_plugin")
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        cli.doctor(output_json=True)
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        version_checks = [r for r in data["results"] if r["check"] == "version_consistency"]
-        assert len(version_checks) == 1
-        assert version_checks[0]["severity"] == "error"
-
     def test_doctor_passes_when_versions_match(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
@@ -176,74 +164,6 @@ class TestCLIDoctor:
         assert len(version_checks) == 1
         assert version_checks[0]["severity"] == "ok"
 
-    def test_doctor_warns_marketplace_staleness(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """doctor warns when marketplace manifest has stale version."""
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-
-        mkt_dir = tmp_path / ".autoskillit" / "marketplace"
-        plugin_dir = mkt_dir / ".claude-plugin"
-        plugin_dir.mkdir(parents=True)
-        (plugin_dir / "marketplace.json").write_text(
-            json.dumps(
-                {"plugins": [{"name": "autoskillit", "version": "0.0.0-stale", "source": "."}]}
-            )
-        )
-        link_dir = mkt_dir / "plugins"
-        link_dir.mkdir(parents=True)
-        link = link_dir / "autoskillit"
-        # Use tmp_path subdirectory as target — no .git ancestor, so not a worktree.
-        fake_pkg = tmp_path / "fake_pkg"
-        fake_pkg.mkdir()
-        link.symlink_to(fake_pkg)
-
-        cli.doctor(output_json=True)
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        mkt_checks = [r for r in data["results"] if r["check"] == "marketplace_freshness"]
-        assert len(mkt_checks) == 1
-        assert mkt_checks[0]["severity"] == "warning"
-
-    def test_doctor_marketplace_freshness_fails_for_worktree_target(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """marketplace_freshness check detects and reports a worktree symlink target."""
-        from autoskillit import __version__
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-
-        marketplace_dir = tmp_path / ".autoskillit" / "marketplace"
-        link = marketplace_dir / "plugins" / "autoskillit"
-        link.parent.mkdir(parents=True)
-
-        # Create a fake worktree target: a package dir with a .git FILE ancestor.
-        fake_worktree_pkg = tmp_path / "worktrees" / "some-wt" / "src" / "autoskillit"
-        fake_worktree_pkg.mkdir(parents=True)
-        (fake_worktree_pkg.parent.parent.parent / ".git").write_text(
-            "gitdir: /main/.git/worktrees/some-wt\n"
-        )
-        link.symlink_to(fake_worktree_pkg)
-
-        # Write a valid marketplace.json with the current version so version check passes
-        plugin_dir = marketplace_dir / ".claude-plugin"
-        plugin_dir.mkdir(parents=True)
-        (plugin_dir / "marketplace.json").write_text(
-            json.dumps(
-                {"plugins": [{"name": "autoskillit", "version": __version__, "source": "."}]}
-            )
-        )
-
-        cli.doctor(output_json=True)
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        mkt_checks = [r for r in data["results"] if r["check"] == "marketplace_freshness"]
-        assert len(mkt_checks) == 1
-        assert mkt_checks[0]["severity"] == "error"
-        assert "worktree" in mkt_checks[0]["message"].lower()
-
     def test_doctor_json_output_includes_all_checks(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
@@ -256,13 +176,13 @@ class TestCLIDoctor:
         check_names = {r["check"] for r in data["results"]}
         expected = {
             "stale_mcp_servers",
-            "duplicate_mcp_server",
-            "plugin_metadata",
+            "mcp_server_registered",
             "autoskillit_on_path",
             "project_config",
             "version_consistency",
-            "script_version_health",
             "hook_health",
+            "hook_registration",
+            "script_version_health",
         }
         assert expected <= check_names
 
@@ -271,66 +191,140 @@ class TestCLIDoctor:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
-        tool_ctx,
     ) -> None:
         """doctor human output includes severity prefixes for problems."""
-        plugin_dir = tmp_path / "fake_plugin" / ".claude-plugin"
-        plugin_dir.mkdir(parents=True)
-        (plugin_dir / "plugin.json").write_text(
-            json.dumps({"name": "autoskillit", "version": "0.0.0"})
+        # Trigger an error via a dead binary MCP server
+        fake_claude_json = tmp_path / ".claude.json"
+        fake_claude_json.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "dead-server": {
+                            "type": "stdio",
+                            "command": "/nonexistent/dead-binary",
+                        },
+                        "autoskillit": {"type": "stdio", "command": "autoskillit"},
+                    }
+                }
+            )
         )
-        tool_ctx.plugin_dir = str(tmp_path / "fake_plugin")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         cli.doctor()
         captured = capsys.readouterr()
         assert "ERROR:" in captured.out
 
-    def test_doctor_detects_duplicate_with_plugin_installed(
+    # DOC-REG-1
+    def test_doctor_includes_mcp_server_registered_check(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """doctor errors when standalone MCP entry exists alongside plugin installation."""
-        # Standalone entry in ~/.claude.json
-        fake_claude_json = tmp_path / ".claude.json"
-        fake_claude_json.write_text(
-            json.dumps(
-                {"mcpServers": {"autoskillit": {"type": "stdio", "command": "autoskillit"}}}
-            )
-        )
-        # Plugin enabled in ~/.claude/settings.json
-        settings_dir = tmp_path / ".claude"
-        settings_dir.mkdir(parents=True)
-        (settings_dir / "settings.json").write_text(
-            json.dumps({"enabledPlugins": {"autoskillit@autoskillit-local": True}})
-        )
+        """doctor run_doctor() results include mcp_server_registered check."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
-        dup_checks = [r for r in data["results"] if r["check"] == "duplicate_mcp_server"]
-        assert len(dup_checks) == 1
-        assert dup_checks[0]["severity"] == "error"
-        assert "duplicate" in dup_checks[0]["message"].lower()
+        check_names = {r["check"] for r in data["results"]}
+        assert "mcp_server_registered" in check_names
 
-    def test_doctor_warns_standalone_without_plugin(
+    # DOC-REG-2
+    def test_doctor_includes_hook_registration_check(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """doctor warns when standalone entry exists but no plugin is installed."""
-        fake_claude_json = tmp_path / ".claude.json"
-        fake_claude_json.write_text(
-            json.dumps(
-                {"mcpServers": {"autoskillit": {"type": "stdio", "command": "autoskillit"}}}
-            )
-        )
+        """doctor run_doctor() results include hook_registration check."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
-        dup_checks = [r for r in data["results"] if r["check"] == "duplicate_mcp_server"]
-        assert len(dup_checks) == 1
-        assert dup_checks[0]["severity"] == "warning"
+        check_names = {r["check"] for r in data["results"]}
+        assert "hook_registration" in check_names
+
+    # DOC-REG-3
+    def test_doctor_marketplace_freshness_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """marketplace_freshness does NOT appear in doctor results."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        check_names = {r["check"] for r in data["results"]}
+        assert "marketplace_freshness" not in check_names
+
+    # DOC-REG-4
+    def test_doctor_plugin_metadata_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """plugin_metadata does NOT appear in doctor results."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        check_names = {r["check"] for r in data["results"]}
+        assert "plugin_metadata" not in check_names
+
+    # DOC-REG-5
+    def test_doctor_duplicate_mcp_server_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """duplicate_mcp_server does NOT appear in doctor results."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        check_names = {r["check"] for r in data["results"]}
+        assert "duplicate_mcp_server" not in check_names
+
+    # DOC-REG-6
+    def test_doctor_mcp_server_registered_warns_when_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """mcp_server_registered returns warning when autoskillit absent from ~/.claude.json."""
+        # ~/.claude.json does not exist in tmp_path (no file created)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        mcp_checks = [r for r in data["results"] if r["check"] == "mcp_server_registered"]
+        assert len(mcp_checks) == 1
+        assert mcp_checks[0]["severity"] == "warning"
+
+    # DOC-REG-7
+    def test_doctor_hook_registration_warns_when_scripts_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """hook_registration returns warning when a HOOK_REGISTRY script is absent."""
+        # settings.json does not exist — all hooks missing
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        hook_checks = [r for r in data["results"] if r["check"] == "hook_registration"]
+        assert len(hook_checks) == 1
+        assert hook_checks[0]["severity"] == "warning"
+
+    # DOC-REG-8
+    def test_doctor_json_output_includes_new_checks_not_removed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Doctor JSON output includes new checks but excludes the three removed checks."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cli.doctor(output_json=True)
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        check_names = {r["check"] for r in data["results"]}
+        assert "mcp_server_registered" in check_names
+        assert "hook_registration" in check_names
+        assert "marketplace_freshness" not in check_names
+        assert "plugin_metadata" not in check_names
+        assert "duplicate_mcp_server" not in check_names
 
 
 class TestDoctorScriptHealth:
@@ -575,9 +569,7 @@ class TestGroupFDoctor:
 
         called_with: dict = {}
 
-        def mock_run_doctor(
-            *, output_json: bool = False, plugin_dir: str | None = None, fix: bool = False
-        ) -> None:
+        def mock_run_doctor(*, output_json: bool = False, fix: bool = False) -> None:
             called_with["output_json"] = output_json
             called_with["fix"] = fix
 
@@ -620,10 +612,7 @@ class TestDoctorResultFixField:
 
     def test_doctor_result_fix_not_in_json_output(self, tmp_path, monkeypatch, capsys):
         """fix callable must not appear in --output-json serialization."""
-        import autoskillit.server._state as _state
-
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(_state, "_get_plugin_dir", lambda: None)
         monkeypatch.chdir(tmp_path)
         cli.doctor(output_json=True)
         captured = capsys.readouterr()

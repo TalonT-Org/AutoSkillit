@@ -81,13 +81,13 @@ class TestCLIDoctor:
             "test_check:\n  command: ['pytest']\n"
         )
         # Register hooks so hook_registration check passes
+        # Use explicit path (tmp_path already monkeypatched as Path.home())
         from autoskillit.cli._hooks import (
-            _claude_settings_path,
             _evict_stale_autoskillit_hooks,
             sync_hooks_to_settings,
         )
 
-        settings_path = _claude_settings_path("user")
+        settings_path = tmp_path / ".claude" / "settings.json"
         _evict_stale_autoskillit_hooks(settings_path)
         sync_hooks_to_settings(settings_path)
         with patch(

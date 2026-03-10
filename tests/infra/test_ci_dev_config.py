@@ -228,6 +228,20 @@ class TestCIWorkflow:
         else:
             pytest.fail("No step computes integration-specific matrix in preflight")
 
+    def test_ci_push_trigger_includes_stable(self) -> None:
+        """CI must trigger on push to stable branch.
+
+        stable is the production-ready branch — direct pushes (from admin bypass or
+        automated tooling) must still run CI. Without this trigger, a push to stable
+        skips all checks.
+        """
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        triggers = workflow.get(True, workflow.get("on", {}))
+        push_branches = triggers["push"]["branches"]
+        assert "stable" in push_branches, (
+            "CI must trigger on push to stable branch — add 'stable' to push.branches in tests.yml"
+        )
+
 
 class TestPtyTestGuard:
     def test_pty_wrapper_test_has_script_guard(self):

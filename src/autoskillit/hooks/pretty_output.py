@@ -374,6 +374,22 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
     if not isinstance(data, dict):
         return None
 
+    # Claude Code wraps MCP tool text responses in {"result": "<text>"} before
+    # passing to PostToolUse hooks. Unwrap when the inner value is a JSON object
+    # so formatters see the actual tool payload fields (success, exit_code, etc.).
+    # Scoped to MCP tools ("mcp__" prefix) since only MCP responses get envelope-wrapped.
+    if (
+        tool_name.startswith("mcp__")
+        and list(data.keys()) == ["result"]
+        and isinstance(data["result"], str)
+    ):
+        try:
+            inner = json.loads(data["result"])
+            if isinstance(inner, dict):
+                data = inner
+        except (json.JSONDecodeError, ValueError):
+            pass  # Plain text result — leave as {"result": "<text>"} for _fmt_generic
+
     # Gate error: any tool can return this
     if data.get("subtype") == "gate_error":
         return _fmt_gate_error(data, pipeline)

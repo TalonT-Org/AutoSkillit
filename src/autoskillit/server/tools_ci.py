@@ -127,7 +127,7 @@ async def set_commit_status(
     target_url: str = "",
     repo: str = "",
     cwd: str = "",
-) -> dict:
+) -> dict[str, object]:
     """Post a GitHub Commit Status to a commit SHA.
 
     Use to implement review-first gating: post `pending` when review starts,
@@ -144,7 +144,17 @@ async def set_commit_status(
         cwd: Working directory for repo inference. Defaults to plugin_dir.
     """
     if (gate := _require_enabled()) is not None:
-        return json.loads(gate)
+        return json.loads(gate)  # type: ignore[return-value]
+
+    if not sha:
+        return {"success": False, "error": "sha must not be empty"}
+    if not context:
+        return {"success": False, "error": "context must not be empty"}
+    if len(description) > 140:
+        return {
+            "success": False,
+            "error": f"description exceeds 140 chars ({len(description)} chars)",
+        }
 
     from autoskillit.server import _get_ctx
 

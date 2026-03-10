@@ -19,6 +19,7 @@ def test_merge_pr_skill_references_gh_pr_merge() -> None:
 def test_merge_pr_skill_references_squash_auto() -> None:
     """merge-pr SKILL.md must reference '--squash --auto' for queued auto-merge."""
     content = SKILL_PATH.read_text()
-    assert "--squash --auto" in content or "--squash" in content, (
-        "merge-pr SKILL.md must document squash merge strategy to keep integration history linear"
+    assert "--squash --auto" in content, (
+        "merge-pr SKILL.md must document '--squash --auto' for queued auto-merge — "
+        "'--squash' alone cannot detect a regression that drops '--auto'"
     )

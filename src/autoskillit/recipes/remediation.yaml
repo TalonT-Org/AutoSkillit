@@ -1,5 +1,5 @@
 name: remediation
-description: Investigate a problem deeply, plan architectural fix, implement in a feature branch, and open a PR.
+description: Investigate deeply, plan architectural fix, implement and open a PR.
 autoskillit_version: "0.3.0"
 
 kitchen_rules:
@@ -32,16 +32,11 @@ ingredients:
     description: Description of the bug, error, or question to investigate
     required: true
   source_dir:
-    description: >
-      Path to the source repository to clone and work in.
-      Leave empty to auto-detect from git rev-parse --show-toplevel.
+    description: Path to the source repository (auto-detected if empty)
     required: false
     default: ""
   run_name:
-    description: >
-      Name prefix for this pipeline run. Used as the first path component
-      of the feature branch name (e.g. investigate/42 or investigate/20260304)
-      and in the clone directory name.
+    description: Pipeline run name prefix (used in branch and clone naming)
     default: "investigate"
   target_dir:
     description: Optional additional project directory for context
@@ -50,19 +45,16 @@ ingredients:
     description: Branch to branch off of and PR target
     default: main
   audit:
-    description: Run /autoskillit:audit-impl before merge to gate on implementation quality
+    description: Gate merge on audit-impl quality check (true/false)
     default: "true"
   review_approach:
-    description: Run /autoskillit:review-approach before dry walkthrough? (true/false)
+    description: Run review-approach before dry walkthrough? (true/false)
     default: "false"
   open_pr:
-    description: Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false)
+    description: Open a PR to base_branch instead of merging directly (true/false)
     default: "true"
   issue_url:
-    description: >
-      Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42).
-      When provided, the issue content is fetched and used to enrich investigation,
-      and the resulting PR will include "Closes #N" to auto-close the issue on merge.
+    description: GitHub issue URL to close on merge (optional)
     required: false
     default: ""
 
@@ -119,7 +111,7 @@ steps:
       issue_slug provides a descriptive branch prefix (e.g. fix-merge-conflict-triage).
 
   claim_issue:
-    description: "Claim this issue with the in-progress label to prevent parallel work"
+    description: Claim the issue with in-progress label to block parallel work
     tool: claim_issue
     optional: true
     skip_when_false: inputs.issue_url

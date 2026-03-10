@@ -8,16 +8,11 @@ ingredients:
     description: Path to source document for group decomposition
     required: true
   source_dir:
-    description: >
-      Path to the source repository to clone and work in.
-      Leave empty to auto-detect from git rev-parse --show-toplevel.
+    description: Path to the source repository (auto-detected if empty)
     required: false
     default: ""
   run_name:
-    description: >
-      Name prefix for this pipeline run. Used as the first path component
-      of the feature branch name (e.g. impl/124 or impl/20260304) and
-      in the clone directory name.
+    description: Pipeline run name prefix (used in branch and clone naming)
     default: "impl"
   base_branch:
     description: Branch to merge into (defaults to current branch)
@@ -26,16 +21,13 @@ ingredients:
     description: Run /review-approach before implementation? (true/false)
     default: "false"
   audit:
-    description: Run /autoskillit:audit-impl once after all groups/parts have been merged, to check overall implementation quality and optionally trigger a remediation round (true/false)
+    description: Gate merge on audit-impl quality check (true/false)
     default: "true"
   open_pr:
-    description: Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false)
+    description: Open a PR to base_branch instead of merging directly (true/false)
     default: "true"
   issue_url:
-    description: >
-      Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42).
-      When provided, the issue content is fetched and used to enrich planning,
-      and the resulting PR will include "Closes #N" to auto-close the issue on merge.
+    description: GitHub issue URL to close on merge (optional)
     required: false
     default: ""
 

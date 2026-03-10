@@ -14,12 +14,12 @@ ingredients:
     description: Keep the clone directory when the pipeline fails (true/false)
     default: "false"
   base_branch:
-    description: Target branch that all PRs are merging into; integration branch is created from this. Pass 'integration' to use the persistent integration branch feature.
+    description: Branch all PRs target; integration branch is created from this
   upstream_branch:
     description: Branch to create base_branch from if it does not yet exist on the remote
     default: main
   audit:
-    description: Run /autoskillit:audit-impl after all PRs are merged to check coherency (true/false)
+    description: Gate merge on audit-impl quality check (true/false)
     default: "true"
   plans_dir:
     description: Directory where collected plan files are stored for audit-impl

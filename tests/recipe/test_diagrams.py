@@ -1209,3 +1209,304 @@ def test_bundled_diagram_inputs_table_has_no_embedded_newlines(
         assert row.count("|") >= 4, (
             f"[{recipe_name}] Malformed table row (likely split by embedded newline): {row!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# T-GRAPH-1..3: igraph builder contract tests
+# ---------------------------------------------------------------------------
+
+
+_SIMPLE_GRAPH_YAML = (
+    "name: simple\nsteps:\n"
+    "  step1:\n    tool: run_skill\n    with:\n      skill_command: /foo\n"
+    "    on_success: done\n    on_failure: escalate\n"
+    "  done:\n    action: stop\n    message: Done.\n"
+    "  escalate:\n    action: stop\n    message: Failed.\n"
+)
+
+
+def _load_simple_recipe(tmp_path: Path):  # type: ignore[no-untyped-def]
+    """Write _SIMPLE_GRAPH_YAML to a temp file and load it as a Recipe."""
+    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+    yaml_path = tmp_path / "simple.yaml"
+    yaml_path.write_text(_SIMPLE_GRAPH_YAML)
+    return load_recipe(yaml_path)
+
+
+def test_build_recipe_graph_is_directed(tmp_path: Path) -> None:
+    """T-GRAPH-1: build_recipe_graph returns a directed igraph.Graph."""
+    import igraph  # noqa: PLC0415
+
+    from autoskillit.recipe.diagrams import build_recipe_graph  # noqa: PLC0415
+
+    recipe = _load_simple_recipe(tmp_path)
+    g = build_recipe_graph(recipe)
+    assert isinstance(g, igraph.Graph)
+    assert g.is_directed()
+    assert g.vcount() == 3  # step1, done, escalate
+
+
+def test_build_recipe_graph_vertex_attributes(tmp_path: Path) -> None:
+    """T-GRAPH-2: build_recipe_graph encodes step attributes as vertex attributes."""
+    from autoskillit.recipe.diagrams import build_recipe_graph  # noqa: PLC0415
+
+    recipe = _load_simple_recipe(tmp_path)
+    g = build_recipe_graph(recipe)
+    names = g.vs["name"]
+    assert "step1" in names
+    assert "done" in names
+    v_done = g.vs.find(name="done")
+    assert v_done["is_terminal"] is True
+    v_step1 = g.vs.find(name="step1")
+    assert v_step1["is_terminal"] is False
+
+
+def test_build_recipe_graph_edge_types(tmp_path: Path) -> None:
+    """T-GRAPH-3: build_recipe_graph encodes routing edge types as edge attributes."""
+    from autoskillit.recipe.diagrams import build_recipe_graph  # noqa: PLC0415
+
+    recipe = _load_simple_recipe(tmp_path)
+    g = build_recipe_graph(recipe)
+    edge_types = set(g.es["edge_type"])
+    assert "success" in edge_types
+    assert "failure" in edge_types
+
+
+# ---------------------------------------------------------------------------
+# T-NEW-1..5: Spec-correctness tests (Part A — graph model unification)
+# ---------------------------------------------------------------------------
+
+
+def _find_for_each_chain_line(content: str) -> str | None:
+    """Return the first horizontal chain line (containing ───) inside a FOR EACH block."""
+    in_block = False
+    for line in content.splitlines():
+        if "┌────┤" in line:
+            in_block = True
+            continue
+        if in_block and "───" in line:
+            return line
+        if "└────┘" in line:
+            break
+    return None
+
+
+def test_classify_steps_excludes_side_legs() -> None:
+    """T-NEW-1: igraph-based _classify_steps must return only tight success-path cycle members.
+
+    Side-leg steps reachable only via on_failure or on_context_limit must NOT
+    appear in main_chain for implementation.yaml's per-part loop.
+    """
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+    from autoskillit.recipe.diagrams import _classify_steps  # noqa: PLC0415
+    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+    recipe = load_recipe(pkg_root() / "recipes" / "implementation.yaml")
+    classification = _classify_steps(recipe)
+
+    # Tight cycle members must be present
+    assert "verify" in classification.main_chain
+    assert "implement" in classification.main_chain
+    assert "test" in classification.main_chain
+    assert "merge" in classification.main_chain
+    # next_or_done is the back-edge source — force-included in main_chain
+    assert "next_or_done" in classification.main_chain
+
+    # Side legs must NOT be in the tight cycle
+    assert "retry_worktree" not in classification.main_chain  # on_context_limit only
+    assert "fix" not in classification.main_chain  # on_failure only
+
+
+def test_classify_steps_on_result_back_edge_includes_full_chain(tmp_path: Path) -> None:
+    """T-NEW-7: When the path to the back-edge source uses on_result (not on_success),
+    all success-reachable steps from start must appear in main_chain.
+
+    Minimal recipe:
+        step_a --on_success--> step_b --on_result--> step_c --on_result--> step_a
+
+    g_success contains: step_a → step_b (only — step_b has no on_success)
+    subcomponent(step_a, OUT) in g_success = {step_a, step_b}
+    subcomponent(step_c, IN) in g_success = {step_c}  (no step has on_success: step_c)
+    Intersection = {} — after force-add: main_chain = {step_c} only — WRONG.
+
+    Current code uses subcomponent(OUT) + force-add (no intersection) → CORRECT:
+    main_chain = {step_a, step_b, step_c}.
+
+    This test fails if the intersection is ever erroneously applied.
+    """
+    from autoskillit.recipe.diagrams import _classify_steps  # noqa: PLC0415
+    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+    yaml_path = tmp_path / "on-result-loop.yaml"
+    yaml_path.write_text(
+        "name: on-result-loop\n"
+        "steps:\n"
+        "  step_a:\n"
+        "    tool: run_skill\n"
+        "    with:\n"
+        "      skill_command: /foo\n"
+        "      cwd: .\n"
+        "    on_success: step_b\n"
+        "    on_failure: stop1\n"
+        "  step_b:\n"
+        "    tool: run_skill\n"
+        "    with:\n"
+        "      skill_command: /bar\n"
+        "      cwd: .\n"
+        "    on_result:\n"
+        "      - route: step_c\n"
+        "    on_failure: stop1\n"
+        "  step_c:\n"
+        "    note: 'for each plan part'\n"
+        "    action: route\n"
+        "    on_result:\n"
+        '      - when: "result.next == more"\n'
+        "        route: step_a\n"
+        "      - route: stop1\n"
+        "  stop1:\n"
+        "    action: stop\n"
+        "    message: Done.\n"
+    )
+    recipe = load_recipe(yaml_path)
+    classification = _classify_steps(recipe)
+
+    # All steps on the success path from step_a must be in main_chain.
+    # If the intersection were applied: subcomponent(step_c, IN) = {step_c} only,
+    # intersection = {}, force-add → main_chain = {step_c} — these assertions would fail.
+    assert "step_a" in classification.main_chain
+    assert "step_b" in classification.main_chain
+    assert "step_c" in classification.main_chain  # force-included as back-edge source
+
+
+def test_for_each_chain_excludes_side_leg_steps(tmp_path: Path) -> None:
+    """T-NEW-2: Side-leg steps must not appear as inline ─── chain tokens.
+
+    The horizontal chain inside the FOR EACH block must contain only tight
+    success-path cycle steps. retry_worktree (on_context_limit) and fix
+    (on_failure) must not be chain tokens.
+    """
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    content = generate_recipe_diagram(
+        recipes_dir / "implementation.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
+    )
+    chain_line = _find_for_each_chain_line(content)
+    assert chain_line is not None, "No horizontal chain found in FOR EACH block"
+    assert "retry_worktree" not in chain_line
+    assert "fix" not in chain_line
+    assert "next_or_done" not in chain_line
+    assert "verify" in chain_line
+    assert "implement" in chain_line
+    assert "test" in chain_line
+    assert "merge" in chain_line
+
+
+def test_next_or_done_rendered_as_footer_routing_block(tmp_path: Path) -> None:
+    """T-NEW-3: next_or_done has on_result_conditions — it must appear as a
+    └── footer block with labeled routing paths, not as an inline chain token.
+    """
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    content = generate_recipe_diagram(
+        recipes_dir / "implementation.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
+    )
+    graph_section = _extract_graph_section(content)
+    assert "└── next_or_done" in graph_section, (
+        "next_or_done must appear on a └── footer line, not as an inline chain token"
+    )
+    assert "→" in graph_section
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "implementation",
+        "bugfix-loop",
+        "smoke-test",
+        "remediation",
+        "audit-and-fix",
+        "implementation-groups",
+        "pr-merge-pipeline",
+    ],
+)
+def test_terminal_steps_have_no_emoji(recipe_name: str, tmp_path: Path) -> None:
+    """T-NEW-4: Issue #223 requires ASCII only. ⏹ must not appear on terminal steps."""
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    content = generate_recipe_diagram(
+        recipes_dir / f"{recipe_name}.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
+    )
+    assert "⏹" not in content, f"Emoji ⏹ found in {recipe_name} (spec: ASCII only)"
+
+
+def test_flow_line_omitted_when_summary_empty(tmp_path: Path) -> None:
+    """T-NEW-5: When summary is absent, **Flow:** must not appear.
+
+    Emitting '**Flow:** ' (trailing space, blank content) is not in the SKILL.md spec.
+    """
+    yaml_path = tmp_path / "no-summary.yaml"
+    yaml_path.write_text(
+        "name: no-summary\nsteps:\n"
+        "  step1:\n    tool: run_skill\n    with:\n      skill_command: /foo\n"
+        "    on_success: done\n    on_failure: escalate\n"
+        "  done:\n    action: stop\n    message: Done.\n"
+        "  escalate:\n    action: stop\n    message: Failed.\n"
+    )
+    content = generate_recipe_diagram(yaml_path, recipes_dir=tmp_path, out_dir=tmp_path / "out")
+    assert "**Flow:**" not in content
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "implementation",
+        "bugfix-loop",
+        "smoke-test",
+        "remediation",
+        "audit-and-fix",
+        "implementation-groups",
+        "pr-merge-pipeline",
+    ],
+)
+def test_bundled_recipe_ingredient_descriptions_are_single_phrase(
+    recipe_name: str, tmp_path: Path
+) -> None:
+    """T-NEW-6: Spec 'Keep descriptions short — one phrase, not a sentence.'
+
+    Every ingredient description rendered into the diagram Inputs table must be
+    ≤ 80 characters.  Multi-sentence folded-YAML scalars must NOT appear verbatim.
+    """
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    content = generate_recipe_diagram(
+        recipes_dir / f"{recipe_name}.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
+    )
+    in_inputs = False
+    desc_col_idx: int | None = None
+    for line in content.splitlines():
+        if line.strip().startswith("| Name |"):
+            header_parts = [p.strip() for p in line.split("|") if p.strip()]
+            desc_col_idx = next(
+                (i for i, h in enumerate(header_parts) if h.lower() == "description"), None
+            )
+            in_inputs = True
+            continue
+        if in_inputs and line.startswith("| ---"):
+            continue
+        if in_inputs and line.startswith("|"):
+            if desc_col_idx is None:
+                continue
+            parts = [p.strip() for p in line.split("|") if p.strip()]
+            if len(parts) > desc_col_idx:
+                description = parts[desc_col_idx]
+                assert len(description) <= 80, (
+                    f"{recipe_name}: description '{description[:40]}...' "
+                    f"is {len(description)} chars (max 80)"
+                )
+        elif in_inputs and not line.startswith("|"):
+            break

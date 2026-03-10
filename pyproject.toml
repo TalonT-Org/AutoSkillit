@@ -12,6 +12,7 @@ dependencies = [
     "dynaconf>=3.2.12,<4.0",
     "fastmcp>=3.0.2",
     "httpx>=0.28,<0.29",
+    "igraph>=1.0",
     "packaging>=23.0",
     "psutil>=7.2.0",
     "pyyaml>=6.0",

@@ -281,14 +281,16 @@ def test_format_merge_worktree_failure():
 
 # PHK-14
 def test_format_merge_worktree_success():
-    """merge_worktree success must show checkmark and merged: True."""
+    """merge_worktree success must show checkmark and merge_succeeded: True."""
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__merge_worktree",
         "tool_response": json.dumps(
             {
-                "merged": True,
-                "worktree_path": "/tmp/wt/fix",
-                "branch": "impl-fix-20260101",
+                "merge_succeeded": True,
+                "merged_branch": "impl-fix-20260101",
+                "into_branch": "main",
+                "worktree_removed": True,
+                "branch_deleted": True,
             }
         ),
     }
@@ -296,7 +298,7 @@ def test_format_merge_worktree_success():
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "merge_worktree" in text
     assert "\u2713" in text  # ✓
-    assert "merged: True" in text
+    assert "merge_succeeded: True" in text
 
 
 # PHK-15
@@ -411,3 +413,288 @@ def test_unknown_tool_passes_through():
     assert out.strip()
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "some_unknown_tool" in text
+
+
+# PHK-19
+def test_fmt_run_cmd_tool_exception_shows_diagnostic():
+    """run_cmd tool_exception subtype must show error, not FAIL []."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__run_cmd",
+        "tool_response": json.dumps(
+            {
+                "error": "RuntimeError: boom",
+                "exit_code": -1,
+                "subtype": "tool_exception",
+                "success": False,
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "tool_exception" in text.lower() or "Tool Exception" in text
+    assert "RuntimeError: boom" in text
+    assert "FAIL []" not in text
+
+
+# PHK-20
+def test_fmt_clone_repo_uncommitted_changes_warning():
+    """clone_repo uncommitted_changes must show WARNING, not OK."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__clone_repo",
+        "tool_response": json.dumps(
+            {
+                "uncommitted_changes": "true",
+                "source_dir": "/src",
+                "branch": "main",
+                "changed_files": "M file.py",
+                "total_changed": "1",
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "uncommitted_changes" in text
+    assert "changed_files" in text
+    assert "\u2713 OK" not in text
+
+
+# PHK-21
+def test_fmt_clone_repo_unpublished_branch_warning():
+    """clone_repo unpublished_branch must show WARNING, not OK."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__clone_repo",
+        "tool_response": json.dumps(
+            {
+                "unpublished_branch": "true",
+                "branch": "feat/x",
+                "source_dir": "/src",
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "unpublished_branch" in text
+    assert "branch" in text
+    assert "\u2713 OK" not in text
+
+
+# PHK-22
+def test_fmt_clone_repo_success_includes_clone_path():
+    """clone_repo success must include clone_path, source_dir, remote_url."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__clone_repo",
+        "tool_response": json.dumps(
+            {
+                "clone_path": "/tmp/clone",
+                "source_dir": "/src",
+                "remote_url": "https://example.com",
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "/tmp/clone" in text
+    assert "/src" in text
+    assert "https://example.com" in text
+
+
+# PHK-23
+def test_fmt_clone_repo_remote_url_failure_includes_stderr():
+    """clone_repo remote_url failure must include stderr."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__clone_repo",
+        "tool_response": json.dumps(
+            {
+                "error": "remote_url_rewrite_failed",
+                "clone_path": "/tmp/clone",
+                "remote_url": "https://example.com",
+                "stderr": "fatal: unable to set url",
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "fatal: unable to set url" in text
+
+
+# PHK-24
+def test_fmt_merge_worktree_success_shows_metadata():
+    """merge_worktree success must show merge_succeeded and merged_branch."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__merge_worktree",
+        "tool_response": json.dumps(
+            {
+                "merge_succeeded": True,
+                "merged_branch": "feat/x",
+                "into_branch": "main",
+                "worktree_removed": True,
+                "branch_deleted": True,
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "merge_succeeded" in text
+    assert "merged_branch" in text
+    assert "\u2713" in text
+
+
+# PHK-25
+def test_fmt_merge_worktree_dirty_tree_shows_files():
+    """merge_worktree dirty tree must show dirty_files content."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__merge_worktree",
+        "tool_response": json.dumps(
+            {
+                "error": "dirty working tree",
+                "state": "DIRTY_TREE",
+                "dirty_files": ["M a.py", "M b.py"],
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "M a.py" in text
+    assert "M b.py" in text
+
+
+# PHK-26
+def test_fmt_run_skill_pipeline_includes_stderr(tmp_path):
+    """run_skill pipeline mode must include stderr."""
+    config_dir = tmp_path / ".autoskillit" / "temp"
+    config_dir.mkdir(parents=True)
+    (config_dir / ".autoskillit_hook_config.json").write_text('{"quota_guard": {}}')
+
+    event = _make_run_skill_event(
+        success=False,
+        subtype="execution_failed",
+        stderr="ImportError: no module named foo",
+        exit_code=1,
+        result="",
+    )
+    out, _ = _run_hook(event=event, cwd=tmp_path)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "ImportError: no module named foo" in text
+
+
+# PHK-27
+def test_fmt_test_check_error_key_visible():
+    """test_check error key must be visible in output."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__test_check",
+        "tool_response": json.dumps({"passed": False, "error": "Test runner not configured"}),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "error: Test runner not configured" in text
+
+
+# PHK-28
+def test_tool_exception_subtype_routed_before_formatter():
+    """tool_exception subtype must be handled before per-tool dispatch."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__merge_worktree",
+        "tool_response": json.dumps(
+            {
+                "success": False,
+                "error": "OSError: disk full",
+                "exit_code": -1,
+                "subtype": "tool_exception",
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "tool_exception" in text.lower() or "Tool Exception" in text
+    assert "OSError: disk full" in text
+
+
+# PHK-29
+def test_fmt_generic_preserves_list_values():
+    """Generic formatter must render list values, not silently drop them."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__some_tool",
+        "tool_response": json.dumps({"total": 3, "items": ["a", "b", "c"]}),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "items" in text
+    assert "a" in text
+    assert "b" in text
+    assert "c" in text
+
+
+# PHK-30
+def test_fmt_generic_preserves_dict_values():
+    """Generic formatter must render dict values, not silently drop them."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__some_tool",
+        "tool_response": json.dumps(
+            {"status": "ok", "metadata": {"version": "1.0", "author": "test"}}
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "metadata" in text
+    assert "version" in text
+    assert "1.0" in text
+    assert "author" in text
+
+
+# PHK-31
+def test_fmt_generic_read_db_rows_visible():
+    """read_db rows and columns must be visible through generic formatter."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__read_db",
+        "tool_response": json.dumps(
+            {
+                "rows": [["id1", "value1"], ["id2", "value2"]],
+                "columns": ["id", "val"],
+                "row_count": 2,
+                "truncated": False,
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "rows" in text
+    assert "id1" in text
+    assert "value2" in text
+    assert "columns" in text
+    assert "id" in text
+
+
+# PHK-32
+def test_fmt_generic_pipeline_report_failures_visible():
+    """get_pipeline_report failures must be visible through generic formatter."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__get_pipeline_report",
+        "tool_response": json.dumps(
+            {
+                "total_failures": 2,
+                "failures": [
+                    {"step": "test", "error": "assertion failed"},
+                    {"step": "build", "error": "compile error"},
+                ],
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "failures" in text
+    assert "assertion failed" in text
+    assert "compile error" in text
+
+
+# PHK-33
+def test_fmt_generic_deeply_nested_truncated():
+    """Deeply nested structures must be rendered as truncated compact JSON."""
+    deep = {"a": {"b": {"c": {"d": {"e": "deep"}}}}}
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__some_tool",
+        "tool_response": json.dumps({"info": "top", "nested": deep}),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "nested" in text
+    assert "deep" in text

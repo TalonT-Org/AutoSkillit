@@ -29,14 +29,14 @@ kitchen_rules:
 
 ingredients:
   source_dir:
-    description: Path to the source repository (auto-detected if empty)
+    description: Remote URL for source repo (auto-detected from git origin if empty)
     required: false
     default: ""
   run_name:
     description: Pipeline run name prefix (used in branch and clone naming)
     default: "audit-fix"
   base_branch:
-    description: Branch to branch off of and PR target
+    description: Integration branch to merge into (defaults to integration)
     default: integration
   audit_type:
     description: Type of audit to run (arch, tests, cohesion, defense-standards)

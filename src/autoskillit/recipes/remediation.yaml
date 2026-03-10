@@ -32,7 +32,7 @@ ingredients:
     description: Description of the bug, error, or question to investigate
     required: true
   source_dir:
-    description: Path to the source repository (auto-detected if empty)
+    description: Remote URL for source repo (auto-detected from git origin if empty)
     required: false
     default: ""
   run_name:
@@ -42,7 +42,7 @@ ingredients:
     description: Optional additional project directory for context
     default: ""
   base_branch:
-    description: Branch to branch off of and PR target
+    description: Integration branch to merge into (defaults to integration)
     default: integration
   audit:
     description: Gate merge on audit-impl quality check (true/false)

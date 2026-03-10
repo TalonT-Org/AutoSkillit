@@ -535,21 +535,16 @@ class TestCLICook:
         capsys: pytest.CaptureFixture,
     ) -> None:
         """cook exits 1 when no recipe is given and no recipes are available."""
-        import importlib
-        import sys
         from unittest.mock import MagicMock as _MagicMock
 
-        # autoskillit.cli.__init__ exports 'app' (cyclopts App), shadowing the submodule
-        # attribute. Use sys.modules to get the actual cli.app module for patching.
-        _app_mod = sys.modules.get("autoskillit.cli.app") or importlib.import_module(
-            "autoskillit.cli.app"
-        )
+        import autoskillit.recipe as _recipe_mod
+
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         mock_result = _MagicMock()
         mock_result.items = []
-        monkeypatch.setattr(_app_mod, "list_recipes", lambda _: mock_result)
+        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
 
         with pytest.raises(SystemExit) as exc_info:
             cli.cook()
@@ -812,17 +807,16 @@ class TestCLICook:
         capsys: pytest.CaptureFixture,
     ) -> None:
         """Out-of-range numeric input exits 1 with an error message."""
-        import sys
+        import autoskillit.recipe as _recipe_mod
 
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
+
         fake_recipe = MagicMock()
         fake_recipe.name = "some-recipe"
         mock_result = MagicMock()
         mock_result.items = [fake_recipe]
-        monkeypatch.setattr(
-            sys.modules["autoskillit.cli.app"], "list_recipes", lambda _: mock_result
-        )
+        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
         monkeypatch.setattr("builtins.input", lambda _prompt="": "99")
 
         with pytest.raises(SystemExit) as exc_info:
@@ -838,17 +832,16 @@ class TestCLICook:
         capsys: pytest.CaptureFixture,
     ) -> None:
         """Unknown recipe name exits 1 with an error message."""
-        import sys
+        import autoskillit.recipe as _recipe_mod
 
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
+
         fake_recipe = MagicMock()
         fake_recipe.name = "some-recipe"
         mock_result = MagicMock()
         mock_result.items = [fake_recipe]
-        monkeypatch.setattr(
-            sys.modules["autoskillit.cli.app"], "list_recipes", lambda _: mock_result
-        )
+        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
         monkeypatch.setattr("builtins.input", lambda _prompt="": "no-such-recipe")
 
         with pytest.raises(SystemExit) as exc_info:
@@ -864,12 +857,8 @@ class TestCLICook:
         capsys: pytest.CaptureFixture,
     ) -> None:
         """cook exits 1 when picker receives empty input (empty name → not found)."""
-        import importlib
-        import sys
+        import autoskillit.recipe as _recipe_mod
 
-        _app_mod = sys.modules.get("autoskillit.cli.app") or importlib.import_module(
-            "autoskillit.cli.app"
-        )
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
@@ -877,13 +866,109 @@ class TestCLICook:
         fake_recipe.name = "some-recipe"
         mock_result = MagicMock()
         mock_result.items = [fake_recipe]
-        monkeypatch.setattr(_app_mod, "list_recipes", lambda _: mock_result)
+        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
 
         with pytest.raises(SystemExit) as exc_info:
             cli.cook()
 
         assert exc_info.value.code == 1
+
+
+class TestCookDiagram:
+    """T3: cook command loads and injects recipe diagram into system prompt."""
+
+    def _setup_recipe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        """Write test recipe to scripts_dir and chdir."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        return scripts_dir
+
+    # T3-A
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_system_prompt_contains_diagram_when_fresh(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """cook injects diagram into system prompt when diagram is fresh (not stale)."""
+        import autoskillit.recipe as _recipe_mod
+
+        self._setup_recipe(tmp_path, monkeypatch)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        monkeypatch.setattr(_recipe_mod, "check_diagram_staleness", lambda *a, **kw: False)
+        monkeypatch.setattr(_recipe_mod, "load_recipe_diagram", lambda *a, **kw: "## Flow\nA → B")
+
+        cli.cook("test-script")
+
+        cmd = mock_run.call_args[0][0]
+        prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
+        system_prompt = cmd[prompt_idx + 1]
+        assert "## Flow" in system_prompt
+        assert "A → B" in system_prompt
+        assert "FIRST ACTION" in system_prompt
+
+    # T3-B
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_regenerates_diagram_when_stale(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """cook calls generate_recipe_diagram when stale and injects result into system prompt."""
+        import autoskillit.recipe as _recipe_mod
+
+        self._setup_recipe(tmp_path, monkeypatch)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        monkeypatch.setattr(_recipe_mod, "check_diagram_staleness", lambda *a, **kw: True)
+        generate_called = []
+
+        def _fake_generate(*a: object, **kw: object) -> str:
+            generate_called.append(1)
+            return "## Flow"
+
+        monkeypatch.setattr(_recipe_mod, "generate_recipe_diagram", _fake_generate)
+        monkeypatch.setattr(_recipe_mod, "load_recipe_diagram", lambda *a, **kw: "## Flow\nA → B")
+
+        cli.cook("test-script")
+
+        assert len(generate_called) == 1, "generate_recipe_diagram must be called once when stale"
+        cmd = mock_run.call_args[0][0]
+        prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
+        system_prompt = cmd[prompt_idx + 1]
+        assert "## Flow" in system_prompt, "Generated diagram must appear in system prompt"
+
+    # T3-C
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_works_when_diagram_is_none(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """cook launches session successfully even when no diagram is available."""
+        import autoskillit.recipe as _recipe_mod
+
+        self._setup_recipe(tmp_path, monkeypatch)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        monkeypatch.setattr(_recipe_mod, "check_diagram_staleness", lambda *a, **kw: False)
+        monkeypatch.setattr(_recipe_mod, "load_recipe_diagram", lambda *a, **kw: None)
+
+        cli.cook("test-script")
+
+        mock_run.assert_called_once()
 
 
 class TestRecipesCLI:

@@ -455,6 +455,12 @@ def _render_for_each_chain(
     (│  ↓ success → ...) because it never calls _append_step(). The horizontal
     layout is the only code path.
     """
+    if classification is not None:
+        assert classification.routing_blocks <= classification.main_chain, (
+            "routing_blocks must be a subset of main_chain; "
+            f"extra: {classification.routing_blocks - classification.main_chain}"
+        )
+
     lines.append(f"┌────┤ {label}")
     lines.append("│    │")
 

@@ -15,7 +15,6 @@ from autoskillit.cli._hooks import (
     _evict_stale_autoskillit_hooks,
     sync_hooks_to_settings,
 )
-from autoskillit.cli.app import app
 from autoskillit.core import _atomic_write, is_git_worktree, pkg_root
 
 _VALID_SCOPES = {"user", "project", "local"}
@@ -97,7 +96,6 @@ def _ensure_marketplace() -> Path:
     return marketplace_dir
 
 
-@app.command
 def install(*, scope: str = "user"):
     """Install the plugin persistently for Claude Code.
 
@@ -176,7 +174,6 @@ def install(*, scope: str = "user"):
     _print_next_steps()
 
 
-@app.command
 def upgrade():
     """Migrate a project from .autoskillit/scripts/ to .autoskillit/recipes/.
 

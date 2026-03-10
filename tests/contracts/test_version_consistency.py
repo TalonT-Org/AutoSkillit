@@ -59,7 +59,7 @@ class TestVersionConsistency:
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(_mkt_mod, "is_git_worktree", lambda path: False)
-        from autoskillit.cli import _ensure_marketplace
+        from autoskillit.cli._marketplace import _ensure_marketplace
 
         _ensure_marketplace()
         manifest = (

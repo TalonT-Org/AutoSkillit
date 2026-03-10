@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from autoskillit.core import _atomic_write
 from autoskillit.recipe import list_recipes
 
 _MARKER_CONTENT = """\
@@ -63,3 +64,51 @@ safety:
 #   stale_threshold: 1200
 #   completion_marker: "%%ORDER_UP%%"
 """
+
+
+def _user_claude_json_path() -> Path:
+    """Return path to ~/.claude.json (user-scoped MCP server config)."""
+    return Path.home() / ".claude.json"
+
+
+def _register_mcp_server(claude_json_path: Path) -> None:
+    """Write autoskillit MCP server entry to claude.json (idempotent)."""
+    data: dict = {}
+    if claude_json_path.exists():
+        try:
+            data = json.loads(claude_json_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            data = {}
+    data.setdefault("mcpServers", {})
+    data["mcpServers"]["autoskillit"] = {
+        "type": "stdio",
+        "command": "autoskillit",
+        "args": ["serve"],
+    }
+    _atomic_write(claude_json_path, json.dumps(data, indent=2))
+
+
+def _print_init_next_steps() -> None:
+    print("\n✓ Config created")
+    print("✓ MCP server registered in ~/.claude.json")
+    print("✓ Hooks registered in settings.json")
+    print("\nNext steps:")
+    print("  autoskillit chefs-hat   Launch Claude with all skills")
+    print("  autoskillit doctor      Check setup health")
+
+
+def _register_all(scope: str, project_dir: Path) -> None:
+    """Ensure project temp dir, register hooks and MCP server, print next steps."""
+    from autoskillit.cli._hooks import (
+        _claude_settings_path,
+        _evict_stale_autoskillit_hooks,
+        sync_hooks_to_settings,
+    )
+    from autoskillit.core import ensure_project_temp
+
+    ensure_project_temp(project_dir)
+    settings_path = _claude_settings_path(scope)
+    _evict_stale_autoskillit_hooks(settings_path)
+    sync_hooks_to_settings(settings_path)
+    _register_mcp_server(_user_claude_json_path())
+    _print_init_next_steps()

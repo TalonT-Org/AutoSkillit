@@ -137,7 +137,7 @@ def test_install_production_order_includes_quota_check(tmp_path, monkeypatch):
     """install() must register quota_check.py regardless of function call order."""
     import importlib
 
-    import autoskillit.cli as cli
+    from autoskillit.cli._marketplace import install
 
     settings_path = tmp_path / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
@@ -152,7 +152,7 @@ def test_install_production_order_includes_quota_check(tmp_path, monkeypatch):
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-    cli.install(scope="local")
+    install(scope="local")
 
     data = json.loads(settings_path.read_text())
     pretooluse = data.get("hooks", {}).get("PreToolUse", [])
@@ -167,7 +167,7 @@ def test_settings_json_matches_hook_registry_after_install(tmp_path, monkeypatch
     """After install(), settings.json must contain every script from HOOK_REGISTRY."""
     import importlib
 
-    import autoskillit.cli as cli
+    from autoskillit.cli._marketplace import install
     from autoskillit.hooks import HOOK_REGISTRY
 
     settings_path = tmp_path / ".claude" / "settings.json"
@@ -183,7 +183,7 @@ def test_settings_json_matches_hook_registry_after_install(tmp_path, monkeypatch
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-    cli.install(scope="local")
+    install(scope="local")
 
     data = json.loads(settings_path.read_text())
     pretooluse = data.get("hooks", {}).get("PreToolUse", [])

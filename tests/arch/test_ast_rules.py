@@ -14,7 +14,7 @@ at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
 Those rules belong in the toolchain, not duplicated here.
 
 Exemptions:
-  - cli/app.py, cli/_doctor.py: may use print() for user-facing terminal output
+  - cli/app.py, cli/_doctor.py, cli/_chefs_hat.py: may use print() for user-facing terminal output
 """
 
 from __future__ import annotations
@@ -382,6 +382,7 @@ def test_no_raw_claude_list_construction() -> None:
     """
     ALLOWED = {
         ("_marketplace.py", "install"),
+        ("_chefs_hat.py", "chefs_hat"),
         ("_llm_triage.py", "_triage_batch"),
         ("commands.py", "build_interactive_cmd"),
         ("commands.py", "build_headless_cmd"),

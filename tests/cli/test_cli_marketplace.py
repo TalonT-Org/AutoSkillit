@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 
 # MK1
 def test_marketplace_module_exists():
@@ -42,3 +44,35 @@ def test_install_not_defined_in_app_module():
     assert "def install(" not in src, (
         "install() should be defined in cli/_marketplace.py, not cli/app.py"
     )
+
+
+# MK-DEP-1
+def test_install_not_registered_as_cli_command():
+    """autoskillit install is not a registered CLI command."""
+    import pytest
+
+    from autoskillit import cli
+
+    with pytest.raises(SystemExit) as exc_info:
+        with patch("sys.argv", ["autoskillit", "install"]):
+            cli.main()
+    assert exc_info.value.code != 0
+
+
+# MK-DEP-2
+def test_upgrade_not_registered_as_cli_command():
+    """autoskillit upgrade is not a registered CLI command."""
+    import pytest
+
+    from autoskillit import cli
+
+    with pytest.raises(SystemExit) as exc_info:
+        with patch("sys.argv", ["autoskillit", "upgrade"]):
+            cli.main()
+    assert exc_info.value.code != 0
+
+
+# MK-DEP-3
+def test_marketplace_module_still_importable():
+    """_marketplace module is still importable (not deleted)."""
+    import autoskillit.cli._marketplace  # noqa: F401

@@ -14,9 +14,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import igraph
-
 from autoskillit.core import _atomic_write
+from autoskillit.recipe._analysis import _is_infrastructure_step, build_recipe_graph
+from autoskillit.recipe.schema import Recipe
 from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 # Diagram format version — bump when rendering logic changes so that
@@ -79,28 +79,6 @@ class _LayoutResult:
 # ---------------------------------------------------------------------------
 
 
-def _is_infrastructure_step(step: Any) -> bool:
-    """Return True if *step* is a plumbing step that should be hidden from diagrams.
-
-    Infrastructure steps are ``run_cmd`` steps whose sole purpose is capturing
-    or setting a context value (git rev-parse, printf, echo one-liners).
-    They add no user-visible behaviour to the pipeline flow.
-    """
-    if step.tool != "run_cmd":
-        return False
-    note_lower = (step.note or "").lower()
-    cmd = ""
-    if step.with_args and isinstance(step.with_args, dict):
-        cmd = step.with_args.get("cmd", "") or ""
-    return (
-        "capture" in note_lower
-        or "set" in note_lower
-        or "printf" in cmd
-        or "git rev-parse" in cmd
-        or (cmd.strip().startswith("echo") and "\n" not in cmd)
-    )
-
-
 _PLAN_ITERATION_KEYWORDS: frozenset[str] = frozenset(
     {
         "plan_parts",
@@ -128,69 +106,7 @@ def _derive_for_each_label(span_steps: list[_LayoutStep]) -> str:
     return "FOR EACH:"
 
 
-def build_recipe_graph(recipe: Any) -> igraph.Graph:
-    """Build a directed igraph.Graph from a Recipe dataclass.
-
-    Nodes represent recipe steps. Each vertex carries attributes matching the
-    RecipeStep fields relevant to diagram rendering:
-    - ``name``: step name (str)
-    - ``tool``: tool identifier (str, empty string if None)
-    - ``action``: action identifier (str, empty string if None)
-    - ``note``: step note for semantic gate checks (str)
-    - ``retries``: retry count (int)
-    - ``skip_when_false``: optional condition (str, empty string if None)
-    - ``is_infra``: whether the step is a hidden infrastructure step (bool)
-    - ``is_terminal``: whether the step is a stop action (bool)
-    - ``is_confirm``: whether the step is a confirm action (bool)
-
-    Edges represent routing connections. Each edge carries:
-    - ``edge_type``: one of ``"success"``, ``"failure"``, ``"context_limit"``,
-      ``"result_condition"``, ``"exhausted"``
-    - ``condition``: for ``on_result`` edges, the ``when`` expression; otherwise ``""``
-
-    Args:
-        recipe: The loaded Recipe dataclass.
-
-    Returns:
-        A directed ``igraph.Graph`` with vertex and edge attributes as described.
-    """
-    from autoskillit.recipe._analysis import _extract_routing_edges  # noqa: PLC0415
-
-    step_names = list(recipe.steps.keys())
-    name_to_id: dict[str, int] = {name: i for i, name in enumerate(step_names)}
-
-    g = igraph.Graph(n=len(step_names), directed=True)
-    steps_list = list(recipe.steps.values())
-
-    g.vs["name"] = step_names
-    g.vs["tool"] = [s.tool or "" for s in steps_list]
-    g.vs["action"] = [s.action or "" for s in steps_list]
-    g.vs["note"] = [s.note or "" for s in steps_list]
-    g.vs["retries"] = [s.retries for s in steps_list]
-    g.vs["skip_when_false"] = [s.skip_when_false or "" for s in steps_list]
-    g.vs["is_infra"] = [_is_infrastructure_step(s) for s in steps_list]
-    g.vs["is_terminal"] = [s.action == "stop" for s in steps_list]
-    g.vs["is_confirm"] = [s.action == "confirm" for s in steps_list]
-
-    edges: list[tuple[int, int]] = []
-    edge_types: list[str] = []
-    edge_conditions: list[str] = []
-
-    for name, step in recipe.steps.items():
-        src = name_to_id[name]
-        for edge in _extract_routing_edges(step):
-            if edge.target in name_to_id:
-                edges.append((src, name_to_id[edge.target]))
-                edge_types.append(edge.edge_type)
-                edge_conditions.append(edge.condition or "")
-
-    if edges:
-        g.add_edges(edges, attributes={"edge_type": edge_types, "condition": edge_conditions})
-
-    return g
-
-
-def _classify_steps(recipe: Any) -> StepClassification:
+def _classify_steps(recipe: Recipe) -> StepClassification:
     """Classify recipe steps by role using igraph's subcomponent analysis.
 
     Builds an igraph.Graph from the recipe, projects a success-path-only subgraph,
@@ -282,11 +198,11 @@ def _classify_steps(recipe: Any) -> StepClassification:
     # routing_blocks: pure route-action steps in main_chain with multiple on_result conditions
     routing_blocks_set: set[str] = set()
     for mc_name in main_chain:
-        step = recipe.steps.get(mc_name)
-        if step is None:
+        mc_step = recipe.steps.get(mc_name)
+        if mc_step is None:
             continue
-        if step.action == "route" and step.on_result is not None:
-            nr = step.on_result
+        if mc_step.action == "route" and mc_step.on_result is not None:
+            nr = mc_step.on_result
             num_routes = (
                 len(nr.conditions) if nr.conditions else (len(nr.routes) if nr.routes else 0)
             )
@@ -298,10 +214,10 @@ def _classify_steps(recipe: Any) -> StepClassification:
     # side_legs: steps reachable from main_chain via on_failure or on_context_limit only
     side_legs_set: set[str] = set()
     for mc_name in main_chain:
-        step = recipe.steps.get(mc_name)
-        if step is None:
+        mc_step = recipe.steps.get(mc_name)
+        if mc_step is None:
             continue
-        for leg_target in [step.on_failure, step.on_context_limit]:
+        for leg_target in [mc_step.on_failure, mc_step.on_context_limit]:
             if leg_target and leg_target in recipe.steps and leg_target not in main_chain:
                 side_legs_set.add(leg_target)
 

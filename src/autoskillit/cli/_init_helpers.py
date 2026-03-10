@@ -77,8 +77,13 @@ def _register_mcp_server(claude_json_path: Path) -> None:
     if claude_json_path.exists():
         try:
             data = json.loads(claude_json_path.read_text())
-        except (json.JSONDecodeError, OSError):
-            data = {}
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"{claude_json_path} contains invalid JSON. "
+                f"Fix or remove it before running 'autoskillit init'. Error: {exc}"
+            ) from exc
+        except OSError as exc:
+            raise OSError(f"{claude_json_path} could not be read: {exc}") from exc
     data.setdefault("mcpServers", {})
     data["mcpServers"]["autoskillit"] = {
         "type": "stdio",

@@ -37,7 +37,7 @@ steps:
       cwd: ${{ inputs.source_dir }}
       step_name: triage
     capture:
-      triage_manifest: "${{ result.manifest_path }}"
+      triage_manifest: "${{ result.triage_manifest }}"
     on_success: implement
     on_failure: escalate
 

@@ -344,10 +344,10 @@ def test_format_get_token_summary_compact():
     out, _ = _run_hook(event=event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "token_summary" in text
-    # One line per step in compact format
-    assert "investigate" in text
-    assert "make_plan" in text
-    assert "implement" in text
+    # Assert specific compact line format: name xN [in:Xk out:Xk cached:XM]
+    assert "investigate x1 [in:45.2k out:12.8k cached:1.2M]" in text
+    assert "make_plan x2 [in:30.0k out:8.0k cached:500.0k]" in text
+    assert "implement x1 [in:60.0k out:15.0k cached:2.0M]" in text
     assert "total_in:" in text
     assert "total_out:" in text
     assert "total_cached:" in text
@@ -388,8 +388,7 @@ def test_pipeline_mode_compact_run_skill(tmp_path):
 
     event = _make_run_skill_event(success=False, needs_retry=True, retry_reason="budget_exhausted")
 
-    with patch("autoskillit.hooks.pretty_output.Path.cwd", return_value=tmp_path):
-        out, _ = _run_hook(event=event, cwd=tmp_path)
+    out, _ = _run_hook(event=event, cwd=tmp_path)
 
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     # Compact format: single-line header, not full ## header

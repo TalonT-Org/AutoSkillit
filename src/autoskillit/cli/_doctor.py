@@ -72,6 +72,7 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
     registered = " ".join(
         hook.get("command", "")
         for event_entries in data.get("hooks", {}).values()
+        if isinstance(event_entries, list)
         for entry in event_entries
         for hook in entry.get("hooks", [])
     )

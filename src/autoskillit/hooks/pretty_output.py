@@ -27,6 +27,8 @@ def _fmt_tokens(n: int | None) -> str:
     """Format a token count as compact string (45.2k, 1.2M, etc.)."""
     if n is None or n == 0:
         return "0"
+    if not isinstance(n, (int, float)):
+        return "0"
     if n >= 1_000_000:
         return f"{n / 1_000_000:.1f}M"
     if n >= 1_000:
@@ -109,7 +111,7 @@ def _fmt_run_cmd(data: dict, pipeline: bool) -> str:
 
     if pipeline:
         lines = [
-            f"run_cmd: {'OK' if success else 'FAIL'}",
+            f"run_cmd: {'OK' if success else 'FAIL'} [{exit_code}]",
             f"success: {success}",
             f"exit_code: {exit_code}",
         ]
@@ -316,9 +318,7 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
         return None
 
     # Gate error: any tool can return this
-    if data.get("subtype") == "gate_error" or (
-        data.get("success") is False and data.get("subtype") == "gate_error"
-    ):
+    if data.get("subtype") == "gate_error":
         return _fmt_gate_error(data, pipeline)
 
     short_name = _extract_tool_short_name(tool_name)

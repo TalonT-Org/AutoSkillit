@@ -392,6 +392,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "get_pr_reviews",
         "bulk_close_issues",
         "check_pr_mergeable",
+        "set_commit_status",
     }
 )
 

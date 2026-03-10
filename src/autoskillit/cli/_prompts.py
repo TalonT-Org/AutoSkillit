@@ -50,14 +50,13 @@ def _build_orchestrator_prompt(script_yaml: str, diagram: str | None = None) -> 
     return f"""\
 You are a pipeline orchestrator. Execute the recipe below step-by-step.
 
-FIRST ACTION — before prompting for any inputs, display the full recipe overview to the user:
-1. The recipe diagram above (if present)
-2. Recipe name, description, and flow summary
-3. Ingredients table (user-supplied vs agent-managed)
-4. Step overview with routing, retry, and capture info
-5. Kitchen rules
-
-1. Present the recipe to the user using the preview format below
+FIRST ACTION — before prompting for any inputs, execute these steps in order:
+1. Display the full recipe overview using the preview format below:
+   - The recipe diagram above (if present)
+   - Recipe name, description, and flow summary
+   - Ingredients table (user-supplied vs agent-managed)
+   - Step overview with routing, retry, and capture info
+   - Kitchen rules
 2. Prompt for input values using AskUserQuestion
 3. Execute the pipeline steps by calling MCP tools directly
 

@@ -57,12 +57,12 @@ def test_dry_walkthrough_historical_step_uses_git_log(step_45_section: str) -> N
 
 
 def test_dry_walkthrough_historical_step_checks_fix_keywords(step_45_section: str) -> None:
-    """Step 4.5 must check commit messages for fix and revert keywords."""
-    has_fix = "fix" in step_45_section.lower()
-    has_revert = "revert" in step_45_section.lower()
-    assert has_fix and has_revert, (
+    """Step 4.5 must enumerate fix and revert as commit message scan keywords."""
+    # Scope to the explicit keyword list or git --grep pattern, not arbitrary prose
+    assert "fix/revert" in step_45_section or "fix\\|revert" in step_45_section, (
         "Step 4.5 must list 'fix' and 'revert' as commit message keywords to scan for "
-        "when detecting potential plan regressions"
+        "when detecting potential plan regressions (expected in git --grep pattern or "
+        "keyword list prose)"
     )
 
 
@@ -99,9 +99,9 @@ def test_dry_walkthrough_historical_step_handles_closed_issues(step_45_section: 
 
 def test_dry_walkthrough_historical_step_gh_auth_guard(step_45_section: str) -> None:
     """Step 4.5 must guard against missing gh authentication before scanning issues."""
-    assert "gh auth" in step_45_section or "authenticated" in step_45_section.lower(), (
+    assert "gh auth status" in step_45_section, (
         "Step 4.5 must check that gh is authenticated before attempting the "
-        "GitHub issues scan, and skip gracefully if not"
+        "GitHub issues scan using 'gh auth status', and skip gracefully if not"
     )
 
 

@@ -295,3 +295,11 @@ def test_recipe_step_description_stores_value() -> None:
 
     step = RecipeStep(tool="run_cmd", description="Build the project")
     assert step.description == "Build the project"
+
+
+def test_terminal_targets_defined_in_schema():
+    """Schema is the authoritative home for routing sentinel constants."""
+    from autoskillit.recipe.schema import _TERMINAL_TARGETS
+
+    assert "escalate" in _TERMINAL_TARGETS
+    assert "done" in _TERMINAL_TARGETS

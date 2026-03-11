@@ -1544,3 +1544,27 @@ class TestDevSprintRecipe:
         rules_text = " ".join(recipe.kitchen_rules)
         for tool in ("Read", "Grep", "Glob", "Edit", "Write", "Bash"):
             assert tool in rules_text, f"kitchen_rules must mention {tool}"
+
+
+# ---------------------------------------------------------------------------
+# WF7: build_recipe_graph emits zero warnings for all bundled recipes
+# ---------------------------------------------------------------------------
+
+import structlog.testing  # noqa: E402
+
+from autoskillit.recipe._analysis import build_recipe_graph  # noqa: E402
+
+_BUNDLED_RECIPE_PATHS = sorted(builtin_recipes_dir().glob("*.yaml"))
+
+
+@pytest.mark.parametrize("recipe_path", _BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
+def test_bundled_recipes_emit_no_graph_warnings(recipe_path):
+    """WF7: build_recipe_graph emits zero warnings for all bundled recipes."""
+    recipe = load_recipe(recipe_path)
+    with structlog.testing.capture_logs() as cap_logs:
+        build_recipe_graph(recipe)
+    warning_events = [l for l in cap_logs if l.get("log_level") == "warning"]
+    assert warning_events == [], (
+        f"build_recipe_graph emitted {len(warning_events)} warnings for "
+        f"{recipe_path.name}: {warning_events}"
+    )

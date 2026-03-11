@@ -1510,3 +1510,134 @@ def test_bundled_recipe_ingredient_descriptions_are_single_phrase(
                 )
         elif in_inputs and not line.startswith("|"):
             break
+
+
+# ---------------------------------------------------------------------------
+# T-SENT-1..4: build_recipe_graph sentinel awareness
+# ---------------------------------------------------------------------------
+
+_SENTINEL_ESCALATE_YAML = """
+name: sentinel-test
+description: Recipe with escalate as pure sentinel (not a step)
+steps:
+  start:
+    tool: run_skill
+    with:
+      skill_command: /run-something
+    on_success: done
+    on_failure: done
+  done:
+    action: stop
+    message: "Finished"
+# Note: on_exhausted defaults to "escalate" but there is no "escalate" step.
+# build_recipe_graph must NOT warn about this.
+"""
+
+
+class TestBuildRecipeGraphSentinels:
+    """T-SENT-1..4: build_recipe_graph must not warn on terminal sentinel targets."""
+
+    @pytest.fixture
+    def sentinel_recipe(self, tmp_path):
+        p = tmp_path / "sentinel-test.yaml"
+        p.write_text(_SENTINEL_ESCALATE_YAML)
+        from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+        return load_recipe(p)
+
+    def test_no_warning_for_default_escalate_sentinel(self, sentinel_recipe):
+        """T-SENT-1: Default on_exhausted='escalate' sentinel emits zero warnings."""
+        import structlog.testing  # noqa: PLC0415
+        from autoskillit.recipe._analysis import build_recipe_graph  # noqa: PLC0415
+
+        with structlog.testing.capture_logs() as cap_logs:
+            build_recipe_graph(sentinel_recipe)
+        warning_events = [l for l in cap_logs if l.get("log_level") == "warning"]
+        assert warning_events == [], f"Unexpected warnings: {warning_events}"
+
+    def test_no_warning_for_explicit_done_sentinel(self, tmp_path):
+        """T-SENT-2: Explicit on_exhausted='done' sentinel emits zero warnings."""
+        import structlog.testing  # noqa: PLC0415
+        from autoskillit.recipe._analysis import build_recipe_graph  # noqa: PLC0415
+        from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+        yaml_content = """
+name: done-sentinel-test
+description: Recipe with done as explicit exhausted target
+steps:
+  start:
+    tool: run_skill
+    with:
+      skill_command: /run-something
+    on_success: finish
+    on_exhausted: done
+  finish:
+    action: stop
+    message: "Done"
+"""
+        p = tmp_path / "done-sentinel.yaml"
+        p.write_text(yaml_content)
+        recipe = load_recipe(p)
+        with structlog.testing.capture_logs() as cap_logs:
+            build_recipe_graph(recipe)
+        warning_events = [l for l in cap_logs if l.get("log_level") == "warning"]
+        assert warning_events == [], f"Unexpected warnings: {warning_events}"
+
+    def test_still_warns_for_truly_unknown_target(self, tmp_path):
+        """T-SENT-3: Genuinely unknown routing targets still emit warnings."""
+        import structlog.testing  # noqa: PLC0415
+        from autoskillit.recipe._analysis import build_recipe_graph  # noqa: PLC0415
+        from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+        yaml_content = """
+name: unknown-target-test
+description: Recipe with a genuinely unknown routing target
+steps:
+  start:
+    tool: run_skill
+    with:
+      skill_command: /run-something
+    on_success: nonexistent_step
+  done:
+    action: stop
+    message: "Done"
+"""
+        p = tmp_path / "unknown-target.yaml"
+        p.write_text(yaml_content)
+        recipe = load_recipe(p)
+        with structlog.testing.capture_logs() as cap_logs:
+            build_recipe_graph(recipe)
+        warning_events = [l for l in cap_logs if l.get("log_level") == "warning"]
+        assert any("nonexistent_step" in str(e) for e in warning_events), (
+            "Expected warning for unknown non-sentinel target"
+        )
+
+    def test_build_recipe_graph_no_warning_for_action_step_exhausted(self, tmp_path):
+        """T-SENT-4: Action steps (stop/confirm/route) do not warn on on_exhausted edges."""
+        import structlog.testing  # noqa: PLC0415
+        from autoskillit.recipe._analysis import build_recipe_graph  # noqa: PLC0415
+        from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+        yaml_content = """
+name: action-step-test
+description: Recipe where a stop step has default on_exhausted
+steps:
+  start:
+    tool: run_skill
+    with:
+      skill_command: /run-something
+    on_success: done
+  done:
+    action: stop
+    message: "All done"
+  # done.on_exhausted defaults to "escalate" — action step, should not warn
+"""
+        p = tmp_path / "action-step.yaml"
+        p.write_text(yaml_content)
+        recipe = load_recipe(p)
+        with structlog.testing.capture_logs() as cap_logs:
+            build_recipe_graph(recipe)
+        warning_events = [l for l in cap_logs if l.get("log_level") == "warning"]
+        assert warning_events == [], (
+            f"Unexpected warnings from action-step exhausted edge: {warning_events}"
+        )

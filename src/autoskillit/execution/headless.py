@@ -637,6 +637,9 @@ async def run_subrecipe_session(
     if step_name:
         try:
             ctx.timing_log.record(step_name, _elapsed)
+        except Exception:
+            logger.debug("timing_log_record_failed", exc_info=True)
+        try:
             ctx.token_log.record(
                 step_name,
                 skill_result.token_usage,
@@ -645,7 +648,7 @@ async def run_subrecipe_session(
                 elapsed_seconds=_elapsed,
             )
         except Exception:
-            logger.debug("telemetry_log_record_failed", exc_info=True)
+            logger.debug("token_log_record_failed", exc_info=True)
 
     return skill_result
 

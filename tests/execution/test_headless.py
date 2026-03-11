@@ -586,7 +586,7 @@ class TestHeadlessTelemetryContainment:
     async def test_run_headless_core_token_log_error_does_not_suppress_skill_result(
         self, tool_ctx, monkeypatch
     ):
-        """[FAILS NOW] token_log.record() raising must not suppress the skill_result."""
+        """token_log.record() raising must not suppress the skill_result."""
         import structlog.testing
 
         from autoskillit.core.types import SkillResult as _SkillResult
@@ -610,6 +610,7 @@ class TestHeadlessTelemetryContainment:
             )
 
         assert isinstance(result, _SkillResult)
+        assert result.success is True, f"Expected success=True, got result: {result}"
         assert any(e.get("event") == "token_log_record_failed" for e in cap), (
             f"Expected 'token_log_record_failed' in captured logs, got: {cap}"
         )
@@ -618,7 +619,7 @@ class TestHeadlessTelemetryContainment:
     async def test_run_subrecipe_session_telemetry_error_does_not_suppress_skill_result(
         self, tool_ctx, monkeypatch, tmp_path
     ):
-        """[FAILS NOW] timing_log.record() raising must not suppress the skill_result."""
+        """timing_log.record() raising must not suppress the skill_result."""
         import structlog.testing
 
         from autoskillit.core.types import SkillResult as _SkillResult
@@ -642,8 +643,9 @@ class TestHeadlessTelemetryContainment:
             )
 
         assert isinstance(result, _SkillResult)
-        assert any(e.get("event") == "telemetry_log_record_failed" for e in cap), (
-            f"Expected 'telemetry_log_record_failed' in captured logs, got: {cap}"
+        assert result.success is True, f"Expected success=True, got result: {result}"
+        assert any(e.get("event") == "timing_log_record_failed" for e in cap), (
+            f"Expected 'timing_log_record_failed' in captured logs, got: {cap}"
         )
 
 

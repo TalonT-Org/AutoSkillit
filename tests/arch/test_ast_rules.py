@@ -552,14 +552,12 @@ def test_init_files_are_pure_facades() -> None:
 
 def test_autoskillit_kitchen_open_not_in_python_sources():
     """AUTOSKILLIT_KITCHEN_OPEN must not appear in any Python source file."""
-    import subprocess
-
     from autoskillit.core.paths import pkg_root
 
     src = pkg_root()  # src/autoskillit/ package directory (not the project root)
-    result = subprocess.run(
-        ["grep", "-r", "AUTOSKILLIT_KITCHEN_OPEN", str(src)],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode != 0, f"AUTOSKILLIT_KITCHEN_OPEN still present:\n{result.stdout}"
+    hits = [
+        str(p)
+        for p in src.rglob("*.py")
+        if "AUTOSKILLIT_KITCHEN_OPEN" in p.read_text(encoding="utf-8", errors="ignore")
+    ]
+    assert not hits, "AUTOSKILLIT_KITCHEN_OPEN still present:\n" + "\n".join(hits)

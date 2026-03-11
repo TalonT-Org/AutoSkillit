@@ -23,7 +23,7 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("list_recipes")
 async def list_recipes() -> str:
     """List available recipes from .autoskillit/recipes/.
@@ -54,7 +54,7 @@ async def list_recipes() -> str:
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("load_recipe")
 async def load_recipe(name: str) -> str:
     """Load a recipe by name and return its raw YAML content.
@@ -193,7 +193,7 @@ async def load_recipe(name: str) -> str:
     return json.dumps(await _apply_triage_gate(result, name, recipe_info=recipe_info))
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("validate_recipe")
 async def validate_recipe(script_path: str) -> str:
     """Validate a recipe YAML file against the recipe schema.

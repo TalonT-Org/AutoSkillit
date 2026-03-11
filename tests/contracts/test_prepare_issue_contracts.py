@@ -181,14 +181,17 @@ def test_prepare_issue_dedup_extend_runs_triage():
     """Extending an existing issue must route to LLM Classification, not exit immediately."""
     text = SKILL_MD.read_text()
     assert "extend" in text.lower()
-    # Find the first occurrence of "extend" and check the surrounding window
-    # references continuing to LLM classification (Step 6), not immediate exit
-    extend_idx = text.lower().find("extend")
-    post_extend = text[extend_idx : extend_idx + 1000]
+    # Anchor to the dedup section to avoid matching unrelated 'extend' occurrences
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "SKILL.md must contain Step 4 dedup section"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    assert "extend" in dedup_section.lower(), "Step 4 dedup section must document the extend path"
+    # The extend path within the dedup section must reference continuing to Step 6
     has_triage_ref = (
-        "Step 6" in post_extend
-        or "LLM Classification" in post_extend
-        or "classification" in post_extend.lower()
+        "Step 6" in dedup_section
+        or "LLM Classification" in dedup_section
+        or "classification" in dedup_section.lower()
     )
     assert has_triage_ref, (
         "Extend path must reference continuing to LLM Classification (Step 6), "

@@ -52,8 +52,10 @@ from autoskillit.execution.session import (
 )
 from autoskillit.execution.session_log import (
     flush_session_log,
+    read_telemetry_clear_marker,
     recover_crashed_sessions,
     resolve_log_dir,
+    write_telemetry_clear_marker,
 )
 from autoskillit.execution.testing import (
     DefaultTestRunner,
@@ -110,4 +112,6 @@ __all__ = [
     "flush_session_log",
     "recover_crashed_sessions",
     "resolve_log_dir",
+    "write_telemetry_clear_marker",
+    "read_telemetry_clear_marker",
 ]

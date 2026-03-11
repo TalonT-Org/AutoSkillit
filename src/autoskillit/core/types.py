@@ -404,6 +404,7 @@ UNGATED_TOOLS: frozenset[str] = frozenset(
         "get_pipeline_report",
         "get_token_summary",
         "get_timing_summary",
+        "get_quota_events",
         "list_recipes",
         "load_recipe",
         "validate_recipe",

@@ -16,6 +16,7 @@ from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools_execution import run_skill
 from autoskillit.server.tools_status import (
     get_pipeline_report,
+    get_quota_events,
     get_timing_summary,
     get_token_summary,
     kitchen_status,
@@ -593,3 +594,135 @@ def test_format_token_summary_includes_elapsed_seconds():
     assert "plan" in result
     assert "elapsed_seconds" in result
     assert "45.7" in result
+
+
+class TestGetQuotaEvents:
+    @pytest.mark.anyio
+    async def test_returns_events_from_jsonl(self, tool_ctx, tmp_path, monkeypatch):
+        events = [
+            {
+                "ts": "2026-03-10T10:00:00+00:00",
+                "event": "approved",
+                "threshold": 90.0,
+                "utilization": 50.0,
+            },
+            {
+                "ts": "2026-03-10T11:00:00+00:00",
+                "event": "blocked",
+                "threshold": 90.0,
+                "utilization": 92.5,
+            },
+        ]
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        (log_dir / "quota_events.jsonl").write_text(
+            "\n".join(json.dumps(e) for e in events) + "\n"
+        )
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        result = json.loads(await get_quota_events())
+        assert result["total_count"] == 2
+        assert result["events"][0]["event"] == "blocked"  # most recent first
+
+    @pytest.mark.anyio
+    async def test_limits_to_n_events(self, tool_ctx, tmp_path, monkeypatch):
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        lines = [
+            json.dumps({"ts": f"2026-03-10T{h:02d}:00:00+00:00", "event": "approved"})
+            for h in range(10)
+        ]
+        (log_dir / "quota_events.jsonl").write_text("\n".join(lines) + "\n")
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        result = json.loads(await get_quota_events(n=3))
+        assert len(result["events"]) == 3
+
+    @pytest.mark.anyio
+    async def test_returns_empty_when_file_missing(self, tool_ctx, tmp_path, monkeypatch):
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        result = json.loads(await get_quota_events())
+        assert result["events"] == []
+        assert result["total_count"] == 0
+
+
+class TestTokenSummaryWallClock:
+    @pytest.mark.anyio
+    async def test_wall_clock_seconds_merged_from_timing_log(self, tool_ctx):
+        from autoskillit.pipeline.timings import DefaultTimingLog
+        from autoskillit.pipeline.tokens import DefaultTokenLog
+
+        tool_ctx.token_log = DefaultTokenLog()
+        tool_ctx.timing_log = DefaultTimingLog()
+        tool_ctx.token_log.record(
+            "step-a",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            elapsed_seconds=8.0,
+        )
+        tool_ctx.timing_log.record("step-a", 12.5)
+
+        result = json.loads(await get_token_summary())
+        step = next(s for s in result["steps"] if s["step_name"] == "step-a")
+        assert step["wall_clock_seconds"] == pytest.approx(12.5)
+        assert step["elapsed_seconds"] == pytest.approx(8.0)
+
+    @pytest.mark.anyio
+    async def test_wall_clock_falls_back_to_elapsed_when_no_timing(self, tool_ctx):
+        from autoskillit.pipeline.timings import DefaultTimingLog
+        from autoskillit.pipeline.tokens import DefaultTokenLog
+
+        tool_ctx.token_log = DefaultTokenLog()
+        tool_ctx.timing_log = DefaultTimingLog()
+        tool_ctx.token_log.record(
+            "step-b",
+            {
+                "input_tokens": 200,
+                "output_tokens": 100,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            elapsed_seconds=5.0,
+        )
+
+        result = json.loads(await get_token_summary())
+        step = next(s for s in result["steps"] if s["step_name"] == "step-b")
+        # No timing_log entry → falls back to elapsed_seconds
+        assert step["wall_clock_seconds"] == pytest.approx(5.0)
+
+
+class TestClearMarkerWritten:
+    @pytest.mark.anyio
+    async def test_token_summary_clear_writes_marker(self, tool_ctx, tmp_path, monkeypatch):
+        from autoskillit.execution.session_log import read_telemetry_clear_marker
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        await get_token_summary(clear=True)
+        marker = read_telemetry_clear_marker(log_dir)
+        assert marker is not None
+
+    @pytest.mark.anyio
+    async def test_timing_summary_clear_writes_marker(self, tool_ctx, tmp_path, monkeypatch):
+        from autoskillit.execution.session_log import read_telemetry_clear_marker
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        await get_timing_summary(clear=True)
+        assert read_telemetry_clear_marker(log_dir) is not None
+
+    @pytest.mark.anyio
+    async def test_pipeline_report_clear_writes_marker(self, tool_ctx, tmp_path, monkeypatch):
+        from autoskillit.execution.session_log import read_telemetry_clear_marker
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        await get_pipeline_report(clear=True)
+        assert read_telemetry_clear_marker(log_dir) is not None

@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   bump-and-sync:
@@ -81,33 +80,8 @@ jobs:
             git push origin main
           fi
 
-      - name: Sync main into integration
-        id: sync
+      - name: Force-push integration to match main
         run: |
           set -euo pipefail
-          git fetch origin main integration
-          git checkout integration
-
-          if git merge --ff-only origin/main; then
-            git push origin integration
-            echo "sync=fast-forwarded" >> "$GITHUB_OUTPUT"
-          else
-            EXISTING=$(gh pr list \
-              --head main \
-              --base integration \
-              --state open \
-              --json number \
-              --jq '.[0].number // empty')
-            if [ -z "$EXISTING" ]; then
-              gh pr create \
-                --head main \
-                --base integration \
-                --title "chore: sync main → integration after version bump" \
-                --body "Automated sync PR: fast-forward merge was not possible (integration has diverged from main). Please resolve and merge."
-              echo "sync=pr-opened" >> "$GITHUB_OUTPUT"
-            else
-              echo "sync=pr-exists (#$EXISTING)" >> "$GITHUB_OUTPUT"
-            fi
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git fetch origin main
+          git push --force origin origin/main:refs/heads/integration

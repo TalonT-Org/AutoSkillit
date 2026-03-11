@@ -324,6 +324,7 @@ class TestGroupDApiContractPreservation:
             "input_data",
             "completion_drain_timeout",
             "linux_tracing_config",
+            "env",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

@@ -280,6 +280,20 @@ skills:
     expected_output_patterns:
     - "https://github\\.com/.*/pull/\\d+"
 
+  triage-issues:
+    inputs: []
+    outputs:
+    - name: triage_report
+      type: file_path
+    - name: triage_manifest
+      type: file_path
+    - name: total_issues
+      type: string
+    - name: batch_count
+      type: string
+    - name: recipe_distribution
+      type: string
+
   review-pr:
     inputs:
     - name: feature_branch

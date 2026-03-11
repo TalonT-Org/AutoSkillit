@@ -17,6 +17,7 @@ from autoskillit.server.tools_recipe import (
     list_recipes,
     load_recipe,
     migrate_recipe,
+    run_recipe,
     validate_recipe,
 )
 
@@ -1434,3 +1435,38 @@ def test_tools_recipe_does_not_import_raw_ctx():
                 assert "_ctx" not in names, (
                     "tools_recipe.py must not import raw _ctx — use _get_ctx_or_none()"
                 )
+
+
+# ---------------------------------------------------------------------------
+# run_recipe tool tests
+# ---------------------------------------------------------------------------
+
+
+def test_run_recipe_is_in_gated_tools():
+    assert "run_recipe" in GATED_TOOLS
+
+
+@pytest.mark.anyio
+async def test_run_recipe_gate_closed_returns_gate_error(tool_ctx):
+    tool_ctx.gate = DefaultGateState(enabled=False)
+    result = json.loads(await run_recipe(name="implementation", cwd="/tmp"))
+    assert result["success"] is False
+    assert result["subtype"] == "gate_error"
+
+
+@pytest.mark.anyio
+async def test_run_recipe_unknown_name_returns_failure(tool_ctx):
+    result = json.loads(await run_recipe(name="no-such-xyz", cwd="/tmp"))
+    assert result["success"] is False
+    assert "no-such-xyz" in result["result"]
+
+
+@pytest.mark.anyio
+async def test_run_recipe_records_step_timing(tool_ctx):
+    from tests.conftest import _make_result
+
+    tool_ctx.runner.push(_make_result(0, "", ""))
+    await run_recipe(
+        name="smoke-test", cwd="/tmp", step_name="my_step", ingredients='{"workspace": "/tmp"}'
+    )
+    assert any(e["step_name"] == "my_step" for e in tool_ctx.timing_log.get_report())

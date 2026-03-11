@@ -23,7 +23,7 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("test_check")
 async def test_check(
     worktree_path: str,
@@ -82,7 +82,7 @@ async def test_check(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("reset_test_dir")
 async def reset_test_dir(
     test_dir: str,
@@ -158,7 +158,7 @@ async def reset_test_dir(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("reset_workspace")
 async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str:
     """Runs a configured reset command then deletes directory contents,

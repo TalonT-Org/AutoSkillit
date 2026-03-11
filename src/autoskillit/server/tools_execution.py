@@ -24,7 +24,7 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("run_cmd")
 async def run_cmd(
     cmd: str,
@@ -78,7 +78,7 @@ async def run_cmd(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("run_python")
 async def run_python(
     callable: str,
@@ -125,7 +125,7 @@ async def run_python(
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("run_skill")
 async def run_skill(
     skill_command: str,

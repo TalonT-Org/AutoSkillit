@@ -22,7 +22,7 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("wait_for_ci")
 async def wait_for_ci(
     branch: str,
@@ -117,7 +117,7 @@ async def wait_for_ci(
     return json.dumps(result)
 
 
-@mcp.tool(tags={"kitchen", "automation"})
+@mcp.tool(tags={"kitchen", "automation"}, annotations={"readOnlyHint": True})
 @track_response_size("set_commit_status")
 async def set_commit_status(
     sha: str,
@@ -196,7 +196,7 @@ async def set_commit_status(
     return {"success": True, "sha": sha, "state": state, "context": context}
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("get_ci_status")
 async def get_ci_status(
     branch: str | None = None,

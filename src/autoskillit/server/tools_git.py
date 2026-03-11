@@ -21,7 +21,7 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("merge_worktree")
 async def merge_worktree(
     worktree_path: str,
@@ -85,7 +85,7 @@ async def merge_worktree(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("classify_fix")
 async def classify_fix(
     worktree_path: str,
@@ -186,7 +186,7 @@ async def classify_fix(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("create_unique_branch")
 async def create_unique_branch(
     slug: str = "",
@@ -312,7 +312,7 @@ async def create_unique_branch(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("check_pr_mergeable")
 async def check_pr_mergeable(
     pr_number: int,

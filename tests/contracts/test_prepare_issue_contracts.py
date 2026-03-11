@@ -112,3 +112,84 @@ def test_prepare_issue_handles_vague_issues():
     assert vague_handled, (
         "Skill must document behavior when issue is too vague for requirement extraction"
     )
+
+
+# ---------------------------------------------------------------------------
+# TRIG: Trigger phrase and When to Use tests
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_issue_trigger_phrases_in_description_frontmatter():
+    """The description: frontmatter must include natural language trigger phrases."""
+    import yaml
+
+    raw = SKILL_MD.read_text()
+    parts = raw.split("---", 2)
+    assert len(parts) >= 3, "SKILL.md must have YAML frontmatter"
+    fm = yaml.safe_load(parts[1])
+    desc = fm.get("description", "").lower()
+    trigger_phrases = [
+        "open an issue",
+        "create an issue",
+        "file a bug",
+        "file an issue",
+        "make a new issue",
+    ]
+    assert any(p in desc for p in trigger_phrases), (
+        f"description: frontmatter must contain natural language trigger phrases; got: {desc!r}"
+    )
+
+
+def test_prepare_issue_has_when_to_use_section():
+    """SKILL.md must contain a ## When to Use section."""
+    text = SKILL_MD.read_text()
+    assert "## When to Use" in text
+
+
+# ---------------------------------------------------------------------------
+# DEDUP: Multi-candidate display and extend-path tests
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_issue_dedup_shows_all_candidates():
+    """Dedup step must document displaying all found candidates with number, title, and URL."""
+    text = SKILL_MD.read_text()
+    # Must show a numbered list of candidates, not just one "high title overlap" check
+    has_numbered_list = "[1]" in text or "(1)" in text or "numbered" in text.lower()
+    assert has_numbered_list, "Dedup must display candidates in a numbered list"
+    # Must include URL in each candidate display
+    assert "url" in text.lower()
+
+
+def test_prepare_issue_dedup_prompt_has_extend_option():
+    """Interactive dedup prompt must include an 'Add to / extend' option."""
+    text = SKILL_MD.read_text()
+    assert "extend" in text.lower(), (
+        "Dedup interactive prompt must offer 'Add to / extend an existing issue' option"
+    )
+
+
+def test_prepare_issue_dedup_extend_runs_triage():
+    """Extending an existing issue must route to LLM Classification, not exit immediately."""
+    text = SKILL_MD.read_text()
+    assert "extend" in text.lower()
+    # Find the first occurrence of "extend" and check the surrounding window
+    # references continuing to LLM classification (Step 6), not immediate exit
+    extend_idx = text.lower().find("extend")
+    post_extend = text[extend_idx : extend_idx + 1000]
+    has_triage_ref = (
+        "Step 6" in post_extend
+        or "LLM Classification" in post_extend
+        or "classification" in post_extend.lower()
+    )
+    assert has_triage_ref, (
+        "Extend path must reference continuing to LLM Classification (Step 6), not exit immediately"
+    )
+
+
+def test_prepare_issue_dedup_bypass_with_issue_flag_still_documented():
+    """--issue N flag must still bypass dedup (existing contract, must remain intact)."""
+    text = SKILL_MD.read_text()
+    # Both the interface docs and the step header must reference the bypass
+    assert "--issue N" in text or "issue_number" in text
+    assert "skip" in text.lower() or "bypass" in text.lower() or "skip if" in text.lower()

@@ -13,14 +13,19 @@ import pytest
 _ORCHESTRATION_TOOLS = ["run_skill", "run_cmd", "run_python"]
 
 
-def _run_guard(tool_input: dict, *, headless: bool = False) -> str:
-    """Run main() with the given event, optionally setting AUTOSKILLIT_HEADLESS=1."""
+def _run_guard(tool_input: dict, *, headless: bool = False, raw_stdin: str | None = None) -> str:
+    """Run main() with the given event, optionally setting AUTOSKILLIT_HEADLESS=1.
+
+    raw_stdin: if provided, passed directly to stdin instead of json.dumps(tool_input).
+    Use this to test malformed-input paths without duplicating setup boilerplate.
+    """
     from autoskillit.hooks.headless_orchestration_guard import main
 
-    env_patch = {"AUTOSKILLIT_HEADLESS": "1"} if headless else {}
+    stdin_content = raw_stdin if raw_stdin is not None else json.dumps(tool_input)
+    env_updates = {"AUTOSKILLIT_HEADLESS": "1"} if headless else {}
     with (
-        patch.dict(os.environ, env_patch, clear=not headless),
-        patch("sys.stdin", io.StringIO(json.dumps(tool_input))),
+        patch.dict(os.environ, env_updates, clear=False),
+        patch("sys.stdin", io.StringIO(stdin_content)),
     ):
         buf = io.StringIO()
         with redirect_stdout(buf):
@@ -62,16 +67,5 @@ def test_guard_allows_merge_worktree_when_headless():
 
 def test_guard_fails_open_on_malformed_input():
     """Malformed stdin must not raise — hook exits 0 silently."""
-    from autoskillit.hooks.headless_orchestration_guard import main
-
-    with (
-        patch.dict(os.environ, {"AUTOSKILLIT_HEADLESS": "1"}),
-        patch("sys.stdin", io.StringIO("not-json")),
-    ):
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            try:
-                main()
-            except SystemExit:
-                pass
-        assert not buf.getvalue().strip()
+    out = _run_guard({}, headless=True, raw_stdin="not-json")
+    assert not out.strip()

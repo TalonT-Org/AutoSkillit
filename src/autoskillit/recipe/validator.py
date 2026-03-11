@@ -54,11 +54,6 @@ __all__ = [
     "semantic_rule",
 ]
 
-# _TERMINAL_TARGETS is the authoritative constant defined in schema.py.
-# Re-imported here for backward compatibility with any direct imports from this module.
-# Do not redefine — use the schema import above.
-
-
 # ---------------------------------------------------------------------------
 # Structural validation
 # ---------------------------------------------------------------------------

@@ -298,6 +298,60 @@ def _fmt_clone_repo(data: dict, _pipeline: bool) -> str:
     return "\n".join(lines)
 
 
+def _fmt_load_recipe(data: dict, pipeline: bool) -> str:
+    """Format load_recipe result as Markdown-KV."""
+    if not isinstance(data, dict):
+        return "## load_recipe\n\n_(unexpected response type)_"
+    lines: list[str] = []
+    valid = data.get("valid", True)
+    mark = _CHECK_MARK if valid else _CROSS_MARK
+    lines.append(f"## load_recipe {mark}")
+
+    diagram = data.get("diagram")
+    if diagram:
+        lines.append(diagram)
+    else:
+        lines.append("_(no diagram available)_")
+
+    suggestions = data.get("suggestions") or []
+    if suggestions:
+        lines.append("\n**Findings:**")
+        for finding in suggestions[:20]:
+            if isinstance(finding, dict):
+                rule = finding.get("rule", "")
+                msg = finding.get("message", str(finding))
+                lines.append(f"  - {rule}: {msg}" if rule else f"  - {msg}")
+            else:
+                lines.append(f"  - {finding}")
+        if len(suggestions) > 20:
+            lines.append(f"  ... and {len(suggestions) - 20} more")
+
+    return "\n".join(lines)
+
+
+def _fmt_list_recipes(data: dict, pipeline: bool) -> str:
+    """Format list_recipes result as Markdown-KV."""
+    if not isinstance(data, dict):
+        return "## list_recipes\n\n_(unexpected response type)_"
+    lines: list[str] = ["## list_recipes"]
+    recipes = data.get("recipes") or []
+    for recipe in recipes[:30]:
+        if isinstance(recipe, dict):
+            name = recipe.get("name", "?")
+            desc = recipe.get("description", "")
+            lines.append(f"  - {name}: {desc}" if desc else f"  - {name}")
+        else:
+            lines.append(f"  - {recipe}")
+    if len(recipes) > 30:
+        lines.append(f"  ... and {len(recipes) - 30} more")
+    count = data.get("count", len(recipes))
+    lines.append(f"\n{count} recipe(s) available")
+    errors = data.get("errors") or []
+    if errors:
+        lines.append(f"\n⚠ {len(errors)} recipe file(s) had load errors")
+    return "\n".join(lines)
+
+
 def _fmt_tool_exception(data: dict, pipeline: bool) -> str:
     """Format a tool_exception response with full diagnostics."""
     error = data.get("error", "unknown error")
@@ -319,6 +373,7 @@ def _fmt_generic(short_name: str, data: dict, _pipeline: bool) -> str:
     lines = [f"## {short_name}", ""]
     for key, val in data.items():
         if isinstance(val, list):
+            val = list(val)
             if not val:
                 lines.append(f"{key}: []")
             elif all(isinstance(item, str) for item in val):
@@ -328,10 +383,18 @@ def _fmt_generic(short_name: str, data: dict, _pipeline: bool) -> str:
                 if len(val) > 20:
                     lines.append(f"  ... and {len(val) - 20} more")
             else:
-                compact = json.dumps(val, separators=(",", ":"))
-                if len(compact) > 500:
-                    compact = compact[:500] + "..."
-                lines.append(f"{key}: {compact}")
+                # Non-string list (list-of-dicts or mixed): render per-item up to 20-item cap
+                lines.append(f"{key}:")
+                for item in val[:20]:
+                    if isinstance(item, dict):
+                        # Render first two key-value pairs inline for readability
+                        parts = [f"{k}: {v}" for k, v in list(item.items())[:2]]
+                        lines.append(f"  - {', '.join(parts)}")
+                    else:
+                        compact = json.dumps(item, separators=(",", ":"))
+                        lines.append(f"  - {compact[:200]}")
+                if len(val) > 20:
+                    lines.append(f"  ... and {len(val) - 20} more")
         elif isinstance(val, dict):
             if not val:
                 lines.append(f"{key}: {{}}")
@@ -359,7 +422,46 @@ _FORMATTERS = {
     "get_token_summary": _fmt_get_token_summary,
     "kitchen_status": _fmt_kitchen_status,
     "clone_repo": _fmt_clone_repo,
+    "load_recipe": _fmt_load_recipe,
+    "list_recipes": _fmt_list_recipes,
 }
+
+# Tools explicitly opted out of dedicated formatters.
+# The generic formatter is sufficient for these tools' response shapes.
+# When adding a new tool, it MUST appear either in _FORMATTERS or here.
+_UNFORMATTED_TOOLS: frozenset[str] = frozenset(
+    {
+        "run_python",  # structured result dict, generic renders correctly
+        "run_recipe",  # simple success/error shape
+        "read_db",  # tabular rows, generic renders correctly (PHK-31 validated)
+        "reset_test_dir",  # simple ack
+        "classify_fix",  # simple classification result
+        "reset_workspace",  # simple ack
+        "migrate_recipe",  # simple migration result
+        "remove_clone",  # simple ack
+        "push_to_remote",  # simple ack
+        "report_bug",  # simple result
+        "prepare_issue",  # simple result
+        "enrich_issues",  # simple result
+        "claim_issue",  # simple result
+        "release_issue",  # simple result
+        "wait_for_ci",  # ci status dict, generic renders correctly
+        "create_unique_branch",  # simple result
+        "write_telemetry_files",  # simple path results
+        "get_pr_reviews",  # list of reviews
+        "bulk_close_issues",  # bulk result
+        "check_pr_mergeable",  # simple bool result
+        "set_commit_status",  # simple ack
+        "get_pipeline_report",  # list-of-dicts, now renders correctly via hardened _fmt_generic
+        "get_timing_summary",  # timing data, generic renders correctly
+        "validate_recipe",  # suggestions list, now renders correctly via hardened _fmt_generic
+        "fetch_github_issue",  # issue data dict
+        "get_issue_title",  # simple string
+        "get_ci_status",  # ci status dict
+        "open_kitchen",  # plain text; formatter handled by unwrap path
+        "close_kitchen",  # simple ack
+    }
+)
 
 
 def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str | None:

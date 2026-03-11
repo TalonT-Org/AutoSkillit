@@ -211,8 +211,21 @@ def _clear_kitchen_open_env(monkeypatch):
     make_context() reads this env var to decide whether to start with the gate
     open. Any residual value from the shell environment would silently break
     tests that assert the gate starts closed.
+
+    Also resets mcp kitchen visibility transforms when the server module is
+    already imported. When AUTOSKILLIT_KITCHEN_OPEN=1 is set in the process
+    environment (e.g. when running tests inside an autoskillit session), the
+    module-level mcp.enable(tags={'kitchen'}) runs at import time and persists
+    across tests in the same worker. The env var unset above is not sufficient
+    to undo the already-applied transform — we must explicitly re-disable.
     """
+    import sys
+
     monkeypatch.delenv("AUTOSKILLIT_KITCHEN_OPEN", raising=False)
+    if "autoskillit.server" in sys.modules:
+        from autoskillit.server import mcp
+
+        mcp.disable(tags={"kitchen"})
 
 
 @pytest.fixture(scope="function")

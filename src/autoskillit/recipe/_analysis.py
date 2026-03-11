@@ -17,7 +17,13 @@ import igraph
 from autoskillit.core import SKILL_TOOLS, get_logger
 from autoskillit.recipe.contracts import _CONTEXT_REF_RE, _RESULT_CAPTURE_RE
 from autoskillit.recipe.io import iter_steps_with_context  # noqa: F401 — re-exported for rules
-from autoskillit.recipe.schema import DataFlowReport, DataFlowWarning, Recipe, RecipeStep
+from autoskillit.recipe.schema import (
+    _TERMINAL_TARGETS,
+    DataFlowReport,
+    DataFlowWarning,
+    Recipe,
+    RecipeStep,
+)
 
 logger = get_logger(__name__)
 
@@ -103,10 +109,17 @@ def build_recipe_graph(recipe: Recipe) -> igraph.Graph:
     for name, step in recipe.steps.items():
         src = name_to_id[name]
         for edge in _extract_routing_edges(step):
+            # Mirror _build_step_graph: skip on_exhausted edges for action steps
+            # (stop/confirm/route steps have no retry semantics).
+            if edge.edge_type == "exhausted" and step.action is not None:
+                continue
             if edge.target in name_to_id:
                 edges.append((src, name_to_id[edge.target]))
                 edge_types.append(edge.edge_type)
                 edge_conditions.append(edge.condition or "")
+            elif edge.target in _TERMINAL_TARGETS:
+                # Known sentinel — valid target, no graph edge needed.
+                pass
             else:
                 logger.warning(
                     "build_recipe_graph: step %r references unknown target %r — edge skipped",

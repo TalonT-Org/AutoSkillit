@@ -43,6 +43,9 @@ HOOK_REGISTRY: list[HookDef] = [
         matcher="mcp__.*autoskillit.*__remove_clone",
         scripts=["remove_clone_guard.py"],
     ),
+    # open_kitchen: hook-layer enforcement via open_kitchen_guard.py (blocks
+    # headless sessions). close_kitchen has no hook entry here — handler-layer
+    # enforcement in tools_kitchen.py is the sole guard for that tool.
     HookDef(
         matcher=r"mcp__.*autoskillit.*__open_kitchen.*",
         scripts=["open_kitchen_guard.py"],

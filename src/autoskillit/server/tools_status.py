@@ -11,11 +11,25 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import _atomic_write, get_logger
+from autoskillit.core import TimingStore, _atomic_write, get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, track_response_size
+from autoskillit.server.helpers import (
+    _notify,
+    _require_enabled,
+    _require_not_headless,
+    resolve_log_dir,
+    track_response_size,
+    write_telemetry_clear_marker,
+)
 
 logger = get_logger(__name__)
+
+
+def _get_log_root() -> Path:
+    """Return the resolved log root directory for the current context."""
+    from autoskillit.server import _get_ctx
+
+    return resolve_log_dir(_get_ctx().config.linux_tracing.log_dir)
 
 
 @mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
@@ -31,6 +45,8 @@ async def kitchen_status() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (h := _require_not_headless("kitchen_status")) is not None:
+        return h
     from autoskillit.server import _get_config, _get_ctx, version_info
 
     info = version_info()
@@ -75,17 +91,37 @@ async def get_pipeline_report(clear: bool = False) -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (h := _require_not_headless("get_pipeline_report")) is not None:
+        return h
     from autoskillit.server import _get_ctx
 
     failures = _get_ctx().audit.get_report_as_dicts()
     if clear:
         _get_ctx().audit.clear()
+        try:
+            write_telemetry_clear_marker(_get_log_root())
+        except Exception:
+            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
     return json.dumps(
         {
             "total_failures": len(failures),
             "failures": failures,
         }
     )
+
+
+def _merge_wall_clock_seconds(steps: list[dict], timing_log: TimingStore) -> None:
+    """Annotate each step dict with wall_clock_seconds from the timing log.
+
+    Mutates steps in-place. Falls back to elapsed_seconds when no timing entry
+    exists for a step.
+    """
+    timing_report = timing_log.get_report()
+    timing_by_step = {entry["step_name"]: entry["total_seconds"] for entry in timing_report}
+    for step in steps:
+        step["wall_clock_seconds"] = timing_by_step.get(
+            step["step_name"], step.get("elapsed_seconds", 0.0)
+        )
 
 
 @mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
@@ -114,9 +150,16 @@ async def get_token_summary(clear: bool = False) -> str:
     total = ctx.token_log.compute_total()
     mcp_report = ctx.response_log.get_report()
     mcp_total = ctx.response_log.compute_total()
+
+    _merge_wall_clock_seconds(steps, ctx.timing_log)
+
     if clear:
         ctx.token_log.clear()
         ctx.response_log.clear()
+        try:
+            write_telemetry_clear_marker(_get_log_root())
+        except Exception:
+            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
     return json.dumps(
         {
             "steps": steps,
@@ -144,6 +187,9 @@ async def get_timing_summary(clear: bool = False) -> str:
 
     Args:
         clear: If True, reset the timing log after returning current data.
+            Note: also advances the shared telemetry_cleared_at fence, which
+            sets the since-bound for ALL log types (token_log, timing_log,
+            audit) on the next server restart via _state._initialize.
     """
     from autoskillit.server import _get_ctx
 
@@ -151,7 +197,64 @@ async def get_timing_summary(clear: bool = False) -> str:
     total = _get_ctx().timing_log.compute_total()
     if clear:
         _get_ctx().timing_log.clear()
+        try:
+            write_telemetry_clear_marker(_get_log_root())
+        except Exception:
+            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
     return json.dumps({"steps": steps, "total": total})
+
+
+def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
+    """Read the last n events from quota_events.jsonl (most recent first).
+
+    Returns (events_slice, total_count). Silently tolerates missing or corrupt lines.
+    """
+    qe_path = Path(log_root) / "quota_events.jsonl"
+    if not qe_path.exists():
+        return [], 0
+    events: list[dict] = []
+    try:
+        for line in qe_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    except OSError:
+        return [], 0
+    total = len(events)
+    return list(reversed(events))[:n], total  # most recent first
+
+
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@track_response_size("get_quota_events")
+async def get_quota_events(n: int = 50) -> str:
+    """Return the most recent quota guard events from the diagnostic log.
+
+    Events are written by the quota_check.py PreToolUse hook each time it
+    approves or blocks a run_skill call. Use this to diagnose quota throttling
+    during long pipeline runs.
+
+    Returns JSON with:
+      - events: list of {ts, event, threshold, utilization?, sleep_seconds?,
+                         resets_at?, cache_path?}  (most recent first)
+      - total_count: int  (total events in the log, before limiting to n)
+
+    Args:
+        n: Maximum number of events to return (default 50).
+
+    This tool is always available (not gated by open_kitchen).
+    This tool sends no MCP progress notifications by design (ungated tools are
+    notification-free — see CLAUDE.md).
+    """
+    from autoskillit.server import _get_ctx
+
+    ctx = _get_ctx()
+    log_root = resolve_log_dir(ctx.config.linux_tracing.log_dir)
+    events, total = _read_quota_events(log_root, n)
+    return json.dumps({"events": events, "total_count": total})
 
 
 def _format_token_summary(steps: list) -> str:
@@ -164,7 +267,8 @@ def _format_token_summary(steps: list) -> str:
         lines.append(f"- cache_creation_input_tokens: {step['cache_creation_input_tokens']}\n")
         lines.append(f"- cache_read_input_tokens: {step['cache_read_input_tokens']}\n")
         lines.append(f"- invocation_count: {step['invocation_count']}\n")
-        lines.append(f"- elapsed_seconds: {step.get('elapsed_seconds', 0.0)}\n\n")
+        lines.append(f"- elapsed_seconds: {step.get('elapsed_seconds', 0.0)}\n")
+        lines.append(f"- wall_clock_seconds: {step.get('wall_clock_seconds', 0.0)}\n\n")
     return "".join(lines)
 
 

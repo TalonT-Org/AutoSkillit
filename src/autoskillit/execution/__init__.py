@@ -17,7 +17,6 @@ from autoskillit.execution.commands import (
     ClaudeInteractiveCmd,
     build_headless_cmd,
     build_interactive_cmd,
-    build_subrecipe_cmd,
 )
 from autoskillit.execution.db import (
     DefaultDatabaseReader,
@@ -29,7 +28,6 @@ from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.execution.headless import (
     DefaultHeadlessExecutor,
     run_headless_core,
-    run_subrecipe_session,
 )
 from autoskillit.execution.linux_tracing import (
     LINUX_TRACING_AVAILABLE,
@@ -52,8 +50,10 @@ from autoskillit.execution.session import (
 )
 from autoskillit.execution.session_log import (
     flush_session_log,
+    read_telemetry_clear_marker,
     recover_crashed_sessions,
     resolve_log_dir,
+    write_telemetry_clear_marker,
 )
 from autoskillit.execution.testing import (
     DefaultTestRunner,
@@ -67,7 +67,6 @@ __all__ = [
     "ClaudeHeadlessCmd",
     "build_interactive_cmd",
     "build_headless_cmd",
-    "build_subrecipe_cmd",
     # process
     "DefaultSubprocessRunner",
     "run_managed_async",
@@ -82,7 +81,6 @@ __all__ = [
     "parse_session_result",
     # headless
     "run_headless_core",
-    "run_subrecipe_session",
     "DefaultHeadlessExecutor",
     # testing
     "parse_pytest_summary",
@@ -110,4 +108,6 @@ __all__ = [
     "flush_session_log",
     "recover_crashed_sessions",
     "resolve_log_dir",
+    "write_telemetry_clear_marker",
+    "read_telemetry_clear_marker",
 ]

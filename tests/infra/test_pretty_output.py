@@ -12,6 +12,8 @@ from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 
 def _run_hook(
     event: dict | None = None,
@@ -887,3 +889,235 @@ def test_fmt_get_token_summary_includes_elapsed_seconds():
     # Must include step name and elapsed time
     assert "implement" in rendered
     assert "t:123.4s" in rendered
+
+
+# ---------------------------------------------------------------------------
+# Helper: generic event factory for new formatter tests
+# ---------------------------------------------------------------------------
+
+
+def _make_event(tool_name: str, payload: dict) -> dict:
+    """Build a minimal PostToolUse hook event for a given tool and payload dict."""
+    return {
+        "tool_name": f"mcp__autoskillit__{tool_name}",
+        "tool_response": json.dumps(payload),
+    }
+
+
+# ---------------------------------------------------------------------------
+# PHK-41: Formatter coverage contract
+# ---------------------------------------------------------------------------
+
+
+def test_formatter_coverage_contract():
+    """PHK-41: Every MCP tool is either in _FORMATTERS or explicitly in _UNFORMATTED_TOOLS.
+
+    This prevents silent fallthrough to _fmt_generic for tools that need dedicated
+    formatters, and forces an explicit choice when adding new tools.
+    """
+    from autoskillit.core.types import GATED_TOOLS, UNGATED_TOOLS
+    from autoskillit.hooks.pretty_output import _FORMATTERS, _UNFORMATTED_TOOLS
+
+    all_tools = GATED_TOOLS | UNGATED_TOOLS
+    covered = set(_FORMATTERS.keys()) | _UNFORMATTED_TOOLS
+    uncovered = all_tools - covered
+    assert uncovered == set(), (
+        f"Tools have no formatter and are not in _UNFORMATTED_TOOLS: {sorted(uncovered)}. "
+        "Either add a dedicated formatter or add to _UNFORMATTED_TOOLS."
+    )
+
+
+# ---------------------------------------------------------------------------
+# PHK-42/43/44: _fmt_load_recipe tests
+# ---------------------------------------------------------------------------
+
+
+def test_fmt_load_recipe_preserves_diagram_verbatim():
+    """PHK-42: load_recipe response renders diagram field exactly as returned."""
+    diagram_text = (
+        "<!-- autoskillit-recipe-hash: sha256:abc123 -->\n"
+        "## my-recipe\n\n"
+        "### Graph\n"
+        "start \u2500\u2500success\u2500\u2500\u25b6 done\n"
+        "start \u2500\u2500failure\u2500\u2500\u25b6 escalate\n"
+    )
+    event = _make_event(
+        "load_recipe",
+        {
+            "content": "name: my-recipe\nsteps: ...",
+            "diagram": diagram_text,
+            "valid": True,
+            "suggestions": [],
+        },
+    )
+    out, _ = _run_hook(event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "## my-recipe" in text
+    assert "start \u2500\u2500success\u2500\u2500\u25b6 done" in text
+    assert "start \u2500\u2500failure\u2500\u2500\u25b6 escalate" in text
+
+
+def test_fmt_load_recipe_suppresses_raw_yaml_content():
+    """PHK-43: load_recipe response does not emit the full raw YAML content field."""
+    long_yaml = "name: my-recipe\n" + "steps:\n" + "  step_n:\n    skill_command: /x\n" * 30
+    event = _make_event(
+        "load_recipe",
+        {
+            "content": long_yaml,
+            "diagram": "## my-recipe\nsome diagram",
+            "valid": True,
+            "suggestions": [],
+        },
+    )
+    out, _ = _run_hook(event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "  step_n:" not in text
+
+
+def test_fmt_load_recipe_renders_suggestions_as_bullets():
+    """PHK-44: load_recipe suggestions rendered as bullet list, not truncated JSON blob."""
+    event = _make_event(
+        "load_recipe",
+        {
+            "content": "name: x",
+            "diagram": "## x",
+            "valid": False,
+            "suggestions": [
+                {"rule": "missing-step", "message": "Step 'done' not found", "severity": "error"},
+                {
+                    "rule": "unknown-tool",
+                    "message": "Tool 'badtool' not in SKILL_TOOLS",
+                    "severity": "warning",
+                },
+            ],
+        },
+    )
+    out, _ = _run_hook(event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "missing-step" in text
+    assert "unknown-tool" in text
+    assert '{"rule"' not in text
+
+
+# ---------------------------------------------------------------------------
+# PHK-45/46: _fmt_list_recipes tests
+# ---------------------------------------------------------------------------
+
+
+def test_fmt_list_recipes_shows_all_names():
+    """PHK-45: list_recipes response renders all recipe names — no 500-char truncation."""
+    recipes = [
+        {"name": f"recipe-{i:02d}", "description": f"Description for recipe {i}", "summary": "..."}
+        for i in range(10)
+    ]
+    event = _make_event("list_recipes", {"recipes": recipes, "count": 10})
+    out, _ = _run_hook(event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    for i in range(10):
+        assert f"recipe-{i:02d}" in text, f"recipe-{i:02d} missing from output"
+    assert '{"name"' not in text
+    assert "10" in text
+
+
+def test_fmt_list_recipes_compact_representation():
+    """PHK-46: list_recipes renders one line per recipe in 'name: description' format."""
+    event = _make_event(
+        "list_recipes",
+        {
+            "recipes": [
+                {
+                    "name": "implementation",
+                    "description": "Implement a plan in a worktree",
+                    "summary": "...",
+                },
+                {
+                    "name": "smoke-test",
+                    "description": "Run a smoke-test pipeline",
+                    "summary": "...",
+                },
+            ],
+            "count": 2,
+        },
+    )
+    out, _ = _run_hook(event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "implementation" in text
+    assert "Implement a plan in a worktree" in text
+    assert "smoke-test" in text
+    assert "Run a smoke-test pipeline" in text
+
+
+# ---------------------------------------------------------------------------
+# PHK-47/48: _fmt_generic list-of-dicts hardening tests
+# ---------------------------------------------------------------------------
+
+
+def test_fmt_generic_list_of_dicts_renders_per_item_not_blob():
+    """PHK-47: Generic formatter renders list-of-dicts per item, not a truncated JSON blob."""
+    failures = [
+        {"step": f"step_{i}", "error": f"Error message {i}", "exit_code": 1} for i in range(10)
+    ]
+    event = _make_event("some_tool", {"failures": failures})
+    out, _ = _run_hook(event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    for i in range(10):
+        assert f"step_{i}" in text, f"step_{i} missing — possible truncation"
+    assert "... and" not in text, "Output was truncated"
+
+
+def test_fmt_generic_list_of_dicts_caps_at_20_items():
+    """PHK-48: Generic formatter caps list-of-dicts at 20 items with overflow note."""
+    items = [{"key": f"item-{i}", "val": f"value-{i}"} for i in range(25)]
+    event = _make_event("some_tool", {"items": items})
+    out, _ = _run_hook(event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "item-0" in text
+    assert "item-19" in text
+    assert "item-20" not in text
+    assert "and 5 more" in text
+
+
+# ---------------------------------------------------------------------------
+# PHK-E1/E2: End-to-end schema consistency tests
+# ---------------------------------------------------------------------------
+
+
+class TestFormatterSchemaConsistency:
+    """End-to-end tests: real tool handler output piped through hook formatter.
+
+    Prevents silent schema drift between tool handlers and formatters.
+
+    The `tool_ctx` fixture (from tests/conftest.py) monkeypatches `server._ctx`,
+    making `list_recipes()` and `kitchen_status()` use the test ToolContext.
+    Neither function accepts a `ctx` argument — they resolve context via `_get_ctx()`.
+    """
+
+    @pytest.mark.anyio
+    async def test_list_recipes_tool_output_through_hook(self, tool_ctx):
+        """PHK-E1: list_recipes real output contains all recipe names through hook."""
+        from autoskillit.hooks.pretty_output import _format_response
+        from autoskillit.server.tools_recipe import list_recipes
+
+        result_json = await list_recipes()
+        output = _format_response("mcp__autoskillit__list_recipes", result_json, pipeline=False)
+
+        data = json.loads(result_json)
+        for recipe in data.get("recipes", []):
+            assert recipe["name"] in output, (
+                f"Recipe '{recipe['name']}' missing from formatted output — possible truncation"
+            )
+
+    @pytest.mark.anyio
+    async def test_kitchen_status_tool_output_through_hook(self, tool_ctx):
+        """PHK-E2: kitchen_status real output contains all key fields through hook."""
+        from autoskillit.hooks.pretty_output import _format_response
+        from autoskillit.server.tools_status import kitchen_status
+
+        result_json = await kitchen_status()
+        output = _format_response("mcp__autoskillit__kitchen_status", result_json, pipeline=False)
+
+        data = json.loads(result_json)
+        for key in ("package_version", "tools_enabled"):
+            assert str(data[key]) in output, (
+                f"Field '{key}' value missing from formatted kitchen_status output"
+            )

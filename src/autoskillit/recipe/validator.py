@@ -32,7 +32,7 @@ from autoskillit.recipe.registry import (
     run_semantic_rules,
     semantic_rule,
 )
-from autoskillit.recipe.schema import Recipe
+from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe
 
 logger = get_logger(__name__)
 
@@ -53,10 +53,6 @@ __all__ = [
     "run_semantic_rules",
     "semantic_rule",
 ]
-
-# Reserved terminal target names accepted by on_success/on_failure/on_context_limit/on_exhausted.
-_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
-
 
 # ---------------------------------------------------------------------------
 # Structural validation

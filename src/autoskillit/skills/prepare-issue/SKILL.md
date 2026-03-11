@@ -3,7 +3,9 @@ name: prepare-issue
 description: >
   Create a single GitHub issue and immediately triage it — dedup check,
   classification (recipe:implementation or recipe:remediation), mixed-concern
-  detection, and label application. The user-facing counterpart to report_bug.
+  detection, and label application. Use when user says "open an issue",
+  "create an issue", "file an issue", or "file a bug". The user-facing
+  counterpart to report_bug.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -16,6 +18,14 @@ hooks:
 # prepare-issue Skill
 
 Create a GitHub issue and immediately triage it with LLM classification.
+
+## When to Use
+
+- User says "open an issue", "create an issue", "file an issue", or "file a bug"
+- User says "make a new issue", "open a GitHub issue", or "create a GitHub issue"
+- User says "I want to open up a GitHub issue" or any similar natural phrasing
+- User describes a bug or feature and wants it recorded as a GitHub issue
+- User provides `/autoskillit:prepare-issue` directly
 
 ## Interface
 
@@ -59,18 +69,65 @@ gh repo view --json owner,name
 
 ### Step 4: Dedup Check (skip if `--issue N` provided)
 
-Search open issues for potential duplicates using keywords from the description:
+Extract multiple keyword sets from the description — individual key terms and 2–3 phrase
+combinations that capture the core topic. For each keyword set, search open issues:
 
 ```bash
-gh issue list --state open --search "{keywords}" \
+gh issue list --state open --search "{keyword-set}" \
     --json number,title,url,body --limit 10
 ```
 
-If a candidate with high title overlap is found:
-- Display the candidate (number, title, URL) to the user
-- Ask interactively: **"Comment on #N or create a new issue?"**
-- If comment: `gh issue comment N --body "..."` → emit result block → exit
-- If create new: continue to Step 4a
+Run searches for each keyword set and deduplicate results by issue number. Collect all unique
+candidates.
+
+If candidates are found, display them all in a numbered list with number, title, and URL:
+
+```
+━━━ Possible Duplicates Found ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Found {N} open issue(s) that may be related:
+
+  [1] #{number} — {title}
+      {url}
+
+  [2] #{number} — {title}
+      {url}
+
+  ...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Options:
+  [1]–[{N}]  Add to / extend an existing issue (enter a number)
+  C          Create a new issue anyway
+
+Your choice [C]:
+```
+
+**If the user enters C (or presses Enter):** Continue to Step 4a.
+
+**If the user enters a number [1]–[N] (extend existing):**
+
+1. Ask: *"Add your context as a comment or edit the issue body? [comment/edit, default: comment]"*
+2. If **comment** (default):
+   ```bash
+   gh issue comment {selected_number} --body "{description as additional context}"
+   ```
+3. If **edit**:
+   ```bash
+   # Fetch current body and append new context using a temp file to avoid shell injection
+   gh issue view {selected_number} --json body -q .body > /tmp/issue_edit_body.txt
+   printf '\n## Additional Context\n\n%s' "{description}" >> /tmp/issue_edit_body.txt
+   gh issue edit {selected_number} --body-file /tmp/issue_edit_body.txt
+   ```
+4. Set `issue_number = selected_number` (no new issue will be created).
+5. Fetch the updated issue for triage:
+   ```bash
+   gh issue view {selected_number} --json number,title,body,labels,url
+   ```
+6. **Continue to Step 6 (LLM Classification)** on this existing issue, then proceed through
+   Steps 7, 7a, 8, and 9 to apply labels and requirements. Emit the result block with the
+   existing issue's number and URL, then exit.
+
+**If no candidates found:** Continue directly to Step 4a.
 
 ### Step 4a: Show Draft and Confirm
 

@@ -139,15 +139,3 @@ def test_make_context_protocol_substitution():
     ctx = make_context(AutomationConfig(), runner=_runner())
     ctx.executor = FakeExecutor()
     assert isinstance(ctx.executor, HeadlessExecutor)
-
-
-def test_make_context_pre_open_when_env_var_set(monkeypatch, tmp_path):
-    monkeypatch.setenv("AUTOSKILLIT_KITCHEN_OPEN", "1")
-    ctx = make_context(AutomationConfig(), runner=_runner(), plugin_dir=str(tmp_path))
-    assert ctx.gate.enabled is True
-
-
-def test_make_context_closed_when_env_var_not_one(monkeypatch, tmp_path):
-    monkeypatch.delenv("AUTOSKILLIT_KITCHEN_OPEN", raising=False)
-    ctx = make_context(AutomationConfig(), runner=_runner(), plugin_dir=str(tmp_path))
-    assert ctx.gate.enabled is False

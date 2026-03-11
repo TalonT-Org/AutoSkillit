@@ -365,3 +365,195 @@ def test_ci_watch_pr_has_no_capture(recipe) -> None:
     """ci_watch_pr must not capture — no downstream consumer in pr-merge-pipeline."""
     step = recipe.steps["ci_watch_pr"]
     assert not step.capture
+
+
+# ── B-series: Mergeability Gate + Review Cycle ──────────────────────────────
+
+
+def test_pmp_create_review_pr_routes_to_wait_for_mergeability(recipe) -> None:
+    """B1: create_review_pr.on_success must route to wait_for_review_pr_mergeability."""
+    step = recipe.steps["create_review_pr"]
+    assert step.on_success == "wait_for_review_pr_mergeability"
+
+
+def test_pmp_has_wait_for_review_pr_mergeability_step(recipe) -> None:
+    """B2: wait_for_review_pr_mergeability step must exist and use run_cmd tool."""
+    assert "wait_for_review_pr_mergeability" in recipe.steps
+    step = recipe.steps["wait_for_review_pr_mergeability"]
+    assert step.tool == "run_cmd"
+
+
+def test_pmp_wait_for_mergeability_captures_review_pr_number(recipe) -> None:
+    """B3: wait_for_review_pr_mergeability must capture review_pr_number."""
+    step = recipe.steps["wait_for_review_pr_mergeability"]
+    assert "review_pr_number" in step.capture
+
+
+def test_pmp_wait_for_mergeability_routes_to_check_mergeability(recipe) -> None:
+    """B4: wait_for_review_pr_mergeability.on_success must route to check_mergeability."""
+    step = recipe.steps["wait_for_review_pr_mergeability"]
+    assert step.on_success == "check_mergeability"
+
+
+def test_pmp_has_check_mergeability_step(recipe) -> None:
+    """B5: check_mergeability step must exist and use check_pr_mergeable tool."""
+    assert "check_mergeability" in recipe.steps
+    step = recipe.steps["check_mergeability"]
+    assert step.tool == "check_pr_mergeable"
+
+
+def test_pmp_check_mergeability_routes_mergeable_to_review_pr_integration(recipe) -> None:
+    """B6: check_mergeability on_result must route MERGEABLE to review_pr_integration."""
+    step = recipe.steps["check_mergeability"]
+    assert step.on_result is not None
+    conditions = step.on_result.conditions
+    mergeable_routes = [c for c in conditions if c.when and "MERGEABLE" in c.when]
+    assert any(c.route == "review_pr_integration" for c in mergeable_routes)
+
+
+def test_pmp_check_mergeability_routes_conflicting_to_resolve_integration_conflicts(
+    recipe,
+) -> None:
+    """B7: check_mergeability on_result must route CONFLICTING to resolve_integration_conflicts."""
+    step = recipe.steps["check_mergeability"]
+    assert step.on_result is not None
+    conditions = step.on_result.conditions
+    conflicting_routes = [c for c in conditions if c.when and "CONFLICTING" in c.when]
+    assert any(c.route == "resolve_integration_conflicts" for c in conflicting_routes)
+
+
+def test_pmp_has_resolve_integration_conflicts_step(recipe) -> None:
+    """B8: resolve_integration_conflicts must exist with run_skill and resolve-merge-conflicts."""
+    assert "resolve_integration_conflicts" in recipe.steps
+    step = recipe.steps["resolve_integration_conflicts"]
+    assert step.tool == "run_skill"
+    assert "resolve-merge-conflicts" in step.with_args.get("skill_command", "")
+
+
+def test_pmp_resolve_integration_conflicts_routes_to_force_push(recipe) -> None:
+    """B9: resolve_integration_conflicts must route to force_push_after_rebase."""
+    step = recipe.steps["resolve_integration_conflicts"]
+    # Step uses on_result conditions; the default (no-when) bare route must route to force_push
+    assert step.on_result is not None
+    conditions = step.on_result.conditions
+    default_routes = [c for c in conditions if c.when is None]
+    assert any(c.route == "force_push_after_rebase" for c in default_routes)
+
+
+def test_pmp_has_force_push_after_rebase_step(recipe) -> None:
+    """B10: force_push_after_rebase step must exist with run_cmd tool and --force-with-lease."""
+    assert "force_push_after_rebase" in recipe.steps
+    step = recipe.steps["force_push_after_rebase"]
+    assert step.tool == "run_cmd"
+    assert "--force-with-lease" in step.with_args.get("cmd", "")
+
+
+def test_pmp_force_push_after_rebase_routes_to_wait_for_post_rebase_mergeability(recipe) -> None:
+    """B23: force_push_after_rebase.on_success must route to wait_for_post_rebase_mergeability."""
+    step = recipe.steps["force_push_after_rebase"]
+    assert step.on_success == "wait_for_post_rebase_mergeability"
+
+
+def test_pmp_has_wait_for_post_rebase_mergeability_step(recipe) -> None:
+    """B24: wait_for_post_rebase_mergeability step must exist and use run_cmd tool."""
+    assert "wait_for_post_rebase_mergeability" in recipe.steps
+    step = recipe.steps["wait_for_post_rebase_mergeability"]
+    assert step.tool == "run_cmd"
+
+
+def test_pmp_wait_for_post_rebase_mergeability_routes_to_check_post_rebase(
+    recipe,
+) -> None:
+    """B25: wait_for_post_rebase_mergeability.on_success must route to check_mergeability_post_rebase."""  # noqa: E501
+    step = recipe.steps["wait_for_post_rebase_mergeability"]
+    assert step.on_success == "check_mergeability_post_rebase"
+
+
+def test_pmp_has_check_mergeability_post_rebase_step(recipe) -> None:
+    """B11: check_mergeability_post_rebase step must exist with check_pr_mergeable tool."""
+    assert "check_mergeability_post_rebase" in recipe.steps
+    step = recipe.steps["check_mergeability_post_rebase"]
+    assert step.tool == "check_pr_mergeable"
+
+
+def test_pmp_check_mergeability_post_rebase_routes_mergeable_to_review(recipe) -> None:
+    """B12: post_rebase mergeability check must route MERGEABLE to review_pr_integration."""
+    step = recipe.steps["check_mergeability_post_rebase"]
+    assert step.on_result is not None
+    conditions = step.on_result.conditions
+    mergeable_routes = [c for c in conditions if c.when and "MERGEABLE" in c.when]
+    assert any(c.route == "review_pr_integration" for c in mergeable_routes)
+
+
+def test_pmp_has_review_pr_integration_step(recipe) -> None:
+    """B13: review_pr_integration step must exist with run_skill tool and review-pr."""
+    assert "review_pr_integration" in recipe.steps
+    step = recipe.steps["review_pr_integration"]
+    assert step.tool == "run_skill"
+    assert "review-pr" in step.with_args.get("skill_command", "")
+
+
+def test_pmp_review_pr_integration_uses_integration_branch(recipe) -> None:
+    """B14: review_pr_integration skill_command must reference context.integration_branch."""
+    step = recipe.steps["review_pr_integration"]
+    assert "context.integration_branch" in step.with_args.get("skill_command", "")
+
+
+def test_pmp_review_pr_integration_routes_changes_requested_to_resolve_review(recipe) -> None:
+    """B15: on_result must route changes_requested to resolve_review_integration."""
+    step = recipe.steps["review_pr_integration"]
+    assert step.on_result is not None
+    conditions = step.on_result.conditions
+    cr_routes = [c for c in conditions if c.when and "changes_requested" in c.when]
+    assert any(c.route == "resolve_review_integration" for c in cr_routes)
+
+
+def test_pmp_review_pr_integration_routes_needs_human_explicitly(recipe) -> None:
+    """B16: review_pr_integration must have an explicit needs_human condition (not fallthrough)."""
+    step = recipe.steps["review_pr_integration"]
+    assert step.on_result is not None
+    conditions = step.on_result.conditions
+    needs_human_routes = [c for c in conditions if c.when and "needs_human" in c.when]
+    assert needs_human_routes, (
+        "review_pr_integration must have an explicit needs_human route to satisfy "
+        "the unrouted-verdict-value semantic rule"
+    )
+
+
+def test_pmp_has_resolve_review_integration_step(recipe) -> None:
+    """B17: resolve_review_integration step must exist with run_skill tool and resolve-review."""
+    assert "resolve_review_integration" in recipe.steps
+    step = recipe.steps["resolve_review_integration"]
+    assert step.tool == "run_skill"
+    assert "resolve-review" in step.with_args.get("skill_command", "")
+
+
+def test_pmp_resolve_review_integration_has_retries(recipe) -> None:
+    """B18: resolve_review_integration must have retries == 2."""
+    step = recipe.steps["resolve_review_integration"]
+    assert step.retries == 2
+
+
+def test_pmp_resolve_review_integration_routes_to_re_push(recipe) -> None:
+    """B19: resolve_review_integration.on_success must route to re_push_review_integration."""
+    step = recipe.steps["resolve_review_integration"]
+    assert step.on_success == "re_push_review_integration"
+
+
+def test_pmp_has_re_push_review_integration_step(recipe) -> None:
+    """B20: re_push_review_integration step must exist with push_to_remote tool."""
+    assert "re_push_review_integration" in recipe.steps
+    step = recipe.steps["re_push_review_integration"]
+    assert step.tool == "push_to_remote"
+
+
+def test_pmp_re_push_review_integration_uses_integration_branch(recipe) -> None:
+    """B21: re_push_review_integration must pass context.integration_branch as branch arg."""
+    step = recipe.steps["re_push_review_integration"]
+    assert "context.integration_branch" in step.with_args.get("branch", "")
+
+
+def test_pmp_re_push_review_integration_routes_to_ci_watch(recipe) -> None:
+    """B22: re_push_review_integration.on_success must route to ci_watch_pr."""
+    step = recipe.steps["re_push_review_integration"]
+    assert step.on_success == "ci_watch_pr"

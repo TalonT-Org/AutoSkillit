@@ -512,6 +512,9 @@ def cook(recipe: str | None = None):
         except OSError as exc:
             print(f"Warning: diagram generation failed: {exc}", file=sys.stderr)
     diagram = load_recipe_diagram(_match.name, _rdir)
+    if diagram:
+        print(diagram)
+        print()
     _launch_cook_session(_build_orchestrator_prompt(recipe_yaml, diagram=diagram))
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import json
+import os
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -11,10 +12,8 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
 from autoskillit.execution import (
-    resolve_log_dir,  # noqa: F401 — used by tools_integrations.py
-)
-from autoskillit.execution import (
-    run_subrecipe_session as _run_subrecipe_session_fn,
+    resolve_log_dir,  # noqa: F401 — used by tools_integrations.py, tools_status.py
+    write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )
 from autoskillit.pipeline import gate_error_result
 from autoskillit.recipe import (
@@ -177,6 +176,21 @@ def _require_enabled() -> str | None:
     """
     if not _get_ctx().gate.enabled:
         return gate_error_result()
+    return None
+
+
+def _require_not_headless(tool_name: str = "") -> str | None:
+    """Return headless_error JSON if called from a headless session; None if safe."""
+    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
+        from autoskillit.pipeline import headless_error_result
+
+        msg = (
+            f"{tool_name} cannot be called from headless sessions. "
+            "Only the Tier 1 orchestrator may call this tool."
+            if tool_name
+            else None
+        )
+        return headless_error_result(msg)
     return None
 
 
@@ -426,25 +440,6 @@ def _find_recipe(name: str, cwd: Path) -> Any:
     This function provides the architecture-compliant bridge to autoskillit.recipe.
     """
     return find_recipe_by_name(name, cwd)
-
-
-async def _run_subrecipe(
-    recipe_yaml: str,
-    ingredients_json: str,
-    cwd: str,
-    ctx: Any,
-    step_name: str = "",
-) -> Any:
-    """Launch a headless sub-recipe session. Delegates to execution layer.
-
-    tools_recipe.py (a tools_*.py file) is restricted by REQ-IMP-003 to importing
-    only from autoskillit.core, autoskillit.pipeline, and autoskillit.server.
-    This function provides the architecture-compliant bridge to autoskillit.execution.
-    """
-    from autoskillit.cli import build_subrecipe_prompt
-
-    prompt = build_subrecipe_prompt(recipe_yaml, ingredients_json)
-    return await _run_subrecipe_session_fn(prompt, cwd, ctx, step_name=step_name)
 
 
 async def _prime_quota_cache() -> None:

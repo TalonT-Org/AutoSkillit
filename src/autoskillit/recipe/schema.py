@@ -55,6 +55,12 @@ class StepResultRoute:
     conditions: list[StepResultCondition] = dataclasses.field(default_factory=list)
 
 
+# Terminal routing sentinels: valid on_exhausted targets that are not step names.
+# "escalate": triggers orchestrator-level escalation (stop-with-escalation).
+# "done": terminates the recipe cleanly without escalation.
+_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
+
+
 @dataclass
 class RecipeStep:
     tool: str | None = None

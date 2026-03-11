@@ -25,7 +25,7 @@ def chefs_hat() -> None:
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
     skills_dir = session_mgr.init_session(session_id, cook_session=True)
 
-    env = {**os.environ, "AUTOSKILLIT_KITCHEN_OPEN": "1"}
+    env = {**os.environ}
     try:
         result = subprocess.run(["claude", "--add-dir", str(skills_dir)], env=env)
         if result.returncode != 0:

@@ -17,7 +17,6 @@ from autoskillit.server.tools_recipe import (
     list_recipes,
     load_recipe,
     migrate_recipe,
-    run_recipe,
     validate_recipe,
 )
 
@@ -1438,35 +1437,29 @@ def test_tools_recipe_does_not_import_raw_ctx():
 
 
 # ---------------------------------------------------------------------------
-# run_recipe tool tests
+# Headless gate enforcement for recipe tools
 # ---------------------------------------------------------------------------
 
 
-def test_run_recipe_is_in_gated_tools():
-    assert "run_recipe" in GATED_TOOLS
-
-
 @pytest.mark.anyio
-async def test_run_recipe_gate_closed_returns_gate_error(tool_ctx):
-    tool_ctx.gate = DefaultGateState(enabled=False)
-    result = json.loads(await run_recipe(name="implementation", cwd="/tmp"))
+async def test_load_recipe_denied_when_headless(tool_ctx, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    result = json.loads(await load_recipe(name="implementation"))
     assert result["success"] is False
-    assert result["subtype"] == "gate_error"
+    assert result["subtype"] == "headless_error"
 
 
 @pytest.mark.anyio
-async def test_run_recipe_unknown_name_returns_failure(tool_ctx):
-    result = json.loads(await run_recipe(name="no-such-xyz", cwd="/tmp"))
+async def test_list_recipes_denied_when_headless(tool_ctx, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    result = json.loads(await list_recipes())
     assert result["success"] is False
-    assert "no-such-xyz" in result["result"]
+    assert result["subtype"] == "headless_error"
 
 
 @pytest.mark.anyio
-async def test_run_recipe_records_step_timing(tool_ctx):
-    from tests.conftest import _make_result
-
-    tool_ctx.runner.push(_make_result(0, "", ""))
-    await run_recipe(
-        name="smoke-test", cwd="/tmp", step_name="my_step", ingredients='{"workspace": "/tmp"}'
-    )
-    assert any(e["step_name"] == "my_step" for e in tool_ctx.timing_log.get_report())
+async def test_validate_recipe_denied_when_headless(tool_ctx, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    result = json.loads(await validate_recipe(script_path="/tmp/test.yaml"))
+    assert result["success"] is False
+    assert result["subtype"] == "headless_error"

@@ -16,6 +16,7 @@ from autoskillit.server.helpers import (
     _import_and_call,
     _notify,
     _require_enabled,
+    _require_not_headless,
     _run_subprocess,
     _validate_skill_command,
     track_response_size,
@@ -41,6 +42,8 @@ async def run_cmd(
         timeout: Max seconds before killing the process (default 600).
         step_name: Optional YAML step key for wall-clock timing accumulation.
     """
+    if (h := _require_not_headless("run_cmd")) is not None:
+        return h
     if (gate := _require_enabled()) is not None:
         return gate
     structlog.contextvars.clear_contextvars()
@@ -101,6 +104,8 @@ async def run_python(
         args: Keyword arguments to pass to the function.
         timeout: Max seconds before aborting the call (default 30).
     """
+    if (h := _require_not_headless("run_python")) is not None:
+        return h
     if (gate := _require_enabled()) is not None:
         return gate
     structlog.contextvars.clear_contextvars()
@@ -160,6 +165,8 @@ async def run_skill(
         step_name: Optional YAML step key (e.g. "implement"). When set, token usage is
             accumulated in the server-side token log, grouped by this name.
     """
+    if (h := _require_not_headless("run_skill")) is not None:
+        return h
     if (gate := _require_enabled()) is not None:
         return gate
     if (cmd_error := _validate_skill_command(skill_command)) is not None:

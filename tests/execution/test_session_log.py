@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from autoskillit.execution.session_log import (
     flush_session_log,
+    read_telemetry_clear_marker,
     recover_crashed_sessions,
     resolve_log_dir,
+    write_telemetry_clear_marker,
 )
 
 
@@ -666,3 +669,35 @@ def test_audit_log_json_schema(tmp_path):
     assert len(al) == 1
     assert al[0]["skill_command"] == "/foo"
     assert al[0]["exit_code"] == 1
+
+
+# Clear marker tests
+
+
+def test_write_read_clear_marker_roundtrip(tmp_path):
+    before = datetime.now(UTC)
+    write_telemetry_clear_marker(tmp_path)
+    after = datetime.now(UTC)
+    result = read_telemetry_clear_marker(tmp_path)
+    assert result is not None
+    assert before <= result <= after
+
+
+def test_read_clear_marker_missing_returns_none(tmp_path):
+    assert read_telemetry_clear_marker(tmp_path) is None
+
+
+def test_read_clear_marker_corrupt_returns_none(tmp_path):
+    (tmp_path / ".telemetry_cleared_at").write_text("not-a-date")
+    assert read_telemetry_clear_marker(tmp_path) is None
+
+
+def test_write_clear_marker_is_atomic(tmp_path):
+    # Calling write twice does not corrupt — second write wins
+    write_telemetry_clear_marker(tmp_path)
+    t1 = read_telemetry_clear_marker(tmp_path)
+    write_telemetry_clear_marker(tmp_path)
+    t2 = read_telemetry_clear_marker(tmp_path)
+    assert t1 is not None
+    assert t2 is not None
+    assert t2 >= t1

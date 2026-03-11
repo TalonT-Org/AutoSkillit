@@ -81,28 +81,6 @@ class TestChefsHat:
         assert exc_info.value.code == 0
         assert "--add-dir" in captured_cmd
 
-    # CH-4
-    def test_chefs_hat_sets_kitchen_open_env(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """chefs-hat sets AUTOSKILLIT_KITCHEN_OPEN=1 in the subprocess env."""
-        captured_env: dict = {}
-        fake_skills_dir = tmp_path / "fake-skills-ch4"
-        fake_skills_dir.mkdir()
-
-        def fake_init_session(self, session_id: str, *, cook_session: bool = False) -> Path:
-            return fake_skills_dir
-
-        def fake_subprocess_run(cmd, **kwargs):
-            captured_env.update(kwargs.get("env", {}))
-            return type("R", (), {"returncode": 0})()
-
-        monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
-        monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
-        monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
-        cli.chefs_hat()
-        assert captured_env.get("AUTOSKILLIT_KITCHEN_OPEN") == "1"
-
     # CH-5
     def test_chefs_hat_exits_when_claude_not_on_path(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture

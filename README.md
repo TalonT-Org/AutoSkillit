@@ -32,6 +32,16 @@ autoskillit init
 autoskillit cook implementation
 ```
 
+### First-Time Project Setup
+
+After installation, run the setup wizard to configure AutoSkillit for your project:
+
+```bash
+autoskillit cook setup-project
+```
+
+This generates project-tailored recipes and config by exploring your codebase.
+
 That's it. Describe what you want to build, and AutoSkillit handles the rest:
 
 ```

@@ -21,38 +21,60 @@ class DoctorResult:
     message: str
 
 
-def _check_mcp_server_registered() -> DoctorResult:
-    claude_json = Path.home() / ".claude.json"
-    if not claude_json.exists():
-        return DoctorResult(
-            severity=Severity.WARNING,
-            check="mcp_server_registered",
-            message="~/.claude.json not found. Run 'autoskillit init' to register.",
-        )
+def _check_mcp_server_registered(claude_json_path: Path | None = None) -> DoctorResult:
+    """Check that autoskillit MCP server is registered (via mcpServers or plugin)."""
+    import subprocess
+
+    if claude_json_path is None:
+        claude_json_path = Path.home() / ".claude.json"
+
+    # Check 1: direct mcpServers entry (legacy / init-based registration)
+    if claude_json_path.exists():
+        try:
+            data = json.loads(claude_json_path.read_text())
+            if "autoskillit" in data.get("mcpServers", {}):
+                return DoctorResult(
+                    severity=Severity.OK,
+                    check="mcp_server_registered",
+                    message="autoskillit registered in mcpServers",
+                )
+        except OSError as exc:
+            return DoctorResult(
+                severity=Severity.ERROR,
+                check="mcp_server_registered",
+                message=f"~/.claude.json could not be read: {exc}",
+            )
+        except json.JSONDecodeError as exc:
+            return DoctorResult(
+                severity=Severity.ERROR,
+                check="mcp_server_registered",
+                message=f"~/.claude.json is not valid JSON: {exc}",
+            )
+
+    # Check 2: plugin-based registration (install-based)
     try:
-        data = json.loads(claude_json.read_text())
-    except OSError as exc:
-        return DoctorResult(
-            severity=Severity.ERROR,
-            check="mcp_server_registered",
-            message=f"~/.claude.json could not be read: {exc}",
+        result = subprocess.run(
+            ["claude", "plugin", "list"],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
-    except json.JSONDecodeError as exc:
-        return DoctorResult(
-            severity=Severity.ERROR,
-            check="mcp_server_registered",
-            message=f"~/.claude.json is not valid JSON: {exc}",
-        )
-    if "autoskillit" not in data.get("mcpServers", {}):
-        return DoctorResult(
-            severity=Severity.WARNING,
-            check="mcp_server_registered",
-            message="autoskillit not in ~/.claude.json mcpServers. Run 'autoskillit init'.",
-        )
+        if result.returncode == 0 and "autoskillit" in result.stdout:
+            return DoctorResult(
+                severity=Severity.OK,
+                check="mcp_server_registered",
+                message="autoskillit registered as Claude plugin",
+            )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+
     return DoctorResult(
-        severity=Severity.OK,
+        severity=Severity.WARNING,
         check="mcp_server_registered",
-        message="autoskillit registered in ~/.claude.json mcpServers.",
+        message=(
+            "autoskillit not registered. Run 'autoskillit install' to install as a plugin, "
+            "or 'autoskillit init' to register in mcpServers."
+        ),
     )
 
 
@@ -131,8 +153,8 @@ def run_doctor(*, output_json: bool = False) -> None:
                 DoctorResult(Severity.OK, "stale_mcp_servers", "No stale MCP servers detected")
             )
 
-    # Check 2: MCP server registered in ~/.claude.json
-    results.append(_check_mcp_server_registered())
+    # Check 2: MCP server registered in ~/.claude.json or via plugin
+    results.append(_check_mcp_server_registered(claude_json_path=Path.home() / ".claude.json"))
 
     # Check 3: autoskillit command on PATH
     if shutil.which("autoskillit") is None:

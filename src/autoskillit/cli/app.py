@@ -152,9 +152,11 @@ def install(
     scope: Annotated[str, Parameter(help="Registration scope: user, project, or local")] = "user",
 ):
     """Install the plugin for Claude Code and refresh the cache."""
+    from autoskillit.cli._init_helpers import _print_next_steps
     from autoskillit.cli._marketplace import install as _install
 
     _install(scope=scope)
+    _print_next_steps()
 
 
 @app.command

@@ -30,8 +30,8 @@ ingredients:
       of feature branch names and in the clone directory name.
     default: "batch-impl"
   base_branch:
-    description: Branch to merge into (defaults to integration)
-    default: integration
+    description: Branch to merge into (defaults to main)
+    default: main
   audit:
     description: Run /autoskillit:audit-impl after all issues are implemented (true/false)
     default: "false"

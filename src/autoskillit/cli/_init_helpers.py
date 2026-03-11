@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
-from autoskillit.core import _atomic_write
+from autoskillit.core import YAMLError, _atomic_write, dump_yaml_str, load_yaml
 from autoskillit.recipe import list_recipes
 
 _MARKER_CONTENT = """\
@@ -50,12 +51,13 @@ def _create_secrets_template(project_dir: Path) -> None:
     secrets_path = autoskillit_dir / ".secrets.yaml"
     if secrets_path.exists():
         return  # Never overwrite existing secrets
-    secrets_path.write_text(
+    _atomic_write(
+        secrets_path,
         "# AutoSkillit secrets — never commit this file\n"
         "# This file is already listed in .gitignore\n\n"
         "github:\n"
         "  token: ''  # GitHub personal access token with repo + issues scope\n"
-        "             # Generate at: https://github.com/settings/tokens\n"
+        "             # Generate at: https://github.com/settings/tokens\n",
     )
     print(f"Created {secrets_path} — add your GitHub token to enable full functionality.")
 
@@ -163,28 +165,28 @@ def _register_all(scope: str, project_dir: Path) -> None:
     sync_hooks_to_settings(settings_path)
 
     # Prompt for github.default_repo if running interactively
-    github_repo = _prompt_github_repo()
-    if github_repo:
-        config_path = project_dir / ".autoskillit" / "config.yaml"
-        if config_path.exists():
-            import yaml  # type: ignore[import-untyped]
-
-            try:
-                config_data = yaml.safe_load(config_path.read_text()) or {}
-                if not config_data.get("github", {}).get("default_repo"):
-                    config_data.setdefault("github", {})["default_repo"] = github_repo
-                    import io
-
-                    buf = io.StringIO()
-                    yaml.dump(config_data, buf, default_flow_style=False, allow_unicode=True)
-                    _atomic_write(config_path, buf.getvalue())
-            except Exception:
-                pass  # Non-fatal: user can add manually
-        # Write even if config doesn't exist yet — create a minimal one
-        else:
-            autoskillit_dir = project_dir / ".autoskillit"
-            autoskillit_dir.mkdir(exist_ok=True)
-            _atomic_write(config_path, f"github:\n  default_repo: '{github_repo}'\n")
+    if sys.stdin.isatty():
+        github_repo = _prompt_github_repo()
+        if github_repo:
+            config_path = project_dir / ".autoskillit" / "config.yaml"
+            if config_path.exists():
+                try:
+                    config_data = load_yaml(config_path) or {}
+                    if not config_data.get("github", {}).get("default_repo"):
+                        config_data.setdefault("github", {})["default_repo"] = github_repo
+                        _atomic_write(
+                            config_path,
+                            dump_yaml_str(
+                                config_data, default_flow_style=False, allow_unicode=True
+                            ),
+                        )
+                except (OSError, YAMLError):
+                    pass  # Non-fatal: user can add manually
+            # Write even if config doesn't exist yet — create a minimal one
+            else:
+                autoskillit_dir = project_dir / ".autoskillit"
+                autoskillit_dir.mkdir(exist_ok=True)
+                _atomic_write(config_path, f"github:\n  default_repo: '{github_repo}'\n")
 
     _create_secrets_template(project_dir)
 

@@ -284,9 +284,17 @@ class TestCLIDoctor:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """mcp_server_registered returns warning when autoskillit absent from ~/.claude.json."""
+        import subprocess as _sub
+
         # ~/.claude.json does not exist in tmp_path (no file created)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
+        # Simulate `claude plugin list` returning non-zero so check falls through to WARNING
+        class _NoPlugin:
+            returncode = 1
+            stdout = ""
+
+        monkeypatch.setattr(_sub, "run", lambda *a, **kw: _NoPlugin())
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)

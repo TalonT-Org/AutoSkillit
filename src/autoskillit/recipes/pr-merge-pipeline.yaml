@@ -15,7 +15,7 @@ ingredients:
     default: "false"
   base_branch:
     description: Branch all PRs target; integration branch is created from this
-    default: main
+    required: true
   upstream_branch:
     description: Branch to create base_branch from if it does not yet exist on the remote
     default: main

@@ -176,6 +176,7 @@ class TestCLIInit:
         """init --scope user writes mcpServers.autoskillit to ~/.claude.json."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
         cli.init(scope="user", test_command="task test-all")
         claude_json = tmp_path / ".claude.json"
         data = json.loads(claude_json.read_text())
@@ -213,6 +214,7 @@ class TestCLIInit:
         """Running init twice does not duplicate mcpServers.autoskillit or hook entries."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
         cli.init(scope="user", test_command="task test-all")
         cli.init(scope="user", test_command="task test-all")
         claude_json = tmp_path / ".claude.json"
@@ -235,6 +237,7 @@ class TestCLIInit:
         project_dir.mkdir()
         monkeypatch.chdir(project_dir)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
         cli.init(test_command="task test-all")
         # MCP server should be registered to user home, not project dir
         assert (tmp_path / ".claude.json").exists()

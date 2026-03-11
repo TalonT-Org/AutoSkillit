@@ -999,11 +999,12 @@ class TestAuditAndFixStructure:
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
 
-    def test_aaf_open_pr_step_routes_to_review_pr(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success is review_pr (review loop before ci_watch)."""
+    def test_aaf_open_pr_step_routes_to_check_review_pr_available(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is check_review_pr_available (graceful degradation)."""
         step = recipe.steps["open_pr_step"]
-        assert step.on_success == "review_pr", (
-            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
+        assert step.on_success == "check_review_pr_available", (
+            "open_pr_step must route to check_review_pr_available — "
+            "review-pr is no longer bundled and requires graceful degradation (REQ-BDL-003)"
         )
 
 
@@ -1248,7 +1249,6 @@ class TestReviewPrRecipeIntegration:
         params=[
             "implementation.yaml",
             "implementation-groups.yaml",
-            "audit-and-fix.yaml",
             "remediation.yaml",
         ],
     )
@@ -1256,7 +1256,7 @@ class TestReviewPrRecipeIntegration:
         return load_recipe(builtin_recipes_dir() / request.param)
 
     def test_open_pr_step_routes_to_review_pr(self, recipe: object) -> None:
-        """T_RP1: open_pr_step.on_success must be review_pr in all four recipes."""
+        """T_RP1: open_pr_step.on_success must be review_pr in all three recipes."""
         assert recipe.steps["open_pr_step"].on_success == "review_pr"  # type: ignore[attr-defined]
 
     def test_review_pr_step_exists_and_is_run_skill(self, recipe: object) -> None:
@@ -1461,11 +1461,9 @@ class TestBaseBranchDefaults:
         "recipe_name",
         [
             "implementation",
-            "audit-and-fix",
             "remediation",
             "bugfix-loop",
             "implementation-groups",
-            "batch-implementation",
         ],
     )
     def test_recipe_base_branch_defaults_to_integration(self, recipe_name: str) -> None:

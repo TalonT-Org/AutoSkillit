@@ -20,6 +20,8 @@ def merge_pr_text():
 
 @pytest.fixture(scope="module")
 def review_pr_text():
+    if not REVIEW_PR_SKILL.exists():
+        pytest.skip("review-pr skill was intentionally removed from bundled skills (REQ-BDL-003)")
     return REVIEW_PR_SKILL.read_text()
 
 

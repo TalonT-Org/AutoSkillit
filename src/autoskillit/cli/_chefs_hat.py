@@ -20,6 +20,12 @@ def chefs_hat() -> None:
         print("'claude' not found on PATH. Install Claude Code to use chefs-hat.")
         raise SystemExit(1)
 
+    from autoskillit import __version__
+
+    print(f"AutoSkillit {__version__} — Kitchen open. All tools active.")
+    print("Skills directory loaded. Start your session.")
+    print()
+
     session_id = uuid.uuid4().hex[:16]
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)

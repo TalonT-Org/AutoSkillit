@@ -970,6 +970,32 @@ class TestCookDiagram:
 
         mock_run.assert_called_once()
 
+    # T3-D
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_prints_diagram_to_terminal_before_launch(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """T3-D: cook command prints the diagram to terminal before launching Claude session."""
+        import autoskillit.recipe as _recipe_mod
+
+        self._setup_recipe(tmp_path, monkeypatch)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        diagram_text = "## test-script\n### Graph\ndone\n"
+        monkeypatch.setattr(_recipe_mod, "check_diagram_staleness", lambda *a, **kw: False)
+        monkeypatch.setattr(_recipe_mod, "load_recipe_diagram", lambda *a, **kw: diagram_text)
+
+        cli.cook("test-script")
+
+        captured = capsys.readouterr()
+        assert "## test-script" in captured.out, "Diagram was not printed to terminal"
+        assert "### Graph" in captured.out
+
 
 class TestRecipesCLI:
     def test_recipes_list_outputs_names(self, capsys: pytest.CaptureFixture) -> None:

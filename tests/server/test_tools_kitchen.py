@@ -217,3 +217,33 @@ def test_close_kitchen_does_not_produce_gate_file(tmp_path, monkeypatch):
             _close_kitchen_handler()
     gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
     assert not gate_file.exists()
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypatch):
+    """open_kitchen response contains static categorized tool groups from TOOL_CATEGORIES."""
+    from autoskillit.core.types import TOOL_CATEGORIES
+
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result = await open_kitchen(ctx=mock_ctx)
+
+    seen: set[str] = set()
+    for category_name, tools in TOOL_CATEGORIES:
+        assert category_name in result, (
+            f"Category '{category_name}' missing from open_kitchen response"
+        )
+        for tool_name in tools:
+            if tool_name not in seen:
+                assert tool_name in result, (
+                    f"Tool '{tool_name}' missing from open_kitchen response"
+                )
+                seen.add(tool_name)

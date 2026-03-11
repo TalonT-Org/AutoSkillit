@@ -8,6 +8,7 @@ gate check in each tool.
 The two-tier invariant: Orchestrator (Tier 1) spawns workers via run_skill.
 Workers (Tier 2) execute skills using native Claude Code tools. No nesting.
 """
+
 import json
 import os
 import sys
@@ -37,7 +38,7 @@ def main() -> None:
                         "permissionDecisionReason": (
                             f"{part} cannot be called from headless sessions. "
                             "Only the Tier 1 orchestrator may call orchestration tools. "
-                            "Headless workers (Tier 2) execute skills via native Claude Code tools."
+                            "Headless workers (Tier 2) use native Claude Code tools."
                         ),
                     }
                 }

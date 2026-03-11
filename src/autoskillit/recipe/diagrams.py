@@ -42,7 +42,7 @@ class _LayoutStep:
     on_failure: str | None = None
     on_context_limit: str | None = None
     retries: int = 0
-    on_exhausted: str = "escalate"  # schema default: _TERMINAL_TARGETS sentinel (schema.py)
+    on_exhausted: str = "escalate"
     is_back_edge_success: bool = False
     is_back_edge_failure: bool = False
     on_result_conditions: list[tuple[str, str, bool]] = field(default_factory=list)
@@ -283,9 +283,7 @@ def _compute_layout(recipe: Any) -> _LayoutResult:
             on_failure=step.on_failure,
             on_context_limit=step.on_context_limit,
             retries=step.retries if not is_terminal else 0,
-            on_exhausted=step.on_exhausted
-            if not is_terminal
-            else "escalate",  # sentinel from _TERMINAL_TARGETS (schema.py)
+            on_exhausted=step.on_exhausted if not is_terminal else "escalate",
             skip_when_false=step.skip_when_false,
             note=step.note or "",
         )

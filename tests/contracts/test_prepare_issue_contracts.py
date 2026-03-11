@@ -192,5 +192,5 @@ def test_prepare_issue_dedup_bypass_with_issue_flag_still_documented():
     """--issue N flag must still bypass dedup (existing contract, must remain intact)."""
     text = SKILL_MD.read_text()
     # Both the interface docs and the step header must reference the bypass
-    assert "--issue N" in text or "issue_number" in text
+    assert "--issue N" in text and "issue_number" in text
     assert "skip" in text.lower() or "bypass" in text.lower() or "skip if" in text.lower()

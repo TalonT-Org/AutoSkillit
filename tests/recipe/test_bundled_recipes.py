@@ -1563,7 +1563,7 @@ def test_bundled_recipes_emit_no_graph_warnings(recipe_path):
     recipe = load_recipe(recipe_path)
     with structlog.testing.capture_logs() as cap_logs:
         build_recipe_graph(recipe)
-    warning_events = [l for l in cap_logs if l.get("log_level") == "warning"]
+    warning_events = [entry for entry in cap_logs if entry.get("log_level") == "warning"]
     assert warning_events == [], (
         f"build_recipe_graph emitted {len(warning_events)} warnings for "
         f"{recipe_path.name}: {warning_events}"

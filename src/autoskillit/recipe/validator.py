@@ -32,7 +32,7 @@ from autoskillit.recipe.registry import (
     run_semantic_rules,
     semantic_rule,
 )
-from autoskillit.recipe.schema import Recipe
+from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe
 
 logger = get_logger(__name__)
 
@@ -54,8 +54,9 @@ __all__ = [
     "semantic_rule",
 ]
 
-# Reserved terminal target names accepted by on_success/on_failure/on_context_limit/on_exhausted.
-_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
+# _TERMINAL_TARGETS is the authoritative constant defined in schema.py.
+# Re-imported here for backward compatibility with any direct imports from this module.
+# Do not redefine — use the schema import above.
 
 
 # ---------------------------------------------------------------------------

@@ -182,20 +182,17 @@ def _require_not_headless(tool_name: str = "") -> str | None:
     """Return a headless_error JSON string if called from a headless session.
 
     Returns None if the caller is not a headless session (safe to proceed).
-    Call this at the start of any tool that must not be accessible to workers.
     """
     if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
         from autoskillit.pipeline import headless_error_result
 
         msg = (
-            (
-                f"{tool_name} cannot be called from headless sessions. "
-                "Only the Tier 1 orchestrator may call this tool."
-            )
+            f"{tool_name} cannot be called from headless sessions. "
+            "Only the Tier 1 orchestrator may call this tool."
             if tool_name
             else None
         )
-        return headless_error_result(msg) if msg else headless_error_result()
+        return headless_error_result(msg)
     return None
 
 

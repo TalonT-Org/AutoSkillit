@@ -14,6 +14,7 @@ from autoskillit.server.helpers import (
     _find_recipe,
     _hook_config_path,
     _prime_quota_cache,
+    _require_not_headless,
     track_response_size,
 )
 
@@ -80,6 +81,8 @@ def get_recipe(name: str) -> str:
 @track_response_size("open_kitchen")
 async def open_kitchen(ctx: Context = CurrentContext()) -> str:
     """Open the AutoSkillit kitchen for service."""
+    if (h := _require_not_headless("open_kitchen")) is not None:
+        return h
     await _open_kitchen_handler()
     await ctx.enable_components(tags={"kitchen"})
 
@@ -119,6 +122,8 @@ async def open_kitchen(ctx: Context = CurrentContext()) -> str:
 @track_response_size("close_kitchen")
 async def close_kitchen(ctx: Context = CurrentContext()) -> str:
     """Close the AutoSkillit kitchen."""
+    if (h := _require_not_headless("close_kitchen")) is not None:
+        return h
     _close_kitchen_handler()
     await ctx.reset_visibility()
     return "Kitchen is closed."

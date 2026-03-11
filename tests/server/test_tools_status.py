@@ -593,3 +593,24 @@ def test_format_token_summary_includes_elapsed_seconds():
     assert "plan" in result
     assert "elapsed_seconds" in result
     assert "45.7" in result
+
+
+# ---------------------------------------------------------------------------
+# Headless gate enforcement for status tools
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_kitchen_status_denied_when_headless(tool_ctx, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    result = json.loads(await kitchen_status())
+    assert result["success"] is False
+    assert result["subtype"] == "headless_error"
+
+
+@pytest.mark.anyio
+async def test_get_pipeline_report_denied_when_headless(tool_ctx, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    result = json.loads(await get_pipeline_report())
+    assert result["success"] is False
+    assert result["subtype"] == "headless_error"

@@ -24,7 +24,20 @@ class HookDef:
 HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         matcher="mcp__.*autoskillit.*__run_skill.*",
-        scripts=["skill_cmd_check.py", "quota_check.py", "skill_command_guard.py"],
+        scripts=[
+            "skill_cmd_check.py",
+            "quota_check.py",
+            "skill_command_guard.py",
+            "headless_orchestration_guard.py",
+        ],
+    ),
+    HookDef(
+        matcher="mcp__.*autoskillit.*__run_cmd.*",
+        scripts=["headless_orchestration_guard.py"],
+    ),
+    HookDef(
+        matcher="mcp__.*autoskillit.*__run_python.*",
+        scripts=["headless_orchestration_guard.py"],
     ),
     HookDef(
         matcher="mcp__.*autoskillit.*__remove_clone",

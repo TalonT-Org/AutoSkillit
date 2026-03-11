@@ -217,3 +217,30 @@ def test_close_kitchen_does_not_produce_gate_file(tmp_path, monkeypatch):
             _close_kitchen_handler()
     gate_file = tmp_path / ".autoskillit" / "temp" / ".kitchen_gate"
     assert not gate_file.exists()
+
+
+# ---------------------------------------------------------------------------
+# Headless gate enforcement for kitchen tools
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_denied_by_gate_when_headless(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.server.tools_kitchen import open_kitchen
+
+    result = json.loads(await open_kitchen())
+    assert result["success"] is False
+    assert result["subtype"] == "headless_error"
+
+
+@pytest.mark.anyio
+async def test_close_kitchen_denied_when_headless(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.server.tools_kitchen import close_kitchen
+
+    result = json.loads(await close_kitchen())
+    assert result["success"] is False
+    assert result["subtype"] == "headless_error"

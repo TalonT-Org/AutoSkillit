@@ -371,7 +371,6 @@ GATED_TOOLS: frozenset[str] = frozenset(
     {
         "run_cmd",
         "run_python",
-        "run_recipe",
         "read_db",
         "run_skill",
         "test_check",
@@ -398,22 +397,29 @@ GATED_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-UNGATED_TOOLS: frozenset[str] = frozenset(
+WORKER_TOOLS: frozenset[str] = frozenset(
     {
-        "kitchen_status",
-        "get_pipeline_report",
-        "get_token_summary",
-        "get_timing_summary",
-        "list_recipes",
-        "load_recipe",
-        "validate_recipe",
         "fetch_github_issue",
         "get_issue_title",
         "get_ci_status",
-        "open_kitchen",  # was prompt, now ungated tool
-        "close_kitchen",  # was prompt, now ungated tool
+        "get_token_summary",
+        "get_timing_summary",
     }
 )
+
+HEADLESS_BLOCKED_UNGATED_TOOLS: frozenset[str] = frozenset(
+    {
+        "kitchen_status",
+        "get_pipeline_report",
+        "list_recipes",
+        "load_recipe",
+        "validate_recipe",
+        "open_kitchen",
+        "close_kitchen",
+    }
+)
+
+UNGATED_TOOLS: frozenset[str] = WORKER_TOOLS | HEADLESS_BLOCKED_UNGATED_TOOLS
 
 # Canonical prefix required for all skill_command values passed to run_skill.
 # Enforced at the Claude Code hook boundary by skill_command_guard.py.

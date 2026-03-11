@@ -34,7 +34,7 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 
 ## Workflow
 
-Read the configured test command from `.autoskillit/config.yaml` (key: `test_check.command`). Use this command wherever `{test_command}` appears in these instructions. Fall back to `task test-all` only if no config exists.
+Read the configured test command from `.autoskillit/config.yaml` (key: `test_check.command`). Use this command wherever `{test_command}` appears in these instructions. If no config exists, use the `test_check` MCP tool (which resolves the command from the project's config automatically).
 
 ### Step 0: Validate Arguments
 1. Parse three positional args using **path detection**: scan all tokens after

@@ -15,6 +15,7 @@ ingredients:
     default: "false"
   base_branch:
     description: Branch all PRs target; integration branch is created from this
+    required: true
   upstream_branch:
     description: Branch to create base_branch from if it does not yet exist on the remote
     default: main
@@ -37,7 +38,7 @@ kitchen_rules:
     push_worktree_branch → create_conflict_pr → wait_for_conflict_ci → merge_conflict_pr)
     per plan part before advancing to the next part or PR."
   - "INTEGRATION BRANCH: Two distinct branches exist. inputs.base_branch is the
-    PERMANENT branch (default: integration) that accumulates AI work across runs —
+    PERMANENT branch (default: main) that accumulates AI work across runs —
     it is never deleted. context.integration_branch is the PER-RUN batch branch
     (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this pipeline run.
     All PR merges and worktree merges target context.integration_branch. The final
@@ -57,10 +58,9 @@ kitchen_rules:
     All work — skill invocations, git operations, file reads — happens
     exclusively in the clone (work_dir). source_dir is used ONLY to read
     the remote URL inside push_to_remote."
-  - "GITHUB API MERGE: All PR merges into the integration branch go through
-    GitHub's merge interface (gh pr merge --squash). This enforces the integration
-    branch ruleset (Preflight + Ubuntu status checks). Never use merge_worktree
-    or local git merge to merge into the integration batch branch."
+  - "GITHUB API MERGE: All PR merges into the integration branch go through GitHub's merge
+    interface (gh pr merge --squash). This enforces the branch ruleset required status checks.
+    Never use merge_worktree or local git merge to merge into the integration batch branch."
   - "PUSH DISCIPLINE: push_worktree_branch (inside the complex PR cycle),
     publish_integration_branch / push_integration_branch, and force_push_after_rebase
     (authorized for conflict-resolution rebases) are the only authorized push steps.

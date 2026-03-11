@@ -93,6 +93,7 @@ class Recipe:
     steps: dict[str, RecipeStep] = field(default_factory=dict)
     kitchen_rules: list[str] = field(default_factory=list)
     version: str | None = None
+    experimental: bool = False
 
     def __post_init__(self) -> None:
         self.name = self.name.strip()

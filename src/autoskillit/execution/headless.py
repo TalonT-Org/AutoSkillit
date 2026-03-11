@@ -31,7 +31,10 @@ from autoskillit.core import (
     claude_code_project_dir,
     get_logger,
 )
-from autoskillit.execution.commands import build_headless_cmd
+from autoskillit.execution.commands import (
+    build_headless_cmd,
+    build_subrecipe_cmd,
+)
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
     ClaudeSessionResult,
@@ -539,6 +542,109 @@ async def run_headless_core(
             except Exception:
                 logger.debug("token_log_record_failed", exc_info=True)
         return skill_result
+
+
+async def run_subrecipe_session(
+    prompt: str,
+    cwd: str,
+    ctx: ToolContext,
+    *,
+    model: str = "",
+    step_name: str = "",
+) -> SkillResult:
+    """Launch a headless sub-recipe orchestrator session and return SkillResult.
+
+    Accepts a pre-built prompt (built by build_subrecipe_prompt in cli/_prompts.py)
+    and runs a headless Claude session with AUTOSKILLIT_KITCHEN_OPEN=1 so the gate
+    is pre-enabled at import time.
+    """
+    if not Path(cwd).is_dir():
+        return SkillResult(
+            success=False,
+            result=f"cwd does not exist or is not a directory: {cwd}",
+            session_id="",
+            subtype="error",
+            is_error=True,
+            exit_code=-1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+    cfg = ctx.config.run_skill
+    if cfg.completion_marker:
+        prompt = _inject_completion_directive(prompt, cfg.completion_marker)
+
+    resolved_model = _resolve_model(model, ctx.config) if model else None
+    cmd_spec = build_subrecipe_cmd(prompt, model=resolved_model)
+    env = {**os.environ, **cmd_spec.env}
+
+    runner = ctx.runner
+    assert runner is not None, "No subprocess runner configured"
+
+    _start_ts = datetime.now(UTC).isoformat()
+    _start_mono = time.monotonic()
+
+    _result: SubprocessResult | None = None
+    try:
+        _result = await runner(
+            cmd_spec.cmd,
+            cwd=Path(cwd),
+            timeout=cfg.timeout,
+            env=env,
+            pty_mode=True,
+            session_log_dir=_session_log_dir(cwd),
+            completion_marker=cfg.completion_marker,
+            stale_threshold=cfg.stale_threshold,
+            completion_drain_timeout=cfg.completion_drain_timeout,
+        )
+    finally:
+        if _result is None:
+            _log_dir = ctx.config.linux_tracing.log_dir
+            try:
+                from autoskillit.execution import flush_session_log
+
+                flush_session_log(
+                    log_dir=_log_dir,
+                    cwd=str(cwd),
+                    session_id="",
+                    pid=0,
+                    skill_command="<sub-recipe>",
+                    success=False,
+                    subtype="crashed",
+                    exit_code=-1,
+                    start_ts=_start_ts,
+                    proc_snapshots=None,
+                    termination_reason="CRASHED",
+                )
+            except Exception:
+                logger.debug("flush_session_log during crash failed", exc_info=True)
+
+    if _result is None:
+        raise RuntimeError("runner() did not return a result — cannot build SkillResult")
+    _elapsed = time.monotonic() - _start_mono
+    _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
+    result = dataclasses.replace(  # type: ignore[arg-type]
+        _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        completion_marker=cfg.completion_marker,
+        skill_command="<sub-recipe>",
+        audit=ctx.audit,
+    )
+
+    if step_name:
+        ctx.timing_log.record(step_name, _elapsed)
+        ctx.token_log.record(
+            step_name,
+            skill_result.token_usage,
+            start_ts=_start_ts,
+            end_ts=_end_ts,
+            elapsed_seconds=_elapsed,
+        )
+
+    return skill_result
 
 
 class DefaultHeadlessExecutor:

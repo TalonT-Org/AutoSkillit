@@ -15,6 +15,9 @@ from autoskillit.execution import (
     resolve_log_dir,  # noqa: F401 — used by tools_integrations.py, tools_status.py
     write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )
+from autoskillit.execution import (
+    run_subrecipe_session as _run_subrecipe_session_fn,
+)
 from autoskillit.pipeline import gate_error_result
 from autoskillit.recipe import (
     StaleItem,
@@ -165,20 +168,6 @@ def track_response_size(
     return decorator
 
 
-def _require_enabled() -> str | None:
-    """Return error JSON if tools are not enabled, None if OK.
-
-    All tools are gated by default and can only be activated by the user
-    typing the open_kitchen prompt. The prompt name is prefixed by Claude
-    Code based on how the server was loaded (plugin vs --plugin-dir).
-    This survives --dangerously-skip-permissions because MCP prompts are
-    outside the permission system.
-    """
-    if not _get_ctx().gate.enabled:
-        return gate_error_result()
-    return None
-
-
 def _require_not_headless(tool_name: str = "") -> str | None:
     """Return headless_error JSON if called from a headless session; None if safe."""
     if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
@@ -191,6 +180,20 @@ def _require_not_headless(tool_name: str = "") -> str | None:
             else None
         )
         return headless_error_result(msg)
+    return None
+
+
+def _require_enabled() -> str | None:
+    """Return error JSON if tools are not enabled, None if OK.
+
+    All tools are gated by default and can only be activated by the user
+    typing the open_kitchen prompt. The prompt name is prefixed by Claude
+    Code based on how the server was loaded (plugin vs --plugin-dir).
+    This survives --dangerously-skip-permissions because MCP prompts are
+    outside the permission system.
+    """
+    if not _get_ctx().gate.enabled:
+        return gate_error_result()
     return None
 
 
@@ -440,6 +443,25 @@ def _find_recipe(name: str, cwd: Path) -> Any:
     This function provides the architecture-compliant bridge to autoskillit.recipe.
     """
     return find_recipe_by_name(name, cwd)
+
+
+async def _run_subrecipe(
+    recipe_yaml: str,
+    ingredients_json: str,
+    cwd: str,
+    ctx: Any,
+    step_name: str = "",
+) -> Any:
+    """Launch a headless sub-recipe session. Delegates to execution layer.
+
+    tools_recipe.py (a tools_*.py file) is restricted by REQ-IMP-003 to importing
+    only from autoskillit.core, autoskillit.pipeline, and autoskillit.server.
+    This function provides the architecture-compliant bridge to autoskillit.execution.
+    """
+    from autoskillit.cli import build_subrecipe_prompt
+
+    prompt = build_subrecipe_prompt(recipe_yaml, ingredients_json)
+    return await _run_subrecipe_session_fn(prompt, cwd, ctx, step_name=step_name)
 
 
 async def _prime_quota_cache() -> None:

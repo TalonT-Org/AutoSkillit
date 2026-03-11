@@ -358,6 +358,7 @@ async def check_pr_mergeable(
     Returns JSON with:
       - mergeable: True when gh reports "MERGEABLE", False otherwise
       - merge_state_status: raw mergeStateStatus string (e.g. "CLEAN", "DIRTY")
+      - mergeable_status: raw GitHub mergeable string ("MERGEABLE" | "CONFLICTING" | "UNKNOWN")
     On gh failure: {"success": false, "error": "..."}
 
     Args:
@@ -395,5 +396,6 @@ async def check_pr_mergeable(
         {
             "mergeable": data.get("mergeable") == "MERGEABLE",
             "merge_state_status": data.get("mergeStateStatus", ""),
+            "mergeable_status": data.get("mergeable", ""),
         }
     )

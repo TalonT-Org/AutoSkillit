@@ -764,6 +764,7 @@ class TestCheckPrMergeable:
         result = json.loads(await check_pr_mergeable(42, "."))
         assert result["mergeable"] is True
         assert result["merge_state_status"] == "CLEAN"
+        assert result["mergeable_status"] == "MERGEABLE"
 
     @pytest.mark.anyio
     async def test_conflicting_pr_is_not_mergeable(self, tool_ctx):
@@ -775,6 +776,18 @@ class TestCheckPrMergeable:
         result = json.loads(await check_pr_mergeable(42, "."))
         assert result["mergeable"] is False
         assert result["merge_state_status"] == "DIRTY"
+        assert result["mergeable_status"] == "CONFLICTING"
+
+    @pytest.mark.anyio
+    async def test_unknown_mergeable_status_returned_raw(self, tool_ctx):
+        tool_ctx.runner.push(
+            _make_result(
+                0, json.dumps({"mergeable": "UNKNOWN", "mergeStateStatus": "UNKNOWN"}), ""
+            )
+        )
+        result = json.loads(await check_pr_mergeable(42, "."))
+        assert result["mergeable"] is False  # UNKNOWN != MERGEABLE → False
+        assert result["mergeable_status"] == "UNKNOWN"
 
     @pytest.mark.anyio
     async def test_gh_command_failure_returns_error(self, tool_ctx):

@@ -132,7 +132,7 @@ class TestVersionBumpWorkflow:
         """Workflow must force-push integration to match main after version bump."""
         wf = _load(VERSION_BUMP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
-        sync_step = _find_step(job, "force")
+        sync_step = _find_step(job, "Force-push integration")
         assert sync_step is not None, "Workflow must have a force-push step"
         run_block = sync_step.get("run", "")
         assert "git push" in run_block, "Step must use git push"

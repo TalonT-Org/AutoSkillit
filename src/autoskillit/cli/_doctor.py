@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
@@ -15,21 +14,11 @@ from autoskillit.hook_registry import HOOK_REGISTRY
 
 @dataclass
 class DoctorResult:
-    """Outcome of a single doctor check.
-
-    The ``fix`` field is for **external programmatic callers** that want to
-    inspect results and apply remediation themselves.  ``run_doctor`` does not
-    dispatch ``fix`` — it passes ``fix=True`` directly into each check function,
-    which applies the fix inline and returns an ``OK`` result immediately.
-    External callers (e.g. tests or integrations) may call ``result.fix()``
-    after receiving an ``ERROR`` result from a check function invoked with
-    ``fix=False``.
-    """
+    """Outcome of a single doctor check."""
 
     severity: Severity
     check: str
     message: str
-    fix: Callable[[], None] | None = field(default=None, repr=False)
 
 
 def _check_mcp_server_registered() -> DoctorResult:
@@ -92,7 +81,7 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
     )
 
 
-def run_doctor(*, output_json: bool = False, fix: bool = False) -> None:
+def run_doctor(*, output_json: bool = False) -> None:
     """Check project setup for common issues."""
     from autoskillit.cli._marketplace import _clear_plugin_cache
 

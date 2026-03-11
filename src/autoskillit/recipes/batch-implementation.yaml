@@ -1,10 +1,13 @@
 name: batch-implementation
+experimental: true
 description: >
   Implement multiple GitHub issues efficiently by sharing setup overhead (clone,
   base_sha, merge_target) across all issues. Per-issue: get_issue_title →
   claim_issue → compute_branch → create_branch → implement → push → open_pr_step →
   release_issue_success. Reduces redundant setup from O(n) to O(1).
-  TODO #237: Full loop state accumulation pending write_telemetry_files tool landing.
+  EXPERIMENTAL: Requires loop state accumulation tools from issue #237 (closed
+  2026-03-10). Remove the experimental flag once all required MCP tools are
+  verified wired and tested end-to-end.
 summary: "clone > capture_base_sha > set_merge_target > [per issue: get_issue_title > claim_issue > compute_branch > create_branch > implement > push_merge_target > open_pr_step > release_issue_success] > delete_clone"
 autoskillit_version: "0.3.0"
 

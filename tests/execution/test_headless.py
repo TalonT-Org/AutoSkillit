@@ -982,7 +982,7 @@ class TestBuildSkillResultWorktreePath:
 
     def test_extracts_worktree_path_on_context_exhaustion(self):
         """worktree_path from early Step 1 emission flows into SkillResult."""
-        path = "/home/talon/projects/autoskillit-runs/worktrees/impl-fix-20260307"
+        path = "/tmp/worktrees/impl-fix-20260307"
         sub_result = SubprocessResult(
             returncode=-1,
             stdout=_context_exhausted_with_worktree_ndjson(path),
@@ -1069,7 +1069,7 @@ class TestWorktreePathOnContextExhaustion:
 
     def test_worktree_path_in_json_response_on_context_limit(self):
         """Full stack: NDJSON with early token → SkillResult → to_json()."""
-        path = "/home/talon/projects/autoskillit-runs/worktrees/impl-fix"
+        path = "/tmp/worktrees/impl-fix"
         assistant = json.dumps(
             {
                 "type": "assistant",

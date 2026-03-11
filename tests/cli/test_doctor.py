@@ -569,13 +569,12 @@ class TestGroupFDoctor:
 
         called_with: dict = {}
 
-        def mock_run_doctor(*, output_json: bool = False, fix: bool = False) -> None:
+        def mock_run_doctor(*, output_json: bool = False) -> None:
             called_with["output_json"] = output_json
-            called_with["fix"] = fix
 
         monkeypatch.setattr(_doctor, "run_doctor", mock_run_doctor)
         cli.doctor(output_json=True)
-        assert called_with == {"output_json": True, "fix": False}
+        assert called_with == {"output_json": True}
 
     def test_severity_and_doctorresult_in_doctor_module(self):
         """Severity and DoctorResult must be importable from autoskillit.cli._doctor."""
@@ -586,50 +585,14 @@ class TestGroupFDoctor:
         assert r.check == "test"
 
 
-class TestDoctorResultFixField:
-    """T1: DoctorResult has an optional fix callable field."""
+def test_doctor_fix_parameter_does_not_exist():
+    """The doctor --fix no-op flag must be removed from the CLI."""
+    import inspect
 
-    def test_doctor_result_has_fix_field(self):
-        """DoctorResult must have an optional fix callable field."""
-        from autoskillit.cli._doctor import DoctorResult
-        from autoskillit.core import Severity
+    from autoskillit import cli
 
-        # Can be constructed without fix
-        r = DoctorResult(severity=Severity.OK, check="x", message="y")
-        assert r.fix is None
-
-        # Can be constructed with fix and it is callable
-        called = []
-        r_with_fix = DoctorResult(
-            severity=Severity.ERROR,
-            check="x",
-            message="y",
-            fix=lambda: called.append(1),
-        )
-        assert callable(r_with_fix.fix)
-        r_with_fix.fix()
-        assert called == [1]
-
-    def test_doctor_result_fix_not_in_json_output(self, tmp_path, monkeypatch, capsys):
-        """fix callable must not appear in --output-json serialization."""
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        cli.doctor(output_json=True)
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        for entry in data["results"]:
-            assert "fix" not in entry
-
-
-class TestDoctorFixFlag:
-    """T3: doctor CLI accepts fix parameter (infrastructure for future checks)."""
-
-    def test_doctor_command_accepts_fix_parameter(self):
-        """doctor CLI command must expose a fix parameter."""
-        import inspect
-
-        sig = inspect.signature(cli.doctor)
-        assert "fix" in sig.parameters
+    sig = inspect.signature(cli.doctor)
+    assert "fix" not in sig.parameters, "doctor --fix is a silent no-op and must be removed"
 
 
 def test_doctor_clears_plugin_cache(tmp_path, monkeypatch, capsys):

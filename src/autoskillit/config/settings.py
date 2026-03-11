@@ -79,7 +79,7 @@ class RunSkillConfig:
 
 @dataclass
 class ModelConfig:
-    default: str | None = None
+    default: str = "sonnet"
     override: str | None = None
 
 
@@ -272,7 +272,7 @@ class AutomationConfig:
                 ),
             ),
             model=ModelConfig(
-                default=val(mc, "default", _mc["default"]) or None,
+                default=str(val(mc, "default", _mc["default"]) or _mc["default"]),
                 override=val(mc, "override", _mc["override"]) or None,
             ),
             worktree_setup=WorktreeSetupConfig(

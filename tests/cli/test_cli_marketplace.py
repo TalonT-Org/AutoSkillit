@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
-import pytest
+import subprocess
 
 
 # MK1
@@ -52,14 +50,10 @@ def test_install_registered_as_cli_command():
 
 
 # MK-DEP-2
-def test_upgrade_not_registered_as_cli_command():
-    """autoskillit upgrade is not a registered CLI command."""
-    from autoskillit import cli
-
-    with pytest.raises(SystemExit) as exc_info:
-        with patch("sys.argv", ["autoskillit", "upgrade"]):
-            cli.main()
-    assert exc_info.value.code != 0
+def test_upgrade_is_registered_as_cli_command():
+    """autoskillit upgrade must be a registered CLI command."""
+    result = subprocess.run(["autoskillit", "upgrade", "--help"], capture_output=True, text=True)
+    assert result.returncode == 0, f"upgrade --help failed:\n{result.stderr}"
 
 
 # MK-DEP-3

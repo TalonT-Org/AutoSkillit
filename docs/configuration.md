@@ -166,6 +166,69 @@ safety:
 
 These defaults are usually fine. Override per-project if needed.
 
+## Token Usage
+
+Controls how token consumption is reported per pipeline step.
+
+```yaml
+token_usage:
+  verbosity: "summary"   # "summary" | "full" | "none"
+```
+
+- `"summary"` — report total tokens per step (default)
+- `"full"` — report input and output tokens separately per step
+- `"none"` — disable token reporting
+
+## Migration
+
+```yaml
+migration:
+  suppressed:
+    - "some-migration-id"
+```
+
+`suppressed` is a list of migration IDs to skip. Useful when a migration is not applicable to a specific project (e.g. you never used the feature the migration addresses). Migration IDs appear in warning output from `autoskillit migrate`.
+
+## Logging
+
+```yaml
+logging:
+  level: "INFO"         # "DEBUG" | "INFO" | "WARNING" | "ERROR"
+  json_output: null     # true = JSON lines, false = human-readable, null = auto (stderr tty detection)
+```
+
+Controls the autoskillit server logger. Useful for debugging:
+
+```bash
+AUTOSKILLIT_LOGGING__LEVEL=DEBUG autoskillit serve
+```
+
+## Read DB
+
+```yaml
+read_db:
+  timeout: 30       # SQLite connection timeout in seconds
+  max_rows: 10000   # maximum rows returned per query
+```
+
+## Report Bug
+
+```yaml
+report_bug:
+  output_dir: null  # null = {cwd}/.autoskillit/temp/bug-reports/
+  timeout: 600
+  github_filing: true
+  github_labels: ["autoreported", "bug"]
+```
+
+## Environment Variables
+
+### `AUTOSKILLIT_KITCHEN_OPEN`
+
+When set to `"1"`, pre-opens the kitchen gate so all 26 gated pipeline tools are available immediately without calling `open_kitchen`.
+
+This is automatically set by `autoskillit cook`, `chefs-hat`, and when launching sub-recipe headless sessions. Do **not** set this manually in user-facing orchestration sessions — it disables the protection that prevents the orchestrator from accidentally calling gated pipeline tools outside of a pipeline context.
+
 ## Full Example
 
 ```yaml

@@ -158,19 +158,25 @@ def install(
 
 
 @app.command
-def doctor(*, output_json: bool = False, fix: bool = False):
+def upgrade() -> None:
+    """Migrate project from .autoskillit/scripts/ format to .autoskillit/recipes/ format."""
+    from autoskillit.cli._marketplace import upgrade as _upgrade
+
+    _upgrade()
+
+
+@app.command
+def doctor(*, output_json: bool = False):
     """Check project setup for common issues.
 
     Parameters
     ----------
     output_json
         Output results as JSON instead of human-readable text.
-    fix
-        Auto-remediate fixable errors (e.g. remove stale gate files).
     """
     from autoskillit.cli._doctor import run_doctor
 
-    run_doctor(output_json=output_json, fix=fix)
+    run_doctor(output_json=output_json)
 
 
 @app.command

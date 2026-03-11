@@ -182,6 +182,9 @@ async def get_timing_summary(clear: bool = False) -> str:
 
     Args:
         clear: If True, reset the timing log after returning current data.
+            Note: also advances the shared telemetry_cleared_at fence, which
+            sets the since-bound for ALL log types (token_log, timing_log,
+            audit) on the next server restart via _state._initialize.
     """
     from autoskillit.server import _get_ctx
 

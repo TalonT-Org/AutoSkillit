@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
 from autoskillit.execution import (
-    resolve_log_dir,  # noqa: F401 — used by tools_integrations.py
+    resolve_log_dir,  # noqa: F401 — used by tools_integrations.py, tools_status.py
+    write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )
 from autoskillit.execution import (
     run_subrecipe_session as _run_subrecipe_session_fn,

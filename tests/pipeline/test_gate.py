@@ -77,6 +77,7 @@ def test_ungated_tools_contains_expected_names():
         "get_pipeline_report",
         "get_token_summary",
         "get_timing_summary",
+        "get_quota_events",
         "list_recipes",
         "load_recipe",
         "validate_recipe",

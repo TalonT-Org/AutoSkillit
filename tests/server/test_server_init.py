@@ -23,6 +23,7 @@ from autoskillit.server.tools_recipe import (
 )
 from autoskillit.server.tools_status import (
     get_pipeline_report,
+    get_quota_events,
     get_token_summary,
     kitchen_status,
 )
@@ -161,6 +162,7 @@ class TestToolRegistration:
             "get_pipeline_report",
             "get_token_summary",
             "get_timing_summary",
+            "get_quota_events",
             "clone_repo",
             "remove_clone",
             "push_to_remote",
@@ -220,6 +222,7 @@ class TestToolRegistration:
             validate_recipe,
             get_pipeline_report,
             get_token_summary,
+            get_quota_events,
         ]:
             doc = tool_fn.__doc__ or ""
             assert "no MCP" in doc or "no progress notification" in doc.lower(), (
@@ -611,6 +614,141 @@ class TestServerLazyInit:
         monkeypatch.setattr(_state, "_ctx", None)
         with pytest.raises(RuntimeError, match="serve\\(\\) must be called"):
             _state._get_config()
+
+
+class TestInitializeClearMarker:
+    """_initialize respects telemetry_cleared_at fence for drift prevention."""
+
+    def test_initialize_uses_clear_marker_as_since_bound(self, tool_ctx, tmp_path, monkeypatch):
+        from datetime import UTC, datetime, timedelta
+
+        from autoskillit.execution.session_log import (
+            flush_session_log,
+        )
+        from autoskillit.server import _state
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        # Write a session that completed 5 hours ago (within 24h window)
+        five_hours_ago = datetime.now(UTC) - timedelta(hours=5)
+        flush_session_log(
+            log_dir=str(log_dir),
+            cwd="/tmp",
+            session_id="old-session",
+            pid=999,
+            skill_command="/autoskillit:foo",
+            success=True,
+            subtype="completed",
+            exit_code=0,
+            start_ts=five_hours_ago.isoformat(),
+            proc_snapshots=None,
+            step_name="old-step",
+            token_usage={
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            timing_seconds=10.0,
+        )
+
+        # Write a clear marker 3 hours ago (after the session completed)
+        three_hours_ago = datetime.now(UTC) - timedelta(hours=3)
+        (log_dir / ".telemetry_cleared_at").write_text(three_hours_ago.isoformat())
+
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        _state._initialize(tool_ctx)
+
+        # The old-session happened before the clear marker → should NOT be replayed
+        report = tool_ctx.token_log.get_report()
+        assert all(s["step_name"] != "old-step" for s in report)
+
+    def test_initialize_loads_sessions_after_marker(self, tool_ctx, tmp_path, monkeypatch):
+        from datetime import UTC, datetime, timedelta
+
+        from autoskillit.execution.session_log import flush_session_log
+        from autoskillit.server import _state
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        # Write clear marker 5 hours ago
+        five_hours_ago = datetime.now(UTC) - timedelta(hours=5)
+        (log_dir / ".telemetry_cleared_at").write_text(five_hours_ago.isoformat())
+
+        # Write a session 3 hours ago (after the marker)
+        three_hours_ago = datetime.now(UTC) - timedelta(hours=3)
+        flush_session_log(
+            log_dir=str(log_dir),
+            cwd="/tmp",
+            session_id="new-session",
+            pid=1001,
+            skill_command="/autoskillit:bar",
+            success=True,
+            subtype="completed",
+            exit_code=0,
+            start_ts=three_hours_ago.isoformat(),
+            proc_snapshots=None,
+            step_name="new-step",
+            token_usage={
+                "input_tokens": 800,
+                "output_tokens": 200,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            timing_seconds=8.0,
+        )
+
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        _state._initialize(tool_ctx)
+
+        report = tool_ctx.token_log.get_report()
+        step_names = [s["step_name"] for s in report]
+        assert "new-step" in step_names
+
+    def test_initialize_includes_session_at_marker_boundary(self, tool_ctx, tmp_path, monkeypatch):
+        """Session with ts == marker ts is included (fence uses strict less-than)."""
+        from datetime import UTC, datetime, timedelta
+
+        from autoskillit.execution.session_log import flush_session_log
+        from autoskillit.server import _state
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        # Write clear marker 2 hours ago
+        two_hours_ago = datetime.now(UTC) - timedelta(hours=2)
+        (log_dir / ".telemetry_cleared_at").write_text(two_hours_ago.isoformat())
+
+        # Write a session with ts == marker ts (boundary: should be included)
+        flush_session_log(
+            log_dir=str(log_dir),
+            cwd="/tmp",
+            session_id="boundary-session",
+            pid=1002,
+            skill_command="/autoskillit:baz",
+            success=True,
+            subtype="completed",
+            exit_code=0,
+            start_ts=two_hours_ago.isoformat(),
+            proc_snapshots=None,
+            step_name="boundary-step",
+            token_usage={
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            timing_seconds=1.0,
+        )
+
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        _state._initialize(tool_ctx)
+
+        report = tool_ctx.token_log.get_report()
+        step_names = [s["step_name"] for s in report]
+        assert "boundary-step" in step_names
 
 
 class TestConfigDrivenBehavior:

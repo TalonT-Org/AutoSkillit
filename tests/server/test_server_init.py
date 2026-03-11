@@ -896,7 +896,7 @@ class TestSafetyConfigWiring:
         assert fifth_call_cmd == ["git", "fetch", "origin"]
 
     @pytest.mark.anyio
-    async def test_run_skill_retry_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
+    async def test_run_skill_2e_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
         """2e: require_dry_walkthrough=False bypasses dry-walkthrough gate (using run_skill)."""
         from autoskillit.server.tools_execution import run_skill
         from tests.conftest import _make_result
@@ -1063,7 +1063,7 @@ class TestToolSchemas:
         )
 
     def test_pipeline_tools_have_orchestrator_guidance(self):
-        """run_skill and run_skill_retry must reinforce MCP-only delegation."""
+        """run_skill must reinforce MCP-only delegation."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -1105,7 +1105,7 @@ class TestToolSchemas:
         assert not missing, f"PIPELINE_FORBIDDEN_TOOLS missing tools: {missing}"
 
     def test_run_skill_names_all_forbidden_tools(self):
-        """run_skill and run_skill_retry docstrings must name all forbidden tools."""
+        """run_skill docstring must name all forbidden tools."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS

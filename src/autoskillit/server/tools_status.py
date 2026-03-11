@@ -11,7 +11,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import TimingStore, _atomic_write, get_logger
+from autoskillit.core import _atomic_write, get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
@@ -110,18 +110,13 @@ async def get_pipeline_report(clear: bool = False) -> str:
     )
 
 
-def _merge_wall_clock_seconds(steps: list[dict], timing_log: TimingStore) -> None:
-    """Annotate each step dict with wall_clock_seconds from the timing log.
-
-    Mutates steps in-place. Falls back to elapsed_seconds when no timing entry
-    exists for a step.
-    """
-    timing_report = timing_log.get_report()
-    timing_by_step = {entry["step_name"]: entry["total_seconds"] for entry in timing_report}
+def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> list[dict]:
+    """Add wall_clock_seconds to each token step from timing log; fall back to elapsed_seconds."""
+    timing_by_step = {e["step_name"]: e["total_seconds"] for e in timing_report}
     for step in steps:
-        step["wall_clock_seconds"] = timing_by_step.get(
-            step["step_name"], step.get("elapsed_seconds", 0.0)
-        )
+        sn = step.get("step_name", "")
+        step["wall_clock_seconds"] = timing_by_step.get(sn, step.get("elapsed_seconds", 0.0))
+    return steps
 
 
 @mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
@@ -136,7 +131,7 @@ async def get_token_summary(clear: bool = False) -> str:
     Returns JSON with:
     - steps: list of {step_name, input_tokens, output_tokens,
                        cache_creation_input_tokens, cache_read_input_tokens,
-                       invocation_count}
+                       invocation_count, wall_clock_seconds}
     - total: {input_tokens, output_tokens, cache_creation_input_tokens,
                cache_read_input_tokens}
 
@@ -146,13 +141,10 @@ async def get_token_summary(clear: bool = False) -> str:
     from autoskillit.server import _get_ctx
 
     ctx = _get_ctx()
-    steps = ctx.token_log.get_report()
+    steps = _merge_wall_clock_seconds(ctx.token_log.get_report(), ctx.timing_log.get_report())
     total = ctx.token_log.compute_total()
     mcp_report = ctx.response_log.get_report()
     mcp_total = ctx.response_log.compute_total()
-
-    _merge_wall_clock_seconds(steps, ctx.timing_log)
-
     if clear:
         ctx.token_log.clear()
         ctx.response_log.clear()
@@ -187,9 +179,6 @@ async def get_timing_summary(clear: bool = False) -> str:
 
     Args:
         clear: If True, reset the timing log after returning current data.
-            Note: also advances the shared telemetry_cleared_at fence, which
-            sets the since-bound for ALL log types (token_log, timing_log,
-            audit) on the next server restart via _state._initialize.
     """
     from autoskillit.server import _get_ctx
 
@@ -267,8 +256,7 @@ def _format_token_summary(steps: list) -> str:
         lines.append(f"- cache_creation_input_tokens: {step['cache_creation_input_tokens']}\n")
         lines.append(f"- cache_read_input_tokens: {step['cache_read_input_tokens']}\n")
         lines.append(f"- invocation_count: {step['invocation_count']}\n")
-        lines.append(f"- elapsed_seconds: {step.get('elapsed_seconds', 0.0)}\n")
-        lines.append(f"- wall_clock_seconds: {step.get('wall_clock_seconds', 0.0)}\n\n")
+        lines.append(f"- elapsed_seconds: {step.get('elapsed_seconds', 0.0)}\n\n")
     return "".join(lines)
 
 

@@ -49,21 +49,14 @@ def _initialize(ctx: ToolContext) -> None:
     try:
         from datetime import datetime, timedelta
 
-        from autoskillit.execution import resolve_log_dir
+        from autoskillit.execution import read_telemetry_clear_marker, resolve_log_dir
 
         cfg = ctx.config.linux_tracing
         log_root = resolve_log_dir(cfg.log_dir)
         since_dt = datetime.now(tz=UTC) - timedelta(hours=24)
-        try:
-            from autoskillit.execution import read_telemetry_clear_marker
-
-            marker = read_telemetry_clear_marker(log_root)
-            if marker is not None:
-                if marker.tzinfo is None:
-                    marker = marker.replace(tzinfo=UTC)
-                since_dt = max(since_dt, marker)
-        except Exception:
-            logger.debug("read_telemetry_clear_marker failed, using 24h window", exc_info=True)
+        clear_marker = read_telemetry_clear_marker(log_root)
+        if clear_marker is not None and clear_marker > since_dt:
+            since_dt = clear_marker
         since_str = since_dt.isoformat()
 
         n_tok = ctx.token_log.load_from_log_dir(log_root, since=since_str)

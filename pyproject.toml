@@ -6,6 +6,22 @@ build-backend = "hatchling.build"
 name = "autoskillit"
 version = "0.3.1"
 description = "MCP server for orchestrating automated skill-driven workflows with Claude Code"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Talon Trecek", email = "talontrecek@gmail.com"},
+]
+keywords = ["claude", "claude-code", "automation", "ai", "mcp", "plugin"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 requires-python = ">=3.11"
 dependencies = [
     "anyio>=4.6.0",
@@ -49,6 +65,14 @@ artifacts = [
     "src/autoskillit/migrations/**",
     "src/autoskillit/hooks/**",
     "src/autoskillit/config/defaults.yaml",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/autoskillit/**",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
 ]
 
 [tool.pytest.ini_options]

@@ -432,7 +432,7 @@ _FORMATTERS = {
 _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
     {
         "run_python",  # structured result dict, generic renders correctly
-        "read_db",  # tabular rows, generic renders correctly (PHK-31 validated)
+        "read_db",  # tabular rows, generic renders correctly
         "reset_test_dir",  # simple ack
         "classify_fix",  # simple classification result
         "reset_workspace",  # simple ack
@@ -460,6 +460,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "get_quota_events",  # list of quota events, generic renders correctly
         "open_kitchen",  # plain text; formatter handled by unwrap path
         "close_kitchen",  # simple ack
+        "run_recipe",  # SkillResult JSON, generic renders correctly
     }
 )
 

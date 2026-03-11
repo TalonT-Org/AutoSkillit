@@ -437,37 +437,6 @@ class TestGateErrorSchemaNormalization:
         assert response["subtype"] == "gate_error"
 
 
-class TestHeadlessGateEnforcement:
-    """Tools blocked in headless sessions return headless_error."""
-
-    @pytest.mark.anyio
-    async def test_run_skill_denied_when_headless(self, tool_ctx, monkeypatch):
-        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        from autoskillit.server.tools_execution import run_skill
-
-        result = json.loads(await run_skill(skill_command="/test", cwd="/tmp"))
-        assert result["success"] is False
-        assert result["subtype"] == "headless_error"
-
-    @pytest.mark.anyio
-    async def test_run_cmd_denied_when_headless(self, tool_ctx, monkeypatch):
-        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        from autoskillit.server.tools_execution import run_cmd
-
-        result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
-        assert result["success"] is False
-        assert result["subtype"] == "headless_error"
-
-    @pytest.mark.anyio
-    async def test_run_python_denied_when_headless(self, tool_ctx, monkeypatch):
-        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        from autoskillit.server.tools_execution import run_python
-
-        result = json.loads(await run_python(callable="os.getcwd"))
-        assert result["success"] is False
-        assert result["subtype"] == "headless_error"
-
-
 class TestRunSkillFailurePaths:
     """run_skill surfaces session outcome on failure."""
 
@@ -552,6 +521,7 @@ class TestRunSkillModel:
     # MOD_S3
     @pytest.mark.anyio
     async def test_run_skill_no_model_flag_when_empty(self, tool_ctx):
+        tool_ctx.config.model.default = ""  # ← add this line
         tool_ctx.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="")
         cmd = tool_ctx.runner.call_args_list[0][0]

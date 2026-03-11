@@ -104,6 +104,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
         steps=steps,
         kitchen_rules=kitchen_rules,
         version=data.get(AUTOSKILLIT_VERSION_KEY),
+        experimental=bool(data.get("experimental", False)),
     )
 
 

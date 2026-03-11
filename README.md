@@ -6,6 +6,13 @@ Automated development pipelines for Claude Code. Give it a task, get back a test
 
 <!-- demo recording here (owner will add) -->
 
+## Prerequisites
+
+- **Python 3.11+**
+- **[uv](https://docs.astral.sh/uv/)** — package manager (`pip install uv` or see uv docs)
+- **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)** — `npm install -g @anthropic-ai/claude-code`
+- **[gh CLI](https://cli.github.com/)** — required for GitHub features (PR creation, issue management, CI status)
+
 ## Install
 
 ```bash
@@ -24,6 +31,16 @@ autoskillit init
 # 2. Run the implementation pipeline
 autoskillit cook implementation
 ```
+
+### First-Time Project Setup
+
+After installation, run the setup wizard to configure AutoSkillit for your project:
+
+```bash
+autoskillit cook setup-project
+```
+
+This generates project-tailored recipes and config by exploring your codebase.
 
 That's it. Describe what you want to build, and AutoSkillit handles the rest:
 
@@ -59,7 +76,7 @@ hitting context limits.
 
 ## Key Features
 
-**Zero Footprint by Default** — AutoSkillit exposes 36 MCP tools, but only 12 lightweight tools are visible in a normal Claude Code session. The other 24 pipeline tools stay hidden until you explicitly open the kitchen. This means AutoSkillit never pollutes your context window or wastes tokens on tool descriptions you aren't using. When you need the full pipeline, one command reveals everything.
+**Zero Footprint by Default** — AutoSkillit exposes 38 MCP tools, but only 12 lightweight tools are visible in a normal Claude Code session. The other 26 gated pipeline tools stay hidden until you explicitly open the kitchen. This means AutoSkillit never pollutes your context window or wastes tokens on tool descriptions you aren't using. When you need the full pipeline, one command reveals everything.
 
 **Clone Isolation** — All pipeline work happens in a cloned copy of your repo. Your working tree and uncommitted changes are never touched.
 
@@ -90,7 +107,14 @@ hitting context limits.
 | `autoskillit init` | Create project config |
 | `autoskillit cook [recipe]` | Launch a pipeline |
 | `autoskillit doctor` | Check setup health |
-| `autoskillit chefs-hat` | Launch Claude with all 36 skills as slash commands |
+| `autoskillit chefs-hat` | Launch Claude with all bundled skills as slash commands |
+| `autoskillit migrate [--check]` | Report and apply recipe format migrations |
+| `autoskillit upgrade` | Migrate project from legacy scripts/ format |
+| `autoskillit quota-status` | Check Anthropic quota utilization |
+| `autoskillit config show` | Display resolved configuration |
+| `autoskillit recipes list/show/render` | Recipe management |
+| `autoskillit skills list` | List bundled skills |
+| `autoskillit workspace init/clean` | Workspace management |
 
 ## Documentation
 

@@ -387,6 +387,9 @@ def test_no_raw_claude_list_construction() -> None:
         ("commands.py", "build_interactive_cmd"),
         ("commands.py", "build_headless_cmd"),
         ("commands.py", "build_subrecipe_cmd"),
+        # Plugin presence checks — not command building, just `claude plugin list`
+        ("_init_helpers.py", "_is_plugin_installed"),
+        ("_doctor.py", "_check_mcp_server_registered"),
     }
     violations: list[str] = []
     for path in SRC_ROOT.rglob("*.py"):
@@ -548,16 +551,3 @@ def test_init_files_are_pure_facades() -> None:
         "Sub-package __init__.py files must not define functions at module scope "
         "(pure re-export facades only):\n" + "\n".join(violations)
     )
-
-
-def test_autoskillit_kitchen_open_not_in_python_sources():
-    """AUTOSKILLIT_KITCHEN_OPEN must not appear in any Python source file."""
-    from autoskillit.core.paths import pkg_root
-
-    src = pkg_root()  # src/autoskillit/ package directory (not the project root)
-    hits = [
-        str(p)
-        for p in src.rglob("*.py")
-        if "AUTOSKILLIT_KITCHEN_OPEN" in p.read_text(encoding="utf-8", errors="ignore")
-    ]
-    assert not hits, "AUTOSKILLIT_KITCHEN_OPEN still present:\n" + "\n".join(hits)

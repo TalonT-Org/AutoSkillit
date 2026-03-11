@@ -212,6 +212,11 @@ def _clear_headless_env(monkeypatch):
     Any residual value from the shell environment (e.g. running tests inside a
     headless Claude session) would silently break tests that call these tools.
     Tests that explicitly need headless behavior use monkeypatch.setenv themselves.
+
+    Note: AUTOSKILLIT_KITCHEN_OPEN was cleared by the predecessor fixture but is
+    intentionally excluded here — production code no longer reads that variable and
+    no test relies on this fixture for its cleanup (test_factory.py manages it
+    explicitly via its own monkeypatch.delenv call).
     """
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 

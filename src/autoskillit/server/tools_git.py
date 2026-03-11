@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 
 import structlog
@@ -11,7 +12,10 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import RestartScope, get_logger
 from autoskillit.server import mcp
+from autoskillit.server.git import _filter_changed_files
 from autoskillit.server.helpers import (
+    _get_config,
+    _get_ctx,
     _notify,
     _require_enabled,
     _run_subprocess,
@@ -124,12 +128,38 @@ async def classify_fix(
         extra={"worktree": worktree_path, "base": base_branch},
     )
 
-    from autoskillit.server import _get_config, _get_ctx
-    from autoskillit.server.git import _filter_changed_files
+    if not os.path.isdir(worktree_path):
+        return json.dumps(
+            {
+                "restart_scope": RestartScope.FULL_RESTART,
+                "reason": f"worktree_path does not exist or is not a directory: {worktree_path}",
+                "critical_files": [],
+                "all_changed_files": [],
+            }
+        )
 
     tool_ctx = _get_ctx()
     _start = time.monotonic()
     try:
+        fetch_rc, _, fetch_stderr = await _run_subprocess(
+            ["git", "fetch", "origin", base_branch],
+            cwd=worktree_path,
+            timeout=30,
+        )
+        if fetch_rc != 0:
+            return json.dumps(
+                {
+                    "restart_scope": RestartScope.FULL_RESTART,
+                    "reason": (
+                        f"git fetch origin {base_branch} failed — "
+                        "remote-tracking ref may be stale. "
+                        f"git error: {(fetch_stderr or '').strip()[:200]}"
+                    ),
+                    "critical_files": [],
+                    "all_changed_files": [],
+                }
+            )
+
         returncode, stdout, stderr = await _run_subprocess(
             ["git", "diff", "--name-only", f"origin/{base_branch}...HEAD"],
             cwd=worktree_path,

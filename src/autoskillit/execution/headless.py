@@ -531,13 +531,16 @@ async def run_headless_core(
         )
 
         if step_name:
-            ctx.token_log.record(
-                step_name,
-                skill_result.token_usage,
-                start_ts=result.start_ts,
-                end_ts=result.end_ts,
-                elapsed_seconds=result.elapsed_seconds,
-            )
+            try:
+                ctx.token_log.record(
+                    step_name,
+                    skill_result.token_usage,
+                    start_ts=result.start_ts,
+                    end_ts=result.end_ts,
+                    elapsed_seconds=result.elapsed_seconds,
+                )
+            except Exception:
+                logger.debug("token_log_record_failed", exc_info=True)
         return skill_result
 
 
@@ -632,14 +635,20 @@ async def run_subrecipe_session(
     )
 
     if step_name:
-        ctx.timing_log.record(step_name, _elapsed)
-        ctx.token_log.record(
-            step_name,
-            skill_result.token_usage,
-            start_ts=_start_ts,
-            end_ts=_end_ts,
-            elapsed_seconds=_elapsed,
-        )
+        try:
+            ctx.timing_log.record(step_name, _elapsed)
+        except Exception:
+            logger.debug("timing_log_record_failed", exc_info=True)
+        try:
+            ctx.token_log.record(
+                step_name,
+                skill_result.token_usage,
+                start_ts=_start_ts,
+                end_ts=_end_ts,
+                elapsed_seconds=_elapsed,
+            )
+        except Exception:
+            logger.debug("token_log_record_failed", exc_info=True)
 
     return skill_result
 

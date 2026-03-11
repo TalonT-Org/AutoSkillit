@@ -521,6 +521,7 @@ class TestRunSkillModel:
     # MOD_S3
     @pytest.mark.anyio
     async def test_run_skill_no_model_flag_when_empty(self, tool_ctx):
+        tool_ctx.config.model.default = ""
         tool_ctx.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="")
         cmd = tool_ctx.runner.call_args_list[0][0]

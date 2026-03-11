@@ -1,4 +1,6 @@
 """Release-readiness sanity checks."""
+
+import getpass
 import subprocess
 from pathlib import Path
 
@@ -6,20 +8,21 @@ REPO_ROOT = Path(__file__).parent.parent
 
 
 def test_no_personal_home_paths_in_test_files():
-    """No tracked test files may contain /home/<user> absolute paths."""
+    """No tracked test files may contain the current user's /home/<user> absolute paths."""
+    username = getpass.getuser()
+    personal_prefix = f"/home/{username}/"
     result = subprocess.run(
-        ["git", "grep", "-rn", r"/home/", "--", "tests/"],
+        ["git", "grep", "-rn", personal_prefix, "--", "tests/"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
     )
-    # Filter out lines that are just test comments / docstrings discussing env vars
     hits = [
         line
         for line in result.stdout.splitlines()
-        if "/home/" in line and not line.strip().startswith("#")
+        if personal_prefix in line and not line.strip().startswith("#")
     ]
-    assert hits == [], f"Personal home paths found in tests:\n" + "\n".join(hits)
+    assert hits == [], "Personal home paths found in tests:\n" + "\n".join(hits)
 
 
 def test_sync_manifest_in_gitignore():

@@ -167,13 +167,7 @@ def upgrade() -> None:
 
 @app.command
 def doctor(*, output_json: bool = False):
-    """Check project setup for common issues.
-
-    Parameters
-    ----------
-    output_json
-        Output results as JSON instead of human-readable text.
-    """
+    """Check project setup for common issues."""
     from autoskillit.cli._doctor import run_doctor
 
     run_doctor(output_json=output_json)

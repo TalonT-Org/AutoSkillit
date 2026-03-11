@@ -84,7 +84,7 @@ class TestClassifyFix:
     async def test_classify_fix_nonexistent_worktree_path_returns_clear_error(self, tool_ctx):
         """[FAILS NOW] nonexistent path returns a distinct path-not-found error."""
         result = json.loads(await classify_fix("/no/such/path", "main"))
-        assert result["restart_scope"] == "error"
+        assert result["restart_scope"] == RestartScope.FULL_RESTART
         assert "does not exist" in result["reason"].lower()
 
     @pytest.mark.anyio

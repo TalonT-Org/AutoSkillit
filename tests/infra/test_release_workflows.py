@@ -81,11 +81,13 @@ class TestVersionBumpWorkflow:
             "version-bump.yml needs contents: write to push commits"
         )
 
-    def test_pull_requests_write_permission(self):
+    def test_no_pull_requests_write_permission(self):
+        """version-bump.yml no longer opens PRs — pull-requests: write must not be present."""
         wf = _load(VERSION_BUMP_WORKFLOW)
         perms = wf.get("permissions", {})
-        assert perms.get("pull-requests") == "write", (
-            "version-bump.yml needs pull-requests: write to open sync PRs"
+        assert "pull-requests" not in perms, (
+            "version-bump.yml must not declare pull-requests: write — "
+            "sync is now a force-push, not a PR"
         )
 
     def test_setup_uv_has_version_pin(self):
@@ -126,25 +128,19 @@ class TestVersionBumpWorkflow:
         text = VERSION_BUMP_WORKFLOW.read_text()
         assert "github-actions[bot]" in text
 
-    def test_syncs_main_into_integration(self):
-        """Workflow must attempt to merge/sync main into integration."""
+    def test_force_pushes_integration_to_main(self):
+        """Workflow must force-push integration to match main after version bump."""
         wf = _load(VERSION_BUMP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
-        sync_step = _find_step(job, "sync")
-        assert sync_step is not None, "Workflow must have a sync step"
+        sync_step = _find_step(job, "Force-push integration")
+        assert sync_step is not None, "Workflow must have a force-push step"
         run_block = sync_step.get("run", "")
-        assert "git checkout integration" in run_block
-        assert "git merge --ff-only" in run_block
-
-    def test_fallback_sync_pr_creation(self):
-        """Workflow must open a PR when fast-forward fails."""
-        wf = _load(VERSION_BUMP_WORKFLOW)
-        job = next(iter(wf.get("jobs", {}).values()))
-        sync_step = _find_step(job, "sync")
-        assert sync_step is not None, "Workflow must have a sync step"
-        run_block = sync_step.get("run", "")
-        assert "gh pr create" in run_block
-        assert "--base integration" in run_block
+        assert "git push" in run_block, "Step must use git push"
+        assert "--force" in run_block, "Step must force-push"
+        assert "integration" in run_block, "Force-push target must be integration"
+        assert "git merge --ff-only" not in run_block, (
+            "Step must not use --ff-only merge; force-push is always safe here"
+        )
 
     def test_checkout_uses_main_ref(self):
         """Checkout step must pin to the main branch, not the detached PR merge ref."""

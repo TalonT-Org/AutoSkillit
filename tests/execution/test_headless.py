@@ -599,7 +599,9 @@ class TestHeadlessTelemetryContainment:
 
         marker = tool_ctx.config.run_skill.completion_marker
         tool_ctx.runner.push(
-            SubprocessResult(0, self._success_payload(marker), "", TerminationReason.NATURAL_EXIT, pid=1)
+            SubprocessResult(
+                0, self._success_payload(marker), "", TerminationReason.NATURAL_EXIT, pid=1
+            )
         )
 
         with structlog.testing.capture_logs() as cap:
@@ -608,9 +610,9 @@ class TestHeadlessTelemetryContainment:
             )
 
         assert isinstance(result, _SkillResult)
-        assert any(
-            e.get("event") == "token_log_record_failed" for e in cap
-        ), f"Expected 'token_log_record_failed' in captured logs, got: {cap}"
+        assert any(e.get("event") == "token_log_record_failed" for e in cap), (
+            f"Expected 'token_log_record_failed' in captured logs, got: {cap}"
+        )
 
     @pytest.mark.anyio
     async def test_run_subrecipe_session_telemetry_error_does_not_suppress_skill_result(
@@ -629,7 +631,9 @@ class TestHeadlessTelemetryContainment:
 
         marker = tool_ctx.config.run_skill.completion_marker
         tool_ctx.runner.push(
-            SubprocessResult(0, self._success_payload(marker), "", TerminationReason.NATURAL_EXIT, pid=1)
+            SubprocessResult(
+                0, self._success_payload(marker), "", TerminationReason.NATURAL_EXIT, pid=1
+            )
         )
 
         with structlog.testing.capture_logs() as cap:
@@ -638,9 +642,9 @@ class TestHeadlessTelemetryContainment:
             )
 
         assert isinstance(result, _SkillResult)
-        assert any(
-            e.get("event") == "telemetry_log_record_failed" for e in cap
-        ), f"Expected 'telemetry_log_record_failed' in captured logs, got: {cap}"
+        assert any(e.get("event") == "telemetry_log_record_failed" for e in cap), (
+            f"Expected 'telemetry_log_record_failed' in captured logs, got: {cap}"
+        )
 
 
 class TestEnsureSkillPrefix:

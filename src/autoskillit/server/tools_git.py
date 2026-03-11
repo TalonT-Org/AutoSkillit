@@ -152,7 +152,8 @@ async def classify_fix(
                     "restart_scope": RestartScope.FULL_RESTART,
                     "reason": (
                         f"git fetch origin {base_branch} failed — "
-                        f"remote-tracking ref may be stale. git error: {fetch_stderr.strip()[:200]}"
+                        "remote-tracking ref may be stale. "
+                        f"git error: {fetch_stderr.strip()[:200]}"
                     ),
                     "critical_files": [],
                     "all_changed_files": [],

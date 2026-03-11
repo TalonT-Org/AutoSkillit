@@ -93,9 +93,7 @@ class TestClassifyFix:
         tool_ctx.runner.push(_make_result(0, "", ""))  # fetch succeeds
         tool_ctx.runner.push(_make_result(0, "src/foo.py\n", ""))  # diff succeeds
         await classify_fix(str(tmp_path), "main")
-        assert tool_ctx.runner.call_args_list[0][0] == [
-            "git", "fetch", "origin", "main"
-        ]
+        assert tool_ctx.runner.call_args_list[0][0] == ["git", "fetch", "origin", "main"]
         assert tool_ctx.runner.call_args_list[1][0][0:3] == ["git", "diff", "--name-only"]
 
     @pytest.mark.anyio

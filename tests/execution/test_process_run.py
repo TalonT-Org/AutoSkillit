@@ -359,5 +359,5 @@ class TestOuterCancelRaceGuard:
         # or the inner function raises the cancellation exception.
         if caught_exc is not None:
             assert not isinstance(caught_exc, AttributeError), (
-                f"timeout_scope None dereference — expected cancel exc, got AttributeError: {caught_exc}"
+                f"timeout_scope None dereference — got AttributeError: {caught_exc}"
             )

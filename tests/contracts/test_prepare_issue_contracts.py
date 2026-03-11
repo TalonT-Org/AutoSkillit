@@ -183,7 +183,8 @@ def test_prepare_issue_dedup_extend_runs_triage():
         or "classification" in post_extend.lower()
     )
     assert has_triage_ref, (
-        "Extend path must reference continuing to LLM Classification (Step 6), not exit immediately"
+        "Extend path must reference continuing to LLM Classification (Step 6), "
+        "not exit immediately"
     )
 
 

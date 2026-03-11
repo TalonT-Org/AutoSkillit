@@ -327,3 +327,37 @@ class TestTracingStopOnException:
 
         # stop() should have been called (via happy path or exception path)
         assert len(stop_called) >= 1
+
+
+class TestOuterCancelRaceGuard:
+    """timeout_scope None-guard prevents AttributeError when outer cancel fires
+    before move_on_after() inside the task group can bind."""
+
+    @pytest.mark.anyio
+    async def test_run_managed_async_outer_cancel_no_attribute_error(self, tmp_path):
+        """Outer move_on_after(0) fires before the task group body's scope can bind.
+
+        Before the fix, timeout_scope was None and timeout_scope.cancelled_caught
+        raised AttributeError. After the fix it must exit cleanly with a
+        CancelledError (or just return if the outer scope swallows the cancel).
+        """
+        import anyio
+
+        caught_exc: BaseException | None = None
+        with anyio.move_on_after(0):
+            try:
+                await run_managed_async(
+                    cmd=["sleep", "10"],
+                    cwd=tmp_path,
+                    timeout=30.0,
+                )
+            except BaseException as exc:
+                caught_exc = exc
+
+        # If we reach here without AttributeError, the fix is in place.
+        # The outer scope may either swallow the cancel (caught_exc is None)
+        # or the inner function raises the cancellation exception.
+        if caught_exc is not None:
+            assert not isinstance(caught_exc, AttributeError), (
+                f"timeout_scope None dereference — expected cancel exc, got AttributeError: {caught_exc}"
+            )

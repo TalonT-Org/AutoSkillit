@@ -27,24 +27,25 @@ def main() -> None:
 
     tool_name: str = data.get("tool_name", "")
     # MCP tool names are prefixed: mcp__<server>__<tool>
-    # Check each __ segment against the orchestration tool set
-    for part in tool_name.split("__"):
-        if part in _ORCHESTRATION_TOOLS:
-            payload = json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": (
-                            f"{part} cannot be called from headless sessions. "
-                            "Only the Tier 1 orchestrator may call orchestration tools. "
-                            "Headless workers (Tier 2) use native Claude Code tools."
-                        ),
-                    }
+    # Check only the last __ segment — avoids false positives where a server
+    # name coincidentally contains an orchestration tool name.
+    tool = tool_name.split("__")[-1]
+    if tool in _ORCHESTRATION_TOOLS:
+        payload = json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        f"{tool} cannot be called from headless sessions. "
+                        "Only the Tier 1 orchestrator may call orchestration tools. "
+                        "Headless workers (Tier 2) use native Claude Code tools."
+                    ),
                 }
-            )
-            sys.stdout.write(payload + "\n")
-            sys.exit(0)
+            }
+        )
+        sys.stdout.write(payload + "\n")
+        sys.exit(0)
 
     sys.exit(0)
 

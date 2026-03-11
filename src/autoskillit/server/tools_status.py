@@ -103,6 +103,8 @@ async def get_token_summary(clear: bool = False) -> str:
     """Return accumulated run_skill token usage grouped by step name.
 
     This tool is always available (not gated by open_kitchen).
+    This tool is in WORKER_TOOLS (core/types.py) — intentionally accessible to
+    headless workers so they can report token usage without orchestrator access.
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
 
@@ -144,6 +146,8 @@ async def get_timing_summary(clear: bool = False) -> str:
     """Return accumulated wall-clock timing grouped by step name.
 
     This tool is always available (not gated by open_kitchen).
+    This tool is in WORKER_TOOLS (core/types.py) — intentionally accessible to
+    headless workers so they can report timing without orchestrator access.
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
 

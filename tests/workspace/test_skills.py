@@ -57,7 +57,6 @@ BUNDLED_SKILLS = [
     "resolve-review",
     "retry-worktree",
     "review-approach",
-    "review-pr",
     "setup-project",
     "smoke-task",
     "sous-chef",

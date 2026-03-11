@@ -1514,29 +1514,28 @@ class TestDevSprintRecipe:
         errors = [f for f in run_semantic_rules(ctx) if f.severity == Severity.ERROR]
         assert not errors, f"Semantic errors: {errors}"
 
-    def test_ds4_has_run_recipe_composition_step(self, recipe) -> None:
-        """DS4: dev-sprint must have at least one run_recipe step."""
+    def test_ds4_has_no_run_recipe_step(self, recipe) -> None:
+        """DS4: dev-sprint must NOT have any run_recipe steps (removed)."""
         run_recipe_steps = [n for n, s in recipe.steps.items() if s.tool == "run_recipe"]
-        assert run_recipe_steps, "dev-sprint must have at least one run_recipe step"
+        assert not run_recipe_steps, f"dev-sprint still uses run_recipe: {run_recipe_steps}"
 
-    def test_ds5_composition_calls_implementation_groups(self, recipe) -> None:
-        """DS5: run_recipe step must delegate to implementation-groups."""
-        sub_names = [
-            s.with_args.get("name") for s in recipe.steps.values() if s.tool == "run_recipe"
-        ]
-        assert "implementation-groups" in sub_names
+    def test_ds5_implement_step_uses_load_recipe(self, recipe) -> None:
+        """DS5: implement step must use load_recipe for direct orchestration."""
+        impl = recipe.steps.get("implement")
+        assert impl is not None and impl.tool == "load_recipe", (
+            "implement step must use tool: load_recipe"
+        )
+
+    def test_ds5b_implement_step_loads_implementation_groups(self, recipe) -> None:
+        """DS5b: implement step must load implementation-groups."""
+        impl = recipe.steps.get("implement")
+        assert impl is not None
+        assert impl.with_args.get("name") == "implementation-groups"
 
     def test_ds6_triage_step_captures_manifest(self, recipe) -> None:
         """DS6: triage step must capture triage_manifest from result.manifest_path."""
         triage = recipe.steps.get("triage")
         assert triage is not None and "triage_manifest" in triage.capture
-
-    def test_ds7_implement_step_threads_manifest(self, recipe) -> None:
-        """DS7: implement step ingredients must reference context.triage_manifest."""
-        impl = next((s for s in recipe.steps.values() if s.tool == "run_recipe"), None)
-        assert impl is not None
-        ingredients_val = impl.with_args.get("ingredients", "")
-        assert "triage_manifest" in ingredients_val
 
     def test_ds8_kitchen_rules_list_forbidden_tools(self, recipe) -> None:
         """DS8: kitchen_rules must explicitly mention each forbidden native tool."""
@@ -1568,3 +1567,27 @@ def test_bundled_recipes_emit_no_graph_warnings(recipe_path):
         f"build_recipe_graph emitted {len(warning_events)} warnings for "
         f"{recipe_path.name}: {warning_events}"
     )
+
+
+def test_dev_sprint_has_no_run_recipe_step():
+    import yaml
+
+    from autoskillit.core.paths import pkg_root
+
+    path = pkg_root() / "recipes" / "dev-sprint.yaml"
+    data = yaml.safe_load(path.read_text())
+    for step_name, step in data.get("steps", {}).items():
+        assert step.get("tool") != "run_recipe", (
+            f"dev-sprint step '{step_name}' still uses tool: run_recipe"
+        )
+
+
+def test_dev_sprint_recipe_passes_validator():
+    from autoskillit.core.paths import pkg_root
+    from autoskillit.recipe import validate_recipe as validate_recipe_fn
+    from autoskillit.recipe.io import load_recipe as load_recipe_fn
+
+    path = pkg_root() / "recipes" / "dev-sprint.yaml"
+    recipe = load_recipe_fn(path)
+    errors = validate_recipe_fn(recipe)
+    assert errors == [], f"dev-sprint.yaml has validation errors: {errors}"

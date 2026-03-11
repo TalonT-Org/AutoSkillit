@@ -36,6 +36,21 @@ def test_run_skill_retry_flagged_as_error() -> None:
     assert any("run_skill_retry" in f.message for f in unknown)
 
 
+def test_run_recipe_flagged_as_unknown_tool() -> None:
+    """Recipe step with removed tool run_recipe produces unknown-tool ERROR.
+
+    run_recipe was removed from GATED_TOOLS; recipes using it must be flagged
+    by the unknown-tool validator rule so orchestrators cannot accidentally call
+    a non-existent tool (REQ-TEST-004).
+    """
+    recipe = _make_recipe(tool="run_recipe")
+    findings = run_semantic_rules(recipe)
+    unknown = [f for f in findings if f.rule == "unknown-tool"]
+    assert unknown, "Expected unknown-tool finding for run_recipe"
+    assert all(f.severity == Severity.ERROR for f in unknown)
+    assert any("run_recipe" in f.message for f in unknown)
+
+
 def test_arbitrary_unknown_tool_flagged() -> None:
     """Any unregistered tool name produces unknown-tool ERROR."""
     recipe = _make_recipe(tool="bogus_tool_xyz")

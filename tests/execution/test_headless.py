@@ -615,38 +615,6 @@ class TestHeadlessTelemetryContainment:
             f"Expected 'token_log_record_failed' in captured logs, got: {cap}"
         )
 
-    @pytest.mark.anyio
-    async def test_run_subrecipe_session_telemetry_error_does_not_suppress_skill_result(
-        self, tool_ctx, monkeypatch, tmp_path
-    ):
-        """timing_log.record() raising must not suppress the skill_result."""
-        import structlog.testing
-
-        from autoskillit.core.types import SkillResult as _SkillResult
-        from autoskillit.execution.headless import run_subrecipe_session
-
-        def bad_record(*args: object, **kwargs: object) -> None:
-            raise TypeError("simulated bad timing_log")
-
-        monkeypatch.setattr(tool_ctx.timing_log, "record", bad_record)
-
-        marker = tool_ctx.config.run_skill.completion_marker
-        tool_ctx.runner.push(
-            SubprocessResult(
-                0, self._success_payload(marker), "", TerminationReason.NATURAL_EXIT, pid=1
-            )
-        )
-
-        with structlog.testing.capture_logs() as cap:
-            result = await run_subrecipe_session(
-                "Use /investigate foo", cwd=str(tmp_path), ctx=tool_ctx, step_name="test-step"
-            )
-
-        assert isinstance(result, _SkillResult)
-        assert result.success is True, f"Expected success=True, got result: {result}"
-        assert any(e.get("event") == "timing_log_record_failed" for e in cap), (
-            f"Expected 'timing_log_record_failed' in captured logs, got: {cap}"
-        )
 
 
 class TestEnsureSkillPrefix:

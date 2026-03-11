@@ -246,3 +246,30 @@ async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypa
                     f"Tool '{tool_name}' missing from open_kitchen response"
                 )
                 seen.add(tool_name)
+
+
+# ---------------------------------------------------------------------------
+# Headless gate enforcement for kitchen tools
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_denied_by_gate_when_headless(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.server.tools_kitchen import open_kitchen
+
+    result = json.loads(await open_kitchen())
+    assert result["success"] is False
+    assert result["subtype"] == "headless_error"
+
+
+@pytest.mark.anyio
+async def test_close_kitchen_denied_when_headless(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.server.tools_kitchen import close_kitchen
+
+    result = json.loads(await close_kitchen())
+    assert result["success"] is False
+    assert result["subtype"] == "headless_error"

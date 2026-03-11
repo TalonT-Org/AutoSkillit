@@ -16,6 +16,7 @@ from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
     _require_enabled,
+    _require_not_headless,
     resolve_log_dir,
     track_response_size,
     write_telemetry_clear_marker,
@@ -44,6 +45,8 @@ async def kitchen_status() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (h := _require_not_headless("kitchen_status")) is not None:
+        return h
     from autoskillit.server import _get_config, _get_ctx, version_info
 
     info = version_info()
@@ -88,6 +91,8 @@ async def get_pipeline_report(clear: bool = False) -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (h := _require_not_headless("get_pipeline_report")) is not None:
+        return h
     from autoskillit.server import _get_ctx
 
     failures = _get_ctx().audit.get_report_as_dicts()

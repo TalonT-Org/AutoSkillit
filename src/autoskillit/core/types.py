@@ -371,7 +371,6 @@ GATED_TOOLS: frozenset[str] = frozenset(
     {
         "run_cmd",
         "run_python",
-        "run_recipe",
         "read_db",
         "run_skill",
         "test_check",
@@ -398,23 +397,30 @@ GATED_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-UNGATED_TOOLS: frozenset[str] = frozenset(
+WORKER_TOOLS: frozenset[str] = frozenset(
     {
-        "kitchen_status",
-        "get_pipeline_report",
-        "get_token_summary",
-        "get_timing_summary",
-        "get_quota_events",
-        "list_recipes",
-        "load_recipe",
-        "validate_recipe",
         "fetch_github_issue",
         "get_issue_title",
         "get_ci_status",
-        "open_kitchen",  # was prompt, now ungated tool
-        "close_kitchen",  # was prompt, now ungated tool
+        "get_token_summary",
+        "get_timing_summary",
+        "get_quota_events",
     }
 )
+
+HEADLESS_BLOCKED_UNGATED_TOOLS: frozenset[str] = frozenset(
+    {
+        "kitchen_status",
+        "get_pipeline_report",
+        "list_recipes",
+        "load_recipe",
+        "validate_recipe",
+        "open_kitchen",
+        "close_kitchen",
+    }
+)
+
+UNGATED_TOOLS: frozenset[str] = WORKER_TOOLS | HEADLESS_BLOCKED_UNGATED_TOOLS
 
 # Ordered tool categories for deterministic display in open_kitchen response.
 # Each entry: (category_label, [tool_name, ...])
@@ -430,6 +436,7 @@ TOOL_CATEGORIES: list[tuple[str, list[str]]] = [
             "get_pipeline_report",
             "get_token_summary",
             "get_timing_summary",
+            "get_quota_events",
             "fetch_github_issue",
             "get_issue_title",
             "get_ci_status",
@@ -443,7 +450,6 @@ TOOL_CATEGORIES: list[tuple[str, list[str]]] = [
             "run_skill",
             "run_cmd",
             "run_python",
-            "run_recipe",
         ],
     ),
     (

@@ -774,7 +774,7 @@ class TestConfigDrivenBehavior:
         assert tool_ctx.runner.call_args_list[0][2] == 300.0
 
     @pytest.mark.anyio
-    async def test_classify_fix_uses_config_prefixes(self, tool_ctx):
+    async def test_classify_fix_uses_config_prefixes(self, tool_ctx, tmp_path):
         """S2: classify_fix uses config.classify_fix.path_prefixes."""
         from autoskillit.config import ClassifyFixConfig
         from autoskillit.core.types import RestartScope
@@ -786,14 +786,15 @@ class TestConfigDrivenBehavior:
         )
 
         changed = "src/custom/handler.py\nsrc/other/util.py\n"
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch succeeds
         tool_ctx.runner.push(_make_result(0, changed, ""))
-        result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
+        result = json.loads(await classify_fix(worktree_path=str(tmp_path), base_branch="main"))
 
         assert result["restart_scope"] == RestartScope.FULL_RESTART
         assert "src/custom/handler.py" in result["critical_files"]
 
     @pytest.mark.anyio
-    async def test_classify_fix_empty_prefixes_always_partial(self, tool_ctx):
+    async def test_classify_fix_empty_prefixes_always_partial(self, tool_ctx, tmp_path):
         """S3: Empty prefix list -> always returns partial_restart."""
         from autoskillit.config import ClassifyFixConfig
         from autoskillit.core.types import RestartScope
@@ -803,8 +804,9 @@ class TestConfigDrivenBehavior:
         tool_ctx.config = AutomationConfig(classify_fix=ClassifyFixConfig(path_prefixes=[]))
 
         changed = "src/core/handler.py\n"
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch succeeds
         tool_ctx.runner.push(_make_result(0, changed, ""))
-        result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
+        result = json.loads(await classify_fix(worktree_path=str(tmp_path), base_branch="main"))
 
         assert result["restart_scope"] == RestartScope.PARTIAL_RESTART
 

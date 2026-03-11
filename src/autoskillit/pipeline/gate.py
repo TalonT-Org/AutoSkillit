@@ -70,7 +70,7 @@ _DEFAULT_HEADLESS_MESSAGE = (
 )
 
 
-def headless_error_result(message: str = _DEFAULT_HEADLESS_MESSAGE) -> str:
+def headless_error_result(message: str | None = None) -> str:
     """Return a canonical JSON error for tools blocked in headless sessions.
 
     Uses subtype='headless_error' to distinguish from gate_error
@@ -85,7 +85,7 @@ def headless_error_result(message: str = _DEFAULT_HEADLESS_MESSAGE) -> str:
             "exit_code": -1,
             "needs_retry": False,
             "retry_reason": "none",
-            "result": message,
+            "result": message if message is not None else _DEFAULT_HEADLESS_MESSAGE,
             "session_id": "",
             "stderr": "",
             "token_usage": {},

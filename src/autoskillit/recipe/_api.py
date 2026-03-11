@@ -263,7 +263,8 @@ def load_and_validate(
             t0 = _t("validate_recipe", t0, name)
 
             # Stage: semantic rules (builds ValidationContext once — shared computation)
-            val_ctx = make_validation_context(recipe)
+            known = frozenset(r.name for r in list_recipes(_pdir).items)
+            val_ctx = make_validation_context(recipe, available_recipes=known)
             semantic_findings = run_semantic_rules(val_ctx)
             semantic_suggestions = findings_to_dicts(semantic_findings)
             t0 = _t("semantic_rules", t0, name)

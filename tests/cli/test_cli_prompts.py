@@ -72,3 +72,39 @@ def test_build_orchestrator_prompt_positional_compat():
     result = _build_orchestrator_prompt("name: my-recipe\n")
     assert isinstance(result, str)
     assert len(result) > 0
+
+
+def test_subrecipe_prompt_embeds_yaml():
+    from autoskillit.cli._prompts import build_subrecipe_prompt
+
+    yaml = "name: test\n"
+    result = build_subrecipe_prompt(yaml, "{}")
+    assert yaml in result
+    assert "--- RECIPE ---" in result
+
+
+def test_subrecipe_prompt_shows_ingredients():
+    from autoskillit.cli._prompts import build_subrecipe_prompt
+
+    p = build_subrecipe_prompt("n: t", '{"task": "fix bug"}')
+    assert "task" in p and "fix bug" in p
+
+
+def test_subrecipe_prompt_no_ingredient_collection_instruction():
+    from autoskillit.cli._prompts import build_subrecipe_prompt
+
+    assert "Prompt for input values" not in build_subrecipe_prompt("n: t", "{}")
+
+
+def test_subrecipe_prompt_has_routing_rules():
+    from autoskillit.cli._prompts import build_subrecipe_prompt
+
+    p = build_subrecipe_prompt("n: t", "{}")
+    assert "ROUTING RULES" in p and "on_failure" in p
+
+
+def test_subrecipe_prompt_handles_invalid_json_gracefully():
+    from autoskillit.cli._prompts import build_subrecipe_prompt
+
+    # Must not raise
+    assert "--- RECIPE ---" in build_subrecipe_prompt("n: t", "not-json")

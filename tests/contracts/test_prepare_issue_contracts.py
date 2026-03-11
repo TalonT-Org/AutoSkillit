@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import yaml
+
 SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills/prepare-issue/SKILL.md"
 
 
@@ -121,8 +123,6 @@ def test_prepare_issue_handles_vague_issues():
 
 def test_prepare_issue_trigger_phrases_in_description_frontmatter():
     """The description: frontmatter must include natural language trigger phrases."""
-    import yaml
-
     raw = SKILL_MD.read_text()
     parts = raw.split("---", 2)
     assert len(parts) >= 3, "SKILL.md must have YAML frontmatter"

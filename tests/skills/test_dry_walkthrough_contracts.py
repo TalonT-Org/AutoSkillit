@@ -128,3 +128,30 @@ def test_dry_walkthrough_step7_has_historical_context_section(skill_text: str) -
         "Step 7 terminal output template must include a '### Historical Context' "
         "section for reporting informational findings collected in Step 4.5"
     )
+
+
+def test_dry_walkthrough_step4_references_test_check_command(skill_text: str) -> None:
+    """Step 4 must reference test_check.command as the config-driven source for
+    the expected test runner, not hardcode a single command."""
+    step_4_idx = skill_text.find("### Step 4:")
+    step_45_idx = skill_text.find("Step 4.5")
+    assert step_4_idx != -1 and step_45_idx != -1
+    step_4_section = skill_text[step_4_idx:step_45_idx]
+    assert "test_check.command" in step_4_section, (
+        "Step 4 must reference 'test_check.command' from AutoSkillit config as the "
+        "project-configured test runner — the skill must not assume a fixed command"
+    )
+
+
+def test_dry_walkthrough_step4_no_hardcoded_sole_test_command(skill_text: str) -> None:
+    """Step 4 must not declare 'task test-all' as the ONLY acceptable test command.
+    The enforcement must be config-driven."""
+    step_4_idx = skill_text.find("### Step 4:")
+    step_45_idx = skill_text.find("Step 4.5")
+    assert step_4_idx != -1 and step_45_idx != -1
+    step_4_section = skill_text[step_4_idx:step_45_idx]
+    assert "only acceptable test command is `task test-all`" not in step_4_section, (
+        "Step 4 must not declare 'task test-all' as the only acceptable test command. "
+        "The check should be config-driven via test_check.command so the skill works "
+        "for any project regardless of its test runner."
+    )

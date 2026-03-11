@@ -113,14 +113,10 @@ Your choice [C]:
    ```
 3. If **edit**:
    ```bash
-   # Fetch current body
-   current_body=$(gh issue view {selected_number} --json body -q .body)
-   # Append the new context section
-   gh issue edit {selected_number} --body "${current_body}
-
-## Additional Context
-
-{description}"
+   # Fetch current body and append new context using a temp file to avoid shell injection
+   gh issue view {selected_number} --json body -q .body > /tmp/issue_edit_body.txt
+   printf '\n## Additional Context\n\n%s' "{description}" >> /tmp/issue_edit_body.txt
+   gh issue edit {selected_number} --body-file /tmp/issue_edit_body.txt
    ```
 4. Set `issue_number = selected_number` (no new issue will be created).
 5. Fetch the updated issue for triage:

@@ -75,11 +75,16 @@ mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
 
 Code-index tools require **project-relative paths**. Always use paths like:
 
-    src/autoskillit/execution/headless.py
+    src/<your_package>/some_module.py
 
 NOT absolute paths like:
 
-    /path/to/project/src/autoskillit/execution/headless.py
+    /absolute/path/to/src/<your_package>/some_module.py
+
+> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
+> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
+> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
+> for the same searches — they provide equivalent results without the code-index server.
 
 Agents launched via `run_skill` inherit no code-index state from the parent session — this
 call is mandatory at the start of every headless session that uses code-index tools.
@@ -131,19 +136,19 @@ call is mandatory at the start of every headless session that uses code-index to
 
 | Lens | Skill to LOAD |
 |------|---------------|
-| C4 Container | `/arch-lens-c4-container` |
-| Process Flow | `/arch-lens-process-flow` |
-| Data Lineage | `/arch-lens-data-lineage` |
-| Module Dependency | `/arch-lens-module-dependency` |
-| Concurrency | `/arch-lens-concurrency` |
-| Error/Resilience | `/arch-lens-error-resilience` |
-| Repository Access | `/arch-lens-repository-access` |
-| Operational | `/arch-lens-operational` |
-| Security | `/arch-lens-security` |
-| Development | `/arch-lens-development` |
-| Scenarios | `/arch-lens-scenarios` |
-| State Lifecycle | `/arch-lens-state-lifecycle` |
-| Deployment | `/arch-lens-deployment` |
+| C4 Container | `/autoskillit:arch-lens-c4-container` |
+| Process Flow | `/autoskillit:arch-lens-process-flow` |
+| Data Lineage | `/autoskillit:arch-lens-data-lineage` |
+| Module Dependency | `/autoskillit:arch-lens-module-dependency` |
+| Concurrency | `/autoskillit:arch-lens-concurrency` |
+| Error/Resilience | `/autoskillit:arch-lens-error-resilience` |
+| Repository Access | `/autoskillit:arch-lens-repository-access` |
+| Operational | `/autoskillit:arch-lens-operational` |
+| Security | `/autoskillit:arch-lens-security` |
+| Development | `/autoskillit:arch-lens-development` |
+| Scenarios | `/autoskillit:arch-lens-scenarios` |
+| State Lifecycle | `/autoskillit:arch-lens-state-lifecycle` |
+| Deployment | `/autoskillit:arch-lens-deployment` |
 
 **5d. Create the diagram following the loaded skill's instructions:**
 - Focus on the PROPOSED changes (use `newComponent` class for new elements)
@@ -193,7 +198,7 @@ handles correctly.
 Before writing the final plan, verify:
 
 - [ ] Determined which architecture lens best fits the proposed changes
-- [ ] LOADED the corresponding `/arch-lens-*` skill using the Skill tool
+- [ ] LOADED the corresponding `/autoskillit:arch-lens-*` skill using the Skill tool
 - [ ] The arch-lens skill LOADED the `/autoskillit:mermaid` skill for styling
 - [ ] Diagram uses ONLY the classDef styles from the mermaid skill (no invented colors)
 - [ ] Diagram includes a color legend table

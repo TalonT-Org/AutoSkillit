@@ -115,7 +115,7 @@ This diagram is for a Pull Request. Focus the diagram on the areas of the codeba
 - The diagram should help PR reviewers understand the architectural impact of these specific changes
 ```
 
-**2. Immediately call the Skill tool to load the arch-lens skill** (e.g., `/arch-lens-module-dependency`).
+**2. Immediately call the Skill tool to load the arch-lens skill** (e.g., `/autoskillit:arch-lens-module-dependency`).
 The loaded skill will read `temp/pr-arch-lens-context.md` for PR context.
 
 **3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.

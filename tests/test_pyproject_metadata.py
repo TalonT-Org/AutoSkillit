@@ -1,4 +1,5 @@
 """Verify pyproject.toml contains required public release metadata."""
+
 import tomllib
 from pathlib import Path
 
@@ -32,10 +33,6 @@ def test_pyproject_has_classifiers():
 def test_pyproject_has_sdist_target():
     data = _project()
     sdist = (
-        data.get("tool", {})
-        .get("hatch", {})
-        .get("build", {})
-        .get("targets", {})
-        .get("sdist", {})
+        data.get("tool", {}).get("hatch", {}).get("build", {}).get("targets", {}).get("sdist", {})
     )
     assert "include" in sdist, "[tool.hatch.build.targets.sdist] must list included paths"

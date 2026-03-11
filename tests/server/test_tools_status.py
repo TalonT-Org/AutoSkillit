@@ -635,6 +635,11 @@ class TestGetQuotaEvents:
         monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
         result = json.loads(await get_quota_events(n=3))
         assert len(result["events"]) == 3
+        assert result["total_count"] == 10
+        # most-recent-first: hours 09, 08, 07
+        assert result["events"][0]["ts"] == "2026-03-10T09:00:00+00:00"
+        assert result["events"][1]["ts"] == "2026-03-10T08:00:00+00:00"
+        assert result["events"][2]["ts"] == "2026-03-10T07:00:00+00:00"
 
     @pytest.mark.anyio
     async def test_returns_empty_when_file_missing(self, tool_ctx, tmp_path, monkeypatch):
@@ -689,6 +694,8 @@ class TestTokenSummaryWallClock:
             elapsed_seconds=5.0,
         )
 
+        # Verify no step-b entry was injected into timing_log (guards against parallel pollution)
+        assert not any(e["step_name"] == "step-b" for e in tool_ctx.timing_log.get_report())
         result = json.loads(await get_token_summary())
         step = next(s for s in result["steps"] if s["step_name"] == "step-b")
         # No timing_log entry → falls back to elapsed_seconds

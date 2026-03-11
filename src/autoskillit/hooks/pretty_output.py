@@ -300,6 +300,8 @@ def _fmt_clone_repo(data: dict, _pipeline: bool) -> str:
 
 def _fmt_load_recipe(data: dict, pipeline: bool) -> str:
     """Format load_recipe result as Markdown-KV."""
+    if not isinstance(data, dict):
+        return "## load_recipe\n\n_(unexpected response type)_"
     lines: list[str] = []
     valid = data.get("valid", True)
     mark = _CHECK_MARK if valid else _CROSS_MARK
@@ -329,6 +331,8 @@ def _fmt_load_recipe(data: dict, pipeline: bool) -> str:
 
 def _fmt_list_recipes(data: dict, pipeline: bool) -> str:
     """Format list_recipes result as Markdown-KV."""
+    if not isinstance(data, dict):
+        return "## list_recipes\n\n_(unexpected response type)_"
     lines: list[str] = ["## list_recipes"]
     recipes = data.get("recipes") or []
     for recipe in recipes[:30]:
@@ -369,6 +373,7 @@ def _fmt_generic(short_name: str, data: dict, _pipeline: bool) -> str:
     lines = [f"## {short_name}", ""]
     for key, val in data.items():
         if isinstance(val, list):
+            val = list(val)
             if not val:
                 lines.append(f"{key}: []")
             elif all(isinstance(item, str) for item in val):

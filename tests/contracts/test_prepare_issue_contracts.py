@@ -134,6 +134,9 @@ def test_prepare_issue_trigger_phrases_in_description_frontmatter():
         "file a bug",
         "file an issue",
         "make a new issue",
+        "open a github issue",
+        "create a github issue",
+        "i want to open up a github issue",
     ]
     assert any(p in desc for p in trigger_phrases), (
         f"description: frontmatter must contain natural language trigger phrases; got: {desc!r}"

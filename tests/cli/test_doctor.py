@@ -618,3 +618,34 @@ def test_stale_gate_check_absent_from_doctor_output(tmp_path, monkeypatch, capsy
     data = json.loads(captured.out)
     check_names = {r["check"] for r in data["results"]}
     assert "stale_gate_file" not in check_names
+
+
+def test_doctor_detects_plugin_registration(monkeypatch: pytest.MonkeyPatch) -> None:
+    """doctor must not report MCP unregistered when autoskillit is installed as a plugin."""
+    import json as _json
+    import subprocess
+    import tempfile
+
+    from autoskillit.cli._doctor import _check_mcp_server_registered
+    from autoskillit.core import Severity
+
+    fake_claude_json_content = _json.dumps({"mcpServers": {}})  # No mcpServers entry
+
+    class FakeResult:
+        stdout = "autoskillit  0.3.1  active\n"
+        returncode = 0
+
+    def fake_plugin_list(*args: object, **kwargs: object) -> FakeResult:
+        return FakeResult()
+
+    monkeypatch.setattr(subprocess, "run", fake_plugin_list)
+
+    with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+        f.write(fake_claude_json_content)
+        tmpf = Path(f.name)
+
+    result = _check_mcp_server_registered(claude_json_path=tmpf)
+    assert result.severity == Severity.OK, (
+        "doctor must recognize plugin-based registration; "
+        "not just mcpServers presence (REQ-ONB-002)"
+    )

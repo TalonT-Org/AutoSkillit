@@ -25,6 +25,13 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
+def _get_log_root() -> Path:
+    """Return the resolved log root directory for the current context."""
+    from autoskillit.server import _get_ctx
+
+    return resolve_log_dir(_get_ctx().config.linux_tracing.log_dir)
+
+
 @mcp.tool(tags={"automation"})
 @track_response_size("kitchen_status")
 async def kitchen_status() -> str:
@@ -88,7 +95,7 @@ async def get_pipeline_report(clear: bool = False) -> str:
     if clear:
         _get_ctx().audit.clear()
         try:
-            write_telemetry_clear_marker(resolve_log_dir(_get_ctx().config.linux_tracing.log_dir))
+            write_telemetry_clear_marker(_get_log_root())
         except Exception:
             logger.debug("write_telemetry_clear_marker failed", exc_info=True)
     return json.dumps(
@@ -146,7 +153,7 @@ async def get_token_summary(clear: bool = False) -> str:
         ctx.token_log.clear()
         ctx.response_log.clear()
         try:
-            write_telemetry_clear_marker(resolve_log_dir(ctx.config.linux_tracing.log_dir))
+            write_telemetry_clear_marker(_get_log_root())
         except Exception:
             logger.debug("write_telemetry_clear_marker failed", exc_info=True)
     return json.dumps(
@@ -184,7 +191,7 @@ async def get_timing_summary(clear: bool = False) -> str:
     if clear:
         _get_ctx().timing_log.clear()
         try:
-            write_telemetry_clear_marker(resolve_log_dir(_get_ctx().config.linux_tracing.log_dir))
+            write_telemetry_clear_marker(_get_log_root())
         except Exception:
             logger.debug("write_telemetry_clear_marker failed", exc_info=True)
     return json.dumps({"steps": steps, "total": total})

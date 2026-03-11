@@ -726,3 +726,22 @@ class TestClearMarkerWritten:
         monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
         await get_pipeline_report(clear=True)
         assert read_telemetry_clear_marker(log_dir) is not None
+
+
+class TestGetLogRoot:
+    def test_returns_resolved_log_dir(self, tool_ctx, tmp_path, monkeypatch):
+        """_get_log_root() returns the resolved path for the configured log_dir."""
+        from autoskillit.server.helpers import resolve_log_dir
+        from autoskillit.server.tools_status import _get_log_root
+
+        log_dir = tmp_path / "custom_logs"
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        result = _get_log_root()
+        assert result == resolve_log_dir(str(log_dir))
+
+    def test_returns_path_type(self, tool_ctx, tmp_path, monkeypatch):
+        """_get_log_root() returns a Path, not a string."""
+        from autoskillit.server.tools_status import _get_log_root
+
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(tmp_path))
+        assert isinstance(_get_log_root(), Path)

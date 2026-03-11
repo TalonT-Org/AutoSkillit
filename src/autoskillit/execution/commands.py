@@ -20,11 +20,11 @@ class ClaudeHeadlessCmd:
 
 
 def build_interactive_cmd(*, model: str | None = None) -> ClaudeInteractiveCmd:
-    """Build a Claude interactive session command with kitchen pre-opened."""
+    """Build a Claude interactive session command."""
     cmd = ["claude", ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
     if model:
         cmd += [ClaudeFlags.MODEL, model]
-    return ClaudeInteractiveCmd(cmd=cmd, env={"AUTOSKILLIT_KITCHEN_OPEN": "1"})
+    return ClaudeInteractiveCmd(cmd=cmd, env={})
 
 
 def build_headless_cmd(prompt: str, *, model: str | None = None) -> ClaudeHeadlessCmd:

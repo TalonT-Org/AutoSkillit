@@ -17,6 +17,7 @@ from autoskillit.server.helpers import (
     _find_recipe,
     _notify,
     _require_enabled,
+    _require_not_headless,
     _run_subrecipe,
     track_response_size,
 )
@@ -44,6 +45,8 @@ async def list_recipes() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (h := _require_not_headless("list_recipes")) is not None:
+        return h
     from autoskillit.server._state import _get_ctx_or_none
 
     tool_ctx = _get_ctx_or_none()
@@ -179,6 +182,8 @@ async def load_recipe(name: str) -> str:
     ``suggestions`` (list of semantic findings, possibly empty) keys.
     On error: JSON with ``error`` key.
     """
+    if (h := _require_not_headless("load_recipe")) is not None:
+        return h
     from autoskillit.server._state import _get_ctx_or_none
 
     tool_ctx = _get_ctx_or_none()
@@ -218,6 +223,8 @@ async def validate_recipe(script_path: str) -> str:
     Args:
         script_path: Absolute path to the .yaml recipe file to validate.
     """
+    if (h := _require_not_headless("validate_recipe")) is not None:
+        return h
     from autoskillit.server._state import _get_ctx_or_none
 
     tool_ctx = _get_ctx_or_none()

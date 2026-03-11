@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import json
+import os
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -11,7 +12,8 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
 from autoskillit.execution import (
-    resolve_log_dir,  # noqa: F401 — used by tools_integrations.py
+    resolve_log_dir,  # noqa: F401 — used by tools_integrations.py, tools_status.py
+    write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )
 from autoskillit.execution import (
     run_subrecipe_session as _run_subrecipe_session_fn,
@@ -164,6 +166,21 @@ def track_response_size(
         return wrapper
 
     return decorator
+
+
+def _require_not_headless(tool_name: str = "") -> str | None:
+    """Return headless_error JSON if called from a headless session; None if safe."""
+    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
+        from autoskillit.pipeline import headless_error_result
+
+        msg = (
+            f"{tool_name} cannot be called from headless sessions. "
+            "Only the Tier 1 orchestrator may call this tool."
+            if tool_name
+            else None
+        )
+        return headless_error_result(msg)
+    return None
 
 
 def _require_enabled() -> str | None:

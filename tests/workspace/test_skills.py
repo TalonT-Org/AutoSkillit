@@ -11,6 +11,19 @@ from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
 
 BUNDLED_SKILLS = [
     "analyze-prs",
+    "arch-lens-c4-container",
+    "arch-lens-concurrency",
+    "arch-lens-data-lineage",
+    "arch-lens-deployment",
+    "arch-lens-development",
+    "arch-lens-error-resilience",
+    "arch-lens-module-dependency",
+    "arch-lens-operational",
+    "arch-lens-process-flow",
+    "arch-lens-repository-access",
+    "arch-lens-scenarios",
+    "arch-lens-security",
+    "arch-lens-state-lifecycle",
     "audit-friction",
     "audit-impl",
     "close-kitchen",
@@ -26,7 +39,6 @@ BUNDLED_SKILLS = [
     "make-groups",
     "make-plan",
     "merge-pr",
-    "write-recipe",
     "mermaid",
     "migrate-recipes",
     "open-kitchen",
@@ -46,6 +58,7 @@ BUNDLED_SKILLS = [
     "smoke-task",
     "sous-chef",
     "triage-issues",
+    "write-recipe",
 ]
 
 # Internal-only skill documents: injected programmatically, never invocable as slash commands.

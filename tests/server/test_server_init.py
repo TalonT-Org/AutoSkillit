@@ -658,7 +658,6 @@ class TestInitializeClearMarker:
         (log_dir / ".telemetry_cleared_at").write_text(three_hours_ago.isoformat())
 
         monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
-        monkeypatch.setattr(_state, "_ctx", None)
         _state._initialize(tool_ctx)
 
         # The old-session happened before the clear marker → should NOT be replayed
@@ -702,12 +701,54 @@ class TestInitializeClearMarker:
         )
 
         monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
-        monkeypatch.setattr(_state, "_ctx", None)
         _state._initialize(tool_ctx)
 
         report = tool_ctx.token_log.get_report()
         step_names = [s["step_name"] for s in report]
         assert "new-step" in step_names
+
+    def test_initialize_includes_session_at_marker_boundary(self, tool_ctx, tmp_path, monkeypatch):
+        """Session with ts == marker ts is included (fence uses strict less-than)."""
+        from datetime import UTC, datetime, timedelta
+
+        from autoskillit.execution.session_log import flush_session_log
+        from autoskillit.server import _state
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        # Write clear marker 2 hours ago
+        two_hours_ago = datetime.now(UTC) - timedelta(hours=2)
+        (log_dir / ".telemetry_cleared_at").write_text(two_hours_ago.isoformat())
+
+        # Write a session with ts == marker ts (boundary: should be included)
+        flush_session_log(
+            log_dir=str(log_dir),
+            cwd="/tmp",
+            session_id="boundary-session",
+            pid=1002,
+            skill_command="/autoskillit:baz",
+            success=True,
+            subtype="completed",
+            exit_code=0,
+            start_ts=two_hours_ago.isoformat(),
+            proc_snapshots=None,
+            step_name="boundary-step",
+            token_usage={
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            timing_seconds=1.0,
+        )
+
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        _state._initialize(tool_ctx)
+
+        report = tool_ctx.token_log.get_report()
+        step_names = [s["step_name"] for s in report]
+        assert "boundary-step" in step_names
 
 
 class TestConfigDrivenBehavior:

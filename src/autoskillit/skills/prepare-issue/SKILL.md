@@ -4,9 +4,8 @@ description: >
   Create a single GitHub issue and immediately triage it — dedup check,
   classification (recipe:implementation or recipe:remediation), mixed-concern
   detection, and label application. Use when user says "open an issue",
-  "create an issue", "file an issue", "file a bug", "make a new issue",
-  "open a GitHub issue", "create a GitHub issue", or "I want to open up
-  a GitHub issue". The user-facing counterpart to report_bug.
+  "create an issue", "file an issue", or "file a bug". The user-facing
+  counterpart to report_bug.
 hooks:
   PreToolUse:
     - matcher: "*"

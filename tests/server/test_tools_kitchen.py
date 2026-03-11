@@ -223,6 +223,7 @@ def test_close_kitchen_does_not_produce_gate_file(tmp_path, monkeypatch):
 async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypatch):
     """open_kitchen response contains static categorized tool groups from TOOL_CATEGORIES."""
     from autoskillit.core.types import TOOL_CATEGORIES
+    from autoskillit.server.tools_kitchen import open_kitchen
 
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
@@ -232,8 +233,6 @@ async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypa
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
                 with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools_kitchen import open_kitchen
-
                     result = await open_kitchen(ctx=mock_ctx)
 
     seen: set[str] = set()

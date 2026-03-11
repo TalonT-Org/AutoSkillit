@@ -1062,7 +1062,7 @@ def test_fmt_generic_list_of_dicts_renders_per_item_not_blob():
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     for i in range(10):
         assert f"step_{i}" in text, f"step_{i} missing — possible truncation"
-    assert "..." not in text, "Output was truncated"
+    assert "... and" not in text, "Output was truncated"
 
 
 def test_fmt_generic_list_of_dicts_caps_at_20_items():
@@ -1118,6 +1118,6 @@ class TestFormatterSchemaConsistency:
 
         data = json.loads(result_json)
         for key in ("package_version", "tools_enabled"):
-            assert str(data.get(key, "")) in output or key in output, (
-                f"Field '{key}' missing from formatted kitchen_status output"
+            assert str(data[key]) in output, (
+                f"Field '{key}' value missing from formatted kitchen_status output"
             )

@@ -8,24 +8,14 @@ from pathlib import Path
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import (
-    PIPELINE_FORBIDDEN_TOOLS,
-    TOOL_CATEGORIES,
-    UNGATED_TOOLS,
-    atomic_write,
-    get_logger,
-    pkg_root,
-)
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, atomic_write, pkg_root
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _find_recipe,
     _hook_config_path,
     _prime_quota_cache,
-    _require_not_headless,
     track_response_size,
 )
-
-logger = get_logger(__name__)
 
 
 def _write_hook_config() -> None:
@@ -77,48 +67,6 @@ def _close_kitchen_handler() -> None:
         logger.warning("hook_config_remove_failed", path=str(hook_cfg_path))
 
 
-def _build_tool_listing() -> str:
-    """Build a deterministic categorized tool listing from TOOL_CATEGORIES."""
-    lines = ["\n## Available Tools\n"]
-    seen: set[str] = set()
-    for category, tools in TOOL_CATEGORIES:
-        category_lines = []
-        for tool in tools:
-            if tool not in seen:
-                gate_marker = "" if tool in UNGATED_TOOLS else " [kitchen]"
-                category_lines.append(f"  - {tool}{gate_marker}")
-                seen.add(tool)
-        if category_lines:
-            lines.append(f"\n**{category}:**")
-            lines.extend(category_lines)
-    return "\n".join(lines)
-
-
-def _build_recipe_listing() -> str:
-    """Build a compact recipe listing from the project's .autoskillit/recipes/."""
-    from autoskillit.server import _get_ctx
-
-    try:
-        ctx = _get_ctx()
-        if ctx is None or ctx.recipes is None:
-            return ""
-        recipes = ctx.recipes.list_all(Path.cwd())
-    except Exception:
-        logger.warning("recipe_listing_failed", exc_info=True)
-        return ""
-    if not recipes:
-        return ""
-    lines = ["\n## Available Recipes\n"]
-    for recipe in recipes:
-        if isinstance(recipe, dict):
-            name = recipe.get("name", "")
-            desc = recipe.get("description", "")
-            lines.append(f"  - {name}: {desc}" if desc else f"  - {name}")
-        else:
-            lines.append(f"  - {recipe}")
-    return "\n".join(lines)
-
-
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
@@ -132,8 +80,6 @@ def get_recipe(name: str) -> str:
 @track_response_size("open_kitchen")
 async def open_kitchen(ctx: Context = CurrentContext()) -> str:
     """Open the AutoSkillit kitchen for service."""
-    if (h := _require_not_headless("open_kitchen")) is not None:
-        return h
     await _open_kitchen_handler()
     await ctx.enable_components(tags={"kitchen"})
 
@@ -166,9 +112,6 @@ async def open_kitchen(ctx: Context = CurrentContext()) -> str:
             "to migrate automatically, or ask me to do it for you."
         )
 
-    text += _build_tool_listing()
-    text += _build_recipe_listing()
-
     return text
 
 
@@ -176,8 +119,6 @@ async def open_kitchen(ctx: Context = CurrentContext()) -> str:
 @track_response_size("close_kitchen")
 async def close_kitchen(ctx: Context = CurrentContext()) -> str:
     """Close the AutoSkillit kitchen."""
-    if (h := _require_not_headless("close_kitchen")) is not None:
-        return h
     _close_kitchen_handler()
     await ctx.reset_visibility()
     return "Kitchen is closed."

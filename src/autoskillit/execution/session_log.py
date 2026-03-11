@@ -23,7 +23,6 @@ from autoskillit.execution.anomaly_detection import detect_anomalies
 logger = get_logger(__name__)
 
 _MAX_SESSIONS = 500
-_CLEAR_MARKER_FILENAME = ".telemetry_cleared_at"
 
 
 def resolve_log_dir(log_dir: str) -> Path:
@@ -35,32 +34,6 @@ def resolve_log_dir(log_dir: str) -> Path:
     xdg = os.environ.get("XDG_DATA_HOME")
     base = Path(xdg) if xdg else Path.home() / ".local" / "share"
     return base / "autoskillit" / "logs"
-
-
-def write_telemetry_clear_marker(log_root: Path) -> None:
-    """Write the current UTC timestamp as a telemetry-clear fence.
-
-    Called when any pipeline log is cleared via clear=True. On the next server
-    startup, _state._initialize reads this marker and excludes sessions that
-    predate it from load_from_log_dir replay, preventing double-counting.
-
-    Silently no-ops on any error — never raises.
-    """
-    try:
-        log_root = Path(log_root)
-        log_root.mkdir(parents=True, exist_ok=True)
-        _atomic_write(log_root / _CLEAR_MARKER_FILENAME, datetime.now(UTC).isoformat())
-    except Exception:
-        logger.debug("write_telemetry_clear_marker failed", exc_info=True)
-
-
-def read_telemetry_clear_marker(log_root: Path) -> datetime | None:
-    """Read the persisted telemetry-clear timestamp, or None if absent/corrupt."""
-    try:
-        text = (Path(log_root) / _CLEAR_MARKER_FILENAME).read_text(encoding="utf-8").strip()
-        return datetime.fromisoformat(text)
-    except (OSError, ValueError):
-        return None
 
 
 def flush_session_log(

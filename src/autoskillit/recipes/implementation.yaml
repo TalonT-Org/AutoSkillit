@@ -15,8 +15,8 @@ ingredients:
     description: Pipeline run name prefix (used in branch and clone naming)
     default: "impl"
   base_branch:
-    description: Integration branch to merge into (defaults to integration)
-    default: integration
+    description: Base branch to merge into (defaults to main)
+    default: main
   review_approach:
     description: Run /review-approach before implementation? (true/false)
     default: "false"

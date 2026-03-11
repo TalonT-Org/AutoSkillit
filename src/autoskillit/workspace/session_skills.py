@@ -19,7 +19,7 @@ from autoskillit.workspace.skills import SkillInfo, SkillResolver
 
 # Tier 2 skills: human-only slash commands that agents must not invoke autonomously.
 # These get disable-model-invocation: true injected into their SKILL.md unless the
-# session is a cook session (cook_session=True).
+# session is a cook session (AUTOSKILLIT_KITCHEN_OPEN=1).
 TIER2_SKILLS: frozenset[str] = frozenset({"open-kitchen", "close-kitchen"})
 
 # Candidate ephemeral roots, tried in order.

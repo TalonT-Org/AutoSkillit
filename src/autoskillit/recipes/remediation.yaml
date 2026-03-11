@@ -42,8 +42,8 @@ ingredients:
     description: Optional additional project directory for context
     default: ""
   base_branch:
-    description: Integration branch to merge into (defaults to integration)
-    default: integration
+    description: Base branch to merge into (defaults to main)
+    default: main
   audit:
     description: Gate merge on audit-impl quality check (true/false)
     default: "true"

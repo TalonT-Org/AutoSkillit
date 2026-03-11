@@ -27,9 +27,9 @@ class TestDefaultConfig:
         assert cfg.worktree_setup.command is None
 
     def test_default_model_config(self):
-        """MOD_C1: ModelConfig defaults to None for both fields."""
+        """MOD_C1: ModelConfig.default is 'sonnet'; override defaults to None."""
         cfg = AutomationConfig()
-        assert cfg.model.default is None
+        assert cfg.model.default == "sonnet"
         assert cfg.model.override is None
 
 
@@ -532,6 +532,26 @@ class TestDynaconfIntegration:
 
         cfg = GitHubConfig()
         assert cfg.in_progress_label == "in-progress"
+
+
+class TestReleaseReadinessConfig:
+    def test_branching_default_base_branch_is_main(self):
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
+
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        assert defaults["branching"]["default_base_branch"] == "main"
+
+    def test_model_default_consistent_with_yaml(self):
+        """ModelConfig dataclass default must match defaults.yaml value."""
+        from autoskillit.config.settings import ModelConfig
+
+        assert ModelConfig().default == "sonnet"
+
+    def test_report_bug_config_exported(self):
+        from autoskillit.config import ReportBugConfig  # must not raise ImportError
+
+        assert ReportBugConfig is not None
 
 
 class TestBranchingConfig:

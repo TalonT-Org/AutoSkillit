@@ -17,7 +17,6 @@ from autoskillit.pipeline.gate import (
     UNGATED_TOOLS,
     DefaultGateState,
     gate_error_result,
-    headless_error_result,
 )
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog, McpResponseEntry
 from autoskillit.pipeline.timings import DefaultTimingLog, TimingEntry
@@ -43,7 +42,6 @@ __all__ = [
     "GATED_TOOLS",
     "UNGATED_TOOLS",
     "gate_error_result",
-    "headless_error_result",
     # context
     "ToolContext",
 ]

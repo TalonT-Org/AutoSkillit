@@ -24,28 +24,12 @@ class HookDef:
 HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         matcher="mcp__.*autoskillit.*__run_skill.*",
-        scripts=[
-            "skill_cmd_check.py",
-            "quota_check.py",
-            "skill_command_guard.py",
-            "headless_orchestration_guard.py",
-        ],
-    ),
-    HookDef(
-        matcher="mcp__.*autoskillit.*__run_cmd.*",
-        scripts=["headless_orchestration_guard.py"],
-    ),
-    HookDef(
-        matcher="mcp__.*autoskillit.*__run_python.*",
-        scripts=["headless_orchestration_guard.py"],
+        scripts=["skill_cmd_check.py", "quota_check.py", "skill_command_guard.py"],
     ),
     HookDef(
         matcher="mcp__.*autoskillit.*__remove_clone",
         scripts=["remove_clone_guard.py"],
     ),
-    # open_kitchen: hook-layer enforcement via open_kitchen_guard.py (blocks
-    # headless sessions). close_kitchen has no hook entry here — handler-layer
-    # enforcement in tools_kitchen.py is the sole guard for that tool.
     HookDef(
         matcher=r"mcp__.*autoskillit.*__open_kitchen.*",
         scripts=["open_kitchen_guard.py"],

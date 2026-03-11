@@ -63,7 +63,7 @@ def _initialize(ctx: ToolContext) -> None:
                     marker = marker.replace(tzinfo=UTC)
                 since_dt = max(since_dt, marker)
         except Exception:
-            pass  # fall back to 24h window
+            logger.debug("read_telemetry_clear_marker failed, using 24h window", exc_info=True)
         since_str = since_dt.isoformat()
 
         n_tok = ctx.token_log.load_from_log_dir(log_root, since=since_str)

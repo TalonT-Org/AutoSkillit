@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from typing import Any
 
 import structlog
 from fastmcp import Context
@@ -13,7 +14,13 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import _atomic_write, get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, track_response_size
+from autoskillit.server.helpers import (
+    _notify,
+    _require_enabled,
+    resolve_log_dir,
+    track_response_size,
+    write_telemetry_clear_marker,
+)
 
 logger = get_logger(__name__)
 
@@ -81,18 +88,29 @@ async def get_pipeline_report(clear: bool = False) -> str:
     if clear:
         _get_ctx().audit.clear()
         try:
-            from autoskillit.execution import resolve_log_dir
-            from autoskillit.execution.session_log import write_telemetry_clear_marker
-
             write_telemetry_clear_marker(resolve_log_dir(_get_ctx().config.linux_tracing.log_dir))
         except Exception:
-            pass
+            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
     return json.dumps(
         {
             "total_failures": len(failures),
             "failures": failures,
         }
     )
+
+
+def _merge_wall_clock_seconds(steps: list[dict], timing_log: Any) -> None:
+    """Annotate each step dict with wall_clock_seconds from the timing log.
+
+    Mutates steps in-place. Falls back to elapsed_seconds when no timing entry
+    exists for a step.
+    """
+    timing_report = timing_log.get_report()
+    timing_by_step = {entry["step_name"]: entry["total_seconds"] for entry in timing_report}
+    for step in steps:
+        step["wall_clock_seconds"] = timing_by_step.get(
+            step["step_name"], step.get("elapsed_seconds", 0.0)
+        )
 
 
 @mcp.tool(tags={"automation"})
@@ -122,22 +140,15 @@ async def get_token_summary(clear: bool = False) -> str:
     mcp_report = ctx.response_log.get_report()
     mcp_total = ctx.response_log.compute_total()
 
-    timing_report = ctx.timing_log.get_report()
-    timing_by_step = {entry["step_name"]: entry["total_seconds"] for entry in timing_report}
-    for step in steps:
-        name = step["step_name"]
-        step["wall_clock_seconds"] = timing_by_step.get(name, step.get("elapsed_seconds", 0.0))
+    _merge_wall_clock_seconds(steps, ctx.timing_log)
 
     if clear:
         ctx.token_log.clear()
         ctx.response_log.clear()
         try:
-            from autoskillit.execution import resolve_log_dir
-            from autoskillit.execution.session_log import write_telemetry_clear_marker
-
             write_telemetry_clear_marker(resolve_log_dir(ctx.config.linux_tracing.log_dir))
         except Exception:
-            pass
+            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
     return json.dumps(
         {
             "steps": steps,
@@ -173,12 +184,9 @@ async def get_timing_summary(clear: bool = False) -> str:
     if clear:
         _get_ctx().timing_log.clear()
         try:
-            from autoskillit.execution import resolve_log_dir
-            from autoskillit.execution.session_log import write_telemetry_clear_marker
-
             write_telemetry_clear_marker(resolve_log_dir(_get_ctx().config.linux_tracing.log_dir))
         except Exception:
-            pass
+            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
     return json.dumps({"steps": steps, "total": total})
 
 
@@ -198,7 +206,7 @@ def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
                 continue
             try:
                 events.append(json.loads(line))
-            except Exception:
+            except json.JSONDecodeError:
                 continue
     except OSError:
         return [], 0
@@ -227,7 +235,6 @@ async def get_quota_events(n: int = 50) -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
-    from autoskillit.execution import resolve_log_dir
     from autoskillit.server import _get_ctx
 
     ctx = _get_ctx()

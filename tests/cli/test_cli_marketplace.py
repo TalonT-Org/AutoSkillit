@@ -49,10 +49,13 @@ def test_install_registered_as_cli_command():
 
 # MK-DEP-2
 def test_upgrade_is_registered_as_cli_command():
-    """autoskillit upgrade must be a registered CLI command."""
-    from autoskillit import cli
+    """autoskillit upgrade must be a registered CLI command (defined in cli/app.py)."""
+    import importlib
+    import inspect
 
-    assert hasattr(cli, "upgrade")
+    app_mod = importlib.import_module("autoskillit.cli.app")
+    src = inspect.getsource(app_mod)
+    assert "def upgrade(" in src
 
 
 # MK-DEP-3

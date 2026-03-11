@@ -97,11 +97,13 @@ class TestClassifyFix:
         assert tool_ctx.runner.call_args_list[1][0][0:3] == ["git", "diff", "--name-only"]
 
     @pytest.mark.anyio
-    async def test_classify_fix_gate_closed_returns_gate_error(self, tool_ctx, tmp_path):
+    async def test_classify_fix_gate_closed_returns_gate_error(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
         """[NEW COVERAGE] gate closed path returns gate_error."""
         from autoskillit.pipeline import DefaultGateState
 
-        tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.setattr(tool_ctx, "gate", DefaultGateState(enabled=False))
         result = json.loads(await classify_fix(str(tmp_path), "main"))
         assert result["subtype"] == "gate_error"
 

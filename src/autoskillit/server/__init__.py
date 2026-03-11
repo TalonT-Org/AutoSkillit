@@ -62,6 +62,7 @@ from autoskillit.server import (  # noqa: E402, F401
     tools_workspace,
 )
 from autoskillit.server._factory import make_context  # noqa: E402, F401
+from autoskillit.server.tools_kitchen import _build_tool_listing  # noqa: E402, F401
 
 # Apply global visibility transform: all sessions start with kitchen tools hidden.
 # Must appear after all tool module imports so the registered tools are in place.

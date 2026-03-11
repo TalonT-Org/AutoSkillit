@@ -13,6 +13,7 @@ from autoskillit.core import (
     TOOL_CATEGORIES,
     UNGATED_TOOLS,
     atomic_write,
+    get_logger,
     pkg_root,
 )
 from autoskillit.server import mcp
@@ -22,6 +23,8 @@ from autoskillit.server.helpers import (
     _prime_quota_cache,
     track_response_size,
 )
+
+logger = get_logger(__name__)
 
 
 def _write_hook_config() -> None:
@@ -90,6 +93,31 @@ def _build_tool_listing() -> str:
     return "\n".join(lines)
 
 
+def _build_recipe_listing() -> str:
+    """Build a compact recipe listing from the project's .autoskillit/recipes/."""
+    from autoskillit.server import _get_ctx
+
+    try:
+        ctx = _get_ctx()
+        if ctx is None or ctx.recipes is None:
+            return ""
+        recipes = ctx.recipes.list_all(Path.cwd())
+    except Exception:
+        logger.warning("recipe_listing_failed", exc_info=True)
+        return ""
+    if not recipes:
+        return ""
+    lines = ["\n## Available Recipes\n"]
+    for recipe in recipes:
+        if isinstance(recipe, dict):
+            name = recipe.get("name", "")
+            desc = recipe.get("description", "")
+            lines.append(f"  - {name}: {desc}" if desc else f"  - {name}")
+        else:
+            lines.append(f"  - {recipe}")
+    return "\n".join(lines)
+
+
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
@@ -136,6 +164,7 @@ async def open_kitchen(ctx: Context = CurrentContext()) -> str:
         )
 
     text += _build_tool_listing()
+    text += _build_recipe_listing()
 
     return text
 

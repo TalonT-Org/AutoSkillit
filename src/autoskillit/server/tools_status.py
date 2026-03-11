@@ -6,13 +6,12 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Any
 
 import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import _atomic_write, get_logger
+from autoskillit.core import TimingStore, _atomic_write, get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
@@ -106,7 +105,7 @@ async def get_pipeline_report(clear: bool = False) -> str:
     )
 
 
-def _merge_wall_clock_seconds(steps: list[dict], timing_log: Any) -> None:
+def _merge_wall_clock_seconds(steps: list[dict], timing_log: TimingStore) -> None:
     """Annotate each step dict with wall_clock_seconds from the timing log.
 
     Mutates steps in-place. Falls back to elapsed_seconds when no timing entry

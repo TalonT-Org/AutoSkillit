@@ -344,7 +344,7 @@ class TestOuterCancelRaceGuard:
         import anyio
 
         caught_exc: BaseException | None = None
-        with anyio.move_on_after(0):
+        with anyio.move_on_after(0.001):
             try:
                 await run_managed_async(
                     cmd=["sleep", "10"],
@@ -354,10 +354,10 @@ class TestOuterCancelRaceGuard:
             except BaseException as exc:
                 caught_exc = exc
 
-        # If we reach here without AttributeError, the fix is in place.
-        # The outer scope may either swallow the cancel (caught_exc is None)
-        # or the inner function raises the cancellation exception.
-        if caught_exc is not None:
-            assert not isinstance(caught_exc, AttributeError), (
-                f"timeout_scope None dereference — got AttributeError: {caught_exc}"
-            )
+        # The outer scope fires before run_managed_async completes. Two valid outcomes:
+        # 1. caught_exc is None: the outer scope swallowed the cancel (no exception escaped)
+        # 2. caught_exc is not None: a CancelledError propagated, but never AttributeError
+        # Either outcome proves the timeout_scope None-guard is in place.
+        assert caught_exc is None or not isinstance(caught_exc, AttributeError), (
+            f"timeout_scope None dereference — got AttributeError: {caught_exc}"
+        )

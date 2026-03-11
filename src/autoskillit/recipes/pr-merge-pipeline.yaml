@@ -1,6 +1,6 @@
 name: pr-merge-pipeline
 description: Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
-summary: "clone > setup_remote > analyze_prs > create_integration_branch > [loop per PR: merge_pr or (plan > verify > implement > test > push_worktree_branch > create_conflict_pr > wait_for_conflict_ci > merge_conflict_pr)] > push_integration_branch > collect_artifacts > check_impl_plans > (audit_impl?) > create_review_pr > cleanup"
+summary: "clone > setup_remote > analyze_prs > create_integration_branch > [loop per PR: merge_pr or (plan > verify > implement > test > push_worktree_branch > create_conflict_pr > wait_for_conflict_ci > merge_conflict_pr)] > push_integration_branch > collect_artifacts > check_impl_plans > (audit_impl?) > create_review_pr > wait_for_review_pr_mergeability > check_mergeability > (resolve_integration_conflicts > force_push_after_rebase)? > review_pr_integration > (resolve_review_integration > re_push_review_integration)? > ci_watch_pr > cleanup"
 autoskillit_version: "0.3.0"
 
 ingredients:
@@ -61,9 +61,10 @@ kitchen_rules:
     GitHub's merge interface (gh pr merge --squash). This enforces the integration
     branch ruleset (Preflight + Ubuntu status checks). Never use merge_worktree
     or local git merge to merge into the integration batch branch."
-  - "PUSH DISCIPLINE: push_worktree_branch (inside the complex PR cycle) and
-    publish_integration_branch / push_integration_branch are the only authorized
-    push steps. Never add ad-hoc run_cmd git push calls elsewhere in the loop."
+  - "PUSH DISCIPLINE: push_worktree_branch (inside the complex PR cycle),
+    publish_integration_branch / push_integration_branch, and force_push_after_rebase
+    (authorized for conflict-resolution rebases) are the only authorized push steps.
+    Never add ad-hoc run_cmd git push calls elsewhere in the loop."
 
 steps:
   clone:
@@ -477,8 +478,152 @@ steps:
       step_name: "create_review_pr"
     capture:
       pr_url: "${{ result.pr_url }}"
+    on_success: wait_for_review_pr_mergeability
+    on_failure: cleanup_failure
+
+  wait_for_review_pr_mergeability:
+    tool: run_cmd
+    with:
+      cmd: >
+        PR_NUM=$(gh pr view "${{ context.pr_url }}" --json number -q .number) &&
+        for i in $(seq 1 12); do
+          STATUS=$(gh pr view "$PR_NUM" --json mergeable -q .mergeable);
+          [ "$STATUS" != "UNKNOWN" ] && break;
+          sleep 15;
+        done &&
+        echo "$PR_NUM"
+      cwd: "${{ context.work_dir }}"
+      step_name: "wait_for_review_pr_mergeability"
+    capture:
+      review_pr_number: "${{ result.stdout | trim }}"
+    on_success: check_mergeability
+    on_failure: cleanup_failure
+    note: >
+      Extracts the review PR number from context.pr_url and polls GitHub until the
+      mergeable field is no longer UNKNOWN (GitHub computes this asynchronously after PR
+      creation). Polls up to 12 times with 15-second intervals (3 minutes maximum).
+      Captures review_pr_number for use by check_mergeability and check_mergeability_post_rebase.
+
+  check_mergeability:
+    tool: check_pr_mergeable
+    with:
+      pr_number: "${{ context.review_pr_number }}"
+      cwd: "${{ context.work_dir }}"
+    on_result:
+      - when: "${{ result.mergeable_status }} == MERGEABLE"
+        route: review_pr_integration
+      - when: "${{ result.mergeable_status }} == CONFLICTING"
+        route: resolve_integration_conflicts
+      - route: cleanup_failure
+    on_failure: cleanup_failure
+    note: >
+      Authoritative mergeability check via check_pr_mergeable MCP tool (REQ-MERGE-001).
+      Routes MERGEABLE directly to review cycle. Routes CONFLICTING to automated
+      conflict resolution. Any other state (UNKNOWN after timeout, tool error) escalates
+      to cleanup_failure (REQ-MERGE-005).
+
+  resolve_integration_conflicts:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "resolve_integration_conflicts"
+    capture:
+      conflict_escalation_required: "${{ result.escalation_required }}"
+      conflict_escalation_reason: "${{ result.escalation_reason }}"
+    on_result:
+      - when: "${{ result.escalation_required }} == true"
+        route: cleanup_failure
+      - route: force_push_after_rebase
+    on_failure: cleanup_failure
+    note: >
+      Automated conflict resolution when the integration PR is CONFLICTING (REQ-MERGE-003).
+      Rebases context.integration_branch onto inputs.base_branch and resolves merge conflicts.
+      Single attempt only — no retries — to prevent looping on unresolvable conflicts.
+      On failure, escalates to cleanup_failure with diagnostics (REQ-MERGE-004).
+
+  force_push_after_rebase:
+    tool: run_cmd
+    with:
+      cmd: "git push origin ${{ context.integration_branch }} --force-with-lease"
+      cwd: "${{ context.work_dir }}"
+      step_name: "force_push_after_rebase"
+    on_success: check_mergeability_post_rebase
+    on_failure: cleanup_failure
+    note: >
+      Force-pushes the rebased integration branch to update the review PR after conflict
+      resolution. Uses --force-with-lease to reject if the remote diverged during the rebase.
+      This is an authorized push step (conflict-resolution rebase rewrites history, requiring
+      force push — a regular push would be rejected by the remote). Routes to
+      check_mergeability_post_rebase to verify the rebase resolved the conflict.
+
+  check_mergeability_post_rebase:
+    tool: check_pr_mergeable
+    with:
+      pr_number: "${{ context.review_pr_number }}"
+      cwd: "${{ context.work_dir }}"
+    on_result:
+      - when: "${{ result.mergeable_status }} == MERGEABLE"
+        route: review_pr_integration
+      - route: cleanup_failure
+    on_failure: cleanup_failure
+    note: >
+      Re-checks mergeability after the rebase and force-push. MERGEABLE proceeds to the
+      review cycle. Any other state means automated resolution did not succeed — escalates
+      to cleanup_failure for human intervention (REQ-MERGE-004). No second conflict
+      resolution attempt — one cycle only.
+
+  review_pr_integration:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:review-pr ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "review_pr_integration"
+    capture:
+      review_verdict: "${{ result.verdict }}"
+    on_result:
+      - when: "${{ result.verdict }} == changes_requested"
+        route: resolve_review_integration
+      - when: "${{ result.verdict }} == needs_human"
+        route: ci_watch_pr
+      - when: "true"
+        route: ci_watch_pr
+    on_failure: resolve_review_integration
+    note: >
+      Automated review of the integration PR (REQ-REVIEW-001). Invokes review-pr against
+      context.integration_branch. All three verdicts have explicit routes: changes_requested
+      → resolve_review_integration, needs_human → ci_watch_pr (human reviews inline),
+      approved → ci_watch_pr. On tool-level failure, routes to resolve_review_integration
+      (matches implementation.yaml pattern). needs_human is explicitly routed to satisfy
+      the unrouted-verdict-value semantic rule.
+
+  resolve_review_integration:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-review ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "resolve_review_integration"
+    retries: 2
+    on_exhausted: cleanup_failure
+    on_success: re_push_review_integration
+    on_failure: cleanup_failure
+    note: >
+      Resolves review findings on the integration PR (REQ-REVIEW-002). Fetches inline and
+      summary review comments from GitHub and applies fixes. Retries up to 2 times (3 total
+      attempts) before escalating to cleanup_failure (REQ-REVIEW-005). On success, routes to
+      re_push_review_integration to push the fixes to remote.
+
+  re_push_review_integration:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.integration_branch }}"
     on_success: ci_watch_pr
     on_failure: cleanup_failure
+    note: >
+      Pushes the review-fixed integration branch to the remote (REQ-REVIEW-003). Routes to
+      ci_watch_pr for final CI validation. On push failure, escalates to cleanup_failure.
 
   ci_watch_pr:
     tool: wait_for_ci

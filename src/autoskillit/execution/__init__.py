@@ -17,6 +17,7 @@ from autoskillit.execution.commands import (
     ClaudeInteractiveCmd,
     build_headless_cmd,
     build_interactive_cmd,
+    build_subrecipe_cmd,
 )
 from autoskillit.execution.db import (
     DefaultDatabaseReader,
@@ -25,7 +26,11 @@ from autoskillit.execution.db import (
     _execute_readonly_query as execute_readonly_query,
 )
 from autoskillit.execution.github import DefaultGitHubFetcher
-from autoskillit.execution.headless import DefaultHeadlessExecutor, run_headless_core
+from autoskillit.execution.headless import (
+    DefaultHeadlessExecutor,
+    run_headless_core,
+    run_subrecipe_session,
+)
 from autoskillit.execution.linux_tracing import (
     LINUX_TRACING_AVAILABLE,
     LinuxTracingHandle,
@@ -62,6 +67,7 @@ __all__ = [
     "ClaudeHeadlessCmd",
     "build_interactive_cmd",
     "build_headless_cmd",
+    "build_subrecipe_cmd",
     # process
     "DefaultSubprocessRunner",
     "run_managed_async",
@@ -76,6 +82,7 @@ __all__ = [
     "parse_session_result",
     # headless
     "run_headless_core",
+    "run_subrecipe_session",
     "DefaultHeadlessExecutor",
     # testing
     "parse_pytest_summary",

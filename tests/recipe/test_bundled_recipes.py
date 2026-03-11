@@ -1483,3 +1483,64 @@ class TestBaseBranchDefaults:
             "smoke-test.yaml creates a fresh git repo initialized with 'main' — "
             "its base_branch default must stay 'main'"
         )
+
+
+class TestDevSprintRecipe:
+    @pytest.fixture(scope="class")
+    def recipe(self):
+        return load_recipe(builtin_recipes_dir() / "dev-sprint.yaml")
+
+    def test_ds1_recipe_name_matches(self, recipe) -> None:
+        """DS1: recipe.name must be 'dev-sprint'."""
+        assert recipe.name == "dev-sprint"
+
+    def test_ds2_structural_validation_clean(self, recipe) -> None:
+        """DS2: dev-sprint passes structural validation with no errors."""
+        from autoskillit.recipe.validator import validate_recipe
+
+        assert not validate_recipe(recipe), "Structural validation errors found"
+
+    def test_ds3_no_semantic_errors(self, recipe) -> None:
+        """DS3: dev-sprint has no semantic ERROR findings.
+
+        Passes available_recipes so unknown-sub-recipe rule fires on misspelled names.
+        """
+        from autoskillit.core.types import Severity
+        from autoskillit.recipe._analysis import make_validation_context
+        from autoskillit.recipe.io import list_recipes
+
+        bundled_names = frozenset(r.name for r in list_recipes(builtin_recipes_dir()).items)
+        ctx = make_validation_context(recipe, available_recipes=bundled_names)
+        errors = [f for f in run_semantic_rules(ctx) if f.severity == Severity.ERROR]
+        assert not errors, f"Semantic errors: {errors}"
+
+    def test_ds4_has_run_recipe_composition_step(self, recipe) -> None:
+        """DS4: dev-sprint must have at least one run_recipe step."""
+        run_recipe_steps = [n for n, s in recipe.steps.items() if s.tool == "run_recipe"]
+        assert run_recipe_steps, "dev-sprint must have at least one run_recipe step"
+
+    def test_ds5_composition_calls_implementation_groups(self, recipe) -> None:
+        """DS5: run_recipe step must delegate to implementation-groups."""
+        sub_names = [
+            s.with_args.get("name") for s in recipe.steps.values() if s.tool == "run_recipe"
+        ]
+        assert "implementation-groups" in sub_names
+
+    def test_ds6_triage_step_captures_manifest(self, recipe) -> None:
+        """DS6: triage step must capture triage_manifest from result.manifest_path."""
+        triage = recipe.steps.get("triage")
+        assert triage is not None and "triage_manifest" in triage.capture
+
+    def test_ds7_implement_step_threads_manifest(self, recipe) -> None:
+        """DS7: implement step ingredients must reference context.triage_manifest."""
+        impl = next((s for s in recipe.steps.values() if s.tool == "run_recipe"), None)
+        assert impl is not None
+        ingredients_val = impl.with_args.get("ingredients", "")
+        assert "triage_manifest" in ingredients_val
+
+    def test_ds8_kitchen_rules_list_forbidden_tools(self, recipe) -> None:
+        """DS8: kitchen_rules must explicitly mention each forbidden native tool."""
+        assert recipe.kitchen_rules
+        rules_text = " ".join(recipe.kitchen_rules)
+        for tool in ("Read", "Grep", "Glob", "Edit", "Write", "Bash"):
+            assert tool in rules_text, f"kitchen_rules must mention {tool}"

@@ -148,8 +148,18 @@ def _has_await_or_return(stmt: ast.stmt) -> bool:
 
 def test_all_mcp_tools_are_registered() -> None:
     """Bidirectional check: every @mcp.tool function is in the _gate registry and
-    every registry entry has a corresponding @mcp.tool function in server/."""
+    every registry entry has a corresponding @mcp.tool function in server/.
+
+    run_recipe is excluded from the bidirectional check: it is a meta-orchestration
+    tool that is intentionally absent from GATED_TOOLS/UNGATED_TOOLS (so the recipe
+    validator flags it as unknown-tool when referenced in YAML steps).
+    """
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
+
+    # Meta-tools: decorated with @mcp.tool but intentionally outside the static
+    # gate registry. They are not flagged as unknown-tool candidates and the
+    # recipe validator treats them as unrecognized step tools by design.
+    _META_TOOLS: frozenset[str] = frozenset({"run_recipe"})
 
     expected = GATED_TOOLS | UNGATED_TOOLS
     server_dir = SRC_ROOT / "server"
@@ -162,7 +172,7 @@ def test_all_mcp_tools_are_registered() -> None:
                     if _is_mcp_tool_decorator(dec):
                         decorated.add(node.name)
 
-    unregistered = decorated - expected
+    unregistered = decorated - expected - _META_TOOLS
     missing = expected - decorated
     assert not unregistered, f"@mcp.tool functions not in _gate registry: {sorted(unregistered)}"
     assert not missing, f"_gate registry entries have no @mcp.tool function: {sorted(missing)}"

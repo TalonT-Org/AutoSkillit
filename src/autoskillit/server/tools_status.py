@@ -16,6 +16,7 @@ from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
     _require_enabled,
+    _require_not_headless,
     resolve_log_dir,
     track_response_size,
     write_telemetry_clear_marker,
@@ -44,6 +45,8 @@ async def kitchen_status() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (h := _require_not_headless("kitchen_status")) is not None:
+        return h
     from autoskillit.server import _get_config, _get_ctx, version_info
 
     info = version_info()
@@ -88,17 +91,32 @@ async def get_pipeline_report(clear: bool = False) -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (h := _require_not_headless("get_pipeline_report")) is not None:
+        return h
     from autoskillit.server import _get_ctx
 
     failures = _get_ctx().audit.get_report_as_dicts()
     if clear:
         _get_ctx().audit.clear()
+        try:
+            write_telemetry_clear_marker(_get_log_root())
+        except Exception:
+            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
     return json.dumps(
         {
             "total_failures": len(failures),
             "failures": failures,
         }
     )
+
+
+def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> list[dict]:
+    """Add wall_clock_seconds to each token step from timing log; fall back to elapsed_seconds."""
+    timing_by_step = {e["step_name"]: e["total_seconds"] for e in timing_report}
+    for step in steps:
+        sn = step.get("step_name", "")
+        step["wall_clock_seconds"] = timing_by_step.get(sn, step.get("elapsed_seconds", 0.0))
+    return steps
 
 
 @mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
@@ -113,7 +131,7 @@ async def get_token_summary(clear: bool = False) -> str:
     Returns JSON with:
     - steps: list of {step_name, input_tokens, output_tokens,
                        cache_creation_input_tokens, cache_read_input_tokens,
-                       invocation_count}
+                       invocation_count, wall_clock_seconds}
     - total: {input_tokens, output_tokens, cache_creation_input_tokens,
                cache_read_input_tokens}
 
@@ -123,13 +141,17 @@ async def get_token_summary(clear: bool = False) -> str:
     from autoskillit.server import _get_ctx
 
     ctx = _get_ctx()
-    steps = ctx.token_log.get_report()
+    steps = _merge_wall_clock_seconds(ctx.token_log.get_report(), ctx.timing_log.get_report())
     total = ctx.token_log.compute_total()
     mcp_report = ctx.response_log.get_report()
     mcp_total = ctx.response_log.compute_total()
     if clear:
         ctx.token_log.clear()
         ctx.response_log.clear()
+        try:
+            write_telemetry_clear_marker(_get_log_root())
+        except Exception:
+            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
     return json.dumps(
         {
             "steps": steps,

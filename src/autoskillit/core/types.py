@@ -422,6 +422,49 @@ HEADLESS_BLOCKED_UNGATED_TOOLS: frozenset[str] = frozenset(
 
 UNGATED_TOOLS: frozenset[str] = WORKER_TOOLS | HEADLESS_BLOCKED_UNGATED_TOOLS
 
+# Categorized tool listing for the open_kitchen response.
+# Each entry is (category_name, tuple_of_tool_names). Tool names must match the
+# registered MCP tool names exactly.
+TOOL_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Execution", ("run_cmd", "run_python", "run_recipe", "run_skill")),
+    ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
+    (
+        "Git Operations",
+        ("merge_worktree", "create_unique_branch", "check_pr_mergeable", "set_commit_status"),
+    ),
+    ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),
+    ("Clone & Remote", ("clone_repo", "remove_clone", "push_to_remote")),
+    (
+        "GitHub",
+        (
+            "fetch_github_issue",
+            "get_issue_title",
+            "get_ci_status",
+            "report_bug",
+            "prepare_issue",
+            "enrich_issues",
+            "claim_issue",
+            "release_issue",
+            "wait_for_ci",
+            "get_pr_reviews",
+            "bulk_close_issues",
+        ),
+    ),
+    (
+        "Telemetry & Diagnostics",
+        (
+            "read_db",
+            "write_telemetry_files",
+            "kitchen_status",
+            "get_pipeline_report",
+            "get_token_summary",
+            "get_timing_summary",
+            "get_quota_events",
+        ),
+    ),
+    ("Kitchen", ("open_kitchen", "close_kitchen")),
+)
+
 # Canonical prefix required for all skill_command values passed to run_skill.
 # Enforced at the Claude Code hook boundary by skill_command_guard.py.
 SKILL_COMMAND_PREFIX: str = "/"

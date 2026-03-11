@@ -8,7 +8,7 @@ from pathlib import Path
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, atomic_write, pkg_root
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, TOOL_CATEGORIES, atomic_write, pkg_root
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _find_recipe,
@@ -77,6 +77,14 @@ def get_recipe(name: str) -> str:
     return match.path.read_text()
 
 
+def _build_tool_category_listing() -> str:
+    """Return a formatted string listing all tool categories from TOOL_CATEGORIES."""
+    lines = []
+    for name, tools in TOOL_CATEGORIES:
+        lines.append(f"  {name}: {', '.join(tools)}")
+    return "\n".join(lines)
+
+
 @mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("open_kitchen")
 async def open_kitchen(ctx: Context = CurrentContext()) -> str:
@@ -87,11 +95,13 @@ async def open_kitchen(ctx: Context = CurrentContext()) -> str:
     await ctx.enable_components(tags={"kitchen"})
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
+    _categories = _build_tool_category_listing()
 
     text = (
         "Kitchen is open. AutoSkillit tools are ready for service. "
         "Call the kitchen_status tool now to display version "
         "and health information to the user.\n\n"
+        f"Available Tools by Category:\n{_categories}\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "

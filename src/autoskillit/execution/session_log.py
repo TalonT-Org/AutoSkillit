@@ -23,7 +23,7 @@ from autoskillit.execution.anomaly_detection import detect_anomalies
 logger = get_logger(__name__)
 
 _MAX_SESSIONS = 500
-_CLEAR_MARKER_FILENAME = "telemetry_cleared_at.txt"
+_CLEAR_MARKER_FILENAME = ".telemetry_cleared_at"
 
 
 def resolve_log_dir(log_dir: str) -> Path:

@@ -460,6 +460,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "get_quota_events",  # list of quota events, generic renders correctly
         "open_kitchen",  # plain text; formatter handled by unwrap path
         "close_kitchen",  # simple ack
+        "run_recipe",  # SkillResult JSON, generic renders correctly
     }
 )
 

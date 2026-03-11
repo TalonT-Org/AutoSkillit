@@ -76,7 +76,7 @@ def get_recipe(name: str) -> str:
     return match.path.read_text()
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("open_kitchen")
 async def open_kitchen(ctx: Context = CurrentContext()) -> str:
     """Open the AutoSkillit kitchen for service."""
@@ -115,7 +115,7 @@ async def open_kitchen(ctx: Context = CurrentContext()) -> str:
     return text
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("close_kitchen")
 async def close_kitchen(ctx: Context = CurrentContext()) -> str:
     """Close the AutoSkillit kitchen."""

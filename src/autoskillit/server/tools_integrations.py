@@ -47,7 +47,7 @@ _ENRICH_RESULT_END = "---/enrich-issues-result---"
 _pending_report_tasks: set[asyncio.Task[Any]] = set()
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("fetch_github_issue")
 async def fetch_github_issue(
     issue_url: str,
@@ -111,7 +111,7 @@ async def fetch_github_issue(
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("get_issue_title")
 async def get_issue_title(issue_url: str) -> str:
     """Fetch only the title and slug for a GitHub issue — no body, no comments.
@@ -153,7 +153,7 @@ async def get_issue_title(issue_url: str) -> str:
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("report_bug")
 async def report_bug(
     error_context: str,
@@ -659,7 +659,7 @@ def _parse_enrich_result(response_text: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("prepare_issue")
 async def prepare_issue(
     title: str,
@@ -726,7 +726,7 @@ async def prepare_issue(
     )
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("enrich_issues")
 async def enrich_issues(
     issue_number: int | None = None,
@@ -793,7 +793,7 @@ async def enrich_issues(
     return json.dumps(parsed)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("claim_issue")
 async def claim_issue(
     issue_url: str,
@@ -877,7 +877,7 @@ async def claim_issue(
         )
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("release_issue")
 async def release_issue(
     issue_url: str,
@@ -972,7 +972,7 @@ async def _close_issues_sequentially(
     return closed, failed
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("get_pr_reviews")
 async def get_pr_reviews(
     pr_number: int,
@@ -1037,7 +1037,7 @@ async def get_pr_reviews(
         return json.dumps({"reviews": reviews})
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("bulk_close_issues")
 async def bulk_close_issues(
     issue_numbers: list[int],

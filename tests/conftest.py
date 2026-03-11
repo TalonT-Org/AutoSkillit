@@ -205,23 +205,16 @@ def parse_stdout_json(capsys):
 
 
 @pytest.fixture(autouse=True)
-def _clear_kitchen_open_env(monkeypatch):
-    """Ensure AUTOSKILLIT_KITCHEN_OPEN is unset at the start of every test.
+def _clear_headless_env(monkeypatch):
+    """Ensure AUTOSKILLIT_HEADLESS is unset at the start of every test.
 
-    make_context() reads this env var to decide whether to start with the gate
-    open. Any residual value from the shell environment would silently break
-    tests that assert the gate starts closed.
-
+    Tools check this env var to block calls from headless sessions.
     Also resets mcp kitchen visibility transforms when the server module is
-    already imported. When AUTOSKILLIT_KITCHEN_OPEN=1 is set in the process
-    environment (e.g. when running tests inside an autoskillit session), the
-    module-level mcp.enable(tags={'kitchen'}) runs at import time and persists
-    across tests in the same worker. The env var unset above is not sufficient
-    to undo the already-applied transform — we must explicitly re-disable.
+    already imported.
     """
     import sys
 
-    monkeypatch.delenv("AUTOSKILLIT_KITCHEN_OPEN", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     if "autoskillit.server" in sys.modules:
         from autoskillit.server import mcp
 

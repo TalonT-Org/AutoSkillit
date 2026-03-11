@@ -146,7 +146,6 @@ class TestToolRegistration:
         expected = {
             "run_cmd",
             "run_python",
-            "run_recipe",
             "run_skill",
             "test_check",
             "reset_test_dir",
@@ -775,7 +774,7 @@ class TestConfigDrivenBehavior:
         assert tool_ctx.runner.call_args_list[0][2] == 300.0
 
     @pytest.mark.anyio
-    async def test_classify_fix_uses_config_prefixes(self, tool_ctx, tmp_path):
+    async def test_classify_fix_uses_config_prefixes(self, tool_ctx):
         """S2: classify_fix uses config.classify_fix.path_prefixes."""
         from autoskillit.config import ClassifyFixConfig
         from autoskillit.core.types import RestartScope
@@ -787,15 +786,14 @@ class TestConfigDrivenBehavior:
         )
 
         changed = "src/custom/handler.py\nsrc/other/util.py\n"
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch succeeds
         tool_ctx.runner.push(_make_result(0, changed, ""))
-        result = json.loads(await classify_fix(worktree_path=str(tmp_path), base_branch="main"))
+        result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
         assert result["restart_scope"] == RestartScope.FULL_RESTART
         assert "src/custom/handler.py" in result["critical_files"]
 
     @pytest.mark.anyio
-    async def test_classify_fix_empty_prefixes_always_partial(self, tool_ctx, tmp_path):
+    async def test_classify_fix_empty_prefixes_always_partial(self, tool_ctx):
         """S3: Empty prefix list -> always returns partial_restart."""
         from autoskillit.config import ClassifyFixConfig
         from autoskillit.core.types import RestartScope
@@ -805,9 +803,8 @@ class TestConfigDrivenBehavior:
         tool_ctx.config = AutomationConfig(classify_fix=ClassifyFixConfig(path_prefixes=[]))
 
         changed = "src/core/handler.py\n"
-        tool_ctx.runner.push(_make_result(0, "", ""))  # git fetch succeeds
         tool_ctx.runner.push(_make_result(0, changed, ""))
-        result = json.loads(await classify_fix(worktree_path=str(tmp_path), base_branch="main"))
+        result = json.loads(await classify_fix(worktree_path="/tmp/wt", base_branch="main"))
 
         assert result["restart_scope"] == RestartScope.PARTIAL_RESTART
 
@@ -1036,7 +1033,7 @@ class TestSafetyConfigWiring:
         assert fifth_call_cmd == ["git", "fetch", "origin"]
 
     @pytest.mark.anyio
-    async def test_run_skill_2e_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
+    async def test_run_skill_retry_skips_dry_walkthrough_when_disabled(self, tool_ctx, tmp_path):
         """2e: require_dry_walkthrough=False bypasses dry-walkthrough gate (using run_skill)."""
         from autoskillit.server.tools_execution import run_skill
         from tests.conftest import _make_result
@@ -1203,7 +1200,7 @@ class TestToolSchemas:
         )
 
     def test_pipeline_tools_have_orchestrator_guidance(self):
-        """run_skill must reinforce MCP-only delegation."""
+        """run_skill and run_skill_retry must reinforce MCP-only delegation."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import mcp as server
@@ -1245,7 +1242,7 @@ class TestToolSchemas:
         assert not missing, f"PIPELINE_FORBIDDEN_TOOLS missing tools: {missing}"
 
     def test_run_skill_names_all_forbidden_tools(self):
-        """run_skill docstring must name all forbidden tools."""
+        """run_skill and run_skill_retry docstrings must name all forbidden tools."""
         from fastmcp.tools import Tool
 
         from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS

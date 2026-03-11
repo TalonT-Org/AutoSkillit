@@ -431,12 +431,12 @@ def test_pmp_has_resolve_integration_conflicts_step(recipe) -> None:
 
 
 def test_pmp_resolve_integration_conflicts_routes_to_force_push(recipe) -> None:
-    """B9: resolve_integration_conflicts must route to force_push_after_rebase on non-escalation."""
+    """B9: resolve_integration_conflicts must route to force_push_after_rebase."""
     step = recipe.steps["resolve_integration_conflicts"]
-    # Step uses on_result conditions; the default (no-when) condition must route to force_push
+    # Step uses on_result conditions; the default (no-when) bare route must route to force_push
     assert step.on_result is not None
     conditions = step.on_result.conditions
-    default_routes = [c for c in conditions if c.when is None or c.when == "true"]
+    default_routes = [c for c in conditions if c.when is None]
     assert any(c.route == "force_push_after_rebase" for c in default_routes)
 
 
@@ -446,6 +446,27 @@ def test_pmp_has_force_push_after_rebase_step(recipe) -> None:
     step = recipe.steps["force_push_after_rebase"]
     assert step.tool == "run_cmd"
     assert "--force-with-lease" in step.with_args.get("cmd", "")
+
+
+def test_pmp_force_push_after_rebase_routes_to_wait_for_post_rebase_mergeability(recipe) -> None:
+    """B23: force_push_after_rebase.on_success must route to wait_for_post_rebase_mergeability."""
+    step = recipe.steps["force_push_after_rebase"]
+    assert step.on_success == "wait_for_post_rebase_mergeability"
+
+
+def test_pmp_has_wait_for_post_rebase_mergeability_step(recipe) -> None:
+    """B24: wait_for_post_rebase_mergeability step must exist and use run_cmd tool."""
+    assert "wait_for_post_rebase_mergeability" in recipe.steps
+    step = recipe.steps["wait_for_post_rebase_mergeability"]
+    assert step.tool == "run_cmd"
+
+
+def test_pmp_wait_for_post_rebase_mergeability_routes_to_check_post_rebase(
+    recipe,
+) -> None:
+    """B25: wait_for_post_rebase_mergeability.on_success must route to check_mergeability_post_rebase."""  # noqa: E501
+    step = recipe.steps["wait_for_post_rebase_mergeability"]
+    assert step.on_success == "check_mergeability_post_rebase"
 
 
 def test_pmp_has_check_mergeability_post_rebase_step(recipe) -> None:

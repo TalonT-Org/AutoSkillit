@@ -491,6 +491,7 @@ steps:
           [ "$STATUS" != "UNKNOWN" ] && break;
           sleep 15;
         done &&
+        [ "$STATUS" != "UNKNOWN" ] || { echo "Timed out waiting for mergeability" >&2; exit 1; } &&
         echo "$PR_NUM"
       cwd: "${{ context.work_dir }}"
       step_name: "wait_for_review_pr_mergeability"
@@ -548,14 +549,36 @@ steps:
       cmd: "git push origin ${{ context.integration_branch }} --force-with-lease"
       cwd: "${{ context.work_dir }}"
       step_name: "force_push_after_rebase"
-    on_success: check_mergeability_post_rebase
+    on_success: wait_for_post_rebase_mergeability
     on_failure: cleanup_failure
     note: >
       Force-pushes the rebased integration branch to update the review PR after conflict
       resolution. Uses --force-with-lease to reject if the remote diverged during the rebase.
       This is an authorized push step (conflict-resolution rebase rewrites history, requiring
       force push — a regular push would be rejected by the remote). Routes to
-      check_mergeability_post_rebase to verify the rebase resolved the conflict.
+      wait_for_post_rebase_mergeability to allow GitHub to recompute mergeability after the push.
+
+  wait_for_post_rebase_mergeability:
+    tool: run_cmd
+    with:
+      cmd: >
+        PR_NUM="${{ context.review_pr_number }}" &&
+        for i in $(seq 1 12); do
+          STATUS=$(gh pr view "$PR_NUM" --json mergeable -q .mergeable);
+          [ "$STATUS" != "UNKNOWN" ] && break;
+          sleep 15;
+        done &&
+        [ "$STATUS" != "UNKNOWN" ] || { echo "Timed out waiting for post-rebase mergeability" >&2; exit 1; }
+      cwd: "${{ context.work_dir }}"
+      step_name: "wait_for_post_rebase_mergeability"
+    on_success: check_mergeability_post_rebase
+    on_failure: cleanup_failure
+    note: >
+      Polls GitHub until the integration PR's mergeable field is no longer UNKNOWN after the
+      force-push following conflict resolution. GitHub resets mergeable to UNKNOWN asynchronously
+      after a force-push, just as it does after PR creation. Polls up to 12 times with
+      15-second intervals (3 minutes maximum). Fails explicitly if UNKNOWN persists after all
+      attempts. Satisfies REQ-MERGE-002.
 
   check_mergeability_post_rebase:
     tool: check_pr_mergeable

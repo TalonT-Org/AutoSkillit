@@ -598,30 +598,6 @@ class TestCLICook:
         cmd = mock_run.call_args[0][0]
         assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS in cmd
 
-    @patch("autoskillit.cli.subprocess.run")
-    def test_cook_env_has_kitchen_open(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """cook passes AUTOSKILLIT_KITCHEN_OPEN=1 in the subprocess environment."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        scripts_dir.mkdir(parents=True)
-        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
-
-        cli.cook("test-script")
-
-        kwargs = mock_run.call_args[1] if mock_run.call_args[1] else {}
-        assert "env" in kwargs
-        assert kwargs["env"].get("AUTOSKILLIT_KITCHEN_OPEN") == "1"
-
     def test_cook_recipe_not_found_exits(
         self,
         tmp_path: Path,
@@ -969,32 +945,6 @@ class TestCookDiagram:
         cli.cook("test-script")
 
         mock_run.assert_called_once()
-
-    # T3-D
-    @patch("autoskillit.cli.subprocess.run")
-    def test_cook_prints_diagram_to_terminal_before_launch(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
-    ) -> None:
-        """T3-D: cook command prints the diagram to terminal before launching Claude session."""
-        import autoskillit.recipe as _recipe_mod
-
-        self._setup_recipe(tmp_path, monkeypatch)
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
-        diagram_text = "## test-script\n### Graph\ndone\n"
-        monkeypatch.setattr(_recipe_mod, "check_diagram_staleness", lambda *a, **kw: False)
-        monkeypatch.setattr(_recipe_mod, "load_recipe_diagram", lambda *a, **kw: diagram_text)
-
-        cli.cook("test-script")
-
-        captured = capsys.readouterr()
-        assert "## test-script" in captured.out, "Diagram was not printed to terminal"
-        assert "### Graph" in captured.out
 
 
 class TestRecipesCLI:

@@ -1,9 +1,9 @@
 name: dev-sprint
 description: >
-  Automate a single development sprint: triage open issues, implement all batches
-  via the implementation-groups sub-recipe, then create the integration review PR.
-  First consumer of recipe composition (tool: run_recipe).
-summary: triage > implement-groups (sub-recipe) > create-review-pr
+  Automate a single development sprint: triage open issues, load the
+  implementation-groups recipe for direct orchestration, then create the
+  integration review PR. The orchestrator drives all steps with full visibility.
+summary: triage > load-impl-groups (direct orchestration) > create-review-pr
 autoskillit_version: "0.3.1"
 
 ingredients:
@@ -21,13 +21,17 @@ ingredients:
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash,
      Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work
-     is delegated through run_skill or run_recipe."
+     is delegated through run_skill."
   - "Route to on_failure — never investigate or fix failures directly from the
-     orchestrator. The downstream skill or sub-recipe handles diagnosis."
-  - "The implement step runs the full implementation-groups sub-recipe as a
-     sub-pipeline. Wait for it to complete before proceeding to create_pr."
-  - "The create_pr step creates the integration PR combining all individual issue
-     PRs opened by the implementation-groups sub-recipe."
+     orchestrator. The downstream skill handles diagnosis."
+  - "After implement (load_recipe) returns: read the implementation-groups
+     YAML from the tool result and drive each step directly using the
+     orchestrator's kitchen tools. Pass ingredients: source_doc from
+     context.triage_manifest, base_branch from inputs.base_branch,
+     run_name from inputs.run_name. When all implementation-groups steps
+     complete successfully, route to create_pr."
+  - "The create_pr step creates the integration PR combining all individual
+     issue PRs opened during the implementation-groups execution."
 
 steps:
   triage:
@@ -42,16 +46,9 @@ steps:
     on_failure: escalate
 
   implement:
-    tool: run_recipe
+    tool: load_recipe
     with:
       name: implementation-groups
-      cwd: ${{ inputs.source_dir }}
-      ingredients: >-
-        {"source_doc": "${{ context.triage_manifest }}",
-         "base_branch": "${{ inputs.base_branch }}",
-         "run_name": "${{ inputs.run_name }}",
-         "task": "Implement the triaged issue batches per the triage manifest"}
-      step_name: implement
     on_success: create_pr
     on_failure: escalate
 

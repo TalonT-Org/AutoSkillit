@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json as _json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -12,67 +11,6 @@ logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from autoskillit.recipe.loader import RecipeInfo
-
-
-def build_subrecipe_prompt(recipe_yaml: str, ingredients_json: str) -> str:
-    """Build the headless prompt for a sub-recipe orchestrator session.
-
-    Like _build_orchestrator_prompt() but pre-supplies all ingredient values
-    so the session begins execution immediately without AskUserQuestion collection.
-    """
-    try:
-        ingredients = _json.loads(ingredients_json) if ingredients_json else {}
-    except _json.JSONDecodeError:
-        logger.warning(
-            "build_subrecipe_prompt: malformed ingredients_json, falling back to {}",
-            ingredients_json=ingredients_json,
-        )
-        ingredients = {}
-
-    sous_chef_content = ""
-    _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
-    if _sous_chef_path.exists():
-        sous_chef_content = "\n\n" + _sous_chef_path.read_text()
-
-    ingredients_block = "\n".join(f"  {k}: {v}" for k, v in ingredients.items()) or "  (none)"
-
-    return f"""\
-You are a pipeline sub-recipe orchestrator. Execute the recipe below immediately.
-
-ALL ingredient values are pre-supplied. DO NOT use AskUserQuestion to collect them.
-Begin execution immediately using the values provided.
-
-Pre-supplied ingredients:
-{ingredients_block}
-
-During pipeline execution, only use AutoSkillit MCP tools. NEVER use native Claude Code
-tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit).
-
-ROUTING RULES — MANDATORY:
-- When a tool returns a failure result, MUST follow the step's on_failure route.
-- Your ONLY job is to route to the correct next step and pass required arguments.
-
-FAILURE PREDICATES — when to follow on_failure:
-- test_check: "passed: False" in output
-- merge_worktree: "error:" line present in output
-- run_cmd / run_skill: "success: False" in output
-- classify_fix: "error:" line present in output
-
-TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
-- Tool-level failure ("success: False"): Follow on_failure. on_result NOT evaluated.
-- Skill-level error ("error:" in result): Follow matching on_result condition.
-
-OPTIONAL STEP SEMANTICS:
-- optional: true means skipped when skip_when_false ingredient is false.
-- A running optional step that fails MUST follow on_failure.
-
-ACTION: CONFIRM STEP SEMANTICS:
-- action: confirm → AskUserQuestion. Affirmative → on_success. Negative → on_failure.
-{sous_chef_content}
---- RECIPE ---
-{recipe_yaml}
---- END RECIPE ---
-"""
 
 
 # Sentinel returned by _resolve_recipe_input when the user selects option 0.
@@ -115,6 +53,8 @@ def _build_orchestrator_prompt(script_yaml: str, diagram: str | None = None) -> 
 You are a pipeline orchestrator. Execute the recipe below step-by-step.
 
 FIRST ACTION — before prompting for any inputs, execute these steps in order:
+0. Call open_kitchen to reveal kitchen tools and enable the gate.
+   Without this step, no kitchen tools are accessible.
 1. Display the full recipe overview using the preview format below:
    - The recipe diagram above (if present)
    - Recipe name, description, and flow summary
@@ -206,16 +146,7 @@ ACTION: CONFIRM STEP SEMANTICS:
   route to the step's on_success target.
 - If the user declines (answers no, skip, keep, cancel, or similar negative),
   route to the step's on_failure target.
-{diagram_section}RECIPE COMPOSITION — run_recipe steps:
-- When you reach a step with `tool: run_recipe`, call the run_recipe MCP tool with:
-    name=<value of with.name>
-    cwd=<value of with.cwd>
-    ingredients=<JSON string of remaining with: args, resolving ${{{{ context.var_name }}}} refs>
-    step_name=<step YAML key>
-- Failure predicate: identical to run_skill — "success: False" in output.
-- capture:, on_result, on_failure, on_context_limit work identically to run_skill steps.
-- Do NOT investigate a sub-recipe failure — follow on_failure.
-{sous_chef_content}
+{diagram_section}{sous_chef_content}
 --- RECIPE ---
 {script_yaml}
 --- END RECIPE ---

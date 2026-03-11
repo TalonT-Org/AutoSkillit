@@ -34,7 +34,7 @@ _SUCCESS_JSON = (
 
 
 class TestRunSkillPluginDir:
-    """T2: run_skill passes --plugin-dir to the claude command."""
+    """T2: run_skill and run_skill_retry pass --plugin-dir to the claude command."""
 
     @pytest.mark.anyio
     async def test_run_skill_passes_plugin_dir(self, tool_ctx):
@@ -266,7 +266,7 @@ class TestDryWalkthroughGateWithPrefix:
 
 
 class TestRunSkillTimeoutFromConfig:
-    """run_skill uses configurable timeouts."""
+    """run_skill and run_skill_retry use configurable timeouts."""
 
     @pytest.mark.anyio
     async def test_run_skill_timeout_from_config(self, tool_ctx):
@@ -437,6 +437,37 @@ class TestGateErrorSchemaNormalization:
         assert response["subtype"] == "gate_error"
 
 
+class TestHeadlessGateEnforcement:
+    """Tools blocked in headless sessions return headless_error."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_denied_when_headless(self, tool_ctx, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        from autoskillit.server.tools_execution import run_skill
+
+        result = json.loads(await run_skill(skill_command="/test", cwd="/tmp"))
+        assert result["success"] is False
+        assert result["subtype"] == "headless_error"
+
+    @pytest.mark.anyio
+    async def test_run_cmd_denied_when_headless(self, tool_ctx, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        from autoskillit.server.tools_execution import run_cmd
+
+        result = json.loads(await run_cmd(cmd="echo hi", cwd="/tmp"))
+        assert result["success"] is False
+        assert result["subtype"] == "headless_error"
+
+    @pytest.mark.anyio
+    async def test_run_python_denied_when_headless(self, tool_ctx, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        from autoskillit.server.tools_execution import run_python
+
+        result = json.loads(await run_python(callable="os.getcwd"))
+        assert result["success"] is False
+        assert result["subtype"] == "headless_error"
+
+
 class TestRunSkillFailurePaths:
     """run_skill surfaces session outcome on failure."""
 
@@ -502,7 +533,7 @@ class TestRunSkillFailurePaths:
 
 
 class TestRunSkillModel:
-    """Tests for model parameter in run_skill."""
+    """Tests for model parameter in run_skill and run_skill_retry."""
 
     _MOCK_STDOUT = (
         '{"type": "result", "subtype": "success", "is_error": false, '

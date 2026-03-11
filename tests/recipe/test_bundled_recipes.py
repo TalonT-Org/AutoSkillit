@@ -1466,12 +1466,11 @@ class TestBaseBranchDefaults:
             "implementation-groups",
         ],
     )
-    def test_recipe_base_branch_defaults_to_integration(self, recipe_name: str) -> None:
-        """All non-exempt bundled recipes must default base_branch to 'integration'."""
+    def test_recipe_base_branch_defaults_to_main(self, recipe_name: str) -> None:
+        """All non-exempt bundled recipes must default base_branch to 'main'."""
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
-        assert recipe.ingredients["base_branch"].default == "integration", (
-            f"{recipe_name}.yaml: base_branch default must be 'integration', not 'main' — "
-            "update to reflect the new 3-tier branching model"
+        assert recipe.ingredients["base_branch"].default == "main", (
+            f"{recipe_name}.yaml: base_branch default must be 'main' (REQ-GEN-005)"
         )
 
     def test_smoke_test_base_branch_remains_main(self) -> None:

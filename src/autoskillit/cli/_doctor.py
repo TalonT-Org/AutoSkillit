@@ -65,15 +65,17 @@ def _check_mcp_server_registered(claude_json_path: Path | None = None) -> Doctor
                 check="mcp_server_registered",
                 message="autoskillit registered as Claude plugin",
             )
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        pass
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        _plugin_check_detail = f" (claude plugin list unavailable: {type(exc).__name__})"
+    else:
+        _plugin_check_detail = ""
 
     return DoctorResult(
         severity=Severity.WARNING,
         check="mcp_server_registered",
         message=(
             "autoskillit not registered. Run 'autoskillit install' to install as a plugin, "
-            "or 'autoskillit init' to register in mcpServers."
+            "or 'autoskillit init' to register in mcpServers." + _plugin_check_detail
         ),
     )
 

@@ -162,6 +162,8 @@ missed registration generates 5–30 cascading test failures that require a seco
 
 ### Step 5: Final Verification
 
+Read the configured test command from `.autoskillit/config.yaml` (key: `test_check.command`). Use this command wherever `{test_command}` appears below. If no config exists, use `task test-check` as the default.
+
 Run the project's code quality checks and test suite from the worktree.
 
 ```bash

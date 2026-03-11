@@ -284,17 +284,18 @@ class TestCLIDoctor:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """mcp_server_registered returns warning when autoskillit absent from ~/.claude.json."""
-        import subprocess as _sub
+        import subprocess
 
         # ~/.claude.json does not exist in tmp_path (no file created)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
+
         # Simulate `claude plugin list` returning non-zero so check falls through to WARNING
         class _NoPlugin:
             returncode = 1
             stdout = ""
 
-        monkeypatch.setattr(_sub, "run", lambda *a, **kw: _NoPlugin())
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _NoPlugin())
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
@@ -652,8 +653,11 @@ def test_doctor_detects_plugin_registration(monkeypatch: pytest.MonkeyPatch) -> 
         f.write(fake_claude_json_content)
         tmpf = Path(f.name)
 
-    result = _check_mcp_server_registered(claude_json_path=tmpf)
-    assert result.severity == Severity.OK, (
-        "doctor must recognize plugin-based registration; "
-        "not just mcpServers presence (REQ-ONB-002)"
-    )
+    try:
+        result = _check_mcp_server_registered(claude_json_path=tmpf)
+        assert result.severity == Severity.OK, (
+            "doctor must recognize plugin-based registration; "
+            "not just mcpServers presence (REQ-ONB-002)"
+        )
+    finally:
+        tmpf.unlink(missing_ok=True)

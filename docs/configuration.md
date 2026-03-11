@@ -51,7 +51,7 @@ Control which model `run_skill` uses for headless sessions.
 
 ```yaml
 model:
-  default: null      # default model when step has no model field (null = CLI default)
+  default: sonnet    # default model when step has no model field
   override: null     # force all sessions to use this model (overrides step YAML)
 ```
 
@@ -114,14 +114,14 @@ Token goes in `.autoskillit/.secrets.yaml` (never commit).
 
 ```yaml
 branching:
-  default_base_branch: integration   # default base branch for recipes
+  default_base_branch: main   # default base branch for recipes
 ```
 
-Most projects should set this to `main`:
+Default: `main`. Override if your project uses a different integration branch (e.g. `integration` or `develop`):
 
 ```yaml
 branching:
-  default_base_branch: main
+  default_base_branch: integration
 ```
 
 ## Session Diagnostics (Linux)

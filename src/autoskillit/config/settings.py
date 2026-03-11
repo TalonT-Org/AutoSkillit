@@ -272,7 +272,7 @@ class AutomationConfig:
                 ),
             ),
             model=ModelConfig(
-                default=str(val(mc, "default", _mc["default"]) or _mc["default"]),
+                default=_d if (_d := val(mc, "default", None)) is not None else _mc["default"],
                 override=val(mc, "override", _mc["override"]) or None,
             ),
             worktree_setup=WorktreeSetupConfig(

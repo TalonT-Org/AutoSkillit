@@ -63,7 +63,10 @@ def _create_secrets_template(project_dir: Path) -> None:
 
 
 def _is_plugin_installed() -> bool:
-    """Return True if autoskillit is installed as a Claude plugin."""
+    """Return True if autoskillit is installed as a Claude plugin.
+
+    Returns False when claude CLI is not on PATH, times out, or is otherwise unavailable.
+    """
     try:
         result = subprocess.run(
             ["claude", "plugin", "list"],
@@ -72,8 +75,10 @@ def _is_plugin_installed() -> bool:
             timeout=10,
         )
         return result.returncode == 0 and "autoskillit" in result.stdout
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return False
+    except FileNotFoundError:
+        return False  # claude CLI not on PATH
+    except (subprocess.TimeoutExpired, OSError):
+        return False  # CLI unavailable or timed out
 
 
 def _generate_config_yaml(test_command: list[str]) -> str:
@@ -146,10 +151,6 @@ def _print_next_steps() -> None:
     print("  4. autoskillit doctor          — verify your setup")
 
 
-# Keep legacy name for backward compatibility with existing call sites
-_print_init_next_steps = _print_next_steps
-
-
 def _register_all(scope: str, project_dir: Path) -> None:
     """Ensure project temp dir, register hooks and MCP server, print next steps."""
     from autoskillit.cli._hooks import (
@@ -180,8 +181,8 @@ def _register_all(scope: str, project_dir: Path) -> None:
                                 config_data, default_flow_style=False, allow_unicode=True
                             ),
                         )
-                except (OSError, YAMLError):
-                    pass  # Non-fatal: user can add manually
+                except (OSError, YAMLError) as exc:
+                    print(f"Warning: could not write github.default_repo to config: {exc}")
             # Write even if config doesn't exist yet — create a minimal one
             else:
                 autoskillit_dir = project_dir / ".autoskillit"

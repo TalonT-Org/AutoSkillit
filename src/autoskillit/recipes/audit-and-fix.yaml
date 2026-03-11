@@ -327,8 +327,8 @@ steps:
         available = r.resolve('review-pr') is not None;
         msg = ('review-pr skill found - PR review will run.' if available else
                'NOTE: review-pr skill not found. Skipping PR review step. '
-               'Generate a project-specific skill via /autoskillit:generate-review-skill '
-               '(see GitHub issue #215).');
+               'Add a project-specific review-pr skill to your .autoskillit/skills/ directory '
+               'to enable automated PR review.');
         print(msg);
         "
       cwd: "${{ context.work_dir }}"

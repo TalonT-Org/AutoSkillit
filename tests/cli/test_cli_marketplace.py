@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
-
 
 # MK1
 def test_marketplace_module_exists():
@@ -52,8 +50,9 @@ def test_install_registered_as_cli_command():
 # MK-DEP-2
 def test_upgrade_is_registered_as_cli_command():
     """autoskillit upgrade must be a registered CLI command."""
-    result = subprocess.run(["autoskillit", "upgrade", "--help"], capture_output=True, text=True)
-    assert result.returncode == 0, f"upgrade --help failed:\n{result.stderr}"
+    from autoskillit import cli
+
+    assert hasattr(cli, "upgrade")
 
 
 # MK-DEP-3

@@ -154,11 +154,19 @@ def test_prepare_issue_has_when_to_use_section():
 def test_prepare_issue_dedup_shows_all_candidates():
     """Dedup step must document displaying all found candidates with number, title, and URL."""
     text = SKILL_MD.read_text()
-    # Must show a numbered list of candidates, not just one "high title overlap" check
-    has_numbered_list = "[1]" in text or "(1)" in text or "numbered" in text.lower()
-    assert has_numbered_list, "Dedup must display candidates in a numbered list"
-    # Must include URL in each candidate display
-    assert "url" in text.lower()
+    # Anchor to the dedup section to avoid matching unrelated occurrences elsewhere
+    dedup_start = text.find("### Step 4: Dedup Check")
+    assert dedup_start != -1, "SKILL.md must contain Step 4 dedup section"
+    dedup_end = text.find("### Step 4a:", dedup_start)
+    dedup_section = text[dedup_start:dedup_end] if dedup_end != -1 else text[dedup_start:]
+    # The option-menu block must use the [1]–[{N}] indexed format within the dedup section
+    assert "[1]" in dedup_section and "[{N}]" in dedup_section, (
+        "Dedup must display candidates in [1]–[{N}] indexed format within Step 4"
+    )
+    # Per-candidate URL must appear in the dedup display block (not just in shell commands)
+    assert "{url}" in dedup_section, (
+        "Dedup section must show per-candidate {url} in the candidate display block"
+    )
 
 
 def test_prepare_issue_dedup_prompt_has_extend_option():

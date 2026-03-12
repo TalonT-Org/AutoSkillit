@@ -566,8 +566,8 @@ class TestRunHeadlessCore:
 
 
 class TestHeadlessTelemetryContainment:
-    """Telemetry errors in run_headless_core and run_subrecipe_session must not
-    suppress the fully-built SkillResult."""
+    """Telemetry errors in run_headless_core must not suppress the
+    fully-built SkillResult."""
 
     def _success_payload(self, completion_marker: str) -> str:
         import json

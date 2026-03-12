@@ -60,6 +60,35 @@ def _format_issue_markdown(
     return "\n".join(lines)
 
 
+def parse_merge_queue_response(data: dict) -> list[dict]:
+    """Parse a GitHub GraphQL merge queue response into a sorted entry list.
+
+    Returns a list of {position, state, pr_number, pr_title} dicts sorted by
+    position ascending.  Returns an empty list when:
+    - the queue is not enabled (mergeQueue is null)
+    - the queue has no entries
+    - the response contains GraphQL errors
+    - the response structure is unexpected
+    """
+    try:
+        queue = data.get("data", {}).get("repository", {}).get("mergeQueue") or {}
+        nodes = queue.get("entries", {}).get("nodes") or []
+        entries = []
+        for node in nodes:
+            pr = node.get("pullRequest") or {}
+            entries.append(
+                {
+                    "position": node.get("position", 0),
+                    "state": node.get("state", ""),
+                    "pr_number": pr.get("number"),
+                    "pr_title": pr.get("title", ""),
+                }
+            )
+        return sorted(entries, key=lambda e: e["position"])
+    except (AttributeError, TypeError):
+        return []
+
+
 class DefaultGitHubFetcher:
     """Concrete GitHub issue fetcher using the GitHub REST API via httpx.
 

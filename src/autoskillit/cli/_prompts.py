@@ -61,7 +61,16 @@ FIRST ACTION — before prompting for any inputs, execute these steps in order:
    - Ingredients table (user-supplied vs agent-managed)
    - Step overview with routing, retry, and capture info
    - Kitchen rules
-2. Prompt for input values using AskUserQuestion
+2. Collect recipe ingredients from the user:
+   Collect ingredient values conversationally:
+   a. Ask the user a single open-ended question — what would they like to do?
+      Do NOT prompt for each ingredient field individually.
+   b. From the user's free-form response, infer as many ingredient values
+      as possible (e.g. task description, source directory, run name).
+   c. If any required ingredients could not be inferred, ask one
+      follow-up question covering only those missing required values.
+   d. Accept optional ingredients at their default values unless the
+      user explicitly mentioned an override in their response.
 3. Execute the pipeline steps by calling MCP tools directly
 
 Preview format:

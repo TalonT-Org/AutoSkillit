@@ -85,7 +85,16 @@ async def load_recipe(name: str) -> str:
        to apply modifications. That skill has the complete schema, validation rules,
        and formatting constraints needed for correct changes. Do NOT edit the YAML
        file directly — always delegate modifications to write-recipe.
-    4. Prompt for input values using AskUserQuestion
+    4. Collect recipe ingredients from the user:
+       Collect ingredient values conversationally:
+       a. Ask the user a single open-ended question — what would they like to do?
+          Do NOT prompt for each ingredient field individually.
+       b. From the user's free-form response, infer as many ingredient values
+          as possible (e.g. task description, source directory, run name).
+       c. If any required ingredients could not be inferred, ask one
+          follow-up question covering only those missing required values.
+       d. Accept optional ingredients at their default values unless the
+          user explicitly mentioned an override in their response.
     5. Execute the pipeline steps by calling MCP tools directly
 
     Allowed during pipeline execution:

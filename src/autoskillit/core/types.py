@@ -516,6 +516,7 @@ class SkillResult:
     stderr: str
     token_usage: dict[str, Any] | None = None
     worktree_path: str | None = None
+    cli_subtype: str = field(default="")
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -523,6 +524,7 @@ class SkillResult:
             "result": self.result,
             "session_id": self.session_id,
             "subtype": self.subtype,
+            "cli_subtype": self.cli_subtype,
             "is_error": self.is_error,
             "exit_code": self.exit_code,
             "needs_retry": self.needs_retry,

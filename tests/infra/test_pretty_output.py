@@ -1121,3 +1121,69 @@ class TestFormatterSchemaConsistency:
             assert str(data[key]) in output, (
                 f"Field '{key}' value missing from formatted kitchen_status output"
             )
+
+
+# PHK-49
+def test_fmt_run_skill_contradictory_subtype_never_renders_fail_success():
+    """Test A: full pipeline — COMPLETED+empty never renders 'FAIL [success]'.
+
+    This captures Issue #346: when adjudication overrides the CLI's reported
+    outcome (CLI says 'success', but result is empty → failure), the rendered
+    status tag must reflect the adjudicated subtype, not the raw CLI value.
+
+    Before the fix: sr.subtype = "success" → hook renders "FAIL [success]".
+    After the fix:  sr.subtype = "empty_result" → hook renders "FAIL [empty_result]".
+    """
+    from autoskillit.core.types import ChannelConfirmation, TerminationReason
+    from autoskillit.execution.headless import _build_skill_result
+    from autoskillit.hooks.pretty_output import _format_response
+    from tests.conftest import _make_result
+
+    # Build a SubprocessResult that triggers the COMPLETED+empty-result path.
+    # The CLI reports subtype="success" but result is empty — adjudication sees failure.
+    stdout = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "",
+            "session_id": "s1",
+        }
+    )
+    result = _make_result(
+        returncode=0,
+        stdout=stdout,
+        termination_reason=TerminationReason.COMPLETED,
+        channel_confirmation=ChannelConfirmation.UNMONITORED,
+    )
+    sr = _build_skill_result(result, completion_marker="", skill_command="/test")
+    assert sr.success is False, "Precondition: this path must produce a failure"
+
+    payload = json.loads(sr.to_json())
+
+    # Pipeline mode: must NOT render "FAIL [success]"
+    pipeline_out = _format_response(
+        "mcp__plugin_autoskillit_autoskillit__run_skill",
+        json.dumps(payload),
+        pipeline=True,
+    )
+    assert pipeline_out is not None
+    assert "FAIL [success]" not in pipeline_out, (
+        f"Pipeline mode rendered contradictory 'FAIL [success]': {pipeline_out!r}"
+    )
+    # Must render the normalized subtype instead
+    assert "FAIL [empty_result]" in pipeline_out, (
+        f"Expected 'FAIL [empty_result]' in pipeline output: {pipeline_out!r}"
+    )
+
+    # Interactive mode: cross mark must not be paired with "success" as status
+    interactive_out = _format_response(
+        "mcp__plugin_autoskillit_autoskillit__run_skill",
+        json.dumps(payload),
+        pipeline=False,
+    )
+    assert interactive_out is not None
+    cross = "\u2717"
+    assert f"{cross} success" not in interactive_out, (
+        f"Interactive mode rendered contradictory '{cross} success': {interactive_out!r}"
+    )

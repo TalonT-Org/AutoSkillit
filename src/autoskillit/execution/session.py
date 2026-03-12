@@ -560,6 +560,44 @@ def _compute_retry(
             assert_never(unreachable)
 
 
+def _normalize_subtype(
+    cli_subtype: str,
+    outcome: SessionOutcome,
+    session: ClaudeSessionResult,
+    completion_marker: str,
+) -> str:
+    """Normalize cli_subtype against the adjudicated outcome to eliminate contradictions.
+
+    Maps ``(cli_subtype, outcome, session, completion_marker) → adjudicated subtype``.
+    Ensures ``subtype == "success"`` iff ``outcome == SUCCEEDED``.
+
+    Class 2 fix (upward normalization):
+      SUCCEEDED + error/diagnostic subtype → "success"
+
+    Class 1 fix (downward normalization):
+      non-SUCCEEDED + "success" → synthesized failure label based on why.
+
+    All other combinations are passed through unchanged.
+    """
+    if outcome == SessionOutcome.SUCCEEDED:
+        # Any diagnostic error subtype with a successful outcome is a drain-race
+        # artifact — normalize up to "success".
+        if cli_subtype in _FAILURE_SUBTYPES:
+            return "success"
+        return cli_subtype
+
+    if cli_subtype != "success":
+        # Non-"success" subtype already carries a meaningful failure label.
+        return cli_subtype
+
+    # cli_subtype == "success" but outcome is FAILED or RETRIABLE — synthesize.
+    if not session.result.strip():
+        return "empty_result"
+    if completion_marker and completion_marker not in session.result:
+        return "missing_completion_marker"
+    return "adjudicated_failure"
+
+
 def _compute_outcome(
     session: ClaudeSessionResult,
     returncode: int,

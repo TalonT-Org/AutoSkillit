@@ -62,7 +62,8 @@ FIRST ACTION — before prompting for any inputs, execute these steps in order:
    - Step overview with routing, retry, and capture info
    - Kitchen rules
 [SYNC: identical block in load_recipe docstring — tools_recipe.py]
-2. Collect ingredient values conversationally:
+2. Collect recipe ingredients from the user:
+   Collect ingredient values conversationally:
    a. Ask the user a single open-ended question — what would they like to do?
       Do NOT prompt for each ingredient field individually.
    b. From the user's free-form response, infer as many ingredient values

@@ -86,7 +86,8 @@ async def load_recipe(name: str) -> str:
        and formatting constraints needed for correct changes. Do NOT edit the YAML
        file directly — always delegate modifications to write-recipe.
     [SYNC: identical block in _build_orchestrator_prompt — cli/_prompts.py]
-    4. Collect ingredient values conversationally:
+    4. Collect recipe ingredients from the user:
+       Collect ingredient values conversationally:
        a. Ask the user a single open-ended question — what would they like to do?
           Do NOT prompt for each ingredient field individually.
        b. From the user's free-form response, infer as many ingredient values

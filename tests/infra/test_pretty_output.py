@@ -14,6 +14,11 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.core.types import ChannelConfirmation, TerminationReason
+from autoskillit.execution.headless import _build_skill_result
+from autoskillit.hooks.pretty_output import _format_response
+from tests.conftest import _make_result
+
 
 def _run_hook(
     event: dict | None = None,
@@ -1240,11 +1245,7 @@ def test_fmt_get_timing_summary_renders_compact():
     assert "total:" in rendered
 
 
-# ---------------------------------------------------------------------------
-# PHK-49: Contradictory subtype rendering guard
-# ---------------------------------------------------------------------------
-
-
+# Issue #346
 def test_fmt_run_skill_contradictory_subtype_never_renders_fail_success():
     """Test A: full pipeline — COMPLETED+empty never renders 'FAIL [success]'.
 
@@ -1255,10 +1256,6 @@ def test_fmt_run_skill_contradictory_subtype_never_renders_fail_success():
     Before the fix: sr.subtype = "success" → hook renders "FAIL [success]".
     After the fix:  sr.subtype = "empty_result" → hook renders "FAIL [empty_result]".
     """
-    from autoskillit.core.types import ChannelConfirmation, TerminationReason
-    from autoskillit.execution.headless import _build_skill_result
-    from autoskillit.hooks.pretty_output import _format_response
-    from tests.conftest import _make_result
 
     # Build a SubprocessResult that triggers the COMPLETED+empty-result path.
     # The CLI reports subtype="success" but result is empty — adjudication sees failure.

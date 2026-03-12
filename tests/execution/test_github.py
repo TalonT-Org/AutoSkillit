@@ -729,3 +729,63 @@ def test_parse_merge_queue_response_is_pure_function():
     a = parse_merge_queue_response(_QUEUE_RESPONSE_WITH_ENTRIES)
     b = parse_merge_queue_response(_QUEUE_RESPONSE_WITH_ENTRIES)
     assert a == b
+
+
+def test_parse_merge_queue_response_bad_node_skips_not_drops_rest():
+    """A None node (or other non-dict) skips that entry but preserves valid entries."""
+    data = {
+        "data": {
+            "repository": {
+                "mergeQueue": {
+                    "entries": {
+                        "nodes": [
+                            {
+                                "position": 1,
+                                "state": "MERGEABLE",
+                                "pullRequest": {"number": 10, "title": "ok"},
+                            },
+                            None,  # malformed — should be skipped
+                            {
+                                "position": 3,
+                                "state": "MERGEABLE",
+                                "pullRequest": {"number": 30, "title": "also ok"},
+                            },
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    entries = parse_merge_queue_response(data)
+    assert len(entries) == 2
+    assert entries[0]["pr_number"] == 10
+    assert entries[1]["pr_number"] == 30
+
+
+def test_parse_merge_queue_response_missing_position_sorts_last():
+    """Entries without a position key sort after entries with explicit positions."""
+    data = {
+        "data": {
+            "repository": {
+                "mergeQueue": {
+                    "entries": {
+                        "nodes": [
+                            {
+                                "state": "MERGEABLE",
+                                "pullRequest": {"number": 99, "title": "no pos"},
+                            },
+                            {
+                                "position": 1,
+                                "state": "MERGEABLE",
+                                "pullRequest": {"number": 1, "title": "pos 1"},
+                            },
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    entries = parse_merge_queue_response(data)
+    assert len(entries) == 2
+    assert entries[0]["pr_number"] == 1
+    assert entries[1]["pr_number"] == 99

@@ -73,20 +73,23 @@ def parse_merge_queue_response(data: dict) -> list[dict]:
     try:
         queue = data.get("data", {}).get("repository", {}).get("mergeQueue") or {}
         nodes = queue.get("entries", {}).get("nodes") or []
-        entries = []
-        for node in nodes:
+    except (AttributeError, TypeError):
+        return []
+    entries = []
+    for node in nodes:
+        try:
             pr = node.get("pullRequest") or {}
             entries.append(
                 {
-                    "position": node.get("position", 0),
+                    "position": node.get("position", float("inf")),
                     "state": node.get("state", ""),
                     "pr_number": pr.get("number"),
                     "pr_title": pr.get("title", ""),
                 }
             )
-        return sorted(entries, key=lambda e: e["position"])
-    except (AttributeError, TypeError):
-        return []
+        except (AttributeError, TypeError):
+            continue
+    return sorted(entries, key=lambda e: e["position"])
 
 
 class DefaultGitHubFetcher:

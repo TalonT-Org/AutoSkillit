@@ -83,6 +83,7 @@ def flush_session_log(
     token_usage: dict[str, Any] | None = None,
     timing_seconds: float | None = None,
     audit_record: dict[str, Any] | None = None,
+    cli_subtype: str = "",
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -177,6 +178,7 @@ def flush_session_log(
         "skill_command": skill_command,
         "success": success,
         "subtype": subtype,
+        "cli_subtype": cli_subtype,
         "exit_code": exit_code,
         "start_ts": start_ts,
         "end_ts": end_ts,
@@ -223,6 +225,7 @@ def flush_session_log(
         "skill_command": skill_command[:100],
         "success": success,
         "subtype": subtype,
+        "cli_subtype": cli_subtype,
         "exit_code": exit_code,
         "snapshot_count": snapshot_count,
         "anomaly_count": anomaly_count,

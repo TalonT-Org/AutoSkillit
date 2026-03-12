@@ -665,6 +665,7 @@ class TestBuildSkillResultCrossValidation:
         "result",
         "session_id",
         "subtype",
+        "cli_subtype",
         "is_error",
         "exit_code",
         "needs_retry",
@@ -1233,10 +1234,11 @@ class TestBuildSkillResultCompleted:
         assert parsed["success"] is False
         assert parsed["needs_retry"] is True
         assert parsed["retry_reason"] == RetryReason.RESUME.value
-        assert parsed["subtype"] == "success"
+        assert parsed["subtype"] == "empty_result"
+        assert parsed["cli_subtype"] == "success"
 
     def test_success_empty_completed_subtype_captured_in_audit_log(self, tool_ctx):
-        """_capture_failure must be called with subtype='success' for audit log integrity."""
+        """_capture_failure receives the normalized subtype for audit log integrity."""
         stdout = json.dumps(
             {
                 "type": "result",
@@ -1252,13 +1254,75 @@ class TestBuildSkillResultCompleted:
             termination_reason=TerminationReason.COMPLETED,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        _build_skill_result(
+        sr = _build_skill_result(
             result, completion_marker="", skill_command="/test", audit=tool_ctx.audit
         )
         report = tool_ctx.audit.get_report()
         assert len(report) == 1
-        assert report[0].subtype == "success"
+        assert report[0].subtype == "empty_result"
         assert report[0].needs_retry is True
+        assert sr.cli_subtype == "success"
+
+    def test_build_skill_result_subtype_never_contradicts_success(self, tool_ctx):
+        """Test B: _build_skill_result never produces contradictory (success, subtype) pairs."""
+        # Path 1: COMPLETED + UNMONITORED + "success" + empty result → RETRIABLE
+        stdout_empty = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "",
+                "session_id": "s1",
+            }
+        )
+        result1 = _make_result(
+            returncode=0,
+            stdout=stdout_empty,
+            termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr1 = _build_skill_result(result1, completion_marker="", skill_command="/test")
+        assert sr1.success is False
+        assert sr1.subtype != "success", (
+            f"subtype must not be 'success' when success=False, got {sr1.subtype!r}"
+        )
+        assert sr1.cli_subtype == "success"
+
+        # Path 2: NATURAL_EXIT + rc=0 + "success" + missing marker → RETRIABLE (EARLY_STOP)
+        stdout_missing_marker = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "I did the work but forgot the marker.",
+                "session_id": "s2",
+            }
+        )
+        result2 = _make_result(
+            returncode=0,
+            stdout=stdout_missing_marker,
+            termination_reason=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr2 = _build_skill_result(result2, completion_marker="%%ORDER_UP%%", skill_command="/test")
+        assert sr2.success is False
+        assert sr2.subtype != "success", (
+            f"subtype must not be 'success' when success=False, got {sr2.subtype!r}"
+        )
+        assert sr2.cli_subtype == "success"
+
+    def test_build_skill_result_channel_b_empty_stdout_subtype_is_success(self, tool_ctx):
+        """Test C: CHANNEL_B + empty stdout normalizes subtype up to 'success'."""
+        result = _make_result(
+            returncode=0,
+            stdout="",
+            termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        sr = _build_skill_result(result, completion_marker="", skill_command="/test")
+        assert sr.success is True
+        assert sr.subtype == "success"
+        assert sr.cli_subtype == "empty_output"
 
 
 class TestMarkerCrossValidation:

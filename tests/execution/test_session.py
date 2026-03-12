@@ -1026,6 +1026,7 @@ class TestSkillResult:
             "result",
             "session_id",
             "subtype",
+            "cli_subtype",
             "is_error",
             "exit_code",
             "needs_retry",

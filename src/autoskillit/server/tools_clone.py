@@ -219,7 +219,13 @@ async def push_to_remote(
     _start = time.monotonic()
     try:
         result = await asyncio.to_thread(
-            lambda: clone_mgr.push_to_remote(clone_path, source_dir, branch, remote_url=remote_url)
+            lambda: clone_mgr.push_to_remote(
+                clone_path,
+                source_dir,
+                branch,
+                remote_url=remote_url,
+                protected_branches=tool_ctx.config.safety.protected_branches,
+            )
         )
 
         if not result.get("success"):

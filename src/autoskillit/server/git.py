@@ -21,6 +21,7 @@ from autoskillit.core import (
     SubprocessRunner,
     TerminationReason,
     get_logger,
+    is_protected_branch,
     truncate_text,
 )
 
@@ -91,6 +92,19 @@ async def perform_merge(
         return {
             "error": f"Path does not exist: {worktree_path}",
             "failed_step": MergeFailedStep.PATH_VALIDATION,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": worktree_path,
+        }
+
+    # 1.5. Protected-branch guard
+    protected = config.safety.protected_branches
+    if is_protected_branch(base_branch, protected=protected):
+        return {
+            "error": (
+                f"Refusing to merge into protected branch '{base_branch}'. "
+                f"Protected branches: {protected}"
+            ),
+            "failed_step": MergeFailedStep.PROTECTED_BRANCH,
             "state": MergeState.WORKTREE_INTACT,
             "worktree_path": worktree_path,
         }

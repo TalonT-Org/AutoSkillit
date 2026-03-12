@@ -31,6 +31,7 @@ def test_merge_failed_step_values():
     """MergeFailedStep enum covers all failure points."""
     assert set(MergeFailedStep) == {
         MergeFailedStep.PATH_VALIDATION,
+        MergeFailedStep.PROTECTED_BRANCH,
         MergeFailedStep.BRANCH_DETECTION,
         MergeFailedStep.DIRTY_TREE,
         MergeFailedStep.TEST_GATE,

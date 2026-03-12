@@ -136,7 +136,7 @@ class TestMergeWorktree:
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch --show-current
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(1, "FAIL\n= 3 failed, 97 passed =", ""))  # test-check
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
         assert result["state"] == MergeState.WORKTREE_INTACT
@@ -172,7 +172,7 @@ class TestMergeWorktree:
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
         assert result["cleanup_succeeded"] is True
         assert result["worktree_removed"] is True
@@ -197,7 +197,7 @@ class TestMergeWorktree:
         )  # git log --merges (no merge commits — step 5.6)
         tool_ctx.runner.push(_make_result(1, "", "CONFLICT (content): ..."))  # git rebase FAILS
         tool_ctx.runner.push(_make_result(0, "", ""))  # git rebase --abort
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.REBASE
         assert result["state"] == MergeState.WORKTREE_INTACT_REBASE_ABORTED
@@ -210,13 +210,13 @@ class TestMergeWorktree:
     @pytest.mark.anyio
     async def test_merge_worktree_rejects_nonexistent_path(self, tool_ctx):
         """merge_worktree rejects non-existent paths."""
-        result = json.loads(await merge_worktree("/nonexistent/path", "main"))
+        result = json.loads(await merge_worktree("/nonexistent/path", "dev"))
         assert "error" in result
 
     @pytest.mark.anyio
     async def test_merge_worktree_rejects_non_worktree(self, tool_ctx, tmp_path):
         """merge_worktree rejects paths that aren't git worktrees."""
-        result = json.loads(await merge_worktree(str(tmp_path), "main"))
+        result = json.loads(await merge_worktree(str(tmp_path), "dev"))
         assert "error" in result
 
 
@@ -226,7 +226,7 @@ class TestMergeWorktreeNoBypass:
     @pytest.mark.anyio
     async def test_skip_test_gate_parameter_rejected(self):
         """merge_worktree does not accept skip_test_gate parameter."""
-        result = json.loads(await merge_worktree("/tmp/wt", "main", skip_test_gate=True))
+        result = json.loads(await merge_worktree("/tmp/wt", "dev", skip_test_gate=True))
         assert result["success"] is False
         assert result["subtype"] == "tool_exception"
         assert "skip_test_gate" in result["error"]
@@ -245,7 +245,7 @@ class TestMergeWorktreeNoBypass:
         tool_ctx.runner.push(
             _make_result(0, "= 3 failed, 97 passed =", "")
         )  # test-check: rc=0 but failed text
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
 
@@ -260,7 +260,7 @@ class TestMergeWorktreeNoBypass:
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(1, "= 3 failed, 97 passed =", ""))  # test-check
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
         assert "error" in result
         assert "test_summary" not in result
 
@@ -299,7 +299,7 @@ class TestMergeWorktreeCleanupReporting:
             _make_result(1, "", "error: untracked files")
         )  # worktree remove FAILS
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
         assert result["cleanup_succeeded"] is False
         assert result["worktree_removed"] is False
@@ -333,7 +333,7 @@ class TestMergeWorktreeCleanupReporting:
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
         assert result["cleanup_succeeded"] is False
         assert result["worktree_removed"] is True
@@ -354,7 +354,7 @@ class TestMergeWorktreeCleanupReporting:
         tool_ctx.runner.push(
             _make_result(1, "", "fatal: could not connect to remote")
         )  # git fetch FAILS
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.FETCH
 
@@ -390,7 +390,7 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
 
         with structlog.testing.capture_logs() as logs:
-            result = json.loads(await merge_worktree(str(wt), "main"))
+            result = json.loads(await merge_worktree(str(wt), "dev"))
 
         assert result["merge_succeeded"] is True
         assert result["cleanup_succeeded"] is False
@@ -424,7 +424,7 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS
 
         with structlog.testing.capture_logs() as logs:
-            result = json.loads(await merge_worktree(str(wt), "main"))
+            result = json.loads(await merge_worktree(str(wt), "dev"))
 
         assert result["merge_succeeded"] is True
         assert result["cleanup_succeeded"] is False
@@ -458,7 +458,7 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D — success
 
         with structlog.testing.capture_logs() as logs:
-            result = json.loads(await merge_worktree(str(wt), "main"))
+            result = json.loads(await merge_worktree(str(wt), "dev"))
 
         assert result["merge_succeeded"] is True
         assert result["cleanup_succeeded"] is True
@@ -575,7 +575,7 @@ class TestMergeWorktreeTiming:
         tool_ctx.runner.push(_make_result())
         tool_ctx.runner.push(_make_result())
 
-        await merge_worktree(str(wt), "main", step_name="merge")
+        await merge_worktree(str(wt), "dev", step_name="merge")
         report = tool_ctx.timing_log.get_report()
         assert any(e["step_name"] == "merge" for e in report)
 
@@ -594,7 +594,7 @@ class TestMergeWorktreeTiming:
         tool_ctx.runner.push(_make_result())
         tool_ctx.runner.push(_make_result())
 
-        await merge_worktree(str(wt), "main")
+        await merge_worktree(str(wt), "dev")
         assert tool_ctx.timing_log.get_report() == []
 
 
@@ -635,7 +635,7 @@ class TestMergeWorktreeMergeCommitDetection:
         # Step 5.6: git log --merges finds merge commits
         tool_ctx.runner.push(_make_result(0, "bb481aa Merge PR branch\n", ""))
 
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
 
         assert result["failed_step"] == MergeFailedStep.MERGE_COMMITS_DETECTED
         assert result["state"] == MergeState.WORKTREE_INTACT_MERGE_COMMITS_DETECTED
@@ -658,7 +658,7 @@ class TestMergeWorktreeMergeCommitDetection:
         tool_ctx.runner.push(_make_result(0, "abc123\n", ""))
         tool_ctx.runner.push(_make_result(0, "bb481aa Merge PR branch\n", ""))
 
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
 
         assert "cherry-pick" in result["error"]
         assert "checkout" in result["error"]
@@ -683,7 +683,7 @@ class TestMergeWorktreeMergeCommitDetection:
         tool_ctx.runner.push(_make_result(1, "", "CONFLICT (content): ..."))  # rebase fails
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase --abort
 
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
 
         # Pipeline passed step 5.6 and reached rebase — failed there, not at step 5.6
         assert result["failed_step"] == MergeFailedStep.REBASE

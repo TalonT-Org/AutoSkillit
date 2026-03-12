@@ -102,7 +102,8 @@ src/autoskillit/
 │   ├── io.py                #   _atomic_write, ensure_project_temp, load_yaml, dump_yaml, YAMLError
 │   ├── logging.py           #   get_logger, configure_logging, PACKAGE_LOGGER_NAME
 │   ├── paths.py             #   pkg_root(), is_git_worktree() — canonical package root resolver
-│   └── types.py             #   StrEnums, protocols, constants (SubprocessRunner, LoadResult, etc.)
+│   ├── types.py             #   StrEnums, protocols, constants (SubprocessRunner, LoadResult, etc.)
+│   └── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
 ├── config/                  # L1 configuration sub-package
 │   ├── __init__.py          #   Re-exports AutomationConfig + GitHubConfig
 │   ├── defaults.yaml        #   Bundled package defaults (always loaded as first layer)

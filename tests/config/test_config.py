@@ -24,6 +24,10 @@ class TestDefaultConfig:
         assert cfg.safety.reset_guard_marker == ".autoskillit-workspace"
         assert cfg.safety.require_dry_walkthrough is True
         assert cfg.safety.test_gate_on_merge is True
+        assert isinstance(cfg.safety.protected_branches, list)
+        assert "main" in cfg.safety.protected_branches
+        assert "integration" in cfg.safety.protected_branches
+        assert "stable" in cfg.safety.protected_branches
         assert cfg.worktree_setup.command is None
 
     def test_default_model_config(self):
@@ -60,6 +64,7 @@ class TestLoadConfig:
                 "reset_guard_marker": ".custom-marker",
                 "require_dry_walkthrough": False,
                 "test_gate_on_merge": False,
+                "protected_branches": ["main", "production"],
             },
             "worktree_setup": {"command": ["task", "install-worktree"]},
         }
@@ -76,6 +81,7 @@ class TestLoadConfig:
         assert cfg.safety.reset_guard_marker == ".custom-marker"
         assert cfg.safety.require_dry_walkthrough is False
         assert cfg.safety.test_gate_on_merge is False
+        assert cfg.safety.protected_branches == ["main", "production"]
         assert cfg.worktree_setup.command == ["task", "install-worktree"]
 
     def test_partial_yaml_preserves_defaults(self, tmp_path):

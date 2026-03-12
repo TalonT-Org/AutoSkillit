@@ -351,6 +351,8 @@ def _fmt_clone_repo(data: dict, _pipeline: bool) -> str:
 
 def _fmt_load_recipe(data: LoadRecipeResult, pipeline: bool) -> str:
     """Format load_recipe result as Markdown-KV."""
+    if not isinstance(data, dict):
+        return "## load_recipe\n\n_(unexpected response type)_"
     lines: list[str] = []
     valid = data.get("valid", True)
     mark = _CHECK_MARK if valid else _CROSS_MARK

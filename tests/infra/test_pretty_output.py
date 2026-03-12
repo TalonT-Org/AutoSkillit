@@ -1153,6 +1153,49 @@ class TestFormatterSchemaConsistency:
             )
 
 
+    def test_fmt_load_recipe_with_real_diagram(self) -> None:
+        """PHK-E3: _fmt_load_recipe must handle real load_and_validate() output correctly.
+
+        Uses the actual load_and_validate() pipeline (not a synthetic dict) so that any
+        schema divergence between the handler and formatter surfaces immediately. Also
+        exercises the formatter with a diagram that was produced by the real renderer —
+        not a hand-crafted string — catching any formatter bugs that depend on diagram shape.
+
+        Fails until load_and_validate() is importable with the correct return shape.
+        """
+        from autoskillit.hooks.pretty_output import _format_response
+        from autoskillit.recipe._api import load_and_validate
+
+        # smoke-test is the smallest bundled recipe — keeps this test fast
+        result = load_and_validate(
+            "smoke-test",
+            project_dir=None,
+            suppressed=None,
+            recipe_info=None,
+        )
+
+        diagram = result.get("diagram")
+        assert diagram is not None, "load_and_validate returned no diagram for smoke-test"
+
+        # Pipe through the real hook formatter (same pattern as PHK-E1/E2)
+        result_json = json.dumps(result)
+        formatted = _format_response("mcp__autoskillit__load_recipe", result_json, pipeline=False)
+        assert formatted is not None
+
+        # The real diagram must appear verbatim in formatted output
+        assert diagram in formatted, (
+            "Real rendered diagram not found in formatter output. "
+            "Formatter may have truncated, modified, or dropped the diagram field."
+        )
+        # Raw YAML must be suppressed
+        raw_yaml = result.get("content", "")
+        if raw_yaml:
+            assert raw_yaml not in formatted, (
+                "Raw YAML content must be suppressed by _fmt_load_recipe — "
+                "found in formatter output."
+            )
+
+
 # ---------------------------------------------------------------------------
 # Output-equivalence: hook inline formatter ≡ TelemetryFormatter.format_compact_kv
 # ---------------------------------------------------------------------------

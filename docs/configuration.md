@@ -223,7 +223,7 @@ report_bug:
 
 ## Environment Variables
 
-### `AUTOSKILLIT_KITCHEN_OPEN`
+### `AUTOSKILLIT_HEADLESS`
 
 When set to `"1"`, pre-opens the kitchen gate so all 26 gated pipeline tools are available immediately without calling `open_kitchen`.
 

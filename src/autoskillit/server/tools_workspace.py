@@ -65,7 +65,8 @@ async def test_check(
 
     _start = time.monotonic()
     try:
-        passed, output = await tool_ctx.tester.run(Path(worktree_path))
+        resolved = os.path.realpath(worktree_path)
+        passed, output = await tool_ctx.tester.run(Path(resolved))
 
         if not passed:
             await _notify(

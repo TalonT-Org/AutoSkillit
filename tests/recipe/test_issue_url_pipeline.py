@@ -328,12 +328,13 @@ class TestClaimReleaseGates:
 
     RECIPES = ["implementation", "implementation-groups", "remediation", "audit-and-fix"]
     RECIPES_WITH_RELEASE_SUCCESS = [
-        "implementation",
         "implementation-groups",
-        "remediation",
         "audit-and-fix",
     ]
-    RECIPES_WITHOUT_RELEASE_SUCCESS: list[str] = []
+    RECIPES_WITHOUT_RELEASE_SUCCESS = [
+        "implementation",
+        "remediation",
+    ]
 
     def test_split_lists_are_exhaustive(self):
         """All RECIPES must appear in exactly one of the split lists."""

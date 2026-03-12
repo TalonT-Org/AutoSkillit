@@ -2,13 +2,28 @@
 
 from __future__ import annotations
 
+import re
+
 from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.workspace.skills import SkillResolver
+from autoskillit.workspace import SkillResolver
 
 _BUNDLED_SKILL_NAMES: frozenset[str] = frozenset(s.name for s in SkillResolver().list_all())
+
+_SKILL_TOKEN_RE = re.compile(r"/autoskillit:(\S+)")
+
+
+def _has_dynamic_skill_name(skill_cmd: str) -> bool:
+    """Return True if the skill name portion contains template expressions."""
+    m = _SKILL_TOKEN_RE.search(skill_cmd)
+    if not m:
+        return False
+    token = m.group(1)
+    first_space = token.find(" ")
+    name_part = token[:first_space] if first_space >= 0 else token
+    return "${{" in name_part
 
 
 @semantic_rule(
@@ -23,6 +38,8 @@ def _check_unknown_skill_command(ctx: ValidationContext) -> list[RuleFinding]:
         if step.tool not in SKILL_TOOLS:
             continue
         skill_cmd = step.with_args.get("skill_command", "")
+        if _has_dynamic_skill_name(skill_cmd):
+            continue
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue

@@ -37,7 +37,7 @@ from autoskillit.recipe.validator import (
     run_semantic_rules,
     validate_recipe,
 )
-from autoskillit.workspace.skills import SkillResolver
+from autoskillit.workspace import SkillResolver
 
 _logger = get_logger(__name__)
 

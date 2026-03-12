@@ -426,7 +426,7 @@ UNGATED_TOOLS: frozenset[str] = WORKER_TOOLS | HEADLESS_BLOCKED_UNGATED_TOOLS
 # Each entry is (category_name, tuple_of_tool_names). Tool names must match the
 # registered MCP tool names exactly.
 TOOL_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Execution", ("run_cmd", "run_python", "run_recipe", "run_skill")),
+    ("Execution", ("run_cmd", "run_python", "run_skill")),
     ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
     (
         "Git Operations",

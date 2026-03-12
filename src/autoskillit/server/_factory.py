@@ -91,7 +91,7 @@ def make_context(
 
     resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
     gate = DefaultGateState(enabled=False)
-    if os.environ.get("AUTOSKILLIT_KITCHEN_OPEN") == "1":
+    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
         gate.enable()
 
     provider = SkillsDirectoryProvider()

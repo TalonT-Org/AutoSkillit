@@ -225,7 +225,12 @@ report_bug:
 
 ### `AUTOSKILLIT_HEADLESS`
 
-When set to `"1"`, pre-opens the kitchen gate so all 26 gated pipeline tools are available immediately without calling `open_kitchen`.
+When set to `"1"`, marks the MCP server instance as a headless session. This activates several session-scoped behaviors:
+
+- **Kitchen pre-opened**: all kitchen-tagged pipeline tools are revealed at startup and the gate is pre-enabled — no `open_kitchen` call required
+- **Orchestration blocked**: `run_skill`, `run_cmd`, and `run_python` are denied (headless sessions execute tasks, they do not orchestrate sub-sessions)
+- **`open_kitchen` blocked**: cannot be triggered from within a headless session
+- **Env isolation**: server-private env vars are stripped from any subprocess env passed to test runners, preventing leakage into user code
 
 This is automatically set by `autoskillit cook`, `chefs-hat`, and when launching sub-recipe headless sessions. Do **not** set this manually in user-facing orchestration sessions — it disables the protection that prevents the orchestrator from accidentally calling gated pipeline tools outside of a pipeline context.
 

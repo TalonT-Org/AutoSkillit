@@ -1122,29 +1122,36 @@ class TestFormatterSchemaConsistency:
                 f"Field '{key}' value missing from formatted kitchen_status output"
             )
 
-    def test_fmt_load_recipe_with_real_diagram(self) -> None:
-        """PHK-E3: _fmt_load_recipe must handle real load_and_validate() output correctly.
+    def test_fmt_load_recipe_with_real_diagram(self, tmp_path) -> None:
+        """PHK-E3: _fmt_load_recipe must handle real generate_recipe_diagram() output correctly.
 
-        Uses the actual load_and_validate() pipeline (not a synthetic dict) so that any
-        schema divergence between the handler and formatter surfaces immediately. Also
-        exercises the formatter with a diagram that was produced by the real renderer —
-        not a hand-crafted string — catching any formatter bugs that depend on diagram shape.
+        Uses the actual generate_recipe_diagram() renderer to produce a diagram string,
+        then pipes it through _fmt_load_recipe. This ensures the formatter is tested with
+        realistic content produced by the real renderer — not a hand-crafted string —
+        catching any formatter bugs that depend on diagram shape (FOR EACH blocks, side-leg
+        branches, Inputs tables, etc.).
 
-        Fails until load_and_validate() is importable with the correct return shape.
+        The test does not rely on pre-generated diagram files on disk; it generates the
+        diagram into a tmp_path so the test is self-contained and CI-clean.
         """
+        from autoskillit.core import pkg_root
         from autoskillit.hooks.pretty_output import _format_response
-        from autoskillit.recipe._api import load_and_validate
+        from autoskillit.recipe._api import LoadRecipeResult
+        from autoskillit.recipe.diagrams import generate_recipe_diagram
 
-        # smoke-test is the smallest bundled recipe — keeps this test fast
-        result = load_and_validate(
-            "smoke-test",
-            project_dir=None,
-            suppressed=None,
-            recipe_info=None,
-        )
+        # Generate a real diagram into tmp_path (avoids blocked diagrams/ dir)
+        recipes_dir = pkg_root() / "recipes"
+        recipe_path = recipes_dir / "smoke-test.yaml"
+        diagram = generate_recipe_diagram(recipe_path, recipes_dir, out_dir=tmp_path)
+        assert diagram, "generate_recipe_diagram returned empty diagram for smoke-test"
 
-        diagram = result.get("diagram")
-        assert diagram is not None, "load_and_validate returned no diagram for smoke-test"
+        # Build a LoadRecipeResult-shaped payload with the real diagram
+        result: LoadRecipeResult = {
+            "content": "fake-yaml-suppressed",
+            "diagram": diagram,
+            "suggestions": [],
+            "valid": True,
+        }
 
         # Pipe through the real hook formatter (same pattern as PHK-E1/E2)
         result_json = json.dumps(result)
@@ -1156,10 +1163,7 @@ class TestFormatterSchemaConsistency:
             "Real rendered diagram not found in formatter output. "
             "Formatter may have truncated, modified, or dropped the diagram field."
         )
-        # Raw YAML must be suppressed
-        raw_yaml = result.get("content", "")
-        if raw_yaml:
-            assert raw_yaml not in formatted, (
-                "Raw YAML content must be suppressed by _fmt_load_recipe — "
-                "found in formatter output."
-            )
+        # Raw YAML must be suppressed (content field never shown to LLM)
+        assert "fake-yaml-suppressed" not in formatted, (
+            "Raw YAML content must be suppressed by _fmt_load_recipe — found in formatter output."
+        )

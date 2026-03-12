@@ -4,14 +4,23 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.execution.testing import parse_pytest_summary as _parse_pytest_summary
+from autoskillit.config import AutomationConfig
+from autoskillit.core.types import (
+    AUTOSKILLIT_PRIVATE_ENV_VARS,
+    SubprocessResult,
+    TerminationReason,
+)
+from autoskillit.execution.testing import (
+    DefaultTestRunner,
+    build_sanitized_env,
+)
+from autoskillit.execution.testing import (
+    parse_pytest_summary as _parse_pytest_summary,
+)
 
 
 def test_build_sanitized_env_strips_private_env_vars(monkeypatch):
     """build_sanitized_env() must strip every var in AUTOSKILLIT_PRIVATE_ENV_VARS."""
-    from autoskillit.core.types import AUTOSKILLIT_PRIVATE_ENV_VARS
-    from autoskillit.execution.testing import build_sanitized_env
-
     for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
         monkeypatch.setenv(var, "1")
     monkeypatch.setenv("UNRELATED_VAR", "keep-me")
@@ -25,9 +34,6 @@ def test_build_sanitized_env_strips_private_env_vars(monkeypatch):
 
 def test_build_sanitized_env_returns_full_copy_when_no_private_vars(monkeypatch):
     """When no private vars are present, build_sanitized_env returns the full env."""
-    from autoskillit.core.types import AUTOSKILLIT_PRIVATE_ENV_VARS
-    from autoskillit.execution.testing import build_sanitized_env
-
     for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("SENTINEL_VAR", "present")
@@ -41,19 +47,13 @@ async def test_default_test_runner_strips_private_env_vars_from_subprocess(monke
     """DefaultTestRunner.run() must pass an env dict to the runner that excludes
     every var in AUTOSKILLIT_PRIVATE_ENV_VARS, even when the var is set in the
     calling process."""
-    from autoskillit.config import AutomationConfig
-    from autoskillit.core.types import (
-        AUTOSKILLIT_PRIVATE_ENV_VARS,
-        SubprocessResult,
-        TerminationReason,
-    )
-    from autoskillit.execution.testing import DefaultTestRunner
-
     for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
         monkeypatch.setenv(var, "1")
 
     captured_kwargs: dict = {}
 
+    # env= is always passed as a keyword argument by DefaultTestRunner.run(),
+    # so it lands in **kwargs and is captured correctly here.
     async def capturing_runner(cmd, *, cwd, timeout, **kwargs):
         captured_kwargs.update(kwargs)
         return SubprocessResult(

@@ -353,19 +353,17 @@ class TestClaimReleaseGates:
             )
 
     def test_release_issue_steps_present(self):
+        cache = {name: yaml.safe_load(_recipe_path(name).read_text()) for name in self.RECIPES}
         for name in self.RECIPES:
-            data = yaml.safe_load(_recipe_path(name).read_text())
-            assert "release_issue_failure" in data["steps"], (
+            assert "release_issue_failure" in cache[name]["steps"], (
                 f"{name}: missing release_issue_failure"
             )
         for name in self.RECIPES_WITH_RELEASE_SUCCESS:
-            data = yaml.safe_load(_recipe_path(name).read_text())
-            assert "release_issue_success" in data["steps"], (
+            assert "release_issue_success" in cache[name]["steps"], (
                 f"{name}: missing release_issue_success"
             )
         for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS:
-            data = yaml.safe_load(_recipe_path(name).read_text())
-            assert "release_issue_success" not in data["steps"], (
+            assert "release_issue_success" not in cache[name]["steps"], (
                 f"{name}: release_issue_success must be absent — label stays on success"
             )
 
@@ -386,15 +384,14 @@ class TestClaimReleaseGates:
             )
 
     def test_ci_watch_on_success_routing(self):
-        for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS:
+        expected = {
+            **{name: "confirm_cleanup" for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS},
+            **{name: "release_issue_success" for name in self.RECIPES_WITH_RELEASE_SUCCESS},
+        }
+        for name, expected_route in expected.items():
             data = yaml.safe_load(_recipe_path(name).read_text())
-            assert data["steps"]["ci_watch"]["on_success"] == "confirm_cleanup", (
-                f"{name}: ci_watch.on_success should be confirm_cleanup (no release_issue_success)"
-            )
-        for name in self.RECIPES_WITH_RELEASE_SUCCESS:
-            data = yaml.safe_load(_recipe_path(name).read_text())
-            assert data["steps"]["ci_watch"]["on_success"] == "release_issue_success", (
-                f"{name}: ci_watch.on_success should be release_issue_success"
+            assert data["steps"]["ci_watch"]["on_success"] == expected_route, (
+                f"{name}: ci_watch.on_success should be {expected_route!r}"
             )
 
     def test_claim_issue_with_args_contains_issue_url(self):

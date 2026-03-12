@@ -208,6 +208,44 @@ class TestTestCheck:
         assert result["passed"] is True
 
 
+@pytest.mark.anyio
+async def test_test_check_resolves_relative_worktree_path(tool_ctx):
+    """test_check must apply os.path.realpath() to worktree_path so that relative
+    paths are resolved against os.getcwd() consistently, matching reset_test_dir
+    and reset_workspace behavior."""
+    import os
+
+    relative_path = "../some_worktree"
+    expected_resolved = os.path.realpath(relative_path)
+
+    await test_check(worktree_path=relative_path)
+
+    cmd, cwd, timeout, kwargs = tool_ctx.runner.call_args_list[-1]
+    assert str(cwd) == expected_resolved, (
+        f"Expected cwd={expected_resolved!r}, got {str(cwd)!r}. "
+        "test_check must apply os.path.realpath() to worktree_path."
+    )
+
+
+@pytest.mark.anyio
+async def test_test_check_does_not_pass_headless_env_to_subprocess(tool_ctx, monkeypatch):
+    """When AUTOSKILLIT_HEADLESS is set in the calling process (simulating a headless
+    MCP server), test_check must not pass it to the subprocess runner."""
+    from autoskillit.core.types import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    # Simulate running inside a headless session
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+
+    await test_check(worktree_path="/tmp/wt")
+
+    assert tool_ctx.runner.call_args_list, "Runner was not called"
+    _, _, _, kwargs = tool_ctx.runner.call_args_list[-1]
+    env = kwargs.get("env")
+    assert env is not None, "test_check must pass an explicit env= to the runner"
+    for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
+        assert var not in env, f"{var} must not appear in env passed to subprocess by test_check"
+
+
 class TestResetGuard:
     """Marker-file-based reset guard for destructive operations."""
 

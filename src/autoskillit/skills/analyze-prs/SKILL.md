@@ -193,8 +193,11 @@ is active on `{base_branch}` with `MERGEABLE` entries.
 
 - **If `QUEUE_MODE = true`**: **skip this step entirely.** The `MERGEABLE` state returned by
   the merge queue API already signifies that the PR passed CI checks and has no blocking
-  reviews. There are no `CI_BLOCKED_PRS` or `REVIEW_BLOCKED_PRS` in queue mode — both arrays
-  are empty.
+  reviews. Initialize both arrays explicitly so Step 5 can reference them unconditionally:
+  ```bash
+  CI_BLOCKED_PRS=()
+  REVIEW_BLOCKED_PRS=()
+  ```
 
 ### Step 2: Build File Overlap Matrix
 
@@ -347,8 +350,8 @@ This file is named `*_plan_*.md` so `audit-impl` can discover it as the baseline
 
 ## Integration Strategy
 
-- **If `QUEUE_MODE = true`**: PR order sourced from GitHub merge queue (position ordering). File overlap analysis skipped.
 {2–3 sentences describing the overall merge strategy and key risk areas}
+- **If `QUEUE_MODE = true`**: PR order sourced from GitHub merge queue (position ordering). File overlap analysis skipped.
 ```
 
 ### Step 6: Verify and Report

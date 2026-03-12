@@ -109,14 +109,15 @@ is active on `{base_branch}` with `MERGEABLE` entries.
 
   Each subagent fetches:
   - `gh pr diff {number}` — full unified diff
-  - `gh pr view {number} --json files` — structured file list with additions/deletions per file
+  - `gh pr view {number} --json files` — structured file list; extract path strings via
+    `gh pr view {number} --json files -q '[.files[].path]'`
   - `gh pr view {number} --json body -q .body` — PR body to extract `## Requirements` section if present
 
   Each subagent returns:
   - `pr_number`: int
   - `title`: str
   - `branch`: str (headRefName)
-  - `files_changed`: list of file paths
+  - `files_changed`: list of file paths (strings extracted from `.files[].path`)
   - `additions`: int
   - `deletions`: int
   - `test_files_changed`: list of test file paths (files matching `test_*.py`, `*_test.py`, `*.test.*`, `tests/**`)
@@ -127,7 +128,8 @@ is active on `{base_branch}` with `MERGEABLE` entries.
   ```
   gh pr view {number} --json headRefName,files,additions,deletions,changedFiles
   ```
-  Collect `files_changed` (list of file paths), `test_files_changed` (subset matching
+  Extract file paths from the `files` array: `gh pr view {number} --json files -q '[.files[].path]'`.
+  Collect `files_changed` (list of file path strings), `test_files_changed` (subset matching
   `test_*.py`, `*_test.py`, `*.test.*`, `tests/**`), `additions`, `deletions`, and
   `branch` (`headRefName`). Run these fetches in parallel (up to 8 simultaneously).
   The PR list for subsequent steps is exactly `QUEUE_ENTRIES` — do **not** use the

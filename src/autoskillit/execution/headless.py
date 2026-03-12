@@ -37,6 +37,7 @@ from autoskillit.execution.session import (
     ClaudeSessionResult,
     _compute_outcome,
     _compute_success,
+    _normalize_subtype,
     _truncate,
     parse_session_result,
 )
@@ -315,11 +316,13 @@ def _build_skill_result(
     success = outcome == SessionOutcome.SUCCEEDED
     needs_retry = outcome == SessionOutcome.RETRIABLE
 
+    normalized_subtype = _normalize_subtype(session.subtype, outcome, session, completion_marker)
+
     if not success or needs_retry:
         _capture_failure(
             skill_command,
             exit_code=returncode,
-            subtype=session.subtype,
+            subtype=normalized_subtype,
             needs_retry=needs_retry,
             retry_reason=retry_reason.value,
             stderr=result.stderr if result.stderr else "",
@@ -338,7 +341,7 @@ def _build_skill_result(
         success=success,
         result=result_text,
         session_id=session.session_id,
-        subtype=session.subtype,
+        subtype=normalized_subtype,
         is_error=session.is_error,
         exit_code=returncode,
         needs_retry=needs_retry,
@@ -346,6 +349,7 @@ def _build_skill_result(
         stderr=_truncate(result.stderr),
         token_usage=session.token_usage,
         worktree_path=extracted_worktree_path,
+        cli_subtype=session.subtype,
     )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
     logger.debug(
@@ -504,6 +508,7 @@ async def run_headless_core(
                     skill_command=original_skill_command,
                     success=skill_result.success,
                     subtype=skill_result.subtype,
+                    cli_subtype=skill_result.cli_subtype,
                     exit_code=skill_result.exit_code,
                     start_ts=result.start_ts,
                     end_ts=result.end_ts,

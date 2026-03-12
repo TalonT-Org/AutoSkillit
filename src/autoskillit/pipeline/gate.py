@@ -53,6 +53,7 @@ def gate_error_result(message: str | None = None) -> str:
             "result": message if message is not None else _DEFAULT_GATE_MESSAGE,
             "session_id": "",
             "subtype": "gate_error",
+            "cli_subtype": "",
             "is_error": True,
             "exit_code": -1,
             "needs_retry": False,

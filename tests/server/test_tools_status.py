@@ -604,8 +604,13 @@ class TestWriteTelemetryFiles:
         result = json.loads(await write_telemetry_files(str(tmp_path)))
         path = Path(result["token_summary_path"])
         assert path.exists()
-        assert "step1" in path.read_text()
-        assert "100" in path.read_text()
+        content = path.read_text()
+        assert "step1" in content
+        # Format-structural assertions (table, not bullet list)
+        assert "| Step |" in content
+        assert "|---" in content
+        assert "- input_tokens:" not in content
+        assert "# Token Summary" not in content
 
     @pytest.mark.anyio
     async def test_writes_timing_summary_markdown(self, tool_ctx, tmp_path):
@@ -613,7 +618,32 @@ class TestWriteTelemetryFiles:
         result = json.loads(await write_telemetry_files(str(tmp_path)))
         path = Path(result["timing_summary_path"])
         assert path.exists()
-        assert "step1" in path.read_text()
+        content = path.read_text()
+        assert "step1" in content
+        # Format-structural assertions (table, not bullet list)
+        assert "| Step |" in content
+        assert "|---" in content
+        assert "- total_seconds:" not in content
+        assert "# Timing Summary" not in content
+
+    @pytest.mark.anyio
+    async def test_token_file_uses_wall_clock_seconds(self, tool_ctx, tmp_path):
+        """write_telemetry_files merges wall_clock_seconds from timing log."""
+        tool_ctx.token_log.record(
+            "deploy",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            elapsed_seconds=5.0,
+        )
+        tool_ctx.timing_log.record("deploy", 120.0)
+        result = json.loads(await write_telemetry_files(str(tmp_path)))
+        content = Path(result["token_summary_path"]).read_text()
+        # Should show 2m 0s (wall_clock=120), not 5s (elapsed)
+        assert "2m 0s" in content
 
     @pytest.mark.anyio
     async def test_creates_output_dir_if_missing(self, tool_ctx, tmp_path):
@@ -630,25 +660,79 @@ class TestWriteTelemetryFiles:
         assert result["subtype"] == "gate_error"
 
 
-# T8
-def test_format_token_summary_includes_elapsed_seconds():
-    from autoskillit.server.tools_status import _format_token_summary
+class TestGetTokenSummaryFormat:
+    """Tests for get_token_summary format parameter."""
 
-    steps = [
-        {
-            "step_name": "plan",
-            "input_tokens": 1000,
-            "output_tokens": 500,
-            "cache_creation_input_tokens": 100,
-            "cache_read_input_tokens": 200,
-            "invocation_count": 1,
-            "elapsed_seconds": 45.7,
-        }
-    ]
-    result = _format_token_summary(steps)
-    assert "plan" in result
-    assert "elapsed_seconds" in result
-    assert "45.7" in result
+    @pytest.fixture(autouse=True)
+    def _close_kitchen(self, tool_ctx):
+        tool_ctx.gate = DefaultGateState(enabled=False)
+
+    @pytest.mark.anyio
+    async def test_format_json_default(self, tool_ctx):
+        """format='json' (default) returns JSON dict."""
+        tool_ctx.token_log.record(
+            "plan",
+            {"input_tokens": 100, "output_tokens": 50},
+        )
+        result = json.loads(await get_token_summary())
+        assert "steps" in result
+        assert "total" in result
+
+    @pytest.mark.anyio
+    async def test_format_table_returns_markdown(self, tool_ctx):
+        """format='table' returns a markdown table string."""
+        tool_ctx.token_log.record(
+            "plan",
+            {"input_tokens": 100, "output_tokens": 50},
+        )
+        result = await get_token_summary(format="table")
+        assert "| Step |" in result
+        assert "|---" in result
+        assert "plan" in result
+        assert "**Total**" in result
+        # Not JSON
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(result)
+
+    @pytest.mark.anyio
+    async def test_format_table_with_clear(self, tool_ctx):
+        """format='table' + clear=True clears the log after returning."""
+        tool_ctx.token_log.record(
+            "plan",
+            {"input_tokens": 100, "output_tokens": 50},
+        )
+        result = await get_token_summary(clear=True, format="table")
+        assert "plan" in result
+        result2 = json.loads(await get_token_summary())
+        assert result2["steps"] == []
+
+
+class TestGetTimingSummaryFormat:
+    """Tests for get_timing_summary format parameter."""
+
+    @pytest.fixture(autouse=True)
+    def _close_kitchen(self, tool_ctx):
+        tool_ctx.gate = DefaultGateState(enabled=False)
+
+    @pytest.mark.anyio
+    async def test_format_json_default(self, tool_ctx):
+        """format='json' (default) returns JSON dict."""
+        tool_ctx.timing_log.record("plan", 3.0)
+        result = json.loads(await get_timing_summary())
+        assert "steps" in result
+        assert "total" in result
+
+    @pytest.mark.anyio
+    async def test_format_table_returns_markdown(self, tool_ctx):
+        """format='table' returns a markdown table string."""
+        tool_ctx.timing_log.record("plan", 3.0)
+        result = await get_timing_summary(format="table")
+        assert "| Step |" in result
+        assert "|---" in result
+        assert "plan" in result
+        assert "**Total**" in result
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(result)
 
 
 class TestTokenSummaryWallClock:

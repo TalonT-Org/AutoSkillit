@@ -20,6 +20,7 @@ from autoskillit.pipeline.gate import (
     headless_error_result,
 )
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog, McpResponseEntry
+from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 from autoskillit.pipeline.timings import DefaultTimingLog, TimingEntry
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
 
@@ -46,6 +47,8 @@ __all__ = [
     "UNGATED_TOOLS",
     "gate_error_result",
     "headless_error_result",
+    # telemetry_fmt
+    "TelemetryFormatter",
     # context
     "ToolContext",
 ]

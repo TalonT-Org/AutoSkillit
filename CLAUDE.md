@@ -114,6 +114,7 @@ src/autoskillit/
 │   ├── context.py           #   ToolContext DI container (config, audit, token_log, gate, plugin_dir, runner)
 │   ├── gate.py              #   DefaultGateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
 │   ├── mcp_response.py      #   McpResponseEntry, DefaultMcpResponseLog — per-tool response size tracking
+│   ├── telemetry_fmt.py     #   TelemetryFormatter — canonical token/timing display (single source of truth)
 │   ├── timings.py           #   TimingEntry, DefaultTimingLog — per-step wall-clock accumulation
 │   ├── tokens.py            #   TokenEntry, TokenLog, _token_log singleton
 │   ├── pr_gates.py          #   PR eligibility gates: is_ci_passing, is_review_passing, partition_prs

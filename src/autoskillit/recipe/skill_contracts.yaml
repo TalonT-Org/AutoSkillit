@@ -247,15 +247,21 @@ skills:
 
   open-pr:
     inputs:
-    - name: worktree_path
-      type: directory_path
+    - name: plan_paths
+      type: string
       required: true
-    - name: branch_name
+    - name: feature_branch
       type: string
       required: true
     - name: base_branch
       type: string
       required: true
+    - name: token_summary_path
+      type: file_path
+      required: false
+    - name: closing_issue
+      type: string
+      required: false
     outputs: []
     expected_output_patterns:
     - "https://github\\.com/.*/pull/\\d+"

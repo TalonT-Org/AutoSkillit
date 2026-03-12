@@ -102,8 +102,10 @@ async def load_recipe(name: str) -> str:
     TOKEN USAGE TRACKING:
     - BEFORE executing the pipeline, call kitchen_status() and read
       token_usage_verbosity. This controls how you handle token reporting:
-        "summary" → call get_token_summary(clear=True) ONCE after the
-                     pipeline completes and render the table below.
+        "summary" → call get_token_summary(clear=false, format=table) ONCE
+                     after the pipeline completes. The tool returns a
+                     pre-formatted markdown table — write it directly to
+                     temp/open-pr/token_summary.md via run_cmd.
         "none"    → do NOT call get_token_summary. Skip token reporting entirely.
     - Do NOT print or render a token usage table after individual steps.
       Only one call to get_token_summary is permitted per pipeline run,
@@ -111,16 +113,6 @@ async def load_recipe(name: str) -> str:
     - Pass step_name (the YAML step key, e.g. "implement") in the with: block
       when calling run_skill. The server accumulates token
       usage server-side, grouped by step name.
-    - When verbosity is "summary", call get_token_summary(clear=True) at pipeline
-      completion and render as:
-
-      ## Token Usage Summary
-      | Step | input | output | cache_create | cache_read |
-      |------|-------|--------|--------------|------------|
-      | investigate | 7 | 5939 | 8495 | 252179 |
-      | implement | 2031 | 122306 | 280601 | 19,071,323 |
-      | **Total** | ... | ... | ... | ... |
-
     - Non-skill steps (test_check, run_cmd, merge_worktree) have no token usage —
       they are not included in get_token_summary output. Do not add rows for them.
 
@@ -128,21 +120,8 @@ async def load_recipe(name: str) -> str:
     - All recipe-step tools (run_skill, run_cmd, test_check, merge_worktree,
       classify_fix, clone_repo, remove_clone, push_to_remote, reset_test_dir)
       accept a step_name parameter. Pass the YAML step key in each with: block.
-    - At pipeline completion (after get_token_summary), call
-      get_timing_summary(clear=True) and write the result to a file at
-      temp/<recipe-name>/timing_summary_<timestamp>.md as a markdown table.
-    - Pass the timing_summary_path as the 5th positional argument to open-pr
-      alongside token_summary_path.
-    - Render the timing table as:
-
-      ## Step Timing Summary
-      | Step        | Duration | Invocations |
-      |-------------|----------|-------------|
-      | clone       | 4s       | 1           |
-      | implement   | 8m 12s   | 3           |
-      | **Total**   | 12m 20s  |             |
-
-    - Format seconds: under 60s → "{n}s", 60–3599s → "{m}m {s}s", ≥3600s → "{h}h {m}m".
+    - Timing data is included as a column in the token summary table when
+      format=table is used. No separate timing file is needed.
     - Non-skill steps that lack step_name values are not included in get_timing_summary.
 
     ROUTING RULES — MANDATORY:

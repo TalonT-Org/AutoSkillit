@@ -68,7 +68,7 @@ from autoskillit.server.tools_kitchen import _build_tool_listing  # noqa: E402, 
 # Must appear after all tool module imports so the registered tools are in place.
 mcp.disable(tags={"kitchen"})
 
-# Cook sessions (AUTOSKILLIT_KITCHEN_OPEN=1) pre-reveal kitchen tools at module load
+# Headless sessions (AUTOSKILLIT_HEADLESS=1) pre-reveal kitchen tools at module load
 # so the session starts with all 36 tools visible without calling open_kitchen.
-if os.environ.get("AUTOSKILLIT_KITCHEN_OPEN") == "1":
+if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
     mcp.enable(tags={"kitchen"})

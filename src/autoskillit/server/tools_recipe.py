@@ -14,11 +14,9 @@ from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _apply_triage_gate,
-    _find_recipe,
     _notify,
     _require_enabled,
     _require_not_headless,
-    _run_subrecipe,
     track_response_size,
 )
 
@@ -232,78 +230,6 @@ async def validate_recipe(script_path: str) -> str:
         return json.dumps({"valid": False, "errors": ["Server not initialized"]})
     result = tool_ctx.recipes.validate_from_path(Path(script_path))
     return json.dumps(result)
-
-
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
-@track_response_size("run_recipe")
-async def run_recipe(
-    name: str,
-    cwd: str,
-    ingredients: str = "{}",
-    step_name: str = "",
-    ctx: Context = CurrentContext(),
-) -> str:
-    """Execute a named recipe as a sub-pipeline within the current session.
-
-    Loads the recipe by name, launches a headless sub-orchestrator session with all
-    ingredient values pre-supplied, and returns a SkillResult-shaped JSON. Use this
-    tool in recipe YAML steps with `tool: run_recipe` for recipe composition.
-
-    Failure predicate (same as run_skill): "success: False" in output.
-
-    Args:
-        name: Recipe name as shown in list_recipes / load_recipe.
-        cwd: Working directory for the sub-recipe session.
-        ingredients: JSON string of ingredient key→value pairs. Template refs
-                     (${{ context.* }}, ${{ inputs.* }}) are resolved by the
-                     parent orchestrator before passing this argument.
-        step_name: YAML step key for timing and token accumulation.
-    """
-    if (gate := _require_enabled()) is not None:
-        return gate
-    from pathlib import Path as _Path
-
-    from autoskillit.core import RetryReason, SkillResult
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-
-    recipe_info = _find_recipe(name, _Path(cwd))
-    if recipe_info is None:
-        return SkillResult(
-            success=False,
-            result=f"No recipe named '{name}' found from cwd={cwd}.",
-            session_id="",
-            subtype="error",
-            is_error=True,
-            exit_code=-1,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        ).to_json()
-
-    try:
-        recipe_yaml = recipe_info.path.read_text()
-    except OSError as exc:
-        return SkillResult(
-            success=False,
-            result=f"Failed to read recipe file '{recipe_info.path}': {exc}",
-            session_id="",
-            subtype="error",
-            is_error=True,
-            exit_code=-1,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        ).to_json()
-    result = await _run_subrecipe(
-        recipe_yaml=recipe_yaml,
-        ingredients_json=ingredients,
-        cwd=cwd,
-        ctx=tool_ctx,
-        step_name=step_name,
-    )
-    return result.to_json()
 
 
 @mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})

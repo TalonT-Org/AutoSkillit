@@ -6,7 +6,11 @@ import httpx
 import pytest
 
 from autoskillit.core import GitHubFetcher
-from autoskillit.execution.github import DefaultGitHubFetcher, _parse_issue_ref
+from autoskillit.execution.github import (
+    DefaultGitHubFetcher,
+    _parse_issue_ref,
+    parse_merge_queue_response,
+)
 
 # ---------------------------------------------------------------------------
 # _parse_issue_ref unit tests
@@ -617,3 +621,171 @@ def test_default_github_fetcher_implements_full_protocol():
         "ensure_label",
     ):
         assert callable(getattr(fetcher, method, None)), f"missing method: {method}"
+
+
+# ---------------------------------------------------------------------------
+# parse_merge_queue_response
+# ---------------------------------------------------------------------------
+
+_QUEUE_RESPONSE_WITH_ENTRIES = {
+    "data": {
+        "repository": {
+            "mergeQueue": {
+                "entries": {
+                    "nodes": [
+                        {
+                            "position": 2,
+                            "state": "MERGEABLE",
+                            "pullRequest": {"number": 42, "title": "feat: add thing"},
+                        },
+                        {
+                            "position": 1,
+                            "state": "MERGEABLE",
+                            "pullRequest": {"number": 37, "title": "fix: old bug"},
+                        },
+                        {
+                            "position": 3,
+                            "state": "AWAITING_CHECKS",
+                            "pullRequest": {"number": 55, "title": "wip: not ready"},
+                        },
+                    ]
+                }
+            }
+        }
+    }
+}
+
+_QUEUE_RESPONSE_EMPTY = {"data": {"repository": {"mergeQueue": {"entries": {"nodes": []}}}}}
+
+_QUEUE_RESPONSE_NULL_QUEUE = {"data": {"repository": {"mergeQueue": None}}}
+
+_QUEUE_RESPONSE_GRAPHQL_ERROR = {
+    "errors": [{"message": "Field 'mergeQueue' doesn't exist on type 'Repository'"}]
+}
+
+
+def test_parse_merge_queue_response_returns_entries_sorted_by_position():
+    entries = parse_merge_queue_response(_QUEUE_RESPONSE_WITH_ENTRIES)
+    assert len(entries) == 3
+    assert entries[0]["position"] == 1
+    assert entries[1]["position"] == 2
+    assert entries[2]["position"] == 3
+
+
+def test_parse_merge_queue_response_entry_fields():
+    entries = parse_merge_queue_response(_QUEUE_RESPONSE_WITH_ENTRIES)
+    first = entries[0]
+    assert first["pr_number"] == 37
+    assert first["pr_title"] == "fix: old bug"
+    assert first["state"] == "MERGEABLE"
+    assert first["position"] == 1
+
+
+def test_parse_merge_queue_response_preserves_all_states():
+    entries = parse_merge_queue_response(_QUEUE_RESPONSE_WITH_ENTRIES)
+    states = {e["state"] for e in entries}
+    assert "MERGEABLE" in states
+    assert "AWAITING_CHECKS" in states
+
+
+def test_parse_merge_queue_response_empty_nodes_returns_empty_list():
+    assert parse_merge_queue_response(_QUEUE_RESPONSE_EMPTY) == []
+
+
+def test_parse_merge_queue_response_null_queue_returns_empty_list():
+    assert parse_merge_queue_response(_QUEUE_RESPONSE_NULL_QUEUE) == []
+
+
+def test_parse_merge_queue_response_graphql_error_returns_empty_list():
+    assert parse_merge_queue_response(_QUEUE_RESPONSE_GRAPHQL_ERROR) == []
+
+
+def test_parse_merge_queue_response_missing_data_key_returns_empty_list():
+    assert parse_merge_queue_response({}) == []
+
+
+def test_parse_merge_queue_response_missing_pullrequest_included_with_none():
+    bad = {
+        "data": {
+            "repository": {
+                "mergeQueue": {
+                    "entries": {
+                        "nodes": [
+                            {"position": 1, "state": "MERGEABLE"},  # missing pullRequest key
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    entries = parse_merge_queue_response(bad)
+    # Missing pullRequest key must not crash; entry is included with pr_number=None
+    assert len(entries) == 1
+    assert entries[0]["pr_number"] is None
+
+
+def test_parse_merge_queue_response_is_pure_function():
+    """Calling it twice with the same input produces the same output."""
+    a = parse_merge_queue_response(_QUEUE_RESPONSE_WITH_ENTRIES)
+    b = parse_merge_queue_response(_QUEUE_RESPONSE_WITH_ENTRIES)
+    assert a == b
+
+
+def test_parse_merge_queue_response_bad_node_skips_not_drops_rest():
+    """A None node (or other non-dict) skips that entry but preserves valid entries."""
+    data = {
+        "data": {
+            "repository": {
+                "mergeQueue": {
+                    "entries": {
+                        "nodes": [
+                            {
+                                "position": 1,
+                                "state": "MERGEABLE",
+                                "pullRequest": {"number": 10, "title": "ok"},
+                            },
+                            None,  # malformed — should be skipped
+                            {
+                                "position": 3,
+                                "state": "MERGEABLE",
+                                "pullRequest": {"number": 30, "title": "also ok"},
+                            },
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    entries = parse_merge_queue_response(data)
+    assert len(entries) == 2
+    assert entries[0]["pr_number"] == 10
+    assert entries[1]["pr_number"] == 30
+
+
+def test_parse_merge_queue_response_missing_position_sorts_last():
+    """Entries without a position key sort after entries with explicit positions."""
+    data = {
+        "data": {
+            "repository": {
+                "mergeQueue": {
+                    "entries": {
+                        "nodes": [
+                            {
+                                "state": "MERGEABLE",
+                                "pullRequest": {"number": 99, "title": "no pos"},
+                            },
+                            {
+                                "position": 1,
+                                "state": "MERGEABLE",
+                                "pullRequest": {"number": 1, "title": "pos 1"},
+                            },
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    entries = parse_merge_queue_response(data)
+    assert len(entries) == 2
+    assert entries[0]["pr_number"] == 1
+    assert entries[1]["pr_number"] == 99

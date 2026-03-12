@@ -53,107 +53,184 @@ If zero PRs are returned: write a summary to terminal and exit cleanly with an e
 
 If `gh` returns an auth error: abort with a clear message.
 
-### Step 1: Fetch PR Diffs in Parallel
+### Step 0.5: Detect GitHub Merge Queue
 
-**ALWAYS launch subagents in parallel** — never process PRs sequentially. Launch one Explore
-subagent per PR (up to 8 simultaneously; batch in groups of 8 if more):
+Before fetching diffs, query the GitHub GraphQL API to determine whether a merge queue
+is active on `{base_branch}` with `MERGEABLE` entries.
 
-Each subagent fetches:
-- `gh pr diff {number}` — full unified diff
-- `gh pr view {number} --json files` — structured file list with additions/deletions per file
-- `gh pr view {number} --json body -q .body` — PR body to extract `## Requirements` section if present
+1. Resolve the repo owner and name:
+   ```
+   gh repo view --json owner,name
+   ```
+   Extract `OWNER` and `REPO` from the JSON output.
 
-Each subagent returns:
-- `pr_number`: int
-- `title`: str
-- `branch`: str (headRefName)
-- `files_changed`: list of file paths
-- `additions`: int
-- `deletions`: int
-- `test_files_changed`: list of test file paths (files matching `test_*.py`, `*_test.py`, `*.test.*`, `tests/**`)
-- `requirements_section`: str — the `## Requirements` section extracted from the PR body, or `""` if not present
+2. Query the merge queue:
+   ```
+   gh api graphql -f query='{
+     repository(owner: "OWNER", name: "REPO") {
+       mergeQueue(branch: "BASE_BRANCH") {
+         entries(first: 50) {
+           nodes {
+             position
+             state
+             pullRequest { number title }
+           }
+         }
+       }
+     }
+   }'
+   ```
+   Pipe the JSON output to:
+   ```
+   python -c "
+   import sys, json
+   from autoskillit.execution.github import parse_merge_queue_response
+   data = json.load(sys.stdin)
+   entries = parse_merge_queue_response(data)
+   print(json.dumps(entries))
+   "
+   ```
+
+3. Determine mode:
+   - If the resulting entry list contains at least one entry with `state == "MERGEABLE"`:
+     set **`QUEUE_MODE = true`** and store the full sorted entry list as `QUEUE_ENTRIES`.
+   - Otherwise (empty list, no MERGEABLE entries, or `gh api graphql` returned a
+     non-zero exit code): set **`QUEUE_MODE = false`** and proceed with the existing
+     analysis path.
+
+   Log which mode was selected and the entry count to the terminal so pipeline runs are
+   observable.
+
+### Step 1: Fetch PR Data
+
+- **If `QUEUE_MODE = false`**: **ALWAYS launch subagents in parallel** — never process PRs
+  sequentially. Launch one Explore subagent per PR (up to 8 simultaneously; batch in groups
+  of 8 if more):
+
+  Each subagent fetches:
+  - `gh pr diff {number}` — full unified diff
+  - `gh pr view {number} --json files` — structured file list with additions/deletions per file
+  - `gh pr view {number} --json body -q .body` — PR body to extract `## Requirements` section if present
+
+  Each subagent returns:
+  - `pr_number`: int
+  - `title`: str
+  - `branch`: str (headRefName)
+  - `files_changed`: list of file paths
+  - `additions`: int
+  - `deletions`: int
+  - `test_files_changed`: list of test file paths (files matching `test_*.py`, `*_test.py`, `*.test.*`, `tests/**`)
+  - `requirements_section`: str — the `## Requirements` section extracted from the PR body, or `""` if not present
+
+- **If `QUEUE_MODE = true`**: for each PR number in `QUEUE_ENTRIES`, fetch only the
+  metadata needed for the manifest (no diffs, no body extraction):
+  ```
+  gh pr view {number} --json headRefName,files,additions,deletions,changedFiles
+  ```
+  Collect `files_changed` (list of file paths), `test_files_changed` (subset matching
+  `test_*.py`, `*_test.py`, `*.test.*`, `tests/**`), `additions`, `deletions`, and
+  `branch` (`headRefName`). Run these fetches in parallel (up to 8 simultaneously).
+  The PR list for subsequent steps is exactly `QUEUE_ENTRIES` — do **not** use the
+  `gh pr list` output.
 
 ### Step 1.5: Filter PRs by CI and Review Status
 
-After fetching all PR diffs, filter the candidate list before building the overlap matrix.
-PRs that fail either gate are reported in the manifest but excluded from merge ordering.
+- **If `QUEUE_MODE = false`**: After fetching all PR diffs, filter the candidate list before
+  building the overlap matrix. PRs that fail either gate are reported in the manifest but
+  excluded from merge ordering.
 
-```bash
-ELIGIBLE_PRS=()
-CI_BLOCKED_PRS=()      # [{number, title, reason}]
-REVIEW_BLOCKED_PRS=()  # [{number, title, reason}]
+  ```bash
+  ELIGIBLE_PRS=()
+  CI_BLOCKED_PRS=()      # [{number, title, reason}]
+  REVIEW_BLOCKED_PRS=()  # [{number, title, reason}]
 
-for PR in "${ALL_PRS[@]}"; do
-  PR_NUM=$(echo "$PR" | jq -r .number)
-  PR_TITLE=$(echo "$PR" | jq -r .title)
+  for PR in "${ALL_PRS[@]}"; do
+    PR_NUM=$(echo "$PR" | jq -r .number)
+    PR_TITLE=$(echo "$PR" | jq -r .title)
 
-  # --- CI Gate ---
-  CI_CHECKS=$(gh pr checks "$PR_NUM" --json name,status,conclusion 2>/dev/null \
-    || echo "[]")
-  FAILING=$(echo "$CI_CHECKS" | jq '[.[] | select(
-    .conclusion != null and
-    .conclusion != "success" and
-    .conclusion != "skipped" and
-    .conclusion != "neutral"
-  )] | length')
-  IN_PROGRESS=$(echo "$CI_CHECKS" | jq '[.[] | select(.conclusion == null)] | length')
+    # --- CI Gate ---
+    CI_CHECKS=$(gh pr checks "$PR_NUM" --json name,status,conclusion 2>/dev/null \
+      || echo "[]")
+    FAILING=$(echo "$CI_CHECKS" | jq '[.[] | select(
+      .conclusion != null and
+      .conclusion != "success" and
+      .conclusion != "skipped" and
+      .conclusion != "neutral"
+    )] | length')
+    IN_PROGRESS=$(echo "$CI_CHECKS" | jq '[.[] | select(.conclusion == null)] | length')
 
-  if [ "$FAILING" -gt 0 ] || [ "$IN_PROGRESS" -gt 0 ]; then
-    REASON="CI failing: ${FAILING} failed, ${IN_PROGRESS} in-progress"
-    CI_BLOCKED_PRS+=("{\"number\":${PR_NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
-    continue
-  fi
+    if [ "$FAILING" -gt 0 ] || [ "$IN_PROGRESS" -gt 0 ]; then
+      REASON="CI failing: ${FAILING} failed, ${IN_PROGRESS} in-progress"
+      CI_BLOCKED_PRS+=("{\"number\":${PR_NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
+      continue
+    fi
 
-  # --- Review Gate ---
-  REVIEWS=$(gh pr view "$PR_NUM" --json reviews -q '.reviews // []')
-  CHANGES_REQUESTED=$(echo "$REVIEWS" | jq '[.[] | select(.state == "CHANGES_REQUESTED")] | length')
+    # --- Review Gate ---
+    REVIEWS=$(gh pr view "$PR_NUM" --json reviews -q '.reviews // []')
+    CHANGES_REQUESTED=$(echo "$REVIEWS" | jq '[.[] | select(.state == "CHANGES_REQUESTED")] | length')
 
-  if [ "$CHANGES_REQUESTED" -gt 0 ]; then
-    REASON="${CHANGES_REQUESTED} unresolved CHANGES_REQUESTED review(s)"
-    REVIEW_BLOCKED_PRS+=("{\"number\":${PR_NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
-    continue
-  fi
+    if [ "$CHANGES_REQUESTED" -gt 0 ]; then
+      REASON="${CHANGES_REQUESTED} unresolved CHANGES_REQUESTED review(s)"
+      REVIEW_BLOCKED_PRS+=("{\"number\":${PR_NUM},\"title\":\"${PR_TITLE}\",\"reason\":\"${REASON}\"}")
+      continue
+    fi
 
-  ELIGIBLE_PRS+=("$PR")
-done
-```
+    ELIGIBLE_PRS+=("$PR")
+  done
+  ```
 
-All subsequent steps (overlap matrix, topo sort, PR ordering) operate on `ELIGIBLE_PRS` only.
-`CI_BLOCKED_PRS` and `REVIEW_BLOCKED_PRS` are written to the manifest in Step 5.
+  All subsequent steps (overlap matrix, topo sort, PR ordering) operate on `ELIGIBLE_PRS` only.
+  `CI_BLOCKED_PRS` and `REVIEW_BLOCKED_PRS` are written to the manifest in Step 5.
+
+- **If `QUEUE_MODE = true`**: **skip this step entirely.** The `MERGEABLE` state returned by
+  the merge queue API already signifies that the PR passed CI checks and has no blocking
+  reviews. There are no `CI_BLOCKED_PRS` or `REVIEW_BLOCKED_PRS` in queue mode — both arrays
+  are empty.
 
 ### Step 2: Build File Overlap Matrix
 
-For each pair of PRs, compute:
-- `shared_files`: files modified by both PRs
-- `shared_test_files`: test files modified by both PRs
+- **If `QUEUE_MODE = false`**: For each pair of PRs, compute:
+  - `shared_files`: files modified by both PRs
+  - `shared_test_files`: test files modified by both PRs
 
-A PR pair is **conflicting** if `shared_files` is non-empty.
+  A PR pair is **conflicting** if `shared_files` is non-empty.
+
+- **If `QUEUE_MODE = true`**: **skip this step entirely.** The merge queue has already proven
+  compatibility. Set `overlap_with_pr_numbers = []` for every PR.
 
 ### Step 3: Determine Merge Order
 
-Order PRs to minimize cascading conflict risk:
+- **If `QUEUE_MODE = false`**: Order PRs to minimize cascading conflict risk:
 
-1. **PRs with no overlapping files** with any other PR → place first (order by additions ASC)
-2. **PRs with overlap** → order so the PR that others depend on (touches foundational files) comes first; use topological sort on the overlap graph
-3. **Large PRs** (additions > 200) → place after small PRs that touch the same files, unless they have no overlap
+  1. **PRs with no overlapping files** with any other PR → place first (order by additions ASC)
+  2. **PRs with overlap** → order so the PR that others depend on (touches foundational files) comes first; use topological sort on the overlap graph
+  3. **Large PRs** (additions > 200) → place after small PRs that touch the same files, unless they have no overlap
 
-Produce a final ordered list. Document the rationale for each ordering decision.
+  Produce a final ordered list. Document the rationale for each ordering decision.
+
+- **If `QUEUE_MODE = true`**: the merge order is `QUEUE_ENTRIES` sorted by `position`
+  ascending (ascending is already guaranteed by `parse_merge_queue_response`).
 
 ### Step 4: Tag Complexity
 
-For each PR in the ordered list, assign a complexity tag:
+- **If `QUEUE_MODE = false`**: For each PR in the ordered list, assign a complexity tag:
 
-**`simple`** — all of the following are true:
-- No shared files with any PR ahead of it in the merge order
-- Total additions < 100
-- No shared test files with PRs ahead of it
-- No substantial logic changes in files also touched by earlier PRs (based on diff inspection)
+  **`simple`** — all of the following are true:
+  - No shared files with any PR ahead of it in the merge order
+  - Total additions < 100
+  - No shared test files with PRs ahead of it
+  - No substantial logic changes in files also touched by earlier PRs (based on diff inspection)
 
-**`needs_check`** — any of the following:
-- Shares files with one or more PRs ahead of it in merge order
-- Additions ≥ 100 and touches files also present in earlier PRs
-- Modifies shared test files
-- The diff suggests it depends on function signatures or class structures that earlier PRs may change
+  **`needs_check`** — any of the following:
+  - Shares files with one or more PRs ahead of it in merge order
+  - Additions ≥ 100 and touches files also present in earlier PRs
+  - Modifies shared test files
+  - The diff suggests it depends on function signatures or class structures that earlier PRs may change
+
+- **If `QUEUE_MODE = true`**: tag every PR whose queue entry has `state == "MERGEABLE"` as
+  **`simple`**. Any entry with a different state (e.g., `AWAITING_CHECKS`) retains the
+  `needs_check` tag (defensive — such entries should not appear since Step 0.5 only sets
+  QUEUE_MODE when MERGEABLE entries exist, but the tag is applied correctly for robustness).
 
 ### Step 5: Write Outputs
 
@@ -261,6 +338,7 @@ This file is named `*_plan_*.md` so `audit-impl` can discover it as the baseline
 
 ## Integration Strategy
 
+{If QUEUE_MODE = true, add: "PR order sourced from GitHub merge queue (position ordering). File overlap analysis skipped."}
 {2–3 sentences describing the overall merge strategy and key risk areas}
 ```
 

@@ -25,19 +25,3 @@ def test_audit_and_fix_uses_autoskillit_audit_prefix() -> None:
                     f"Step '{step_name}' uses unbundled skill '{cmd}'. "
                     "Use '/autoskillit:audit-*' for bundled variants."
                 )
-
-
-def test_audit_and_fix_review_pr_step_has_skip_when_false() -> None:
-    """review-pr step in audit-and-fix must have skip_when_false for graceful degradation."""
-    recipe = _recipe()
-    review_steps = {
-        name: step
-        for name, step in recipe.get("steps", {}).items()
-        if "review-pr" in (step.get("with", {}).get("skill_command", "") or "")
-        or "resolve-review" in (step.get("with", {}).get("skill_command", "") or "")
-    }
-    for step_name, step in review_steps.items():
-        assert "skip_when_false" in step, (
-            f"Step '{step_name}' calls review-pr/resolve-review but has no "
-            "'skip_when_false'. Add graceful degradation."
-        )

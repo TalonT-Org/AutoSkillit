@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from autoskillit.core import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
@@ -79,10 +77,6 @@ def test_non_skill_step_not_checked() -> None:
     assert not unknown, "run_cmd steps must not trigger unknown-skill-command"
 
 
-@pytest.mark.xfail(
-    reason="review-pr skill deleted — Part B restores it (rectify plan Part B)",
-    strict=True,
-)
 def test_all_bundled_recipes_skill_commands_resolve() -> None:
     """Every skill_command in bundled recipes references a skill that exists on disk."""
     for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):

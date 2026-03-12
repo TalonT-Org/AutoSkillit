@@ -704,7 +704,7 @@ def test_parse_merge_queue_response_missing_data_key_returns_empty_list():
     assert parse_merge_queue_response({}) == []
 
 
-def test_parse_merge_queue_response_malformed_node_skipped():
+def test_parse_merge_queue_response_missing_pullrequest_included_with_none():
     bad = {
         "data": {
             "repository": {
@@ -719,7 +719,7 @@ def test_parse_merge_queue_response_malformed_node_skipped():
         }
     }
     entries = parse_merge_queue_response(bad)
-    # Malformed node must not crash; entry is included with None pr_number
+    # Missing pullRequest key must not crash; entry is included with pr_number=None
     assert len(entries) == 1
     assert entries[0]["pr_number"] is None
 

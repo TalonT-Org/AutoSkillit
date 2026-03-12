@@ -148,7 +148,7 @@ class McpResponseConfig:
 
 @dataclass
 class BranchingConfig:
-    default_base_branch: str = "integration"
+    default_base_branch: str = "main"
 
 
 def _field_defaults(cls: type) -> dict[str, Any]:

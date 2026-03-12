@@ -42,6 +42,9 @@ class MockSubprocessRunner(SubprocessRunner):
 
     Inherits from SubprocessRunner (Protocol) so mypy verifies the __call__
     signature matches the protocol at class definition, not just at call sites.
+
+    call_args_list stores (cmd, cwd, timeout, kwargs) tuples.
+    IMPORTANT: Assert [N][1] (cwd) when testing cwd propagation.
     """
 
     def __init__(self) -> None:

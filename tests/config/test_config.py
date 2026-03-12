@@ -561,22 +561,37 @@ class TestReleaseReadinessConfig:
 
 
 class TestBranchingConfig:
-    def test_branching_config_default_base_branch_is_integration(self) -> None:
-        """BranchingConfig must default default_base_branch to 'integration'."""
+    def test_branching_config_default_base_branch_is_main(self) -> None:
+        """BranchingConfig must default default_base_branch to 'main'."""
         from autoskillit.config.settings import BranchingConfig
 
-        assert BranchingConfig().default_base_branch == "integration"
+        assert BranchingConfig().default_base_branch == "main"
 
     def test_automation_config_has_branching_field(self) -> None:
         """AutomationConfig must expose a BranchingConfig as .branching."""
         from autoskillit.config.settings import AutomationConfig
 
         cfg = AutomationConfig()
-        assert cfg.branching.default_base_branch == "integration"
+        assert cfg.branching.default_base_branch == "main"
 
     def test_branching_config_is_overridable(self) -> None:
         """BranchingConfig.default_base_branch must accept override values."""
         from autoskillit.config.settings import BranchingConfig
 
-        cfg = BranchingConfig(default_base_branch="main")
-        assert cfg.default_base_branch == "main"
+        cfg = BranchingConfig(default_base_branch="develop")
+        assert cfg.default_base_branch == "develop"
+
+    def test_branching_default_base_branch_matches_defaults_yaml(self) -> None:
+        """BranchingConfig Python default must match defaults.yaml."""
+        from autoskillit.config.settings import BranchingConfig
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
+
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        yaml_default = defaults["branching"]["default_base_branch"]
+        python_default = BranchingConfig().default_base_branch
+
+        assert python_default == yaml_default, (
+            f"BranchingConfig.default_base_branch Python default ({python_default!r}) "
+            f"disagrees with defaults.yaml ({yaml_default!r})"
+        )

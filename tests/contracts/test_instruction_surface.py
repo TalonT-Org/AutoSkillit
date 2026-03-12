@@ -257,12 +257,12 @@ class TestMultiPartScopeContract:
 
 
 class TestIngredientCollectionAlignment:
-    """cook and load_recipe must carry identical conversational ingredient collection instructions."""
+    """cook and load_recipe must carry identical conversational collection instructions."""
 
     _SENTINEL = "infer as many ingredient values"
 
     def test_orchestrator_prompt_has_conversational_sentinel(self):
-        """_build_orchestrator_prompt must contain the conversational collection sentinel phrase."""
+        """_build_orchestrator_prompt must contain the conversational sentinel phrase."""
         from autoskillit.cli._prompts import _build_orchestrator_prompt
 
         prompt = _build_orchestrator_prompt("<dummy yaml>")
@@ -272,18 +272,17 @@ class TestIngredientCollectionAlignment:
         )
 
     def test_load_recipe_docstring_has_conversational_sentinel(self):
-        """load_recipe docstring must contain the conversational collection sentinel phrase."""
+        """load_recipe docstring must contain the conversational sentinel phrase."""
         from autoskillit.server.tools_recipe import load_recipe
 
         doc = load_recipe.__doc__ or ""
         assert self._SENTINEL in doc, (
             f"load_recipe docstring must contain '{self._SENTINEL}'. "
-            "Update the conversational ingredient collection block to match _build_orchestrator_prompt."
+            "Update the conversational collection block to match _build_orchestrator_prompt."
         )
 
     def test_ingredient_collection_instructions_are_aligned(self):
         """The conversational ingredient collection block must be identical in both paths."""
-        import re
         from autoskillit.cli._prompts import _build_orchestrator_prompt
         from autoskillit.server.tools_recipe import load_recipe
 
@@ -295,7 +294,8 @@ class TestIngredientCollectionAlignment:
             """Return the multi-line conversational collection block."""
             lines = text.splitlines()
             start = next(
-                (i for i, l in enumerate(lines) if "infer as many ingredient values" in l), None
+                (i for i, line in enumerate(lines) if "infer as many ingredient values" in line),
+                None,
             )
             if start is None:
                 return ""
@@ -307,15 +307,20 @@ class TestIngredientCollectionAlignment:
             # Walk forward to find the closing clause (clause d about optional defaults)
             end = start
             for i in range(start, min(start + 15, len(lines))):
-                if "optional ingredients" in lines[i].lower() or "default values" in lines[i].lower():
+                if (
+                    "optional ingredients" in lines[i].lower()
+                    or "default values" in lines[i].lower()
+                ):
                     end = i
                     break
-            return "\n".join(l.strip() for l in lines[start : end + 1])
+            return "\n".join(line.strip() for line in lines[start : end + 1])
 
         prompt_block = _extract_block(prompt)
         doc_block = _extract_block(doc)
 
-        assert prompt_block, "Could not extract conversational block from _build_orchestrator_prompt"
+        assert prompt_block, (
+            "Could not extract conversational block from _build_orchestrator_prompt"
+        )
         assert doc_block, "Could not extract conversational block from load_recipe docstring"
         assert prompt_block == doc_block, (
             "Conversational ingredient collection block differs between "

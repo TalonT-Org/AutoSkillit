@@ -35,7 +35,7 @@ def test_build_orchestrator_prompt_not_in_app_module():
 
 
 def test_orchestrator_prompt_ingredient_collection_is_conversational():
-    """Orchestrator prompt must use conversational ingredient collection, not per-field prompting."""
+    """Orchestrator prompt must use conversational collection, not per-field prompting."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("<dummy yaml>")
@@ -44,13 +44,13 @@ def test_orchestrator_prompt_ingredient_collection_is_conversational():
         "Orchestrator prompt must instruct Claude to infer ingredient values"
     )
     assert "free-form" in prompt.lower() or "open-ended" in prompt.lower(), (
-        "Orchestrator prompt must describe a free-form or open-ended question for ingredient collection"
+        "Orchestrator prompt must describe a free-form or open-ended question"
     )
     # Old mechanical per-field instruction must be gone from the input-collection step
     # (AskUserQuestion may still appear in the confirm-step section — that's expected)
     lines = prompt.splitlines()
     mechanical_line = next(
-        (l for l in lines if "Prompt for input values using AskUserQuestion" in l), None
+        (line for line in lines if "Prompt for input values using AskUserQuestion" in line), None
     )
     assert mechanical_line is None, (
         "Orchestrator prompt must not contain 'Prompt for input values using AskUserQuestion' "

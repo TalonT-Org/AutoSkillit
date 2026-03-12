@@ -616,7 +616,6 @@ class TestHeadlessTelemetryContainment:
         )
 
 
-
 class TestEnsureSkillPrefix:
     """Unit tests for _ensure_skill_prefix helper."""
 

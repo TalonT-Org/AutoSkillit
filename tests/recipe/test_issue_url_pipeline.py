@@ -366,7 +366,7 @@ class TestClaimReleaseGates:
         for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS:
             data = yaml.safe_load(_recipe_path(name).read_text())
             assert "release_issue_success" not in data["steps"], (
-                f"{name}: release_issue_success must be absent — in-progress label stays on success"
+                f"{name}: release_issue_success must be absent — label stays on success"
             )
 
     def test_release_issue_success_routes_to_confirm_cleanup(self):

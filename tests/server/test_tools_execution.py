@@ -471,7 +471,8 @@ class TestRunSkillFailurePaths:
         tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["is_error"] is True
-        assert result["subtype"] == "success"
+        assert result["subtype"] == "missing_completion_marker"
+        assert result["cli_subtype"] == "success"
 
     @pytest.mark.anyio
     async def test_handles_empty_stdout(self, tool_ctx):

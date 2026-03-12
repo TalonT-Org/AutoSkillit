@@ -248,8 +248,11 @@ def test_load_recipe_result_is_typed() -> None:
     from autoskillit.recipe._api import LoadRecipeResult  # fails until defined
 
     assert LoadRecipeResult is not None
-    # Verify required keys are declared
-    hints = LoadRecipeResult.__annotations__
+    # Verify required keys are declared — use get_type_hints for robust introspection
+    # (handles inherited keys if the TypedDict is later split into base+extension).
+    import typing  # noqa: PLC0415
+
+    hints = typing.get_type_hints(LoadRecipeResult)
     assert "content" in hints
     assert "diagram" in hints
     assert "suggestions" in hints

@@ -4,7 +4,75 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.execution.testing import parse_pytest_summary as _parse_pytest_summary
+from autoskillit.config import AutomationConfig
+from autoskillit.core.types import (
+    AUTOSKILLIT_PRIVATE_ENV_VARS,
+    SubprocessResult,
+    TerminationReason,
+)
+from autoskillit.execution.testing import (
+    DefaultTestRunner,
+    build_sanitized_env,
+)
+from autoskillit.execution.testing import (
+    parse_pytest_summary as _parse_pytest_summary,
+)
+
+
+def test_build_sanitized_env_strips_private_env_vars(monkeypatch):
+    """build_sanitized_env() must strip every var in AUTOSKILLIT_PRIVATE_ENV_VARS."""
+    for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
+        monkeypatch.setenv(var, "1")
+    monkeypatch.setenv("UNRELATED_VAR", "keep-me")
+
+    result = build_sanitized_env()
+
+    for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
+        assert var not in result, f"{var} must not appear in sanitized env"
+    assert result.get("UNRELATED_VAR") == "keep-me"
+
+
+def test_build_sanitized_env_returns_full_copy_when_no_private_vars(monkeypatch):
+    """When no private vars are present, build_sanitized_env returns the full env."""
+    for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("SENTINEL_VAR", "present")
+
+    result = build_sanitized_env()
+    assert "SENTINEL_VAR" in result
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_strips_private_env_vars_from_subprocess(monkeypatch, tmp_path):
+    """DefaultTestRunner.run() must pass an env dict to the runner that excludes
+    every var in AUTOSKILLIT_PRIVATE_ENV_VARS, even when the var is set in the
+    calling process."""
+    for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
+        monkeypatch.setenv(var, "1")
+
+    captured_kwargs: dict = {}
+
+    # env= is always passed as a keyword argument by DefaultTestRunner.run(),
+    # so it lands in **kwargs and is captured correctly here.
+    async def capturing_runner(cmd, *, cwd, timeout, **kwargs):
+        captured_kwargs.update(kwargs)
+        return SubprocessResult(
+            returncode=0,
+            stdout="1 passed",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+
+    runner = DefaultTestRunner(config=AutomationConfig(), runner=capturing_runner)
+    await runner.run(cwd=tmp_path)
+
+    assert "env" in captured_kwargs, "DefaultTestRunner must pass env= to its runner"
+    passed_env = captured_kwargs["env"]
+    for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
+        assert var not in passed_env, (
+            f"{var} must not appear in the env passed to the subprocess runner"
+        )
 
 
 class TestParsePytestSummary:

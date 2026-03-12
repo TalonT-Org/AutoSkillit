@@ -17,6 +17,15 @@ T = TypeVar("T")
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
 
+# Env vars that control MCP server-level behavior and must not leak into
+# user-code subprocesses (pytest runs, shell commands, etc.).
+# Add new internal vars here as they are introduced.
+AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
+    {
+        "AUTOSKILLIT_HEADLESS",
+    }
+)
+
 
 class RetryReason(StrEnum):
     RESUME = "resume"

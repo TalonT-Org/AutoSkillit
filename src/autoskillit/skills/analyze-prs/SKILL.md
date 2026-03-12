@@ -347,7 +347,7 @@ This file is named `*_plan_*.md` so `audit-impl` can discover it as the baseline
 
 ## Integration Strategy
 
-{If QUEUE_MODE = true, add: "PR order sourced from GitHub merge queue (position ordering). File overlap analysis skipped."}
+- **If `QUEUE_MODE = true`**: PR order sourced from GitHub merge queue (position ordering). File overlap analysis skipped.
 {2–3 sentences describing the overall merge strategy and key risk areas}
 ```
 

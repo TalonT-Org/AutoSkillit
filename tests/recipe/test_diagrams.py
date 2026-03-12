@@ -1645,3 +1645,106 @@ steps:
         assert warning_events == [], (
             f"Unexpected warnings from action-step exhausted edge: {warning_events}"
         )
+
+
+# ---------------------------------------------------------------------------
+# T-SPEC-1, T-SPATIAL-1, T-VER-1 — Spec oracle, spatial constraints, version gate
+# ---------------------------------------------------------------------------
+
+_SPEC_FIXTURES = Path(__file__).parent / "fixtures"
+_MAX_LINE_WIDTH = 120
+
+
+def test_renderer_matches_visual_spec(tmp_path: Path) -> None:
+    """T-SPEC-1: Renderer output must match the committed hand-crafted spec fixture.
+
+    This is the correctness oracle. Fails until all renderer bugs are fixed.
+    spec_diagram_expected.md is committed and NEVER auto-regenerated — it is the
+    definition of 'correct'. Updating it requires deliberate authorship.
+    """
+    from autoskillit.recipe.diagrams import generate_recipe_diagram  # noqa: PLC0415
+
+    spec_recipe = _SPEC_FIXTURES / "spec_diagram_recipe.yaml"
+    spec_expected = _SPEC_FIXTURES / "spec_diagram_expected.md"
+
+    out_dir = tmp_path / "diagrams"
+    out_dir.mkdir()
+    actual = generate_recipe_diagram(spec_recipe, recipes_dir=spec_recipe.parent, out_dir=out_dir)
+    expected = spec_expected.read_text()
+
+    assert actual == expected, (
+        "Renderer output does not match committed visual spec. "
+        "If the renderer was intentionally changed, update spec_diagram_expected.md "
+        "AND bump DIAGRAM_FORMAT_VERSION in diagrams.py."
+    )
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "implementation",
+        "implementation-groups",
+        "bugfix-loop",
+        "audit-and-fix",
+        "remediation",
+        "smoke-test",
+        "pr-merge-pipeline",
+        "batch-implementation",
+        "dev-sprint",
+    ],
+)
+def test_no_graph_line_exceeds_width_limit(recipe_name: str, tmp_path: Path) -> None:
+    """T-SPATIAL-1: No graph-body line may exceed 120 chars for any bundled recipe.
+
+    Checks only the flow graph body (before the terminal-step separator line)
+    to catch 'unbounded horizontal chain' and 'unbounded side-leg indentation' bugs
+    independently of the spec fixture, for all production recipes.
+    """
+    from autoskillit.core.paths import pkg_root  # noqa: PLC0415
+    from autoskillit.recipe.diagrams import generate_recipe_diagram  # noqa: PLC0415
+
+    recipes_dir = pkg_root() / "recipes"
+    pipeline = recipes_dir / f"{recipe_name}.yaml"
+    out_dir = tmp_path / "diagrams"
+    out_dir.mkdir()
+    diagram = generate_recipe_diagram(pipeline, recipes_dir=recipes_dir, out_dir=out_dir)
+
+    in_graph = False
+    past_sep = False
+    violations = []
+    for lineno, line in enumerate(diagram.splitlines(), 1):
+        if line.strip() == "### Graph":
+            in_graph = True
+            continue
+        if in_graph and line.startswith("### "):
+            break
+        if in_graph and line.startswith("─────────"):
+            past_sep = True
+        if in_graph and not past_sep and len(line) > _MAX_LINE_WIDTH:
+            violations.append((lineno, len(line), line[:60]))
+
+    assert not violations, (
+        f"{recipe_name}: {len(violations)} graph-body line(s) exceed {_MAX_LINE_WIDTH} chars.\n"
+        + "\n".join(f"  line {ln}: {w} chars: {p!r}..." for ln, w, p in violations)
+    )
+
+
+def test_spec_fixture_version_matches_diagram_format_constant() -> None:
+    """T-VER-1: spec_diagram_expected.md must embed the current DIAGRAM_FORMAT_VERSION.
+
+    Enforcement gate: when rendering logic changes, T-SPEC-1 fails → developer
+    updates the spec → T-VER-1 fails if DIAGRAM_FORMAT_VERSION wasn't also bumped.
+    Both must be updated together. This gate makes version bumps mandatory.
+    """
+    import re  # noqa: PLC0415
+
+    from autoskillit.recipe.diagrams import DIAGRAM_FORMAT_VERSION  # noqa: PLC0415
+
+    spec_expected = _SPEC_FIXTURES / "spec_diagram_expected.md"
+    content = spec_expected.read_text()
+    m = re.search(r"<!-- autoskillit-diagram-format: (\S+) -->", content)
+    assert m is not None, "spec_diagram_expected.md missing format version comment"
+    assert m.group(1) == DIAGRAM_FORMAT_VERSION, (
+        f"spec embeds {m.group(1)!r} but DIAGRAM_FORMAT_VERSION={DIAGRAM_FORMAT_VERSION!r}. "
+        "Either bump DIAGRAM_FORMAT_VERSION or regenerate the spec fixture."
+    )

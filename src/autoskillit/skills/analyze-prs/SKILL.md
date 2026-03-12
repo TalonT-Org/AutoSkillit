@@ -101,6 +101,13 @@ is active on `{base_branch}` with `MERGEABLE` entries.
    Log which mode was selected and the entry count to the terminal so pipeline runs are
    observable.
 
+**State variables set by this step (referenced in Steps 1–4):**
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `QUEUE_MODE` | boolean | `true` when the merge queue has ≥1 MERGEABLE entry; `false` otherwise |
+| `QUEUE_ENTRIES` | list[dict] | Sorted queue entries `{position, state, pr_number, pr_title}` when `QUEUE_MODE = true`; empty list when `false` |
+
 ### Step 1: Fetch PR Data
 
 - **If `QUEUE_MODE = false`**: **ALWAYS launch subagents in parallel** — never process PRs

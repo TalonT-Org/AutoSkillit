@@ -327,8 +327,19 @@ class TestClaimReleaseGates:
     """Claim/release issue gate steps are present and correctly wired in all 4 recipes."""
 
     RECIPES = ["implementation", "implementation-groups", "remediation", "audit-and-fix"]
-    RECIPES_WITH_RELEASE_SUCCESS = ["implementation-groups", "audit-and-fix"]
-    RECIPES_WITHOUT_RELEASE_SUCCESS = ["implementation", "remediation"]
+    RECIPES_WITH_RELEASE_SUCCESS = [
+        "implementation",
+        "implementation-groups",
+        "remediation",
+        "audit-and-fix",
+    ]
+    RECIPES_WITHOUT_RELEASE_SUCCESS: list[str] = []
+
+    def test_split_lists_are_exhaustive(self):
+        """All RECIPES must appear in exactly one of the split lists."""
+        assert set(self.RECIPES_WITH_RELEASE_SUCCESS) | set(
+            self.RECIPES_WITHOUT_RELEASE_SUCCESS
+        ) == set(self.RECIPES)
 
     def test_claim_issue_step_present(self):
         for name in self.RECIPES:
@@ -388,6 +399,9 @@ class TestClaimReleaseGates:
             **{name: "confirm_cleanup" for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS},
             **{name: "release_issue_success" for name in self.RECIPES_WITH_RELEASE_SUCCESS},
         }
+        assert set(expected) == set(self.RECIPES), (
+            "expected dict does not cover all RECIPES — update split lists"
+        )
         for name, expected_route in expected.items():
             data = yaml.safe_load(_recipe_path(name).read_text())
             assert data["steps"]["ci_watch"]["on_success"] == expected_route, (

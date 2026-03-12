@@ -469,7 +469,7 @@ steps:
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
-    on_success: confirm_cleanup
+    on_success: release_issue_success
     on_failure: diagnose_ci
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -478,11 +478,10 @@ steps:
       using the wait_for_ci MCP tool (timeout: 300 s). Captures structured output
       (conclusion + failed job names) for downstream resolve_ci.
       Skipped when open_pr=false — no remote feature branch is opened in that mode.
-      On success, routes directly to confirm_cleanup — the in-progress label is NOT
-      released here because an open PR still represents active work. The label is
-      only released on the failure path (release_issue_failure).
-      On failure, routes to diagnose_ci which fetches CI logs and writes a diagnosis
-      before routing to resolve_ci for targeted remediation.
+      On success, routes to release_issue_success to remove the in-progress label
+      before confirm_cleanup. On failure, routes to diagnose_ci which fetches CI
+      logs and writes a diagnosis before routing to resolve_ci for targeted
+      remediation.
 
   diagnose_ci:
     tool: run_skill
@@ -533,6 +532,16 @@ steps:
       Pushes the CI-fixed feature branch back to the remote after resolve_ci succeeds.
       Routes back to ci_watch to verify the fix resolves CI. On push failure, escalates
       via cleanup_failure.
+
+  release_issue_success:
+    description: "Release the in-progress claim after successful completion"
+    tool: release_issue
+    optional: true
+    skip_when_false: inputs.issue_url
+    with:
+      issue_url: ${{ inputs.issue_url }}
+    on_success: confirm_cleanup
+    on_failure: confirm_cleanup
 
   release_issue_failure:
     description: "Release the in-progress claim after pipeline failure"

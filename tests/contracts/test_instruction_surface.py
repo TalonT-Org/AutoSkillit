@@ -264,8 +264,8 @@ class TestIngredientCollectionAlignment:
     # Raise if the closing clause is not found within this window.
     _BLOCK_MAX_LINES = 30
 
-    @staticmethod
-    def _extract_block(text: str) -> str:
+    @classmethod
+    def _extract_block(cls, text: str) -> str:
         """Return the multi-line conversational collection block, dedented for comparison.
 
         Raises AssertionError with a descriptive message if any structural marker is missing
@@ -282,9 +282,10 @@ class TestIngredientCollectionAlignment:
             raise AssertionError(
                 "Could not find sentinel 'infer as many ingredient values' in text"
             )
-        # Walk back to find the opening line ("Collect ingredient values conversationally")
+        # Walk back from sentinel_idx - 1 to find the opening line.
+        # Start exclusive of the sentinel line so opener and sentinel cannot share a line.
         opener_idx = None
-        for i in range(sentinel_idx, -1, -1):
+        for i in range(sentinel_idx - 1, -1, -1):
             if "Collect ingredient values conversationally" in lines[i]:
                 opener_idx = i
                 break
@@ -295,41 +296,31 @@ class TestIngredientCollectionAlignment:
             )
         # Walk forward from opener to find the closing clause (clause d about optional defaults)
         closer_idx = None
-        search_limit = min(
-            opener_idx + TestIngredientCollectionAlignment._BLOCK_MAX_LINES, len(lines)
-        )
+        search_limit = min(opener_idx + cls._BLOCK_MAX_LINES, len(lines))
         for i in range(opener_idx, search_limit):
             if "optional ingredients" in lines[i].lower() or "default values" in lines[i].lower():
                 closer_idx = i
                 break
         if closer_idx is None:
-            max_lines = TestIngredientCollectionAlignment._BLOCK_MAX_LINES
+            max_lines = cls._BLOCK_MAX_LINES
             raise AssertionError(
                 f"Could not find closing clause ('optional ingredients' or 'default values') "
                 f"within {max_lines} lines of opener at line {opener_idx}"
             )
-        block = "\n".join(lines[opener_idx : closer_idx + 1])
+        # Extend to include continuation lines of the closing clause.
+        # A continuation line is any non-blank line indented deeper than closer_idx's line.
+        end_idx = closer_idx + 1
+        closer_indent = len(lines[closer_idx]) - len(lines[closer_idx].lstrip())
+        while end_idx < len(lines) and lines[end_idx].strip():
+            indent = len(lines[end_idx]) - len(lines[end_idx].lstrip())
+            if indent <= closer_indent:
+                break
+            end_idx += 1
+        block = "\n".join(lines[opener_idx:end_idx])
+        # Strip trailing whitespace per line for robust comparison across sources
+        # with different surrounding indentation contexts.
+        block = "\n".join(line.rstrip() for line in block.splitlines())
         return textwrap.dedent(block)
-
-    def test_orchestrator_prompt_has_conversational_sentinel(self):
-        """_build_orchestrator_prompt must contain the conversational sentinel phrase."""
-        from autoskillit.cli._prompts import _build_orchestrator_prompt
-
-        prompt = _build_orchestrator_prompt("<dummy yaml>")
-        assert self._SENTINEL in prompt, (
-            f"_build_orchestrator_prompt must contain '{self._SENTINEL}'. "
-            "Update the conversational ingredient collection block."
-        )
-
-    def test_load_recipe_docstring_has_conversational_sentinel(self):
-        """load_recipe docstring must contain the conversational sentinel phrase."""
-        from autoskillit.server.tools_recipe import load_recipe
-
-        doc = load_recipe.__doc__ or ""
-        assert self._SENTINEL in doc, (
-            f"load_recipe docstring must contain '{self._SENTINEL}'. "
-            "Update the conversational collection block to match _build_orchestrator_prompt."
-        )
 
     def test_ingredient_collection_instructions_are_aligned(self):
         """The conversational ingredient collection block must be identical in both paths."""

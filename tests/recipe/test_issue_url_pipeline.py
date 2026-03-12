@@ -324,6 +324,20 @@ class TestClaimReleaseGates:
     """Claim/release issue gate steps are present and correctly wired in all 4 recipes."""
 
     RECIPES = ["implementation", "implementation-groups", "remediation", "audit-and-fix"]
+    RECIPES_WITH_RELEASE_SUCCESS = [
+        "implementation-groups",
+        "audit-and-fix",
+    ]
+    RECIPES_WITHOUT_RELEASE_SUCCESS = [
+        "implementation",
+        "remediation",
+    ]
+
+    def test_split_lists_are_exhaustive(self):
+        """All RECIPES must appear in exactly one of the split lists."""
+        assert set(self.RECIPES_WITH_RELEASE_SUCCESS) | set(
+            self.RECIPES_WITHOUT_RELEASE_SUCCESS
+        ) == set(self.RECIPES)
 
     def test_claim_issue_step_present(self):
         for name in self.RECIPES:
@@ -348,17 +362,22 @@ class TestClaimReleaseGates:
             )
 
     def test_release_issue_steps_present(self):
+        cache = {name: yaml.safe_load(_recipe_path(name).read_text()) for name in self.RECIPES}
         for name in self.RECIPES:
-            data = yaml.safe_load(_recipe_path(name).read_text())
-            assert "release_issue_success" in data["steps"], (
+            assert "release_issue_failure" in cache[name]["steps"], (
+                f"{name}: missing release_issue_failure"
+            )
+        for name in self.RECIPES_WITH_RELEASE_SUCCESS:
+            assert "release_issue_success" in cache[name]["steps"], (
                 f"{name}: missing release_issue_success"
             )
-            assert "release_issue_failure" in data["steps"], (
-                f"{name}: missing release_issue_failure"
+        for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS:
+            assert "release_issue_success" not in cache[name]["steps"], (
+                f"{name}: release_issue_success must be absent — label stays on success"
             )
 
     def test_release_issue_success_routes_to_confirm_cleanup(self):
-        for name in self.RECIPES:
+        for name in self.RECIPES_WITH_RELEASE_SUCCESS:
             data = yaml.safe_load(_recipe_path(name).read_text())
             step = data["steps"]["release_issue_success"]
             assert step["on_success"] == "confirm_cleanup", (
@@ -373,11 +392,18 @@ class TestClaimReleaseGates:
                 f"{name}: release_issue_failure.on_success should be cleanup_failure"
             )
 
-    def test_ci_watch_routes_to_release_issue_success(self):
-        for name in self.RECIPES:
+    def test_ci_watch_on_success_routing(self):
+        expected = {
+            **{name: "confirm_cleanup" for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS},
+            **{name: "release_issue_success" for name in self.RECIPES_WITH_RELEASE_SUCCESS},
+        }
+        assert set(expected) == set(self.RECIPES), (
+            "expected dict does not cover all RECIPES — update split lists"
+        )
+        for name, expected_route in expected.items():
             data = yaml.safe_load(_recipe_path(name).read_text())
-            assert data["steps"]["ci_watch"]["on_success"] == "release_issue_success", (
-                f"{name}: ci_watch.on_success should be release_issue_success"
+            assert data["steps"]["ci_watch"]["on_success"] == expected_route, (
+                f"{name}: ci_watch.on_success should be {expected_route!r}"
             )
 
     def test_claim_issue_with_args_contains_issue_url(self):
@@ -397,7 +423,7 @@ class TestClaimReleaseGates:
 
     def test_release_issue_success_with_args_contains_issue_url(self):
         """CC-F1: release_issue_success.with_args must contain issue_url after parsing."""
-        for name in self.RECIPES:
+        for name in self.RECIPES_WITH_RELEASE_SUCCESS:
             recipe = load_recipe(_recipe_path(name))
             step = recipe.steps["release_issue_success"]
             assert "issue_url" in step.with_args, (

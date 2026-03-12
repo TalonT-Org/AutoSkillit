@@ -354,10 +354,11 @@ class TestImplementationPipelineStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_ip_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> diagnose_ci."""
+        """T_CI2: ci_watch on_success -> confirm_cleanup; on_failure -> diagnose_ci."""
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "release_issue_success"
+        assert step.on_success == "confirm_cleanup"
         assert step.on_failure == "diagnose_ci"
+        assert "release_issue_success" not in recipe.steps
 
     def test_ip_ci_watch_uses_merge_target(self, recipe) -> None:
         """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""
@@ -765,10 +766,11 @@ class TestInvestigateFirstStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_if_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> diagnose_ci."""
+        """T_CI2: ci_watch on_success -> confirm_cleanup; on_failure -> diagnose_ci."""
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "release_issue_success"
+        assert step.on_success == "confirm_cleanup"
         assert step.on_failure == "diagnose_ci"
+        assert "release_issue_success" not in recipe.steps
 
     def test_if_ci_watch_uses_merge_target(self, recipe) -> None:
         """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""

@@ -40,12 +40,13 @@ def test_orchestrator_prompt_ingredient_collection_is_conversational():
 
     prompt = _build_orchestrator_prompt("<dummy yaml>")
     # New conversational behavior must be present
-    assert "infer" in prompt.lower(), (
+    assert "infer as many ingredient values" in prompt, (
         "Orchestrator prompt must instruct Claude to infer ingredient values"
     )
-    assert "free-form" in prompt.lower() or "open-ended" in prompt.lower(), (
-        "Orchestrator prompt must describe a free-form or open-ended question"
+    assert "open-ended" in prompt.lower(), (
+        "Orchestrator prompt must describe an open-ended question"
     )
+    assert "free-form" in prompt.lower(), "Orchestrator prompt must describe a free-form response"
     # Old mechanical per-field instruction must be gone from the input-collection step
     # (AskUserQuestion may still appear in the confirm-step section — that's expected)
     lines = prompt.splitlines()

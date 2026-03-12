@@ -260,6 +260,56 @@ class TestIngredientCollectionAlignment:
     """cook and load_recipe must carry identical conversational collection instructions."""
 
     _SENTINEL = "infer as many ingredient values"
+    # Safety ceiling for the forward search; covers the current 9-line block with 3x headroom.
+    # Raise if the closing clause is not found within this window.
+    _BLOCK_MAX_LINES = 30
+
+    @staticmethod
+    def _extract_block(text: str) -> str:
+        """Return the multi-line conversational collection block, dedented for comparison.
+
+        Raises AssertionError with a descriptive message if any structural marker is missing
+        so that test failures point to the broken surface rather than the broken extractor.
+        """
+        import textwrap
+
+        lines = text.splitlines()
+        sentinel_idx = next(
+            (i for i, line in enumerate(lines) if "infer as many ingredient values" in line),
+            None,
+        )
+        if sentinel_idx is None:
+            raise AssertionError(
+                "Could not find sentinel 'infer as many ingredient values' in text"
+            )
+        # Walk back to find the opening line ("Collect ingredient values conversationally")
+        opener_idx = None
+        for i in range(sentinel_idx, -1, -1):
+            if "Collect ingredient values conversationally" in lines[i]:
+                opener_idx = i
+                break
+        if opener_idx is None:
+            raise AssertionError(
+                "Could not find opener 'Collect ingredient values conversationally' "
+                f"before sentinel at line {sentinel_idx}"
+            )
+        # Walk forward from opener to find the closing clause (clause d about optional defaults)
+        closer_idx = None
+        search_limit = min(
+            opener_idx + TestIngredientCollectionAlignment._BLOCK_MAX_LINES, len(lines)
+        )
+        for i in range(opener_idx, search_limit):
+            if "optional ingredients" in lines[i].lower() or "default values" in lines[i].lower():
+                closer_idx = i
+                break
+        if closer_idx is None:
+            max_lines = TestIngredientCollectionAlignment._BLOCK_MAX_LINES
+            raise AssertionError(
+                f"Could not find closing clause ('optional ingredients' or 'default values') "
+                f"within {max_lines} lines of opener at line {opener_idx}"
+            )
+        block = "\n".join(lines[opener_idx : closer_idx + 1])
+        return textwrap.dedent(block)
 
     def test_orchestrator_prompt_has_conversational_sentinel(self):
         """_build_orchestrator_prompt must contain the conversational sentinel phrase."""
@@ -289,39 +339,9 @@ class TestIngredientCollectionAlignment:
         prompt = _build_orchestrator_prompt("<dummy yaml>")
         doc = load_recipe.__doc__ or ""
 
-        # Extract the 4-clause conversational block from both surfaces using the sentinel
-        def _extract_block(text: str) -> str:
-            """Return the multi-line conversational collection block."""
-            lines = text.splitlines()
-            start = next(
-                (i for i, line in enumerate(lines) if "infer as many ingredient values" in line),
-                None,
-            )
-            if start is None:
-                return ""
-            # Walk back to find the opening line ("Collect ingredient values conversationally")
-            for i in range(start, -1, -1):
-                if "Collect ingredient values conversationally" in lines[i]:
-                    start = i
-                    break
-            # Walk forward to find the closing clause (clause d about optional defaults)
-            end = start
-            for i in range(start, min(start + 15, len(lines))):
-                if (
-                    "optional ingredients" in lines[i].lower()
-                    or "default values" in lines[i].lower()
-                ):
-                    end = i
-                    break
-            return "\n".join(line.strip() for line in lines[start : end + 1])
+        prompt_block = self._extract_block(prompt)
+        doc_block = self._extract_block(doc)
 
-        prompt_block = _extract_block(prompt)
-        doc_block = _extract_block(doc)
-
-        assert prompt_block, (
-            "Could not extract conversational block from _build_orchestrator_prompt"
-        )
-        assert doc_block, "Could not extract conversational block from load_recipe docstring"
         assert prompt_block == doc_block, (
             "Conversational ingredient collection block differs between "
             "_build_orchestrator_prompt and load_recipe docstring. "

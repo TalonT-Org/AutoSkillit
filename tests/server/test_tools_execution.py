@@ -844,6 +844,37 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
     assert calls == [("/test skill", "/tmp")]
 
 
+class TestHeadlessGateEnforcement:
+    """T_HGE: run_skill, run_cmd, run_python each return headless_error
+    when the session is running with AUTOSKILLIT_HEADLESS=1.
+
+    The gate is open (tool_ctx default), so _require_enabled() passes.
+    _require_not_headless() fires first and returns subtype='headless_error'.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _set_headless_env(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+
+    @pytest.mark.anyio
+    async def test_run_skill_blocked_in_headless_session(self, tool_ctx):
+        """run_skill returns headless_error when AUTOSKILLIT_HEADLESS=1."""
+        result = json.loads(await run_skill("/autoskillit:investigate some-error", "/tmp"))
+        assert result["subtype"] == "headless_error"
+
+    @pytest.mark.anyio
+    async def test_run_cmd_blocked_in_headless_session(self, tool_ctx):
+        """run_cmd returns headless_error when AUTOSKILLIT_HEADLESS=1."""
+        result = json.loads(await run_cmd("echo hello", "/tmp"))
+        assert result["subtype"] == "headless_error"
+
+    @pytest.mark.anyio
+    async def test_run_python_blocked_in_headless_session(self, tool_ctx):
+        """run_python returns headless_error when AUTOSKILLIT_HEADLESS=1."""
+        result = json.loads(await run_python("os.getcwd"))
+        assert result["subtype"] == "headless_error"
+
+
 class TestResponseFieldsAreTypeSafe:
     """Every discriminator field in MCP tool responses uses enum values."""
 

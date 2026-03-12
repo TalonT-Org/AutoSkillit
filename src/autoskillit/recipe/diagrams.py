@@ -538,7 +538,8 @@ def _render_for_each_chain(
             if failure_routes:
                 max_route_len = max(len(r) for r in failure_routes)
                 # Cap so │{pad}{longest_route} ≤ 120; also don't extend past chain end.
-                cap = min(max_chain_len - 1, 120 - 1 - max_route_len)
+                # Clamp to >= 0: when max_route_len >= 119 the expression would go negative.
+                cap = max(0, min(max_chain_len - 1, 120 - 1 - max_route_len))
                 pad_size = min(indent_base + cursor + 1, max(indent_base + 1, cap))
                 pad = " " * pad_size
                 lines.append(f"│{pad}│")
@@ -686,7 +687,11 @@ def generate_recipe_diagram(
         # Markdown table row remains a single line.
         _desc = ing.description.replace("\n", " ").strip()
         if len(_desc) > 80:
-            _desc = _desc[:77].rsplit(" ", 1)[0] + "..."
+            _cut = _desc[:77]
+            # Prefer a word-boundary cut; fall back to hard 77-char slice when no space.
+            if " " in _cut:
+                _cut = _cut.rsplit(" ", 1)[0]
+            _desc = _cut + "..."
         input_rows.append(f"| {ing_name} | {_desc} | {_format_ingredient_default(ing)} |")
     inputs_table = "\n".join(input_rows)
     if agent_managed:

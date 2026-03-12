@@ -1,0 +1,69 @@
+name: spec-diagram-oracle
+description: Minimal recipe for spec-oracle testing. Covers all layout features.
+autoskillit_version: "0.3.0"
+
+ingredients:
+  plan_path:
+    description: Pre-existing plan file path (skip make-plan if provided)
+    default: "false"
+  task:
+    description: >
+      The implementation task
+    required: true
+
+steps:
+  plan:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:make-plan
+    capture:
+      plan_path: "${{ result.plan_path }}"
+    on_success: implement
+    on_failure: escalate
+    skip_when_false: plan_path
+
+  implement:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:implement-worktree-no-merge
+    retries: 0
+    on_success: verify
+    on_failure: fix
+    on_context_limit: retry_worktree
+
+  verify:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:dry-walkthrough
+    on_success: next_or_done
+    on_failure: escalate
+
+  fix:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:resolve-failures
+    on_success: verify
+    on_failure: escalate
+
+  retry_worktree:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:retry-worktree
+    on_success: verify
+    on_failure: escalate
+
+  next_or_done:
+    action: route
+    on_result:
+      - when: "${{ result.next }} == more_parts"
+        route: plan
+      - route: done
+    note: "Checks if more plan_parts remain; routes back to plan for the next part."
+
+  done:
+    action: stop
+    message: "Complete."
+
+  escalate:
+    action: stop
+    message: "Failed."

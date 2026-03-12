@@ -55,6 +55,7 @@ def test_all_rules_registered_across_submodules() -> None:
         "skip-when-false-undeclared",
         "merge-base-unpublished",
         "telemetry-before-open-pr",
+        "unknown-skill-command",
     }
     assert expected <= rule_names
 

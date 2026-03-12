@@ -932,7 +932,7 @@ class TestConfigDrivenBehavior:
         tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (pre-dirty-tree check)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(1, "FAIL", ""))  # test gate fails
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
 
         # Verify the test command was ["make", "test"] (5th call, after ls-files + porcelain)
@@ -1027,7 +1027,7 @@ class TestSafetyConfigWiring:
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
-        result = json.loads(await merge_worktree(str(wt), "main"))
+        result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
 
         # Verify no test command was called — the 5th call should be git fetch, not test

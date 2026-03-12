@@ -56,6 +56,11 @@ class TestRunSkillPluginDir:
         # --output-format and stream-json must be present
         assert "--output-format" in cmd
         assert cmd[cmd.index("--output-format") + 1] == "stream-json"
+        # cwd must propagate to the subprocess runner
+        from pathlib import Path
+
+        actual_cwd = tool_ctx.runner.call_args_list[0][1]
+        assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 
     @pytest.mark.anyio
     async def test_run_skill_uses_two_hour_timeout(self, tool_ctx):
@@ -160,6 +165,11 @@ class TestRunSkillPrefix:
         await run_skill("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
         assert cmd[5].startswith("Use /investigate error")
+        # cwd must propagate to the subprocess runner
+        from pathlib import Path
+
+        actual_cwd = tool_ctx.runner.call_args_list[0][1]
+        assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 
     @pytest.mark.anyio
     async def test_run_skill_rejects_prose_without_slash(self, tool_ctx):
@@ -210,6 +220,11 @@ class TestRunSkillPrefix:
         await run_skill("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
         assert "%%ORDER_UP%%" in cmd[5]
+        # cwd must propagate to the subprocess runner
+        from pathlib import Path
+
+        actual_cwd = tool_ctx.runner.call_args_list[0][1]
+        assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 
 
 class TestValidateSkillCommand:

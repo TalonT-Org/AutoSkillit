@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 38 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 25 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 52 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 38 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 25 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 53 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -102,7 +102,8 @@ src/autoskillit/
 │   ├── io.py                #   _atomic_write, ensure_project_temp, load_yaml, dump_yaml, YAMLError
 │   ├── logging.py           #   get_logger, configure_logging, PACKAGE_LOGGER_NAME
 │   ├── paths.py             #   pkg_root(), is_git_worktree() — canonical package root resolver
-│   └── types.py             #   StrEnums, protocols, constants (SubprocessRunner, LoadResult, etc.)
+│   ├── types.py             #   StrEnums, protocols, constants (SubprocessRunner, LoadResult, etc.)
+│   └── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
 ├── config/                  # L1 configuration sub-package
 │   ├── __init__.py          #   Re-exports AutomationConfig + GitHubConfig
 │   ├── defaults.yaml        #   Bundled package defaults (always loaded as first layer)
@@ -113,6 +114,7 @@ src/autoskillit/
 │   ├── context.py           #   ToolContext DI container (config, audit, token_log, gate, plugin_dir, runner)
 │   ├── gate.py              #   DefaultGateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
 │   ├── mcp_response.py      #   McpResponseEntry, DefaultMcpResponseLog — per-tool response size tracking
+│   ├── telemetry_fmt.py     #   TelemetryFormatter — canonical token/timing display (single source of truth)
 │   ├── timings.py           #   TimingEntry, DefaultTimingLog — per-step wall-clock accumulation
 │   ├── tokens.py            #   TokenEntry, TokenLog, _token_log singleton
 │   ├── pr_gates.py          #   PR eligibility gates: is_ci_passing, is_review_passing, partition_prs
@@ -161,6 +163,7 @@ src/autoskillit/
 │   ├── rules_inputs.py      #   Semantic rules for ingredient/version validation
 │   ├── rules_merge.py       #   Semantic rules for merge_worktree routing completeness
 │   ├── rules_recipe.py      #   Semantic rules for unknown sub-recipe references (unknown-sub-recipe rule)
+│   ├── rules_skills.py      #   Semantic rules for skill_command resolvability (unknown-skill-command)
 │   ├── rules_tools.py       #   Semantic rules for MCP tool name validity (unknown-tool rule)
 │   ├── rules_verdict.py     #   Semantic rules for skill verdict routing completeness (unrouted-verdict-value)
 │   ├── rules_worktree.py    #   Semantic rules for worktree retry lifecycle
@@ -200,6 +203,7 @@ src/autoskillit/
 ├── hooks/                   # Claude Code PreToolUse and PostToolUse hook scripts
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration (auto-discovered by Claude Code)
+│   ├── branch_protection_guard.py #  PreToolUse hook — denies merge_worktree/push_to_remote targeting protected branches
 │   ├── quota_check.py       #   Quota guard hook — blocks run_skill when threshold exceeded
 │   ├── remove_clone_guard.py #  Remove-clone guard — denies remove_clone calls with keep != "true"
 │   ├── skill_cmd_check.py   #   PreToolUse hook — validates skill_command path argument format
@@ -216,7 +220,7 @@ src/autoskillit/
 │   ├── implementation.yaml
 │   ├── remediation.yaml
 │   └── smoke-test.yaml
-└── skills/                  # 52 bundled skills (SKILL.md per skill)
+└── skills/                  # 53 bundled skills (SKILL.md per skill)
     ├── analyze-prs/              ├── arch-lens-c4-container/
     ├── arch-lens-concurrency/    ├── arch-lens-data-lineage/
     ├── arch-lens-deployment/     ├── arch-lens-development/
@@ -240,9 +244,10 @@ src/autoskillit/
     ├── rectify/                  ├── report-bug/
     ├── resolve-failures/         ├── resolve-merge-conflicts/
     ├── resolve-review/           ├── retry-worktree/
-    ├── review-approach/          ├── setup-project/
-    ├── smoke-task/               ├── sous-chef/
-    ├── triage-issues/            └── write-recipe/
+    ├── review-approach/          ├── review-pr/
+    ├── setup-project/            ├── smoke-task/
+    ├── sous-chef/                ├── triage-issues/
+    └── write-recipe/
 ```
 
 **Session diagnostics logs** are stored globally at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir` in config. Session directories are named by Claude Code session UUID when available (preferred: parsed from stdout, fallback: discovered from JSONL filename via Channel B). When no session ID is available from either source, directories use `no_session_{timestamp}` naming. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.

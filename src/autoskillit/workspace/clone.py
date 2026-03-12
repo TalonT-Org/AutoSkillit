@@ -21,7 +21,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from autoskillit.core import GENERATED_FILES, get_logger
+from autoskillit.core import GENERATED_FILES, get_logger, is_protected_branch
 
 logger = get_logger(__name__)
 
@@ -397,6 +397,7 @@ def push_to_remote(
     branch: str = "",
     *,
     remote_url: str = "",
+    protected_branches: list[str] | None = None,
 ) -> dict[str, str | bool]:
     """Push the merged branch from the clone directly to the upstream remote.
 
@@ -416,6 +417,22 @@ def push_to_remote(
         {"success": False, "stderr": str} on failure (does not raise).
         {"success": False, "error_type": str, "stderr": str} on classified failure.
     """
+    # Protected-branch guard
+    if is_protected_branch(branch, protected=protected_branches):
+        logger.error(
+            "push_to_remote_protected_branch",
+            clone_path=clone_path,
+            branch=branch,
+        )
+        return {
+            "success": False,
+            "error_type": "protected_branch_push",
+            "stderr": (
+                f"Refusing to push to protected branch '{branch}'. "
+                f"Protected branches: {protected_branches or ['main', 'integration', 'stable']}"
+            ),
+        }
+
     resolved_url = remote_url
     if not resolved_url:
         if not source_dir:
@@ -502,6 +519,18 @@ class DefaultCloneManager:
         return remove_clone(clone_path, keep)
 
     def push_to_remote(
-        self, clone_path: str, source_dir: str = "", branch: str = "", *, remote_url: str = ""
+        self,
+        clone_path: str,
+        source_dir: str = "",
+        branch: str = "",
+        *,
+        remote_url: str = "",
+        protected_branches: list[str] | None = None,
     ) -> dict[str, str | bool]:
-        return push_to_remote(clone_path, source_dir, branch, remote_url=remote_url)
+        return push_to_remote(
+            clone_path,
+            source_dir,
+            branch,
+            remote_url=remote_url,
+            protected_branches=protected_branches,
+        )

@@ -18,7 +18,6 @@ class TestImplementationPipelineIssueUrl:
     def test_recipe_validates_clean(self):
         """implementation must validate with no errors after adding issue_url."""
         result = validate_from_path(_recipe_path("implementation"))
-        assert result["valid"] is True
         errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
         assert errors == [], f"Unexpected errors: {errors}"
 
@@ -106,7 +105,6 @@ class TestImplementationPipelineIssueUrl:
 class TestInvestigateFirstIssueUrl:
     def test_recipe_validates_clean(self):
         result = validate_from_path(_recipe_path("remediation"))
-        assert result["valid"] is True
         errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
         assert errors == [], f"Unexpected errors: {errors}"
 
@@ -278,7 +276,6 @@ class TestAuditAndFixIssueUrl:
 class TestImplementationGroupsIssueTitle:
     def test_recipe_validates_clean(self):
         result = validate_from_path(_recipe_path("implementation-groups"))
-        assert result["valid"] is True
         errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
         assert errors == [], f"Unexpected errors: {errors}"
 

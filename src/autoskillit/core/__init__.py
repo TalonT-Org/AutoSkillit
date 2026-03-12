@@ -5,6 +5,7 @@ so callers can do either `from autoskillit.core import get_logger` or the
 explicit `from autoskillit.core.logging import get_logger`.
 """
 
+from .branch_guard import is_protected_branch
 from .io import (
     YAMLError,
     _atomic_write,
@@ -77,6 +78,8 @@ from .types import (
 )
 
 __all__ = [
+    # branch_guard
+    "is_protected_branch",
     # io
     "YAMLError",
     "atomic_write",

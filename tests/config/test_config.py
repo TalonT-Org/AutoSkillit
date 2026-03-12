@@ -24,6 +24,10 @@ class TestDefaultConfig:
         assert cfg.safety.reset_guard_marker == ".autoskillit-workspace"
         assert cfg.safety.require_dry_walkthrough is True
         assert cfg.safety.test_gate_on_merge is True
+        assert isinstance(cfg.safety.protected_branches, list)
+        assert "main" in cfg.safety.protected_branches
+        assert "integration" in cfg.safety.protected_branches
+        assert "stable" in cfg.safety.protected_branches
         assert cfg.worktree_setup.command is None
 
     def test_default_model_config(self):
@@ -60,6 +64,7 @@ class TestLoadConfig:
                 "reset_guard_marker": ".custom-marker",
                 "require_dry_walkthrough": False,
                 "test_gate_on_merge": False,
+                "protected_branches": ["main", "production"],
             },
             "worktree_setup": {"command": ["task", "install-worktree"]},
         }
@@ -76,6 +81,7 @@ class TestLoadConfig:
         assert cfg.safety.reset_guard_marker == ".custom-marker"
         assert cfg.safety.require_dry_walkthrough is False
         assert cfg.safety.test_gate_on_merge is False
+        assert cfg.safety.protected_branches == ["main", "production"]
         assert cfg.worktree_setup.command == ["task", "install-worktree"]
 
     def test_partial_yaml_preserves_defaults(self, tmp_path):
@@ -555,22 +561,37 @@ class TestReleaseReadinessConfig:
 
 
 class TestBranchingConfig:
-    def test_branching_config_default_base_branch_is_integration(self) -> None:
-        """BranchingConfig must default default_base_branch to 'integration'."""
+    def test_branching_config_default_base_branch_is_main(self) -> None:
+        """BranchingConfig must default default_base_branch to 'main'."""
         from autoskillit.config.settings import BranchingConfig
 
-        assert BranchingConfig().default_base_branch == "integration"
+        assert BranchingConfig().default_base_branch == "main"
 
     def test_automation_config_has_branching_field(self) -> None:
         """AutomationConfig must expose a BranchingConfig as .branching."""
         from autoskillit.config.settings import AutomationConfig
 
         cfg = AutomationConfig()
-        assert cfg.branching.default_base_branch == "integration"
+        assert cfg.branching.default_base_branch == "main"
 
     def test_branching_config_is_overridable(self) -> None:
         """BranchingConfig.default_base_branch must accept override values."""
         from autoskillit.config.settings import BranchingConfig
 
-        cfg = BranchingConfig(default_base_branch="main")
-        assert cfg.default_base_branch == "main"
+        cfg = BranchingConfig(default_base_branch="develop")
+        assert cfg.default_base_branch == "develop"
+
+    def test_branching_default_base_branch_matches_defaults_yaml(self) -> None:
+        """BranchingConfig Python default must match defaults.yaml."""
+        from autoskillit.config.settings import BranchingConfig
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
+
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        yaml_default = defaults["branching"]["default_base_branch"]
+        python_default = BranchingConfig().default_base_branch
+
+        assert python_default == yaml_default, (
+            f"BranchingConfig.default_base_branch Python default ({python_default!r}) "
+            f"disagrees with defaults.yaml ({yaml_default!r})"
+        )

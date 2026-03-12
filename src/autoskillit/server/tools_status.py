@@ -12,6 +12,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import _atomic_write, get_logger
+from autoskillit.pipeline import TelemetryFormatter
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
@@ -121,7 +122,7 @@ def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> l
 
 @mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("get_token_summary")
-async def get_token_summary(clear: bool = False) -> str:
+async def get_token_summary(clear: bool = False, format: str = "json") -> str:
     """Return accumulated run_skill token usage grouped by step name.
 
     This tool is always available (not gated by open_kitchen).
@@ -137,6 +138,8 @@ async def get_token_summary(clear: bool = False) -> str:
 
     Args:
         clear: If True, reset the token log after returning current data.
+        format: Output format — "json" (default) returns structured JSON,
+                "table" returns a pre-formatted markdown table string.
     """
     from autoskillit.server import _get_ctx
 
@@ -152,6 +155,8 @@ async def get_token_summary(clear: bool = False) -> str:
             write_telemetry_clear_marker(_get_log_root())
         except Exception:
             logger.debug("write_telemetry_clear_marker failed", exc_info=True)
+    if format == "table":
+        return TelemetryFormatter.format_token_table(steps, total)
     return json.dumps(
         {
             "steps": steps,
@@ -166,7 +171,7 @@ async def get_token_summary(clear: bool = False) -> str:
 
 @mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("get_timing_summary")
-async def get_timing_summary(clear: bool = False) -> str:
+async def get_timing_summary(clear: bool = False, format: str = "json") -> str:
     """Return accumulated wall-clock timing grouped by step name.
 
     This tool is always available (not gated by open_kitchen).
@@ -179,6 +184,8 @@ async def get_timing_summary(clear: bool = False) -> str:
 
     Args:
         clear: If True, reset the timing log after returning current data.
+        format: Output format — "json" (default) returns structured JSON,
+                "table" returns a pre-formatted markdown table string.
     """
     from autoskillit.server import _get_ctx
 
@@ -190,6 +197,8 @@ async def get_timing_summary(clear: bool = False) -> str:
             write_telemetry_clear_marker(_get_log_root())
         except Exception:
             logger.debug("write_telemetry_clear_marker failed", exc_info=True)
+    if format == "table":
+        return TelemetryFormatter.format_timing_table(steps, total)
     return json.dumps({"steps": steps, "total": total})
 
 
@@ -246,30 +255,6 @@ async def get_quota_events(n: int = 50) -> str:
     return json.dumps({"events": events, "total_count": total})
 
 
-def _format_token_summary(steps: list) -> str:
-    """Render token log entries as a markdown string."""
-    lines = ["# Token Summary\n\n"]
-    for step in steps:
-        lines.append(f"## {step['step_name']}\n\n")
-        lines.append(f"- input_tokens: {step['input_tokens']}\n")
-        lines.append(f"- output_tokens: {step['output_tokens']}\n")
-        lines.append(f"- cache_creation_input_tokens: {step['cache_creation_input_tokens']}\n")
-        lines.append(f"- cache_read_input_tokens: {step['cache_read_input_tokens']}\n")
-        lines.append(f"- invocation_count: {step['invocation_count']}\n")
-        lines.append(f"- elapsed_seconds: {step.get('elapsed_seconds', 0.0)}\n\n")
-    return "".join(lines)
-
-
-def _format_timing_summary(steps: list) -> str:
-    """Render timing log entries as a markdown string."""
-    lines = ["# Timing Summary\n\n"]
-    for step in steps:
-        lines.append(f"## {step['step_name']}\n\n")
-        lines.append(f"- total_seconds: {step['total_seconds']}\n")
-        lines.append(f"- invocation_count: {step['invocation_count']}\n\n")
-    return "".join(lines)
-
-
 @mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("write_telemetry_files")
 async def write_telemetry_files(
@@ -280,6 +265,7 @@ async def write_telemetry_files(
 
     Reads the current session's token log and timing log and writes two
     markdown files to output_dir, creating the directory if needed.
+    Files contain PR-ready markdown tables via TelemetryFormatter.
 
     Returns JSON with:
       - token_summary_path: absolute path to the written token_summary.md
@@ -309,11 +295,21 @@ async def write_telemetry_files(
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
+    token_steps = _merge_wall_clock_seconds(
+        tool_ctx.token_log.get_report(), tool_ctx.timing_log.get_report()
+    )
+    token_total = tool_ctx.token_log.compute_total()
+
     token_path = out / "token_summary.md"
-    _atomic_write(token_path, _format_token_summary(tool_ctx.token_log.get_report()))
+    _atomic_write(token_path, TelemetryFormatter.format_token_table(token_steps, token_total))
 
     timing_path = out / "timing_summary.md"
-    _atomic_write(timing_path, _format_timing_summary(tool_ctx.timing_log.get_report()))
+    _atomic_write(
+        timing_path,
+        TelemetryFormatter.format_timing_table(
+            tool_ctx.timing_log.get_report(), tool_ctx.timing_log.compute_total()
+        ),
+    )
 
     mcp_path = out / "mcp_response_metrics.json"
     mcp_data = {

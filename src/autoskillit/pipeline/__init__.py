@@ -5,7 +5,7 @@ Only pipeline/context.py imports from config/; the other three modules
 depend only on autoskillit.core.*.
 """
 
-from autoskillit.core import FailureRecord
+from autoskillit.core import FailureRecord, is_protected_branch
 from autoskillit.pipeline.audit import (
     COMMAND_MAX_LEN,
     STDERR_MAX_LEN,
@@ -20,10 +20,13 @@ from autoskillit.pipeline.gate import (
     headless_error_result,
 )
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog, McpResponseEntry
+from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 from autoskillit.pipeline.timings import DefaultTimingLog, TimingEntry
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
 
 __all__ = [
+    # branch_guard
+    "is_protected_branch",
     # audit
     "DefaultAuditLog",
     "FailureRecord",
@@ -44,6 +47,8 @@ __all__ = [
     "UNGATED_TOOLS",
     "gate_error_result",
     "headless_error_result",
+    # telemetry_fmt
+    "TelemetryFormatter",
     # context
     "ToolContext",
 ]

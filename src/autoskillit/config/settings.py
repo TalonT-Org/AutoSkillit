@@ -55,6 +55,9 @@ class SafetyConfig:
     reset_guard_marker: str = ".autoskillit-workspace"
     require_dry_walkthrough: bool = True
     test_gate_on_merge: bool = True
+    protected_branches: list[str] = field(
+        default_factory=lambda: ["main", "integration", "stable"]
+    )
 
 
 @dataclass
@@ -145,7 +148,7 @@ class McpResponseConfig:
 
 @dataclass
 class BranchingConfig:
-    default_base_branch: str = "integration"
+    default_base_branch: str = "main"
 
 
 def _field_defaults(cls: type) -> dict[str, Any]:
@@ -255,6 +258,7 @@ class AutomationConfig:
                     val(sf, "require_dry_walkthrough", _sf["require_dry_walkthrough"])
                 ),
                 test_gate_on_merge=bool(val(sf, "test_gate_on_merge", _sf["test_gate_on_merge"])),
+                protected_branches=list(val(sf, "protected_branches", _sf["protected_branches"])),
             ),
             read_db=ReadDbConfig(
                 timeout=int(val(rd, "timeout", _rd["timeout"])),

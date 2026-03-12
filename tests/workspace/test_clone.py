@@ -561,7 +561,7 @@ class TestPushToRemote:
             check=True,
         ).stdout.strip()
 
-        result = push_to_remote(clone_path, str(source), branch)
+        result = push_to_remote(clone_path, str(source), branch, protected_branches=[])
         assert result["success"] is True
 
         # Commit landed in remote
@@ -633,7 +633,7 @@ class TestPushToRemote:
             capture_output=True,
         )
 
-        result = push_to_remote(clone_path, str(source), src_branch)
+        result = push_to_remote(clone_path, str(source), src_branch, protected_branches=[])
         assert result["success"] is True
 
         upstream_rc = subprocess.run(
@@ -649,7 +649,7 @@ class TestPushToRemote:
         source.mkdir()
         subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
 
-        result = push_to_remote("/nonexistent/clone", str(source), "main")
+        result = push_to_remote("/nonexistent/clone", str(source), "main", protected_branches=[])
         assert result["success"] is False
         assert len(result["stderr"]) > 0
 
@@ -796,6 +796,31 @@ class TestDetectUncommittedChanges:
             assert detect_uncommitted_changes("/any") == []
 
 
+class TestPushToRemoteProtectedBranch:
+    """push_to_remote rejects pushes to protected branches."""
+
+    @pytest.mark.parametrize("branch", ["main", "integration", "stable"])
+    def test_push_to_remote_rejects_protected_branch(self, tmp_path: Path, branch: str) -> None:
+        """push_to_remote must reject when branch is a protected branch."""
+        clone = tmp_path / "clone"
+        clone.mkdir()
+
+        result = push_to_remote(
+            clone_path=str(clone),
+            branch=branch,
+            remote_url="https://github.com/example/repo.git",
+        )
+
+        assert result["success"] is False
+        assert result.get("error_type") == "protected_branch_push"
+
+    def test_push_to_remote_allows_non_protected_branch(self, tmp_path: Path) -> None:
+        """push_to_remote does not reject non-protected branches (at the guard level)."""
+        from autoskillit.core.branch_guard import is_protected_branch
+
+        assert is_protected_branch("feat/my-feature") is False
+
+
 class TestPushToRemoteMocked:
     def test_ds6_push_to_remote_calls_get_url_then_push(self) -> None:
         """T_DS6: push_to_remote calls git remote get-url origin then git push -u origin."""
@@ -809,7 +834,7 @@ class TestPushToRemoteMocked:
         mock_push.stderr = ""
 
         with patch("subprocess.run", side_effect=[mock_url, mock_push]) as mock_run:
-            result = push_to_remote("/clone", "/source", "main")
+            result = push_to_remote("/clone", "/source", "main", protected_branches=[])
 
         assert result == {"success": True, "stderr": ""}
         # First call: git remote get-url origin from source_dir
@@ -829,7 +854,7 @@ class TestPushToRemoteMocked:
         mock_fail.stderr = "error: No such remote 'origin'"
 
         with patch("subprocess.run", return_value=mock_fail) as mock_run:
-            result = push_to_remote("/clone", "/source", "main")
+            result = push_to_remote("/clone", "/source", "main", protected_branches=[])
 
         assert result["success"] is False
         assert "origin" in result["stderr"]
@@ -899,7 +924,7 @@ class TestPushToRemoteNonBare:
             capture_output=True,
         )
 
-        result = push_to_remote(clone_path, str(source), "main")
+        result = push_to_remote(clone_path, str(source), "main", protected_branches=[])
 
         assert result["success"] is False
         assert result.get("error_type") == "local_non_bare_remote"
@@ -1033,7 +1058,9 @@ class TestPushToRemoteNonBare:
         )
 
         # Pass explicit remote_url — source_dir is not needed
-        result = push_to_remote(clone_path, remote_url=str(remote), branch="main")
+        result = push_to_remote(
+            clone_path, remote_url=str(remote), branch="main", protected_branches=[]
+        )
 
         assert result["success"] is True
 

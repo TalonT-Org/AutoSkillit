@@ -379,11 +379,10 @@ steps:
       Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
       and runs gh pr create. The skill gracefully degrades if gh is unavailable.
       TOKEN SUMMARY: Before invoking this step, the orchestrator MUST:
-      1. Call get_token_summary(clear=false) to retrieve accumulated token usage.
-      2. The get_token_summary result is already formatted as Markdown-KV. Parse the compact lines (e.g. "investigate x1 [in:45.2k out:12.8k cached:1.2M]") into a markdown table with columns: Step, input, output, cached, count. Include a bold Total row from the total_in/total_out/total_cached lines.
-      3. Write the formatted table to temp/open-pr/token_summary.md via run_cmd.
-      4. Append the file path as a 4th positional argument to the skill_command.
-      5. If context.issue_number is a non-empty string, append it as a 5th positional
+      1. Call get_token_summary(clear=false, format=table) — returns a pre-formatted markdown table.
+      2. Write the result to temp/open-pr/token_summary.md via run_cmd.
+      3. Append the file path as a 4th positional argument to the skill_command.
+      4. If context.issue_number is a non-empty string, append it as a 5th positional
          argument so the open-pr skill inserts "Closes #{issue_number}" into the PR body.
 
   review_pr:

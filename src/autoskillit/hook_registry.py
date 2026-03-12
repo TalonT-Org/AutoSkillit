@@ -35,6 +35,18 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["open_kitchen_guard.py"],
     ),
     HookDef(
+        matcher=r"mcp__.*autoskillit.*__merge_worktree",
+        scripts=["branch_protection_guard.py"],
+    ),
+    HookDef(
+        matcher=r"mcp__.*autoskillit.*__push_to_remote",
+        scripts=["branch_protection_guard.py"],
+    ),
+    HookDef(
+        matcher=r"mcp__.*autoskillit.*__(run_skill|run_cmd|run_python).*",
+        scripts=["headless_orchestration_guard.py"],
+    ),
+    HookDef(
         event_type="PostToolUse",
         matcher="mcp__.*autoskillit.*",
         scripts=["pretty_output.py"],

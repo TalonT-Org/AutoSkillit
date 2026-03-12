@@ -299,7 +299,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "open_pr"
       issue_number: "${{ context.issue_number }}"
-    on_success: check_review_pr_available
+    on_success: review_pr
     on_failure: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -309,43 +309,16 @@ steps:
       Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
       and runs gh pr create. The skill gracefully degrades if gh is unavailable.
       TOKEN SUMMARY: Before invoking this step, the orchestrator MUST:
-      1. Call get_token_summary(clear=false) to retrieve accumulated token usage.
-      2. The get_token_summary result is already formatted as Markdown-KV. Parse the compact lines (e.g. "investigate x1 [in:45.2k out:12.8k cached:1.2M]") into a markdown table with columns: Step, input, output, cached, count. Include a bold Total row from the total_in/total_out/total_cached lines.
-      3. Write the formatted table to temp/open-pr/token_summary.md via run_cmd.
-      4. Append the file path as a 4th positional argument to the skill_command.
-      5. If context.issue_number is a non-empty string, append it as a 5th positional
+      1. Call get_token_summary(clear=false, format=table) — returns a pre-formatted markdown table.
+      2. Write the result to temp/open-pr/token_summary.md via run_cmd.
+      3. Append the file path as a 4th positional argument to the skill_command.
+      4. If context.issue_number is a non-empty string, append it as a 5th positional
          argument so the open-pr skill inserts "Closes #{issue_number}" into the PR body.
-
-  check_review_pr_available:
-    description: Detect whether a project-specific review-pr skill is present; emit hint when absent
-    tool: run_cmd
-    with:
-      cmd: >-
-        python3 -c "
-        from autoskillit.workspace.skills import SkillResolver;
-        r = SkillResolver();
-        available = r.resolve('review-pr') is not None;
-        msg = ('review-pr skill found - PR review will run.' if available else
-               'NOTE: review-pr skill not found. Skipping PR review step. '
-               'Add a project-specific review-pr skill to your .autoskillit/skills/ directory '
-               'to enable automated PR review.');
-        print(msg);
-        "
-      cwd: "${{ context.work_dir }}"
-      step_name: "check_review_pr_available"
-    on_success: review_pr
-    on_failure: review_pr
-    optional: true
-    skip_when_false: "inputs.open_pr"
-    note: >
-      Informational step: detects whether a project-specific review-pr skill is
-      installed and emits a helpful message when absent. Routes to review_pr
-      regardless of outcome — review_pr handles its own graceful failure via on_failure.
 
   review_pr:
     tool: run_skill
     with:
-      skill_command: "/review-pr ${{ context.merge_target }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review_pr"
     capture:
@@ -357,16 +330,14 @@ steps:
         route: ci_watch
       - when: "true"
         route: ci_watch
-    on_failure: ci_watch
+    on_failure: resolve_review
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Runs after open_pr_step creates the PR. Uses bare /review-pr (not /autoskillit:review-pr)
-      so project-local skills take precedence — review-pr is project-specific and not bundled.
+      Runs after open_pr_step creates the PR. Uses bundled /autoskillit:review-pr skill.
       Captures verdict and routes via on_result: changes_requested → resolve_review,
-      needs_human/approved → ci_watch. On tool-level failure (skill absent, MCP error, gh
-      unavailable), routes to ci_watch for graceful degradation — the PR remains open and CI
-      still validates the change. Skipped when open_pr=false.
+      needs_human/approved → ci_watch. On tool-level failure, routes to resolve_review
+      for attempted remediation. Skipped when open_pr=false.
 
   resolve_review:
     tool: run_skill
@@ -378,7 +349,6 @@ steps:
     on_exhausted: release_issue_failure
     on_success: re_push_review
     on_failure: release_issue_failure
-    skip_when_false: "inputs.open_pr"
     note: >
       Runs when review_pr reports issues (verdict=changes_requested). The clone
       (context.work_dir) has the feature branch (context.merge_target) checked out.
@@ -386,7 +356,6 @@ steps:
       applies fixes for each actionable finding (critical + warning severity), and
       commits each fix. Orchestrator re-pushes via re_push_review after success.
       Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.
-      Skipped when open_pr=false.
 
   re_push_review:
     tool: push_to_remote

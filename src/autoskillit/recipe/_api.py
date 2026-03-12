@@ -37,6 +37,7 @@ from autoskillit.recipe.validator import (
     run_semantic_rules,
     validate_recipe,
 )
+from autoskillit.workspace import SkillResolver
 
 _logger = get_logger(__name__)
 
@@ -159,7 +160,8 @@ def validate_from_path(path: Path) -> dict[str, Any]:
 
     recipe = _parse_recipe(data)
     errors = validate_recipe(recipe)
-    ctx = make_validation_context(recipe)
+    known_skills = frozenset(s.name for s in SkillResolver().list_all())
+    ctx = make_validation_context(recipe, available_skills=known_skills)
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)
 
@@ -264,7 +266,10 @@ def load_and_validate(
 
             # Stage: semantic rules (builds ValidationContext once — shared computation)
             known = frozenset(r.name for r in list_recipes(_pdir).items)
-            val_ctx = make_validation_context(recipe, available_recipes=known)
+            known_skills = frozenset(s.name for s in SkillResolver().list_all())
+            val_ctx = make_validation_context(
+                recipe, available_recipes=known, available_skills=known_skills
+            )
             semantic_findings = run_semantic_rules(val_ctx)
             semantic_suggestions = findings_to_dicts(semantic_findings)
             t0 = _t("semantic_rules", t0, name)

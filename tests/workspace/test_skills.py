@@ -56,6 +56,7 @@ BUNDLED_SKILLS = [
     "resolve-merge-conflicts",
     "resolve-review",
     "retry-worktree",
+    "review-pr",
     "review-approach",
     "setup-project",
     "smoke-task",
@@ -372,9 +373,7 @@ class TestSkillResolver:
             info = resolver.resolve(name)
             assert info is not None, f"audit skill '{name}' not found in bundled skills"
 
-    def test_review_pr_not_in_bundled_skills(self) -> None:
-        """review-pr must not be in bundled skills — it is project-specific."""
+    def test_review_pr_is_bundled(self) -> None:
+        """review-pr must be in bundled skills."""
         resolver = SkillResolver()
-        assert resolver.resolve("review-pr") is None, (
-            "review-pr must be removed from bundled skills (REQ-BDL-003)"
-        )
+        assert resolver.resolve("review-pr") is not None, "review-pr must be a bundled skill"

@@ -999,12 +999,11 @@ class TestAuditAndFixStructure:
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
 
-    def test_aaf_open_pr_step_routes_to_check_review_pr_available(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success is check_review_pr_available (REQ-BDL-003)."""
+    def test_aaf_open_pr_step_routes_to_review_pr(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success routes to review_pr."""
         step = recipe.steps["open_pr_step"]
-        assert step.on_success == "check_review_pr_available", (
-            "open_pr_step must route to check_review_pr_available — REQ-BDL-003: "
-            "review-pr removed from bundle; audit-and-fix uses graceful degradation"
+        assert step.on_success == "review_pr", (
+            "open_pr_step must route to review_pr after opening the PR"
         )
 
 

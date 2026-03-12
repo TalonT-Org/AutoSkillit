@@ -27,6 +27,7 @@ class RetryReason(StrEnum):
 
 class MergeFailedStep(StrEnum):
     PATH_VALIDATION = "path_validation"
+    PROTECTED_BRANCH = "protected_branch"
     BRANCH_DETECTION = "branch_detection"
     DIRTY_TREE = "dirty_tree"
     TEST_GATE = "test_gate"
@@ -752,7 +753,13 @@ class CloneManager(Protocol):
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]: ...
 
     def push_to_remote(
-        self, clone_path: str, source_dir: str = "", branch: str = "", *, remote_url: str = ""
+        self,
+        clone_path: str,
+        source_dir: str = "",
+        branch: str = "",
+        *,
+        remote_url: str = "",
+        protected_branches: list[str] | None = None,
     ) -> dict[str, str | bool]: ...
 
 

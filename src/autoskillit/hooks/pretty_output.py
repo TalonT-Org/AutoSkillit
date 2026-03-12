@@ -217,7 +217,13 @@ def _fmt_merge_worktree(data: dict, _pipeline: bool) -> str:
 def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
     """Format get_token_summary as compact Markdown-KV.
 
-    Each step becomes: name xN [in:Xk out:Xk cached:XM]
+    Each step becomes: name xN [in:Xk out:Xk cached:XM t:Xs]
+    Prefers wall_clock_seconds over elapsed_seconds when both present.
+
+    When format="table" is used, the MCP response is a pre-formatted
+    markdown table string (not JSON). The outer _format_response detects
+    this as non-dict and returns None (pass-through), so this function
+    only receives the JSON dict format.
     """
     lines = ["## token_summary", ""]
     steps = data.get("steps", [])
@@ -229,8 +235,8 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
         cached = _fmt_tokens(
             step.get("cache_read_input_tokens", 0) + step.get("cache_creation_input_tokens", 0)
         )
-        elapsed = step.get("elapsed_seconds", 0.0)
-        lines.append(f"{name} x{count} [in:{inp} out:{out} cached:{cached} t:{elapsed:.1f}s]")
+        wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
+        lines.append(f"{name} x{count} [in:{inp} out:{out} cached:{cached} t:{wc:.1f}s]")
     total = data.get("total", {})
     if total:
         lines.append("")
@@ -247,6 +253,44 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
         lines.append(f"mcp_invocations: {mcp_total.get('total_invocations', 0)}")
         est_tokens = mcp_total.get("total_estimated_response_tokens", 0)
         lines.append(f"mcp_response_tokens: ~{_fmt_tokens(est_tokens)}")
+    return "\n".join(lines)
+
+
+def _fmt_get_timing_summary(data: dict, _pipeline: bool) -> str:
+    """Format get_timing_summary as compact Markdown-KV.
+
+    Each step becomes: name xN [dur:Xs]
+    """
+    lines = ["## timing_summary", ""]
+    steps = data.get("steps", [])
+    for step in steps:
+        name = step.get("step_name", "?")
+        count = step.get("invocation_count", 1)
+        secs = step.get("total_seconds", 0.0)
+        if secs < 60:
+            dur = f"{secs:.0f}s"
+        elif secs < 3600:
+            m, s = divmod(int(secs), 60)
+            dur = f"{m}m {s}s"
+        else:
+            h, remainder = divmod(int(secs), 3600)
+            m = remainder // 60
+            dur = f"{h}h {m}m"
+        lines.append(f"{name} x{count} [dur:{dur}]")
+    total = data.get("total", {})
+    if total:
+        total_secs = total.get("total_seconds", 0.0)
+        if total_secs < 60:
+            total_dur = f"{total_secs:.0f}s"
+        elif total_secs < 3600:
+            m, s = divmod(int(total_secs), 60)
+            total_dur = f"{m}m {s}s"
+        else:
+            h, remainder = divmod(int(total_secs), 3600)
+            m = remainder // 60
+            total_dur = f"{h}h {m}m"
+        lines.append("")
+        lines.append(f"total: {total_dur}")
     return "\n".join(lines)
 
 
@@ -420,6 +464,7 @@ _FORMATTERS = {
     "test_check": _fmt_test_check,
     "merge_worktree": _fmt_merge_worktree,
     "get_token_summary": _fmt_get_token_summary,
+    "get_timing_summary": _fmt_get_timing_summary,
     "kitchen_status": _fmt_kitchen_status,
     "clone_repo": _fmt_clone_repo,
     "load_recipe": _fmt_load_recipe,
@@ -452,7 +497,6 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "check_pr_mergeable",  # simple bool result
         "set_commit_status",  # simple ack
         "get_pipeline_report",  # list-of-dicts, now renders correctly via hardened _fmt_generic
-        "get_timing_summary",  # timing data, generic renders correctly
         "validate_recipe",  # suggestions list, now renders correctly via hardened _fmt_generic
         "fetch_github_issue",  # issue data dict
         "get_issue_title",  # simple string

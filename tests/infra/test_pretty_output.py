@@ -855,8 +855,8 @@ def test_wrapped_tool_exception_still_detected(tmp_path):
 
 
 # T7
-def test_fmt_get_token_summary_includes_elapsed_seconds():
-    """_fmt_get_token_summary must include elapsed time in each step line."""
+def test_fmt_get_token_summary_prefers_wall_clock_seconds():
+    """_fmt_get_token_summary prefers wall_clock_seconds over elapsed_seconds."""
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__get_token_summary",
         "tool_response": json.dumps(
@@ -869,6 +869,7 @@ def test_fmt_get_token_summary_includes_elapsed_seconds():
                         "cache_creation_input_tokens": 200,
                         "cache_read_input_tokens": 3000,
                         "invocation_count": 2,
+                        "wall_clock_seconds": 150.0,
                         "elapsed_seconds": 123.4,
                     }
                 ],
@@ -886,9 +887,38 @@ def test_fmt_get_token_summary_includes_elapsed_seconds():
     out, _ = _run_hook(event=event)
     data = json.loads(out)
     rendered = data["hookSpecificOutput"]["updatedMCPToolOutput"]
-    # Must include step name and elapsed time
     assert "implement" in rendered
-    assert "t:123.4s" in rendered
+    # Should use wall_clock_seconds (150.0), not elapsed_seconds (123.4)
+    assert "t:150.0s" in rendered
+
+
+# T7b
+def test_fmt_get_token_summary_falls_back_to_elapsed():
+    """_fmt_get_token_summary falls back to elapsed_seconds when no wall_clock."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__get_token_summary",
+        "tool_response": json.dumps(
+            {
+                "steps": [
+                    {
+                        "step_name": "plan",
+                        "input_tokens": 100,
+                        "output_tokens": 50,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 0,
+                        "invocation_count": 1,
+                        "elapsed_seconds": 42.5,
+                    }
+                ],
+                "total": {"input_tokens": 100, "output_tokens": 50},
+                "mcp_responses": {"steps": [], "total": {}},
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    data = json.loads(out)
+    rendered = data["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "t:42.5s" in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -1121,3 +1151,90 @@ class TestFormatterSchemaConsistency:
             assert str(data[key]) in output, (
                 f"Field '{key}' value missing from formatted kitchen_status output"
             )
+
+
+# ---------------------------------------------------------------------------
+# Output-equivalence: hook inline formatter ≡ TelemetryFormatter.format_compact_kv
+# ---------------------------------------------------------------------------
+
+
+def test_hook_token_summary_output_equivalent_to_canonical():
+    """1g: Hook inline _fmt_get_token_summary produces identical output to
+    TelemetryFormatter.format_compact_kv for the same input data."""
+    from autoskillit.hooks.pretty_output import _fmt_get_token_summary
+    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+    data = {
+        "steps": [
+            {
+                "step_name": "investigate",
+                "input_tokens": 7000,
+                "output_tokens": 5939,
+                "cache_creation_input_tokens": 8495,
+                "cache_read_input_tokens": 252179,
+                "invocation_count": 1,
+                "wall_clock_seconds": 45.0,
+                "elapsed_seconds": 40.0,
+            },
+            {
+                "step_name": "implement",
+                "input_tokens": 2031000,
+                "output_tokens": 122306,
+                "cache_creation_input_tokens": 280601,
+                "cache_read_input_tokens": 19071323,
+                "invocation_count": 3,
+                "wall_clock_seconds": 492.0,
+                "elapsed_seconds": 480.0,
+            },
+        ],
+        "total": {
+            "input_tokens": 2038000,
+            "output_tokens": 128245,
+            "cache_creation_input_tokens": 289096,
+            "cache_read_input_tokens": 19323502,
+            "total_elapsed_seconds": 537.0,
+        },
+        "mcp_responses": {
+            "steps": [],
+            "total": {"total_invocations": 42, "total_estimated_response_tokens": 5000},
+        },
+    }
+
+    hook_output = _fmt_get_token_summary(data, _pipeline=False)
+    canonical_output = TelemetryFormatter.format_compact_kv(
+        data["steps"], data["total"], mcp_responses=data["mcp_responses"]
+    )
+    assert hook_output == canonical_output, (
+        f"Hook and canonical formatter produce different output:\n"
+        f"HOOK:\n{hook_output}\n\nCANONICAL:\n{canonical_output}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Timing summary dedicated formatter
+# ---------------------------------------------------------------------------
+
+
+def test_fmt_get_timing_summary_renders_compact():
+    """get_timing_summary dedicated formatter renders compact Markdown-KV."""
+    event = {
+        "tool_name": "mcp__autoskillit__get_timing_summary",
+        "tool_response": json.dumps(
+            {
+                "steps": [
+                    {"step_name": "clone", "total_seconds": 4.0, "invocation_count": 1},
+                    {"step_name": "implement", "total_seconds": 492.0, "invocation_count": 3},
+                ],
+                "total": {"total_seconds": 496.0},
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    data = json.loads(out)
+    rendered = data["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "## timing_summary" in rendered
+    assert "clone x1" in rendered
+    assert "implement x3" in rendered
+    assert "dur:4s" in rendered
+    assert "dur:8m 12s" in rendered
+    assert "total:" in rendered

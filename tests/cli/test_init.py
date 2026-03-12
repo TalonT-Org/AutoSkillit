@@ -224,9 +224,10 @@ class TestCLIInit:
         settings = json.loads(settings_path.read_text())
         pretooluse = settings.get("hooks", {}).get("PreToolUse", [])
         matchers = [e.get("matcher", "") for e in pretooluse]
-        # No duplicate matchers (run_skill appears exactly once)
-        run_skill_count = sum(1 for m in matchers if "run_skill" in m)
-        assert run_skill_count == 1
+        # No duplicate matchers — each matcher string appears exactly once
+        assert len(matchers) == len(set(matchers)), (
+            f"Duplicate PreToolUse matchers after double init: {matchers}"
+        )
 
     # CI-SCOPE-4
     def test_init_default_scope_is_user(

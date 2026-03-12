@@ -23,6 +23,9 @@ from autoskillit.recipe.staleness_cache import compute_recipe_hash
 # existing diagrams are flagged stale even if the recipe YAML hasn't changed.
 DIAGRAM_FORMAT_VERSION = "v7"  # bump: fixed line guard, side-leg cap, description normalization
 
+# Separator line rendered between the graph body and the terminal steps block.
+DIAGRAM_SECTION_SEPARATOR = "─────────────────────────────────────"
+
 
 # ---------------------------------------------------------------------------
 # Layout data structures
@@ -618,7 +621,7 @@ def _render_visual_flow(layout: _LayoutResult) -> str:
 
     if terminal:
         lines.append("│")
-        lines.append("─────────────────────────────────────")
+        lines.append(DIAGRAM_SECTION_SEPARATOR)
         for term in terminal:
             if term.message:
                 lines.append(f'{term.name}  "{term.message}"')

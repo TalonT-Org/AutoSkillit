@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.recipe.diagrams import (
+    DIAGRAM_SECTION_SEPARATOR,
     check_diagram_staleness,
     diagram_stale_to_suggestions,
     generate_recipe_diagram,
@@ -1718,7 +1719,7 @@ def test_no_graph_line_exceeds_width_limit(recipe_name: str, tmp_path: Path) -> 
             continue
         if in_graph and line.startswith("### "):
             break
-        if in_graph and line.startswith("─────────"):
+        if in_graph and line.startswith(DIAGRAM_SECTION_SEPARATOR):
             past_sep = True
         if in_graph and not past_sep and len(line) > _MAX_LINE_WIDTH:
             violations.append((lineno, len(line), line[:60]))

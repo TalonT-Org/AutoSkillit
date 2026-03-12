@@ -1203,7 +1203,6 @@ class TestFormatterSchemaConsistency:
             "Raw YAML content must be suppressed by _fmt_load_recipe — found in formatter output."
         )
 
-
 # ---------------------------------------------------------------------------
 # Output-equivalence: hook inline formatter ≡ TelemetryFormatter.format_compact_kv
 # ---------------------------------------------------------------------------
@@ -1289,6 +1288,7 @@ def test_fmt_get_timing_summary_renders_compact():
     assert "dur:4s" in rendered
     assert "dur:8m 12s" in rendered
     assert "total:" in rendered
+
 
 
 # Issue #346

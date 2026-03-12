@@ -91,6 +91,12 @@ lens guard.
 
 For each selected lens, follow this exact sequence:
 
+**CRITICAL:** Do NOT output any prose status text between lens iterations.
+After completing all sub-steps for one lens (including mermaid extraction and
+validation), immediately begin sub-step 1 (Write the PR context file) for the
+next lens. Progress announcements like "Diagram generated. Now calling X:"
+create end_turn windows that cause stochastic session termination.
+
 **1. Write the PR context to a file using the Write tool:**
 
 - **Path:** `temp/pr-arch-lens-context.md`

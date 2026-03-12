@@ -8,9 +8,16 @@ LLM field-extraction accuracy.
 Stdlib-only — runs under any Python interpreter without the autoskillit package.
 """
 
+from __future__ import annotations
+
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from autoskillit.recipe._api import LoadRecipeResult
 
 _HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", "temp", ".autoskillit_hook_config.json")
 _CHECK_MARK = "\u2713"  # ✓
@@ -342,7 +349,7 @@ def _fmt_clone_repo(data: dict, _pipeline: bool) -> str:
     return "\n".join(lines)
 
 
-def _fmt_load_recipe(data: dict, pipeline: bool) -> str:
+def _fmt_load_recipe(data: LoadRecipeResult, pipeline: bool) -> str:
     """Format load_recipe result as Markdown-KV."""
     if not isinstance(data, dict):
         return "## load_recipe\n\n_(unexpected response type)_"
@@ -458,7 +465,7 @@ def _fmt_generic(short_name: str, data: dict, _pipeline: bool) -> str:
 
 
 # Dispatch table: short tool name → formatter function
-_FORMATTERS = {
+_FORMATTERS: dict[str, Callable[..., str]] = {
     "run_skill": _fmt_run_skill,
     "run_cmd": _fmt_run_cmd,
     "test_check": _fmt_test_check,

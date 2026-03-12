@@ -235,6 +235,31 @@ def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# T-TYPED-1: LoadRecipeResult TypedDict contract test
+# ---------------------------------------------------------------------------
+
+
+def test_load_recipe_result_is_typed() -> None:
+    """T-TYPED-1: LoadRecipeResult TypedDict must be importable from recipe._api.
+
+    Fails until LoadRecipeResult is defined. Once passing, mypy can enforce the schema
+    at all call sites that use the return type annotation.
+    """
+    from autoskillit.recipe._api import LoadRecipeResult  # fails until defined
+
+    assert LoadRecipeResult is not None
+    # Verify required keys are declared — use get_type_hints for robust introspection
+    # (handles inherited keys if the TypedDict is later split into base+extension).
+    import typing  # noqa: PLC0415
+
+    hints = typing.get_type_hints(LoadRecipeResult)
+    assert "content" in hints
+    assert "diagram" in hints
+    assert "suggestions" in hints
+    assert "valid" in hints
+
+
+# ---------------------------------------------------------------------------
 # Repository routing test
 # ---------------------------------------------------------------------------
 

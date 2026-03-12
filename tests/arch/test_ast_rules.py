@@ -500,24 +500,47 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
 # ── P14-2: Sub-package __init__.py facade enforcement ─────────────────────────
 
 
+def _type_checking_linenos(tree: ast.AST) -> set[int]:
+    """Return line numbers of all AST nodes inside `if TYPE_CHECKING:` guards."""
+    linenos: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        test = node.test
+        is_guard = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+            isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+        )
+        if is_guard:
+            for child in ast.walk(node):
+                if hasattr(child, "lineno"):
+                    linenos.add(child.lineno)  # type: ignore[attr-defined]
+    return linenos
+
+
 def test_hooks_are_stdlib_only() -> None:
-    """Hook scripts must not import from autoskillit.* — they run outside the venv."""
+    """Hook scripts must not import from autoskillit.* — they run outside the venv.
+
+    Exemption: imports inside `if TYPE_CHECKING:` blocks are annotation-only and
+    are never executed at runtime, so they do not break the stdlib-only constraint.
+    """
     hooks_dir = SRC_ROOT / "hooks"
     violations: list[str] = []
     for py_file in sorted(hooks_dir.glob("*.py")):
         if py_file.name == "__init__.py":
             continue
         tree = ast.parse(py_file.read_text())
+        exempt = _type_checking_linenos(tree)
         for node in ast.walk(tree):
             if (
                 isinstance(node, ast.ImportFrom)
                 and node.module
                 and node.module.startswith("autoskillit")
+                and node.lineno not in exempt
             ):
                 violations.append(f"  {py_file.name}:{node.lineno}: imports from {node.module}")
             elif isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name.startswith("autoskillit"):
+                    if alias.name.startswith("autoskillit") and node.lineno not in exempt:
                         violations.append(f"  {py_file.name}:{node.lineno}: imports {alias.name}")
     assert not violations, (
         "Hook scripts must be stdlib-only (no autoskillit.* imports) — "

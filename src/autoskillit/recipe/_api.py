@@ -7,7 +7,7 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass as _dc
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from autoskillit.core import LoadResult, RecipeSource, YAMLError, get_logger, load_yaml, pkg_root
 from autoskillit.recipe._analysis import make_validation_context
@@ -40,6 +40,22 @@ from autoskillit.recipe.validator import (
 from autoskillit.workspace import SkillResolver
 
 _logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Schema contract: handler → formatter boundary
+# ---------------------------------------------------------------------------
+
+
+class LoadRecipeResult(TypedDict, total=False):
+    """Typed schema for the load_recipe handler → formatter boundary."""
+
+    content: str
+    diagram: str | None
+    suggestions: list[dict[str, Any]]
+    valid: bool
+    kitchen_rules: list[str]
+    error: str
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +114,7 @@ class _LoadCacheEntry:
     project_dir_mtime: int
     builtin_dir_mtime: int
     pkg_version: str
-    result: dict[str, Any]
+    result: LoadRecipeResult
 
 
 _LOAD_CACHE: dict[tuple, _LoadCacheEntry] = {}
@@ -192,7 +208,7 @@ def load_and_validate(
     *,
     suppressed: Sequence[str] | None = None,
     recipe_info: RecipeInfo | None = None,
-) -> dict[str, Any]:
+) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
     Args:
@@ -345,7 +361,7 @@ def load_and_validate(
     diagram: str | None = load_recipe_diagram(name, recipes_dir)
 
     if recipe is not None and recipe.kitchen_rules:
-        result: dict[str, Any] = {
+        result: LoadRecipeResult = {
             "content": raw,
             "diagram": diagram,
             "suggestions": suggestions,

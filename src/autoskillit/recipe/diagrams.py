@@ -21,7 +21,10 @@ from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 # Diagram format version — bump when rendering logic changes so that
 # existing diagrams are flagged stale even if the recipe YAML hasn't changed.
-_DIAGRAM_FORMAT_VERSION = "v6"
+DIAGRAM_FORMAT_VERSION = "v7"  # bump: fixed line guard, side-leg cap, description normalization
+
+# Separator line rendered between the graph body and the terminal steps block.
+DIAGRAM_SECTION_SEPARATOR = "─────────────────────────────────────"
 
 
 # ---------------------------------------------------------------------------
@@ -488,30 +491,65 @@ def _render_for_each_chain(
             token += " ↑"
         chain_tokens.append(token)
 
-    chain_line = " ─── ".join(chain_tokens)
-    lines.append(f"│    {chain_line}")
+    # Line-length guard on horizontal chains.
+    # If the full join exceeds _MAX_CHAIN_WIDTH usable chars (120 total − 5 for "│    "
+    # prefix), render each step on its own line (vertical fallback) instead of an
+    # inline horizontal join. This prevents the chain line and its indented side-legs
+    # from exceeding the 120-char terminal width limit.
+    _MAX_CHAIN_WIDTH = 115  # 120 total − 5 chars for "│    " prefix
 
-    # Side-leg failure branches: one block per chain step that has a failure route.
-    # Each side-leg hangs below the chain line, indented to the step's position.
-    indent_base = 4  # "│    " prefix = 4 chars after the leading │
-    cursor = 0
-    for idx, step in enumerate(chain_steps):
-        failure_routes: list[str] = []
-        if step.on_failure:
-            suf = " ↑" if step.is_back_edge_failure else ""
-            failure_routes.append(f"✗ failure → {step.on_failure}{suf}")
-        if step.on_context_limit:
-            failure_routes.append(f"⌛ context limit → {step.on_context_limit}")
-        for cond_str, target, is_back in step.on_result_conditions:
-            suf = " ↑" if is_back else ""
-            failure_routes.append(f"{cond_str} → {target}{suf}")
-        if failure_routes:
-            pad = " " * (indent_base + cursor + 1)
-            lines.append(f"│{pad}│")
-            for route in failure_routes:
-                lines.append(f"│{pad}{route}")
-        # Advance cursor by token length + " ─── " separator (5 chars)
-        cursor += len(chain_tokens[idx]) + 5
+    chain_line = " ─── ".join(chain_tokens)
+
+    if len(chain_line) > _MAX_CHAIN_WIDTH:
+        # Vertical fallback: each chain step on its own line with fixed indent.
+        for step, token in zip(chain_steps, chain_tokens):
+            lines.append(f"│    {token}")
+            failure_routes: list[str] = []
+            if step.on_failure:
+                suf = " ↑" if step.is_back_edge_failure else ""
+                failure_routes.append(f"✗ failure → {step.on_failure}{suf}")
+            if step.on_context_limit:
+                failure_routes.append(f"⌛ context limit → {step.on_context_limit}")
+            for cond_str, target, is_back in step.on_result_conditions:
+                suf = " ↑" if is_back else ""
+                failure_routes.append(f"{cond_str} → {target}{suf}")
+            if failure_routes:
+                lines.append("│     │")
+                for route in failure_routes:
+                    lines.append(f"│     {route}")
+    else:
+        lines.append(f"│    {chain_line}")
+
+        # Side-leg failure branches: one block per chain step that has a failure route.
+        # Each side-leg hangs below the chain line, indented to the step's position.
+        # Cap pad size so │{pad}{route} ≤ 120 chars for the longest route in the
+        # block; also cap at the chain-line width to avoid the connector extending beyond
+        # the visual end of the chain box.
+        indent_base = 4  # "│    " prefix = 4 chars after the leading │
+        cursor = 0
+        max_chain_len = len(chain_line)
+        for idx, step in enumerate(chain_steps):
+            failure_routes = []
+            if step.on_failure:
+                suf = " ↑" if step.is_back_edge_failure else ""
+                failure_routes.append(f"✗ failure → {step.on_failure}{suf}")
+            if step.on_context_limit:
+                failure_routes.append(f"⌛ context limit → {step.on_context_limit}")
+            for cond_str, target, is_back in step.on_result_conditions:
+                suf = " ↑" if is_back else ""
+                failure_routes.append(f"{cond_str} → {target}{suf}")
+            if failure_routes:
+                max_route_len = max(len(r) for r in failure_routes)
+                # Cap so │{pad}{longest_route} ≤ 120; also don't extend past chain end.
+                # Clamp to >= 0: when max_route_len >= 119 the expression would go negative.
+                cap = max(0, min(max_chain_len - 1, 120 - 1 - max_route_len))
+                pad_size = min(indent_base + cursor + 1, max(indent_base + 1, cap))
+                pad = " " * pad_size
+                lines.append(f"│{pad}│")
+                for route in failure_routes:
+                    lines.append(f"│{pad}{route}")
+            # Advance cursor by token length + " ─── " separator (5 chars)
+            cursor += len(chain_tokens[idx]) + 5
 
     lines.append("│")
     lines.append("└────┘")
@@ -583,7 +621,7 @@ def _render_visual_flow(layout: _LayoutResult) -> str:
 
     if terminal:
         lines.append("│")
-        lines.append("─────────────────────────────────────")
+        lines.append(DIAGRAM_SECTION_SEPARATOR)
         for term in terminal:
             if term.message:
                 lines.append(f'{term.name}  "{term.message}"')
@@ -647,9 +685,17 @@ def generate_recipe_diagram(
             # Agent-managed state captured by pipeline steps — omit from table
             agent_managed.append(ing_name)
             continue
-        input_rows.append(
-            f"| {ing_name} | {ing.description} | {_format_ingredient_default(ing)} |"
-        )
+        # Normalize description — collapse embedded newlines (from folded/literal
+        # YAML scalars) to spaces, strip whitespace, and truncate to ≤ 80 chars so the
+        # Markdown table row remains a single line.
+        _desc = ing.description.replace("\n", " ").strip()
+        if len(_desc) > 80:
+            _cut = _desc[:77]
+            # Prefer a word-boundary cut; fall back to hard 77-char slice when no space.
+            if " " in _cut:
+                _cut = _cut.rsplit(" ", 1)[0]
+            _desc = _cut + "..."
+        input_rows.append(f"| {ing_name} | {_desc} | {_format_ingredient_default(ing)} |")
     inputs_table = "\n".join(input_rows)
     if agent_managed:
         inputs_table += f"\n\nAgent-managed: {', '.join(agent_managed)}"
@@ -668,7 +714,7 @@ def generate_recipe_diagram(
     )
     diagram = (
         f"<!-- autoskillit-recipe-hash: {recipe_hash} -->\n"
-        f"<!-- autoskillit-diagram-format: {_DIAGRAM_FORMAT_VERSION} -->\n"
+        f"<!-- autoskillit-diagram-format: {DIAGRAM_FORMAT_VERSION} -->\n"
         f"## {recipe.name}\n"
         f"{recipe.description}\n"
         f"\n"
@@ -749,7 +795,7 @@ def check_diagram_staleness(
         return True  # No format version = pre-v2 diagram, stale
 
     stored_format = format_match.group(1)
-    return stored_format != _DIAGRAM_FORMAT_VERSION
+    return stored_format != DIAGRAM_FORMAT_VERSION
 
 
 def diagram_stale_to_suggestions(recipe_name: str) -> list[dict[str, str]]:

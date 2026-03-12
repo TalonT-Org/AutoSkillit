@@ -219,7 +219,7 @@ class TestTestCheck:
 
         await test_check(worktree_path=relative_path)
 
-        cwd = tool_ctx.runner.call_args_list[-1].kwargs["cwd"]
+        _cmd, cwd, _timeout, _kwargs = tool_ctx.runner.call_args_list[-1]
         assert str(cwd) == expected_resolved, (
             f"Expected cwd={expected_resolved!r}, got {str(cwd)!r}. "
             "test_check must apply os.path.realpath() to worktree_path."
@@ -238,7 +238,7 @@ class TestTestCheck:
         await test_check(worktree_path="/tmp/wt")
 
         assert tool_ctx.runner.call_args_list, "Runner was not called"
-        kwargs = tool_ctx.runner.call_args_list[-1].kwargs
+        _cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[-1]
         env = kwargs.get("env")
         assert env is not None, "test_check must pass an explicit env= to the runner"
         for var in AUTOSKILLIT_PRIVATE_ENV_VARS:

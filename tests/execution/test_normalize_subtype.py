@@ -1,8 +1,4 @@
-"""Test D: Unit tests for _normalize_subtype().
-
-These tests are the specification for the normalization gate. They must all
-FAIL before the implementation and PASS after.
-"""
+"""Unit tests for the _normalize_subtype() normalization gate."""
 
 from __future__ import annotations
 
@@ -30,7 +26,7 @@ def _session(
 
 def test_normalize_succeeded_empty_output_returns_success():
     """SUCCEEDED + 'empty_output' → 'success' (Class 2 fix)."""
-    session = _session(subtype="empty_output", result="", is_error=True)
+    session = _session(subtype="empty_output", result="", is_error=False)
     result = _normalize_subtype("empty_output", SessionOutcome.SUCCEEDED, session, "")
     assert result == "success"
 

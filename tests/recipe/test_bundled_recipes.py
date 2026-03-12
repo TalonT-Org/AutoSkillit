@@ -999,11 +999,12 @@ class TestAuditAndFixStructure:
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
 
-    def test_aaf_open_pr_step_routes_to_review_pr(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success is review_pr (review loop before ci_watch)."""
+    def test_aaf_open_pr_step_routes_to_check_review_pr_available(self, recipe) -> None:
+        """T_CI8: open_pr_step.on_success is check_review_pr_available (REQ-BDL-003)."""
         step = recipe.steps["open_pr_step"]
-        assert step.on_success == "review_pr", (
-            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
+        assert step.on_success == "check_review_pr_available", (
+            "open_pr_step must route to check_review_pr_available — REQ-BDL-003: "
+            "review-pr removed from bundle; audit-and-fix uses graceful degradation"
         )
 
 
@@ -1248,7 +1249,6 @@ class TestReviewPrRecipeIntegration:
         params=[
             "implementation.yaml",
             "implementation-groups.yaml",
-            "audit-and-fix.yaml",
             "remediation.yaml",
         ],
     )
@@ -1256,7 +1256,7 @@ class TestReviewPrRecipeIntegration:
         return load_recipe(builtin_recipes_dir() / request.param)
 
     def test_open_pr_step_routes_to_review_pr(self, recipe: object) -> None:
-        """T_RP1: open_pr_step.on_success must be review_pr in all four recipes."""
+        """T_RP1: open_pr_step.on_success must be review_pr in all three recipes."""
         assert recipe.steps["open_pr_step"].on_success == "review_pr"  # type: ignore[attr-defined]
 
     def test_review_pr_step_exists_and_is_run_skill(self, recipe: object) -> None:
@@ -1461,19 +1461,16 @@ class TestBaseBranchDefaults:
         "recipe_name",
         [
             "implementation",
-            "audit-and-fix",
             "remediation",
             "bugfix-loop",
             "implementation-groups",
-            "batch-implementation",
         ],
     )
-    def test_recipe_base_branch_defaults_to_integration(self, recipe_name: str) -> None:
-        """All non-exempt bundled recipes must default base_branch to 'integration'."""
+    def test_recipe_base_branch_defaults_to_main(self, recipe_name: str) -> None:
+        """All non-exempt bundled recipes must default base_branch to 'main' (REQ-GEN-005)."""
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
-        assert recipe.ingredients["base_branch"].default == "integration", (
-            f"{recipe_name}.yaml: base_branch default must be 'integration', not 'main' — "
-            "update to reflect the new 3-tier branching model"
+        assert recipe.ingredients["base_branch"].default == "main", (
+            f"{recipe_name}.yaml: base_branch default must be 'main' — REQ-GEN-005"
         )
 
     def test_smoke_test_base_branch_remains_main(self) -> None:
@@ -1514,29 +1511,28 @@ class TestDevSprintRecipe:
         errors = [f for f in run_semantic_rules(ctx) if f.severity == Severity.ERROR]
         assert not errors, f"Semantic errors: {errors}"
 
-    def test_ds4_has_run_recipe_composition_step(self, recipe) -> None:
-        """DS4: dev-sprint must have at least one run_recipe step."""
+    def test_ds4_has_no_run_recipe_step(self, recipe) -> None:
+        """DS4: dev-sprint must NOT have any run_recipe steps (removed)."""
         run_recipe_steps = [n for n, s in recipe.steps.items() if s.tool == "run_recipe"]
-        assert run_recipe_steps, "dev-sprint must have at least one run_recipe step"
+        assert not run_recipe_steps, f"dev-sprint still uses run_recipe: {run_recipe_steps}"
 
-    def test_ds5_composition_calls_implementation_groups(self, recipe) -> None:
-        """DS5: run_recipe step must delegate to implementation-groups."""
-        sub_names = [
-            s.with_args.get("name") for s in recipe.steps.values() if s.tool == "run_recipe"
-        ]
-        assert "implementation-groups" in sub_names
+    def test_ds5_implement_step_uses_load_recipe(self, recipe) -> None:
+        """DS5: implement step must use load_recipe for direct orchestration."""
+        impl = recipe.steps.get("implement")
+        assert impl is not None and impl.tool == "load_recipe", (
+            "implement step must use tool: load_recipe"
+        )
+
+    def test_ds5b_implement_step_loads_implementation_groups(self, recipe) -> None:
+        """DS5b: implement step must load implementation-groups."""
+        impl = recipe.steps.get("implement")
+        assert impl is not None
+        assert impl.with_args.get("name") == "implementation-groups"
 
     def test_ds6_triage_step_captures_manifest(self, recipe) -> None:
         """DS6: triage step must capture triage_manifest from result.manifest_path."""
         triage = recipe.steps.get("triage")
         assert triage is not None and "triage_manifest" in triage.capture
-
-    def test_ds7_implement_step_threads_manifest(self, recipe) -> None:
-        """DS7: implement step ingredients must reference context.triage_manifest."""
-        impl = next((s for s in recipe.steps.values() if s.tool == "run_recipe"), None)
-        assert impl is not None
-        ingredients_val = impl.with_args.get("ingredients", "")
-        assert "triage_manifest" in ingredients_val
 
     def test_ds8_kitchen_rules_list_forbidden_tools(self, recipe) -> None:
         """DS8: kitchen_rules must explicitly mention each forbidden native tool."""
@@ -1568,3 +1564,27 @@ def test_bundled_recipes_emit_no_graph_warnings(recipe_path):
         f"build_recipe_graph emitted {len(warning_events)} warnings for "
         f"{recipe_path.name}: {warning_events}"
     )
+
+
+def test_dev_sprint_has_no_run_recipe_step():
+    import yaml
+
+    from autoskillit.core.paths import pkg_root
+
+    path = pkg_root() / "recipes" / "dev-sprint.yaml"
+    data = yaml.safe_load(path.read_text())
+    for step_name, step in data.get("steps", {}).items():
+        assert step.get("tool") != "run_recipe", (
+            f"dev-sprint step '{step_name}' still uses tool: run_recipe"
+        )
+
+
+def test_dev_sprint_recipe_passes_validator():
+    from autoskillit.core.paths import pkg_root
+    from autoskillit.recipe import validate_recipe as validate_recipe_fn
+    from autoskillit.recipe.io import load_recipe as load_recipe_fn
+
+    path = pkg_root() / "recipes" / "dev-sprint.yaml"
+    recipe = load_recipe_fn(path)
+    errors = validate_recipe_fn(recipe)
+    assert errors == [], f"dev-sprint.yaml has validation errors: {errors}"

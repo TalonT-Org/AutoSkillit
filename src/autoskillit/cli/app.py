@@ -152,25 +152,27 @@ def install(
     scope: Annotated[str, Parameter(help="Registration scope: user, project, or local")] = "user",
 ):
     """Install the plugin for Claude Code and refresh the cache."""
+    from autoskillit.cli._init_helpers import _print_next_steps
     from autoskillit.cli._marketplace import install as _install
 
     _install(scope=scope)
+    _print_next_steps()
 
 
 @app.command
-def doctor(*, output_json: bool = False, fix: bool = False):
-    """Check project setup for common issues.
+def upgrade() -> None:
+    """Migrate project from .autoskillit/scripts/ format to .autoskillit/recipes/ format."""
+    from autoskillit.cli._marketplace import upgrade as _upgrade
 
-    Parameters
-    ----------
-    output_json
-        Output results as JSON instead of human-readable text.
-    fix
-        Auto-remediate fixable errors (e.g. remove stale gate files).
-    """
+    _upgrade()
+
+
+@app.command
+def doctor(*, output_json: bool = False):
+    """Check project setup for common issues."""
     from autoskillit.cli._doctor import run_doctor
 
-    run_doctor(output_json=output_json, fix=fix)
+    run_doctor(output_json=output_json)
 
 
 @app.command
@@ -514,7 +516,6 @@ def cook(recipe: str | None = None):
     diagram = load_recipe_diagram(_match.name, _rdir)
     if diagram:
         print(diagram)
-        print()
     _launch_cook_session(_build_orchestrator_prompt(recipe_yaml, diagram=diagram))
 
 

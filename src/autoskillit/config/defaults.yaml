@@ -90,4 +90,4 @@ mcp_response:
   alert_threshold_tokens: 2000
 
 branching:
-  default_base_branch: integration
+  default_base_branch: main

@@ -146,7 +146,6 @@ class TestToolRegistration:
         expected = {
             "run_cmd",
             "run_python",
-            "run_recipe",
             "run_skill",
             "test_check",
             "reset_test_dir",

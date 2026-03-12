@@ -16,7 +16,6 @@ from autoskillit.cli._prompts import (
     _build_open_kitchen_prompt,
     _build_orchestrator_prompt,
     _resolve_recipe_input,
-    build_subrecipe_prompt,
 )
 from autoskillit.cli.app import (
     _generate_config_yaml,
@@ -39,6 +38,7 @@ from autoskillit.cli.app import (
     serve,
     skills_app,
     skills_list,
+    upgrade,
     workspace_app,
     workspace_clean,
     workspace_init,
@@ -53,7 +53,6 @@ __all__ = [
     "_prompt_recipe_choice",
     "_prompt_test_command",
     "_resolve_recipe_input",
-    "build_subrecipe_prompt",
     "app",
     "chefs_hat",
     "config_app",
@@ -72,6 +71,7 @@ __all__ = [
     "serve",
     "skills_app",
     "skills_list",
+    "upgrade",
     "workspace_app",
     "workspace_clean",
     "workspace_init",

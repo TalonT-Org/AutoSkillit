@@ -41,7 +41,7 @@ conflicts from earlier merges in the queue.
 
 **ALWAYS:**
 - Run `git status` before any operation to verify clean state
-- Use `gh pr merge {pr_number} --squash --auto` for the simple path — this enforces GitHub's required status checks (Preflight + Ubuntu) before the merge executes
+- Use `gh pr merge {pr_number} --squash --auto` for the simple path — this enforces the repository's required status checks before the merge executes
 - Poll `gh pr view {pr_number} --json state,mergedAt` to confirm the merge completed
 - Fetch the PR branch from remote before the deletion regression scan and conflict analysis
 
@@ -159,7 +159,7 @@ code** from the PR's changes, not to restore it. The base branch's deletion is a
 ### Step 2: Simple Path — gh pr merge
 
 Queue the merge on GitHub using auto-merge so that the integration branch ruleset
-(Preflight + Ubuntu required status checks) is enforced before GitHub executes the merge:
+(required status checks) is enforced before GitHub executes the merge:
 
 ```bash
 gh pr merge {pr_number} --squash --auto

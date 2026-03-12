@@ -432,8 +432,7 @@ _FORMATTERS = {
 _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
     {
         "run_python",  # structured result dict, generic renders correctly
-        "run_recipe",  # simple success/error shape
-        "read_db",  # tabular rows, generic renders correctly (PHK-31 validated)
+        "read_db",  # tabular rows, generic renders correctly
         "reset_test_dir",  # simple ack
         "classify_fix",  # simple classification result
         "reset_workspace",  # simple ack
@@ -458,6 +457,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "fetch_github_issue",  # issue data dict
         "get_issue_title",  # simple string
         "get_ci_status",  # ci status dict
+        "get_quota_events",  # list of quota events, generic renders correctly
         "open_kitchen",  # plain text; formatter handled by unwrap path
         "close_kitchen",  # simple ack
     }

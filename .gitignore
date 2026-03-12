@@ -19,3 +19,6 @@ src/autoskillit/recipes/diagrams/
 # dynaconf secrets files — never commit
 .secrets.*
 .autoskillit/.secrets.*
+
+# Runtime sync state — generated on each install, not source
+.autoskillit/sync_manifest.json

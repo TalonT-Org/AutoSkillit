@@ -147,8 +147,9 @@ def _has_await_or_return(stmt: ast.stmt) -> bool:
 
 
 def test_all_mcp_tools_are_registered() -> None:
-    """Bidirectional check: every @mcp.tool function is in the _gate registry and
-    every registry entry has a corresponding @mcp.tool function in server/."""
+    """Bidirectional check: every @mcp.tool function is in the _gate registry
+    and every registry entry has a corresponding @mcp.tool function in server/.
+    """
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
     expected = GATED_TOOLS | UNGATED_TOOLS
@@ -194,7 +195,13 @@ def test_gated_tools_call_require_enabled_first() -> None:
                 for i, stmt in enumerate(node.body):
                     if require_idx is None and _has_call_to(stmt, "_require_enabled"):
                         require_idx = i
-                    if action_idx is None and _has_await_or_return(stmt):
+                    # _require_not_headless guard calls may precede _require_enabled —
+                    # they are valid early-exit guards, not tool logic.
+                    if (
+                        action_idx is None
+                        and _has_await_or_return(stmt)
+                        and not _has_call_to(stmt, "_require_not_headless")
+                    ):
                         action_idx = i
 
                 if require_idx is None:

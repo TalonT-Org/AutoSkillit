@@ -8,7 +8,6 @@ from autoskillit.execution.commands import (
     ClaudeInteractiveCmd,
     build_headless_cmd,
     build_interactive_cmd,
-    build_subrecipe_cmd,
 )
 
 
@@ -33,9 +32,9 @@ class TestBuildInteractiveCmd:
         result = build_interactive_cmd()
         assert result.cmd[0] == "claude"
 
-    def test_env_has_kitchen_open(self) -> None:
+    def test_env_is_empty(self) -> None:
         result = build_interactive_cmd()
-        assert result.env.get("AUTOSKILLIT_KITCHEN_OPEN") == "1"
+        assert result.env == {}
 
     def test_accepts_model(self) -> None:
         result = build_interactive_cmd(model="claude-opus-4-6")
@@ -74,24 +73,3 @@ class TestBuildHeadlessCmd:
         assert ClaudeFlags.MODEL in result.cmd
         idx = result.cmd.index(ClaudeFlags.MODEL)
         assert result.cmd[idx + 1] == "claude-sonnet-4-6"
-
-
-class TestBuildSubrecipeCmd:
-    def test_sets_kitchen_open_env(self) -> None:
-        assert build_subrecipe_cmd("p").env.get("AUTOSKILLIT_KITCHEN_OPEN") == "1"
-
-    def test_no_headless_env(self) -> None:
-        assert "AUTOSKILLIT_HEADLESS" not in build_subrecipe_cmd("p").env
-
-    def test_has_print_flag(self) -> None:
-        assert ClaudeFlags.PRINT in build_subrecipe_cmd("p").cmd
-
-    def test_model_override(self) -> None:
-        cmd = build_subrecipe_cmd("p", model="sonnet")
-        assert ClaudeFlags.MODEL in cmd.cmd and "sonnet" in cmd.cmd
-
-    def test_returns_headless_cmd_type(self) -> None:
-        assert isinstance(build_subrecipe_cmd("p"), ClaudeHeadlessCmd)
-
-    def test_no_model_flag_when_model_is_none(self) -> None:
-        assert ClaudeFlags.MODEL not in build_subrecipe_cmd("p", model=None).cmd

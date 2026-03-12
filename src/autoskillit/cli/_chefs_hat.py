@@ -21,10 +21,10 @@ def chefs_hat() -> None:
         raise SystemExit(1)
 
     from autoskillit import __version__
-    from autoskillit.server import _build_tool_listing
+    from autoskillit.server import _build_tool_category_listing
 
     print(f"AutoSkillit {__version__} — Kitchen open. All tools active.")
-    print(_build_tool_listing())
+    print(_build_tool_category_listing())
     print()
 
     session_id = uuid.uuid4().hex[:16]
@@ -32,7 +32,7 @@ def chefs_hat() -> None:
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
     skills_dir = session_mgr.init_session(session_id, cook_session=True)
 
-    env = {**os.environ, "AUTOSKILLIT_KITCHEN_OPEN": "1"}
+    env = {**os.environ}
     try:
         result = subprocess.run(["claude", "--add-dir", str(skills_dir)], env=env)
         if result.returncode != 0:

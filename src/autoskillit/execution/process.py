@@ -225,7 +225,7 @@ async def run_managed_async(
                     accumulated.append(final_snap)
                 snapshots_data = [s.__dict__ for s in accumulated]
 
-            if timeout_scope is not None and timeout_scope.cancelled_caught:
+            if timeout_scope.cancelled_caught:
                 termination = TerminationReason.TIMED_OUT
                 proc_log.debug("kill_decision", reason="timeout", timeout=timeout)
                 logger.warning("Process %d timed out after %ss, killing tree", proc.pid, timeout)

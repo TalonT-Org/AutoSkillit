@@ -19,8 +19,8 @@ ingredients:
     description: Directory containing the project to test
     required: true
   base_branch:
-    description: Branch to merge fixes into
-    default: integration
+    description: Base branch to merge fixes into (defaults to main)
+    default: main
   helper_dir:
     description: Directory for helper agent sessions
     required: true

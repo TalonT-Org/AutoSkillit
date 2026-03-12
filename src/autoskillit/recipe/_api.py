@@ -48,15 +48,7 @@ _logger = get_logger(__name__)
 
 
 class LoadRecipeResult(TypedDict, total=False):
-    """Typed schema for the load_and_validate() return value.
-
-    Using total=False so the TypedDict is structurally compatible with both the
-    base response (content, diagram, suggestions, valid) and the extended response
-    that includes kitchen_rules. mypy enforces all field access as the declared
-    types, catching handler/formatter divergence at commit time.
-
-    The ``error`` field is only present on not-found error returns.
-    """
+    """Typed schema for the load_recipe handler → formatter boundary."""
 
     content: str
     diagram: str | None

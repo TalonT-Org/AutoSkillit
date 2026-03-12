@@ -60,19 +60,25 @@ def _format_issue_markdown(
     return "\n".join(lines)
 
 
-def parse_merge_queue_response(data: dict) -> list[dict]:
+def parse_merge_queue_response(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Parse a GitHub GraphQL merge queue response into a sorted entry list.
 
     Returns a list of {position, state, pr_number, pr_title} dicts sorted by
     position ascending.  Returns an empty list when:
     - the queue is not enabled (mergeQueue is null)
     - the queue has no entries
-    - the response contains GraphQL errors
+    - the response contains GraphQL errors (logged at WARNING level)
     - the response structure is unexpected
+
+    A node with a missing ``pullRequest`` key is included with ``pr_number=None``
+    rather than skipped, so callers can inspect and handle partial entries.
     """
+    if "errors" in data:
+        _log.warning("parse_merge_queue_response graphql errors", errors=data["errors"])
+        return []
     try:
         queue = data.get("data", {}).get("repository", {}).get("mergeQueue") or {}
-        nodes = queue.get("entries", {}).get("nodes") or []
+        nodes = (queue.get("entries") or {}).get("nodes") or []
     except (AttributeError, TypeError):
         return []
     entries = []

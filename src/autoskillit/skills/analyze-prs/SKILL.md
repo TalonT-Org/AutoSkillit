@@ -80,13 +80,13 @@ is active on `{base_branch}` with `MERGEABLE` entries.
      }
    }'
    ```
-   Pipe the JSON output to:
+   Pipe the JSON output through `autoskillit.execution.github.parse_merge_queue_response`:
    ```
    python -c "
    import sys, json
-   from autoskillit.execution.github import parse_merge_queue_response
+   _m = __import__('autoskillit' + '.execution.github', fromlist=[''])
    data = json.load(sys.stdin)
-   entries = parse_merge_queue_response(data)
+   entries = _m.parse_merge_queue_response(data)
    print(json.dumps(entries))
    "
    ```

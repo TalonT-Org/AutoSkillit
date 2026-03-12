@@ -6,7 +6,11 @@ import httpx
 import pytest
 
 from autoskillit.core import GitHubFetcher
-from autoskillit.execution.github import DefaultGitHubFetcher, _parse_issue_ref
+from autoskillit.execution.github import (
+    DefaultGitHubFetcher,
+    _parse_issue_ref,
+    parse_merge_queue_response,
+)
 
 # ---------------------------------------------------------------------------
 # _parse_issue_ref unit tests
@@ -622,7 +626,6 @@ def test_default_github_fetcher_implements_full_protocol():
 # ---------------------------------------------------------------------------
 # parse_merge_queue_response
 # ---------------------------------------------------------------------------
-from autoskillit.execution.github import parse_merge_queue_response
 
 _QUEUE_RESPONSE_WITH_ENTRIES = {
     "data": {

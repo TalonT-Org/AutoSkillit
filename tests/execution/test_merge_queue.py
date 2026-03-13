@@ -119,9 +119,7 @@ class TestDefaultMergeQueueWatcher:
         watcher._fetch_queue_entries = AsyncMock(return_value=[])  # type: ignore[method-assign]
         watcher._toggle_auto_merge = _toggle_side  # type: ignore[method-assign]
 
-        with patch(
-            "autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock
-        ):
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             result = await watcher.wait(
                 pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
             )
@@ -140,13 +138,9 @@ class TestDefaultMergeQueueWatcher:
             return_value=[{"pr_number": 42, "state": "AWAITING_CHECKS"}]
         )
 
-        with patch(
-            "autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock
-        ):
-            with patch(
-                "autoskillit.execution.merge_queue.time.monotonic"
-            ) as mock_time:
-                # deadline = 0.0 + 1000 = 1000.0; loop enters (1.0 < 1000.0); after sleep exceeds (1001.0)
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            with patch("autoskillit.execution.merge_queue.time.monotonic") as mock_time:
+                # deadline=0.0+1000=1000.0; loop enters (1.0<1000); after sleep exceeds (1001.0)
                 mock_time.side_effect = [0.0, 1.0, 1001.0]
                 result = await watcher.wait(
                     pr_number=42,
@@ -191,9 +185,7 @@ class TestDefaultMergeQueueWatcher:
 
         watcher._fetch_pr_state = _pr_state_side  # type: ignore[method-assign]
 
-        with patch(
-            "autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock
-        ):
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             result = await watcher.wait(
                 pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
             )

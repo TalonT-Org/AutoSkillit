@@ -258,7 +258,8 @@ async def _infer_repo_from_remote(cwd: str) -> str:
         url = stdout.decode().strip()
         m = re.search(r"github\.com[:/](.+?)(?:\.git)?$", url)
         return m.group(1) if m else ""
-    except Exception:
+    except Exception as exc:
+        logger.warning("infer_repo_from_remote.error", exc=str(exc), exc_info=True)
         return ""
 
 

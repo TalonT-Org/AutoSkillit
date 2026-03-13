@@ -10,6 +10,11 @@ from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.execution.testing import DefaultTestRunner
 from autoskillit.migration.engine import DefaultMigrationService
 from autoskillit.pipeline.context import ToolContext
+from autoskillit.recipe.contracts import (
+    get_skill_contract,
+    load_bundled_manifest,
+    resolve_skill_name,
+)
 from autoskillit.recipe.repository import DefaultRecipeRepository
 from autoskillit.server._factory import make_context
 from autoskillit.workspace.cleanup import DefaultWorkspaceManager
@@ -146,3 +151,31 @@ def test_make_context_protocol_substitution():
     ctx = make_context(AutomationConfig(), runner=_runner())
     ctx.executor = FakeExecutor()
     assert isinstance(ctx.executor, HeadlessExecutor)
+
+
+# ---------------------------------------------------------------------------
+# Output pattern integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_output_patterns_nonempty_for_open_pr() -> None:
+    """open-pr must have non-empty expected_output_patterns in the manifest."""
+    name = resolve_skill_name("/autoskillit:open-pr")
+    assert name is not None
+    contract = get_skill_contract(name, load_bundled_manifest())
+    assert contract is not None
+    assert contract.expected_output_patterns, (
+        "open-pr must have non-empty expected_output_patterns"
+    )
+    assert any("github" in p.lower() for p in contract.expected_output_patterns)
+
+
+def test_output_patterns_nonempty_for_investigate() -> None:
+    """investigate must have non-empty expected_output_patterns in the manifest."""
+    name = resolve_skill_name("/autoskillit:investigate")
+    assert name is not None
+    contract = get_skill_contract(name, load_bundled_manifest())
+    assert contract is not None
+    assert contract.expected_output_patterns, (
+        "investigate must have non-empty expected_output_patterns"
+    )

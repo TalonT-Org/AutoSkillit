@@ -129,7 +129,7 @@ call is mandatory at the start of every headless session that uses code-index to
 
 **5b. Write your lens selection rationale to a file using the Write tool:**
 
-- **Path:** `temp/arch-lens-selection.md`
+- **Path:** `temp/make-plan/arch_lens_selection_{YYYY-MM-DD_HHMMSS}.md`
 - **Content:** Which lens was selected and why (1-2 sentences of rationale).
 
 **5c. MANDATORY: LOAD the appropriate arch-lens skill using the Skill tool:**
@@ -247,14 +247,14 @@ Save the plan to: `temp/make-plan/{task_name}_plan_{YYYY-MM-DD_HHMMSS}.md`
 
 For a single-part plan:
 ```
-plan_path={absolute_path}
-plan_parts={absolute_path}
+plan_path = {absolute_path}
+plan_parts = {absolute_path}
 ```
 
 For a multi-part plan (list all part paths in alphabetical order):
 ```
-plan_path={path_to_part_a}
-plan_parts={path_to_part_a}
+plan_path = {path_to_part_a}
+plan_parts = {path_to_part_a}
 {path_to_part_b}
 {path_to_part_c}
 ```

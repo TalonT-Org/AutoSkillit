@@ -69,7 +69,7 @@ Rules:
 absolute paths:
 
 ```
-plan_parts=/abs/path/to/plan_part_a_....md
+plan_parts = /abs/path/to/plan_part_a_....md
 /abs/path/to/plan_part_b_....md
 ```
 

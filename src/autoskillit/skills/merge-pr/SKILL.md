@@ -418,48 +418,48 @@ very last lines of your text output:
 
 **On successful GitHub auto-merge:**
 ```
-merged=true
-needs_plan=false
-deletion_regression=false
-pr_number={pr_number}
-pr_branch={pr_branch_name}
-pr_title={pr_title}
+merged = true
+needs_plan = false
+deletion_regression = false
+pr_number = {pr_number}
+pr_branch = {pr_branch_name}
+pr_title = {pr_title}
 ```
 
 **On complex / conflict detected:**
 ```
-merged=false
-needs_plan=true
-deletion_regression=false
-escalation_required=false
-pr_number={pr_number}
-pr_branch={pr_branch_name}
-pr_title={pr_title}
-conflict_report_path={absolute_path_to_conflict_plan_file}
+merged = false
+needs_plan = true
+deletion_regression = false
+escalation_required = false
+pr_number = {pr_number}
+pr_branch = {pr_branch_name}
+pr_title = {pr_title}
+conflict_report_path = {absolute_path_to_conflict_plan_file}
 ```
 
 **On deletion regression detected:**
 ```
-merged=false
-needs_plan=true
-deletion_regression=true
-escalation_required=false
-pr_number={pr_number}
-pr_branch={pr_branch_name}
-pr_title={pr_title}
-conflict_report_path={absolute_path_to_conflict_plan_file}
+merged = false
+needs_plan = true
+deletion_regression = true
+escalation_required = false
+pr_number = {pr_number}
+pr_branch = {pr_branch_name}
+pr_title = {pr_title}
+conflict_report_path = {absolute_path_to_conflict_plan_file}
 ```
 
 **On escalation required:**
 ```
-merged=false
-needs_plan=false
-deletion_regression=false
-escalation_required=true
-escalation_reason={human-readable description of why the conflict cannot be resolved automatically}
-pr_number={pr_number}
-pr_branch={pr_branch_name}
-pr_title={pr_title}
+merged = false
+needs_plan = false
+deletion_regression = false
+escalation_required = true
+escalation_reason = {human-readable description of why the conflict cannot be resolved automatically}
+pr_number = {pr_number}
+pr_branch = {pr_branch_name}
+pr_title = {pr_title}
 ```
 
 Emit `conflict_report_path=` only when `needs_plan=true` and a conflict plan file was

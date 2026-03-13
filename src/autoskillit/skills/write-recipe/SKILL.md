@@ -504,7 +504,7 @@ After telling the user, emit the structured output token as the very last line o
 text output:
 
 ```
-recipe_path={absolute_path_to_saved_recipe_file}
+recipe_path = {absolute_path_to_saved_recipe_file}
 ```
 
 ## CRITICAL: Scripts Are NOT Skills

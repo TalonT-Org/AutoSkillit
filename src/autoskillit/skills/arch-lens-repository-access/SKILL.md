@@ -132,7 +132,13 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `temp/autoskillit:arch-lens-repository-access/arch_diag_repository_access_{YYYY-MM-DD}.md`
+Write the diagram to: `temp/autoskillit:arch-lens-repository-access/arch_diag_repository_access_{YYYY-MM-DD_HHMMSS}.md`
+
+After writing the diagram file, emit a structured output line:
+
+```
+diagram_path = {absolute_path_to_diagram_file}
+```
 
 ---
 

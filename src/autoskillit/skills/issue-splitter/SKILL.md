@@ -65,7 +65,7 @@ Extract from ARGUMENTS:
 
 Fail fast if neither `--issue` nor `--url` is provided:
 ```
-decision=error, rationale="--issue N or --url URL is required"
+decision = error, rationale = "--issue N or --url URL is required"
 ```
 
 ### Step 1 — Authenticate

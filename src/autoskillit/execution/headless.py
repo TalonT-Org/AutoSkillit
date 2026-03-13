@@ -154,7 +154,7 @@ def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
     return None
 
 
-_WORKTREE_PATH_PATTERN: re.Pattern[str] = re.compile(r"^worktree_path=(.+)$", re.MULTILINE)
+_WORKTREE_PATH_PATTERN: re.Pattern[str] = re.compile(r"^worktree_path\s*=\s*(.+)$", re.MULTILINE)
 
 
 def _extract_worktree_path(assistant_messages: list[str]) -> str | None:

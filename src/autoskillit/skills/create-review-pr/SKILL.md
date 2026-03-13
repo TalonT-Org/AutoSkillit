@@ -99,7 +99,7 @@ create end_turn windows that cause stochastic session termination.
 
 **1. Write the PR context to a file using the Write tool:**
 
-- **Path:** `temp/pr-arch-lens-context.md`
+- **Path:** `temp/create-review-pr/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
 - **Content:** The following PR context block, with placeholders filled in:
 
 ```markdown
@@ -122,7 +122,7 @@ This diagram is for a Pull Request. Focus the diagram on the areas of the codeba
 ```
 
 **2. Immediately call the Skill tool to load the arch-lens skill** (e.g., `/autoskillit:arch-lens-module-dependency`).
-The loaded skill will read `temp/pr-arch-lens-context.md` for PR context.
+The loaded skill will read the PR context file written in step 1 above.
 
 **3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.
 
@@ -205,5 +205,5 @@ Continue even if individual close operations fail (log warning, do not exit).
 ### Output
 
 ```
-pr_url={new_pr_url}
+pr_url = {new_pr_url}
 ```

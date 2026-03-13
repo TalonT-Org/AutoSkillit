@@ -245,9 +245,9 @@ After all group files are written and the prose report is printed, emit the foll
 structured output tokens as the very last lines of your text output:
 
 ```
-groups_path={absolute_path_to_index_file}
-manifest_path={absolute_path_to_manifest_file}
-group_files={absolute_path_to_group_1_file}
+groups_path = {absolute_path_to_index_file}
+manifest_path = {absolute_path_to_manifest_file}
+group_files = {absolute_path_to_group_1_file}
 {absolute_path_to_group_2_file}
 {absolute_path_to_group_3_file}
 ```

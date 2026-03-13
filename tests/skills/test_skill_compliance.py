@@ -197,14 +197,14 @@ def test_arch_lens_context_via_file_not_prose(skill_name: str) -> None:
     """Assert that PR context for arch-lens skills is passed via a temp
     file (Write tool), not as inline prose text output.
 
-    The SKILL.md must reference writing context to a file path
-    (e.g., temp/pr-arch-lens-context.md) rather than outputting
+    The SKILL.md must reference writing context to a skill-scoped file path
+    (e.g., temp/{skill_name}/pr_arch_lens_context_...) rather than outputting
     it as a conversational text block.
     """
     text = _skill_text(skill_name)
-    assert "temp/pr-arch-lens-context.md" in text, (
-        f"{skill_name}/SKILL.md does not reference temp/pr-arch-lens-context.md. "
-        "PR context must be written to a file, not output as prose."
+    assert f"temp/{skill_name}/pr_arch_lens_context_" in text, (
+        f"{skill_name}/SKILL.md does not reference a skill-scoped pr_arch_lens_context file. "
+        "PR context must be written to a skill-scoped temp file, not a shared path."
     )
     assert "Output the PR context block as plain text" not in text, (
         f"{skill_name}/SKILL.md still contains the old prose output instruction."

@@ -415,7 +415,7 @@ Save findings summary to `temp/review-pr/summary_{pr_number}_{timestamp}.md`.
 Output the verdict as the final line:
 
 ```
-verdict={approved|changes_requested|needs_human}
+verdict = {approved|changes_requested|needs_human}
 ```
 
 Exit 0 in all normal cases (approved, needs_human, changes_requested).

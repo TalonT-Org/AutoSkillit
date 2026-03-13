@@ -117,8 +117,8 @@ lines so the execution layer can capture them from `assistant_messages` even
 if context is exhausted before Step 6:
 
 ```
-worktree_path=${WORKTREE_PATH}
-branch_name=${WORKTREE_NAME}
+worktree_path = ${WORKTREE_PATH}
+branch_name = ${WORKTREE_NAME}
 ```
 
 **Why emit early?** If context exhaustion occurs during Steps 2–5, the
@@ -218,8 +218,8 @@ Explicitly state: "Worktree left intact for orchestrator to test and merge."
 Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
 
 ```
-worktree_path=${WORKTREE_PATH}
-branch_name=${WORKTREE_NAME}
+worktree_path = ${WORKTREE_PATH}
+branch_name = ${WORKTREE_NAME}
 ```
 
 **If this is a `_part_` plan file:** The orchestrator MUST merge this worktree

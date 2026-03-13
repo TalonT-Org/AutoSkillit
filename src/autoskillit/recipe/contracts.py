@@ -255,6 +255,7 @@ def generate_recipe_card(
                             for i in contract.inputs
                         ],
                         "outputs": [{"name": o.name, "type": o.type} for o in contract.outputs],
+                        "expected_output_patterns": contract.expected_output_patterns,
                     }
                     if count_positional_args(skill_cmd) > 0:
                         # Positional args used — can't verify named inputs by ref

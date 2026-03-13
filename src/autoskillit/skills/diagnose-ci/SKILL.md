@@ -114,9 +114,9 @@ Save to `temp/diagnose-ci/diagnosis_{timestamp}.md`.
 Emit these tokens on their own lines at the end of your response:
 
 ```
-diagnosis_path=/absolute/path/to/temp/diagnose-ci/diagnosis_{timestamp}.md
-failure_type=test|lint|build|type_check|env|unknown
-is_fixable=true|false
+diagnosis_path = /absolute/path/to/temp/diagnose-ci/diagnosis_{timestamp}.md
+failure_type = test|lint|build|type_check|env|unknown
+is_fixable = true|false
 ```
 
 ## gh Unavailable Fallback

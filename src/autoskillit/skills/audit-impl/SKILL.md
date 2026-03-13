@@ -233,7 +233,7 @@ After printing the GO result, emit the following structured output token as the 
 last line of your text output:
 
 ```
-verdict=GO
+verdict = GO
 ```
 
 ---
@@ -303,8 +303,8 @@ After printing the NO GO result, emit the following structured output tokens as 
 last lines of your text output:
 
 ```
-verdict=NO GO
-remediation_path={absolute_path_to_remediation_file}
+verdict = NO GO
+remediation_path = {absolute_path_to_remediation_file}
 ```
 
 The `verdict` token must be exactly `GO` or `NO GO` — this is the value the recipe's

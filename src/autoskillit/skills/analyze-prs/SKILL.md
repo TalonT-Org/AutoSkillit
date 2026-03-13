@@ -382,15 +382,15 @@ After writing all output files and printing the terminal report, emit the follow
 structured output tokens as the very last lines of your text output:
 
 ```
-pr_order_file={absolute_path_to_pr_order_json}
-analysis_file={absolute_path_to_pr_analysis_plan_md}
-integration_branch={integration_branch_name}
-pr_count={eligible_pr_count}
-simple_count={simple_pr_count}
-needs_check_count={needs_check_pr_count}
-ci_blocked_count={ci_blocked_pr_count}
-review_blocked_count={review_blocked_pr_count}
-queue_mode=${QUEUE_MODE}   # true when merge queue has ≥1 MERGEABLE entry; false otherwise
+pr_order_file = {absolute_path_to_pr_order_json}
+analysis_file = {absolute_path_to_pr_analysis_plan_md}
+integration_branch = {integration_branch_name}
+pr_count = {eligible_pr_count}
+simple_count = {simple_pr_count}
+needs_check_count = {needs_check_pr_count}
+ci_blocked_count = {ci_blocked_pr_count}
+review_blocked_count = {review_blocked_pr_count}
+queue_mode = ${QUEUE_MODE}   # true when merge queue has ≥1 MERGEABLE entry; false otherwise
 ```
 
 ## Related Skills

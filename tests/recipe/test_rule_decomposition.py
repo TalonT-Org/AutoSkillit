@@ -24,7 +24,7 @@ def test_no_deferred_validator_imports_in_rule_modules() -> None:
 
 
 def test_all_rules_registered_across_submodules() -> None:
-    """T2: All 27 rules registered, distributed across sub-modules."""
+    """T2: All 28 rules registered, distributed across sub-modules."""
     import autoskillit.recipe  # noqa: F401 -- triggers rule registration
     from autoskillit.recipe.registry import _RULE_REGISTRY
 
@@ -56,6 +56,7 @@ def test_all_rules_registered_across_submodules() -> None:
         "merge-base-unpublished",
         "telemetry-before-open-pr",
         "unknown-skill-command",
+        "missing-output-patterns",
     }
     assert expected <= rule_names
 

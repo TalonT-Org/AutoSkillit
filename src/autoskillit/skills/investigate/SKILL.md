@@ -155,7 +155,7 @@ After subagents complete, consolidate into structured findings:
 
 ### Step 4: Write Report
 
-Write findings to: `temp/investigate/investigation_{topic}_{date}.md`
+Write findings to: `temp/investigate/investigation_{topic}_{YYYY-MM-DD_HHMMSS}.md`
 
 Report structure:
 ```markdown
@@ -195,7 +195,7 @@ After writing the report file, emit the structured output token as the very last
 of your text output:
 
 ```
-investigation_path={absolute_path_to_investigation_report_file}
+investigation_path = {absolute_path_to_investigation_report_file}
 ```
 
 ## Subagent Prompt Template

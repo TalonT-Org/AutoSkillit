@@ -157,8 +157,8 @@ git -C {worktree_path} rebase --abort
 Emit escalation output tokens and exit:
 
 ```
-escalation_required=true
-escalation_reason=<brief human-readable explanation: which file(s), which category, why confidence was LOW>
+escalation_required = true
+escalation_reason = <brief human-readable explanation: which file(s), which category, why confidence was LOW>
 ```
 
 **Do NOT attempt partial resolution.** Partial resolution with remaining LOW-confidence
@@ -213,8 +213,8 @@ git -C {worktree_path} rebase --abort
 ```
 
 ```
-escalation_required=true
-escalation_reason=Rebase required more than 3 continuation rounds — conflict complexity exceeds automated resolution threshold.
+escalation_required = true
+escalation_reason = Rebase required more than 3 continuation rounds — conflict complexity exceeds automated resolution threshold.
 ```
 
 ### Step 5 — Post-rebase hygiene
@@ -235,8 +235,8 @@ tests here would be redundant and is explicitly prohibited.
 ### Step 6 — Emit output tokens
 
 ```
-worktree_path={worktree_path}
-branch_name={current_branch}
+worktree_path = {worktree_path}
+branch_name = {current_branch}
 ```
 
 Where `{current_branch}` is the output of:

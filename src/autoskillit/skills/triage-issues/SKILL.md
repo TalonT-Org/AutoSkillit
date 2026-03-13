@@ -344,11 +344,11 @@ After the triage report and manifest are written, emit the following structured 
 tokens as the very last lines of your text output:
 
 ```
-triage_report={absolute_path_to_report_file}
-triage_manifest={absolute_path_to_manifest_file}
-total_issues={integer_count}
-batch_count={integer_count}
-recipe_distribution={json_distribution_dict}
+triage_report = {absolute_path_to_report_file}
+triage_manifest = {absolute_path_to_manifest_file}
+total_issues = {integer_count}
+batch_count = {integer_count}
+recipe_distribution = {json_distribution_dict}
 ```
 
 These emit lines are consumed by `capture:` in orchestrating recipes. The
@@ -357,11 +357,11 @@ These emit lines are consumed by `capture:` in orchestrating recipes. The
 Example emit block:
 
 ```
-triage_report=temp/triage-issues/triage_report_20260310_120000.md
-triage_manifest=temp/triage-issues/triage_manifest_20260310_120000.json
-total_issues=12
-batch_count=3
-recipe_distribution={"implementation": 8, "remediation": 4}
+triage_report = temp/triage-issues/triage_report_20260310_120000.md
+triage_manifest = temp/triage-issues/triage_manifest_20260310_120000.json
+total_issues = 12
+batch_count = 3
+recipe_distribution = {"implementation": 8, "remediation": 4}
 ```
 
 ## Related Skills

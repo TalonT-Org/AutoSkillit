@@ -18,6 +18,8 @@ skills:
       type: string
     - name: is_fixable
       type: string
+    expected_output_patterns:
+    - "diagnosis_path\\s*=\\s*/.+"
   resolve-failures:
     inputs:
     - name: worktree_path
@@ -50,6 +52,8 @@ skills:
       type: string
     - name: escalation_reason
       type: string
+    expected_output_patterns:
+    - "worktree_path\\s*=\\s*/.+"
   resolve-review:
     inputs:
     - name: feature_branch
@@ -75,6 +79,8 @@ skills:
       type: directory_path
     - name: branch_name
       type: string
+    expected_output_patterns:
+    - "worktree_path\\s*=\\s*/.+"
   implement-worktree-no-merge:
     inputs:
     - name: plan_path
@@ -85,6 +91,8 @@ skills:
       type: directory_path
     - name: branch_name
       type: string
+    expected_output_patterns:
+    - "worktree_path\\s*=\\s*/.+"
   investigate:
     inputs:
     - name: topic
@@ -93,6 +101,8 @@ skills:
     outputs:
     - name: investigation_path
       type: file_path
+    expected_output_patterns:
+    - "investigation_path\\s*=\\s*/.+"
   make-groups:
     inputs:
     - name: source_doc
@@ -105,6 +115,8 @@ skills:
       type: file_path
     - name: group_files
       type: file_path_list
+    expected_output_patterns:
+    - "groups_path\\s*=\\s*/.+"
   make-plan:
     inputs:
     - name: task
@@ -115,11 +127,15 @@ skills:
       type: file_path
     - name: plan_parts
       type: file_path_list
+    expected_output_patterns:
+    - "plan_path\\s*=\\s*/.+"
   write-recipe:
     inputs: []
     outputs:
     - name: recipe_path
       type: file_path
+    expected_output_patterns:
+    - "recipe_path\\s*=\\s*/.+"
   mermaid:
     inputs: []
     outputs: []
@@ -137,7 +153,11 @@ skills:
     - name: workspace
       type: directory_path
       required: true
-    outputs: []
+    outputs:
+    - name: summary_path
+      type: file_path
+    expected_output_patterns:
+    - "summary_path\\s*=\\s*.+"
   rectify:
     inputs:
     - name: investigation_path
@@ -148,6 +168,8 @@ skills:
       type: file_path
     - name: plan_parts
       type: file_path_list
+    expected_output_patterns:
+    - "plan_path\\s*=\\s*/.+"
   retry-worktree:
     inputs:
     - name: plan_path
@@ -161,6 +183,8 @@ skills:
       type: directory_path
     - name: branch_name
       type: string
+    expected_output_patterns:
+    - "worktree_path\\s*=\\s*/.+"
   review-approach:
     inputs:
     - name: plan_path
@@ -169,6 +193,8 @@ skills:
     outputs:
     - name: review_path
       type: file_path
+    expected_output_patterns:
+    - "review_path\\s*=\\s*/.+"
   setup-project:
     inputs:
     - name: project_dir
@@ -179,6 +205,8 @@ skills:
       type: file_path
     - name: config_path
       type: file_path
+    expected_output_patterns:
+    - "analysis_path\\s*=\\s*/.+"
   audit-friction:
     inputs: []
     outputs: []
@@ -198,6 +226,8 @@ skills:
       type: string
     - name: remediation_path
       type: file_path
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(GO|NO_GO)"
   migrate-recipes:
     inputs: []
     outputs: []
@@ -221,6 +251,8 @@ skills:
       type: string
     - name: queue_mode
       type: string
+    expected_output_patterns:
+    - "pr_order_file\\s*=\\s*.+"
   merge-pr:
     inputs:
     - name: pr_number
@@ -246,6 +278,8 @@ skills:
       type: string
     - name: conflict_report_path
       type: file_path
+    expected_output_patterns:
+    - "merged\\s*=\\s*(true|false)"
 
   open-pr:
     inputs:
@@ -301,6 +335,8 @@ skills:
       type: string
     - name: recipe_distribution
       type: string
+    expected_output_patterns:
+    - "triage_report\\s*=\\s*.+"
 
   review-pr:
     inputs:
@@ -317,3 +353,148 @@ skills:
         - approved
         - changes_requested
         - needs_human
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(approved|changes_requested|needs_human)"
+
+  arch-lens-c4-container:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+
+  arch-lens-concurrency:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+
+  arch-lens-data-lineage:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+
+  arch-lens-deployment:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+
+  arch-lens-development:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+
+  arch-lens-error-resilience:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+
+  arch-lens-module-dependency:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+
+  arch-lens-operational:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+
+  arch-lens-process-flow:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+
+  arch-lens-repository-access:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+
+  arch-lens-scenarios:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+
+  arch-lens-security:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+
+  arch-lens-state-lifecycle:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"

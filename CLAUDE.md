@@ -159,6 +159,7 @@ src/autoskillit/
 │   ├── rules_bypass.py      #   Semantic rules for skip_when_false bypass routing contracts
 │   ├── rules_ci.py          #   Semantic rules for CI polling patterns (ci-polling-inline-shell)
 │   ├── rules_clone.py       #   Semantic rules for clone/push workflow validation
+│   ├── rules_contracts.py   #   Semantic rules for skill contract completeness (missing-output-patterns)
 │   ├── rules_dataflow.py    #   Semantic rules for capture/output dataflow analysis
 │   ├── rules_graph.py       #   Semantic rules for step graph reachability and cycles
 │   ├── rules_inputs.py      #   Semantic rules for ingredient/version validation

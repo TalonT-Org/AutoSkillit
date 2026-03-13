@@ -1028,6 +1028,19 @@ class TestExtractWorktreePath:
         msg = "worktree_path=/some/path   \n"
         assert _extract_worktree_path([msg]) == "/some/path"
 
+    def test_extract_worktree_path_with_spaces_around_equals(self):
+        """Regex handles 'worktree_path = /path' format (spaces around =)."""
+        msg = "Worktree created.\nworktree_path = /path/to/wt\nbranch_name = impl"
+        result = _extract_worktree_path([msg])
+        assert result == "/path/to/wt"
+
+    def test_extract_worktree_path_mixed_spacing(self):
+        """Regex handles mixed spacing: 'worktree_path= /path' and 'worktree_path =/path'."""
+        for token in ["worktree_path= /path/to/wt", "worktree_path =/path/to/wt"]:
+            msg = f"Done.\n{token}\nbranch_name=impl"
+            result = _extract_worktree_path([msg])
+            assert result == "/path/to/wt"
+
 
 class TestBuildSkillResultWorktreePath:
     """_build_skill_result extracts worktree_path on context exhaustion."""

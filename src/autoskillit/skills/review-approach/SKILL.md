@@ -98,5 +98,5 @@ After saving the review file, emit the structured output token as the very last 
 of your text output:
 
 ```
-review_path={absolute_path_to_review_file}
+review_path = {absolute_path_to_review_file}
 ```

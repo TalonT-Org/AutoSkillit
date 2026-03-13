@@ -644,17 +644,182 @@ def _format_ingredient_default(ing: Any) -> str:
     return ing.default
 
 
+# ---------------------------------------------------------------------------
+# Structured diagram model
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class InputRow:
+    """A single row in the diagram's Inputs table."""
+
+    name: str
+    description: str
+    default_display: str  # pre-formatted: "—", "auto-detect", "on"/"off", or raw value
+
+
+@dataclass
+class RecipeDiagram:
+    """Format-agnostic structured representation of a recipe diagram.
+
+    Separates diagram content (what to display) from presentation (how to
+    display it).  Renderers consume this model to produce context-appropriate
+    output — Markdown for Claude/MCP, aligned plain text for the terminal.
+    """
+
+    name: str
+    description: str
+    flow_summary: str  # may be empty
+    graph_text: str  # pre-rendered ASCII flow (already terminal-safe)
+    input_rows: list[InputRow]
+    agent_managed: list[str]  # ingredient names that are agent-managed
+    kitchen_rules: list[str]
+    recipe_hash: str  # "sha256:..."
+    format_version: str  # e.g. "v7"
+
+    @classmethod
+    def from_recipe(cls, recipe: Recipe, recipe_path: Path) -> RecipeDiagram:
+        """Build a RecipeDiagram from a parsed Recipe and its source path."""
+        layout = _compute_layout(recipe)
+        graph_text = _render_visual_flow(layout)
+        recipe_hash = compute_recipe_hash(recipe_path)
+
+        input_rows: list[InputRow] = []
+        agent_managed: list[str] = []
+        for ing_name, ing in recipe.ingredients.items():
+            if ing.default is None and not ing.required:
+                agent_managed.append(ing_name)
+                continue
+            desc = ing.description.replace("\n", " ").strip()
+            if len(desc) > 80:
+                cut = desc[:77]
+                if " " in cut:
+                    cut = cut.rsplit(" ", 1)[0]
+                desc = cut + "..."
+            input_rows.append(
+                InputRow(
+                    name=ing_name,
+                    description=desc,
+                    default_display=_format_ingredient_default(ing),
+                )
+            )
+
+        return cls(
+            name=recipe.name,
+            description=recipe.description,
+            flow_summary=recipe.summary or "",
+            graph_text=graph_text,
+            input_rows=input_rows,
+            agent_managed=agent_managed,
+            kitchen_rules=list(recipe.kitchen_rules) if recipe.kitchen_rules else [],
+            recipe_hash=recipe_hash,
+            format_version=DIAGRAM_FORMAT_VERSION,
+        )
+
+    def render_markdown(self) -> str:
+        """Render as Markdown suitable for .md files, MCP responses, and Claude prompts."""
+        input_lines = [
+            "| Name | Description | Default |",
+            "|------|-------------|---------|",
+        ]
+        for row in self.input_rows:
+            input_lines.append(f"| {row.name} | {row.description} | {row.default_display} |")
+        inputs_table = "\n".join(input_lines)
+        if self.agent_managed:
+            inputs_table += f"\n\nAgent-managed: {', '.join(self.agent_managed)}"
+
+        rules_section = ""
+        if self.kitchen_rules:
+            rules_lines = ["### Kitchen Rules"]
+            for rule in self.kitchen_rules:
+                rules_lines.append(f"- {rule}")
+            rules_section = "\n" + "\n".join(rules_lines)
+
+        flow_line = (
+            f"**Flow:** {self.flow_summary}\n\n"
+            if self.flow_summary and self.flow_summary.strip()
+            else ""
+        )
+        return (
+            f"<!-- autoskillit-recipe-hash: {self.recipe_hash} -->\n"
+            f"<!-- autoskillit-diagram-format: {self.format_version} -->\n"
+            f"## {self.name}\n"
+            f"{self.description}\n"
+            f"\n"
+            f"{flow_line}"
+            f"### Graph\n"
+            f"{self.graph_text}\n"
+            f"\n"
+            f"### Inputs\n"
+            f"{inputs_table}"
+            f"{rules_section}\n"
+        )
+
+    def render_terminal(self) -> str:
+        """Render as plain text suitable for terminal display.
+
+        Uses padded columns for the inputs table, plain text headers, and
+        omits HTML comments and Markdown syntax.
+        """
+        lines: list[str] = []
+        # Header — plain text, no Markdown ## prefix
+        lines.append(self.name.upper())
+        lines.append(self.description)
+        lines.append("")
+
+        if self.flow_summary and self.flow_summary.strip():
+            lines.append(f"Flow: {self.flow_summary}")
+            lines.append("")
+
+        # Graph — already terminal-safe (ASCII box-drawing characters)
+        lines.append(self.graph_text)
+        lines.append("")
+
+        # Inputs — padded columns
+        if self.input_rows:
+            name_w = max(len(r.name) for r in self.input_rows)
+            desc_w = max(len(r.description) for r in self.input_rows)
+            name_w = max(name_w, 4)  # min width for header "NAME"
+            desc_w = max(desc_w, 11)  # min width for header "DESCRIPTION"
+            lines.append(f"  {'NAME':<{name_w}}  {'DESCRIPTION':<{desc_w}}  DEFAULT")
+            lines.append(f"  {'-' * name_w}  {'-' * desc_w}  {'-' * 7}")
+            for row in self.input_rows:
+                lines.append(
+                    f"  {row.name:<{name_w}}  {row.description:<{desc_w}}  {row.default_display}"
+                )
+
+        if self.agent_managed:
+            lines.append(f"\n  Agent-managed: {', '.join(self.agent_managed)}")
+
+        # Kitchen rules — plain bullet list
+        if self.kitchen_rules:
+            lines.append("")
+            lines.append("Kitchen Rules:")
+            for rule in self.kitchen_rules:
+                lines.append(f"  - {rule}")
+
+        lines.append("")
+        return "\n".join(lines)
+
+
+def build_recipe_diagram(recipe: Recipe, recipe_path: Path) -> RecipeDiagram:
+    """Build a RecipeDiagram model without writing to disk.
+
+    Use this when you need a structured diagram for rendering (e.g. terminal
+    display) but don't want to regenerate the .md artifact.
+    """
+    return RecipeDiagram.from_recipe(recipe, recipe_path)
+
+
 def generate_recipe_diagram(
     pipeline_path: Path,
     recipes_dir: Path,
     out_dir: Path | None = None,
-) -> str:
+) -> RecipeDiagram:
     """Generate a visual flow diagram for the recipe at *pipeline_path*.
 
-    Reads the recipe YAML, builds a spec-compliant visual ASCII flow diagram
-    and 3-column Inputs table, embeds SHA-256 hash and format version for
-    staleness detection, and writes the result atomically to the output
-    directory.
+    Returns the RecipeDiagram model. The Markdown rendering is written
+    atomically to the output directory.
 
     Args:
         pipeline_path: Absolute path to the recipe ``.yaml`` file.
@@ -663,75 +828,18 @@ def generate_recipe_diagram(
             ``recipes_dir/diagrams/`` when not provided.
 
     Returns:
-        The diagram Markdown string that was written to disk.
+        The ``RecipeDiagram`` structured model.
     """
     from autoskillit.recipe.io import load_recipe
 
     recipe = load_recipe(pipeline_path)
-    recipe_hash = compute_recipe_hash(pipeline_path)
+    model = RecipeDiagram.from_recipe(recipe, pipeline_path)
+    markdown = model.render_markdown()
 
-    # Compute layout and render flow diagram
-    layout = _compute_layout(recipe)
-    flow_diagram = _render_visual_flow(layout)
-
-    # Build 3-column Inputs table (Name | Description | Default)
-    input_rows: list[str] = [
-        "| Name | Description | Default |",
-        "|------|-------------|---------|",
-    ]
-    agent_managed: list[str] = []
-    for ing_name, ing in recipe.ingredients.items():
-        if ing.default is None and not ing.required:
-            # Agent-managed state captured by pipeline steps — omit from table
-            agent_managed.append(ing_name)
-            continue
-        # Normalize description — collapse embedded newlines (from folded/literal
-        # YAML scalars) to spaces, strip whitespace, and truncate to ≤ 80 chars so the
-        # Markdown table row remains a single line.
-        _desc = ing.description.replace("\n", " ").strip()
-        if len(_desc) > 80:
-            _cut = _desc[:77]
-            # Prefer a word-boundary cut; fall back to hard 77-char slice when no space.
-            if " " in _cut:
-                _cut = _cut.rsplit(" ", 1)[0]
-            _desc = _cut + "..."
-        input_rows.append(f"| {ing_name} | {_desc} | {_format_ingredient_default(ing)} |")
-    inputs_table = "\n".join(input_rows)
-    if agent_managed:
-        inputs_table += f"\n\nAgent-managed: {', '.join(agent_managed)}"
-
-    # Build kitchen rules section
-    rules_section = ""
-    if recipe.kitchen_rules:
-        rules_lines = ["### Kitchen Rules"]
-        for rule in recipe.kitchen_rules:
-            rules_lines.append(f"- {rule}")
-        rules_section = "\n" + "\n".join(rules_lines)
-
-    # Assemble full diagram
-    flow_line = (
-        f"**Flow:** {recipe.summary}\n\n" if recipe.summary and recipe.summary.strip() else ""
-    )
-    diagram = (
-        f"<!-- autoskillit-recipe-hash: {recipe_hash} -->\n"
-        f"<!-- autoskillit-diagram-format: {DIAGRAM_FORMAT_VERSION} -->\n"
-        f"## {recipe.name}\n"
-        f"{recipe.description}\n"
-        f"\n"
-        f"{flow_line}"
-        f"### Graph\n"
-        f"{flow_diagram}\n"
-        f"\n"
-        f"### Inputs\n"
-        f"{inputs_table}"
-        f"{rules_section}\n"
-    )
-
-    # Write atomically to out_dir/{stem}.md (defaults to recipes_dir/diagrams/)
     _out_dir = out_dir if out_dir is not None else recipes_dir / "diagrams"
     out_path = _out_dir / f"{pipeline_path.stem}.md"
-    _atomic_write(out_path, diagram)
-    return diagram
+    _atomic_write(out_path, markdown)
+    return model
 
 
 def load_recipe_diagram(recipe_name: str, recipes_dir: Path) -> str | None:

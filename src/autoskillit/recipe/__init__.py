@@ -36,6 +36,9 @@ from autoskillit.recipe.contracts import (  # noqa: E402
     validate_recipe_cards,
 )
 from autoskillit.recipe.diagrams import (  # noqa: E402
+    InputRow,
+    RecipeDiagram,
+    build_recipe_diagram,
     check_diagram_staleness,
     diagram_stale_to_suggestions,
     generate_recipe_diagram,
@@ -94,6 +97,9 @@ __all__ = [
     "validate_from_path",
     "list_all",
     "format_recipe_list_response",
+    "InputRow",
+    "RecipeDiagram",
+    "build_recipe_diagram",
     "generate_recipe_diagram",
     "load_recipe_diagram",
     "check_diagram_staleness",

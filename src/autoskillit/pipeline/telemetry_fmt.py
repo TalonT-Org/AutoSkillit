@@ -94,6 +94,76 @@ class TelemetryFormatter:
         return "\n".join(lines)
 
     @staticmethod
+    def format_token_table_terminal(steps: list[dict], total: dict) -> str:
+        """Produce a padded-column plain text table for token usage."""
+        h = TelemetryFormatter._humanize
+        fmt_dur = TelemetryFormatter._fmt_duration
+
+        rows: list[tuple[str, str, str, str, str, str]] = []
+        for step in steps:
+            rows.append(
+                (
+                    step.get("step_name", "?"),
+                    h(step.get("input_tokens", 0)),
+                    h(step.get("output_tokens", 0)),
+                    h(
+                        step.get("cache_read_input_tokens", 0)
+                        + step.get("cache_creation_input_tokens", 0)
+                    ),
+                    str(step.get("invocation_count", 1)),
+                    fmt_dur(step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))),
+                )
+            )
+
+        total_row = (
+            "Total",
+            h(total.get("input_tokens", 0)),
+            h(total.get("output_tokens", 0)),
+            h(
+                total.get("cache_read_input_tokens", 0)
+                + total.get("cache_creation_input_tokens", 0)
+            ),
+            "",
+            fmt_dur(total.get("total_elapsed_seconds", 0.0)),
+        )
+
+        headers = ("STEP", "INPUT", "OUTPUT", "CACHED", "COUNT", "TIME")
+        all_rows = rows + [total_row]
+        widths = [max(len(headers[i]), max(len(r[i]) for r in all_rows)) for i in range(6)]
+
+        output_lines = ["  ".join(headers[i].ljust(widths[i]) for i in range(6))]
+        output_lines.append("  ".join("-" * w for w in widths))
+        for r in all_rows:
+            output_lines.append("  ".join(r[i].ljust(widths[i]) for i in range(6)))
+        return "\n".join(output_lines)
+
+    @staticmethod
+    def format_timing_table_terminal(steps: list[dict], total: dict) -> str:
+        """Produce a padded-column plain text table for step timing."""
+        fmt_dur = TelemetryFormatter._fmt_duration
+
+        rows: list[tuple[str, str, str]] = []
+        for step in steps:
+            rows.append(
+                (
+                    step.get("step_name", "?"),
+                    fmt_dur(step.get("total_seconds", 0.0)),
+                    str(step.get("invocation_count", 1)),
+                )
+            )
+        total_row = ("Total", fmt_dur(total.get("total_seconds", 0.0)), "")
+
+        headers = ("STEP", "DURATION", "INVOCATIONS")
+        all_rows = rows + [total_row]
+        widths = [max(len(headers[i]), max(len(r[i]) for r in all_rows)) for i in range(3)]
+
+        output_lines = ["  ".join(headers[i].ljust(widths[i]) for i in range(3))]
+        output_lines.append("  ".join("-" * w for w in widths))
+        for r in all_rows:
+            output_lines.append("  ".join(r[i].ljust(widths[i]) for i in range(3)))
+        return "\n".join(output_lines)
+
+    @staticmethod
     def format_compact_kv(
         steps: list[dict], total: dict, mcp_responses: dict | None = None
     ) -> str:

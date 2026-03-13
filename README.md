@@ -1,8 +1,8 @@
-# AutoSkillit
+<p align="center">
+  <img src="assets/banner.gif" alt="AutoSkillit — Skill-driven automation for agentic workflows" width="830">
+</p>
 
-<!-- banner image here (owner will add) -->
-
-Automated development pipelines for Claude Code. Give it a task, get back a tested PR.
+Give it a task, get back a tested PR.
 
 <!-- demo recording here (owner will add) -->
 

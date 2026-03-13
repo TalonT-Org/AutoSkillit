@@ -219,6 +219,8 @@ skills:
       type: string
     - name: needs_check_count
       type: string
+    - name: queue_mode
+      type: string
   merge-pr:
     inputs:
     - name: pr_number

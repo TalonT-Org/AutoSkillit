@@ -188,13 +188,29 @@ steps:
         done
       cwd: "${{ context.work_dir }}"
       step_name: "enqueue_all_prs"
-    on_success: wait_queue_pr
+    on_success: get_first_pr_number
     on_failure: cleanup_failure
     note: >
       Queue mode only. Submits all PRs in analyzed order to the merge queue via
       gh pr merge --squash --auto. Non-fatal per-PR failures are warned but do not
       abort — a PR may already be in queue or have auto-merge enabled. The orchestrator
       initializes context.current_pr_index = 0 after this step.
+
+  get_first_pr_number:
+    tool: run_cmd
+    with:
+      cmd: "jq -r '.[0].number' '${{ context.pr_order_file }}'"
+      cwd: "${{ context.work_dir }}"
+      step_name: "get_first_pr_number"
+    capture:
+      current_pr_number: "${{ result.stdout | trim }}"
+    on_success: wait_queue_pr
+    on_failure: cleanup_failure
+    note: >
+      Queue mode only. Extracts the first PR's number from pr_order_file to initialize
+      context.current_pr_number before the queue wait loop. The agent advances
+      current_pr_index and updates current_pr_number in next_queue_pr_or_done
+      for subsequent iterations.
 
   wait_queue_pr:
     tool: wait_for_merge_queue

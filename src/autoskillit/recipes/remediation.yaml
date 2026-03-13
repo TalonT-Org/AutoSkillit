@@ -552,18 +552,24 @@ steps:
   queue_ejected_fix:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts '${{ context.merge_target }}' '${{ inputs.base_branch }}'"
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "queue_ejected_fix"
-    on_success: re_push_queue_fix
+    capture:
+      conflict_escalation_required: "${{ result.escalation_required }}"
+    on_result:
+      - when: "${{ result.escalation_required }} == true"
+        route: release_issue_failure
+      - route: re_push_queue_fix
     on_failure: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
     skip_when_false: "inputs.open_pr"
     note: >
       Resolves rebase conflicts on the feature branch after queue ejection.
-      context.merge_target is the feature branch. Conflicts arise when another PR
-      merged into base_branch ahead of ours and changed overlapping files.
+      Uses the clone working directory (context.work_dir) with the feature branch
+      (context.merge_target) checked out. context.plan_path provides resolution guidance.
+      escalation_required=true → release_issue_failure for human review.
 
   re_push_queue_fix:
     tool: push_to_remote

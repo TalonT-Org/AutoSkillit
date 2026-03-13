@@ -515,10 +515,7 @@ def cook(recipe: str | None = None):
         except OSError as exc:
             print(f"Warning: diagram generation failed: {exc}", file=sys.stderr)
     diagram = load_recipe_diagram(_match.name, _rdir)
-    # Terminal display: render from structured model, not raw Markdown
-    diagram_model = build_recipe_diagram(parsed, _match.path)
-    print(diagram_model.render_terminal())
-    # System prompt: continue using Markdown (Claude renders it)
+    print(build_recipe_diagram(parsed, _match.path).render_terminal())
     _launch_cook_session(_build_orchestrator_prompt(recipe_yaml, diagram=diagram))
 
 

@@ -1315,7 +1315,20 @@ class TestCloneRemoteUrlResolution:
             if call[0] and isinstance(call[0][0], list) and call[0][0][:2] == ["git", "clone"]
         ]
         assert len(clone_calls) == 1, "Expected exactly one git clone call"
-        clone_source = clone_calls[0][0][0][-2]
+        cmd = clone_calls[0][0][0]
+        # Extract positional args from git clone, skipping flags and their values.
+        # Handles any optional flags (--branch, --no-hardlinks, --depth, etc.)
+        # without relying on a fixed index like [-2].
+        positional: list[str] = []
+        i = cmd.index("clone") + 1
+        while i < len(cmd):
+            if cmd[i].startswith("-"):
+                i += 2  # skip flag and its value
+            else:
+                positional.append(cmd[i])
+                i += 1
+        assert len(positional) == 2, f"Expected [source, target] in clone cmd: {cmd}"
+        clone_source = positional[0]
         assert clone_source == str(bare_remote), (
             f"Expected remote URL {bare_remote!r} as clone source, "
             f"got {clone_source!r} — local path fallback detected"

@@ -945,7 +945,11 @@ class TestPushToRemoteNonBare:
     def test_clone_repo_returns_remote_url(self, tmp_path: Path) -> None:
         """clone_repo result dict includes remote_url field."""
         remote = tmp_path / "remote.git"
-        subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "init", "--bare", "--initial-branch=main", str(remote)],
+            check=True,
+            capture_output=True,
+        )
         source = tmp_path / "source"
         subprocess.run(["git", "clone", str(remote), str(source)], check=True, capture_output=True)
         subprocess.run(

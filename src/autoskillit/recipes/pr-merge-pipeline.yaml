@@ -65,6 +65,13 @@ kitchen_rules:
     publish_integration_branch / push_integration_branch, and force_push_after_rebase
     (authorized for conflict-resolution rebases) are the only authorized push steps.
     Never add ad-hoc run_cmd git push calls elsewhere in the loop."
+  - "QUEUE MODE: When context.queue_mode == true, PRs merge directly into base_branch via the
+    merge queue. The batch branch (context.integration_branch) is the same as base_branch.
+    Never invoke create_integration_branch, publish_integration_branch, merge_pr, or
+    push_integration_branch in queue mode."
+  - "QUEUE LOOP: In queue mode, context.current_pr_index tracks the current PR being waited on.
+    Initialize to 0 after enqueue_all_prs. Advance by 1 in next_queue_pr_or_done after each
+    successful merge. Read pr_number from pr_order_file[current_pr_index].number."
 
 steps:
   clone:
@@ -148,13 +155,147 @@ steps:
     capture:
       pr_order_file: "${{ result.pr_order_file }}"
       integration_branch: "${{ result.integration_branch }}"
-    on_success: create_integration_branch
+      queue_mode: "${{ result.queue_mode }}"
+    on_success: route_by_queue_mode
     on_failure: cleanup_failure
     note: >
-      Captures pr_order_file (path to JSON with ordered PRs + complexity tags) and
-      integration_branch (e.g. integration/pr-merge-20250228-143052). If the skill
-      reports pr_count=0 (no open PRs), skip directly to cleanup_success — no
-      integration branch is needed.
+      Captures pr_order_file (path to JSON with ordered PRs + complexity tags),
+      integration_branch (e.g. integration/pr-merge-20250228-143052), and
+      queue_mode ("true" when a GitHub merge queue with MERGEABLE entries is active
+      on base_branch; "false" otherwise). If the skill reports pr_count=0 (no open
+      PRs), skip directly to cleanup_success — no integration branch is needed.
+
+  route_by_queue_mode:
+    action: route
+    on_result:
+      - when: "${{ context.queue_mode }} == true"
+        route: enqueue_all_prs
+      - route: create_integration_branch
+    note: >
+      Routes to queue mode (enqueue_all_prs) when analyze-prs detected a merge queue
+      on the target branch. Falls back to the classic batch-branch path otherwise.
+      context.queue_mode is captured from analyze_prs result.
+
+  enqueue_all_prs:
+    tool: run_cmd
+    with:
+      cmd: >
+        cat '${{ context.pr_order_file }}' |
+        jq -r '.[].number' |
+        while read pr; do
+          echo "Enqueueing PR #$pr..." &&
+          gh pr merge "$pr" --squash --auto || echo "WARNING: Failed to enqueue PR #$pr";
+        done
+      cwd: "${{ context.work_dir }}"
+      step_name: "enqueue_all_prs"
+    on_success: wait_queue_pr
+    on_failure: cleanup_failure
+    note: >
+      Queue mode only. Submits all PRs in analyzed order to the merge queue via
+      gh pr merge --squash --auto. Non-fatal per-PR failures are warned but do not
+      abort — a PR may already be in queue or have auto-merge enabled. The orchestrator
+      initializes context.current_pr_index = 0 after this step.
+
+  wait_queue_pr:
+    tool: wait_for_merge_queue
+    with:
+      pr_number: "${{ context.current_pr_number }}"
+      target_branch: "${{ inputs.base_branch }}"
+      timeout_seconds: 900
+      cwd: "${{ context.work_dir }}"
+    capture:
+      queue_pr_state: "${{ result.pr_state }}"
+    on_result:
+      - when: "${{ result.pr_state }} == merged"
+        route: next_queue_pr_or_done
+      - when: "${{ result.pr_state }} == ejected"
+        route: get_ejected_pr_branch
+      - route: cleanup_failure
+    on_failure: cleanup_failure
+    note: >
+      Queue mode only. The agent reads context.pr_order_file at context.current_pr_index
+      to get the current PR's number and appends it to the pr_number argument.
+      merged → advance to next PR or finish.
+      ejected → conflict resolution cycle (get_ejected_pr_branch → checkout → resolve → push → reenter).
+      timeout → cleanup_failure (900s budget = 15 min per PR).
+
+  get_ejected_pr_branch:
+    tool: run_cmd
+    with:
+      cmd: "gh pr view '${{ context.current_pr_number }}' --json headRefName -q .headRefName"
+      cwd: "${{ context.work_dir }}"
+      step_name: "get_ejected_pr_branch"
+    capture:
+      ejected_pr_branch: "${{ result.stdout | trim }}"
+    on_success: checkout_ejected_pr
+    on_failure: cleanup_failure
+
+  checkout_ejected_pr:
+    tool: run_cmd
+    with:
+      cmd: >
+        git fetch origin '${{ context.ejected_pr_branch }}' &&
+        git checkout '${{ context.ejected_pr_branch }}' &&
+        git pull origin '${{ context.ejected_pr_branch }}'
+      cwd: "${{ context.work_dir }}"
+      step_name: "checkout_ejected_pr"
+    on_success: resolve_ejected_conflicts
+    on_failure: cleanup_failure
+
+  resolve_ejected_conflicts:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-merge-conflicts '${{ context.ejected_pr_branch }}' '${{ inputs.base_branch }}'"
+      cwd: "${{ context.work_dir }}"
+      step_name: "resolve_ejected_conflicts"
+    capture:
+      conflict_escalation_required: "${{ result.escalation_required }}"
+    on_result:
+      - when: "${{ result.escalation_required }} == true"
+        route: cleanup_failure
+      - route: push_ejected_fix
+    on_failure: cleanup_failure
+    retries: 1
+    on_exhausted: cleanup_failure
+    note: >
+      Resolves git-level rebase conflicts between the ejected PR's branch and the
+      current base_branch HEAD. Uses the same resolve-merge-conflicts skill as the
+      classic path's integration conflict resolution.
+
+  push_ejected_fix:
+    tool: run_cmd
+    with:
+      cmd: "git push origin '${{ context.ejected_pr_branch }}' --force-with-lease"
+      cwd: "${{ context.work_dir }}"
+      step_name: "push_ejected_fix"
+    on_success: reenter_queue
+    on_failure: cleanup_failure
+
+  reenter_queue:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.current_pr_number }}' --squash --auto"
+      cwd: "${{ context.work_dir }}"
+      step_name: "reenter_queue"
+    on_success: wait_queue_pr
+    on_failure: cleanup_failure
+    note: >
+      Re-submits the fixed PR to the merge queue after conflict resolution.
+      Routes back to wait_queue_pr to continue monitoring.
+
+  next_queue_pr_or_done:
+    action: route
+    on_result:
+      field: next
+      routes:
+        more_prs: wait_queue_pr
+        all_done: collect_artifacts
+    note: >
+      Queue mode routing only. Advance context.current_pr_index. If more PRs remain,
+      fetch the next PR's number from pr_order_file and route to wait_queue_pr.
+      When all PRs are merged, route to collect_artifacts.
+      In queue mode, integration_branch == base_branch — collect_artifacts proceeds
+      directly without push_integration_branch (there is no batch branch to push).
 
   create_integration_branch:
     tool: run_cmd
@@ -414,7 +555,9 @@ steps:
       Copies plan files generated during the pipeline (from temp/make-plan/) into
       temp/pr-merge-pipeline/ alongside any conflict reports already there.
       Always routes to check_impl_plans, which determines whether audit_impl
-      is meaningful.
+      is meaningful. In queue mode (context.queue_mode == true), the integration_branch
+      is the base_branch itself — no batch branch push is needed. The step after
+      collect_artifacts proceeds identically in both modes.
 
   check_impl_plans:
     tool: run_cmd

@@ -258,3 +258,22 @@ reset_workspace:
 github:
   default_repo: "my-org/my-repo"
 ```
+
+## Merge Queue Configuration
+
+AutoSkillit's `wait_for_merge_queue` tool and the queue mode in `pr-merge-pipeline` work
+with GitHub's merge queue feature. For best results with automation use cases:
+
+### `min_entries_to_merge_wait_minutes` = 0
+
+GitHub branch rulesets expose a `min_entries_to_merge_wait_minutes` setting that adds
+latency before a queued PR is eligible to merge. For the `integration` branch (or any
+branch where AutoSkillit manages the PR queue), set this to `0`.
+
+**Why:** AutoSkillit enters PRs one at a time or in small batches. A non-zero wait
+multiplier adds unnecessary latency per PR. Setting it to `0` lets PRs merge as soon
+as their CI passes.
+
+**Location:** GitHub → Repository Settings → Branches → Branch protection rules →
+select the integration ruleset → Merge queue → "Minimum entries to merge — wait X minutes".
+Set to `0`.

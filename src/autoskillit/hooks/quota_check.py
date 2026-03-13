@@ -92,7 +92,7 @@ def _write_quota_log_event(event: dict, log_dir: Path | None) -> None:
         pass  # Never block the hook on logging failure
 
 
-def main() -> None:
+def main(*, cache_path_override: str | None = None) -> None:
     try:
         raw = sys.stdin.read()
         _ = json.loads(raw)  # validate event is JSON; contents not needed
@@ -108,9 +108,10 @@ def main() -> None:
     hook_config = _read_hook_config()
     threshold = hook_config.get("threshold", _DEFAULT_THRESHOLD)
     cache_max_age = hook_config.get("cache_max_age", _DEFAULT_CACHE_MAX_AGE)
-    # env var takes priority over hook config for cache path
+    # Function parameter > env var > hook config > module default
     cache_path_str = (
-        os.environ.get("AUTOSKILLIT_QUOTA_CACHE")
+        cache_path_override
+        or os.environ.get("AUTOSKILLIT_QUOTA_CACHE")
         or hook_config.get("cache_path")
         or _DEFAULT_CACHE_PATH
     )

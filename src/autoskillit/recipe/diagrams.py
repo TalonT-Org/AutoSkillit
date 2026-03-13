@@ -660,11 +660,11 @@ class InputRow:
 
 @dataclass
 class RecipeDiagram:
-    """Format-agnostic structured representation of a recipe diagram.
+    """Structured representation of a recipe diagram.
 
     Separates diagram content (what to display) from presentation (how to
-    display it).  Renderers consume this model to produce context-appropriate
-    output — Markdown for Claude/MCP, aligned plain text for the terminal.
+    display it).  The ``render_markdown`` method produces output suitable for
+    .md files, MCP responses, and Claude prompts.
     """
 
     name: str
@@ -754,52 +754,6 @@ class RecipeDiagram:
             f"{inputs_table}"
             f"{rules_section}\n"
         )
-
-    def render_terminal(self) -> str:
-        """Render as plain text suitable for terminal display.
-
-        Uses padded columns for the inputs table, plain text headers, and
-        omits HTML comments and Markdown syntax.
-        """
-        lines: list[str] = []
-        # Header — plain text, no Markdown ## prefix
-        lines.append(self.name.upper())
-        lines.append(self.description)
-        lines.append("")
-
-        if self.flow_summary and self.flow_summary.strip():
-            lines.append(f"Flow: {self.flow_summary}")
-            lines.append("")
-
-        # Graph — already terminal-safe (ASCII box-drawing characters)
-        lines.append(self.graph_text)
-        lines.append("")
-
-        # Inputs — padded columns
-        if self.input_rows:
-            name_w = max(len(r.name) for r in self.input_rows)
-            desc_w = max(len(r.description) for r in self.input_rows)
-            name_w = max(name_w, 4)  # min width for header "NAME"
-            desc_w = max(desc_w, 11)  # min width for header "DESCRIPTION"
-            lines.append(f"  {'NAME':<{name_w}}  {'DESCRIPTION':<{desc_w}}  DEFAULT")
-            lines.append(f"  {'-' * name_w}  {'-' * desc_w}  {'-' * 7}")
-            for row in self.input_rows:
-                lines.append(
-                    f"  {row.name:<{name_w}}  {row.description:<{desc_w}}  {row.default_display}"
-                )
-
-        if self.agent_managed:
-            lines.append(f"\n  Agent-managed: {', '.join(self.agent_managed)}")
-
-        # Kitchen rules — plain bullet list
-        if self.kitchen_rules:
-            lines.append("")
-            lines.append("Kitchen Rules:")
-            for rule in self.kitchen_rules:
-                lines.append(f"  - {rule}")
-
-        lines.append("")
-        return "\n".join(lines)
 
 
 def build_recipe_diagram(recipe: Recipe, recipe_path: Path) -> RecipeDiagram:

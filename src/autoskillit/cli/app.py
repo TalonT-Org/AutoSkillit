@@ -423,9 +423,8 @@ def cook(recipe: str | None = None):
     """Launch an interactive Claude Code session to execute a recipe.
 
     Starts Claude Code with hard tool restrictions: only AskUserQuestion
-    (built-in) and AutoSkillit MCP tools are available. The recipe is
-    injected via --append-system-prompt so the session starts ready to
-    execute.
+    (built-in) and AutoSkillit MCP tools are available. The session
+    discovers recipe content by calling load_recipe as its first action.
 
     Parameters
     ----------
@@ -434,13 +433,9 @@ def cook(recipe: str | None = None):
     """
     from autoskillit.cli._prompts import _build_orchestrator_prompt
     from autoskillit.recipe import (
-        build_recipe_diagram,
-        check_diagram_staleness,
         find_recipe_by_name,
-        generate_recipe_diagram,
         list_recipes,
         load_recipe,
-        load_recipe_diagram,
         validate_recipe,
     )
 
@@ -490,8 +485,6 @@ def cook(recipe: str | None = None):
         else:
             print("No recipes found")
         sys.exit(1)
-    recipe_yaml = _match.path.read_text()
-
     # Validate recipe before launching session
     try:
         parsed = load_recipe(_match.path)
@@ -508,15 +501,7 @@ def cook(recipe: str | None = None):
         for err in errors:
             print(f"  - {err}")
         sys.exit(1)
-    _rdir = _recipes_dir_for(_match)
-    if check_diagram_staleness(_match.name, _rdir, _match.path):
-        try:
-            generate_recipe_diagram(_match.path, _rdir)
-        except OSError as exc:
-            print(f"Warning: diagram generation failed: {exc}", file=sys.stderr)
-    diagram = load_recipe_diagram(_match.name, _rdir)
-    print(build_recipe_diagram(parsed, _match.path).render_terminal())
-    _launch_cook_session(_build_orchestrator_prompt(recipe_yaml, diagram=diagram))
+    _launch_cook_session(_build_orchestrator_prompt(recipe))
 
 
 @app.command(name="chefs-hat", alias="chef")

@@ -37,69 +37,29 @@ def _resolve_recipe_input(raw: str, available: list[RecipeInfo]) -> RecipeInfo |
     return next((r for r in available if r.name == raw), None)
 
 
-def _build_orchestrator_prompt(script_yaml: str, diagram: str | None = None) -> str:
-    """Build the --append-system-prompt content for a cook session."""
+def _build_orchestrator_prompt(recipe_name: str) -> str:
+    """Build the --append-system-prompt content for a cook session.
+
+    The prompt contains only behavioral instructions (routing rules, failure
+    predicates, orchestrator discipline). Recipe content is discovered by the
+    session via ``load_recipe`` — the CLI never injects YAML or diagrams.
+    """
     # Inject sous-chef global orchestration rules (graceful degradation if absent)
     sous_chef_content = ""
     _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
     if _sous_chef_path.exists():
         sous_chef_content = "\n\n" + _sous_chef_path.read_text()
 
-    diagram_section = ""
-    if diagram:
-        diagram_section = f"\n\nRECIPE DIAGRAM (pre-generated):\n{diagram}\n"
-
     return f"""\
-You are a pipeline orchestrator. Execute the recipe below step-by-step.
+You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
-FIRST ACTION — before prompting for any inputs, execute these steps in order:
+FIRST ACTION — before prompting for any inputs:
 0. Call open_kitchen to reveal kitchen tools and enable the gate.
    Without this step, no kitchen tools are accessible.
-1. Display the full recipe overview using the preview format below:
-   - The recipe diagram above (if present)
-   - Recipe name, description, and flow summary
-   - Ingredients table (user-supplied vs agent-managed)
-   - Step overview with routing, retry, and capture info
-   - Kitchen rules
-2. Collect recipe ingredients from the user:
-   Collect ingredient values conversationally:
-   a. Ask the user a single open-ended question — what would they like to do?
-      Do NOT prompt for each ingredient field individually.
-   b. From the user's free-form response, infer as many ingredient values
-      as possible (e.g. task description, source directory, run name).
-   c. If any required ingredients could not be inferred, ask one
-      follow-up question covering only those missing required values.
-   d. Accept optional ingredients at their default values unless the
-      user explicitly mentioned an override in their response.
-3. Execute the pipeline steps by calling MCP tools directly
-
-Preview format:
-
-    ## {{name}}
-    {{description}}
-
-    **Flow:** {{summary}}
-
-    ### Ingredients
-    For each ingredient show: name, description, required/optional, default value.
-    Distinguish user-supplied ingredients (required=true or meaningful defaults)
-    from agent-managed state (default="" or default=null with description
-    indicating it is set by a prior step or the agent).
-
-    ### Steps
-    For each step show:
-    - Step name and tool/action/python discriminator
-    - Routing: on_success → X, on_failure → Y
-    - If on_result: show field name and each route
-    - If optional: true, mark as "[Optional]" and show the note explaining
-      the skip condition
-    - If retry block exists: retries Nx on {{condition}}, then → {{on_exhausted}}
-    - If note exists, show it (notes contain critical agent instructions)
-    - If capture exists, show what values are extracted
-
-    ### Kitchen Rules
-    If present, list all kitchen_rules strings.
-    If absent, note: "No kitchen rules defined"
+1. Call load_recipe('{recipe_name}') to load and display the recipe.
+2. Display the recipe overview from load_recipe's response.
+3. Collect ingredients from the user conversationally.
+4. Execute the pipeline steps.
 
 During pipeline execution, only use AutoSkillit MCP tools:
 - Read, Grep, Glob (code investigation) — not used here because investigation
@@ -155,10 +115,7 @@ ACTION: CONFIRM STEP SEMANTICS:
   route to the step's on_success target.
 - If the user declines (answers no, skip, keep, cancel, or similar negative),
   route to the step's on_failure target.
-{diagram_section}{sous_chef_content}
---- RECIPE ---
-{script_yaml}
---- END RECIPE ---
+{sous_chef_content}
 """
 
 

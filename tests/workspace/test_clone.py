@@ -963,6 +963,11 @@ class TestPushToRemoteNonBare:
             check=True,
             capture_output=True,
         )
+        subprocess.run(
+            ["git", "-C", str(source), "push", "-u", "origin", "HEAD:main"],
+            check=True,
+            capture_output=True,
+        )
 
         result = clone_repo(str(source), "test-remoteurl", strategy="proceed")
 

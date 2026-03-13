@@ -8,6 +8,8 @@ import pytest
 
 from autoskillit.recipe.diagrams import (
     DIAGRAM_SECTION_SEPARATOR,
+    RecipeDiagram,
+    build_recipe_diagram,
     check_diagram_staleness,
     diagram_stale_to_suggestions,
     generate_recipe_diagram,
@@ -164,7 +166,7 @@ def test_generate_content_has_name(tmp_path: Path, sample_recipe_yaml: Path) -> 
 def test_generate_route_table(tmp_path: Path, complex_recipe_yaml: Path) -> None:
     """DG-4: diagram uses spec-compliant route format markers."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir).render_markdown()
     assert "← only if" in content, "Optional step notation '← only if' must appear."
     assert "(retry ×" in content, "Retry notation '(retry ×N)' must appear."
 
@@ -250,21 +252,21 @@ def test_stale_to_suggestions_format() -> None:
 def test_generate_contains_recipe_name(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """DG-12: diagram contains exact recipe name, not just '## '."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir).render_markdown()
     assert "## my-recipe" in content
 
 
 def test_generate_contains_description(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """DG-13: diagram contains recipe description text."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir).render_markdown()
     assert "A test recipe for diagram generation" in content
 
 
 def test_generate_contains_flow_summary(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """DG-14: diagram contains flow summary."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir).render_markdown()
     assert "**Flow:**" in content
     assert "step1 -> done" in content
 
@@ -272,7 +274,7 @@ def test_generate_contains_flow_summary(tmp_path: Path, sample_recipe_yaml: Path
 def test_generate_contains_step_names(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """DG-15: diagram graph section contains step names."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir).render_markdown()
     # Extract graph section
     graph_start = content.index("### Graph")
     graph_end = content.index("### Inputs")
@@ -283,14 +285,14 @@ def test_generate_contains_step_names(tmp_path: Path, sample_recipe_yaml: Path) 
 def test_generate_contains_tool_names(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """DG-16: diagram contains tool name for step1."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir).render_markdown()
     assert "run_skill" in content
 
 
 def test_generate_contains_routes(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """DG-17: diagram contains route targets done and escalate."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir).render_markdown()
     graph_start = content.index("### Graph")
     graph_end = content.index("### Inputs")
     graph_section = content[graph_start:graph_end]
@@ -301,7 +303,7 @@ def test_generate_contains_routes(tmp_path: Path, sample_recipe_yaml: Path) -> N
 def test_generate_contains_ingredient_values(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """DG-18: diagram Inputs section contains ingredient details."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir).render_markdown()
     inputs_start = content.index("### Inputs")
     inputs_section = content[inputs_start:]
     assert "task" in inputs_section
@@ -311,7 +313,7 @@ def test_generate_contains_ingredient_values(tmp_path: Path, sample_recipe_yaml:
 def test_generate_contains_terminal_steps(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """DG-19: diagram contains terminal step messages."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir).render_markdown()
     assert "Done." in content
     assert "Failed." in content
 
@@ -319,7 +321,7 @@ def test_generate_contains_terminal_steps(tmp_path: Path, sample_recipe_yaml: Pa
 def test_generate_contains_kitchen_rules(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """DG-20: diagram contains kitchen rules."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir).render_markdown()
     assert "Use AutoSkillit tools only" in content
 
 
@@ -335,7 +337,7 @@ def test_generate_produces_visual_flow(tmp_path: Path, sample_recipe_yaml: Path)
     renderer uses │ (U+2502) for the vertical spine connecting steps.
     """
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir).render_markdown()
     graph_start = content.index("### Graph")
     graph_end = content.index("### Inputs")
     graph_section = content[graph_start:graph_end]
@@ -353,7 +355,7 @@ def test_generate_produces_visual_flow(tmp_path: Path, sample_recipe_yaml: Path)
 def test_generate_embeds_format_version(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """DG-22: diagram embeds a format version marker for rendering logic staleness."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir).render_markdown()
     assert "autoskillit-diagram-format:" in content
 
 
@@ -365,7 +367,7 @@ def test_generate_embeds_format_version(tmp_path: Path, sample_recipe_yaml: Path
 def test_complex_recipe_back_edge_marker(tmp_path: Path, complex_recipe_yaml: Path) -> None:
     """DG-23: back-edge (loop) from test->fix is marked in diagram."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir).render_markdown()
     graph_start = content.index("### Graph")
     graph_end = content.index("### Inputs")
     graph_section = content[graph_start:graph_end]
@@ -376,7 +378,7 @@ def test_complex_recipe_back_edge_marker(tmp_path: Path, complex_recipe_yaml: Pa
 def test_complex_recipe_on_result_conditions(tmp_path: Path, complex_recipe_yaml: Path) -> None:
     """DG-24: on_result conditions and their target steps appear in diagram."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir).render_markdown()
     # Check that the predicate conditions appear
     assert "simple" in content
     assert "complex" in content
@@ -388,7 +390,7 @@ def test_complex_recipe_on_result_conditions(tmp_path: Path, complex_recipe_yaml
 def test_complex_recipe_optional_step(tmp_path: Path, complex_recipe_yaml: Path) -> None:
     """DG-25: optional step (skip_when_false) uses bracket+arrow notation."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir).render_markdown()
     # The fix step has skip_when_false: inputs.auto_fix
     assert "[fix]" in content, "Optional step must appear as [fix] in bracket notation."
     assert "← only if" in content, "Optional step must use '← only if' annotation."
@@ -398,7 +400,7 @@ def test_complex_recipe_optional_step(tmp_path: Path, complex_recipe_yaml: Path)
 def test_complex_recipe_retry_info(tmp_path: Path, complex_recipe_yaml: Path) -> None:
     """DG-26: retry count appears as parenthetical on the step name line."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir).render_markdown()
     # The fix step has retries: 2 — must appear as (retry ×2) on the same line as [fix]
     assert "(retry ×2)" in content, "Retry annotation '(retry ×2)' must appear for fix step."
     assert "escalate" in content  # on_exhausted target
@@ -407,7 +409,7 @@ def test_complex_recipe_retry_info(tmp_path: Path, complex_recipe_yaml: Path) ->
 def test_complex_recipe_multiple_kitchen_rules(tmp_path: Path, complex_recipe_yaml: Path) -> None:
     """DG-27: all kitchen rules appear in diagram."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir).render_markdown()
     assert "Use AutoSkillit tools only" in content
     assert "Never modify files outside the worktree" in content
 
@@ -592,7 +594,7 @@ def bool_ingredient_recipe_yaml(tmp_path: Path) -> Path:
 def test_diagram_hides_infrastructure_steps(tmp_path: Path, infra_recipe_yaml: Path) -> None:
     """T1: infrastructure run_cmd capture steps are hidden from the graph section."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(infra_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(infra_recipe_yaml, recipes_dir).render_markdown()
     graph_start = content.index("### Graph")
     graph_end = content.index("### Inputs")
     graph_section = content[graph_start:graph_end]
@@ -606,7 +608,7 @@ def test_diagram_shows_on_context_limit_routes(
 ) -> None:
     """T2: on_context_limit route appears in graph section."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(ctx_limit_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(ctx_limit_recipe_yaml, recipes_dir).render_markdown()
     graph_start = content.index("### Graph")
     graph_end = content.index("### Inputs")
     graph_section = content[graph_start:graph_end]
@@ -620,7 +622,7 @@ def test_diagram_optional_step_notation_uses_bracket_and_arrow(
 ) -> None:
     """T3: optional steps use [step] bracket notation with '← only if', not ⟨skip if⟩."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(complex_recipe_yaml, recipes_dir).render_markdown()
     graph_start = content.index("### Graph")
     graph_end = content.index("### Inputs")
     graph_section = content[graph_start:graph_end]
@@ -636,7 +638,7 @@ def test_diagram_retry_notation_is_parenthetical_on_step_name(
 ) -> None:
     """T4: retry is shown as (retry ×N) on the step name line, not ↺ ×N as a sub-line."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(retry3_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(retry3_recipe_yaml, recipes_dir).render_markdown()
     assert "(retry ×3)" in content, (
         "Retry count must appear as parenthetical '(retry ×3)' on the step name line."
     )
@@ -648,7 +650,7 @@ def test_diagram_retry_notation_is_parenthetical_on_step_name(
 def test_diagram_inputs_table_has_three_columns(tmp_path: Path, sample_recipe_yaml: Path) -> None:
     """T5: diagram has ### Inputs with 3-column table (Name, Description, Default)."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(sample_recipe_yaml, recipes_dir).render_markdown()
     assert "### Inputs" in content, "Section header must be '### Inputs', not '### Ingredients'."
     assert "### Ingredients" not in content, (
         "'### Ingredients' must be replaced with '### Inputs'."
@@ -664,7 +666,7 @@ def test_diagram_boolean_ingredient_default_rendered_as_off_on(
 ) -> None:
     """T6: boolean-string defaults 'false'→'off' and 'true'→'on' in Inputs table."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(bool_ingredient_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(bool_ingredient_recipe_yaml, recipes_dir).render_markdown()
     inputs_start = content.index("### Inputs")
     inputs_section = content[inputs_start:]
     assert "| off |" in inputs_section or "| off" in inputs_section, (
@@ -680,7 +682,7 @@ def test_diagram_empty_string_default_rendered_as_auto_detect(
 ) -> None:
     """T7: empty-string default renders as 'auto-detect' in Inputs table."""
     recipes_dir = tmp_path / "recipes"
-    content = generate_recipe_diagram(bool_ingredient_recipe_yaml, recipes_dir)
+    content = generate_recipe_diagram(bool_ingredient_recipe_yaml, recipes_dir).render_markdown()
     inputs_start = content.index("### Inputs")
     inputs_section = content[inputs_start:]
     assert "auto-detect" in inputs_section, (
@@ -906,7 +908,9 @@ def test_for_each_inner_layout_is_horizontal_chain(looping_parts_recipe, tmp_pat
     pipeline, recipes_dir = looping_parts_recipe
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    content = generate_recipe_diagram(pipeline, recipes_dir=recipes_dir, out_dir=out_dir)
+    content = generate_recipe_diagram(
+        pipeline, recipes_dir=recipes_dir, out_dir=out_dir
+    ).render_markdown()
     graph = _extract_graph_section(content)
 
     assert "FOR EACH" in graph.upper(), (
@@ -936,7 +940,9 @@ def test_ci_polling_loop_does_not_get_for_each_block(ci_polling_recipe, tmp_path
     pipeline, recipes_dir = ci_polling_recipe
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    content = generate_recipe_diagram(pipeline, recipes_dir=recipes_dir, out_dir=out_dir)
+    content = generate_recipe_diagram(
+        pipeline, recipes_dir=recipes_dir, out_dir=out_dir
+    ).render_markdown()
     graph = _extract_graph_section(content)
     assert "FOR EACH" not in graph.upper(), (
         "CI polling loop (re_push → ci_watch↑) must not be wrapped in a FOR EACH block; "
@@ -973,7 +979,9 @@ def test_bundled_diagram_roundtrip(recipe_name: str, tmp_path: Path) -> None:
 
     out_dir = tmp_path / "diagrams"
     out_dir.mkdir()
-    generated = generate_recipe_diagram(pipeline, recipes_dir=recipes_dir, out_dir=out_dir)
+    generated = generate_recipe_diagram(
+        pipeline, recipes_dir=recipes_dir, out_dir=out_dir
+    ).render_markdown()
 
     assert generated == committed, (
         f"Committed {recipe_name}.md differs from renderer output. "
@@ -997,7 +1005,7 @@ def test_implementation_diagram_for_each_label_names_plan_part(tmp_path: Path) -
         recipes_dir / "implementation.yaml",
         recipes_dir=recipes_dir,
         out_dir=out_dir,
-    )
+    ).render_markdown()
     graph = _extract_graph_section(content)
     assert "FOR EACH PLAN PART:" in graph, (
         "implementation.yaml iterates plan_parts; FOR EACH label must say 'FOR EACH PLAN PART:'"
@@ -1015,7 +1023,7 @@ def test_implementation_groups_diagram_for_each_label_names_group(tmp_path: Path
         recipes_dir / "implementation-groups.yaml",
         recipes_dir=recipes_dir,
         out_dir=out_dir,
-    )
+    ).render_markdown()
     graph = _extract_graph_section(content)
     assert "FOR EACH GROUP" in graph, (
         "implementation-groups.yaml iterates groups; FOR EACH label must say 'FOR EACH GROUP...'"
@@ -1033,7 +1041,7 @@ def test_audit_and_fix_diagram_has_no_for_each_block(tmp_path: Path) -> None:
         recipes_dir / "audit-and-fix.yaml",
         recipes_dir=recipes_dir,
         out_dir=out_dir,
-    )
+    ).render_markdown()
     graph = _extract_graph_section(content)
     assert "FOR EACH" not in graph.upper(), (
         "audit-and-fix.yaml has no plan_parts iteration (only CI polling); "
@@ -1074,7 +1082,7 @@ def test_confirm_step_rendered_as_decision_point(tmp_path: Path) -> None:
     """DG-C1: confirm steps appear with ❓ prefix and show yes/no routes."""
     recipe_path = tmp_path / "confirm-test.yaml"
     recipe_path.write_text(_CONFIRM_RECIPE_YAML)
-    diagram = generate_recipe_diagram(recipe_path, tmp_path)
+    diagram = generate_recipe_diagram(recipe_path, tmp_path).render_markdown()
     assert "❓" in diagram and "confirm" in diagram.lower()
     assert "yes" in diagram.lower() and "no" in diagram.lower()
 
@@ -1083,7 +1091,7 @@ def test_confirm_step_not_in_terminal_section(tmp_path: Path) -> None:
     """DG-C2: confirm steps must NOT appear in the ⏹ terminal section."""
     recipe_path = tmp_path / "confirm-test.yaml"
     recipe_path.write_text(_CONFIRM_RECIPE_YAML)
-    diagram = generate_recipe_diagram(recipe_path, tmp_path)
+    diagram = generate_recipe_diagram(recipe_path, tmp_path).render_markdown()
     # Find the terminal section by locating the separator line (a line of all ─ characters)
     diagram_lines = diagram.splitlines()
     sep_idx = next(
@@ -1109,7 +1117,7 @@ def test_smoke_test_diagram_has_no_for_each_block(tmp_path: Path) -> None:
         recipes_dir / "smoke-test.yaml",
         recipes_dir=recipes_dir,
         out_dir=out_dir,
-    )
+    ).render_markdown()
     graph = _extract_graph_section(content)
     assert "FOR EACH" not in graph.upper(), (
         "smoke-test.yaml has no plan_parts iteration; "
@@ -1149,7 +1157,9 @@ def test_diagram_inputs_table_rows_are_single_lines_with_folded_scalars(
     """T-FS-1: Table rows built from folded-scalar descriptions must not embed newlines."""
     pipeline = tmp_path / "test-folded.yaml"
     pipeline.write_text(_FOLDED_SCALAR_RECIPE_YAML)
-    content = generate_recipe_diagram(pipeline, recipes_dir=tmp_path, out_dir=tmp_path)
+    content = generate_recipe_diagram(
+        pipeline, recipes_dir=tmp_path, out_dir=tmp_path
+    ).render_markdown()
 
     inputs_start = content.index("### Inputs")
     inputs_section = content[inputs_start:]
@@ -1194,7 +1204,9 @@ def test_bundled_diagram_inputs_table_has_no_embedded_newlines(
     pipeline = recipes_dir / f"{recipe_name}.yaml"
     out_dir = tmp_path / "diagrams"
     out_dir.mkdir()
-    content = generate_recipe_diagram(pipeline, recipes_dir=recipes_dir, out_dir=out_dir)
+    content = generate_recipe_diagram(
+        pipeline, recipes_dir=recipes_dir, out_dir=out_dir
+    ).render_markdown()
 
     if "### Inputs" not in content:
         return  # recipe has no ingredients — skip
@@ -1392,7 +1404,7 @@ def test_for_each_chain_excludes_side_leg_steps(tmp_path: Path) -> None:
     recipes_dir = pkg_root() / "recipes"
     content = generate_recipe_diagram(
         recipes_dir / "implementation.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
-    )
+    ).render_markdown()
     chain_line = _find_for_each_chain_line(content)
     assert chain_line is not None, "No horizontal chain found in FOR EACH block"
     assert "retry_worktree" not in chain_line
@@ -1413,7 +1425,7 @@ def test_next_or_done_rendered_as_footer_routing_block(tmp_path: Path) -> None:
     recipes_dir = pkg_root() / "recipes"
     content = generate_recipe_diagram(
         recipes_dir / "implementation.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
-    )
+    ).render_markdown()
     graph_section = _extract_graph_section(content)
     assert "└── next_or_done" in graph_section, (
         "next_or_done must appear on a └── footer line, not as an inline chain token"
@@ -1440,7 +1452,7 @@ def test_terminal_steps_have_no_emoji(recipe_name: str, tmp_path: Path) -> None:
     recipes_dir = pkg_root() / "recipes"
     content = generate_recipe_diagram(
         recipes_dir / f"{recipe_name}.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
-    )
+    ).render_markdown()
     assert "⏹" not in content, f"Emoji ⏹ found in {recipe_name} (spec: ASCII only)"
 
 
@@ -1457,7 +1469,9 @@ def test_flow_line_omitted_when_summary_empty(tmp_path: Path) -> None:
         "  done:\n    action: stop\n    message: Done.\n"
         "  escalate:\n    action: stop\n    message: Failed.\n"
     )
-    content = generate_recipe_diagram(yaml_path, recipes_dir=tmp_path, out_dir=tmp_path / "out")
+    content = generate_recipe_diagram(
+        yaml_path, recipes_dir=tmp_path, out_dir=tmp_path / "out"
+    ).render_markdown()
     assert "**Flow:**" not in content
 
 
@@ -1486,7 +1500,7 @@ def test_bundled_recipe_ingredient_descriptions_are_single_phrase(
     recipes_dir = pkg_root() / "recipes"
     content = generate_recipe_diagram(
         recipes_dir / f"{recipe_name}.yaml", recipes_dir=recipes_dir, out_dir=tmp_path
-    )
+    ).render_markdown()
     in_inputs = False
     desc_col_idx: int | None = None
     for line in content.splitlines():
@@ -1670,7 +1684,9 @@ def test_renderer_matches_visual_spec(tmp_path: Path) -> None:
 
     out_dir = tmp_path / "diagrams"
     out_dir.mkdir()
-    actual = generate_recipe_diagram(spec_recipe, recipes_dir=spec_recipe.parent, out_dir=out_dir)
+    actual = generate_recipe_diagram(
+        spec_recipe, recipes_dir=spec_recipe.parent, out_dir=out_dir
+    ).render_markdown()
     expected = spec_expected.read_text()
 
     assert actual == expected, (
@@ -1708,7 +1724,9 @@ def test_no_graph_line_exceeds_width_limit(recipe_name: str, tmp_path: Path) -> 
     pipeline = recipes_dir / f"{recipe_name}.yaml"
     out_dir = tmp_path / "diagrams"
     out_dir.mkdir()
-    diagram = generate_recipe_diagram(pipeline, recipes_dir=recipes_dir, out_dir=out_dir)
+    diagram = generate_recipe_diagram(
+        pipeline, recipes_dir=recipes_dir, out_dir=out_dir
+    ).render_markdown()
 
     in_graph = False
     past_sep = False
@@ -1749,3 +1767,82 @@ def test_spec_fixture_version_matches_diagram_format_constant() -> None:
         f"spec embeds {m.group(1)!r} but DIAGRAM_FORMAT_VERSION={DIAGRAM_FORMAT_VERSION!r}. "
         "Either bump DIAGRAM_FORMAT_VERSION or regenerate the spec fixture."
     )
+
+
+# ---------------------------------------------------------------------------
+# RecipeDiagram structured model tests
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_diagram_from_recipe_populates_all_fields(
+    tmp_path: Path, sample_recipe_yaml: Path
+) -> None:
+    """RecipeDiagram.from_recipe extracts all diagram components as structured data."""
+    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+    recipe = load_recipe(sample_recipe_yaml)
+    model = RecipeDiagram.from_recipe(recipe, sample_recipe_yaml)
+
+    assert model.name == "my-recipe"
+    assert model.description == "A test recipe for diagram generation"
+    assert model.flow_summary == "step1 -> done"
+    assert model.graph_text  # non-empty
+    assert isinstance(model.input_rows, list)
+    assert len(model.input_rows) >= 1
+    assert model.input_rows[0].name == "task"
+    assert model.input_rows[0].description == "What to do"
+    assert model.recipe_hash.startswith("sha256:")
+    assert model.format_version
+    assert "Use AutoSkillit tools only" in model.kitchen_rules
+
+
+def test_recipe_diagram_render_markdown_matches_current_format(
+    tmp_path: Path, sample_recipe_yaml: Path
+) -> None:
+    """render_markdown() output is byte-identical to generate_recipe_diagram() file output."""
+    recipes_dir = tmp_path / "recipes"
+    model = generate_recipe_diagram(sample_recipe_yaml, recipes_dir)
+    md_from_method = model.render_markdown()
+    md_from_file = (recipes_dir / "diagrams" / "my-recipe.md").read_text()
+    assert md_from_method == md_from_file
+
+
+def test_recipe_diagram_render_terminal_contains_no_markdown(
+    tmp_path: Path, sample_recipe_yaml: Path
+) -> None:
+    """render_terminal() output must not contain Markdown syntax."""
+    model = build_recipe_diagram(
+        __import__("autoskillit.recipe.io", fromlist=["load_recipe"]).load_recipe(
+            sample_recipe_yaml
+        ),
+        sample_recipe_yaml,
+    )
+    output = model.render_terminal()
+    assert "<!--" not in output
+    assert "|---" not in output
+    assert not any(line.lstrip().startswith("## ") for line in output.splitlines())
+    assert "**Flow:**" not in output
+    # Positive assertion: ingredient data IS present
+    assert "task" in output
+    assert "What to do" in output
+
+
+def test_recipe_diagram_render_terminal_aligns_columns(
+    tmp_path: Path, sample_recipe_yaml: Path
+) -> None:
+    """render_terminal() input rows are column-aligned with padding."""
+    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
+
+    model = build_recipe_diagram(load_recipe(sample_recipe_yaml), sample_recipe_yaml)
+    output = model.render_terminal()
+    # Header and separator lines present
+    assert "NAME" in output
+    assert "DESCRIPTION" in output
+    assert "DEFAULT" in output
+    # Data lines have consistent column positions (all start with 2 spaces)
+    data_lines = [
+        ln
+        for ln in output.splitlines()
+        if ln.startswith("  ") and "---" not in ln and "NAME" not in ln and ln.strip()
+    ]
+    assert len(data_lines) >= 1

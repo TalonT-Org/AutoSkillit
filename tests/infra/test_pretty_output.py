@@ -1177,7 +1177,9 @@ class TestFormatterSchemaConsistency:
         # Generate a real diagram into tmp_path (avoids blocked diagrams/ dir)
         recipes_dir = pkg_root() / "recipes"
         recipe_path = recipes_dir / "smoke-test.yaml"
-        diagram = generate_recipe_diagram(recipe_path, recipes_dir, out_dir=tmp_path)
+        diagram = generate_recipe_diagram(
+            recipe_path, recipes_dir, out_dir=tmp_path
+        ).render_markdown()
         assert diagram, "generate_recipe_diagram returned empty diagram for smoke-test"
 
         # Build a LoadRecipeResult-shaped payload with the real diagram
@@ -1202,6 +1204,7 @@ class TestFormatterSchemaConsistency:
         assert "fake-yaml-suppressed" not in formatted, (
             "Raw YAML content must be suppressed by _fmt_load_recipe — found in formatter output."
         )
+
 
 # ---------------------------------------------------------------------------
 # Output-equivalence: hook inline formatter ≡ TelemetryFormatter.format_compact_kv
@@ -1288,7 +1291,6 @@ def test_fmt_get_timing_summary_renders_compact():
     assert "dur:4s" in rendered
     assert "dur:8m 12s" in rendered
     assert "total:" in rendered
-
 
 
 # Issue #346

@@ -955,22 +955,27 @@ class TestCookDiagram:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
     ) -> None:
-        """T3-D: cook command prints the diagram to terminal before launching Claude session."""
+        """T3-D: cook command prints a terminal-friendly diagram summary before launching."""
         import autoskillit.recipe as _recipe_mod
 
         self._setup_recipe(tmp_path, monkeypatch)
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
-        diagram_text = "## test-script\n### Graph\ndone\n"
         monkeypatch.setattr(_recipe_mod, "check_diagram_staleness", lambda *a, **kw: False)
-        monkeypatch.setattr(_recipe_mod, "load_recipe_diagram", lambda *a, **kw: diagram_text)
+        monkeypatch.setattr(_recipe_mod, "load_recipe_diagram", lambda *a, **kw: "## md diagram")
 
         cli.cook("test-script")
 
         captured = capsys.readouterr()
-        assert "## test-script" in captured.out, "Diagram was not printed to terminal"
-        assert "### Graph" in captured.out
+        # Recipe name appears in terminal output (without ## prefix)
+        assert "TEST-SCRIPT" in captured.out, "Recipe name not printed to terminal"
+        # No raw Markdown syntax in terminal output
+        assert "<!--" not in captured.out, "HTML comments must not appear in terminal output"
+        assert "|---" not in captured.out, "Markdown table separators must not appear"
+        assert not any(line.lstrip().startswith("## ") for line in captured.out.splitlines()), (
+            "Markdown headings must not appear in terminal output"
+        )
 
 
 class TestRecipesCLI:

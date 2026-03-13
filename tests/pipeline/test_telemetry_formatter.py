@@ -159,6 +159,48 @@ class TestFormatTimingTable:
 
 
 # ---------------------------------------------------------------------------
+# format_token_table_terminal
+# ---------------------------------------------------------------------------
+
+
+class TestFormatTokenTableTerminal:
+    def test_contains_no_markdown_syntax(self) -> None:
+        """Terminal token table must not contain Markdown pipe tables or headings."""
+        result = TelemetryFormatter.format_token_table_terminal(_STEPS, _TOTAL)
+        assert "<!--" not in result
+        assert "|---" not in result
+        assert not any(line.lstrip().startswith("## ") for line in result.splitlines())
+        assert "**Total**" not in result
+
+    def test_contains_step_data(self) -> None:
+        """Terminal token table preserves all data from the Markdown version."""
+        result = TelemetryFormatter.format_token_table_terminal(_STEPS, _TOTAL)
+        assert "investigate" in result
+        assert "7.0k" in result
+
+
+# ---------------------------------------------------------------------------
+# format_timing_table_terminal
+# ---------------------------------------------------------------------------
+
+
+class TestFormatTimingTableTerminal:
+    def test_contains_no_markdown_syntax(self) -> None:
+        """Terminal timing table must not contain Markdown pipe tables or headings."""
+        result = TelemetryFormatter.format_timing_table_terminal(_TIMING_STEPS, _TIMING_TOTAL)
+        assert "<!--" not in result
+        assert "|---" not in result
+        assert not any(line.lstrip().startswith("## ") for line in result.splitlines())
+        assert "**Total**" not in result
+
+    def test_contains_step_data(self) -> None:
+        """Terminal timing table preserves all data from the Markdown version."""
+        result = TelemetryFormatter.format_timing_table_terminal(_TIMING_STEPS, _TIMING_TOTAL)
+        assert "clone" in result
+        assert "implement" in result
+
+
+# ---------------------------------------------------------------------------
 # format_compact_kv
 # ---------------------------------------------------------------------------
 

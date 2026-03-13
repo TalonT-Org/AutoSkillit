@@ -362,6 +362,7 @@ class TestCLICook:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
 
         with pytest.raises(SystemExit) as exc_info:
             cli.cook("test-script")
@@ -400,6 +401,7 @@ class TestCLICook:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
@@ -441,6 +443,7 @@ class TestCLICook:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
@@ -480,6 +483,7 @@ class TestCLICook:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
@@ -501,6 +505,7 @@ class TestCLICook:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=42, stdout="", stderr=""
         )
@@ -555,13 +560,13 @@ class TestCLICook:
         assert exc_info.value.code == 1
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_named_recipe_skips_prompt(
+    def test_cook_named_recipe_skips_picker_prompt(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cook does not prompt for recipe when name is provided directly."""
+        """cook skips picker when name is provided; only confirmation prompt fires."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -572,12 +577,13 @@ class TestCLICook:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        input_called = []
-        monkeypatch.setattr("builtins.input", lambda *a, **kw: input_called.append(1) or "")
+        prompts_seen: list[str] = []
+        monkeypatch.setattr("builtins.input", lambda prompt="": prompts_seen.append(prompt) or "")
 
         cli.cook("test-script")
 
-        assert not input_called, "input() must not be called when recipe name is provided"
+        assert len(prompts_seen) == 1, "input() should be called exactly once (confirmation)"
+        assert "Launch session" in prompts_seen[0]
 
     @patch("autoskillit.cli.subprocess.run")
     def test_cook_uses_dangerously_skip_permissions(
@@ -593,6 +599,7 @@ class TestCLICook:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
@@ -866,6 +873,7 @@ class TestCookDisplayOwnership:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         return scripts_dir
 
     @patch("autoskillit.cli.subprocess.run")
@@ -893,14 +901,14 @@ class TestCookDisplayOwnership:
         assert "on_success:" not in system_prompt
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_does_not_print_recipe_before_launch(
+    def test_cook_prints_recipe_diagram_before_launch(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
     ) -> None:
-        """cook() must not dump recipe info to terminal. Display is Claude's job."""
+        """cook() renders recipe diagram to terminal before launching Claude session."""
         self._setup_recipe(tmp_path, monkeypatch)
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
@@ -909,10 +917,8 @@ class TestCookDisplayOwnership:
         cli.cook("test-script")
 
         captured = capsys.readouterr()
-        assert "TEST-SCRIPT" not in captured.out, (
-            "Recipe name must not be pre-rendered to terminal"
-        )
-        assert "Kitchen Rules" not in captured.out, "Kitchen rules must not appear before launch"
+        assert "TEST-SCRIPT" in captured.out, "Recipe name should be rendered to terminal"
+        assert "Kitchen Rules" in captured.out, "Kitchen rules should appear before launch"
 
     @patch("autoskillit.cli.subprocess.run")
     def test_cook_system_prompt_instructs_load_recipe(

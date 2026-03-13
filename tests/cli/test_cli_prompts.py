@@ -77,6 +77,25 @@ def test_orchestrator_prompt_instructs_load_recipe_first():
     assert "collect" in prompt[lr_idx:].lower() or "ingredient" in prompt[lr_idx:].lower()
 
 
+def test_orchestrator_prompt_contains_greeting_pool():
+    """Orchestrator prompt includes food-service greetings with the recipe name."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my-recipe")
+    assert "Good Burger" in prompt
+    assert "Today's special" in prompt
+    assert "my-recipe" in prompt
+
+
+def test_orchestrator_prompt_no_diagram():
+    """Orchestrator prompt must not contain diagram content."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my-recipe")
+    assert "### Graph" not in prompt
+    assert "### Inputs" not in prompt
+
+
 # T2-C (updated for single-parameter signature)
 def test_build_orchestrator_prompt_single_param():
     """Calling with a single recipe name returns a valid prompt."""

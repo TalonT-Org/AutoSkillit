@@ -433,6 +433,7 @@ def cook(recipe: str | None = None):
     """
     from autoskillit.cli._prompts import _build_orchestrator_prompt
     from autoskillit.recipe import (
+        build_recipe_diagram,
         find_recipe_by_name,
         list_recipes,
         load_recipe,
@@ -501,6 +502,14 @@ def cook(recipe: str | None = None):
         for err in errors:
             print(f"  - {err}")
         sys.exit(1)
+
+    diagram = build_recipe_diagram(parsed, _match.path)
+    print(diagram.render_terminal())
+
+    confirm = input("Launch session? [Y/n]: ").strip().lower()
+    if confirm in ("n", "no"):
+        return
+
     _launch_cook_session(_build_orchestrator_prompt(recipe))
 
 

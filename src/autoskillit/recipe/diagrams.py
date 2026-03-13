@@ -716,6 +716,44 @@ class RecipeDiagram:
             format_version=DIAGRAM_FORMAT_VERSION,
         )
 
+    def render_terminal(self) -> str:
+        """Render as plain text for terminal display."""
+        lines: list[str] = []
+        lines.append(self.name.upper())
+        lines.append(self.description)
+        lines.append("")
+
+        if self.flow_summary and self.flow_summary.strip():
+            lines.append(f"Flow: {self.flow_summary}")
+            lines.append("")
+
+        lines.append(self.graph_text)
+        lines.append("")
+
+        if self.input_rows:
+            name_w = max(len(r.name) for r in self.input_rows)
+            desc_w = max(len(r.description) for r in self.input_rows)
+            name_w = max(name_w, 4)
+            desc_w = max(desc_w, 11)
+            lines.append(f"  {'NAME':<{name_w}}  {'DESCRIPTION':<{desc_w}}  DEFAULT")
+            lines.append(f"  {'-' * name_w}  {'-' * desc_w}  {'-' * 7}")
+            for row in self.input_rows:
+                lines.append(
+                    f"  {row.name:<{name_w}}  {row.description:<{desc_w}}  {row.default_display}"
+                )
+
+        if self.agent_managed:
+            lines.append(f"\n  Agent-managed: {', '.join(self.agent_managed)}")
+
+        if self.kitchen_rules:
+            lines.append("")
+            lines.append("Kitchen Rules:")
+            for rule in self.kitchen_rules:
+                lines.append(f"  - {rule}")
+
+        lines.append("")
+        return "\n".join(lines)
+
     def render_markdown(self) -> str:
         """Render as Markdown suitable for .md files, MCP responses, and Claude prompts."""
         input_lines = [

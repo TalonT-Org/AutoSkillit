@@ -37,12 +37,29 @@ def _resolve_recipe_input(raw: str, available: list[RecipeInfo]) -> RecipeInfo |
     return next((r for r in available if r.name == raw), None)
 
 
+_COOK_GREETINGS: list[str] = [
+    (
+        "Welcome to Good Burger, home of the Good Burger, "
+        "can I take your order? Today's special: {recipe_name}."
+    ),
+    "Order up! Today's special: {recipe_name}. What ingredients are we working with?",
+    "Table for one! Today's special: {recipe_name}. Ready when you are.",
+    "Fresh off the menu — today's special: {recipe_name}. What can I get started for you?",
+]
+
+_OPEN_KITCHEN_GREETINGS: list[str] = [
+    "Welcome to Good Burger, home of the Good Burger, can I take your order?",
+    "Kitchen's open! What are we cooking today?",
+    "Order up! The kitchen is ready. What can I get you?",
+]
+
+
 def _build_orchestrator_prompt(recipe_name: str) -> str:
     """Build the --append-system-prompt content for a cook session.
 
-    The prompt contains only behavioral instructions (routing rules, failure
-    predicates, orchestrator discipline). Recipe content is discovered by the
-    session via ``load_recipe`` — the CLI never injects YAML or diagrams.
+    The prompt contains behavioral instructions (routing rules, failure
+    predicates, orchestrator discipline) and a greeting pool. Recipe content
+    is discovered by the session via ``load_recipe``.
     """
     # Inject sous-chef global orchestration rules (graceful degradation if absent)
     sous_chef_content = ""
@@ -50,14 +67,21 @@ def _build_orchestrator_prompt(recipe_name: str) -> str:
     if _sous_chef_path.exists():
         sous_chef_content = "\n\n" + _sous_chef_path.read_text()
 
+    formatted_greetings = "\n".join(
+        f"- {g.format(recipe_name=recipe_name)}" for g in _COOK_GREETINGS
+    )
+
     return f"""\
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
 FIRST ACTION — before prompting for any inputs:
-0. Call open_kitchen to reveal kitchen tools and enable the gate.
+0. Display ONE of these greetings (pick randomly, do not show more than one):
+{formatted_greetings}
+1. Call open_kitchen to reveal kitchen tools and enable the gate.
    Without this step, no kitchen tools are accessible.
-1. Call load_recipe('{recipe_name}') to load and display the recipe.
-2. Display the recipe overview from load_recipe's response.
+2. Call load_recipe('{recipe_name}') to load the recipe data for execution.
+   The user has already seen the recipe overview in the terminal — do NOT
+   re-display it. Just load the data silently.
 3. Collect ingredients from the user conversationally.
 4. Execute the pipeline steps.
 
@@ -126,9 +150,13 @@ def _build_open_kitchen_prompt() -> str:
     if _sous_chef_path.exists():
         sous_chef_content = "\n\n" + _sous_chef_path.read_text()
 
+    formatted_greetings = "\n".join(f"- {g}" for g in _OPEN_KITCHEN_GREETINGS)
+
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
-        "Call the open_kitchen tool now to open the AutoSkillit kitchen and gain access to "
+        "Display ONE of these greetings (pick randomly, do not show more than one):\n"
+        f"{formatted_greetings}\n\n"
+        "Then call the open_kitchen tool to open the AutoSkillit kitchen and gain access to "
         "all automation tools. Then call the kitchen_status tool to display version "
         "and health information to the user.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"

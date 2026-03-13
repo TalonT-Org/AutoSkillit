@@ -173,6 +173,7 @@ class TestToolRegistration:
             "claim_issue",
             "release_issue",
             "wait_for_ci",
+            "wait_for_merge_queue",
             "get_ci_status",
             "open_kitchen",
             "close_kitchen",

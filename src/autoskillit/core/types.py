@@ -404,6 +404,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "bulk_close_issues",
         "check_pr_mergeable",
         "set_commit_status",
+        "wait_for_merge_queue",
     }
 )
 
@@ -456,6 +457,7 @@ TOOL_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "claim_issue",
             "release_issue",
             "wait_for_ci",
+            "wait_for_merge_queue",
             "get_pr_reviews",
             "bulk_close_issues",
         ),
@@ -875,6 +877,25 @@ class CIWatcher(Protocol):
         repo: str | None = None,
         run_id: int | None = None,
         cwd: str = "",
+    ) -> dict[str, Any]: ...
+
+
+@runtime_checkable
+class MergeQueueWatcher(Protocol):
+    """Protocol for watching a PR's progress through GitHub's merge queue.
+
+    Implementations must never raise — all errors must be captured and
+    returned in the result dict with appropriate pr_state values.
+    """
+
+    async def wait(
+        self,
+        pr_number: int,
+        target_branch: str,
+        repo: str | None = None,
+        cwd: str = ".",
+        timeout_seconds: int = 600,
+        poll_interval: int = 15,
     ) -> dict[str, Any]: ...
 
 

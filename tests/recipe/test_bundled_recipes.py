@@ -223,10 +223,10 @@ class TestImplementationPipelineStructure:
         assert all(v.severity == Severity.WARNING for v in violations)
 
     def test_ip_open_pr_step_routes_to_review_pr(self, recipe) -> None:
-        """open_pr_step.on_success must be review_pr — review loop inserted before ci_watch."""
+        """open_pr_step.on_success routes to extract_pr_number before review_pr."""
         open_pr_step = recipe.steps["open_pr_step"]
-        assert open_pr_step.on_success == "review_pr", (
-            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
+        assert open_pr_step.on_success == "extract_pr_number", (
+            "open_pr_step must route to extract_pr_number"
         )
 
     def test_ip_open_pr_step_has_skip_when_false(self, recipe) -> None:
@@ -354,9 +354,9 @@ class TestImplementationPipelineStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_ip_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> confirm_cleanup; on_failure -> diagnose_ci."""
+        """T_CI2: ci_watch on_success -> check_merge_queue; on_failure -> diagnose_ci."""
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "confirm_cleanup"
+        assert step.on_success == "check_merge_queue"
         assert step.on_failure == "diagnose_ci"
         assert "release_issue_success" not in recipe.steps
 
@@ -399,10 +399,10 @@ class TestImplementationPipelineStructure:
         assert "context.remote_url" in with_args["remote_url"]
 
     def test_ip_open_pr_step_routes_to_review_pr_ci(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success is now review_pr (review loop before ci_watch)."""
+        """T_CI8: open_pr_step.on_success routes to extract_pr_number before review_pr."""
         step = recipe.steps["open_pr_step"]
-        assert step.on_success == "review_pr", (
-            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
+        assert step.on_success == "extract_pr_number", (
+            "open_pr_step must route to extract_pr_number"
         )
 
 
@@ -766,9 +766,9 @@ class TestInvestigateFirstStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_if_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> confirm_cleanup; on_failure -> diagnose_ci."""
+        """T_CI2: ci_watch on_success -> check_merge_queue; on_failure -> diagnose_ci."""
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "confirm_cleanup"
+        assert step.on_success == "check_merge_queue"
         assert step.on_failure == "diagnose_ci"
         assert "release_issue_success" not in recipe.steps
 
@@ -811,10 +811,10 @@ class TestInvestigateFirstStructure:
         assert "context.remote_url" in with_args["remote_url"]
 
     def test_if_open_pr_step_routes_to_review_pr(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success is review_pr (review loop before ci_watch)."""
+        """T_CI8: open_pr_step.on_success routes to extract_pr_number before review_pr."""
         step = recipe.steps["open_pr_step"]
-        assert step.on_success == "review_pr", (
-            "open_pr_step must route to review_pr — review loop runs before ci_watch now"
+        assert step.on_success == "extract_pr_number", (
+            "open_pr_step must route to extract_pr_number"
         )
 
     def test_if_resolve_review_uses_resolve_review_skill(self, recipe) -> None:
@@ -1257,8 +1257,23 @@ class TestReviewPrRecipeIntegration:
         return load_recipe(builtin_recipes_dir() / request.param)
 
     def test_open_pr_step_routes_to_review_pr(self, recipe: object) -> None:
-        """T_RP1: open_pr_step.on_success must be review_pr in all three recipes."""
-        assert recipe.steps["open_pr_step"].on_success == "review_pr"  # type: ignore[attr-defined]
+        """T_RP1: open_pr_step.on_success routes per-recipe to the correct next step.
+
+        Queue-aware recipes (implementation, remediation) insert extract_pr_number between
+        open_pr_step and review_pr to capture the PR number for merge queue support.
+        Non-queue recipes (implementation-groups) route directly to review_pr.
+        """
+        _expected: dict[str, str] = {
+            "implementation": "extract_pr_number",
+            "remediation": "extract_pr_number",
+            "implementation-groups": "review_pr",
+        }
+        recipe_name = recipe.name  # type: ignore[attr-defined]
+        expected = _expected[recipe_name]
+        on_success = recipe.steps["open_pr_step"].on_success  # type: ignore[attr-defined]
+        assert on_success == expected, (
+            f"{recipe_name}: open_pr_step.on_success must be {expected!r}, got {on_success!r}"
+        )
 
     def test_review_pr_step_exists_and_is_run_skill(self, recipe: object) -> None:
         """T_RP2: review_pr step exists and uses run_skill tool."""

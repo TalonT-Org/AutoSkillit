@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import json
 import os
+import re
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -440,6 +442,29 @@ def _find_recipe(name: str, cwd: Path) -> Any:
     This function provides the architecture-compliant bridge to autoskillit.recipe.
     """
     return find_recipe_by_name(name, cwd)
+
+
+async def infer_repo_from_remote(cwd: str) -> str:
+    """Return 'owner/repo' from git remote URL, or '' on failure."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git",
+            "remote",
+            "get-url",
+            "origin",
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode != 0:
+            return ""
+        url = stdout.decode().strip()
+        m = re.search(r"github\.com[:/](.+?)(?:\.git)?$", url)
+        return m.group(1) if m else ""
+    except Exception as exc:
+        logger.warning("infer_repo_from_remote.error", exc=str(exc), exc_info=True)
+        return ""
 
 
 async def _prime_quota_cache() -> None:

@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 38 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 25 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 53 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 39 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, wait_for_merge_queue, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 26 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 53 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -136,6 +136,7 @@ src/autoskillit/
 │   ├── _process_race.py     #   RaceAccumulator, RaceSignals, resolve_termination, _watch_*
 │   ├── quota.py             #   Quota-aware check: QuotaStatus, cache, fetch, check_and_sleep_if_needed
 │   ├── ci.py                #   GitHub Actions CI watcher service (L1, httpx-based, never raises)
+│   ├── merge_queue.py       #   GitHub merge queue watcher service (L1, httpx-based, never raises)
 │   ├── github.py            #   GitHub issue fetcher (L1, httpx-based, never raises)
 │   ├── session.py           #   ClaudeSessionResult, SkillResult, extract_token_usage
 │   └── testing.py           #   Pytest output parsing and pass/fail adjudication
@@ -181,7 +182,7 @@ src/autoskillit/
 │   ├── git.py               #   Git merge workflow for merge_worktree (perform_merge)
 │   ├── helpers.py           #   Shared server-layer helpers (worktree setup, path utilities)
 │   ├── tools_kitchen.py     #   open_kitchen, close_kitchen tool handlers + recipe:// resource
-│   ├── tools_ci.py          #   wait_for_ci, get_ci_status tool handlers
+│   ├── tools_ci.py          #   wait_for_ci, get_ci_status, wait_for_merge_queue tool handlers
 │   ├── tools_clone.py       #   clone_repo, remove_clone, push_to_remote tool handlers
 │   ├── tools_execution.py   #   run_cmd, run_python, run_skill tool handlers
 │   ├── tools_git.py         #   merge_worktree, classify_fix, create_unique_branch, check_pr_mergeable tool handlers

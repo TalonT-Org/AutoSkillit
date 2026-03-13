@@ -436,7 +436,8 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         # BFS: collect all steps reachable from this step
         reachable = _bfs_reachable(graph, step_name)
 
-        # Collect all context.X references in reachable steps' with_args
+        # Collect all context.X references in reachable steps' with_args and
+        # on_result condition when-expressions (route actions gate on context vars).
         consumed: set[str] = set()
         for reachable_name in reachable:
             reachable_step = recipe.steps[reachable_name]
@@ -444,6 +445,10 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                 if not isinstance(arg_val, str):
                     continue
                 consumed.update(_CONTEXT_REF_RE.findall(arg_val))
+            if reachable_step.on_result and reachable_step.on_result.conditions:
+                for cond in reachable_step.on_result.conditions:
+                    if cond.when and isinstance(cond.when, str):
+                        consumed.update(_CONTEXT_REF_RE.findall(cond.when))
 
         # on_result routing — both legacy field and predicate conditions count
         # as structural consumption of captured variables.

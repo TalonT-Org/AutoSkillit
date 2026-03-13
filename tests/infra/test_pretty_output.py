@@ -1157,7 +1157,6 @@ class TestFormatterSchemaConsistency:
                 f"Field '{key}' value missing from formatted kitchen_status output"
             )
 
-
     def test_fmt_load_recipe_with_real_diagram(self, tmp_path) -> None:
         """PHK-E3: _fmt_load_recipe must handle real generate_recipe_diagram() output correctly.
 

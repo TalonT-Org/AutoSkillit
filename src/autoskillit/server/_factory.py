@@ -19,6 +19,7 @@ from autoskillit.execution import (
     DefaultDatabaseReader,
     DefaultGitHubFetcher,
     DefaultHeadlessExecutor,
+    DefaultMergeQueueWatcher,
     DefaultTestRunner,
 )
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
@@ -113,6 +114,7 @@ def make_context(
         clone_mgr=DefaultCloneManager(),
         github_client=DefaultGitHubFetcher(token=github_token),
         ci_watcher=DefaultCIWatcher(token=github_token),
+        merge_queue_watcher=DefaultMergeQueueWatcher(token=github_token),
         session_skill_manager=session_mgr,
     )
 

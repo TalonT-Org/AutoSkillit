@@ -394,7 +394,7 @@ class TestClaimReleaseGates:
 
     def test_ci_watch_on_success_routing(self):
         expected = {
-            **{name: "confirm_cleanup" for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS},
+            **{name: "check_merge_queue" for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS},
             **{name: "release_issue_success" for name in self.RECIPES_WITH_RELEASE_SUCCESS},
         }
         assert set(expected) == set(self.RECIPES), (

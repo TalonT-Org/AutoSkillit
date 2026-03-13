@@ -37,6 +37,7 @@ from autoskillit.execution.linux_tracing import (
     read_starttime_ticks,
     start_linux_tracing,
 )
+from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
     run_managed_async,
@@ -88,6 +89,8 @@ __all__ = [
     "DefaultTestRunner",
     # ci
     "DefaultCIWatcher",
+    # merge_queue
+    "DefaultMergeQueueWatcher",
     # db
     "execute_readonly_query",
     "DefaultDatabaseReader",

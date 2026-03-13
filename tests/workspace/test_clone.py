@@ -239,13 +239,22 @@ class TestCloneRepo:
         assert "clone_path" in result
         assert "unpublished_branch" not in result
 
-    def test_strategy_proceed_bypasses_unpublished_guard(self, local_with_remote: Path) -> None:
-        """strategy='proceed' bypasses the unpublished_branch guard."""
-        result = clone_repo(
-            str(local_with_remote), "test-run", branch="feature/local-only", strategy="proceed"
-        )
-        # Guard bypassed — clone proceeds (NOT an unpublished warning)
-        assert "unpublished_branch" not in result
+    def test_strategy_proceed_with_unpublished_branch_fails_from_remote(
+        self, local_with_remote: Path
+    ) -> None:
+        """strategy='proceed' with unpublished branch now fails — remote is always used.
+
+        Previously 'proceed' bypassed the guard by silently falling back to the
+        local path. After the fix the clone always targets the remote, so a branch
+        that doesn't exist on the remote causes git clone to fail.
+        """
+        with pytest.raises(RuntimeError, match="git clone failed"):
+            clone_repo(
+                str(local_with_remote),
+                "test-run",
+                branch="feature/local-only",
+                strategy="proceed",
+            )
 
 
 def test_clone_output_stays_within_test_isolation_boundary(tmp_path: Path, git_repo: Path) -> None:
@@ -936,7 +945,11 @@ class TestPushToRemoteNonBare:
     def test_clone_repo_returns_remote_url(self, tmp_path: Path) -> None:
         """clone_repo result dict includes remote_url field."""
         remote = tmp_path / "remote.git"
-        subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "init", "--bare", "--initial-branch=main", str(remote)],
+            check=True,
+            capture_output=True,
+        )
         source = tmp_path / "source"
         subprocess.run(["git", "clone", str(remote), str(source)], check=True, capture_output=True)
         subprocess.run(
@@ -951,6 +964,11 @@ class TestPushToRemoteNonBare:
         )
         subprocess.run(
             ["git", "-C", str(source), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "push", "-u", "origin", "HEAD:main"],
             check=True,
             capture_output=True,
         )
@@ -1272,3 +1290,75 @@ class TestCloneRemoteUrlResolution:
             assert result["remote_url"] == str(bare_remote)
         finally:
             shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    # T1-D
+    def test_clone_uses_remote_when_branch_not_on_remote(
+        self, local_with_remote: Path, bare_remote: Path
+    ) -> None:
+        """Regression: clone always uses remote URL even when branch not on remote.
+
+        Previously _resolve_clone_source fell back to the local path when ls-remote
+        did not find the branch on the remote. After the fix it always uses the
+        remote URL when one is configured, so git clone fails (correctly) instead
+        of silently cloning local state.
+        """
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run",
+            wraps=subprocess.run,
+        ) as spy:
+            with pytest.raises(RuntimeError, match="git clone failed"):
+                clone_repo(
+                    str(local_with_remote),
+                    "test",
+                    branch="feature/local-only",
+                    strategy="proceed",
+                )
+        clone_calls = [
+            call
+            for call in spy.call_args_list
+            if call[0] and isinstance(call[0][0], list) and call[0][0][:2] == ["git", "clone"]
+        ]
+        assert len(clone_calls) == 1, "Expected exactly one git clone call"
+        cmd = clone_calls[0][0][0]
+        # Extract positional args from git clone, skipping flags and their values.
+        # Handles any optional flags (--branch, --no-hardlinks, --depth, etc.)
+        # without relying on a fixed index like [-2].
+        positional: list[str] = []
+        i = cmd.index("clone") + 1
+        while i < len(cmd):
+            if cmd[i].startswith("-"):
+                i += 2  # skip flag and its value
+            else:
+                positional.append(cmd[i])
+                i += 1
+        assert len(positional) == 2, f"Expected [source, target] in clone cmd: {cmd}"
+        clone_source = positional[0]
+        assert clone_source == str(bare_remote), (
+            f"Expected remote URL {bare_remote!r} as clone source, "
+            f"got {clone_source!r} — local path fallback detected"
+        )
+
+
+class TestResolveCloneSource:
+    """Unit tests for _resolve_clone_source."""
+
+    def test_returns_url_when_configured(self, tmp_path: Path) -> None:
+        from autoskillit.workspace.clone import _resolve_clone_source
+
+        source = tmp_path / "repo"
+        url = "https://github.com/example/repo.git"
+        assert _resolve_clone_source(source, url) == url
+
+    def test_returns_local_path_when_no_url(self, tmp_path: Path) -> None:
+        from autoskillit.workspace.clone import _resolve_clone_source
+
+        source = tmp_path / "repo"
+        assert _resolve_clone_source(source, "") == str(source)
+
+    def test_url_returned_regardless_of_branch_existence(self, tmp_path: Path) -> None:
+        """No branch parameter — URL is always returned when available."""
+        from autoskillit.workspace.clone import _resolve_clone_source
+
+        source = tmp_path / "repo"
+        url = "git@github.com:example/repo.git"
+        assert _resolve_clone_source(source, url) == url

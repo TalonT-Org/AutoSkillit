@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from autoskillit.core.types import Severity
+from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     get_skill_contract,

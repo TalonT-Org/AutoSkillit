@@ -153,11 +153,7 @@ skills:
     - name: workspace
       type: directory_path
       required: true
-    outputs:
-    - name: summary_path
-      type: file_path
-    expected_output_patterns:
-    - "summary_path\\s*=\\s*.+"
+    outputs: []
   rectify:
     inputs:
     - name: investigation_path

@@ -26,7 +26,7 @@ from autoskillit.workspace import bundled_skills_dir
 def test_load_bundled_manifest() -> None:
     manifest = load_bundled_manifest()
     assert manifest["version"] == "0.1.0"
-    assert len(manifest["skills"]) >= 40
+    assert len(manifest["skills"]) >= 39
     assert "implement-worktree" in manifest["skills"]
     assert "investigate" in manifest["skills"]
     assert "write-recipe" in manifest["skills"]
@@ -511,7 +511,6 @@ FILE_PRODUCING_SKILLS_WITH_CONTRACTS: list[str] = [
     "triage-issues",
     "analyze-prs",
     "merge-pr",
-    "pipeline-summary",
     "open-pr",
     "create-review-pr",
     "implement-worktree",

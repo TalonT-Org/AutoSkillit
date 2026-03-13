@@ -242,19 +242,6 @@ class TestSkillResolver:
             "review-approach": "temp/review-approach/",
             "setup-project": "temp/setup-project/",
             "triage-issues": "temp/triage-issues/",
-            "arch-lens-c4-container": "temp/autoskillit:arch-lens-c4-container/",
-            "arch-lens-concurrency": "temp/autoskillit:arch-lens-concurrency/",
-            "arch-lens-data-lineage": "temp/autoskillit:arch-lens-data-lineage/",
-            "arch-lens-deployment": "temp/autoskillit:arch-lens-deployment/",
-            "arch-lens-development": "temp/autoskillit:arch-lens-development/",
-            "arch-lens-error-resilience": "temp/autoskillit:arch-lens-error-resilience/",
-            "arch-lens-module-dependency": "temp/autoskillit:arch-lens-module-dependency/",
-            "arch-lens-operational": "temp/autoskillit:arch-lens-operational/",
-            "arch-lens-process-flow": "temp/autoskillit:arch-lens-process-flow/",
-            "arch-lens-repository-access": "temp/autoskillit:arch-lens-repository-access/",
-            "arch-lens-scenarios": "temp/autoskillit:arch-lens-scenarios/",
-            "arch-lens-security": "temp/autoskillit:arch-lens-security/",
-            "arch-lens-state-lifecycle": "temp/autoskillit:arch-lens-state-lifecycle/",
         }
         bd = bundled_skills_dir()
         failures: list[str] = []

@@ -1197,32 +1197,36 @@ def test_smoke_check_summary_has_error_escalation() -> None:
 
 
 def test_audit_impl_skill_md_emits_verdict_and_remediation_path() -> None:
-    """1b: audit-impl SKILL.md must contain verdict= and remediation_path= emit lines."""
+    """1b: audit-impl SKILL.md must contain verdict and remediation_path emit lines."""
     from autoskillit.core.paths import pkg_root
 
     content = (pkg_root() / "skills" / "audit-impl" / "SKILL.md").read_text()
-    assert "verdict=" in content, "audit-impl SKILL.md missing 'verdict=' emit line"
-    assert "remediation_path=" in content, (
-        "audit-impl SKILL.md missing 'remediation_path=' emit line"
+    assert "verdict = " in content, "audit-impl SKILL.md missing 'verdict = ' emit line"
+    assert "remediation_path = " in content, (
+        "audit-impl SKILL.md missing 'remediation_path = ' emit line"
     )
 
 
 def test_review_approach_skill_md_emits_review_path() -> None:
-    """1c: review-approach SKILL.md must contain review_path= emit line."""
+    """1c: review-approach SKILL.md must contain review_path emit line."""
     from autoskillit.core.paths import pkg_root
 
     content = (pkg_root() / "skills" / "review-approach" / "SKILL.md").read_text()
-    assert "review_path=" in content, "review-approach SKILL.md missing 'review_path=' emit line"
+    assert "review_path = " in content, (
+        "review-approach SKILL.md missing 'review_path = ' emit line"
+    )
 
 
 def test_make_groups_skill_md_emits_group_files() -> None:
-    """1d: make-groups SKILL.md must contain group_files=, groups_path=, manifest_path= lines."""
+    """1d: make-groups SKILL.md must contain group_files, groups_path, manifest_path lines."""
     from autoskillit.core.paths import pkg_root
 
     content = (pkg_root() / "skills" / "make-groups" / "SKILL.md").read_text()
-    assert "group_files=" in content, "make-groups SKILL.md missing 'group_files=' emit line"
-    assert "groups_path=" in content, "make-groups SKILL.md missing 'groups_path=' emit line"
-    assert "manifest_path=" in content, "make-groups SKILL.md missing 'manifest_path=' emit line"
+    assert "group_files = " in content, "make-groups SKILL.md missing 'group_files = ' emit line"
+    assert "groups_path = " in content, "make-groups SKILL.md missing 'groups_path = ' emit line"
+    assert "manifest_path = " in content, (
+        "make-groups SKILL.md missing 'manifest_path = ' emit line"
+    )
 
 
 # ---------------------------------------------------------------------------

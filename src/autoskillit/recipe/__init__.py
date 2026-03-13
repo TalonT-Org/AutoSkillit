@@ -20,7 +20,9 @@ from autoskillit.recipe import rules_tools as _rules_tools  # noqa: E402 F401
 from autoskillit.recipe import rules_verdict as _rules_verdict  # noqa: E402 F401
 from autoskillit.recipe import rules_worktree as _rules_worktree  # noqa: E402 F401
 from autoskillit.recipe._api import (  # noqa: E402
+    ListRecipesResult,
     LoadRecipeResult,
+    RecipeListItem,
     format_recipe_list_response,
     list_all,
     load_and_validate,
@@ -68,7 +70,9 @@ from autoskillit.recipe.validator import (  # noqa: E402
 )
 
 __all__ = [
+    "ListRecipesResult",
     "LoadRecipeResult",
+    "RecipeListItem",
     "Recipe",
     "RecipeInfo",
     "RecipeStep",

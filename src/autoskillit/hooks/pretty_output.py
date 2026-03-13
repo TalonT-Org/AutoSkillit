@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.recipe._api import LoadRecipeResult
+    from autoskillit.recipe._api import ListRecipesResult, LoadRecipeResult
 
 _HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", "temp", ".autoskillit_hook_config.json")
 _CHECK_MARK = "\u2713"  # ✓
@@ -349,20 +349,54 @@ def _fmt_clone_repo(data: dict, _pipeline: bool) -> str:
     return "\n".join(lines)
 
 
+# Field coverage contract for _fmt_load_recipe ↔ LoadRecipeResult
+_FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
+    {
+        "valid",
+        "diagram",
+        "suggestions",
+        "kitchen_rules",
+        "error",
+        "greeting",
+    }
+)
+_FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
+    {
+        "content",  # PHK-43: raw YAML deliberately hidden from Claude
+    }
+)
+
+
 def _fmt_load_recipe(data: LoadRecipeResult, pipeline: bool) -> str:
     """Format load_recipe result as Markdown-KV."""
     if not isinstance(data, dict):
         return "## load_recipe\n\n_(unexpected response type)_"
+
+    # Error short-circuit
+    error = data.get("error")
+    if error:
+        return f"## load_recipe {_CROSS_MARK}\n\n**Error:** {error}"
+
     lines: list[str] = []
     valid = data.get("valid", True)
     mark = _CHECK_MARK if valid else _CROSS_MARK
     lines.append(f"## load_recipe {mark}")
+
+    greeting = data.get("greeting")
+    if greeting:
+        lines.append(f"\n**{greeting}**")
 
     diagram = data.get("diagram")
     if diagram:
         lines.append(diagram)
     else:
         lines.append("_(no diagram available)_")
+
+    kitchen_rules = data.get("kitchen_rules") or []
+    if kitchen_rules:
+        lines.append("\n**Kitchen Rules:**")
+        for rule in kitchen_rules:
+            lines.append(f"  - {rule}")
 
     suggestions = data.get("suggestions") or []
     if suggestions:
@@ -380,7 +414,28 @@ def _fmt_load_recipe(data: LoadRecipeResult, pipeline: bool) -> str:
     return "\n".join(lines)
 
 
-def _fmt_list_recipes(data: dict, pipeline: bool) -> str:
+# Field coverage contract for _fmt_list_recipes ↔ ListRecipesResult
+_FMT_LIST_RECIPES_RENDERED: frozenset[str] = frozenset(
+    {
+        "recipes",
+        "count",
+        "errors",
+    }
+)
+_FMT_LIST_RECIPES_SUPPRESSED: frozenset[str] = frozenset()
+
+# Field coverage contract for per-item recipe entries ↔ RecipeListItem
+_FMT_RECIPE_LIST_ITEM_RENDERED: frozenset[str] = frozenset(
+    {
+        "name",
+        "description",
+        "summary",
+    }
+)
+_FMT_RECIPE_LIST_ITEM_SUPPRESSED: frozenset[str] = frozenset()
+
+
+def _fmt_list_recipes(data: ListRecipesResult, pipeline: bool) -> str:
     """Format list_recipes result as Markdown-KV."""
     if not isinstance(data, dict):
         return "## list_recipes\n\n_(unexpected response type)_"
@@ -390,7 +445,10 @@ def _fmt_list_recipes(data: dict, pipeline: bool) -> str:
         if isinstance(recipe, dict):
             name = recipe.get("name", "?")
             desc = recipe.get("description", "")
+            summary = recipe.get("summary", "")
             lines.append(f"  - {name}: {desc}" if desc else f"  - {name}")
+            if summary:
+                lines.append(f"    {summary}")
         else:
             lines.append(f"  - {recipe}")
     if len(recipes) > 30:

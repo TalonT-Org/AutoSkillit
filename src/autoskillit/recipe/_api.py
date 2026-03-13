@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import threading
 import time
 from collections.abc import Sequence
@@ -47,6 +48,19 @@ _logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 
+# Greeting pool for load_recipe responses — shared with cli._prompts (canonical source).
+# Duplicated here because server/tools_*.py cannot import from cli/ (L3→L3 cross-package).
+_LOAD_RECIPE_GREETINGS: list[str] = [
+    (
+        "Welcome to Good Burger, home of the Good Burger, "
+        "can I take your order? Today's special: {recipe_name}."
+    ),
+    "Order up! Today's special: {recipe_name}. What ingredients are we working with?",
+    "Table for one! Today's special: {recipe_name}. Ready when you are.",
+    "Fresh off the menu — today's special: {recipe_name}. What can I get started for you?",
+]
+
+
 class LoadRecipeResult(TypedDict, total=False):
     """Typed schema for the load_recipe handler → formatter boundary."""
 
@@ -56,6 +70,23 @@ class LoadRecipeResult(TypedDict, total=False):
     valid: bool
     kitchen_rules: list[str]
     error: str
+    greeting: str
+
+
+class RecipeListItem(TypedDict):
+    """Typed schema for a single recipe entry in the list_recipes response."""
+
+    name: str
+    description: str
+    summary: str
+
+
+class ListRecipesResult(TypedDict, total=False):
+    """Typed schema for the list_recipes handler → formatter boundary."""
+
+    recipes: list[RecipeListItem]
+    count: int
+    errors: list[dict[str, str]]
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +154,7 @@ _LOAD_CACHE_LOCK = threading.Lock()
 
 def format_recipe_list_response(result: LoadResult[RecipeInfo]) -> dict[str, object]:
     """Build the MCP response dict for the list_recipes tool."""
-    items = [
+    items: list[RecipeListItem] = [
         {"name": r.name, "description": r.description, "summary": r.summary} for r in result.items
     ]
     response: dict[str, object] = {
@@ -360,6 +391,7 @@ def load_and_validate(
     # Load pre-generated diagram
     diagram: str | None = load_recipe_diagram(name, recipes_dir)
 
+    greeting = random.choice(_LOAD_RECIPE_GREETINGS).format(recipe_name=name)
     if recipe is not None and recipe.kitchen_rules:
         result: LoadRecipeResult = {
             "content": raw,
@@ -367,9 +399,16 @@ def load_and_validate(
             "suggestions": suggestions,
             "valid": valid,
             "kitchen_rules": recipe.kitchen_rules,
+            "greeting": greeting,
         }
     else:
-        result = {"content": raw, "diagram": diagram, "suggestions": suggestions, "valid": valid}
+        result = {
+            "content": raw,
+            "diagram": diagram,
+            "suggestions": suggestions,
+            "valid": valid,
+            "greeting": greeting,
+        }
 
     # Write to cache (only when recipe was found and fully processed)
     if match is not None:

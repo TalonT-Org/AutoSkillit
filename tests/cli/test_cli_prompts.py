@@ -77,13 +77,13 @@ def test_orchestrator_prompt_instructs_load_recipe_first():
     assert "collect" in prompt[lr_idx:].lower() or "ingredient" in prompt[lr_idx:].lower()
 
 
-def test_orchestrator_prompt_contains_greeting_pool():
-    """Orchestrator prompt includes food-service greetings with the recipe name."""
+def test_orchestrator_prompt_does_not_contain_greeting_pool():
+    """Greetings are delivered via positional arg, not embedded in system prompt."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("my-recipe")
-    assert "Good Burger" in prompt
-    assert "Today's special" in prompt
+    assert "Good Burger" not in prompt
+    assert "Display ONE of these greetings" not in prompt
     assert "my-recipe" in prompt
 
 
@@ -105,3 +105,37 @@ def test_build_orchestrator_prompt_single_param():
     assert isinstance(result, str)
     assert len(result) > 0
     assert "ROUTING RULES" in result
+
+
+def test_cook_greetings_all_render_recipe_name():
+    """Every cook greeting must include the recipe name after formatting."""
+    from autoskillit.cli._prompts import _COOK_GREETINGS
+
+    for g in _COOK_GREETINGS:
+        rendered = g.format(recipe_name="test-recipe")
+        assert "test-recipe" in rendered, f"Greeting missing recipe name: {g!r}"
+        assert "{" not in rendered, f"Unresolved placeholder in: {rendered!r}"
+
+
+def test_open_kitchen_greetings_have_no_placeholders():
+    """Open-kitchen greetings must not contain format placeholders."""
+    from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+
+    for g in _OPEN_KITCHEN_GREETINGS:
+        assert "{" not in g, f"Placeholder in open-kitchen greeting: {g!r}"
+
+
+def test_orchestrator_prompt_does_not_embed_greetings():
+    """Greetings are delivered via positional arg, not embedded in system prompt."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my-recipe")
+    assert "Display ONE of these greetings" not in prompt
+
+
+def test_open_kitchen_prompt_does_not_embed_greetings():
+    """Open-kitchen greetings are delivered via positional arg, not embedded."""
+    from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
+    prompt = _build_open_kitchen_prompt()
+    assert "Display ONE of these greetings" not in prompt

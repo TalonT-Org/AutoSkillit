@@ -67,23 +67,17 @@ def _build_orchestrator_prompt(recipe_name: str) -> str:
     if _sous_chef_path.exists():
         sous_chef_content = "\n\n" + _sous_chef_path.read_text()
 
-    formatted_greetings = "\n".join(
-        f"- {g.format(recipe_name=recipe_name)}" for g in _COOK_GREETINGS
-    )
-
     return f"""\
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
 FIRST ACTION — before prompting for any inputs:
-0. Display ONE of these greetings (pick randomly, do not show more than one):
-{formatted_greetings}
-1. Call open_kitchen to reveal kitchen tools and enable the gate.
+0. Call open_kitchen to reveal kitchen tools and enable the gate.
    Without this step, no kitchen tools are accessible.
-2. Call load_recipe('{recipe_name}') to load the recipe data for execution.
+1. Call load_recipe('{recipe_name}') to load the recipe data for execution.
    The user has already seen the recipe overview in the terminal — do NOT
    re-display it. Just load the data silently.
-3. Collect ingredients from the user conversationally.
-4. Execute the pipeline steps.
+2. Collect ingredients from the user conversationally.
+3. Execute the pipeline steps.
 
 During pipeline execution, only use AutoSkillit MCP tools:
 - Read, Grep, Glob (code investigation) — not used here because investigation
@@ -150,13 +144,9 @@ def _build_open_kitchen_prompt() -> str:
     if _sous_chef_path.exists():
         sous_chef_content = "\n\n" + _sous_chef_path.read_text()
 
-    formatted_greetings = "\n".join(f"- {g}" for g in _OPEN_KITCHEN_GREETINGS)
-
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
-        "Display ONE of these greetings (pick randomly, do not show more than one):\n"
-        f"{formatted_greetings}\n\n"
-        "Then call the open_kitchen tool to open the AutoSkillit kitchen and gain access to "
+        "Call the open_kitchen tool to open the AutoSkillit kitchen and gain access to "
         "all automation tools. Then call the kitchen_status tool to display version "
         "and health information to the user.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"

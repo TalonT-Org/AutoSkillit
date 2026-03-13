@@ -861,6 +861,62 @@ class TestCLICook:
 
         assert exc_info.value.code == 1
 
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_command_includes_positional_greeting(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The cook command must pass a greeting as a positional argument."""
+        from autoskillit.cli._prompts import _COOK_GREETINGS
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.cook("test-script")
+
+        cmd = mock_run.call_args[0][0]
+        greeting_candidates = [g.format(recipe_name="test-script") for g in _COOK_GREETINGS]
+        # Greeting must appear as one of the positional args (not a flag value)
+        assert any(arg in greeting_candidates for arg in cmd), (
+            f"No greeting found as positional arg in: {cmd}"
+        )
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_open_kitchen_includes_positional_greeting(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Open-kitchen cook sessions also pass a greeting as positional arg."""
+        from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "0")
+
+        cli.cook()
+
+        cmd = mock_run.call_args[0][0]
+        assert any(arg in _OPEN_KITCHEN_GREETINGS for arg in cmd), (
+            f"No open-kitchen greeting found as positional arg in: {cmd}"
+        )
+
 
 class TestCookDisplayOwnership:
     """cook() delegates recipe display to the Claude session via load_recipe."""

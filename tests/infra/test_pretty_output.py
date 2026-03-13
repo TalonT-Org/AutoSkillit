@@ -1353,3 +1353,144 @@ def test_fmt_run_skill_contradictory_subtype_never_renders_fail_success():
     assert f"{cross} success" not in interactive_out, (
         f"Interactive mode rendered contradictory '{cross} success': {interactive_out!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Field coverage contract: LoadRecipeResult
+# ---------------------------------------------------------------------------
+
+
+def test_fmt_load_recipe_field_coverage():
+    """Every LoadRecipeResult field must be in RENDERED or SUPPRESSED."""
+    from autoskillit.hooks.pretty_output import (
+        _FMT_LOAD_RECIPE_RENDERED,
+        _FMT_LOAD_RECIPE_SUPPRESSED,
+    )
+    from autoskillit.recipe._api import LoadRecipeResult
+
+    all_fields = set(LoadRecipeResult.__annotations__)
+    covered = _FMT_LOAD_RECIPE_RENDERED | _FMT_LOAD_RECIPE_SUPPRESSED
+    uncovered = all_fields - covered
+    assert uncovered == set(), (
+        f"LoadRecipeResult fields have no coverage decision: {sorted(uncovered)}. "
+        "Add each to _FMT_LOAD_RECIPE_RENDERED or _FMT_LOAD_RECIPE_SUPPRESSED."
+    )
+    extra = covered - all_fields
+    assert extra == set(), (
+        f"Coverage registry references non-existent fields: {sorted(extra)}. Remove stale entries."
+    )
+
+
+def test_fmt_load_recipe_renders_error():
+    """When error is present, it appears in output with cross mark."""
+    formatted = _format_response(
+        "mcp__autoskillit__load_recipe",
+        json.dumps({"error": "Recipe 'x' not found", "valid": False}),
+        pipeline=False,
+    )
+    assert formatted is not None
+    assert "\u2717" in formatted
+    assert "Recipe 'x' not found" in formatted
+
+
+def test_fmt_load_recipe_renders_kitchen_rules():
+    """Kitchen rules appear in formatted output."""
+    formatted = _format_response(
+        "mcp__autoskillit__load_recipe",
+        json.dumps(
+            {
+                "valid": True,
+                "diagram": "## test diagram",
+                "suggestions": [],
+                "kitchen_rules": ["no raw SQL", "use run_cmd for shell"],
+            }
+        ),
+        pipeline=False,
+    )
+    assert formatted is not None
+    assert "no raw SQL" in formatted
+    assert "use run_cmd for shell" in formatted
+
+
+def test_fmt_load_recipe_renders_greeting():
+    """Greeting appears in formatted output when present."""
+    formatted = _format_response(
+        "mcp__autoskillit__load_recipe",
+        json.dumps(
+            {
+                "valid": True,
+                "diagram": "## test diagram",
+                "suggestions": [],
+                "greeting": "Welcome to Good Burger!",
+            }
+        ),
+        pipeline=False,
+    )
+    assert formatted is not None
+    assert "Welcome to Good Burger!" in formatted
+
+
+# ---------------------------------------------------------------------------
+# Field coverage contract: ListRecipesResult + RecipeListItem
+# ---------------------------------------------------------------------------
+
+
+def test_fmt_list_recipes_field_coverage():
+    """Every ListRecipesResult field must be in RENDERED or SUPPRESSED."""
+    from autoskillit.hooks.pretty_output import (
+        _FMT_LIST_RECIPES_RENDERED,
+        _FMT_LIST_RECIPES_SUPPRESSED,
+    )
+    from autoskillit.recipe._api import ListRecipesResult
+
+    all_fields = set(ListRecipesResult.__annotations__)
+    covered = _FMT_LIST_RECIPES_RENDERED | _FMT_LIST_RECIPES_SUPPRESSED
+    uncovered = all_fields - covered
+    assert uncovered == set(), (
+        f"ListRecipesResult fields have no coverage decision: {sorted(uncovered)}. "
+        "Add each to _FMT_LIST_RECIPES_RENDERED or _FMT_LIST_RECIPES_SUPPRESSED."
+    )
+    extra = covered - all_fields
+    assert extra == set(), (
+        f"Coverage registry references non-existent fields: {sorted(extra)}. Remove stale entries."
+    )
+
+
+def test_fmt_recipe_list_item_field_coverage():
+    """Every RecipeListItem field must be in RENDERED or SUPPRESSED."""
+    from autoskillit.hooks.pretty_output import (
+        _FMT_RECIPE_LIST_ITEM_RENDERED,
+        _FMT_RECIPE_LIST_ITEM_SUPPRESSED,
+    )
+    from autoskillit.recipe._api import RecipeListItem
+
+    all_fields = set(RecipeListItem.__annotations__)
+    covered = _FMT_RECIPE_LIST_ITEM_RENDERED | _FMT_RECIPE_LIST_ITEM_SUPPRESSED
+    uncovered = all_fields - covered
+    assert uncovered == set(), (
+        f"RecipeListItem fields have no coverage decision: {sorted(uncovered)}. "
+        "Add each to _FMT_RECIPE_LIST_ITEM_RENDERED or _FMT_RECIPE_LIST_ITEM_SUPPRESSED."
+    )
+    extra = covered - all_fields
+    assert extra == set(), (
+        f"Coverage registry references non-existent fields: {sorted(extra)}. Remove stale entries."
+    )
+
+
+def test_fmt_list_recipes_renders_summary():
+    """Recipe summary appears on the line below each recipe name."""
+    formatted = _format_response(
+        "mcp__autoskillit__list_recipes",
+        json.dumps(
+            {
+                "recipes": [
+                    {"name": "test-recipe", "description": "A test", "summary": "step1 -> done"},
+                ],
+                "count": 1,
+            }
+        ),
+        pipeline=False,
+    )
+    assert formatted is not None
+    assert "test-recipe" in formatted
+    assert "step1 -> done" in formatted

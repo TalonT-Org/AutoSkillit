@@ -716,10 +716,23 @@ class RecipeDiagram:
             format_version=DIAGRAM_FORMAT_VERSION,
         )
 
-    def render_terminal(self) -> str:
-        """Render as plain text for terminal display."""
+    def render_terminal(self, *, color: bool = False) -> str:
+        """Render as plain text for terminal display.
+
+        Parameters
+        ----------
+        color
+            When True, apply ANSI escape codes for styled output.
+        """
+        # Inline ANSI constants (L2 cannot import cli._ansi which is L3)
+        _BOLD = "\x1b[1m" if color else ""
+        _DIM = "\x1b[2m" if color else ""
+        _RESET = "\x1b[0m" if color else ""
+        _CYAN = "\x1b[36m" if color else ""
+        _BRIGHT_CYAN = "\x1b[96m" if color else ""
+
         lines: list[str] = []
-        lines.append(self.name.upper())
+        lines.append(f"{_BOLD}{_BRIGHT_CYAN}{self.name.upper()}{_RESET}")
         lines.append(self.description)
         lines.append("")
 
@@ -735,8 +748,10 @@ class RecipeDiagram:
             desc_w = max(len(r.description) for r in self.input_rows)
             name_w = max(name_w, 4)
             desc_w = max(desc_w, 11)
-            lines.append(f"  {'NAME':<{name_w}}  {'DESCRIPTION':<{desc_w}}  DEFAULT")
-            lines.append(f"  {'-' * name_w}  {'-' * desc_w}  {'-' * 7}")
+            lines.append(
+                f"  {_BOLD}{_DIM}{'NAME':<{name_w}}  {'DESCRIPTION':<{desc_w}}  DEFAULT{_RESET}"
+            )
+            lines.append(f"  {_DIM}{'-' * name_w}  {'-' * desc_w}  {'-' * 7}{_RESET}")
             for row in self.input_rows:
                 lines.append(
                     f"  {row.name:<{name_w}}  {row.description:<{desc_w}}  {row.default_display}"
@@ -747,9 +762,9 @@ class RecipeDiagram:
 
         if self.kitchen_rules:
             lines.append("")
-            lines.append("Kitchen Rules:")
+            lines.append(f"{_BOLD}Kitchen Rules:{_RESET}")
             for rule in self.kitchen_rules:
-                lines.append(f"  - {rule}")
+                lines.append(f"  {_DIM}{_CYAN}-{_RESET} {rule}")
 
         lines.append("")
         return "\n".join(lines)

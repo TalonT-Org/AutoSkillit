@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -398,13 +399,12 @@ def recipes_render(name: str | None = None) -> None:
             print(f"Rendered: {info.name}")
 
 
-def _launch_cook_session(system_prompt: str) -> None:
+def _launch_cook_session(system_prompt: str, *, initial_message: str | None = None) -> None:
     """Launch an interactive Claude Code cook session with the given system prompt."""
     if shutil.which("claude") is None:
-        print("ERROR: 'claude' command not found on PATH.")
-        print("Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code")
+        print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
         sys.exit(1)
-    spec = build_interactive_cmd()
+    spec = build_interactive_cmd(initial_prompt=initial_message)
     cmd = spec.cmd + [
         ClaudeFlags.PLUGIN_DIR,
         str(pkg_root()),
@@ -463,7 +463,10 @@ def cook(recipe: str | None = None):
         raw = input(f"Select recipe [0-{len(available)}]: ").strip()
         resolved = _resolve_recipe_input(raw, available)
         if resolved is _OPEN_KITCHEN_CHOICE:
-            _launch_cook_session(_build_open_kitchen_prompt())
+            from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+
+            greeting = random.choice(_OPEN_KITCHEN_GREETINGS)
+            _launch_cook_session(_build_open_kitchen_prompt(), initial_message=greeting)
             return
         elif resolved is None:
             print(f"Invalid selection: '{raw}'")
@@ -503,14 +506,17 @@ def cook(recipe: str | None = None):
             print(f"  - {err}")
         sys.exit(1)
 
-    diagram = build_recipe_diagram(parsed, _match.path)
-    print(diagram.render_terminal())
+    from autoskillit.cli._ansi import supports_color  # noqa: E402
+    from autoskillit.cli._prompts import _COOK_GREETINGS  # noqa: E402
+
+    print(build_recipe_diagram(parsed, _match.path).render_terminal(color=supports_color()))
 
     confirm = input("Launch session? [Y/n]: ").strip().lower()
     if confirm in ("n", "no"):
         return
 
-    _launch_cook_session(_build_orchestrator_prompt(recipe))
+    greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
+    _launch_cook_session(_build_orchestrator_prompt(recipe), initial_message=greeting)
 
 
 @app.command(name="chefs-hat", alias="chef")

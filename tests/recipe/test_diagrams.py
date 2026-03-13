@@ -9,11 +9,13 @@ import pytest
 from autoskillit.recipe.diagrams import (
     DIAGRAM_SECTION_SEPARATOR,
     RecipeDiagram,
+    build_recipe_diagram,
     check_diagram_staleness,
     diagram_stale_to_suggestions,
     generate_recipe_diagram,
     load_recipe_diagram,
 )
+from autoskillit.recipe.io import load_recipe
 
 
 def _extract_graph_section(content: str) -> str:
@@ -1804,3 +1806,39 @@ def test_recipe_diagram_render_markdown_matches_current_format(
     md_from_method = model.render_markdown()
     md_from_file = (recipes_dir / "diagrams" / "my-recipe.md").read_text()
     assert md_from_method == md_from_file
+
+
+# ---------------------------------------------------------------------------
+# render_terminal() direct tests
+# ---------------------------------------------------------------------------
+
+
+def test_render_terminal_includes_structured_elements(
+    tmp_path: Path, sample_recipe_yaml: Path
+) -> None:
+    """render_terminal produces name, graph, input table, and kitchen rules."""
+    model = build_recipe_diagram(load_recipe(sample_recipe_yaml), sample_recipe_yaml)
+    output = model.render_terminal()
+    assert model.name.upper() in output
+    assert model.description in output
+    assert model.graph_text in output
+    assert "NAME" in output and "DESCRIPTION" in output and "DEFAULT" in output
+    for rule in model.kitchen_rules:
+        assert rule in output
+
+
+def test_render_terminal_color_mode(tmp_path: Path, sample_recipe_yaml: Path) -> None:
+    """render_terminal(color=True) includes ANSI escape codes."""
+    model = build_recipe_diagram(load_recipe(sample_recipe_yaml), sample_recipe_yaml)
+    colored = model.render_terminal(color=True)
+    assert "\x1b[" in colored  # ANSI escape present
+    plain = model.render_terminal(color=False)
+    assert "\x1b[" not in plain  # No ANSI in plain mode
+
+
+def test_render_terminal_plain_backward_compat(tmp_path: Path, sample_recipe_yaml: Path) -> None:
+    """render_terminal() without args produces the same output as color=False."""
+    model = build_recipe_diagram(load_recipe(sample_recipe_yaml), sample_recipe_yaml)
+    default = model.render_terminal()
+    explicit = model.render_terminal(color=False)
+    assert default == explicit

@@ -14,11 +14,11 @@ def test_build_orchestrator_prompt_importable_from_prompts():
 
 
 # PR3
-def test_build_orchestrator_prompt_contains_recipe_yaml():
+def test_build_orchestrator_prompt_contains_recipe_name():
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
-    result = _build_orchestrator_prompt("name: my-recipe\n")
-    assert "name: my-recipe" in result
+    result = _build_orchestrator_prompt("my-recipe")
+    assert "my-recipe" in result
 
 
 # PR4
@@ -34,28 +34,14 @@ def test_build_orchestrator_prompt_not_in_app_module():
     )
 
 
-def test_orchestrator_prompt_ingredient_collection_is_conversational():
-    """Orchestrator prompt must use conversational collection, not per-field prompting."""
+def test_orchestrator_prompt_delegates_ingredient_collection_to_load_recipe():
+    """Orchestrator prompt must instruct Claude to call load_recipe for recipe content."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
-    prompt = _build_orchestrator_prompt("<dummy yaml>")
-    # New conversational behavior must be present
-    assert "infer as many ingredient values" in prompt, (
-        "Orchestrator prompt must instruct Claude to infer ingredient values"
-    )
-    assert "open-ended" in prompt.lower(), (
-        "Orchestrator prompt must describe an open-ended question"
-    )
-    assert "free-form" in prompt.lower(), "Orchestrator prompt must describe a free-form response"
-    # Old mechanical per-field instruction must be gone from the input-collection step
-    # (AskUserQuestion may still appear in the confirm-step section — that's expected)
-    lines = prompt.splitlines()
-    mechanical_line = next(
-        (line for line in lines if "Prompt for input values using AskUserQuestion" in line), None
-    )
-    assert mechanical_line is None, (
-        "Orchestrator prompt must not contain 'Prompt for input values using AskUserQuestion' "
-        "as a standalone instruction. Use conversational collection instead."
+    prompt = _build_orchestrator_prompt("my-recipe")
+    assert "load_recipe" in prompt, "Prompt must instruct Claude to call load_recipe"
+    assert "collect ingredients" in prompt.lower(), (
+        "Prompt must mention ingredient collection after load_recipe"
     )
 
 
@@ -63,37 +49,40 @@ def test_orchestrator_prompt_documents_confirm_action():
     """The orchestrator system prompt must explain how to handle action:confirm steps."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
-    prompt = _build_orchestrator_prompt("<dummy yaml>")
+    prompt = _build_orchestrator_prompt("my-recipe")
     assert "action: confirm" in prompt or 'action: "confirm"' in prompt
     assert "AskUserQuestion" in prompt
 
 
-# T2-A
-def test_build_orchestrator_prompt_includes_diagram():
-    """Prompt includes diagram content and FIRST ACTION instruction when diagram supplied."""
+def test_build_orchestrator_prompt_accepts_name_not_yaml():
+    """_build_orchestrator_prompt takes a recipe name string, not raw YAML."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
-    result = _build_orchestrator_prompt("name: my-recipe\n", diagram="## Flow\n```\nA → B\n```")
-    assert "## Flow" in result
-    assert "A → B" in result
-    assert "FIRST ACTION" in result
+    prompt = _build_orchestrator_prompt("my-recipe")
+    assert "my-recipe" in prompt
+    assert "load_recipe" in prompt
+    # Recipe YAML markers must not appear
+    assert "--- RECIPE ---" not in prompt
+    assert "--- END RECIPE ---" not in prompt
 
 
-# T2-B
-def test_build_orchestrator_prompt_diagram_none_unchanged():
-    """Passing diagram=None preserves existing behavior (recipe YAML present, ROUTING RULES)."""
+def test_orchestrator_prompt_instructs_load_recipe_first():
+    """Prompt must instruct Claude to call load_recipe as its first action after open_kitchen."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
-    result = _build_orchestrator_prompt("name: my-recipe\n", diagram=None)
-    assert "name: my-recipe" in result
-    assert "ROUTING RULES" in result
+    prompt = _build_orchestrator_prompt("my-recipe")
+    assert "load_recipe" in prompt
+    # load_recipe instruction must come before ingredient collection
+    lr_idx = prompt.index("load_recipe")
+    assert "collect" in prompt[lr_idx:].lower() or "ingredient" in prompt[lr_idx:].lower()
 
 
-# T2-C
-def test_build_orchestrator_prompt_positional_compat():
-    """Calling without diagram kwarg (positional compat) still returns a valid prompt."""
+# T2-C (updated for single-parameter signature)
+def test_build_orchestrator_prompt_single_param():
+    """Calling with a single recipe name returns a valid prompt."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
-    result = _build_orchestrator_prompt("name: my-recipe\n")
+    result = _build_orchestrator_prompt("implementation")
     assert isinstance(result, str)
     assert len(result) > 0
+    assert "ROUTING RULES" in result

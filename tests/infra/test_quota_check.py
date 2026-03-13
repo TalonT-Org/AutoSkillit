@@ -33,56 +33,21 @@ def _run_hook(
     """Run quota_check.main() with synthetic stdin and optional cache file.
 
     Returns (stdout, exit_code). stdout empty = approve, JSON string = deny.
+    Uses cache_path_override parameter for DI — no module-level patching needed.
     """
     from autoskillit.hooks.quota_check import main
 
     stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event or {})
 
-    patches = [
-        patch("sys.stdin", io.StringIO(stdin_text)),
-    ]
-    if cache_path is not None:
-        patches.append(
-            patch(
-                "autoskillit.hooks.quota_check._DEFAULT_CACHE_PATH",
-                str(cache_path),
-            )
-        )
-
     buf = io.StringIO()
-    ctx_stack = patches[0]
-    for p in patches[1:]:
-        ctx_stack = _nested(ctx_stack, p)
-
     exit_code = 0
-    with _apply_patches(patches):
+    with patch("sys.stdin", io.StringIO(stdin_text)):
         with redirect_stdout(buf):
             try:
-                main()
+                main(cache_path_override=str(cache_path) if cache_path is not None else None)
             except SystemExit as e:
                 exit_code = e.code if e.code is not None else 0
     return buf.getvalue(), exit_code
-
-
-class _apply_patches:
-    """Context manager to apply multiple patches."""
-
-    def __init__(self, patches):
-        self._patches = patches
-        self._contexts = []
-
-    def __enter__(self):
-        for p in self._patches:
-            self._contexts.append(p.__enter__())
-        return self
-
-    def __exit__(self, *exc):
-        for p in reversed(self._patches):
-            p.__exit__(*exc)
-
-
-def _nested(cm1, cm2):
-    """Not used — replaced by _apply_patches."""
 
 
 def test_deny_when_utilization_above_threshold(tmp_path):

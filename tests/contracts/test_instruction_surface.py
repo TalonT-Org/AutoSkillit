@@ -256,88 +256,24 @@ class TestMultiPartScopeContract:
         )
 
 
-class TestIngredientCollectionAlignment:
-    """cook and load_recipe must carry identical conversational collection instructions."""
+class TestOrchestratorPromptDelegation:
+    """Orchestrator prompt must delegate recipe display to load_recipe."""
 
-    _SENTINEL = "infer as many ingredient values"
-    # Safety ceiling for the forward search; covers the current 9-line block with 3x headroom.
-    # Raise if the closing clause is not found within this window.
-    _BLOCK_MAX_LINES = 30
+    def test_orchestrator_prompt_does_not_embed_recipe_data(self):
+        """The orchestrator prompt must delegate recipe display to load_recipe.
 
-    @classmethod
-    def _extract_block(cls, text: str) -> str:
-        """Return the multi-line conversational collection block, dedented for comparison.
-
-        Raises AssertionError with a descriptive message if any structural marker is missing
-        so that test failures point to the broken surface rather than the broken extractor.
+        This is an architectural invariant: the CLI-to-session bridge injects
+        behavioral instructions only. Recipe content is discovered by the
+        session via MCP tools.
         """
-        import textwrap
-
-        lines = text.splitlines()
-        sentinel_idx = next(
-            (i for i, line in enumerate(lines) if "infer as many ingredient values" in line),
-            None,
-        )
-        if sentinel_idx is None:
-            raise AssertionError(
-                "Could not find sentinel 'infer as many ingredient values' in text"
-            )
-        # Walk back from sentinel_idx - 1 to find the opening line.
-        # Start exclusive of the sentinel line so opener and sentinel cannot share a line.
-        opener_idx = None
-        for i in range(sentinel_idx - 1, -1, -1):
-            if "Collect ingredient values conversationally" in lines[i]:
-                opener_idx = i
-                break
-        if opener_idx is None:
-            raise AssertionError(
-                "Could not find opener 'Collect ingredient values conversationally' "
-                f"before sentinel at line {sentinel_idx}"
-            )
-        # Walk forward from opener to find the closing clause (clause d about optional defaults)
-        closer_idx = None
-        search_limit = min(opener_idx + cls._BLOCK_MAX_LINES, len(lines))
-        for i in range(opener_idx, search_limit):
-            if "optional ingredients" in lines[i].lower() or "default values" in lines[i].lower():
-                closer_idx = i
-                break
-        if closer_idx is None:
-            max_lines = cls._BLOCK_MAX_LINES
-            raise AssertionError(
-                f"Could not find closing clause ('optional ingredients' or 'default values') "
-                f"within {max_lines} lines of opener at line {opener_idx}"
-            )
-        # Extend to include continuation lines of the closing clause.
-        # A continuation line is any non-blank line indented deeper than closer_idx's line.
-        end_idx = closer_idx + 1
-        closer_indent = len(lines[closer_idx]) - len(lines[closer_idx].lstrip())
-        while end_idx < len(lines) and lines[end_idx].strip():
-            indent = len(lines[end_idx]) - len(lines[end_idx].lstrip())
-            if indent <= closer_indent:
-                break
-            end_idx += 1
-        block = "\n".join(lines[opener_idx:end_idx])
-        # Strip trailing whitespace per line for robust comparison across sources
-        # with different surrounding indentation contexts.
-        block = "\n".join(line.rstrip() for line in block.splitlines())
-        return textwrap.dedent(block)
-
-    def test_ingredient_collection_instructions_are_aligned(self):
-        """The conversational ingredient collection block must be identical in both paths."""
         from autoskillit.cli._prompts import _build_orchestrator_prompt
-        from autoskillit.server.tools_recipe import load_recipe
 
-        prompt = _build_orchestrator_prompt("<dummy yaml>")
-        doc = load_recipe.__doc__ or ""
-
-        prompt_block = self._extract_block(prompt)
-        doc_block = self._extract_block(doc)
-
-        assert prompt_block == doc_block, (
-            "Conversational ingredient collection block differs between "
-            "_build_orchestrator_prompt and load_recipe docstring. "
-            "Both must be identical — update the out-of-sync location."
-        )
+        prompt = _build_orchestrator_prompt("implementation")
+        # Must NOT contain recipe YAML markers
+        assert "--- RECIPE ---" not in prompt
+        assert "--- END RECIPE ---" not in prompt
+        # Must instruct load_recipe call
+        assert "load_recipe" in prompt
 
 
 class TestQuotaGuardStructuralEnforcement:

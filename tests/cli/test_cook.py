@@ -428,13 +428,13 @@ class TestCLICook:
         assert "stdin" not in kwargs
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_system_prompt_contains_script(
+    def test_cook_system_prompt_contains_behavioral_instructions(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cook injects script YAML and orchestrator contract into system prompt."""
+        """cook injects recipe name and behavioral instructions into system prompt."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -450,9 +450,10 @@ class TestCLICook:
         cmd = mock_run.call_args[0][0]
         prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
         system_prompt = cmd[prompt_idx + 1]
-        # Contains the script YAML content
+        # Contains recipe name
         assert "test-script" in system_prompt
-        assert "do-something" in system_prompt
+        # Instructs Claude to call load_recipe
+        assert "load_recipe" in system_prompt
         # Contains routing rules
         assert "ROUTING RULES" in system_prompt
         # Contains failure predicates
@@ -461,6 +462,9 @@ class TestCLICook:
         assert "capture:" in system_prompt
         assert "${{ context." in system_prompt
         assert "AutoSkillit MCP tools" in system_prompt
+        # Does NOT contain raw recipe YAML body
+        assert "--- RECIPE ---" not in system_prompt
+        assert "do-something" not in system_prompt
 
     @patch("autoskillit.cli.subprocess.run")
     def test_cook_propagates_exit_code(
@@ -851,8 +855,8 @@ class TestCLICook:
         assert exc_info.value.code == 1
 
 
-class TestCookDiagram:
-    """T3: cook command loads and injects recipe diagram into system prompt."""
+class TestCookDisplayOwnership:
+    """cook() delegates recipe display to the Claude session via load_recipe."""
 
     def _setup_recipe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         """Write test recipe to scripts_dir and chdir."""
@@ -864,118 +868,72 @@ class TestCookDiagram:
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         return scripts_dir
 
-    # T3-A
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_system_prompt_contains_diagram_when_fresh(
+    def test_cook_system_prompt_does_not_contain_recipe_yaml(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cook injects diagram into system prompt when diagram is fresh (not stale)."""
-        import autoskillit.recipe as _recipe_mod
-
+        """System prompt must contain recipe NAME but not the raw YAML body."""
         self._setup_recipe(tmp_path, monkeypatch)
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
-        monkeypatch.setattr(_recipe_mod, "check_diagram_staleness", lambda *a, **kw: False)
-        monkeypatch.setattr(_recipe_mod, "load_recipe_diagram", lambda *a, **kw: "## Flow\nA → B")
 
         cli.cook("test-script")
 
         cmd = mock_run.call_args[0][0]
         prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
         system_prompt = cmd[prompt_idx + 1]
-        assert "## Flow" in system_prompt
-        assert "A → B" in system_prompt
-        assert "FIRST ACTION" in system_prompt
+        assert "test-script" in system_prompt
+        assert "--- RECIPE ---" not in system_prompt
+        assert "--- END RECIPE ---" not in system_prompt
+        assert "steps:" not in system_prompt
+        assert "on_success:" not in system_prompt
 
-    # T3-B
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_regenerates_diagram_when_stale(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """cook calls generate_recipe_diagram when stale and injects result into system prompt."""
-        import autoskillit.recipe as _recipe_mod
-
-        self._setup_recipe(tmp_path, monkeypatch)
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
-        monkeypatch.setattr(_recipe_mod, "check_diagram_staleness", lambda *a, **kw: True)
-        generate_called = []
-
-        def _fake_generate(*a: object, **kw: object) -> str:
-            generate_called.append(1)
-            return "## Flow"
-
-        monkeypatch.setattr(_recipe_mod, "generate_recipe_diagram", _fake_generate)
-        monkeypatch.setattr(_recipe_mod, "load_recipe_diagram", lambda *a, **kw: "## Flow\nA → B")
-
-        cli.cook("test-script")
-
-        assert len(generate_called) == 1, "generate_recipe_diagram must be called once when stale"
-        cmd = mock_run.call_args[0][0]
-        prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
-        system_prompt = cmd[prompt_idx + 1]
-        assert "## Flow" in system_prompt, "Generated diagram must appear in system prompt"
-
-    # T3-C
-    @patch("autoskillit.cli.subprocess.run")
-    def test_cook_works_when_diagram_is_none(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """cook launches session successfully even when no diagram is available."""
-        import autoskillit.recipe as _recipe_mod
-
-        self._setup_recipe(tmp_path, monkeypatch)
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
-        monkeypatch.setattr(_recipe_mod, "check_diagram_staleness", lambda *a, **kw: False)
-        monkeypatch.setattr(_recipe_mod, "load_recipe_diagram", lambda *a, **kw: None)
-
-        cli.cook("test-script")
-
-        mock_run.assert_called_once()
-
-    # T3-D
-    @patch("autoskillit.cli.subprocess.run")
-    def test_cook_prints_diagram_to_terminal_before_launch(
+    def test_cook_does_not_print_recipe_before_launch(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
     ) -> None:
-        """T3-D: cook command prints a terminal-friendly diagram summary before launching."""
-        import autoskillit.recipe as _recipe_mod
-
+        """cook() must not dump recipe info to terminal. Display is Claude's job."""
         self._setup_recipe(tmp_path, monkeypatch)
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
-        monkeypatch.setattr(_recipe_mod, "check_diagram_staleness", lambda *a, **kw: False)
-        monkeypatch.setattr(_recipe_mod, "load_recipe_diagram", lambda *a, **kw: "## md diagram")
 
         cli.cook("test-script")
 
         captured = capsys.readouterr()
-        # Recipe name appears in terminal output (without ## prefix)
-        assert "TEST-SCRIPT" in captured.out, "Recipe name not printed to terminal"
-        # No raw Markdown syntax in terminal output
-        assert "<!--" not in captured.out, "HTML comments must not appear in terminal output"
-        assert "|---" not in captured.out, "Markdown table separators must not appear"
-        assert not any(line.lstrip().startswith("## ") for line in captured.out.splitlines()), (
-            "Markdown headings must not appear in terminal output"
+        assert "TEST-SCRIPT" not in captured.out, (
+            "Recipe name must not be pre-rendered to terminal"
         )
+        assert "Kitchen Rules" not in captured.out, "Kitchen rules must not appear before launch"
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_system_prompt_instructs_load_recipe(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """System prompt must instruct Claude to call load_recipe as its first action."""
+        self._setup_recipe(tmp_path, monkeypatch)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.cook("test-script")
+
+        cmd = mock_run.call_args[0][0]
+        prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
+        system_prompt = cmd[prompt_idx + 1]
+        assert "load_recipe" in system_prompt
+        assert "FIRST ACTION" in system_prompt
 
 
 class TestRecipesCLI:

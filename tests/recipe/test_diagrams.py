@@ -9,7 +9,6 @@ import pytest
 from autoskillit.recipe.diagrams import (
     DIAGRAM_SECTION_SEPARATOR,
     RecipeDiagram,
-    build_recipe_diagram,
     check_diagram_staleness,
     diagram_stale_to_suggestions,
     generate_recipe_diagram,
@@ -1805,44 +1804,3 @@ def test_recipe_diagram_render_markdown_matches_current_format(
     md_from_method = model.render_markdown()
     md_from_file = (recipes_dir / "diagrams" / "my-recipe.md").read_text()
     assert md_from_method == md_from_file
-
-
-def test_recipe_diagram_render_terminal_contains_no_markdown(
-    tmp_path: Path, sample_recipe_yaml: Path
-) -> None:
-    """render_terminal() output must not contain Markdown syntax."""
-    model = build_recipe_diagram(
-        __import__("autoskillit.recipe.io", fromlist=["load_recipe"]).load_recipe(
-            sample_recipe_yaml
-        ),
-        sample_recipe_yaml,
-    )
-    output = model.render_terminal()
-    assert "<!--" not in output
-    assert "|---" not in output
-    assert not any(line.lstrip().startswith("## ") for line in output.splitlines())
-    assert "**Flow:**" not in output
-    # Positive assertion: ingredient data IS present
-    assert "task" in output
-    assert "What to do" in output
-
-
-def test_recipe_diagram_render_terminal_aligns_columns(
-    tmp_path: Path, sample_recipe_yaml: Path
-) -> None:
-    """render_terminal() input rows are column-aligned with padding."""
-    from autoskillit.recipe.io import load_recipe  # noqa: PLC0415
-
-    model = build_recipe_diagram(load_recipe(sample_recipe_yaml), sample_recipe_yaml)
-    output = model.render_terminal()
-    # Header and separator lines present
-    assert "NAME" in output
-    assert "DESCRIPTION" in output
-    assert "DEFAULT" in output
-    # Data lines have consistent column positions (all start with 2 spaces)
-    data_lines = [
-        ln
-        for ln in output.splitlines()
-        if ln.startswith("  ") and "---" not in ln and "NAME" not in ln and ln.strip()
-    ]
-    assert len(data_lines) >= 1

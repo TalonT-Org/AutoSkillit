@@ -145,14 +145,12 @@ class DefaultMergeQueueWatcher:
     @staticmethod
     def _is_stuck(pr_info: dict[str, Any]) -> bool:
         """Stuck = auto-merge is set AND merge is clean — queue should have picked it up."""
-        return (
-            pr_info.get("auto_merge") is not None
-            and pr_info.get("mergeable_state") in {"clean", "has_hooks"}
-        )
+        return pr_info.get("auto_merge") is not None and pr_info.get("mergeable_state") in {
+            "clean",
+            "has_hooks",
+        }
 
-    async def _fetch_pr_state(
-        self, pr_number: int, owner: str, repo: str
-    ) -> dict[str, Any]:
+    async def _fetch_pr_state(self, pr_number: int, owner: str, repo: str) -> dict[str, Any]:
         resp = await self._client.get(
             f"{_REST_ENDPOINT}/repos/{owner}/{repo}/pulls/{pr_number}",
         )
@@ -190,9 +188,7 @@ class DefaultMergeQueueWatcher:
             if n.get("pullRequest")
         ]
 
-    async def _toggle_auto_merge(
-        self, pr_number: int, owner: str, repo: str
-    ) -> None:
+    async def _toggle_auto_merge(self, pr_number: int, owner: str, repo: str) -> None:
         url = f"{_REST_ENDPOINT}/repos/{owner}/{repo}/pulls/{pr_number}/auto-merge"
         await self._client.delete(url)
         await asyncio.sleep(2)

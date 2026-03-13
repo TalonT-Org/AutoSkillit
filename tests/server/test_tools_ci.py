@@ -1,4 +1,4 @@
-"""Tests for the wait_for_ci and get_ci_status MCP tool handlers."""
+"""Tests for the wait_for_ci, get_ci_status, and wait_for_merge_queue MCP tool handlers."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
-from autoskillit.server.tools_ci import get_ci_status, wait_for_ci
+from autoskillit.server.tools_ci import get_ci_status, wait_for_ci, wait_for_merge_queue
 
 # ---------------------------------------------------------------------------
 # Gate membership
@@ -182,3 +182,109 @@ async def test_get_ci_status_no_watcher(tool_ctx):
     result = json.loads(await get_ci_status(branch="main"))
     assert result["runs"] == []
     assert "not configured" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# wait_for_merge_queue
+# ---------------------------------------------------------------------------
+
+
+def test_wait_for_merge_queue_is_gated():
+    assert "wait_for_merge_queue" in GATED_TOOLS
+
+
+@pytest.mark.anyio
+async def test_gate_closed_returns_gate_error(tool_ctx):
+    """Gate-closed returns gate_error response (watcher not called)."""
+    tool_ctx.gate = DefaultGateState(enabled=False)
+    result = json.loads(await wait_for_merge_queue(pr_number=1, target_branch="main", cwd="."))
+    assert result["success"] is False
+    assert result["subtype"] == "gate_error"
+
+
+@pytest.mark.anyio
+async def test_delegates_to_merge_queue_watcher(tool_ctx):
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"success": True, "pr_state": "merged", "reason": "PR merged"}
+    )
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    with patch(
+        "autoskillit.server.tools_ci.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+    ) as mock_proc:
+        proc_inst = AsyncMock()
+        proc_inst.communicate = AsyncMock(
+            return_value=(b"https://github.com/owner/repo.git\n", b"")
+        )
+        proc_inst.returncode = 0
+        mock_proc.return_value = proc_inst
+
+        result = json.loads(
+            await wait_for_merge_queue(pr_number=42, target_branch="integration", cwd=".")
+        )
+
+    assert result["pr_state"] == "merged"
+    mock_watcher.wait.assert_called_once()
+    call_kwargs = mock_watcher.wait.call_args
+    assert call_kwargs.kwargs["pr_number"] == 42
+    assert call_kwargs.kwargs["target_branch"] == "integration"
+
+
+@pytest.mark.anyio
+async def test_infers_repo_from_git_remote_when_repo_empty(tool_ctx):
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"success": True, "pr_state": "merged", "reason": "PR merged"}
+    )
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    with patch(
+        "autoskillit.server.tools_ci.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+    ) as mock_proc:
+        proc_inst = AsyncMock()
+        proc_inst.communicate = AsyncMock(
+            return_value=(b"https://github.com/owner/repo.git\n", b"")
+        )
+        proc_inst.returncode = 0
+        mock_proc.return_value = proc_inst
+
+        await wait_for_merge_queue(pr_number=42, target_branch="main", cwd=".", repo="")
+
+    call_kwargs = mock_watcher.wait.call_args
+    assert call_kwargs.kwargs["repo"] == "owner/repo"
+
+
+@pytest.mark.anyio
+async def test_explicit_repo_skips_subprocess(tool_ctx):
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"success": True, "pr_state": "merged", "reason": "PR merged"}
+    )
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    with patch(
+        "autoskillit.server.tools_ci.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+    ) as mock_proc:
+        await wait_for_merge_queue(
+            pr_number=42,
+            target_branch="main",
+            cwd=".",
+            repo="owner/explicit-repo",
+        )
+
+    mock_proc.assert_not_called()
+    call_kwargs = mock_watcher.wait.call_args
+    assert call_kwargs.kwargs["repo"] == "owner/explicit-repo"
+
+
+@pytest.mark.anyio
+async def test_watcher_none_returns_error(tool_ctx):
+    tool_ctx.merge_queue_watcher = None
+    result = json.loads(await wait_for_merge_queue(pr_number=42, target_branch="main", cwd="."))
+    assert result["success"] is False
+    assert "pr_state" in result
+    assert result["pr_state"] == "error"

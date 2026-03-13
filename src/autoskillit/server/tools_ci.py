@@ -1,9 +1,12 @@
-"""MCP tool handlers: wait_for_ci (gated), get_ci_status (ungated), set_commit_status (gated)."""
+"""MCP tool handlers: wait_for_ci (gated), get_ci_status (ungated), set_commit_status (gated),
+wait_for_merge_queue (gated).
+"""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import Literal
 
 import structlog
@@ -233,5 +236,95 @@ async def get_ci_status(
         repo=repo,
         run_id=run_id,
         cwd=cwd,
+    )
+    return json.dumps(result)
+
+
+async def _infer_repo_from_remote(cwd: str) -> str:
+    """Return 'owner/repo' from git remote URL, or '' on failure."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git",
+            "remote",
+            "get-url",
+            "origin",
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode != 0:
+            return ""
+        url = stdout.decode().strip()
+        m = re.search(r"github\.com[:/](.+?)(?:\.git)?$", url)
+        return m.group(1) if m else ""
+    except Exception:
+        return ""
+
+
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": False})
+@track_response_size("wait_for_merge_queue")
+async def wait_for_merge_queue(
+    pr_number: int,
+    target_branch: str,
+    cwd: str,
+    repo: str = "",
+    timeout_seconds: int = 600,
+    poll_interval: int = 15,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Poll a PR's progress through GitHub's merge queue until merged, ejected, or timed out.
+
+    Args:
+        pr_number: PR number to monitor.
+        target_branch: Branch the merge queue targets (e.g. "integration").
+        cwd: Working directory for git remote resolution when repo is not provided.
+        repo: Optional "owner/name" string. Inferred from git remote if empty.
+        timeout_seconds: Total polling budget (default 600s).
+        poll_interval: Seconds between polls (default 15s).
+
+    Returns:
+        JSON: {"success": bool, "pr_state": "merged"|"ejected"|"timeout"|"error", "reason": str}
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(
+        tool="wait_for_merge_queue", pr_number=pr_number, target_branch=target_branch
+    )
+    await _notify(
+        ctx,
+        "info",
+        f"Waiting for PR #{pr_number} in merge queue on {target_branch!r}",
+        "autoskillit.wait_for_merge_queue",
+        extra={"pr_number": pr_number, "target_branch": target_branch},
+    )
+
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+
+    if tool_ctx.merge_queue_watcher is None:
+        return json.dumps(
+            {
+                "success": False,
+                "pr_state": "error",
+                "reason": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
+            }
+        )
+
+    # Resolve repo from git remote when not provided
+    resolved_repo = repo
+    if not resolved_repo:
+        resolved_repo = await _infer_repo_from_remote(cwd)
+
+    result = await tool_ctx.merge_queue_watcher.wait(
+        pr_number=pr_number,
+        target_branch=target_branch,
+        repo=resolved_repo or None,
+        cwd=cwd,
+        timeout_seconds=timeout_seconds,
+        poll_interval=poll_interval,
     )
     return json.dumps(result)

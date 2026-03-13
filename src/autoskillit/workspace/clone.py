@@ -8,10 +8,10 @@ and every other command in source_dir. All pipeline work runs in clone_path.
 L1 module: depends only on stdlib and autoskillit.core.logging.
 Three callables are registered as run_python entry points in bundled recipes.
 
-Note: clone_repo uses the default git clone path, which leverages hardlinks when
-source and destination are on the same filesystem (fast, low disk usage). This is
-safe for single-user ephemeral pipelines. For multi-tenant deployments where repos
-may be owned by different users, pass --no-hardlinks to git clone to avoid the
+Note: The ``clone_local`` strategy (``shutil.copytree``) leverages hardlinks when
+source and destination are on the same filesystem (fast, low disk usage). The
+default and ``proceed`` strategies clone from the remote URL and do not use hardlinks.
+For multi-tenant deployments using ``clone_local``, pass --no-hardlinks to avoid the
 cross-user hardlink risk (CVE-2024-32020).
 """
 
@@ -143,29 +143,17 @@ def detect_unpublished_branch(source_dir: str, branch: str) -> bool:
     return ls_remote.returncode == 2
 
 
-def _resolve_clone_source(source: Path, branch: str, detected_url: str) -> str:
-    """Select the clone source for the ``proceed`` git-clone strategy.
+def _resolve_clone_source(source: Path, detected_url: str) -> str:
+    """Select the clone source for the proceed git-clone strategy.
 
-    Prefers the remote URL when source has an origin configured and the
-    branch (if specified) is confirmed present on the remote. Falls back
-    to the local path for local-only branches, repos without a remote, or
-    when network commands time out. Not used by the ``clone_local`` strategy,
-    which always copies directly from the local filesystem path.
+    Always uses the remote URL when source has a configured origin.
+    Falls back to the local filesystem path only when no remote origin
+    is configured. Never falls back based on branch availability or
+    network reachability — when a remote URL is known, it is always
+    used as the clone source. The clone_local strategy bypasses this
+    function entirely (shutil.copytree, always local).
     """
-    if not detected_url:
-        return str(source)
-    if branch:
-        try:
-            ls = subprocess.run(
-                ["git", "ls-remote", "--exit-code", "--heads", detected_url, branch],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-        except subprocess.TimeoutExpired:
-            return str(source)
-        return detected_url if ls.returncode == 0 else str(source)
-    return detected_url
+    return detected_url if detected_url else str(source)
 
 
 def clone_repo(
@@ -193,11 +181,13 @@ def clone_repo(
     committed state only) or strategy="clone_local" (copytree — includes working-tree
     changes).
 
-    When using the ``proceed`` strategy, the git clone is performed from the remote
-    URL when source_dir has an origin configured and (if branch is given) the branch
-    is confirmed present on the remote. Falls back to the local path for local-only
-    branches or when no remote is configured. The ``clone_local`` strategy always
-    copies directly from the local filesystem path regardless of remote configuration.
+    When using the ``proceed`` strategy, the git clone is always performed from the
+    remote URL when source_dir has a configured origin. Falls back to the local path
+    only when no remote origin is configured. If a branch is requested that does not
+    exist on the remote, git clone will fail with RuntimeError — use
+    ``strategy="clone_local"`` to clone a local-only branch. The ``clone_local``
+    strategy always copies directly from the local filesystem path regardless of
+    remote configuration.
 
     After this function returns, source_dir is off-limits except for push_to_remote
     reading its remote URL. See module docstring for the full SOURCE ISOLATION contract.
@@ -279,7 +269,7 @@ def clone_repo(
         shutil.copytree(str(source), str(clone_path))
         logger.info("clone_created_local_copy", clone_path=str(clone_path), source=str(source))
     else:
-        clone_source = _resolve_clone_source(source, branch, detected_url)
+        clone_source = _resolve_clone_source(source, detected_url)
         cmd = ["git", "clone"]
         if branch:
             cmd += ["--branch", branch]

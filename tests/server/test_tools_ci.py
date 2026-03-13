@@ -52,7 +52,7 @@ async def test_wait_for_ci_success_response(tool_ctx):
     tool_ctx.ci_watcher = mock_watcher
 
     with patch(
-        "autoskillit.server.tools_ci.asyncio.create_subprocess_exec",
+        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -80,7 +80,7 @@ async def test_wait_for_ci_failure_response(tool_ctx):
     tool_ctx.ci_watcher = mock_watcher
 
     with patch(
-        "autoskillit.server.tools_ci.asyncio.create_subprocess_exec",
+        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -109,7 +109,7 @@ async def test_wait_for_ci_infers_head_sha(tool_ctx):
     tool_ctx.ci_watcher = mock_watcher
 
     with patch(
-        "autoskillit.server.tools_ci.asyncio.create_subprocess_exec",
+        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -211,7 +211,7 @@ async def test_delegates_to_merge_queue_watcher(tool_ctx):
     tool_ctx.merge_queue_watcher = mock_watcher
 
     with patch(
-        "autoskillit.server.tools_ci.asyncio.create_subprocess_exec",
+        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -241,7 +241,7 @@ async def test_infers_repo_from_git_remote_when_repo_empty(tool_ctx):
     tool_ctx.merge_queue_watcher = mock_watcher
 
     with patch(
-        "autoskillit.server.tools_ci.asyncio.create_subprocess_exec",
+        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -266,7 +266,7 @@ async def test_explicit_repo_skips_subprocess(tool_ctx):
     tool_ctx.merge_queue_watcher = mock_watcher
 
     with patch(
-        "autoskillit.server.tools_ci.asyncio.create_subprocess_exec",
+        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         await wait_for_merge_queue(

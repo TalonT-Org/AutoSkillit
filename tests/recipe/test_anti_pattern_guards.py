@@ -83,6 +83,7 @@ def test_pr_merge_pipeline_has_no_loop_push_kitchen_rule():
         "publish_integration_branch",
         "push_integration_branch",
         "re_push_review_integration",  # authorized: re-pushes after review fixes
+        "push_ejected_fix",  # authorized: pushes conflict-resolved ejected PR branch back
     }
     assert not unexpected, (
         f"push_to_remote found in unexpected steps (loop pushes are prohibited): {unexpected}"

@@ -127,9 +127,9 @@ class DefaultMergeQueueWatcher:
                     except Exception as exc:
                         _log.warning("merge_queue.toggle_error", exc=str(exc))
                     stuck_cycles += 1
-                    await asyncio.sleep(poll_interval)
-                    continue
-            # Not stuck (or already toggled once) → ejected
+                await asyncio.sleep(poll_interval)
+                continue
+            # Not stuck → ejected
             return {
                 "success": False,
                 "pr_state": "ejected",
@@ -185,11 +185,13 @@ class DefaultMergeQueueWatcher:
         return [
             {"pr_number": n["pullRequest"]["number"], "state": n["state"]}
             for n in nodes
-            if n.get("pullRequest")
+            if n.get("pullRequest") and n["pullRequest"].get("number") is not None
         ]
 
     async def _toggle_auto_merge(self, pr_number: int, owner: str, repo: str) -> None:
         url = f"{_REST_ENDPOINT}/repos/{owner}/{repo}/pulls/{pr_number}/auto-merge"
-        await self._client.delete(url)
+        resp = await self._client.delete(url)
+        resp.raise_for_status()
         await asyncio.sleep(2)
-        await self._client.put(url, json={"merge_method": "squash"})
+        resp = await self._client.put(url, json={"merge_method": "squash"})
+        resp.raise_for_status()

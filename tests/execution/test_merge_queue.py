@@ -37,6 +37,7 @@ class TestDefaultMergeQueueWatcher:
         watcher._fetch_pr_state = AsyncMock(  # type: ignore[method-assign]
             return_value=self._pr_state(merged=True)
         )
+        watcher._fetch_queue_entries = AsyncMock(return_value=[])  # type: ignore[method-assign]
         result = await watcher.wait(
             pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
         )
@@ -160,7 +161,6 @@ class TestDefaultMergeQueueWatcher:
         watcher._fetch_pr_state = AsyncMock(  # type: ignore[method-assign]
             return_value=self._pr_state(state="closed", merged=False)
         )
-        watcher._fetch_queue_entries = AsyncMock(return_value=[])  # type: ignore[method-assign]
         result = await watcher.wait(
             pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
         )
@@ -195,15 +195,32 @@ class TestDefaultMergeQueueWatcher:
 
     @pytest.mark.anyio
     async def test_graphql_error_falls_through_as_empty_queue(self):
+        """GraphQL error is caught; stuck PR continues via toggle path (not direct ejection)."""
         watcher = self._make_watcher()
-        watcher._fetch_pr_state = AsyncMock(  # type: ignore[method-assign]
-            return_value=self._pr_state(auto_merge=None)
-        )
+        pr_call_count = 0
+        toggle_calls: list[int] = []
+
+        async def _pr_state_side(*_a: object, **_kw: object) -> dict:
+            nonlocal pr_call_count
+            pr_call_count += 1
+            if pr_call_count >= 2:
+                return self._pr_state(merged=True)
+            return self._pr_state(auto_merge={"method": "squash"}, mergeable_state="clean")
+
+        async def _toggle_side(*_a: object, **_kw: object) -> None:
+            toggle_calls.append(1)
+
+        watcher._fetch_pr_state = _pr_state_side  # type: ignore[method-assign]
         watcher._fetch_queue_entries = AsyncMock(  # type: ignore[method-assign]
             side_effect=httpx.RequestError("connection error")
         )
-        result = await watcher.wait(
-            pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
-        )
-        assert result["success"] is False
-        assert result["pr_state"] == "ejected"
+        watcher._toggle_auto_merge = _toggle_side  # type: ignore[method-assign]
+
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
+            )
+
+        assert result["success"] is True
+        assert result["pr_state"] == "merged"
+        assert len(toggle_calls) == 1, "graphql error caught; stuck-path toggle must fire"

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from typing import Literal
 
 import structlog
@@ -19,6 +18,7 @@ from autoskillit.server.helpers import (
     _notify,
     _require_enabled,
     _run_subprocess,
+    infer_repo_from_remote,
     track_response_size,
 )
 
@@ -240,29 +240,6 @@ async def get_ci_status(
     return json.dumps(result)
 
 
-async def _infer_repo_from_remote(cwd: str) -> str:
-    """Return 'owner/repo' from git remote URL, or '' on failure."""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "remote",
-            "get-url",
-            "origin",
-            cwd=cwd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
-        if proc.returncode != 0:
-            return ""
-        url = stdout.decode().strip()
-        m = re.search(r"github\.com[:/](.+?)(?:\.git)?$", url)
-        return m.group(1) if m else ""
-    except Exception as exc:
-        logger.warning("infer_repo_from_remote.error", exc=str(exc), exc_info=True)
-        return ""
-
-
 @mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": False})
 @track_response_size("wait_for_merge_queue")
 async def wait_for_merge_queue(
@@ -318,7 +295,7 @@ async def wait_for_merge_queue(
     # Resolve repo from git remote when not provided
     resolved_repo = repo
     if not resolved_repo:
-        resolved_repo = await _infer_repo_from_remote(cwd)
+        resolved_repo = await infer_repo_from_remote(cwd)
 
     result = await tool_ctx.merge_queue_watcher.wait(
         pr_number=pr_number,

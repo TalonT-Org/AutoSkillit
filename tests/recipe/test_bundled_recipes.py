@@ -1257,16 +1257,22 @@ class TestReviewPrRecipeIntegration:
         return load_recipe(builtin_recipes_dir() / request.param)
 
     def test_open_pr_step_routes_to_review_pr(self, recipe: object) -> None:
-        """T_RP1: open_pr_step.on_success routes to review_pr or extract_pr_number (queue-aware).
+        """T_RP1: open_pr_step.on_success routes per-recipe to the correct next step.
 
         Queue-aware recipes (implementation, remediation) insert extract_pr_number between
         open_pr_step and review_pr to capture the PR number for merge queue support.
         Non-queue recipes (implementation-groups) route directly to review_pr.
         """
+        _expected: dict[str, str] = {
+            "implementation": "extract_pr_number",
+            "remediation": "extract_pr_number",
+            "implementation-groups": "review_pr",
+        }
+        recipe_name = recipe.name  # type: ignore[attr-defined]
+        expected = _expected[recipe_name]
         on_success = recipe.steps["open_pr_step"].on_success  # type: ignore[attr-defined]
-        assert on_success in ("review_pr", "extract_pr_number"), (
-            f"open_pr_step.on_success must be 'review_pr' or 'extract_pr_number', "
-            f"got {on_success!r}"
+        assert on_success == expected, (
+            f"{recipe_name}: open_pr_step.on_success must be {expected!r}, got {on_success!r}"
         )
 
     def test_review_pr_step_exists_and_is_run_skill(self, recipe: object) -> None:

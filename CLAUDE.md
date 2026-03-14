@@ -123,6 +123,7 @@ src/autoskillit/
 │   ├── __init__.py          #   Re-exports public surface
 │   ├── commands.py          #   ClaudeInteractiveCmd/ClaudeHeadlessCmd builders
 │   ├── db.py                #   Read-only SQLite execution with defence-in-depth
+│   ├── diff_annotator.py    #   Deterministic diff annotation and findings filter for review-pr
 │   ├── headless.py          #   Headless Claude session orchestration (L1 service)
 │   ├── linux_tracing.py     #   Linux-only /proc + psutil process tracing (accumulate snapshots)
 │   ├── anomaly_detection.py #   Post-hoc anomaly detection over ProcSnapshot series

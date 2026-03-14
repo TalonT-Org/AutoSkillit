@@ -24,6 +24,12 @@ from autoskillit.execution.db import (
 from autoskillit.execution.db import (
     _execute_readonly_query as execute_readonly_query,
 )
+from autoskillit.execution.diff_annotator import (
+    FilterResult,
+    annotate_diff,
+    filter_findings,
+    parse_hunk_ranges,
+)
 from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.execution.headless import (
     DefaultHeadlessExecutor,
@@ -91,6 +97,11 @@ __all__ = [
     "DefaultCIWatcher",
     # merge_queue
     "DefaultMergeQueueWatcher",
+    # diff_annotator
+    "FilterResult",
+    "annotate_diff",
+    "filter_findings",
+    "parse_hunk_ranges",
     # db
     "execute_readonly_query",
     "DefaultDatabaseReader",

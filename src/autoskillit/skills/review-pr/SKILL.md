@@ -97,20 +97,31 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 
 Save the diff to `temp/review-pr/diff_{pr_number}.txt`.
 
-### Step 2.7: Parse Diff Hunk Ranges
+### Step 2.7: Deterministic Diff Annotation
 
-Parse the saved diff to extract valid new-file line ranges per file. These ranges
-define which `line` values are valid for the GitHub Reviews API batch POST.
+Run the following via Bash to produce the annotated diff and `VALID_LINE_RANGES`.
+This is deterministic — do not parse `@@` headers yourself.
 
-For each `+++ b/{path}` header in the diff, collect all subsequent `@@ -a,b +c,d @@`
-hunk headers. From each hunk header, `c` is the starting new-file line and `d` is
-the hunk's new-file line count (if absent, count is 1). When `d=0` (pure deletion
-hunk, e.g. `+0,0`), skip the hunk — it has no new-file lines to anchor to.
-Otherwise the valid range for that hunk is `[c, c + d - 1]`.
+```bash
+python3 -c "
+from autoskillit.execution.diff_annotator import parse_hunk_ranges, annotate_diff
+import json, pathlib
+diff = pathlib.Path('${DIFF_PATH}').read_text()
+annotated = annotate_diff(diff)
+pathlib.Path('${ANNOTATED_DIFF_PATH}').write_text(annotated)
+ranges = parse_hunk_ranges(diff)
+pathlib.Path('${RANGES_PATH}').write_text(json.dumps(ranges))
+print(f'Annotated {len(ranges)} files, wrote ${ANNOTATED_DIFF_PATH} and ${RANGES_PATH}')
+"
+```
 
-Build `VALID_LINE_RANGES` — a map of file path → list of `(start, end)` tuples.
-Store in memory for use in Steps 4 and 6.
-If the diff is empty or parsing fails, leave `VALID_LINE_RANGES` empty (no filtering).
+Where:
+- `DIFF_PATH` is `temp/review-pr/diff_{pr_number}.txt` (saved in Step 2)
+- `ANNOTATED_DIFF_PATH` is `temp/review-pr/annotated_diff_{pr_number}.txt`
+- `RANGES_PATH` is `temp/review-pr/ranges_{pr_number}.json`
+
+`VALID_LINE_RANGES` is now a JSON file on disk. Load it in Step 4 for filtering.
+If the diff is empty or the Python invocation fails, leave `VALID_LINE_RANGES` empty (no filtering).
 
 ### Step 2.5: Deletion Context Pre-Computation
 
@@ -230,15 +241,15 @@ Subagent prompt template (dimensions 1–6):
 > Set requires_decision=false for ALL bugs, style issues, or anything with a
 > clear fix, regardless of severity. When in doubt, set requires_decision=false.
 >
-> The `line` value must be a line number visible in the diff hunks shown above.
-> Report only lines from `+` (added) or ` ` (context) lines within a `@@` hunk block.
-> Do not report absolute file line numbers that do not appear in this diff.
-> If the finding cannot be anchored to a line visible in the diff, use the nearest
-> `+` or context line in the same hunk.
+> Each line in the diff is prefixed with `[LNNN]` where NNN is the new-file line number.
+> When reporting findings, use the `[LNNN]` number as the `line` value in your finding.
+> Do not compute line numbers yourself — use the marker.
+> If the finding cannot be anchored to a specific `[LNNN]` marker, use the nearest
+> `+` or context line's marker in the same hunk.
 >
 > If no issues found, return an empty array [].
-> Diff content:
-> {diff_content}
+> Annotated diff content (each line prefixed with [LNNN] markers):
+> {annotated_diff_content}
 
 Subagent prompt template (dimension 7 — deletion_regression, only when `deletion_context` is non-null):
 
@@ -284,6 +295,14 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
    - `actionable_findings` — requires_decision=false AND severity in ("critical", "warning")
    - `decision_findings` — requires_decision=true (any severity)
    - `info_findings` — severity == "info" AND requires_decision=false
+
+### Step 4.5: Echo Primary Obligation
+
+After aggregating all subagent findings, before proceeding to verdict or posting, you MUST state aloud:
+
+> "I have N findings. My primary job is to post inline comments on specific code lines for each finding. I must use the GitHub Reviews API to leave comments anchored to the exact lines in the diff."
+
+This is not optional. Do not proceed to Step 5 without stating this.
 
 ### Step 5: Determine Verdict
 
@@ -371,7 +390,14 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
 Individual POSTs are not atomic — one failure does not block others.
 If at least one per-finding comment succeeds, proceed to Step 7.
 
-**Fallback Tier 2 — Bullet-List Summary Dump (if all individual posts fail):**
+**Fallback Tier 2 — DEGRADED: Bullet-List Summary Dump (if all individual posts fail):**
+
+WARNING: If you reach Tier 2 fallback, the review has FAILED its primary purpose.
+Before posting the body dump, you MUST state:
+
+> "FALLBACK: I was unable to post inline comments. Posting summary as review body instead. This is a DEGRADED review."
+
+Tier 2 is a failure mode with a workaround, not an acceptable alternative to inline comments.
 
 Post ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`) via:
 
@@ -394,6 +420,17 @@ Format each file's findings as a bullet list (not a markdown table):
 ```
 
 This bullet-list format avoids horizontal overflow from long message content.
+
+### Step 6.5: Post-Completion Confirmation
+
+After completing Step 6, you MUST state:
+
+> "I confirm that I posted N inline comments on the following files: [list files]. If I posted 0 inline comments and had findings, this review has FAILED its primary purpose."
+
+If you find yourself writing "I posted 0 inline comments and had N findings" — STOP.
+Do not proceed to Step 7. Instead, investigate why zero comments were posted. Check
+whether the line numbers in your findings match `VALID_LINE_RANGES`. If they do not,
+attempt to map each finding to the nearest valid hunk line before falling back.
 
 ### Step 7: Submit Summary Review
 

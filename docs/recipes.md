@@ -191,7 +191,7 @@ Clone ─── Analyze PRs ─── Create Integration Branch ─── [FOR E
 | audit | No | true | Gate on audit-impl quality check |
 
 **Skills invoked:** analyze-prs, merge-pr, make-plan, dry-walkthrough,
-implement-worktree-no-merge, resolve-failures, audit-impl, create-review-pr,
+implement-worktree-no-merge, resolve-failures, audit-impl, open-integration-pr,
 diagnose-ci
 
 ---

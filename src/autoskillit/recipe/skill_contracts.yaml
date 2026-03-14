@@ -298,7 +298,7 @@ skills:
     expected_output_patterns:
     - "https://github\\.com/.*/pull/\\d+"
 
-  create-review-pr:
+  open-integration-pr:
     inputs:
     - name: integration_branch
       type: string

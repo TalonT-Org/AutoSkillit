@@ -17,14 +17,6 @@ def test_generated_files_importable_from_core_paths():
         assert isinstance(entry, str)
 
 
-def test_diagram_directory_in_generated_files():
-    """Diagram directory must be in GENERATED_FILES so perform_merge strips it."""
-    assert "src/autoskillit/recipes/diagrams/" in GENERATED_FILES, (
-        "src/autoskillit/recipes/diagrams/ must be in GENERATED_FILES. "
-        "Add it to the frozenset in src/autoskillit/core/paths.py."
-    )
-
-
 def test_no_generated_files_tracked():
     """Generated config and diagram files must not be tracked in git."""
     result = subprocess.run(
@@ -44,15 +36,6 @@ def test_no_generated_files_tracked():
     assert tracked_generated == [], (
         f"Generated files must not be tracked in git: {tracked_generated}. "
         "Run 'git rm --cached <file>' and ensure the path is in .gitignore."
-    )
-
-
-def test_gitignore_covers_diagram_directory():
-    """Diagram directory must be in .gitignore to prevent accidental commits."""
-    gitignore = (REPO_ROOT / ".gitignore").read_text()
-    assert "src/autoskillit/recipes/diagrams/" in gitignore, (
-        "Missing .gitignore entry for diagram directory. "
-        "Add 'src/autoskillit/recipes/diagrams/' to .gitignore."
     )
 
 

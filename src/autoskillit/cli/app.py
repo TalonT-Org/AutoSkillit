@@ -503,7 +503,9 @@ def cook(recipe: str | None = None):
 
     diagram = load_recipe_diagram(recipe, _recipes_dir_for(_match))
     if diagram:
-        print(diagram)
+        from autoskillit.cli._ansi import diagram_to_terminal
+
+        print(diagram_to_terminal(diagram))
 
     confirm = input("Launch session? [Y/n]: ").strip().lower()
     if confirm in ("n", "no"):

@@ -1,6 +1,6 @@
 name: merge-prs
 description: Analyze open PRs, determine merge order, collapse them sequentially into an integration branch, and open a single review PR for human approval. Handles conflict resolution via plan+implement for complex PRs.
-summary: "clone > setup_remote > analyze_prs > create_integration_branch > [loop per PR: merge_pr or (plan > verify > implement > test > push_worktree_branch > create_conflict_pr > wait_for_conflict_ci > merge_conflict_pr)] > push_integration_branch > collect_artifacts > check_impl_plans > (audit_impl?) > create_review_pr > wait_for_review_pr_mergeability > check_mergeability > (resolve_integration_conflicts > force_push_after_rebase)? > review_pr_integration > (resolve_review_integration > re_push_review_integration)? > ci_watch_pr > cleanup"
+summary: "clone > setup_remote > analyze_prs > create_integration_branch > [loop per PR: merge_pr or (plan > verify > implement > test > push_worktree_branch > create_conflict_pr > wait_for_conflict_ci > merge_conflict_pr)] > push_integration_branch > collect_artifacts > check_impl_plans > (audit_impl?) > open_integration_pr > wait_for_review_pr_mergeability > check_mergeability > (resolve_integration_conflicts > force_push_after_rebase)? > review_pr_integration > (resolve_review_integration > re_push_review_integration)? > ci_watch_pr > cleanup"
 autoskillit_version: "0.3.0"
 
 ingredients:
@@ -583,13 +583,13 @@ steps:
       step_name: "check_impl_plans"
     on_result:
       - when: "${{ result.stdout | trim }} == 0"
-        route: create_review_pr
+        route: open_integration_pr
       - route: audit_impl
     on_failure: audit_impl
     note: >
       Counts implementation plan files in plans_dir — excludes pr_analysis_plan_*.md,
       which is always written by analyze-prs but is not an implementation plan.
-      Routes to create_review_pr when zero implementation plans exist (all PRs merged
+      Routes to open_integration_pr when zero implementation plans exist (all PRs merged
       cleanly, make-plan was never invoked — "No plans generated; all PRs merged cleanly").
       Routes to audit_impl when conflict reports or make-plan outputs are present.
 
@@ -605,7 +605,7 @@ steps:
     on_result:
       field: verdict
       routes:
-        GO: create_review_pr
+        GO: open_integration_pr
         NO GO: remediate
     on_failure: cleanup_failure
     optional: true
@@ -617,11 +617,11 @@ steps:
       is guaranteed to be set when audit_impl runs.
       Gated by check_impl_plans — only reached when implementation plan files exist in
       plans_dir. Only execute if inputs.audit is 'true'; if false, skip directly to
-      create_review_pr. Passes context.all_plan_paths (comma-separated list of plan file
+      open_integration_pr. Passes context.all_plan_paths (comma-separated list of plan file
       paths accumulated across the PR loop) as plans_input. audit-impl splits on commas
       and audits each plan file.
       implementation_ref is context.integration_branch (no worktree remains).
-      GO → create_review_pr. NO GO → remediate (re-enters plan with remediation file).
+      GO → open_integration_pr. NO GO → remediate (re-enters plan with remediation file).
 
   remediate:
     action: route
@@ -629,12 +629,12 @@ steps:
       remediation_path: "${{ context.remediation_path }}"
     on_success: plan
 
-  create_review_pr:
+  open_integration_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:create-review-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }}"
+      skill_command: "/autoskillit:open-integration-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "create_review_pr"
+      step_name: "open_integration_pr"
     capture:
       pr_url: "${{ result.pr_url }}"
     on_success: wait_for_review_pr_mergeability

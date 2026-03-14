@@ -3,7 +3,7 @@ description: >
   Automate a single development sprint: triage open issues, load the
   implementation-groups recipe for direct orchestration, then create the
   integration review PR. The orchestrator drives all steps with full visibility.
-summary: triage > load-impl-groups (direct orchestration) > create-review-pr
+summary: triage > load-impl-groups (direct orchestration) > open-integration-pr
 autoskillit_version: "0.3.1"
 
 ingredients:
@@ -55,7 +55,7 @@ steps:
   create_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:create-review-pr ${{ context.triage_manifest }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:open-integration-pr ${{ context.triage_manifest }} ${{ inputs.base_branch }}"
       cwd: ${{ inputs.source_dir }}
       step_name: create_pr
     capture:

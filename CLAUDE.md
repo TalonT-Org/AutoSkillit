@@ -235,15 +235,15 @@ src/autoskillit/
     ├── audit-cohesion/           ├── audit-defense-standards/
     ├── audit-friction/           ├── audit-impl/
     ├── audit-tests/              ├── close-kitchen/
-    ├── collapse-issues/          ├── create-review-pr/
-    ├── design-guards/            ├── diagnose-ci/
-    ├── dry-walkthrough/          ├── elaborate-phase/
-    ├── enrich-issues/            ├── implement-worktree/
-    ├── implement-worktree-no-merge/ ├── investigate/
-    ├── issue-splitter/           ├── make-arch-diag/
-    ├── make-groups/              ├── make-plan/
-    ├── make-req/                 ├── merge-pr/
-    ├── mermaid/                  ├── migrate-recipes/
+    ├── collapse-issues/          ├── design-guards/
+    ├── diagnose-ci/              ├── dry-walkthrough/
+    ├── elaborate-phase/          ├── enrich-issues/
+    ├── implement-worktree/       ├── implement-worktree-no-merge/
+    ├── investigate/              ├── issue-splitter/
+    ├── make-arch-diag/           ├── make-groups/
+    ├── make-plan/                ├── make-req/
+    ├── merge-pr/                 ├── mermaid/
+    ├── migrate-recipes/          ├── open-integration-pr/
     ├── open-kitchen/             ├── open-pr/
     ├── pipeline-summary/         ├── prepare-issue/
     ├── process-issues/           ├── rectify/

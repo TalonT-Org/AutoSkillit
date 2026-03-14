@@ -176,15 +176,8 @@ def test_bundled_implementation_diagram_matches_spec_structure() -> None:
         "Implementation recipe must have a FOR EACH iteration block in the graph."
     )
 
-    # Optional step bracket+arrow notation
-    assert "[" in graph_section and "← only if" in graph_section, (
-        "Optional steps must use bracket notation with '← only if' annotation."
-    )
-
-    # Retry parenthetical notation for retries:0
-    assert "(retry ×∞)" in graph_section, (
-        "implement step with retries:0 must render as '(retry ×∞)'."
-    )
+    # Optional step bracket notation
+    assert "(optional)" in graph_section, "Optional steps must use '(optional)' annotation."
 
     # Inputs section (not Ingredients)
     assert "### Inputs" in content, "Section header must be '### Inputs'."

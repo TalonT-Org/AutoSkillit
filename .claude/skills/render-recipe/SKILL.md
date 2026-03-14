@@ -20,6 +20,8 @@ Produce a compact, structured overview of an AutoSkillit recipe. Reads the recip
 - Add decorative flair, emoji, or unnecessary commentary
 - Create files outside `temp/render-recipe/` and `recipes/diagrams/`
 - Use Unicode characters, emoji, or non-ASCII symbols. ASCII only — use `*` for pass, `x` for fail, `?` for confirm, `|` for spine, `+` for joins. No box-drawing characters, no arrows like `→` or `↑`, no check marks, no crosses. Write `->` and `(up)` instead.
+- Include HTML comments, hash markers, format version markers, or any metadata in the output. No `<!-- ... -->` lines.
+- Include "Agent-managed" lines listing internal context variables. The user doesn't need to see plumbing state.
 
 **ALWAYS:**
 - Read the recipe YAML carefully and render exactly what exists
@@ -36,8 +38,9 @@ The output has exactly three sections. Follow this structure precisely.
 
 ```
 ## {name}
-{description}
 ```
+
+Just the name. No description — the user already chose the recipe from the picker.
 
 ### Section 2: Flow Diagram
 
@@ -53,7 +56,7 @@ The diagram shows ONLY the *skill work* — `run_skill` invocations and `test_ch
 - **All CI/CD steps** — `wait_for_ci`, `wait_for_merge_queue`, `enable_auto_merge`, `route_queue_mode`, `reenter_merge_queue`, `queue_ejected_fix`, `diagnose_ci`. Plumbing.
 - **All `merge_worktree` steps** — worktree-back-to-branch merge. Plumbing.
 - **All cleanup steps** — `delete_clone`, `cleanup_failure`, `confirm_cleanup`. Teardown.
-- **All `open_pr` / `review_pr` steps** — post-merge delivery plumbing.
+- **All post-PR steps** — `review_pr`, `resolve_review`, `diagnose_ci`, `resolve_ci`. Post-delivery plumbing.
 - **All `action: route` steps** — pure routing nodes with no work.
 
 If a hidden step is the *only* path between two visible steps, collapse the route — just connect the visible steps directly. The reader should see: "what skills run, in what order, and what happens on failure."
@@ -75,6 +78,7 @@ Use a vertical spine with `|` and `+--` branches. ASCII only — no Unicode.
     - `implement-worktree-no-merge` -> `implement`
     - `audit-impl` -> `audit`
     - `resolve-failures` -> `fix`
+    - `open-integration-pr` -> `open-pr`
     - Everything else: use the skill name as-is (e.g., `make-plan`, `dry-walkthrough`, `rectify`)
 11. **FOR EACH loop routing** (more parts? / all done?) is implicit — omit it. The loop block itself conveys iteration. The first step inside the loop connects directly to the `+----+` box — no extra `|` line needed between them.
 12. **Context limit recovery** (`retry_worktree`, `on_context_limit`) is automatic plumbing — omit it.
@@ -127,7 +131,7 @@ Render all ingredients as a single Markdown table.
 - Show `off`/`on` for boolean-like flags with `"false"`/`"true"` defaults.
 - Show `auto-detect` for empty-string defaults that auto-resolve.
 - If an ingredient is conditionally required (e.g., `task` required when `make_groups=false`), note it parenthetically: "What to implement (when no groups)".
-- Omit agent-managed state (ingredients with no default that are populated by step captures). If any exist, add a brief line below the table: `Agent-managed: work_dir, worktree_path, plan_path, ...`
+- Omit agent-managed state entirely (ingredients with no default that are populated by step captures). No listing, no mention.
 
 ---
 

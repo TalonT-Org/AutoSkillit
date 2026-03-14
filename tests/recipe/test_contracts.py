@@ -512,7 +512,7 @@ FILE_PRODUCING_SKILLS_WITH_CONTRACTS: list[str] = [
     "analyze-prs",
     "merge-pr",
     "open-pr",
-    "create-review-pr",
+    "open-integration-pr",
     "implement-worktree",
     "implement-worktree-no-merge",
     "resolve-merge-conflicts",

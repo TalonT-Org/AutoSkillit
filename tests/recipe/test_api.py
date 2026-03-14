@@ -314,19 +314,19 @@ class TestIngredientSortOrder:
         flag = _ingredient_sort_key("audit", required=False, default="true")
         assert auto[0] < flag[0], "auto-detect must sort above boolean flags"
 
-    def test_sort_key_flags_above_constants(self):
+    def test_sort_key_flags_above_optional(self):
         from autoskillit.recipe._api import _ingredient_sort_key
 
         flag = _ingredient_sort_key("audit", required=False, default="true")
-        const = _ingredient_sort_key("run_name", required=False, default="impl")
-        assert flag[0] < const[0], "boolean flags must sort above constants"
+        opt = _ingredient_sort_key("issue_url", required=False, default=None)
+        assert flag[0] < opt[0], "boolean flags must sort above optional"
 
-    def test_sort_key_constants_above_optional(self):
+    def test_sort_key_optional_above_constants(self):
         from autoskillit.recipe._api import _ingredient_sort_key
 
-        const = _ingredient_sort_key("run_name", required=False, default="impl")
         opt = _ingredient_sort_key("issue_url", required=False, default=None)
-        assert const[0] < opt[0], "constants must sort above optional"
+        const = _ingredient_sort_key("run_name", required=False, default="impl")
+        assert opt[0] < const[0], "optional must sort above constants (rarely changed)"
 
     def test_sort_key_full_tier_ordering(self):
         """All five tiers must be strictly ordered."""
@@ -336,8 +336,8 @@ class TestIngredientSortOrder:
             _ingredient_sort_key("task", required=True, default=None)[0],  # required
             _ingredient_sort_key("source_dir", required=False, default="")[0],  # auto-detect
             _ingredient_sort_key("audit", required=False, default="true")[0],  # flag
-            _ingredient_sort_key("run_name", required=False, default="impl")[0],  # constant
             _ingredient_sort_key("issue_url", required=False, default=None)[0],  # optional
+            _ingredient_sort_key("run_name", required=False, default="impl")[0],  # constant
         ]
         assert tiers == sorted(tiers), f"Tiers must be strictly ascending: {tiers}"
         assert len(set(tiers)) == 5, f"All 5 tiers must be distinct: {tiers}"
@@ -345,14 +345,14 @@ class TestIngredientSortOrder:
     def test_implementation_table_has_required_first(self):
         """Implementation recipe must show required ingredients at the top."""
         from autoskillit.core import load_yaml
-        from autoskillit.recipe._api import _format_ingredients_table
+        from autoskillit.recipe._api import format_ingredients_table
         from autoskillit.recipe.io import _parse_recipe, find_recipe_by_name
 
         match = find_recipe_by_name("implementation", Path.cwd())
         assert match is not None
         data = load_yaml(match.path.read_text())
         recipe = _parse_recipe(data)
-        table = _format_ingredients_table(recipe)
+        table = format_ingredients_table(recipe)
         assert table is not None
         lines = [
             ln for ln in table.splitlines() if "|" in ln and "---" not in ln and "Name" not in ln
@@ -363,14 +363,14 @@ class TestIngredientSortOrder:
     def test_merge_prs_table_has_auto_detect_before_flags(self):
         """merge-prs recipe must show auto-detect ingredients before boolean flags."""
         from autoskillit.core import load_yaml
-        from autoskillit.recipe._api import _format_ingredients_table
+        from autoskillit.recipe._api import format_ingredients_table
         from autoskillit.recipe.io import _parse_recipe, find_recipe_by_name
 
         match = find_recipe_by_name("merge-prs", Path.cwd())
         assert match is not None
         data = load_yaml(match.path.read_text())
         recipe = _parse_recipe(data)
-        table = _format_ingredients_table(recipe)
+        table = format_ingredients_table(recipe)
         assert table is not None
         lines = [
             ln for ln in table.splitlines() if "|" in ln and "---" not in ln and "Name" not in ln

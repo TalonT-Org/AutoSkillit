@@ -32,7 +32,9 @@ Produce a compact, structured overview of an AutoSkillit recipe. Reads the recip
 
 ## Rendering Specification
 
-The output has exactly three sections. Follow this structure precisely.
+The output has exactly two sections. Follow this structure precisely.
+
+**Note:** The inputs table is NOT part of the diagram output. It is generated at runtime from the recipe YAML by `_format_ingredients_table` (single source of truth). Do not include an inputs table in the diagram file.
 
 ### Section 1: Header
 
@@ -83,6 +85,8 @@ Use a vertical spine with `|` and `+--` branches. ASCII only — no Unicode.
 11. **FOR EACH loop routing** (more parts? / all done?) is implicit — omit it. The loop block itself conveys iteration. The first step inside the loop connects directly to the `+----+` box — no extra `|` line needed between them.
 12. **Context limit recovery** (`retry_worktree`, `on_context_limit`) is automatic plumbing — omit it.
 13. **Consistent failure language.** Always use `x fail` for failure branches. Never use "NO GO", "FAIL", "failure", or other variants.
+14. **Back-edge targets must be the actual destination, not an intermediate optional step.** When a back-edge (e.g. audit fail) routes to a step that then passes through an optional step before reaching the real target, show the back-edge pointing to the real target directly. Example: if audit fail routes to `make_plan` and `make_plan.on_success` is `dry_walkthrough`, show `x fail [-> make-plan]` with the arrow going to `make-plan`, not to `review-approach`. The optional step is only reachable from its primary path, not from back-edges that happen to pass through the same chain.
+15. **Center step names on the vertical spine.** When a step name appears on the main spine (not on a branch), center the text relative to the `|` character column. All spine-level step names should align to the same visual center.
 
 **Reference example for implementation:**
 
@@ -106,33 +110,6 @@ Use a vertical spine with `|` and `+--` branches. ASCII only — no Unicode.
 - Recipes with few optional steps can show them inline on the main flow: `clone ─── audit ─── investigate ─── plan ─── implement ─── test ─── merge ─── push`.
 - Very simple recipes (under 8 meaningful steps) can use a single horizontal chain.
 - Always adapt the shape to the recipe — do not force a complex layout on a simple recipe.
-
-### Section 3: Inputs Table
-
-Render all ingredients as a single Markdown table.
-
-```
-### Inputs
-
-| Name | Description | Default |
-|------|-------------|---------|
-| task | What to implement | — |
-| source_dir | Repository path | auto-detect |
-| base_branch | Merge target | main |
-| run_name | Run name prefix | impl |
-| make_groups | Decompose into groups | off |
-| review_approach | Research first | off |
-| audit | Post-merge audit | on |
-| open_pr | PR instead of direct merge | off |
-```
-
-**Rules:**
-- Keep descriptions short — one phrase, not a sentence.
-- Show `—` for no default (required inputs).
-- Show `off`/`on` for boolean-like flags with `"false"`/`"true"` defaults.
-- Show `auto-detect` for empty-string defaults that auto-resolve.
-- If an ingredient is conditionally required (e.g., `task` required when `make_groups=false`), note it parenthetically: "What to implement (when no groups)".
-- Omit agent-managed state entirely (ingredients with no default that are populated by step captures). No listing, no mention.
 
 ---
 
@@ -165,13 +142,9 @@ Before writing, check the diagram for alignment errors. Scan every line and veri
 
 If any check fails, fix the diagram before proceeding. This is a mechanical check — count character positions, do not eyeball it.
 
-### Step 4: Build the Inputs Table
+### Step 4: Assemble and Write
 
-Construct the table following the rules in Section 3.
-
-### Step 5: Assemble and Write
-
-Combine all three sections and write to two locations:
+Combine both sections and write to two locations:
 1. `temp/render-recipe/{recipe-name}_{YYYY-MM-DD_HHMMSS}.md` — timestamped history copy
 2. The recipe's diagram file — for bundled recipes: `src/autoskillit/recipes/diagrams/{recipe-name}.md`; for project recipes: `.autoskillit/recipes/diagrams/{recipe-name}.md`. This is the file that `load_recipe` serves to Claude.
 

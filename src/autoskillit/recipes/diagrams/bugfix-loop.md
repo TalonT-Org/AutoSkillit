@@ -64,15 +64,3 @@ merge  [merge_worktree] (retry ×3)
 ─────────────────────────────────────
 done  "All tests passing. Fix merged successfully."
 escalate  "Human intervention needed. Review the latest output for details."
-
-### Inputs
-| Name | Description | Default |
-|------|-------------|---------|
-| test_dir | Directory containing the project to test | — |
-| base_branch | Base branch to merge fixes into (defaults to main) | main |
-| helper_dir | Directory for helper agent sessions | — |
-| audit | Gate merge on audit-impl quality check (true/false) | on |
-### Kitchen Rules
-- NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All code changes and investigation happen through headless sessions via run_skill.
-- Route to on_failure when a step fails — the downstream skill (e.g., resolve-failures) has diagnostic access that the orchestrator does not. Do not investigate or attempt to fix failures directly.
-- SEQUENTIAL EXECUTION: complete full cycle per part before advancing. For each plan_part, run the full cycle (implement → test → merge) before starting the next part. Do NOT batch-implement all parts upfront.

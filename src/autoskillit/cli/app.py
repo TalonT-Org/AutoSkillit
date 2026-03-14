@@ -429,7 +429,6 @@ def cook(recipe: str | None = None):
         find_recipe_by_name,
         list_recipes,
         load_recipe,
-        load_recipe_diagram,
         validate_recipe,
     )
 
@@ -499,18 +498,14 @@ def cook(recipe: str | None = None):
             print(f"  - {err}")
         sys.exit(1)
 
-    from autoskillit.cli._prompts import _COOK_GREETINGS  # noqa: E402
+    from autoskillit.cli._prompts import _COOK_GREETINGS, show_cook_preview  # noqa: E402
 
-    diagram = load_recipe_diagram(recipe, _recipes_dir_for(_match))
-    if diagram:
-        from autoskillit.cli._ansi import diagram_to_terminal
-
-        print(diagram_to_terminal(diagram))
+    show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
 
     from autoskillit.cli._ansi import permissions_warning
 
     print(permissions_warning())
-    confirm = input("Launch session? [Y/n]: ").strip().lower()
+    confirm = input("Launch session? [Enter/n]: ").strip().lower()
     if confirm in ("n", "no"):
         return
 

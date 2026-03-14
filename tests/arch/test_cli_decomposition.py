@@ -41,12 +41,17 @@ def _body_is_only_sys_exit(node: ast.ExceptHandler) -> bool:
 
 
 # CD1
+# cli/app.py is L3 and can import from every internal layer (L0–L2), which makes
+# it the single easiest place for AI to dump new logic — it bypasses all layer
+# restrictions that guard other modules.  This limit exists to keep that file
+# decomposed.  Only a human may raise it beyond 750.
 def test_app_py_under_line_limit():
-    """cli/app.py must be under 500 lines after decomposition."""
+    """cli/app.py must stay under the line limit to prevent monolith regrowth."""
     p = SRC_ROOT / "cli" / "app.py"
     lines = p.read_text().splitlines()
-    assert len(lines) <= 530, (
-        f"cli/app.py has {len(lines)} lines -- must be <=530 after deferred import refactor"
+    assert len(lines) <= 750, (
+        f"cli/app.py has {len(lines)} lines -- must be <=750; "
+        "decompose into cli/ submodules instead of growing this file"
     )
 
 

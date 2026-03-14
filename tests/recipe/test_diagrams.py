@@ -151,7 +151,7 @@ def test_extract_routing_edges_covers_all_routing_fields() -> None:
 
 
 def test_bundled_implementation_diagram_matches_spec_structure() -> None:
-    """T10: bundled implementation diagram uses spec-compliant v3 format."""
+    """T10: bundled implementation diagram uses spec-compliant format (flow diagram only)."""
     import autoskillit
 
     pkg_root = Path(autoskillit.__file__).parent
@@ -159,34 +159,26 @@ def test_bundled_implementation_diagram_matches_spec_structure() -> None:
     assert diagram_path.exists(), f"Bundled diagram not found: {diagram_path}"
     content = diagram_path.read_text(encoding="utf-8")
 
-    graph_start = content.index("### Graph")
-    graph_end = content.index("### Inputs")
-    graph_section = content[graph_start:graph_end]
-
     # Infrastructure steps must be hidden
-    assert "capture_base_sha" not in graph_section, (
-        "'capture_base_sha' is an infrastructure step and must not appear in the graph."
+    assert "capture_base_sha" not in content, (
+        "'capture_base_sha' is an infrastructure step and must not appear in the diagram."
     )
-    assert "set_merge_target" not in graph_section, (
-        "'set_merge_target' is an infrastructure step and must not appear in the graph."
+    assert "set_merge_target" not in content, (
+        "'set_merge_target' is an infrastructure step and must not appear in the diagram."
     )
 
     # FOR EACH block must be present
-    assert "FOR EACH" in graph_section.upper(), (
-        "Implementation recipe must have a FOR EACH iteration block in the graph."
+    assert "FOR EACH" in content.upper(), (
+        "Implementation recipe must have a FOR EACH iteration block in the diagram."
     )
 
     # Optional step bracket notation
-    assert "(optional)" in graph_section, "Optional steps must use '(optional)' annotation."
+    assert "(optional)" in content, "Optional steps must use '(optional)' annotation."
 
-    # Inputs section (not Ingredients)
-    assert "### Inputs" in content, "Section header must be '### Inputs'."
-
-    # Boolean defaults rendered as off/on
-    inputs_start = content.index("### Inputs")
-    inputs_section = content[inputs_start:]
-    assert "off" in inputs_section, (
-        "Boolean-default ingredients must render as 'off' in Inputs table."
+    # Inputs table must NOT be in the diagram file (generated from recipe YAML at runtime)
+    assert "### Inputs" not in content, (
+        "Diagram files must not contain an Inputs table — "
+        "the ingredients table is generated from recipe YAML at runtime."
     )
 
 

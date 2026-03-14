@@ -10,7 +10,7 @@ skill_hashes:
 skills:
   investigate:
     inputs:
-    - name: topic
+    - name: task
       type: string
       required: true
     outputs: []

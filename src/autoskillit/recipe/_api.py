@@ -63,12 +63,12 @@ def _ingredient_sort_key(name: str, required: bool, default: object) -> tuple[in
         return (1, name)  # auto-detect — important, user should review
     if default in ("true", "false"):
         return (2, name)  # boolean user flags
-    if default is not None:
-        return (3, name)  # has a non-empty default (constants)
-    return (4, name)  # optional with no default
+    if default is None:
+        return (3, name)  # optional with no default
+    return (4, name)  # has a non-empty default (constants, rarely changed)
 
 
-def _format_ingredients_table(
+def format_ingredients_table(
     recipe: Any, resolved_defaults: dict[str, str] | None = None
 ) -> str | None:
     """Build a pre-formatted ingredients table from a parsed Recipe.
@@ -456,7 +456,7 @@ def load_and_validate(
 
     # Build pre-formatted ingredients table
     ing_table = (
-        _format_ingredients_table(recipe, resolved_defaults=resolved_defaults) if recipe else None
+        format_ingredients_table(recipe, resolved_defaults=resolved_defaults) if recipe else None
     )
 
     result: LoadRecipeResult = {

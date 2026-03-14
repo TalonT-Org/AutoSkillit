@@ -17,7 +17,7 @@ from autoskillit.server.helpers import (
     _notify,
     _require_enabled,
     _require_not_headless,
-    _resolve_ingredient_defaults,
+    resolve_ingredient_defaults,
     track_response_size,
 )
 
@@ -177,7 +177,7 @@ async def load_recipe(name: str) -> str:
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"error": "Server not initialized"})
     suppressed = tool_ctx.config.migration.suppressed
-    _defaults = _resolve_ingredient_defaults(Path.cwd())
+    _defaults = resolve_ingredient_defaults(Path.cwd())
     result = tool_ctx.recipes.load_and_validate(
         name, Path.cwd(), suppressed=suppressed, resolved_defaults=_defaults
     )

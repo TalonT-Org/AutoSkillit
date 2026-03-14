@@ -89,6 +89,14 @@ class TestResolveRecipeInput:
 
 
 class TestCLICook:
+    @pytest.fixture(autouse=True)
+    def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub terminal preview to avoid subprocess.run collision with git calls."""
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts.show_cook_preview",
+            lambda *a, **kw: None,
+        )
+
     # --- workspace init ---
 
     def test_prep_station_init_creates_dir_with_marker(
@@ -920,6 +928,14 @@ class TestCLICook:
 
 class TestCookDisplayOwnership:
     """cook() delegates recipe display to the Claude session via load_recipe."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub terminal preview to avoid subprocess.run collision with git calls."""
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts.show_cook_preview",
+            lambda *a, **kw: None,
+        )
 
     def _setup_recipe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         """Write test recipe to scripts_dir and chdir."""

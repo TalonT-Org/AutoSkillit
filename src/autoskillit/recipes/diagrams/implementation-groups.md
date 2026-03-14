@@ -122,22 +122,3 @@ cleanup_failure  [remove_clone] (retry ×3)
 ─────────────────────────────────────
 done  "Implementation pipeline complete. All groups/tasks have been planned, implemented, tested, and merged."
 escalate_stop  "Pipeline failed — human intervention needed. Check the worktree and plan for details."
-
-### Inputs
-| Name | Description | Default |
-|------|-------------|---------|
-| source_doc | Path to source document for group decomposition | — |
-| source_dir | Remote URL for source repo (auto-detected from git origin if empty) | auto-detect |
-| run_name | Pipeline run name prefix (used in branch and clone naming) | impl |
-| base_branch | Base branch to merge into (defaults to main) | main |
-| review_approach | Run /review-approach before implementation? (true/false) | off |
-| audit | Gate merge on audit-impl quality check (true/false) | on |
-| open_pr | Open a PR to base_branch instead of merging directly (true/false) | on |
-| issue_url | GitHub issue URL to close on merge (optional) | auto-detect |
-### Kitchen Rules
-- NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill.
-- Route to on_failure — never investigate or fix directly from the orchestrator.
-- source_doc is required — it provides the work via group decomposition.
-- Process plan parts and groups sequentially. Complete the full cycle (verify → implement → test → merge) for one part before starting the next. Do NOT run verify for all parts upfront.
-- By default (open_pr=true), a feature branch is created with a unique name derived from inputs.run_name and context.issue_number (e.g. impl/124) or a date suffix (e.g. impl/20260304) when no issue is available. All worktree merges target the feature branch (context.merge_target), not base_branch directly. The push step publishes the feature branch, then open_pr_step opens a PR to base_branch. When open_pr=false, merges target base_branch directly and open_pr_step is skipped.
-- SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly off-limits. Never run any command in source_dir — no git checkout, git fetch, git reset, git pull, run_cmd, run_skill, or any other operation. All work — skill invocations, git operations, file reads — happens exclusively in the clone (work_dir). source_dir is used ONLY to read the remote URL inside push_to_remote.

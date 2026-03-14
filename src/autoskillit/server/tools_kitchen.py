@@ -16,7 +16,7 @@ from autoskillit.server.helpers import (
     _hook_config_path,
     _prime_quota_cache,
     _require_not_headless,
-    _resolve_ingredient_defaults,
+    resolve_ingredient_defaults,
     track_response_size,
 )
 
@@ -113,7 +113,7 @@ async def open_kitchen(name: str | None = None, ctx: Context = CurrentContext())
         if tool_ctx.recipes is None:
             return json.dumps({"error": "Server not initialized", "kitchen": "open"})
         suppressed = tool_ctx.config.migration.suppressed
-        _defaults = _resolve_ingredient_defaults(Path.cwd())
+        _defaults = resolve_ingredient_defaults(Path.cwd())
         result = tool_ctx.recipes.load_and_validate(
             name, Path.cwd(), suppressed=suppressed, resolved_defaults=_defaults
         )

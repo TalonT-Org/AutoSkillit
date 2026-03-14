@@ -434,7 +434,7 @@ async def _import_and_call(
         return {"success": True, "result": str(result)}
 
 
-def _resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
+def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     """Resolve auto-detect ingredient values from the project environment.
 
     Called at the server layer (L3) which has access to config and subprocess.
@@ -448,13 +448,13 @@ def _resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
 
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
+            ["git", "remote", "get-url", "origin"],
             cwd=str(project_dir),
             capture_output=True,
             text=True,
             timeout=5,
         )
-        if result.returncode == 0:
+        if result.returncode == 0 and result.stdout.strip():
             resolved["source_dir"] = result.stdout.strip()
     except (OSError, subprocess.TimeoutExpired):
         pass

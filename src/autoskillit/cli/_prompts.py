@@ -169,3 +169,26 @@ def _build_open_kitchen_prompt() -> str:
         )
 
     return text
+
+
+def show_cook_preview(
+    recipe_name: str, parsed_recipe: object, recipes_dir: Path, project_dir: Path
+) -> None:
+    """Display the terminal preview: flow diagram + ingredients table.
+
+    Owns the entire pre-launch display so ``cook()`` makes one call.
+    Gateway imports only (no cross-package submodule imports).
+    """
+    from autoskillit.cli._ansi import diagram_to_terminal, ingredients_to_terminal
+    from autoskillit.recipe import format_ingredients_table, load_recipe_diagram
+    from autoskillit.server import resolve_ingredient_defaults
+
+    diagram = load_recipe_diagram(recipe_name, recipes_dir)
+    if diagram:
+        print(diagram_to_terminal(diagram))
+        print()  # blank line between diagram and table
+
+    resolved = resolve_ingredient_defaults(project_dir)
+    table = format_ingredients_table(parsed_recipe, resolved_defaults=resolved)
+    if table:
+        print(ingredients_to_terminal(table))

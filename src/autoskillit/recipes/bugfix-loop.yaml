@@ -16,16 +16,16 @@ kitchen_rules:
 
 ingredients:
   test_dir:
-    description: Directory containing the project to test
+    description: Project directory to test
     required: true
   base_branch:
-    description: Base branch to merge fixes into (defaults to main)
-    default: main
+    description: Merge target
+    default: ""
   helper_dir:
-    description: Directory for helper agent sessions
+    description: Helper agent session directory
     required: true
   audit:
-    description: Gate merge on audit-impl quality check (true/false)
+    description: Post-merge quality gate
     default: "true"
 
 steps:

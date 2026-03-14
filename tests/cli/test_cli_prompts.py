@@ -139,3 +139,65 @@ def test_open_kitchen_prompt_does_not_embed_greetings():
 
     prompt = _build_open_kitchen_prompt()
     assert "Display ONE of these greetings" not in prompt
+
+
+def test_show_cook_preview_prints_table(monkeypatch, tmp_path, capsys):
+    """show_cook_preview prints ingredients table to stdout."""
+    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.recipe.io import _parse_recipe
+
+    monkeypatch.setattr(
+        "autoskillit.server.resolve_ingredient_defaults",
+        lambda _: {"source_dir": "https://github.com/test/repo", "base_branch": "main"},
+    )
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "steps": {
+                "do": {
+                    "tool": "run_cmd",
+                    "with": {"cmd": "echo"},
+                    "on_success": "done",
+                    "on_failure": "done",
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+            "ingredients": {"task": {"description": "What to do", "required": True}},
+        }
+    )
+    show_cook_preview("test", recipe, tmp_path, tmp_path)
+    captured = capsys.readouterr()
+    assert "task" in captured.out
+    assert "(required)" in captured.out
+
+
+def test_show_cook_preview_no_diagram(monkeypatch, tmp_path, capsys):
+    """show_cook_preview works when no diagram file exists."""
+    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.recipe.io import _parse_recipe
+
+    monkeypatch.setattr(
+        "autoskillit.server.resolve_ingredient_defaults",
+        lambda _: {},
+    )
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "steps": {
+                "do": {
+                    "tool": "run_cmd",
+                    "with": {"cmd": "echo"},
+                    "on_success": "done",
+                    "on_failure": "done",
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+            "ingredients": {"x": {"description": "A thing", "default": "val"}},
+        }
+    )
+    show_cook_preview("nonexistent-recipe", recipe, tmp_path, tmp_path)
+    captured = capsys.readouterr()
+    # No diagram, but table should print
+    assert "A thing" in captured.out
+    # No diagram header
+    assert "RECIPE" not in captured.out

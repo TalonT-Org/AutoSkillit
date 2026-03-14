@@ -8,14 +8,14 @@ autoskillit_version: "0.3.1"
 
 ingredients:
   source_dir:
-    description: Path to the source repository (auto-detected if empty, uses CWD).
+    description: Source repository
     required: false
     default: ""
   base_branch:
-    description: Integration branch name to merge implementations into.
+    description: Merge target
     default: integration
   run_name:
-    description: Pipeline run name prefix for branch and clone naming.
+    description: Run name prefix
     default: sprint
 
 kitchen_rules:

@@ -664,7 +664,7 @@ class TestInvestigateFirstStructure:
         assert "context.remediation_path" in skill_cmd
         assert "plan_path" in step.capture
         assert "plan_parts" in step.capture_list
-        assert step.on_success == "review"
+        assert step.on_success == "dry_walkthrough"
         assert step.on_failure == "release_issue_failure"
 
     def test_if3_test_step_uses_implementation_ref(self, recipe) -> None:
@@ -1297,13 +1297,14 @@ class TestBaseBranchDefaults:
             "remediation",
             "bugfix-loop",
             "implementation-groups",
+            "merge-prs",
         ],
     )
-    def test_recipe_base_branch_defaults_to_main(self, recipe_name: str) -> None:
-        """All non-exempt bundled recipes must default base_branch to 'main' (REQ-GEN-005)."""
+    def test_recipe_base_branch_auto_detects(self, recipe_name: str) -> None:
+        """Non-exempt bundled recipes must use auto-detect for base_branch."""
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
-        assert recipe.ingredients["base_branch"].default == "main", (
-            f"{recipe_name}.yaml: base_branch default must be 'main' — REQ-GEN-005"
+        assert recipe.ingredients["base_branch"].default == "", (
+            f"{recipe_name}.yaml: base_branch must use auto-detect (default: '')"
         )
 
     def test_smoke_test_base_branch_remains_main(self) -> None:

@@ -64,14 +64,3 @@ check_summary  [autoskillit.smoke_utils.check_bug_report_non_empty] (retry ×3)
 ─────────────────────────────────────
 done  "Smoke pipeline completed successfully."
 escalate  "Smoke pipeline failed — check step output for details."
-
-### Inputs
-| Name | Description | Default |
-|------|-------------|---------|
-| workspace | Git repo workspace directory (must have an initial commit) | — |
-| base_branch | Merge target branch (feature branch override when collect_on_branch=true) | main |
-| collect_on_branch | Collect all fixes on a feature branch and create issue+PR at end (true/false) | on |
-| original_base_branch | Original base branch for PR target (auto-set from base_branch) | main |
-### Kitchen Rules
-- NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated through run_skill.
-- Route to on_failure — never investigate or fix directly from the orchestrator.

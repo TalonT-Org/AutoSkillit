@@ -44,7 +44,7 @@ def chefs_hat() -> None:
     from autoskillit.cli._ansi import permissions_warning
 
     print(permissions_warning())
-    confirm = input("\nLaunch session? [Y/n]: ").strip().lower()
+    confirm = input("\nLaunch session? [Enter/n]: ").strip().lower()
     if confirm in ("n", "no"):
         return
 

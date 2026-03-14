@@ -435,11 +435,7 @@ async def _import_and_call(
 
 
 def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
-    """Resolve auto-detect ingredient values from the project environment.
-
-    Called at the server layer (L3) which has access to config and subprocess.
-    Returns a dict mapping ingredient names to their resolved values.
-    """
+    """Resolve auto-detect ingredient values from the project environment."""
     import subprocess
 
     from autoskillit.config import load_config

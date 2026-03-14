@@ -57,24 +57,21 @@ def diagram_to_terminal(md: str) -> str:
             saw_title = False
             if ln.strip():
                 continue
-        # Skip the entire Inputs section (table is generated from recipe YAML)
         if ln.startswith("### Inputs"):
             in_table_section = True
             continue
         if in_table_section:
-            if ln.startswith("### ") or (ln.strip() == "" and not ln.startswith("|")):
-                # Hit next section or blank line after table — stop skipping
-                if ln.startswith("### "):
-                    continue  # skip the next section header too
+            if ln.startswith("### "):
                 in_table_section = False
-                # Don't skip this blank line — it's after the table
+                continue
+            if ln.strip() == "" and not ln.startswith("|"):
+                in_table_section = False
             else:
-                continue  # skip table rows and separators
+                continue
         if ln.startswith("### "):
             continue
         out.append(ln)
 
-    # Collapse consecutive blank lines
     cleaned: list[str] = []
     for ln in out:
         if not ln.strip() and cleaned and not cleaned[-1].strip():

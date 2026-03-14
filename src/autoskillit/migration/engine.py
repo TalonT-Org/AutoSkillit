@@ -334,9 +334,6 @@ class DiagramMigrationAdapter(DeterministicMigrationAdapter):
         *,
         temp_dir: Path,
     ) -> MigrationResult:
-        # Diagram rendering is now handled by the /render-recipe skill.
-        # Staleness detection still works; this adapter just marks success
-        # so the migration engine doesn't block on diagram regeneration.
         return MigrationResult(success=True, name=file.name)
 
     def validate(self, path: Path) -> tuple[bool, str]:

@@ -340,12 +340,7 @@ async def test_open_kitchen_without_recipe_returns_plain_text(tmp_path, monkeypa
 
     assert isinstance(result, str)
     assert "Kitchen is open" in result
-    # Should not be JSON
-    try:
-        parsed = json.loads(result)
-        assert "content" not in parsed, "No-recipe open_kitchen should not have recipe content"
-    except json.JSONDecodeError:
-        pass  # Expected — plain text is not JSON
+    assert "content" not in result, "No-recipe open_kitchen should not contain recipe content key"
 
 
 # ---------------------------------------------------------------------------

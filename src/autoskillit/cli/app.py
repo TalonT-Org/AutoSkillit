@@ -498,7 +498,7 @@ def cook(recipe: str | None = None):
             print(f"  - {err}")
         sys.exit(1)
 
-    from autoskillit.cli._prompts import _COOK_GREETINGS, show_cook_preview  # noqa: E402
+    from autoskillit.cli._prompts import _COOK_GREETINGS, show_cook_preview
 
     show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
 

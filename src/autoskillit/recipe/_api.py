@@ -48,23 +48,15 @@ _logger = get_logger(__name__)
 
 
 def _ingredient_sort_key(name: str, required: bool, default: object) -> tuple[int, str]:
-    """Sort ingredients: required > auto-detect > flags > constants > optional.
-
-    Priority tiers:
-      0 — required (no default)
-      1 — auto-detect (default: ""), important inputs the user should review
-      2 — boolean user flags (on/off)
-      3 — constants (non-empty, non-boolean defaults)
-      4 — optional (no default, not required)
-    """
+    """Sort ingredients: required > auto-detect > flags > optional > constants."""
     if required and default is None:
-        return (0, name)  # required — top
+        return (0, name)
     if default == "":
-        return (1, name)  # auto-detect — important, user should review
+        return (1, name)
     if default in ("true", "false"):
-        return (2, name)  # boolean user flags
+        return (2, name)
     if default is None:
-        return (3, name)  # optional with no default
+        return (3, name)
     return (4, name)  # has a non-empty default (constants, rarely changed)
 
 

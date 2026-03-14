@@ -105,7 +105,6 @@ async def open_kitchen(name: str | None = None, ctx: Context = CurrentContext())
 
     from autoskillit import __version__
 
-    # When a recipe name is provided, load it in the same call
     if name is not None:
         from autoskillit.server import _get_ctx
 

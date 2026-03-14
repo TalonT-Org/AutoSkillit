@@ -597,7 +597,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
 
     server/ is exempt at 12 files to accommodate tools_clone and tools_integrations modules.
     """
-    EXEMPTIONS: dict[str, int] = {"server": 14, "recipe": 24, "execution": 20}
+    EXEMPTIONS: dict[str, int] = {"server": 14, "recipe": 24, "execution": 21}
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":

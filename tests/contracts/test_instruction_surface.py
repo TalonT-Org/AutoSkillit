@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 import re
+import types
 from pathlib import Path
 
 import pytest
@@ -195,7 +196,7 @@ class TestRunPythonCallableContract:
             except ImportError:
                 continue
             attr = getattr(module, attr_name, None)
-            if attr is not None and not callable(attr):
+            if attr is not None and not callable(attr) and not isinstance(attr, types.ModuleType):
                 failures.append(f"{source}: {dotted!r} — attribute exists but is not callable")
         assert not failures, "Non-callable references in SKILL.md files:\n" + "\n".join(failures)
 

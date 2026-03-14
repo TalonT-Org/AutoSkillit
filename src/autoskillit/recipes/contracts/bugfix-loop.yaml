@@ -84,7 +84,7 @@ dataflow:
   - test_dir
   required: []
   produced: []
-- step: test
+- step: initial_test
   available:
   - audit
   - base_branch
@@ -133,7 +133,7 @@ dataflow:
   produced:
   - worktree_path
   - branch_name
-- step: verify
+- step: test
   available:
   - audit
   - base_branch

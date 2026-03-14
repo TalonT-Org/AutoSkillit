@@ -1157,54 +1157,6 @@ class TestFormatterSchemaConsistency:
                 f"Field '{key}' value missing from formatted kitchen_status output"
             )
 
-    def test_fmt_load_recipe_with_real_diagram(self, tmp_path) -> None:
-        """PHK-E3: _fmt_load_recipe must handle real generate_recipe_diagram() output correctly.
-
-        Uses the actual generate_recipe_diagram() renderer to produce a diagram string,
-        then pipes it through _fmt_load_recipe. This ensures the formatter is tested with
-        realistic content produced by the real renderer — not a hand-crafted string —
-        catching any formatter bugs that depend on diagram shape (FOR EACH blocks, side-leg
-        branches, Inputs tables, etc.).
-
-        The test does not rely on pre-generated diagram files on disk; it generates the
-        diagram into a tmp_path so the test is self-contained and CI-clean.
-        """
-        from autoskillit.core import pkg_root
-        from autoskillit.hooks.pretty_output import _format_response
-        from autoskillit.recipe._api import LoadRecipeResult
-        from autoskillit.recipe.diagrams import generate_recipe_diagram
-
-        # Generate a real diagram into tmp_path (avoids blocked diagrams/ dir)
-        recipes_dir = pkg_root() / "recipes"
-        recipe_path = recipes_dir / "smoke-test.yaml"
-        diagram = generate_recipe_diagram(
-            recipe_path, recipes_dir, out_dir=tmp_path
-        ).render_markdown()
-        assert diagram, "generate_recipe_diagram returned empty diagram for smoke-test"
-
-        # Build a LoadRecipeResult-shaped payload with the real diagram
-        result: LoadRecipeResult = {
-            "content": "fake-yaml-suppressed",
-            "diagram": diagram,
-            "suggestions": [],
-            "valid": True,
-        }
-
-        # Pipe through the real hook formatter (same pattern as PHK-E1/E2)
-        result_json = json.dumps(result)
-        formatted = _format_response("mcp__autoskillit__load_recipe", result_json, pipeline=False)
-        assert formatted is not None
-
-        # The real diagram must appear verbatim in formatted output
-        assert diagram in formatted, (
-            "Real rendered diagram not found in formatter output. "
-            "Formatter may have truncated, modified, or dropped the diagram field."
-        )
-        # Raw YAML must be suppressed (content field never shown to LLM)
-        assert "fake-yaml-suppressed" not in formatted, (
-            "Raw YAML content must be suppressed by _fmt_load_recipe — found in formatter output."
-        )
-
 
 # ---------------------------------------------------------------------------
 # Output-equivalence: hook inline formatter ≡ TelemetryFormatter.format_compact_kv

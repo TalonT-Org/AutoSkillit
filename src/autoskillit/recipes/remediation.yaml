@@ -12,7 +12,7 @@ kitchen_rules:
     Do not investigate or attempt to fix failures directly."
   - "SEQUENTIAL EXECUTION: complete full cycle per part before advancing.
     For each plan_part, run the full cycle (dry_walkthrough → implement →
-    verify → merge) before starting the next part."
+    test → merge) before starting the next part."
   - "By default (open_pr=true), a feature branch is created with a unique name
     derived from inputs.run_name and context.issue_number (e.g. investigate/42) or
     a date suffix (e.g. investigate/20260304) when no issue is available. All worktree
@@ -237,8 +237,10 @@ steps:
       add_dir: "${{ context.review_path }}"
       step_name: "dry_walkthrough"
     on_success: implement
-    on_failure: rectify
-    note: If walkthrough finds issues, re-plan via rectify.
+    on_failure: release_issue_failure
+    retries: 3
+    on_exhausted: release_issue_failure
+    note: Dry walkthrough retries on failure. It never routes back to a previous step.
 
   implement:
     tool: run_skill
@@ -252,7 +254,7 @@ steps:
       branch_name: "${{ result.branch_name }}"
     retries: 0
     on_context_limit: retry_worktree
-    on_success: verify
+    on_success: test
     on_failure: release_issue_failure
 
   retry_worktree:
@@ -266,10 +268,10 @@ steps:
       worktree_path: "${{ result.worktree_path }}"
       branch_name: "${{ result.branch_name }}"
     on_exhausted: release_issue_failure
-    on_success: verify
+    on_success: test
     on_failure: release_issue_failure
 
-  verify:
+  test:
     tool: test_check
     with:
       worktree_path: "${{ context.implementation_ref }}"
@@ -282,7 +284,7 @@ steps:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: "assess"
-    on_success: verify
+    on_success: test
     on_failure: release_issue_failure
     on_exhausted: release_issue_failure
 

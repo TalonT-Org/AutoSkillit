@@ -288,8 +288,8 @@ branch, runs the group loop, and gates on audit before signalling merge-ready.
 
 ## Related Skills
 
-- **`/make-req`** — Produces requirements from raw input (this skill groups existing requirements)
+- **`/autoskillit:make-req`** — Produces requirements from raw input (this skill groups existing requirements)
 - **`/autoskillit:make-plan`** — Consumes individual groups as planning input
-- **`/elaborate-phase`** — Elaborates phases within a plan (this skill creates the groups that become plans)
+- **`/autoskillit:elaborate-phase`** — Elaborates phases within a plan (this skill creates the groups that become plans)
 - **`/autoskillit:dry-walkthrough`** — Validates plans produced from groups
 - **`/autoskillit:audit-impl`** — Audits the full implementation against all group plans

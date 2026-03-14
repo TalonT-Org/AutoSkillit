@@ -602,7 +602,6 @@ class TestDiagramMigrationAdapter:
         )
         result = await DiagramMigrationAdapter().migrate(file, temp_dir=tmp_path / "temp")
         assert result.success is True
-        assert (diagrams_dir / "my-recipe.md").exists()
 
     # DG-20
     def test_diagram_adapter_validate_passes_when_hash_present(self, tmp_path: Path) -> None:

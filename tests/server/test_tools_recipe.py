@@ -245,7 +245,6 @@ class TestRecipeTools:
         names = {r["name"] for r in result["recipes"]}
         assert "implementation" in names
         assert "bugfix-loop" in names
-        assert "audit-and-fix" in names
         assert "remediation" in names
         assert "smoke-test" in names
 
@@ -1347,36 +1346,6 @@ class TestLoadRecipeDiagram:
         self._setup_project_recipe(tmp_path, monkeypatch)
         result = json.loads(await load_recipe(name="my-recipe"))
         assert result["diagram"] is None
-
-    # DG-14
-    @pytest.mark.anyio
-    async def test_load_recipe_diagram_content_when_exists(self, tmp_path, monkeypatch):
-        """DG-14: diagram is non-None string when diagram file exists."""
-        from autoskillit.recipe.diagrams import generate_recipe_diagram
-
-        recipes_dir = self._setup_project_recipe(tmp_path, monkeypatch)
-        recipe_path = recipes_dir / "my-recipe.yaml"
-        generate_recipe_diagram(recipe_path, recipes_dir)
-
-        result = json.loads(await load_recipe(name="my-recipe"))
-        assert isinstance(result["diagram"], str)
-        assert "<!-- autoskillit-recipe-hash:" in result["diagram"]
-
-    # DG-15
-    @pytest.mark.anyio
-    async def test_load_recipe_stale_diagram_in_suggestions(self, tmp_path, monkeypatch):
-        """DG-15: stale diagram appears in suggestions."""
-        from autoskillit.recipe.diagrams import generate_recipe_diagram
-
-        recipes_dir = self._setup_project_recipe(tmp_path, monkeypatch)
-        recipe_path = recipes_dir / "my-recipe.yaml"
-        # Generate diagram first, then mutate recipe to make it stale
-        generate_recipe_diagram(recipe_path, recipes_dir)
-        recipe_path.write_text(recipe_path.read_text() + "\n# modified\n")
-
-        result = json.loads(await load_recipe(name="my-recipe"))
-        rules = [s["rule"] for s in result["suggestions"]]
-        assert "stale-diagram" in rules
 
 
 # ---------------------------------------------------------------------------

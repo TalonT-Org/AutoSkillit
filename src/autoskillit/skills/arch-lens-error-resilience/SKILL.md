@@ -21,7 +21,7 @@ hooks:
 - Need to understand error handling architecture
 - Documenting recovery and retry mechanisms
 - Analyzing validation gates and circuit breakers
-- User invokes `/autoskillit:arch-lens-error-resilience` or `/make-arch-diag error`
+- User invokes `/autoskillit:arch-lens-error-resilience` or `/autoskillit:make-arch-diag error`
 
 ## Critical Constraints
 
@@ -268,7 +268,7 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:arch-lens-process-flow` - For normal flow view
 - `/autoskillit:arch-lens-concurrency` - For parallel failure handling

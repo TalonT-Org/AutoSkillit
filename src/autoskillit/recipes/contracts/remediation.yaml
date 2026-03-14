@@ -283,7 +283,7 @@ dataflow:
   produced:
   - implementation_ref
   - worktree_path
-- step: verify
+- step: test
   available:
   - audit
   - base_branch

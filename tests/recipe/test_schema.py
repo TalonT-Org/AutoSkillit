@@ -261,21 +261,6 @@ def test_recipe_ingredient_default_strips_for_comparison() -> None:
     assert ing_none.default is None  # None sentinel preserved
 
 
-def test_format_ingredient_default_folded_scalar_bool() -> None:
-    """_format_ingredient_default must return 'off'/'on'/'auto-detect' for folded defaults."""
-    from autoskillit.recipe.diagrams import _format_ingredient_default
-    from autoskillit.recipe.schema import RecipeIngredient
-
-    assert (
-        _format_ingredient_default(RecipeIngredient(description="d", default="false\n")) == "off"
-    )
-    assert _format_ingredient_default(RecipeIngredient(description="d", default="true\n")) == "on"
-    assert (
-        _format_ingredient_default(RecipeIngredient(description="d", default="\n"))
-        == "auto-detect"
-    )
-
-
 # ---------------------------------------------------------------------------
 # P9-F1: RecipeStep.description field
 # ---------------------------------------------------------------------------

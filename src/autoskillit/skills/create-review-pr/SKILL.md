@@ -1,10 +1,10 @@
 ---
 name: create-review-pr
 description: >
-  Create an integration PR for the pr-merge-pipeline. Reads pr_order_file JSON, generates
+  Create an integration PR for the merge-prs. Reads pr_order_file JSON, generates
   a rich PR body with per-PR details, arch-lens diagrams, and carried-forward Closes #N
   references. Closes all collapsed PRs with a comment after creation. Use inside the
-  pr-merge-pipeline after all PRs have been merged into the integration branch.
+  merge-prs after all PRs have been merged into the integration branch.
 ---
 
 # Create Review PR
@@ -29,7 +29,7 @@ PR, and output `pr_url=<url>`.
 
 ## When to Use
 
-- Called by `pr-merge-pipeline` after all PRs have been merged into the integration branch
+- Called by `merge-prs` after all PRs have been merged into the integration branch
 - Invoked via `run_skill` as the final step before CI watch
 
 ## Critical Constraints

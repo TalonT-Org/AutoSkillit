@@ -32,7 +32,7 @@ description: >
 
 ## When to Use
 
-- Called by the `pr-merge-pipeline` when `merge_worktree` fails with
+- Called by the `merge-prs` when `merge_worktree` fails with
   `failed_step=rebase` and `state=worktree_intact_rebase_aborted`
 - The worktree must still be intact (rebase aborted cleanly, no partial state)
 

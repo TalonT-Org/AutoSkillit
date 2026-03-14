@@ -168,7 +168,7 @@ resolve-failures, open-pr
 
 ---
 
-### pr-merge-pipeline
+### merge-prs
 
 **Use when:** You have multiple open PRs targeting a branch and want to
 collapse them into a single integration PR with conflict resolution.

@@ -33,10 +33,10 @@ steps:
     tool: reset_test_dir
     with:
       test_dir: ${{ inputs.test_dir }}
-    on_success: test
+    on_success: initial_test
     on_failure: escalate
 
-  test:
+  initial_test:
     tool: test_check
     with:
       worktree_path: ${{ inputs.test_dir }}
@@ -82,7 +82,7 @@ steps:
       branch_name: "${{ result.branch_name }}"
     retries: 0
     on_context_limit: retry_worktree
-    on_success: verify
+    on_success: test
     on_failure: escalate
 
   retry_worktree:
@@ -95,10 +95,10 @@ steps:
       worktree_path: "${{ result.worktree_path }}"
       branch_name: "${{ result.branch_name }}"
     on_exhausted: escalate
-    on_success: verify
+    on_success: test
     on_failure: escalate
 
-  verify:
+  test:
     tool: test_check
     with:
       worktree_path: ${{ inputs.test_dir }}
@@ -111,7 +111,7 @@ steps:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: "assess"
-    on_success: verify
+    on_success: test
     on_failure: classify
     on_exhausted: classify
 

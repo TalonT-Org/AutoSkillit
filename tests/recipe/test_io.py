@@ -50,9 +50,9 @@ def _write_yaml(path: Path, data: dict) -> Path:
 
 def test_load_recipe_smoke() -> None:
     """load_recipe(path) returns a Recipe with correct name."""
-    path = builtin_recipes_dir() / "audit-and-fix.yaml"
+    path = builtin_recipes_dir() / "implementation.yaml"
     recipe = load_recipe(path)
-    assert recipe.name == "audit-and-fix"
+    assert recipe.name == "implementation"
 
 
 def test_parse_recipe_accepts_raw_dict() -> None:

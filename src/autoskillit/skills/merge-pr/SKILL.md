@@ -1,6 +1,6 @@
 ---
 name: merge-pr
-description: Merge a single PR into the integration branch. For simple PRs, uses gh pr merge --squash --auto to enforce GitHub's required status checks. For needs_check PRs, re-assesses complexity and returns needs_plan=true with a conflict report when conflicts are detected. Use inside the pr-merge-pipeline loop.
+description: Merge a single PR into the integration branch. For simple PRs, uses gh pr merge --squash --auto to enforce GitHub's required status checks. For needs_check PRs, re-assesses complexity and returns needs_plan=true with a conflict report when conflicts are detected. Use inside the merge-prs loop.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -18,7 +18,7 @@ conflicts from earlier merges in the queue.
 
 ## When to Use
 
-- Inside the `pr-merge-pipeline` loop, once per PR
+- Inside the `merge-prs` loop, once per PR
 - Called with the PR number and its complexity tag from `analyze-prs` output
 
 ## Arguments
@@ -37,7 +37,7 @@ conflicts from earlier merges in the queue.
 - Use `git merge` to merge the PR into the integration branch — always use `gh pr merge --squash --auto`
 - Close or comment on the PR
 - Leave the git working tree in a dirty state
-- Create files outside `temp/pr-merge-pipeline/` directory
+- Create files outside `temp/merge-prs/` directory
 
 **ALWAYS:**
 - Run `git status` before any operation to verify clean state
@@ -251,7 +251,7 @@ Extract the `## Requirements` section if present — set `requirements_section =
 
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.
 
-Write `temp/pr-merge-pipeline/conflict_pr{pr_number}_plan_{ts}.md`:
+Write `temp/merge-prs/conflict_pr{pr_number}_plan_{ts}.md`:
 
 ```markdown
 # Conflict Resolution Plan: PR #{pr_number} — "{pr_title}"
@@ -373,7 +373,7 @@ Print a JSON result block to stdout for recipe capture:
     "pr_number": 47,
     "pr_branch": "feature/db-refactor",
     "pr_title": "Refactor database layer",
-    "conflict_report_path": "temp/pr-merge-pipeline/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+    "conflict_report_path": "temp/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
 }
 ```
 
@@ -392,7 +392,7 @@ with `conflict_report_path` set. The pipeline then routes to make-plan → imple
     "pr_number": 47,
     "pr_branch": "feature/stale-branch",
     "pr_title": "Feature from stale branch",
-    "conflict_report_path": "temp/pr-merge-pipeline/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+    "conflict_report_path": "temp/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
 }
 ```
 
@@ -468,7 +468,7 @@ written. Omit the line entirely on a successful direct merge or when `escalation
 ## Output Location
 
 ```
-temp/pr-merge-pipeline/
+temp/merge-prs/
 └── conflict_pr{N}_plan_{ts}.md    (written only when needs_plan=true)
 ```
 

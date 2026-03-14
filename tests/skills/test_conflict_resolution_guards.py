@@ -1,7 +1,7 @@
 """Structural guards for conflict resolution safeguards.
 
-Analogous to tests/recipe/test_pr_merge_pipeline.py — validates that documented
-interfaces exist in SKILL.md files and the pr-merge-pipeline recipe, preventing
+Analogous to tests/recipe/test_merge_prs.py — validates that documented
+interfaces exist in SKILL.md files and the merge-prs recipe, preventing
 silent regression if sections are accidentally removed.
 """
 
@@ -12,7 +12,7 @@ from autoskillit.core.paths import pkg_root
 
 PROJECT_ROOT = pkg_root()
 SKILLS_ROOT = pkg_root() / "skills"
-RECIPE_PATH = pkg_root() / "recipes" / "pr-merge-pipeline.yaml"
+RECIPE_PATH = pkg_root() / "recipes" / "merge-prs.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -123,7 +123,7 @@ def test_implement_no_merge_skill_has_completeness_self_check(impl_no_merge_skil
 # --- recipe YAML guards ---
 
 
-def test_pr_merge_pipeline_captures_escalation_required(recipe):
+def test_merge_prs_captures_escalation_required(recipe):
     """merge_pr step must capture escalation_required from skill output."""
     merge_pr = recipe["steps"]["merge_pr"]
     capture = merge_pr.get("capture", {})
@@ -132,7 +132,7 @@ def test_pr_merge_pipeline_captures_escalation_required(recipe):
     )
 
 
-def test_pr_merge_pipeline_routes_escalation_to_stop(recipe):
+def test_merge_prs_routes_escalation_to_stop(recipe):
     """merge_pr routing must send escalation_required=true to escalate_stop as a PRIMARY route.
 
     The route must be a primary on_result entry (predicate conditions list), not buried in

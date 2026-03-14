@@ -957,26 +957,6 @@ class TestCookDisplayOwnership:
         assert "on_success:" not in system_prompt
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_prints_recipe_diagram_before_launch(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
-    ) -> None:
-        """cook() renders recipe diagram to terminal before launching Claude session."""
-        self._setup_recipe(tmp_path, monkeypatch)
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
-
-        cli.cook("test-script")
-
-        captured = capsys.readouterr()
-        assert "TEST-SCRIPT" in captured.out, "Recipe name should be rendered to terminal"
-        assert "Kitchen Rules" in captured.out, "Kitchen rules should appear before launch"
-
-    @patch("autoskillit.cli.subprocess.run")
     def test_cook_system_prompt_instructs_load_recipe(
         self,
         mock_run: MagicMock,
@@ -1037,17 +1017,17 @@ class TestRecipesCLI:
             _app_mod.recipes_show("nonexistent-recipe-xyz")
         assert exc_info.value.code == 1
 
-    # DG-22
-    def test_recipes_render_renders_bundled(
+    def test_recipes_render_lists_available(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
     ) -> None:
-        """DG-22: `autoskillit recipes render` subcommand is registered and callable."""
+        """DG-22: `autoskillit recipes render` subcommand is registered and lists recipes."""
         from autoskillit import cli
 
         monkeypatch.chdir(tmp_path)
-        cli.recipes_render(None)  # render all bundled
+        cli.recipes_render(None)  # list all
         captured = capsys.readouterr()
-        assert "Rendered:" in captured.out
+        assert captured.out.strip(), "Expected recipe names in output"
+        assert "implementation" in captured.out

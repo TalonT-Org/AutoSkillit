@@ -21,7 +21,7 @@ hooks:
 - Need to understand the high-level technical building blocks
 - Documenting container boundaries and communication
 - Onboarding new team members to system architecture
-- User invokes `/autoskillit:arch-lens-c4-container` or `/make-arch-diag c4`
+- User invokes `/autoskillit:arch-lens-c4-container` or `/autoskillit:make-arch-diag c4`
 
 ## Critical Constraints
 
@@ -241,7 +241,7 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:arch-lens-module-dependency` - For detailed coupling analysis
 - `/autoskillit:arch-lens-deployment` - For physical deployment topology

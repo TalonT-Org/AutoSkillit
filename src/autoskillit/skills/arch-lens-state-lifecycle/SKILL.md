@@ -21,7 +21,7 @@ hooks:
 - Need to understand state management architecture
 - Documenting field lifecycle contracts
 - Analyzing resume and checkpoint safety
-- User invokes `/autoskillit:arch-lens-state-lifecycle` or `/make-arch-diag state`
+- User invokes `/autoskillit:arch-lens-state-lifecycle` or `/autoskillit:make-arch-diag state`
 
 ## Critical Constraints
 
@@ -267,7 +267,7 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:arch-lens-process-flow` - For state machine view
 - `/autoskillit:arch-lens-error-resilience` - For validation failure handling

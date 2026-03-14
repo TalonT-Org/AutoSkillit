@@ -21,7 +21,7 @@ hooks:
 - Need to validate component cooperation
 - Documenting key user scenarios
 - Analyzing end-to-end flows through architecture
-- User invokes `/autoskillit:arch-lens-scenarios` or `/make-arch-diag scenarios`
+- User invokes `/autoskillit:arch-lens-scenarios` or `/autoskillit:make-arch-diag scenarios`
 
 ## Critical Constraints
 
@@ -256,7 +256,7 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:arch-lens-process-flow` - For detailed workflow view
 - `/autoskillit:arch-lens-error-resilience` - For failure handling details

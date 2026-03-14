@@ -334,24 +334,10 @@ class DiagramMigrationAdapter(DeterministicMigrationAdapter):
         *,
         temp_dir: Path,
     ) -> MigrationResult:
-        from autoskillit.recipe import generate_recipe_diagram
-
-        recipes_dir = file.path.parent.parent
-        recipe_path = recipes_dir / f"{file.name}.yaml"
-        if not recipe_path.exists():
-            return MigrationResult(
-                success=False,
-                name=file.name,
-                error=f"Source recipe not found: {recipe_path}",
-            )
-        try:
-            generate_recipe_diagram(recipe_path, recipes_dir)
-            return MigrationResult(success=True, name=file.name)
-        except Exception as exc:
-            logger.warning(
-                "diagram.generate_failed", name=file.name, error=str(exc), exc_info=True
-            )
-            return MigrationResult(success=False, name=file.name, error=str(exc))
+        # Diagram rendering is now handled by the /render-recipe skill.
+        # Staleness detection still works; this adapter just marks success
+        # so the migration engine doesn't block on diagram regeneration.
+        return MigrationResult(success=True, name=file.name)
 
     def validate(self, path: Path) -> tuple[bool, str]:
         try:

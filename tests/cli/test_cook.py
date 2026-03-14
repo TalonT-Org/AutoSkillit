@@ -455,8 +455,8 @@ class TestCLICook:
         system_prompt = cmd[prompt_idx + 1]
         # Contains recipe name
         assert "test-script" in system_prompt
-        # Instructs Claude to call load_recipe
-        assert "load_recipe" in system_prompt
+        # Instructs Claude to call open_kitchen with recipe name
+        assert "open_kitchen" in system_prompt
         # Contains routing rules
         assert "ROUTING RULES" in system_prompt
         # Contains failure predicates
@@ -957,13 +957,13 @@ class TestCookDisplayOwnership:
         assert "on_success:" not in system_prompt
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_system_prompt_instructs_load_recipe(
+    def test_cook_system_prompt_instructs_open_kitchen_with_recipe(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """System prompt must instruct Claude to call load_recipe as its first action."""
+        """System prompt must instruct Claude to call open_kitchen(name) as its first action."""
         self._setup_recipe(tmp_path, monkeypatch)
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
@@ -974,7 +974,7 @@ class TestCookDisplayOwnership:
         cmd = mock_run.call_args[0][0]
         prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
         system_prompt = cmd[prompt_idx + 1]
-        assert "load_recipe" in system_prompt
+        assert "open_kitchen" in system_prompt
         assert "FIRST ACTION" in system_prompt
 
 

@@ -22,12 +22,12 @@ class TestImplementationPipelineIssueUrl:
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_issue_url_ingredient_declared(self):
-        """issue_url ingredient must be declared as optional with default empty string."""
+        """issue_url ingredient must be declared as optional with no default."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
         assert "issue_url" in data["ingredients"]
         ing = data["ingredients"]["issue_url"]
         assert ing.get("required", False) is False
-        assert ing.get("default", None) == ""
+        assert ing.get("default") is None
 
     def test_no_fetch_issue_step(self):
         """fetch_issue step must NOT exist — orchestrator no longer fetches issue content."""
@@ -113,7 +113,7 @@ class TestInvestigateFirstIssueUrl:
         assert "issue_url" in data["ingredients"]
         ing = data["ingredients"]["issue_url"]
         assert ing.get("required", False) is False
-        assert ing.get("default", None) == ""
+        assert ing.get("default") is None
 
     def test_no_fetch_issue_step(self):
         """fetch_issue step must NOT exist — orchestrator no longer fetches issue content."""

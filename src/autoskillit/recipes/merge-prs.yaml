@@ -5,8 +5,9 @@ autoskillit_version: "0.3.0"
 
 ingredients:
   source_dir:
-    description: Path to the source repository to clone and work in
-    required: true
+    description: Source repository path (auto-detected from current directory)
+    required: false
+    default: ""
   run_name:
     description: Name prefix for this pipeline run (used in clone directory name)
     default: "pr-merge"
@@ -14,11 +15,9 @@ ingredients:
     description: Keep the clone directory when the pipeline fails (true/false)
     default: "false"
   base_branch:
-    description: Branch all PRs target; integration branch is created from this
-    required: true
-  upstream_branch:
-    description: Branch to create base_branch from if it does not yet exist on the remote
-    default: main
+    description: Branch that PRs target (auto-detected from config)
+    required: false
+    default: ""
   audit:
     description: Gate merge on audit-impl quality check (true/false)
     default: "true"
@@ -38,8 +37,8 @@ kitchen_rules:
     push_worktree_branch → create_conflict_pr → wait_for_conflict_ci → merge_conflict_pr)
     per plan part before advancing to the next part or PR."
   - "INTEGRATION BRANCH: Two distinct branches exist. inputs.base_branch is the
-    PERMANENT branch (default: main) that accumulates AI work across runs —
-    it is never deleted. context.integration_branch is the PER-RUN batch branch
+    target branch that PRs point to (e.g. main, integration).
+    context.integration_branch is the per-run batch branch
     (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this pipeline run.
     All PR merges and worktree merges target context.integration_branch. The final
     review PR opens from context.integration_branch into inputs.base_branch."
@@ -111,40 +110,37 @@ steps:
     on_success: analyze_prs
     on_failure: confirm_create_integration
     note: >
-      Checks whether the permanent base_branch (default: integration) exists on
-      the remote. Exit code 0 means the branch exists — proceed to analyze_prs.
-      Non-zero exit means the branch is absent — route to user confirmation before
-      creating it. This is an idempotent check: re-running the pipeline after
-      the branch is created will simply skip through on_success.
+      Checks whether base_branch exists on the remote. Exit code 0 means the
+      branch exists — proceed to analyze_prs. Non-zero exit means the branch
+      is absent — route to user confirmation before creating it. Idempotent:
+      re-running after the branch is created skips through on_success.
 
   confirm_create_integration:
     action: confirm
     message: >-
       The branch '${{ inputs.base_branch }}' does not exist on the remote.
-      Create it now from '${{ inputs.upstream_branch }}'?
-      This will be a permanent branch that accumulates AI-generated work.
+      Create it now from the repository's default branch?
       Type yes to create it or no to abort.
     on_success: create_persistent_integration
     on_failure: escalate_stop
     note: >
       User approval gate. On yes: create_persistent_integration creates and
-      pushes the permanent branch. On no: escalate_stop — the pipeline cannot
+      pushes the branch. On no: escalate_stop — the pipeline cannot
       proceed without the target branch.
 
   create_persistent_integration:
     tool: run_cmd
     with:
-      cmd: "git checkout '${{ inputs.upstream_branch }}' && git pull && git checkout -b '${{ inputs.base_branch }}' && git push origin '${{ inputs.base_branch }}'"
+      cmd: "DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||') && DEFAULT_BRANCH=${DEFAULT_BRANCH:-main} && git checkout \"$DEFAULT_BRANCH\" && git pull && git checkout -b '${{ inputs.base_branch }}' && git push origin '${{ inputs.base_branch }}'"
       cwd: "${{ context.work_dir }}"
       step_name: "create_persistent_integration"
     on_success: analyze_prs
     on_failure: cleanup_failure
     note: >
-      Creates the permanent base_branch (e.g. integration) off upstream_branch
-      (e.g. main) and pushes it to the remote. This step only executes when the
-      user confirmed branch creation in confirm_create_integration. Once created,
-      subsequent pipeline runs skip directly from check_integration_exists to
-      analyze_prs via on_success.
+      Creates base_branch from the repository's default branch (auto-detected
+      via origin/HEAD, falls back to main). Only executes when the user confirmed
+      branch creation in confirm_create_integration. Once created, subsequent
+      pipeline runs skip directly from check_integration_exists to analyze_prs.
 
   analyze_prs:
     tool: run_skill
@@ -878,7 +874,7 @@ steps:
 
   done:
     action: stop
-    message: "PR consolidation complete. Create PR from integration → main when ready for human review."
+    message: "PR consolidation complete."
 
   escalate_stop:
     action: stop

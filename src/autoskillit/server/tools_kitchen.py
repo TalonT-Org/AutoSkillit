@@ -11,10 +11,12 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, TOOL_CATEGORIES, atomic_write, pkg_root
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
+    _apply_triage_gate,
     _find_recipe,
     _hook_config_path,
     _prime_quota_cache,
     _require_not_headless,
+    _resolve_ingredient_defaults,
     track_response_size,
 )
 
@@ -87,8 +89,12 @@ def _build_tool_category_listing() -> str:
 
 @mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("open_kitchen")
-async def open_kitchen(ctx: Context = CurrentContext()) -> str:
-    """Open the AutoSkillit kitchen for service."""
+async def open_kitchen(name: str | None = None, ctx: Context = CurrentContext()) -> str:
+    """Open the AutoSkillit kitchen for service.
+
+    When ``name`` is provided, the kitchen is opened AND the named recipe is
+    loaded in a single call, reducing terminal noise from two tool calls to one.
+    """
     if (h := _require_not_headless("open_kitchen")) is not None:
         return h
     await _open_kitchen_handler()
@@ -97,10 +103,28 @@ async def open_kitchen(ctx: Context = CurrentContext()) -> str:
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     _categories = _build_tool_category_listing()
 
+    from autoskillit import __version__
+
+    # When a recipe name is provided, load it in the same call
+    if name is not None:
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.recipes is None:
+            return json.dumps({"error": "Server not initialized", "kitchen": "open"})
+        suppressed = tool_ctx.config.migration.suppressed
+        _defaults = _resolve_ingredient_defaults(Path.cwd())
+        result = tool_ctx.recipes.load_and_validate(
+            name, Path.cwd(), suppressed=suppressed, resolved_defaults=_defaults
+        )
+        recipe_info = tool_ctx.recipes.find(name, Path.cwd())
+        result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
+        result["kitchen"] = "open"
+        result["version"] = __version__
+        return json.dumps(result)
+
     text = (
-        "Kitchen is open. AutoSkillit tools are ready for service. "
-        "Call the kitchen_status tool now to display version "
-        "and health information to the user.\n\n"
+        f"Kitchen is open. AutoSkillit {__version__}. Tools are ready for service.\n\n"
         f"Available Tools by Category:\n{_categories}\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "

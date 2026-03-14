@@ -34,14 +34,14 @@ def test_build_orchestrator_prompt_not_in_app_module():
     )
 
 
-def test_orchestrator_prompt_delegates_ingredient_collection_to_load_recipe():
-    """Orchestrator prompt must instruct Claude to call load_recipe for recipe content."""
+def test_orchestrator_prompt_delegates_ingredient_collection_to_open_kitchen():
+    """Orchestrator prompt must instruct Claude to call open_kitchen with recipe name."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("my-recipe")
-    assert "load_recipe" in prompt, "Prompt must instruct Claude to call load_recipe"
-    assert "collect ingredients" in prompt.lower(), (
-        "Prompt must mention ingredient collection after load_recipe"
+    assert "open_kitchen" in prompt, "Prompt must instruct Claude to call open_kitchen"
+    assert "collect ingredient" in prompt.lower(), (
+        "Prompt must mention ingredient collection after open_kitchen"
     )
 
 
@@ -60,21 +60,21 @@ def test_build_orchestrator_prompt_accepts_name_not_yaml():
 
     prompt = _build_orchestrator_prompt("my-recipe")
     assert "my-recipe" in prompt
-    assert "load_recipe" in prompt
+    assert "open_kitchen" in prompt
     # Recipe YAML markers must not appear
     assert "--- RECIPE ---" not in prompt
     assert "--- END RECIPE ---" not in prompt
 
 
-def test_orchestrator_prompt_instructs_load_recipe_first():
-    """Prompt must instruct Claude to call load_recipe as its first action after open_kitchen."""
+def test_orchestrator_prompt_instructs_open_kitchen_with_recipe_first():
+    """Prompt must instruct Claude to call open_kitchen(name) as its first action."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("my-recipe")
-    assert "load_recipe" in prompt
-    # load_recipe instruction must come before ingredient collection
-    lr_idx = prompt.index("load_recipe")
-    assert "collect" in prompt[lr_idx:].lower() or "ingredient" in prompt[lr_idx:].lower()
+    assert "open_kitchen" in prompt
+    # open_kitchen instruction must come before ingredient collection
+    ok_idx = prompt.index("open_kitchen")
+    assert "collect" in prompt[ok_idx:].lower() or "ingredient" in prompt[ok_idx:].lower()
 
 
 def test_orchestrator_prompt_does_not_contain_greeting_pool():

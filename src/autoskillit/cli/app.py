@@ -507,6 +507,9 @@ def cook(recipe: str | None = None):
 
         print(diagram_to_terminal(diagram))
 
+    from autoskillit.cli._ansi import permissions_warning
+
+    print(permissions_warning())
     confirm = input("Launch session? [Y/n]: ").strip().lower()
     if confirm in ("n", "no"):
         return

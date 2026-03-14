@@ -71,12 +71,14 @@ def _build_orchestrator_prompt(recipe_name: str) -> str:
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
 FIRST ACTION — before prompting for any inputs:
-0. Call open_kitchen to reveal kitchen tools and enable the gate.
-   Without this step, no kitchen tools are accessible.
-1. Call load_recipe('{recipe_name}') to load the recipe data for execution.
-   The user has already seen the recipe overview in the terminal — do NOT
-   re-display it. Just load the data silently.
-2. Collect ingredients from the user conversationally.
+0. Call open_kitchen('{recipe_name}') to open the kitchen and load the recipe.
+1. The response contains a pre-formatted ingredients table
+   between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
+   Display it verbatim in your response — do not reformat or re-render it.
+   Then ask for the required fields (marked with *). If the recipe has both
+   a task and an issue_url ingredient, mention that a GitHub issue URL can
+   be provided as the task. Keep it to one or two short sentences.
+2. Collect ingredient values conversationally from the user's response.
 3. Execute the pipeline steps.
 
 During pipeline execution, only use AutoSkillit MCP tools:
@@ -147,8 +149,7 @@ def _build_open_kitchen_prompt() -> str:
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
         "Call the open_kitchen tool to open the AutoSkillit kitchen and gain access to "
-        "all automation tools. Then call the kitchen_status tool to display version "
-        "and health information to the user.\n\n"
+        "all automation tools.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "

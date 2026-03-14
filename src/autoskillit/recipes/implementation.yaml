@@ -29,7 +29,6 @@ ingredients:
   issue_url:
     description: GitHub issue URL to close on merge (optional)
     required: false
-    default: ""
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,

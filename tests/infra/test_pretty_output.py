@@ -822,6 +822,78 @@ def test_wrapped_plain_text_result_passes_through(tmp_path):
     assert "Kitchen is open" in text
 
 
+# PHK-50: open_kitchen combined formatter
+def test_fmt_open_kitchen_combined_response():
+    """open_kitchen with recipe returns combined kitchen+recipe format."""
+    payload = {
+        "content": "name: my-recipe\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "kitchen": "open",
+        "version": "1.2.3",
+    }
+    formatted = _format_response(
+        "mcp__autoskillit__open_kitchen",
+        json.dumps(payload),
+        pipeline=False,
+    )
+    assert formatted is not None
+    assert "open_kitchen" in formatted
+    assert "v1.2.3" in formatted
+    assert "--- RECIPE ---" in formatted
+    assert "my-recipe" in formatted
+
+
+def test_fmt_open_kitchen_combined_includes_ingredients_table():
+    """Combined open_kitchen response includes pre-formatted ingredients table."""
+    payload = {
+        "content": "name: my-recipe\nsteps: ...",
+        "valid": True,
+        "suggestions": [],
+        "kitchen": "open",
+        "version": "1.0.0",
+        "ingredients_table": "  Name  Description  Default\n  task  The task     (required)",
+    }
+    formatted = _format_response(
+        "mcp__autoskillit__open_kitchen",
+        json.dumps(payload),
+        pipeline=False,
+    )
+    assert formatted is not None
+    assert "--- INGREDIENTS TABLE" in formatted
+    assert "The task" in formatted
+
+
+def test_fmt_open_kitchen_combined_error():
+    """Combined open_kitchen with recipe error shows error with kitchen status."""
+    payload = {
+        "error": "No recipe named 'bad' found",
+        "kitchen": "open",
+        "version": "1.0.0",
+    }
+    formatted = _format_response(
+        "mcp__autoskillit__open_kitchen",
+        json.dumps(payload),
+        pipeline=False,
+    )
+    assert formatted is not None
+    assert "open_kitchen" in formatted
+    assert "No recipe named 'bad' found" in formatted
+    assert "\u2717" in formatted
+
+
+def test_fmt_open_kitchen_plain_text():
+    """open_kitchen without recipe returns plain text format."""
+    formatted = _format_response(
+        "mcp__autoskillit__open_kitchen",
+        json.dumps({"result": "Kitchen is open. AutoSkillit 1.2.3."}),
+        pipeline=False,
+    )
+    assert formatted is not None
+    assert "open_kitchen" in formatted
+    assert "Kitchen is open" in formatted
+
+
 # PHK-39
 def test_wrapped_gate_error_still_detected(tmp_path):
     """Wrapped gate_error subtype must unwrap and route to gate_error formatter."""
@@ -967,71 +1039,68 @@ def test_formatter_coverage_contract():
 # ---------------------------------------------------------------------------
 
 
-def test_fmt_load_recipe_preserves_diagram_verbatim():
-    """PHK-42: load_recipe response renders diagram field exactly as returned."""
-    diagram_text = (
-        "<!-- autoskillit-recipe-hash: sha256:abc123 -->\n"
-        "## my-recipe\n\n"
-        "### Graph\n"
-        "start \u2500\u2500success\u2500\u2500\u25b6 done\n"
-        "start \u2500\u2500failure\u2500\u2500\u25b6 escalate\n"
+def test_fmt_load_recipe_suppresses_diagram():
+    """Diagram is suppressed — user sees it in terminal, agent doesn't need it."""
+    formatted = _format_response(
+        "mcp__autoskillit__load_recipe",
+        json.dumps(
+            {
+                "content": "name: my-recipe\nsteps: ...",
+                "diagram": "## my-recipe\nsome diagram graph",
+                "valid": True,
+                "suggestions": [],
+            }
+        ),
+        pipeline=False,
     )
-    event = _make_event(
-        "load_recipe",
-        {
-            "content": "name: my-recipe\nsteps: ...",
-            "diagram": diagram_text,
-            "valid": True,
-            "suggestions": [],
-        },
-    )
-    out, _ = _run_hook(event)
-    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "## my-recipe" in text
-    assert "start \u2500\u2500success\u2500\u2500\u25b6 done" in text
-    assert "start \u2500\u2500failure\u2500\u2500\u25b6 escalate" in text
+    assert formatted is not None
+    assert "some diagram graph" not in formatted
+    assert "--- RECIPE ---" in formatted
 
 
-def test_fmt_load_recipe_suppresses_raw_yaml_content():
-    """PHK-43: load_recipe response does not emit the full raw YAML content field."""
-    long_yaml = "name: my-recipe\n" + "steps:\n" + "  step_n:\n    skill_command: /x\n" * 30
-    event = _make_event(
-        "load_recipe",
-        {
-            "content": long_yaml,
-            "diagram": "## my-recipe\nsome diagram",
-            "valid": True,
-            "suggestions": [],
-        },
+def test_fmt_load_recipe_includes_raw_yaml_content():
+    """load_recipe response includes the raw YAML so the agent can execute steps."""
+    yaml_content = "name: my-recipe\nsteps:\n  do_thing:\n    tool: run_cmd\n"
+    formatted = _format_response(
+        "mcp__autoskillit__load_recipe",
+        json.dumps(
+            {
+                "content": yaml_content,
+                "diagram": "## my-recipe\nsome diagram",
+                "valid": True,
+                "suggestions": [],
+            }
+        ),
+        pipeline=False,
     )
-    out, _ = _run_hook(event)
-    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "  step_n:" not in text
+    assert formatted is not None
+    assert "do_thing" in formatted
+    assert "--- RECIPE ---" in formatted
 
 
-def test_fmt_load_recipe_renders_suggestions_as_bullets():
-    """PHK-44: load_recipe suggestions rendered as bullet list, not truncated JSON blob."""
-    event = _make_event(
-        "load_recipe",
-        {
-            "content": "name: x",
-            "diagram": "## x",
-            "valid": False,
-            "suggestions": [
-                {"rule": "missing-step", "message": "Step 'done' not found", "severity": "error"},
-                {
-                    "rule": "unknown-tool",
-                    "message": "Tool 'badtool' not in SKILL_TOOLS",
-                    "severity": "warning",
-                },
-            ],
-        },
+def test_fmt_load_recipe_shows_finding_count():
+    """Findings are summarized as a count, not individual bullets."""
+    formatted = _format_response(
+        "mcp__autoskillit__load_recipe",
+        json.dumps(
+            {
+                "content": "name: x",
+                "diagram": "## x",
+                "valid": False,
+                "suggestions": [
+                    {
+                        "rule": "missing-step",
+                        "message": "Step 'done' not found",
+                        "severity": "error",
+                    },
+                    {"rule": "unknown-tool", "message": "Tool 'badtool'", "severity": "warning"},
+                ],
+            }
+        ),
+        pipeline=False,
     )
-    out, _ = _run_hook(event)
-    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "missing-step" in text
-    assert "unknown-tool" in text
-    assert '{"rule"' not in text
+    assert formatted is not None
+    assert "2 finding(s)" in formatted
 
 
 # ---------------------------------------------------------------------------
@@ -1345,8 +1414,8 @@ def test_fmt_load_recipe_renders_error():
     assert "Recipe 'x' not found" in formatted
 
 
-def test_fmt_load_recipe_renders_kitchen_rules():
-    """Kitchen rules appear in formatted output."""
+def test_fmt_load_recipe_suppresses_kitchen_rules():
+    """Kitchen rules are suppressed — they're in the YAML content."""
     formatted = _format_response(
         "mcp__autoskillit__load_recipe",
         json.dumps(
@@ -1360,12 +1429,11 @@ def test_fmt_load_recipe_renders_kitchen_rules():
         pipeline=False,
     )
     assert formatted is not None
-    assert "no raw SQL" in formatted
-    assert "use run_cmd for shell" in formatted
+    assert "no raw SQL" not in formatted
 
 
-def test_fmt_load_recipe_renders_greeting():
-    """Greeting appears in formatted output when present."""
+def test_fmt_load_recipe_suppresses_greeting():
+    """Greeting is suppressed — delivered via positional CLI arg instead."""
     formatted = _format_response(
         "mcp__autoskillit__load_recipe",
         json.dumps(
@@ -1379,7 +1447,7 @@ def test_fmt_load_recipe_renders_greeting():
         pipeline=False,
     )
     assert formatted is not None
-    assert "Welcome to Good Burger!" in formatted
+    assert "Welcome to Good Burger!" not in formatted
 
 
 # ---------------------------------------------------------------------------

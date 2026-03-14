@@ -434,6 +434,41 @@ async def _import_and_call(
         return {"success": True, "result": str(result)}
 
 
+def _resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
+    """Resolve auto-detect ingredient values from the project environment.
+
+    Called at the server layer (L3) which has access to config and subprocess.
+    Returns a dict mapping ingredient names to their resolved values.
+    """
+    import subprocess
+
+    from autoskillit.config import load_config
+
+    resolved: dict[str, str] = {}
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=str(project_dir),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            resolved["source_dir"] = result.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    try:
+        cfg = load_config(project_dir)
+        resolved["base_branch"] = cfg.branching.default_base_branch
+    except Exception:
+        logger.warning("resolve_base_branch_failed", exc_info=True)
+        resolved["base_branch"] = "main"
+
+    return resolved
+
+
 def _find_recipe(name: str, cwd: Path) -> Any:
     """Look up a recipe by name. Delegates to recipe layer; exposed for tools_kitchen.py.
 

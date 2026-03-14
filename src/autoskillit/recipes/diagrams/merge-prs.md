@@ -21,9 +21,9 @@
       |  +----+
       |
       +-- [audit] (optional)
-      |     x NO GO [-> make-plan]
+      |     x fail [-> make-plan]
       |
-      open-integration-pr
+      open-pr
       |
       +-- [resolve-merge-conflicts] (on conflict)
 ```
@@ -32,10 +32,9 @@
 
 | Name | Description | Default |
 |------|-------------|---------|
-| source_dir | Repository path to clone | -- |
+| source_dir | Source repository path | auto-detect |
 | run_name | Run name prefix | pr-merge |
 | keep_clone_on_failure | Keep clone on failure | off |
-| base_branch | Branch all PRs target | -- |
-| upstream_branch | Branch to create base_branch from | main |
+| base_branch | Branch that PRs target | auto-detect |
 | audit | Gate merge on audit-impl check | on |
 | plans_dir | Plan files directory for audit-impl | temp/merge-prs |

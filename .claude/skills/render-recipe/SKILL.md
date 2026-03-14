@@ -82,6 +82,7 @@ Use a vertical spine with `|` and `+--` branches. ASCII only — no Unicode.
     - Everything else: use the skill name as-is (e.g., `make-plan`, `dry-walkthrough`, `rectify`)
 11. **FOR EACH loop routing** (more parts? / all done?) is implicit — omit it. The loop block itself conveys iteration. The first step inside the loop connects directly to the `+----+` box — no extra `|` line needed between them.
 12. **Context limit recovery** (`retry_worktree`, `on_context_limit`) is automatic plumbing — omit it.
+13. **Consistent failure language.** Always use `x fail` for failure branches. Never use "NO GO", "FAIL", "failure", or other variants.
 
 **Reference example for implementation:**
 

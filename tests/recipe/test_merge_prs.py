@@ -182,24 +182,18 @@ def test_pmp_open_integration_pr_passes_four_args(recipe) -> None:
         assert arg in cmd, f"open_integration_pr skill_command must include {arg}"
 
 
-def test_pmp_base_branch_has_no_silent_default(recipe) -> None:
-    """base_branch must have no default — callers must specify it explicitly.
-
-    Silently defaulting base_branch to 'integration' would break existing callers
-    that previously relied on 'main' as the target.  Requiring an explicit value
-    forces callers to opt in to the integration-branch feature consciously.
-    """
+def test_pmp_base_branch_auto_detects(recipe) -> None:
+    """base_branch must use auto-detect (default: empty string) from config."""
     ingredient = recipe.ingredients["base_branch"]
-    assert ingredient.default is None, (
-        "base_branch must not have a default — callers must pass base_branch "
-        "explicitly (e.g. 'integration' or 'main') to avoid silent target changes"
+    assert ingredient.default == "", (
+        "base_branch must use auto-detect (default: '') to resolve from config"
     )
+    assert ingredient.required is False
 
 
-def test_pmp_has_upstream_branch_ingredient(recipe) -> None:
-    """upstream_branch ingredient must exist with default 'main'."""
-    assert "upstream_branch" in recipe.ingredients
-    assert recipe.ingredients["upstream_branch"].default == "main"
+def test_pmp_no_upstream_branch_ingredient(recipe) -> None:
+    """upstream_branch ingredient must not exist — replaced by auto-detection."""
+    assert "upstream_branch" not in recipe.ingredients
 
 
 def test_pmp_setup_remote_routes_to_check_integration_exists(recipe) -> None:
@@ -251,10 +245,11 @@ def test_pmp_has_create_persistent_integration_step(recipe) -> None:
     assert recipe.steps["create_persistent_integration"].tool == "run_cmd"
 
 
-def test_pmp_create_persistent_integration_references_upstream_branch(recipe) -> None:
-    """create_persistent_integration cmd must use inputs.upstream_branch as source."""
+def test_pmp_create_persistent_integration_auto_detects_default_branch(recipe) -> None:
+    """create_persistent_integration cmd must auto-detect the repo's default branch."""
     cmd = recipe.steps["create_persistent_integration"].with_args["cmd"]
-    assert "upstream_branch" in cmd
+    assert "symbolic-ref" in cmd
+    assert "upstream_branch" not in cmd
 
 
 def test_pmp_create_persistent_integration_routes_to_analyze_prs(recipe) -> None:

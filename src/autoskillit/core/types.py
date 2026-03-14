@@ -703,7 +703,12 @@ class RecipeRepository(Protocol):
     def list(self, project_dir: Path) -> Any: ...
 
     def load_and_validate(
-        self, name: str, project_dir: Any, *, suppressed: Sequence[str] | None = None
+        self,
+        name: str,
+        project_dir: Any,
+        *,
+        suppressed: Sequence[str] | None = None,
+        resolved_defaults: dict[str, str] | None = None,
     ) -> dict[str, Any]: ...
 
     def validate_from_path(self, script_path: Any) -> dict[str, Any]: ...

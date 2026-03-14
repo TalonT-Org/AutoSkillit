@@ -244,7 +244,6 @@ class TestRecipeTools:
         result = json.loads(await list_recipes())
         names = {r["name"] for r in result["recipes"]}
         assert "implementation" in names
-        assert "bugfix-loop" in names
         assert "remediation" in names
         assert "smoke-test" in names
 

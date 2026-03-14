@@ -40,7 +40,7 @@ class TestCLIDoctor:
             json.dumps(
                 {
                     "mcpServers": {
-                        "bugfix-loop": {
+                        "old-server": {
                             "type": "stdio",
                             "command": "/nonexistent/path/to/old-server",
                         },
@@ -53,7 +53,7 @@ class TestCLIDoctor:
         monkeypatch.chdir(tmp_path)
         cli.doctor()
         captured = capsys.readouterr()
-        assert "bugfix-loop" in captured.out
+        assert "old-server" in captured.out
         assert "ERROR" in captured.out
 
     def test_doctor_ignores_healthy_coregistered_servers(

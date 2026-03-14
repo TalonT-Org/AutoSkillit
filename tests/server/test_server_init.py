@@ -414,7 +414,6 @@ class TestKitchenToolSchemas:
         "disable_tools",
         "autoskillit_status",
         "executor",
-        "bugfix-loop",
     ]
 
     def test_tool_descriptions_contain_no_legacy_terms(self):
@@ -1092,7 +1091,6 @@ class TestToolSchemas:
     FORBIDDEN_TERMS = {
         "executor",
         "planner",
-        "bugfix-loop",
         "automation-mcp",
         "ai-executor",
         "enable_tools",  # old open_kitchen prompt name

@@ -58,12 +58,12 @@ class TestResolveRecipeInput:
 
     def test_valid_number_first_returns_first_recipe(self) -> None:
         r1 = self._make_recipe("implementation")
-        r2 = self._make_recipe("bugfix-loop")
+        r2 = self._make_recipe("remediation")
         assert _resolve_recipe_input("1", [r1, r2]) is r1
 
     def test_valid_number_last_returns_last_recipe(self) -> None:
         r1 = self._make_recipe("implementation")
-        r2 = self._make_recipe("bugfix-loop")
+        r2 = self._make_recipe("remediation")
         assert _resolve_recipe_input("2", [r1, r2]) is r2
 
     def test_out_of_range_too_high_returns_none(self) -> None:

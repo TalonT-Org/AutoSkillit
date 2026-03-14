@@ -550,78 +550,6 @@ class TestImplementationGroupsStructure:
 
 
 # ---------------------------------------------------------------------------
-# TestBugfixLoopStructure
-# ---------------------------------------------------------------------------
-
-
-class TestBugfixLoopStructure:
-    @pytest.fixture(scope="class")
-    def recipe(self):
-        return load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
-
-    def test_bl1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
-        self,
-        recipe,
-    ) -> None:
-        """T_BL1: audit_impl captures remediation_path and routes via on_result using verdict.
-
-        Uses predicate format (v0.3.0): verdict is read directly from result.verdict in predicate
-        conditions — not captured as context.verdict (which would create a dead output).
-        """
-        step = recipe.steps["audit_impl"]
-        assert "remediation_path" in step.capture
-        assert step.on_result is not None
-        conds = step.on_result.conditions
-        assert len(conds) > 0, "audit_impl on_result must have predicate conditions"
-        assert any("result.verdict" in (c.when or "") for c in conds), (
-            "audit_impl on_result must have a condition checking result.verdict"
-        )
-
-    def test_bl2_remediate_step_exists_with_on_success_plan(self, recipe) -> None:
-        """T_BL2: a step named remediate exists with on_success == 'plan'."""
-        assert "remediate" in recipe.steps
-        assert recipe.steps["remediate"].on_success == "plan"
-
-    def test_bl_b1_implement_captures_branch_name(self, recipe) -> None:
-        """T_BL_B1: implement step must capture branch_name from result."""
-        step = recipe.steps["implement"]
-        assert "branch_name" in step.capture, (
-            "implement step must capture branch_name so audit_impl can pass a "
-            "stable git ref to audit-impl after merge_worktree deletes the worktree"
-        )
-
-    def test_bl_b2_audit_impl_uses_branch_name_as_ref(self, recipe) -> None:
-        """T_BL_B2: audit_impl with: must reference context.branch_name as implementation_ref."""
-        step = recipe.steps["audit_impl"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "context.branch_name" in skill_cmd, (
-            "audit_impl must pass context.branch_name as implementation_ref — not "
-            "context.implementation_ref or context.worktree_path (stale after merge)"
-        )
-
-    def test_bl_b3_retry_worktree_captures_branch_name(self, recipe) -> None:
-        """T_BL_B3: retry_worktree step must also capture branch_name."""
-        step = recipe.steps["retry_worktree"]
-        assert "branch_name" in step.capture, (
-            "retry_worktree also updates the active worktree reference; "
-            "it must capture branch_name for downstream audit_impl use"
-        )
-
-    def test_bugfix_loop_investigate_captures_investigation_path(self, recipe) -> None:
-        """1e: investigate step must capture investigation_path; plan step must pass it."""
-        investigate_step = recipe.steps["investigate"]
-        assert (
-            investigate_step.capture is not None
-            and "investigation_path" in investigate_step.capture
-        ), "bugfix-loop investigate step must capture investigation_path"
-        plan_step = recipe.steps["plan"]
-        skill_cmd = plan_step.with_args.get("skill_command", "")
-        assert "${{ context.investigation_path }}" in skill_cmd, (
-            "bugfix-loop plan step skill_command must pass ${{ context.investigation_path }}"
-        )
-
-
-# ---------------------------------------------------------------------------
 # TestInvestigateFirstStructure
 # ---------------------------------------------------------------------------
 
@@ -971,7 +899,7 @@ def test_bundled_recipes_diagrams_dir_exists() -> None:
 
 def test_all_predicate_steps_have_on_failure() -> None:
     """Every tool/python step with on_result.conditions must declare on_failure."""
-    for recipe_name in ["implementation", "remediation", "bugfix-loop", "smoke-test"]:
+    for recipe_name in ["implementation", "remediation", "smoke-test"]:
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
         for step_name, step in recipe.steps.items():
             is_tool = step.tool is not None or step.python is not None
@@ -985,10 +913,8 @@ def test_audit_impl_on_failure_routes_to_escalation() -> None:
     """audit_impl.on_failure must route to an escalation step in each recipe."""
     impl = load_recipe(builtin_recipes_dir() / "implementation.yaml")
     rem = load_recipe(builtin_recipes_dir() / "remediation.yaml")
-    bl = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
     assert impl.steps["audit_impl"].on_failure == "escalate_stop"
     assert rem.steps["audit_impl"].on_failure == "escalate_stop"
-    assert bl.steps["audit_impl"].on_failure == "escalate"
 
 
 def test_smoke_check_summary_has_error_escalation() -> None:
@@ -1295,7 +1221,6 @@ class TestBaseBranchDefaults:
         [
             "implementation",
             "remediation",
-            "bugfix-loop",
             "implementation-groups",
             "merge-prs",
         ],

@@ -36,31 +36,6 @@ resolve-failures, audit-impl, open-pr, review-pr, resolve-review, diagnose-ci
 
 ---
 
-### bugfix-loop
-
-**Use when:** You have a failing test suite and want automated investigation
-and fixing.
-
-**Flow:**
-```
-Reset ─── Test ─── Investigate ─── Plan ─── Implement ─── Verify ─── Audit ─── Merge
-           │                                                 │
-        Pass → Done                                     Fix loop
-```
-
-**Ingredients:**
-| Name | Required | Default | Description |
-|------|----------|---------|-------------|
-| test_dir | Yes | — | Directory with the failing tests |
-| base_branch | No | integration | Target branch |
-| helper_dir | Yes | — | Directory for investigation artifacts |
-| audit | No | true | Run audit-impl quality gate |
-
-**Skills invoked:** investigate, rectify, implement-worktree-no-merge,
-resolve-failures, audit-impl
-
----
-
 ### remediation
 
 **Use when:** You have a problem that needs deep investigation before any

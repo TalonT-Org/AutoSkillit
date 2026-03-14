@@ -348,7 +348,7 @@ steps:
 A condensed bugfix loop showing retry, classify, and routing patterns:
 
 ```yaml
-name: bugfix-loop
+name: example-loop
 description: Test, fix, and merge with automatic retry.
 summary: test > investigate > plan > implement > verify > merge
 

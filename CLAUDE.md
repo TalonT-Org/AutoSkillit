@@ -219,7 +219,6 @@ src/autoskillit/
 │   └── __init__.py
 ├── recipes/                 # Bundled recipe YAML definitions
 │   ├── audit-and-fix.yaml
-│   ├── bugfix-loop.yaml
 │   ├── implementation-groups.yaml
 │   ├── implementation.yaml
 │   ├── remediation.yaml

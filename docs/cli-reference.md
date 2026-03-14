@@ -56,7 +56,6 @@ Launch an interactive pipeline session.
 
     autoskillit cook                    # Show recipe menu
     autoskillit cook implementation     # Run implementation pipeline
-    autoskillit cook bugfix-loop        # Run bugfix loop
 
 ---
 

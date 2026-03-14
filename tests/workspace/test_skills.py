@@ -175,7 +175,7 @@ class TestSkillResolver:
                 name = match.group(1)
                 if name.startswith("autoskillit:") or name.startswith("mcp__"):
                     continue
-                # Skip URI paths like workflow://bugfix-loop — not skill invocations
+                # Skip URI paths like workflow://some-recipe — not skill invocations
                 start = match.start()
                 if start >= 1 and content[start - 1] == "/":
                     continue

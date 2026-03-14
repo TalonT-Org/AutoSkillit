@@ -14,7 +14,7 @@ hooks:
 
 Audit the codebase against defense standards derived from historical bug pattern analysis. Each standard represents an architectural lesson learned from real bugs - a guard that prevents an entire class of bugs, not just one instance.
 
-Standards are added here when `/design-guards` recommends them and the user approves.
+Standards are added here when `/autoskillit:design-guards` recommends them and the user approves.
 
 ## When to Use
 
@@ -92,10 +92,10 @@ The following examples show common patterns applicable to many codebases. Replac
 
 ## Adding Project-Specific Standards
 
-Defense standards come from the `/design-guards` pipeline:
+Defense standards come from the `/autoskillit:design-guards` pipeline:
 
-1. `/audit-bugs` identifies recurring patterns
-2. `/design-guards` investigates solutions and recommends standards
+1. `/autoskillit:audit-bugs` identifies recurring patterns
+2. `/autoskillit:design-guards` investigates solutions and recommends standards
 3. User approves which recommendations become permanent standards
 4. Add the approved standards to this file following the format below
 

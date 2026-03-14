@@ -21,7 +21,7 @@ hooks:
 - Need to understand developer experience
 - Documenting build and test infrastructure
 - Analyzing code quality gates
-- User invokes `/autoskillit:arch-lens-development` or `/make-arch-diag development`
+- User invokes `/autoskillit:arch-lens-development` or `/autoskillit:make-arch-diag development`
 
 ## Critical Constraints
 
@@ -270,5 +270,5 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram

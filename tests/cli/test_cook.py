@@ -58,12 +58,12 @@ class TestResolveRecipeInput:
 
     def test_valid_number_first_returns_first_recipe(self) -> None:
         r1 = self._make_recipe("implementation")
-        r2 = self._make_recipe("bugfix-loop")
+        r2 = self._make_recipe("remediation")
         assert _resolve_recipe_input("1", [r1, r2]) is r1
 
     def test_valid_number_last_returns_last_recipe(self) -> None:
         r1 = self._make_recipe("implementation")
-        r2 = self._make_recipe("bugfix-loop")
+        r2 = self._make_recipe("remediation")
         assert _resolve_recipe_input("2", [r1, r2]) is r2
 
     def test_out_of_range_too_high_returns_none(self) -> None:
@@ -89,6 +89,14 @@ class TestResolveRecipeInput:
 
 
 class TestCLICook:
+    @pytest.fixture(autouse=True)
+    def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub terminal preview to avoid subprocess.run collision with git calls."""
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts.show_cook_preview",
+            lambda *a, **kw: None,
+        )
+
     # --- workspace init ---
 
     def test_prep_station_init_creates_dir_with_marker(
@@ -455,8 +463,8 @@ class TestCLICook:
         system_prompt = cmd[prompt_idx + 1]
         # Contains recipe name
         assert "test-script" in system_prompt
-        # Instructs Claude to call load_recipe
-        assert "load_recipe" in system_prompt
+        # Instructs Claude to call open_kitchen with recipe name
+        assert "open_kitchen" in system_prompt
         # Contains routing rules
         assert "ROUTING RULES" in system_prompt
         # Contains failure predicates
@@ -861,9 +869,73 @@ class TestCLICook:
 
         assert exc_info.value.code == 1
 
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_command_includes_positional_greeting(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The cook command must pass a greeting as a positional argument."""
+        from autoskillit.cli._prompts import _COOK_GREETINGS
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.cook("test-script")
+
+        cmd = mock_run.call_args[0][0]
+        greeting_candidates = [g.format(recipe_name="test-script") for g in _COOK_GREETINGS]
+        # Greeting must appear as one of the positional args (not a flag value)
+        assert any(arg in greeting_candidates for arg in cmd), (
+            f"No greeting found as positional arg in: {cmd}"
+        )
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_open_kitchen_includes_positional_greeting(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Open-kitchen cook sessions also pass a greeting as positional arg."""
+        from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "0")
+
+        cli.cook()
+
+        cmd = mock_run.call_args[0][0]
+        assert any(arg in _OPEN_KITCHEN_GREETINGS for arg in cmd), (
+            f"No open-kitchen greeting found as positional arg in: {cmd}"
+        )
+
 
 class TestCookDisplayOwnership:
     """cook() delegates recipe display to the Claude session via load_recipe."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub terminal preview to avoid subprocess.run collision with git calls."""
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts.show_cook_preview",
+            lambda *a, **kw: None,
+        )
 
     def _setup_recipe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         """Write test recipe to scripts_dir and chdir."""
@@ -901,33 +973,13 @@ class TestCookDisplayOwnership:
         assert "on_success:" not in system_prompt
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_prints_recipe_diagram_before_launch(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
-    ) -> None:
-        """cook() renders recipe diagram to terminal before launching Claude session."""
-        self._setup_recipe(tmp_path, monkeypatch)
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
-
-        cli.cook("test-script")
-
-        captured = capsys.readouterr()
-        assert "TEST-SCRIPT" in captured.out, "Recipe name should be rendered to terminal"
-        assert "Kitchen Rules" in captured.out, "Kitchen rules should appear before launch"
-
-    @patch("autoskillit.cli.subprocess.run")
-    def test_cook_system_prompt_instructs_load_recipe(
+    def test_cook_system_prompt_instructs_open_kitchen_with_recipe(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """System prompt must instruct Claude to call load_recipe as its first action."""
+        """System prompt must instruct Claude to call open_kitchen(name) as its first action."""
         self._setup_recipe(tmp_path, monkeypatch)
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
@@ -938,7 +990,7 @@ class TestCookDisplayOwnership:
         cmd = mock_run.call_args[0][0]
         prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
         system_prompt = cmd[prompt_idx + 1]
-        assert "load_recipe" in system_prompt
+        assert "open_kitchen" in system_prompt
         assert "FIRST ACTION" in system_prompt
 
 
@@ -981,17 +1033,17 @@ class TestRecipesCLI:
             _app_mod.recipes_show("nonexistent-recipe-xyz")
         assert exc_info.value.code == 1
 
-    # DG-22
-    def test_recipes_render_renders_bundled(
+    def test_recipes_render_lists_available(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
     ) -> None:
-        """DG-22: `autoskillit recipes render` subcommand is registered and callable."""
+        """DG-22: `autoskillit recipes render` subcommand is registered and lists recipes."""
         from autoskillit import cli
 
         monkeypatch.chdir(tmp_path)
-        cli.recipes_render(None)  # render all bundled
+        cli.recipes_render(None)  # list all
         captured = capsys.readouterr()
-        assert "Rendered:" in captured.out
+        assert captured.out.strip(), "Expected recipe names in output"
+        assert "implementation" in captured.out

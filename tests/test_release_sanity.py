@@ -23,13 +23,3 @@ def test_sync_manifest_in_gitignore():
     """.autoskillit/sync_manifest.json must be gitignored."""
     gitignore = (REPO_ROOT / ".gitignore").read_text()
     assert ".autoskillit/sync_manifest.json" in gitignore
-
-
-def test_batch_impl_marked_experimental():
-    """batch-implementation.yaml must carry experimental: true."""
-    import yaml
-
-    recipe_path = REPO_ROOT / "src/autoskillit/recipes/batch-implementation.yaml"
-    assert recipe_path.exists(), f"batch-implementation.yaml not found at {recipe_path}"
-    recipe = yaml.safe_load(recipe_path.read_text())
-    assert recipe.get("experimental") is True

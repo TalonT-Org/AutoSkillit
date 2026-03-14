@@ -417,8 +417,8 @@ async def test_perform_merge_dirty_check_ignores_generated_files(
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (no tracked generated files)
-    # git status --porcelain returns only a diagram file as untracked
-    dirty_out = "?? src/autoskillit/recipes/diagrams/implementation.md\n"
+    # git status --porcelain returns only a generated config file as untracked
+    dirty_out = "?? src/autoskillit/hooks/hooks.json\n"
     conftest_mock_runner.push(_make_result(0, dirty_out, ""))  # git status --porcelain
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check

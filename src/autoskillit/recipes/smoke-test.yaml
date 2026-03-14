@@ -5,16 +5,16 @@ summary: setup > seed_task > set_feature_branch > create_branch? > investigate >
 
 ingredients:
   workspace:
-    description: Git repo workspace directory (must have an initial commit)
+    description: Git repo workspace directory
     required: true
   base_branch:
-    description: Merge target branch (feature branch override when collect_on_branch=true)
-    default: "main"
+    description: Merge target
+    default: main
   collect_on_branch:
-    description: Collect all fixes on a feature branch and create issue+PR at end (true/false)
+    description: Collect fixes on feature branch
     default: "true"
   original_base_branch:
-    description: Original base branch for PR target (auto-set from base_branch)
+    description: Original base branch for PR target
     default: "main"
 
 kitchen_rules:

@@ -336,7 +336,7 @@ dataflow:
   - worktree_path
   required: []
   produced: []
-- step: create_review_pr
+- step: open_integration_pr
   available:
   - audit
   - base_branch

@@ -13,11 +13,11 @@ hooks:
 # PR Analysis Skill
 
 Analyze all open PRs targeting a base branch, determine a safe merge order, assess
-complexity, and produce machine-readable output for the `pr-merge-pipeline` recipe.
+complexity, and produce machine-readable output for the `merge-prs` recipe.
 
 ## When to Use
 
-- At the start of a `pr-merge-pipeline` run
+- At the start of a `merge-prs` run
 - User wants to understand which PRs can be merged safely and in what order
 - User says "analyze PRs", "order PRs", or "assess PR complexity"
 
@@ -26,7 +26,7 @@ complexity, and produce machine-readable output for the `pr-merge-pipeline` reci
 **NEVER:**
 - Merge, close, or modify any PR
 - Modify any source code files
-- Create files outside `temp/pr-merge-pipeline/` directory
+- Create files outside `temp/merge-prs/` directory
 
 **ALWAYS:**
 - Use subagents to fetch PR data in parallel
@@ -250,9 +250,9 @@ Compute a timestamp: `YYYY-MM-DD_HHMMSS`.
 
 Compute integration branch name: `pr-batch/pr-merge-{YYYYMMDD-HHMMSS}`.
 
-Ensure `temp/pr-merge-pipeline/` exists.
+Ensure `temp/merge-prs/` exists.
 
-**5a. Machine-readable order file:** `temp/pr-merge-pipeline/pr_order_{ts}.json`
+**5a. Machine-readable order file:** `temp/merge-prs/pr_order_{ts}.json`
 
 ```json
 {
@@ -295,7 +295,7 @@ Ensure `temp/pr-merge-pipeline/` exists.
 
 `pr_count` reflects the number of **eligible** PRs (i.e., `${#ELIGIBLE_PRS[@]}`).
 
-**5b. Human-readable analysis plan:** `temp/pr-merge-pipeline/pr_analysis_plan_{ts}.md`
+**5b. Human-readable analysis plan:** `temp/merge-prs/pr_analysis_plan_{ts}.md`
 
 This file is named `*_plan_*.md` so `audit-impl` can discover it as the baseline specification.
 
@@ -371,7 +371,7 @@ Report to terminal:
 ## Output Location
 
 ```
-temp/pr-merge-pipeline/
+temp/merge-prs/
 ├── pr_order_{ts}.json              # Machine-readable manifest (captured by recipe)
 └── pr_analysis_plan_{ts}.md        # Human-readable analysis (discovered by audit-impl)
 ```
@@ -397,4 +397,4 @@ queue_mode = ${QUEUE_MODE}   # true when merge queue has ≥1 MERGEABLE entry; f
 
 - **`/autoskillit:merge-pr`** — Merges individual PRs from this skill's ordered list
 - **`/autoskillit:make-plan`** — Called for complex PRs that need conflict resolution plans
-- **`/autoskillit:audit-impl`** — Receives `temp/pr-merge-pipeline/` as plans_input
+- **`/autoskillit:audit-impl`** — Receives `temp/merge-prs/` as plans_input

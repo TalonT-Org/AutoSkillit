@@ -96,7 +96,7 @@ hitting context limits.
 | `audit-and-fix` | Audit → investigate → plan → implement → test → merge → PR |
 | `implementation-groups` | Decompose large docs → sequenced group implementation |
 | `batch-implementation` | Implement multiple GitHub issues sharing clone setup overhead |
-| `pr-merge-pipeline` | Analyze open PRs → merge in order → single integration PR |
+| `merge-prs` | Analyze open PRs → merge in order → single integration PR |
 | `smoke-test` | Integration self-test of the orchestration engine |
 
 ## CLI Quick Reference

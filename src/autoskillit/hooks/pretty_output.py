@@ -12,12 +12,12 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autoskillit.recipe._api import LoadRecipeResult
+    from autoskillit.recipe._api import ListRecipesResult, LoadRecipeResult
 
 _HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", "temp", ".autoskillit_hook_config.json")
 _CHECK_MARK = "\u2713"  # ✓
@@ -349,38 +349,108 @@ def _fmt_clone_repo(data: dict, _pipeline: bool) -> str:
     return "\n".join(lines)
 
 
+# Field coverage contract for _fmt_load_recipe ↔ LoadRecipeResult
+_FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
+    {
+        "valid",
+        "suggestions",
+        "error",
+        "content",
+        "ingredients_table",
+    }
+)
+_FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
+    {
+        "greeting",  # delivered via positional CLI arg, not MCP response
+        "diagram",  # user sees it in terminal preview; agent doesn't need it
+        "kitchen_rules",  # already in the YAML content
+    }
+)
+
+
+def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
+    """Shared recipe content rendering for load_recipe and open_kitchen+recipe."""
+    lines: list[str] = []
+    content = data.get("content")
+    if content:
+        lines.append("\n--- RECIPE ---")
+        lines.append(content)
+        lines.append("--- END RECIPE ---")
+    ing_table = data.get("ingredients_table")
+    if ing_table:
+        lines.append("\n--- INGREDIENTS TABLE (display this verbatim to the user) ---")
+        lines.append(ing_table)
+        lines.append("--- END TABLE ---")
+    suggestions = data.get("suggestions") or []
+    errors = [
+        f for f in suggestions if isinstance(f, dict) and f.get("severity") in ("error", "warning")
+    ]
+    if errors:
+        lines.append(f"\n{len(errors)} finding(s)")
+    return lines
+
+
 def _fmt_load_recipe(data: LoadRecipeResult, pipeline: bool) -> str:
     """Format load_recipe result as Markdown-KV."""
     if not isinstance(data, dict):
         return "## load_recipe\n\n_(unexpected response type)_"
-    lines: list[str] = []
+
+    error = data.get("error")
+    if error:
+        return f"## load_recipe {_CROSS_MARK}\n\n**Error:** {error}"
+
     valid = data.get("valid", True)
     mark = _CHECK_MARK if valid else _CROSS_MARK
-    lines.append(f"## load_recipe {mark}")
-
-    diagram = data.get("diagram")
-    if diagram:
-        lines.append(diagram)
-    else:
-        lines.append("_(no diagram available)_")
-
-    suggestions = data.get("suggestions") or []
-    if suggestions:
-        lines.append("\n**Findings:**")
-        for finding in suggestions[:20]:
-            if isinstance(finding, dict):
-                rule = finding.get("rule", "")
-                msg = finding.get("message", str(finding))
-                lines.append(f"  - {rule}: {msg}" if rule else f"  - {msg}")
-            else:
-                lines.append(f"  - {finding}")
-        if len(suggestions) > 20:
-            lines.append(f"  ... and {len(suggestions) - 20} more")
-
+    lines: list[str] = [f"## load_recipe {mark}"]
+    lines.extend(_fmt_recipe_body(data))
     return "\n".join(lines)
 
 
-def _fmt_list_recipes(data: dict, pipeline: bool) -> str:
+# Field coverage contract for _fmt_list_recipes ↔ ListRecipesResult
+_FMT_LIST_RECIPES_RENDERED: frozenset[str] = frozenset(
+    {
+        "recipes",
+        "count",
+        "errors",
+    }
+)
+_FMT_LIST_RECIPES_SUPPRESSED: frozenset[str] = frozenset()
+
+# Field coverage contract for per-item recipe entries ↔ RecipeListItem
+_FMT_RECIPE_LIST_ITEM_RENDERED: frozenset[str] = frozenset(
+    {
+        "name",
+        "description",
+        "summary",
+    }
+)
+_FMT_RECIPE_LIST_ITEM_SUPPRESSED: frozenset[str] = frozenset()
+
+
+def _fmt_open_kitchen(data: dict, pipeline: bool) -> str:
+    """Format open_kitchen result — plain text or combined kitchen+recipe."""
+    if "content" in data or ("error" in data and "kitchen" in data):
+        # Combined kitchen + recipe response
+        version = data.get("version", "")
+
+        error = data.get("error")
+        if error:
+            return (
+                f"## open_kitchen {_CROSS_MARK} v{version}\n\nKitchen open. Recipe error: {error}"
+            )
+
+        valid = data.get("valid", True)
+        mark = _CHECK_MARK if valid else _CROSS_MARK
+        lines: list[str] = [f"## open_kitchen {mark} v{version}"]
+        lines.extend(_fmt_recipe_body(data))
+        return "\n".join(lines)
+
+    # Plain text kitchen-open response (no recipe)
+    result = data.get("result", "")
+    return f"## open_kitchen\n\n{result}"
+
+
+def _fmt_list_recipes(data: ListRecipesResult, pipeline: bool) -> str:
     """Format list_recipes result as Markdown-KV."""
     if not isinstance(data, dict):
         return "## list_recipes\n\n_(unexpected response type)_"
@@ -390,7 +460,10 @@ def _fmt_list_recipes(data: dict, pipeline: bool) -> str:
         if isinstance(recipe, dict):
             name = recipe.get("name", "?")
             desc = recipe.get("description", "")
+            summary = recipe.get("summary", "")
             lines.append(f"  - {name}: {desc}" if desc else f"  - {name}")
+            if summary:
+                lines.append(f"    {summary}")
         else:
             lines.append(f"  - {recipe}")
     if len(recipes) > 30:
@@ -475,6 +548,7 @@ _FORMATTERS: dict[str, Callable[..., str]] = {
     "kitchen_status": _fmt_kitchen_status,
     "clone_repo": _fmt_clone_repo,
     "load_recipe": _fmt_load_recipe,
+    "open_kitchen": _fmt_open_kitchen,
     "list_recipes": _fmt_list_recipes,
 }
 
@@ -510,7 +584,6 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "get_issue_title",  # simple string
         "get_ci_status",  # ci status dict
         "get_quota_events",  # list of quota events, generic renders correctly
-        "open_kitchen",  # plain text; formatter handled by unwrap path
         "close_kitchen",  # simple ack
     }
 )

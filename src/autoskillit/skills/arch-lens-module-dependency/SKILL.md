@@ -21,7 +21,7 @@ hooks:
 - Need to understand module coupling and dependencies
 - Analyzing architectural layering violations
 - Identifying high fan-in modules (stability concerns)
-- User invokes `/autoskillit:arch-lens-module-dependency` or `/make-arch-diag dependency`
+- User invokes `/autoskillit:arch-lens-module-dependency` or `/autoskillit:make-arch-diag dependency`
 
 ## Critical Constraints
 
@@ -259,6 +259,6 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:arch-lens-c4-container` - For container-level view

@@ -21,7 +21,7 @@ hooks:
 - Need to understand physical deployment
 - Documenting infrastructure and processes
 - Analyzing where components execute
-- User invokes `/autoskillit:arch-lens-deployment` or `/make-arch-diag deployment`
+- User invokes `/autoskillit:arch-lens-deployment` or `/autoskillit:make-arch-diag deployment`
 
 ## Critical Constraints
 
@@ -248,6 +248,6 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:arch-lens-c4-container` - For container-level view

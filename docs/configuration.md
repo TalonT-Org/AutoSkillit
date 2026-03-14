@@ -261,7 +261,7 @@ github:
 
 ## Merge Queue Configuration
 
-AutoSkillit's `wait_for_merge_queue` tool and the queue mode in `pr-merge-pipeline` work
+AutoSkillit's `wait_for_merge_queue` tool and the queue mode in `merge-prs` work
 with GitHub's merge queue feature. For best results with automation use cases:
 
 ### `min_entries_to_merge_wait_minutes` = 0

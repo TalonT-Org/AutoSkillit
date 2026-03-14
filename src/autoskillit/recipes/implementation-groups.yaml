@@ -5,31 +5,30 @@ autoskillit_version: "0.3.0"
 
 ingredients:
   source_doc:
-    description: Path to source document for group decomposition
+    description: Source document for group decomposition
     required: true
   source_dir:
-    description: Remote URL for source repo (auto-detected from git origin if empty)
+    description: Source repository
     required: false
     default: ""
   run_name:
-    description: Pipeline run name prefix (used in branch and clone naming)
+    description: Run name prefix
     default: "impl"
   base_branch:
-    description: Base branch to merge into (defaults to main)
-    default: main
+    description: Merge target
+    default: ""
   review_approach:
-    description: Run /review-approach before implementation? (true/false)
+    description: Research approaches first
     default: "false"
   audit:
-    description: Gate merge on audit-impl quality check (true/false)
+    description: Post-merge quality gate
     default: "true"
   open_pr:
-    description: Open a PR to base_branch instead of merging directly (true/false)
+    description: PR instead of direct merge
     default: "true"
   issue_url:
-    description: GitHub issue URL to close on merge (optional)
+    description: GitHub issue to close on merge
     required: false
-    default: ""
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,

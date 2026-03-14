@@ -21,7 +21,7 @@ hooks:
 - Need to understand how data flows through the system
 - Documenting data transformations and conversions
 - Identifying storage destinations and access patterns
-- User invokes `/autoskillit:arch-lens-data-lineage` or `/make-arch-diag data`
+- User invokes `/autoskillit:arch-lens-data-lineage` or `/autoskillit:make-arch-diag data`
 
 ## Critical Constraints
 
@@ -245,6 +245,6 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:arch-lens-c4-container` - For container-level storage view

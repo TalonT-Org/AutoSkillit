@@ -47,6 +47,73 @@ _logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 
+def _ingredient_sort_key(name: str, required: bool, default: object) -> tuple[int, str]:
+    """Sort ingredients: required > auto-detect > flags > optional > constants."""
+    if required and default is None:
+        return (0, name)
+    if default == "":
+        return (1, name)
+    if default in ("true", "false"):
+        return (2, name)
+    if default is None:
+        return (3, name)
+    return (4, name)  # has a non-empty default (constants, rarely changed)
+
+
+def format_ingredients_table(
+    recipe: Any, resolved_defaults: dict[str, str] | None = None
+) -> str | None:
+    """Build a pre-formatted ingredients table from a parsed Recipe.
+
+    When ``resolved_defaults`` is provided, auto-detect ingredients (``default: ""``)
+    use the resolved value instead of showing "auto-detect".
+    """
+    ingredients = getattr(recipe, "ingredients", None)
+    if not ingredients:
+        return None
+
+    raw: list[tuple[str, str, str, tuple[int, str]]] = []
+    for name, ing in ingredients.items():
+        desc = getattr(ing, "description", "")
+        required = getattr(ing, "required", False)
+        default = getattr(ing, "default", None)
+        sort_key = _ingredient_sort_key(name, required, default)
+        if default is None and required:
+            default_str, name_str = "(required)", f"{name} *"
+        elif default == "":
+            resolved = (resolved_defaults or {}).get(name)
+            default_str = resolved if resolved else "auto-detect"
+            name_str = name
+        elif default == "true":
+            default_str, name_str = "on", name
+        elif default == "false":
+            default_str, name_str = "off", name
+        elif default is None:
+            default_str, name_str = "--", name
+        else:
+            default_str, name_str = str(default), name
+        raw.append((name_str, desc, default_str, sort_key))
+
+    if not raw:
+        return None
+
+    raw.sort(key=lambda r: r[3])
+    rows = [(r[0], r[1], r[2]) for r in raw]
+
+    nw = max(len(r[0]) for r in rows)
+    dw = max(len(r[1]) for r in rows)
+    dfw = max(len(r[2]) for r in rows)
+    nw = max(nw, 4)
+    dw = max(dw, 11)
+    dfw = max(dfw, 7)
+    out: list[str] = []
+    out.append(f"| {'Name':>{nw}} | {'Description':<{dw}} | {'Default':>{dfw}} |")
+    out.append(f"| {'-' * (nw - 1)}: | {'-' * dw} | {'-' * (dfw - 1)}: |")
+    for name_str, desc, default_str in rows:
+        out.append(f"| {name_str:>{nw}} | {desc:<{dw}} | {default_str:>{dfw}} |")
+    return "\n".join(out)
+
+
 class LoadRecipeResult(TypedDict, total=False):
     """Typed schema for the load_recipe handler → formatter boundary."""
 
@@ -56,6 +123,24 @@ class LoadRecipeResult(TypedDict, total=False):
     valid: bool
     kitchen_rules: list[str]
     error: str
+    greeting: str
+    ingredients_table: str
+
+
+class RecipeListItem(TypedDict):
+    """Typed schema for a single recipe entry in the list_recipes response."""
+
+    name: str
+    description: str
+    summary: str
+
+
+class ListRecipesResult(TypedDict, total=False):
+    """Typed schema for the list_recipes handler → formatter boundary."""
+
+    recipes: list[RecipeListItem]
+    count: int
+    errors: list[dict[str, str]]
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +208,7 @@ _LOAD_CACHE_LOCK = threading.Lock()
 
 def format_recipe_list_response(result: LoadResult[RecipeInfo]) -> dict[str, object]:
     """Build the MCP response dict for the list_recipes tool."""
-    items = [
+    items: list[RecipeListItem] = [
         {"name": r.name, "description": r.description, "summary": r.summary} for r in result.items
     ]
     response: dict[str, object] = {
@@ -208,6 +293,7 @@ def load_and_validate(
     *,
     suppressed: Sequence[str] | None = None,
     recipe_info: RecipeInfo | None = None,
+    resolved_defaults: dict[str, str] | None = None,
 ) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
@@ -360,16 +446,21 @@ def load_and_validate(
     # Load pre-generated diagram
     diagram: str | None = load_recipe_diagram(name, recipes_dir)
 
+    # Build pre-formatted ingredients table
+    ing_table = (
+        format_ingredients_table(recipe, resolved_defaults=resolved_defaults) if recipe else None
+    )
+
+    result: LoadRecipeResult = {
+        "content": raw,
+        "diagram": diagram,
+        "suggestions": suggestions,
+        "valid": valid,
+    }
     if recipe is not None and recipe.kitchen_rules:
-        result: LoadRecipeResult = {
-            "content": raw,
-            "diagram": diagram,
-            "suggestions": suggestions,
-            "valid": valid,
-            "kitchen_rules": recipe.kitchen_rules,
-        }
-    else:
-        result = {"content": raw, "diagram": diagram, "suggestions": suggestions, "valid": valid}
+        result["kitchen_rules"] = recipe.kitchen_rules
+    if ing_table:
+        result["ingredients_table"] = ing_table
 
     # Write to cache (only when recipe was found and fully processed)
     if match is not None:

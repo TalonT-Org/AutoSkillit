@@ -21,7 +21,7 @@ hooks:
 - Need to understand operator/admin perspective
 - Documenting CLI commands and workflows
 - Analyzing configuration and monitoring setup
-- User invokes `/autoskillit:arch-lens-operational` or `/make-arch-diag operational`
+- User invokes `/autoskillit:arch-lens-operational` or `/autoskillit:make-arch-diag operational`
 
 ## Critical Constraints
 
@@ -263,7 +263,7 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:arch-lens-development` - For build tooling view
 - `/autoskillit:arch-lens-deployment` - For infrastructure view

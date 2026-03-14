@@ -1,4 +1,4 @@
-"""Structural assertions for the bundled pr-merge-pipeline recipe."""
+"""Structural assertions for the bundled merge-prs recipe."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from autoskillit.recipe.io import builtin_recipes_dir, iter_steps_with_context, 
 
 @pytest.fixture(scope="module")
 def recipe():
-    return load_recipe(builtin_recipes_dir() / "pr-merge-pipeline.yaml")
+    return load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
 
 
 def test_pmp_check_impl_plans_step_exists(recipe) -> None:
@@ -58,19 +58,19 @@ def test_pmp_check_impl_plans_excludes_pr_analysis_plan(recipe) -> None:
     )
 
 
-def test_pmp_check_impl_plans_routes_to_create_review_pr_on_empty(recipe) -> None:
-    """check_impl_plans must route to create_review_pr when no impl plans exist."""
+def test_pmp_check_impl_plans_routes_to_open_integration_pr_on_empty(recipe) -> None:
+    """check_impl_plans must route to open_integration_pr when no impl plans exist."""
     step = recipe.steps["check_impl_plans"]
     assert step.on_result is not None, "check_impl_plans must use on_result routing"
     conds = step.on_result.conditions
     routes = {c.route for c in conds}
-    assert "create_review_pr" in routes, (
-        "check_impl_plans must route to create_review_pr when count is 0 — "
+    assert "open_integration_pr" in routes, (
+        "check_impl_plans must route to open_integration_pr when count is 0 — "
         "skipping audit_impl when no implementation plans exist"
     )
     zero_conds = [c for c in conds if c.when is not None and "0" in (c.when or "")]
-    assert any(c.route == "create_review_pr" for c in zero_conds), (
-        "the create_review_pr route must be guarded by a zero-count condition"
+    assert any(c.route == "open_integration_pr" for c in zero_conds), (
+        "the open_integration_pr route must be guarded by a zero-count condition"
     )
 
 
@@ -141,37 +141,37 @@ def test_pmp_all_plan_paths_available_at_audit_impl(recipe) -> None:
         pytest.fail("audit_impl step not found in recipe")
 
 
-def test_pmp_create_review_pr_uses_run_skill(recipe) -> None:
-    """create_review_pr must use run_skill (not run_cmd)."""
-    step = recipe.steps["create_review_pr"]
+def test_pmp_open_integration_pr_uses_run_skill(recipe) -> None:
+    """open_integration_pr must use run_skill (not run_cmd)."""
+    step = recipe.steps["open_integration_pr"]
     assert step.tool == "run_skill", (
-        "create_review_pr must use run_skill to invoke /autoskillit:create-review-pr — "
+        "open_integration_pr must use run_skill to invoke /autoskillit:open-integration-pr — "
         "the skill produces rich PR bodies with tables and arch-lens diagrams; "
         "run_cmd produces a minimal plain text PR"
     )
 
 
-def test_pmp_create_review_pr_calls_create_review_pr_skill(recipe) -> None:
-    """create_review_pr skill_command must invoke /autoskillit:create-review-pr."""
-    step = recipe.steps["create_review_pr"]
+def test_pmp_open_integration_pr_calls_open_integration_pr_skill(recipe) -> None:
+    """open_integration_pr skill_command must invoke /autoskillit:open-integration-pr."""
+    step = recipe.steps["open_integration_pr"]
     cmd = step.with_args.get("skill_command", "")
-    assert "/autoskillit:create-review-pr" in cmd, (
-        "create_review_pr step must call /autoskillit:create-review-pr skill"
+    assert "/autoskillit:open-integration-pr" in cmd, (
+        "open_integration_pr step must call /autoskillit:open-integration-pr skill"
     )
 
 
-def test_pmp_create_review_pr_captures_pr_url(recipe) -> None:
-    """create_review_pr must capture pr_url from the skill result."""
-    step = recipe.steps["create_review_pr"]
+def test_pmp_open_integration_pr_captures_pr_url(recipe) -> None:
+    """open_integration_pr must capture pr_url from the skill result."""
+    step = recipe.steps["open_integration_pr"]
     assert "pr_url" in (step.capture or {}), (
-        "create_review_pr must capture pr_url from result — "
-        "the create-review-pr skill emits pr_url in its output"
+        "open_integration_pr must capture pr_url from result — "
+        "the open-integration-pr skill emits pr_url in its output"
     )
 
 
-def test_pmp_create_review_pr_passes_four_args(recipe) -> None:
+def test_pmp_open_integration_pr_passes_four_args(recipe) -> None:
     """skill_command must supply integration_branch, base_branch, pr_order_file, verdict."""
-    step = recipe.steps["create_review_pr"]
+    step = recipe.steps["open_integration_pr"]
     cmd = step.with_args.get("skill_command", "")
     for arg in [
         "context.integration_branch",
@@ -179,27 +179,21 @@ def test_pmp_create_review_pr_passes_four_args(recipe) -> None:
         "context.pr_order_file",
         "context.verdict",
     ]:
-        assert arg in cmd, f"create_review_pr skill_command must include {arg}"
+        assert arg in cmd, f"open_integration_pr skill_command must include {arg}"
 
 
-def test_pmp_base_branch_has_no_silent_default(recipe) -> None:
-    """base_branch must have no default — callers must specify it explicitly.
-
-    Silently defaulting base_branch to 'integration' would break existing callers
-    that previously relied on 'main' as the target.  Requiring an explicit value
-    forces callers to opt in to the integration-branch feature consciously.
-    """
+def test_pmp_base_branch_auto_detects(recipe) -> None:
+    """base_branch must use auto-detect (default: empty string) from config."""
     ingredient = recipe.ingredients["base_branch"]
-    assert ingredient.default is None, (
-        "base_branch must not have a default — callers must pass base_branch "
-        "explicitly (e.g. 'integration' or 'main') to avoid silent target changes"
+    assert ingredient.default == "", (
+        "base_branch must use auto-detect (default: '') to resolve from config"
     )
+    assert ingredient.required is False
 
 
-def test_pmp_has_upstream_branch_ingredient(recipe) -> None:
-    """upstream_branch ingredient must exist with default 'main'."""
-    assert "upstream_branch" in recipe.ingredients
-    assert recipe.ingredients["upstream_branch"].default == "main"
+def test_pmp_no_upstream_branch_ingredient(recipe) -> None:
+    """upstream_branch ingredient must not exist — replaced by auto-detection."""
+    assert "upstream_branch" not in recipe.ingredients
 
 
 def test_pmp_setup_remote_routes_to_check_integration_exists(recipe) -> None:
@@ -251,10 +245,11 @@ def test_pmp_has_create_persistent_integration_step(recipe) -> None:
     assert recipe.steps["create_persistent_integration"].tool == "run_cmd"
 
 
-def test_pmp_create_persistent_integration_references_upstream_branch(recipe) -> None:
-    """create_persistent_integration cmd must use inputs.upstream_branch as source."""
+def test_pmp_create_persistent_integration_auto_detects_default_branch(recipe) -> None:
+    """create_persistent_integration cmd must auto-detect the repo's default branch."""
     cmd = recipe.steps["create_persistent_integration"].with_args["cmd"]
-    assert "upstream_branch" in cmd
+    assert "symbolic-ref" in cmd
+    assert "upstream_branch" not in cmd
 
 
 def test_pmp_create_persistent_integration_routes_to_analyze_prs(recipe) -> None:
@@ -362,7 +357,7 @@ def test_ci_watch_pr_no_inline_shell(recipe) -> None:
 
 
 def test_ci_watch_pr_has_no_capture(recipe) -> None:
-    """ci_watch_pr must not capture — no downstream consumer in pr-merge-pipeline."""
+    """ci_watch_pr must not capture — no downstream consumer in merge-prs."""
     step = recipe.steps["ci_watch_pr"]
     assert not step.capture
 
@@ -370,9 +365,9 @@ def test_ci_watch_pr_has_no_capture(recipe) -> None:
 # ── B-series: Mergeability Gate + Review Cycle ──────────────────────────────
 
 
-def test_pmp_create_review_pr_routes_to_wait_for_mergeability(recipe) -> None:
-    """B1: create_review_pr.on_success must route to wait_for_review_pr_mergeability."""
-    step = recipe.steps["create_review_pr"]
+def test_pmp_open_integration_pr_routes_to_wait_for_mergeability(recipe) -> None:
+    """B1: open_integration_pr.on_success must route to wait_for_review_pr_mergeability."""
+    step = recipe.steps["open_integration_pr"]
     assert step.on_success == "wait_for_review_pr_mergeability"
 
 

@@ -21,7 +21,7 @@ hooks:
 - Need to understand data access layer architecture
 - Documenting repository pattern implementation
 - Analyzing entity relationships and query patterns
-- User invokes `/autoskillit:arch-lens-repository-access` or `/make-arch-diag repository`
+- User invokes `/autoskillit:arch-lens-repository-access` or `/autoskillit:make-arch-diag repository`
 
 ## Critical Constraints
 
@@ -258,7 +258,7 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:arch-lens-data-lineage` - For data flow view
 - `/autoskillit:arch-lens-c4-container` - For storage container view

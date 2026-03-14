@@ -67,23 +67,19 @@ def _build_orchestrator_prompt(recipe_name: str) -> str:
     if _sous_chef_path.exists():
         sous_chef_content = "\n\n" + _sous_chef_path.read_text()
 
-    formatted_greetings = "\n".join(
-        f"- {g.format(recipe_name=recipe_name)}" for g in _COOK_GREETINGS
-    )
-
     return f"""\
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
 FIRST ACTION — before prompting for any inputs:
-0. Display ONE of these greetings (pick randomly, do not show more than one):
-{formatted_greetings}
-1. Call open_kitchen to reveal kitchen tools and enable the gate.
-   Without this step, no kitchen tools are accessible.
-2. Call load_recipe('{recipe_name}') to load the recipe data for execution.
-   The user has already seen the recipe overview in the terminal — do NOT
-   re-display it. Just load the data silently.
-3. Collect ingredients from the user conversationally.
-4. Execute the pipeline steps.
+0. Call open_kitchen('{recipe_name}') to open the kitchen and load the recipe.
+1. The response contains a pre-formatted ingredients table
+   between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
+   Display it verbatim in your response — do not reformat or re-render it.
+   Then ask for the required fields (marked with *). If the recipe has both
+   a task and an issue_url ingredient, mention that a GitHub issue URL can
+   be provided as the task. Keep it to one or two short sentences.
+2. Collect ingredient values conversationally from the user's response.
+3. Execute the pipeline steps.
 
 During pipeline execution, only use AutoSkillit MCP tools:
 - Read, Grep, Glob (code investigation) — not used here because investigation
@@ -150,15 +146,10 @@ def _build_open_kitchen_prompt() -> str:
     if _sous_chef_path.exists():
         sous_chef_content = "\n\n" + _sous_chef_path.read_text()
 
-    formatted_greetings = "\n".join(f"- {g}" for g in _OPEN_KITCHEN_GREETINGS)
-
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
-        "Display ONE of these greetings (pick randomly, do not show more than one):\n"
-        f"{formatted_greetings}\n\n"
-        "Then call the open_kitchen tool to open the AutoSkillit kitchen and gain access to "
-        "all automation tools. Then call the kitchen_status tool to display version "
-        "and health information to the user.\n\n"
+        "Call the open_kitchen tool to open the AutoSkillit kitchen and gain access to "
+        "all automation tools.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "
@@ -178,3 +169,26 @@ def _build_open_kitchen_prompt() -> str:
         )
 
     return text
+
+
+def show_cook_preview(
+    recipe_name: str, parsed_recipe: object, recipes_dir: Path, project_dir: Path
+) -> None:
+    """Display the terminal preview: flow diagram + ingredients table.
+
+    Owns the entire pre-launch display so ``cook()`` makes one call.
+    Gateway imports only (no cross-package submodule imports).
+    """
+    from autoskillit.cli._ansi import diagram_to_terminal, ingredients_to_terminal
+    from autoskillit.recipe import format_ingredients_table, load_recipe_diagram
+    from autoskillit.server import resolve_ingredient_defaults
+
+    diagram = load_recipe_diagram(recipe_name, recipes_dir)
+    if diagram:
+        print(diagram_to_terminal(diagram))
+        print()  # blank line between diagram and table
+
+    resolved = resolve_ingredient_defaults(project_dir)
+    table = format_ingredients_table(parsed_recipe, resolved_defaults=resolved)
+    if table:
+        print(ingredients_to_terminal(table))

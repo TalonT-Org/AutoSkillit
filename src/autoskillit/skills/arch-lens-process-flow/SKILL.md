@@ -21,7 +21,7 @@ hooks:
 - Need to understand runtime execution paths
 - Documenting state machines or workflows
 - Analyzing decision points and branching logic
-- User invokes `/autoskillit:arch-lens-process-flow` or `/make-arch-diag process`
+- User invokes `/autoskillit:arch-lens-process-flow` or `/autoskillit:make-arch-diag process`
 
 ## Critical Constraints
 
@@ -227,7 +227,7 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:arch-lens-concurrency` - For parallel execution details
 - `/autoskillit:arch-lens-error-resilience` - For failure handling specifics

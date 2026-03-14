@@ -34,14 +34,14 @@ def test_build_orchestrator_prompt_not_in_app_module():
     )
 
 
-def test_orchestrator_prompt_delegates_ingredient_collection_to_load_recipe():
-    """Orchestrator prompt must instruct Claude to call load_recipe for recipe content."""
+def test_orchestrator_prompt_delegates_ingredient_collection_to_open_kitchen():
+    """Orchestrator prompt must instruct Claude to call open_kitchen with recipe name."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("my-recipe")
-    assert "load_recipe" in prompt, "Prompt must instruct Claude to call load_recipe"
-    assert "collect ingredients" in prompt.lower(), (
-        "Prompt must mention ingredient collection after load_recipe"
+    assert "open_kitchen" in prompt, "Prompt must instruct Claude to call open_kitchen"
+    assert "collect ingredient" in prompt.lower(), (
+        "Prompt must mention ingredient collection after open_kitchen"
     )
 
 
@@ -60,30 +60,30 @@ def test_build_orchestrator_prompt_accepts_name_not_yaml():
 
     prompt = _build_orchestrator_prompt("my-recipe")
     assert "my-recipe" in prompt
-    assert "load_recipe" in prompt
+    assert "open_kitchen" in prompt
     # Recipe YAML markers must not appear
     assert "--- RECIPE ---" not in prompt
     assert "--- END RECIPE ---" not in prompt
 
 
-def test_orchestrator_prompt_instructs_load_recipe_first():
-    """Prompt must instruct Claude to call load_recipe as its first action after open_kitchen."""
+def test_orchestrator_prompt_instructs_open_kitchen_with_recipe_first():
+    """Prompt must instruct Claude to call open_kitchen(name) as its first action."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("my-recipe")
-    assert "load_recipe" in prompt
-    # load_recipe instruction must come before ingredient collection
-    lr_idx = prompt.index("load_recipe")
-    assert "collect" in prompt[lr_idx:].lower() or "ingredient" in prompt[lr_idx:].lower()
+    assert "open_kitchen" in prompt
+    # open_kitchen instruction must come before ingredient collection
+    ok_idx = prompt.index("open_kitchen")
+    assert "collect" in prompt[ok_idx:].lower() or "ingredient" in prompt[ok_idx:].lower()
 
 
-def test_orchestrator_prompt_contains_greeting_pool():
-    """Orchestrator prompt includes food-service greetings with the recipe name."""
+def test_orchestrator_prompt_does_not_contain_greeting_pool():
+    """Greetings are delivered via positional arg, not embedded in system prompt."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("my-recipe")
-    assert "Good Burger" in prompt
-    assert "Today's special" in prompt
+    assert "Good Burger" not in prompt
+    assert "Display ONE of these greetings" not in prompt
     assert "my-recipe" in prompt
 
 
@@ -105,3 +105,99 @@ def test_build_orchestrator_prompt_single_param():
     assert isinstance(result, str)
     assert len(result) > 0
     assert "ROUTING RULES" in result
+
+
+def test_cook_greetings_all_render_recipe_name():
+    """Every cook greeting must include the recipe name after formatting."""
+    from autoskillit.cli._prompts import _COOK_GREETINGS
+
+    for g in _COOK_GREETINGS:
+        rendered = g.format(recipe_name="test-recipe")
+        assert "test-recipe" in rendered, f"Greeting missing recipe name: {g!r}"
+        assert "{" not in rendered, f"Unresolved placeholder in: {rendered!r}"
+
+
+def test_open_kitchen_greetings_have_no_placeholders():
+    """Open-kitchen greetings must not contain format placeholders."""
+    from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+
+    for g in _OPEN_KITCHEN_GREETINGS:
+        assert "{" not in g, f"Placeholder in open-kitchen greeting: {g!r}"
+
+
+def test_orchestrator_prompt_does_not_embed_greetings():
+    """Greetings are delivered via positional arg, not embedded in system prompt."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my-recipe")
+    assert "Display ONE of these greetings" not in prompt
+
+
+def test_open_kitchen_prompt_does_not_embed_greetings():
+    """Open-kitchen greetings are delivered via positional arg, not embedded."""
+    from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
+    prompt = _build_open_kitchen_prompt()
+    assert "Display ONE of these greetings" not in prompt
+
+
+def test_show_cook_preview_prints_table(monkeypatch, tmp_path, capsys):
+    """show_cook_preview prints ingredients table to stdout."""
+    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.recipe.io import _parse_recipe
+
+    monkeypatch.setattr(
+        "autoskillit.server.resolve_ingredient_defaults",
+        lambda _: {"source_dir": "https://github.com/test/repo", "base_branch": "main"},
+    )
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "steps": {
+                "do": {
+                    "tool": "run_cmd",
+                    "with": {"cmd": "echo"},
+                    "on_success": "done",
+                    "on_failure": "done",
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+            "ingredients": {"task": {"description": "What to do", "required": True}},
+        }
+    )
+    show_cook_preview("test", recipe, tmp_path, tmp_path)
+    captured = capsys.readouterr()
+    assert "task" in captured.out
+    assert "(required)" in captured.out
+
+
+def test_show_cook_preview_no_diagram(monkeypatch, tmp_path, capsys):
+    """show_cook_preview works when no diagram file exists."""
+    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.recipe.io import _parse_recipe
+
+    monkeypatch.setattr(
+        "autoskillit.server.resolve_ingredient_defaults",
+        lambda _: {},
+    )
+    recipe = _parse_recipe(
+        {
+            "name": "test",
+            "steps": {
+                "do": {
+                    "tool": "run_cmd",
+                    "with": {"cmd": "echo"},
+                    "on_success": "done",
+                    "on_failure": "done",
+                },
+                "done": {"action": "stop", "message": "ok"},
+            },
+            "ingredients": {"x": {"description": "A thing", "default": "val"}},
+        }
+    )
+    show_cook_preview("nonexistent-recipe", recipe, tmp_path, tmp_path)
+    captured = capsys.readouterr()
+    # No diagram, but table should print
+    assert "A thing" in captured.out
+    # No diagram header
+    assert "RECIPE" not in captured.out

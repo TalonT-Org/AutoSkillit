@@ -1,13 +1,13 @@
 ---
-name: create-review-pr
+name: open-integration-pr
 description: >
-  Create an integration PR for the pr-merge-pipeline. Reads pr_order_file JSON, generates
+  Create an integration PR for the merge-prs. Reads pr_order_file JSON, generates
   a rich PR body with per-PR details, arch-lens diagrams, and carried-forward Closes #N
   references. Closes all collapsed PRs with a comment after creation. Use inside the
-  pr-merge-pipeline after all PRs have been merged into the integration branch.
+  merge-prs after all PRs have been merged into the integration branch.
 ---
 
-# Create Review PR
+# Open Integration PR
 
 Read `pr_order_file` JSON produced by `analyze-prs`, generate a rich PR description
 (per-PR details, complexity tags, merge outcomes, optional audit verdict), generate 1–3
@@ -19,7 +19,7 @@ PR, and output `pr_url=<url>`.
 ## Arguments
 
 ```
-/autoskillit:create-review-pr {integration_branch} {base_branch} {pr_order_file} [audit_verdict]
+/autoskillit:open-integration-pr {integration_branch} {base_branch} {pr_order_file} [audit_verdict]
 ```
 
 - `integration_branch` — integration branch name (e.g. `pr-batch/pr-merge-20250228-143052`)
@@ -29,13 +29,13 @@ PR, and output `pr_url=<url>`.
 
 ## When to Use
 
-- Called by `pr-merge-pipeline` after all PRs have been merged into the integration branch
+- Called by `merge-prs` after all PRs have been merged into the integration branch
 - Invoked via `run_skill` as the final step before CI watch
 
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `temp/create-review-pr/` (except the temp body file for `gh pr create --body-file`)
+- Create files outside `temp/open-integration-pr/` (except the temp body file for `gh pr create --body-file`)
 - Modify any source code
 - Fail the pipeline if `gh` is unavailable or not authenticated — output `pr_url=` (empty) and exit successfully
 - Close original PRs before the integration PR is successfully created
@@ -99,7 +99,7 @@ create end_turn windows that cause stochastic session termination.
 
 **1. Write the PR context to a file using the Write tool:**
 
-- **Path:** `temp/create-review-pr/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
+- **Path:** `temp/open-integration-pr/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
 - **Content:** The following PR context block, with placeholders filled in:
 
 ```markdown
@@ -135,7 +135,7 @@ After extracting the mermaid block, inspect its content for `★` or `●` chara
 
 ### Step 7: Compose PR Body
 
-Write to `temp/create-review-pr/pr_body_{timestamp}.md`.
+Write to `temp/open-integration-pr/pr_body_{timestamp}.md`.
 
 ```markdown
 ## Integration Summary
@@ -185,7 +185,7 @@ gh pr create \
   --base {base_branch} \
   --head {integration_branch} \
   --title "Integration: collapsed PRs #{numbers} into {base_branch}" \
-  --body-file temp/create-review-pr/pr_body_{timestamp}.md
+  --body-file temp/open-integration-pr/pr_body_{timestamp}.md
 ```
 
 `{numbers}` = comma-separated PR numbers (e.g., `#42, #47, #51`).

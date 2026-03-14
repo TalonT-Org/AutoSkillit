@@ -9,12 +9,12 @@ temp/
 .mypy_cache/
 .pytest_cache/
 
+*.code-workspace
+
 # Generated at install time with machine-local absolute paths
 .claude/settings.json
 src/autoskillit/hooks/hooks.json
 
-# Recipe diagrams — regenerated on demand, not versioned source
-src/autoskillit/recipes/diagrams/
 
 # dynaconf secrets files — never commit
 .secrets.*

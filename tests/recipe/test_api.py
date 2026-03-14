@@ -272,9 +272,17 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
     captured = {}
     real_fn = api_mod.load_and_validate
 
-    def capturing_fn(name, project_dir, *, suppressed=None, recipe_info=None):
+    def capturing_fn(
+        name, project_dir, *, suppressed=None, recipe_info=None, resolved_defaults=None
+    ):
         captured["recipe_info"] = recipe_info
-        return real_fn(name, project_dir, suppressed=suppressed, recipe_info=recipe_info)
+        return real_fn(
+            name,
+            project_dir,
+            suppressed=suppressed,
+            recipe_info=recipe_info,
+            resolved_defaults=resolved_defaults,
+        )
 
     monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)
 
@@ -283,3 +291,96 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
 
     assert captured.get("recipe_info") is not None
     assert captured["recipe_info"].name == "smoke-test"
+
+
+# ---------------------------------------------------------------------------
+# Ingredient sort order enforcement
+# ---------------------------------------------------------------------------
+
+
+class TestIngredientSortOrder:
+    """Ingredients must sort: required > auto-detect > flags > constants > optional."""
+
+    def test_sort_key_required_is_highest_priority(self):
+        from autoskillit.recipe._api import _ingredient_sort_key
+
+        key = _ingredient_sort_key("task", required=True, default=None)
+        assert key[0] == 0
+
+    def test_sort_key_auto_detect_above_flags(self):
+        from autoskillit.recipe._api import _ingredient_sort_key
+
+        auto = _ingredient_sort_key("source_dir", required=False, default="")
+        flag = _ingredient_sort_key("audit", required=False, default="true")
+        assert auto[0] < flag[0], "auto-detect must sort above boolean flags"
+
+    def test_sort_key_flags_above_optional(self):
+        from autoskillit.recipe._api import _ingredient_sort_key
+
+        flag = _ingredient_sort_key("audit", required=False, default="true")
+        opt = _ingredient_sort_key("issue_url", required=False, default=None)
+        assert flag[0] < opt[0], "boolean flags must sort above optional"
+
+    def test_sort_key_optional_above_constants(self):
+        from autoskillit.recipe._api import _ingredient_sort_key
+
+        opt = _ingredient_sort_key("issue_url", required=False, default=None)
+        const = _ingredient_sort_key("run_name", required=False, default="impl")
+        assert opt[0] < const[0], "optional must sort above constants (rarely changed)"
+
+    def test_sort_key_full_tier_ordering(self):
+        """All five tiers must be strictly ordered."""
+        from autoskillit.recipe._api import _ingredient_sort_key
+
+        tiers = [
+            _ingredient_sort_key("task", required=True, default=None)[0],  # required
+            _ingredient_sort_key("source_dir", required=False, default="")[0],  # auto-detect
+            _ingredient_sort_key("audit", required=False, default="true")[0],  # flag
+            _ingredient_sort_key("issue_url", required=False, default=None)[0],  # optional
+            _ingredient_sort_key("run_name", required=False, default="impl")[0],  # constant
+        ]
+        assert tiers == sorted(tiers), f"Tiers must be strictly ascending: {tiers}"
+        assert len(set(tiers)) == 5, f"All 5 tiers must be distinct: {tiers}"
+
+    def test_implementation_table_has_required_first(self):
+        """Implementation recipe must show required ingredients at the top."""
+        from autoskillit.core import load_yaml
+        from autoskillit.recipe._api import format_ingredients_table
+        from autoskillit.recipe.io import _parse_recipe, find_recipe_by_name
+
+        match = find_recipe_by_name("implementation", Path.cwd())
+        assert match is not None
+        data = load_yaml(match.path.read_text())
+        recipe = _parse_recipe(data)
+        table = format_ingredients_table(recipe)
+        assert table is not None
+        lines = [
+            ln for ln in table.splitlines() if "|" in ln and "---" not in ln and "Name" not in ln
+        ]
+        # First data row must be the required ingredient (task *)
+        assert "task *" in lines[0], f"First row must be 'task *', got: {lines[0]}"
+
+    def test_merge_prs_table_has_auto_detect_before_flags(self):
+        """merge-prs recipe must show auto-detect ingredients before boolean flags."""
+        from autoskillit.core import load_yaml
+        from autoskillit.recipe._api import format_ingredients_table
+        from autoskillit.recipe.io import _parse_recipe, find_recipe_by_name
+
+        match = find_recipe_by_name("merge-prs", Path.cwd())
+        assert match is not None
+        data = load_yaml(match.path.read_text())
+        recipe = _parse_recipe(data)
+        table = format_ingredients_table(recipe)
+        assert table is not None
+        lines = [
+            ln for ln in table.splitlines() if "|" in ln and "---" not in ln and "Name" not in ln
+        ]
+        names = [ln.split("|")[1].strip() for ln in lines]
+        # base_branch and source_dir (auto-detect) must appear before audit (flag)
+        base_idx = next(i for i, n in enumerate(names) if "base_branch" in n)
+        source_idx = next(i for i, n in enumerate(names) if "source_dir" in n)
+        audit_idx = next(i for i, n in enumerate(names) if "audit" in n)
+        assert base_idx < audit_idx, f"base_branch ({base_idx}) must be before audit ({audit_idx})"
+        assert source_idx < audit_idx, (
+            f"source_dir ({source_idx}) must be before audit ({audit_idx})"
+        )

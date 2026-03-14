@@ -21,7 +21,7 @@ hooks:
 - Need to understand security architecture
 - Documenting trust boundaries and validation
 - Analyzing path contracts and isolation
-- User invokes `/autoskillit:arch-lens-security` or `/make-arch-diag security`
+- User invokes `/autoskillit:arch-lens-security` or `/autoskillit:make-arch-diag security`
 
 ## Critical Constraints
 
@@ -258,7 +258,7 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:arch-lens-error-resilience` - For error handling view
 - `/autoskillit:audit-arch` - For security violation detection

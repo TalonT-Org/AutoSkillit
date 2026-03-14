@@ -12,7 +12,7 @@ kitchen_rules:
     Do not investigate or attempt to fix failures directly."
   - "SEQUENTIAL EXECUTION: complete full cycle per part before advancing.
     For each plan_part, run the full cycle (dry_walkthrough → implement →
-    verify → merge) before starting the next part."
+    test → merge) before starting the next part."
   - "By default (open_pr=true), a feature branch is created with a unique name
     derived from inputs.run_name and context.issue_number (e.g. investigate/42) or
     a date suffix (e.g. investigate/20260304) when no issue is available. All worktree
@@ -28,35 +28,31 @@ kitchen_rules:
     the remote URL inside push_to_remote."
 
 ingredients:
-  topic:
-    description: Description of the bug, error, or question to investigate
+  task:
+    description: Bug, error, or question to investigate
     required: true
   source_dir:
-    description: Remote URL for source repo (auto-detected from git origin if empty)
+    description: Source repository
     required: false
     default: ""
   run_name:
-    description: Pipeline run name prefix (used in branch and clone naming)
-    default: "investigate"
-  target_dir:
-    description: Optional additional project directory for context
-    default: ""
+    description: Run name prefix
+    default: "remediation"
   base_branch:
-    description: Base branch to merge into (defaults to main)
-    default: main
+    description: Merge target
+    default: ""
   audit:
-    description: Gate merge on audit-impl quality check (true/false)
+    description: Post-merge quality gate
     default: "true"
   review_approach:
-    description: Run review-approach before dry walkthrough? (true/false)
+    description: Research approaches first
     default: "false"
   open_pr:
-    description: Open a PR to base_branch instead of merging directly (true/false)
+    description: PR instead of direct merge
     default: "true"
   issue_url:
-    description: GitHub issue URL to close on merge (optional)
+    description: GitHub issue to close on merge
     required: false
-    default: ""
 
 steps:
   clone:
@@ -187,7 +183,7 @@ steps:
   investigate:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:investigate ${{ inputs.topic }}"
+      skill_command: "/autoskillit:investigate ${{ inputs.task }}"
       cwd: "${{ context.work_dir }}"
       step_name: "investigate"
       issue_url: "${{ inputs.issue_url }}"
@@ -199,7 +195,7 @@ steps:
     note: >
       ISSUE CONTEXT: If inputs.issue_url is a non-empty string, append it to the
       skill_command so the investigate skill can detect and fetch the issue itself:
-      "/autoskillit:investigate {topic}\n\nGitHub Issue: {inputs.issue_url}"
+      "/autoskillit:investigate {task}\n\nGitHub Issue: {inputs.issue_url}"
       The skill detects the URL pattern and calls fetch_github_issue internally.
 
   rectify:
@@ -237,8 +233,10 @@ steps:
       add_dir: "${{ context.review_path }}"
       step_name: "dry_walkthrough"
     on_success: implement
-    on_failure: rectify
-    note: If walkthrough finds issues, re-plan via rectify.
+    on_failure: release_issue_failure
+    retries: 3
+    on_exhausted: release_issue_failure
+    note: Dry walkthrough retries on failure. It never routes back to a previous step.
 
   implement:
     tool: run_skill
@@ -252,7 +250,7 @@ steps:
       branch_name: "${{ result.branch_name }}"
     retries: 0
     on_context_limit: retry_worktree
-    on_success: verify
+    on_success: test
     on_failure: release_issue_failure
 
   retry_worktree:
@@ -266,10 +264,10 @@ steps:
       worktree_path: "${{ result.worktree_path }}"
       branch_name: "${{ result.branch_name }}"
     on_exhausted: release_issue_failure
-    on_success: verify
+    on_success: test
     on_failure: release_issue_failure
 
-  verify:
+  test:
     tool: test_check
     with:
       worktree_path: "${{ context.implementation_ref }}"
@@ -282,7 +280,7 @@ steps:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: "assess"
-    on_success: verify
+    on_success: test
     on_failure: release_issue_failure
     on_exhausted: release_issue_failure
 
@@ -314,14 +312,15 @@ steps:
   make_plan:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:make-plan the remediation plan ${{ context.remediation_path }}"
+      skill_command: "/autoskillit:make-plan ${{ context.remediation_path }}"
+      task: "${{ inputs.task }}"
       cwd: "${{ context.work_dir }}"
       step_name: "make_plan"
     capture:
       plan_path: "${{ result.plan_path }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
-    on_success: review
+    on_success: dry_walkthrough
     on_failure: release_issue_failure
 
   merge:

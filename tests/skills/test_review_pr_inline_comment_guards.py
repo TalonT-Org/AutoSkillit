@@ -1,8 +1,9 @@
-"""Structural guards for review-pr/SKILL.md Step 6 posting mechanics.
+"""Structural guards for review-pr/SKILL.md posting mechanics.
 
-Tests enforce the structural presence of diff-hunk validation, updated
-subagent prompt guidance, and a non-table tiered fallback. Each test
-makes it impossible to silently regress its guarded element.
+Tests enforce orchestrator behavioral guardrails (echo-the-rule,
+post-confirmation, degraded labeling), subagent [LNNN] marker guidance,
+and a non-table tiered fallback. Each test makes it impossible to
+silently regress its guarded element.
 """
 
 import re
@@ -21,27 +22,35 @@ SKILL_PATH = (
 SKILL_TEXT = SKILL_PATH.read_text()
 
 
-def test_skill_describes_hunk_range_parsing():
-    """SKILL.md must describe parsing @@ hunk headers to extract valid line ranges."""
+# --- Orchestrator behavioral guardrails ---
+
+
+def test_skill_has_pre_posting_echo_the_rule():
+    """After receiving findings (Step 4), the orchestrator must echo its primary
+    obligation before attempting to post. This primes the model to treat inline
+    commenting as a hard requirement."""
     text = SKILL_TEXT
-    has_hunk_parse = any(kw in text.lower() for kw in ["hunk", "valid_line", "line_range"])
-    assert has_hunk_parse, (
-        "review-pr/SKILL.md must describe parsing @@ hunk headers from the diff "
-        "to build valid line ranges for the GitHub Reviews API."
-    )
+    assert "I must post inline comments" in text or "post inline comments" in text
+    assert "specific code lines" in text
 
 
-def test_step6_describes_hunk_filtering_before_post():
-    """Step 6 (or adjacent step) must describe filtering findings against hunk ranges."""
-    text = SKILL_TEXT.lower()
-    assert any(kw in text for kw in ["hunk", "valid_line", "in-hunk"]), (
-        "review-pr/SKILL.md must describe filtering/validating findings against diff "
-        "hunk ranges before the batch review POST."
-    )
+def test_skill_has_post_completion_confirmation():
+    """After Step 6, the orchestrator must confirm how many inline comments
+    it posted. If 0 and findings existed, it must state the review FAILED."""
+    text = SKILL_TEXT
+    assert "I posted" in text and "inline comments" in text
+    assert "FAILED" in text or "failed" in text
 
 
-def test_subagent_prompt_includes_diff_line_guidance():
-    """Subagent prompt must instruct subagents to report only diff-visible line numbers."""
+def test_skill_labels_tier2_as_degraded_failure():
+    """Tier 2 (body dump) must be explicitly labeled as a degraded failure mode,
+    not presented as an acceptable fallback."""
+    text = SKILL_TEXT
+    assert "DEGRADED" in text or "degraded" in text
+
+
+def test_subagent_prompt_references_lnnn_markers():
+    """Subagent prompt must instruct subagents to use [LNNN] markers for line numbers."""
     text = SKILL_TEXT
     prompt_marker = "Subagent prompt template"
     prompt_start = text.find(prompt_marker)
@@ -49,24 +58,10 @@ def test_subagent_prompt_includes_diff_line_guidance():
         "review-pr/SKILL.md must contain a 'Subagent prompt template' section."
     )
     next_section = text.find("\n###", prompt_start + len(prompt_marker))
-    prompt_section = (
-        text[prompt_start:next_section].lower()
-        if next_section != -1
-        else text[prompt_start:].lower()
-    )
-    assert any(
-        kw in prompt_section
-        for kw in [
-            "diff hunk",
-            "visible in the diff",
-            "appears in the diff",
-            "within the diff",
-            "diff line",
-            "line from the diff",
-        ]
-    ), (
-        "review-pr/SKILL.md subagent prompt must instruct subagents to report only "
-        "line numbers visible in the diff hunks — not absolute file line numbers."
+    prompt_section = text[prompt_start:next_section] if next_section != -1 else text[prompt_start:]
+    assert "[LNNN]" in prompt_section, (
+        "review-pr/SKILL.md subagent prompt must instruct subagents to use [LNNN] "
+        "markers for line numbers — not compute line numbers themselves."
     )
 
 

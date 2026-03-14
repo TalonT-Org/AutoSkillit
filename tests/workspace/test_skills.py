@@ -25,6 +25,7 @@ BUNDLED_SKILLS = [
     "arch-lens-security",
     "arch-lens-state-lifecycle",
     "audit-arch",
+    "audit-bugs",
     "audit-cohesion",
     "audit-defense-standards",
     "audit-friction",
@@ -32,19 +33,23 @@ BUNDLED_SKILLS = [
     "audit-tests",
     "close-kitchen",
     "collapse-issues",
-    "create-review-pr",
+    "design-guards",
     "diagnose-ci",
     "dry-walkthrough",
+    "elaborate-phase",
     "enrich-issues",
     "implement-worktree",
     "implement-worktree-no-merge",
     "investigate",
     "issue-splitter",
+    "make-arch-diag",
     "make-groups",
     "make-plan",
+    "make-req",
     "merge-pr",
     "mermaid",
     "migrate-recipes",
+    "open-integration-pr",
     "open-kitchen",
     "open-pr",
     "pipeline-summary",
@@ -62,6 +67,7 @@ BUNDLED_SKILLS = [
     "smoke-task",
     "sous-chef",
     "triage-issues",
+    "verify-diag",
     "write-recipe",
 ]
 
@@ -169,7 +175,7 @@ class TestSkillResolver:
                 name = match.group(1)
                 if name.startswith("autoskillit:") or name.startswith("mcp__"):
                     continue
-                # Skip URI paths like workflow://bugfix-loop — not skill invocations
+                # Skip URI paths like workflow://some-recipe — not skill invocations
                 start = match.start()
                 if start >= 1 and content[start - 1] == "/":
                     continue
@@ -367,7 +373,7 @@ class TestSkillResolver:
             assert info.path.exists(), f"SKILL.md missing for '{name}' at {info.path}"
 
     def test_all_audit_skills_bundled(self) -> None:
-        """Audit skills must be bundled so audit-and-fix.yaml functions standalone."""
+        """Audit skills must be bundled and available for use in recipes."""
         resolver = SkillResolver()
         for name in AUDIT_SKILL_NAMES:
             info = resolver.resolve(name)

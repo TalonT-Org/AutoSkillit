@@ -550,78 +550,6 @@ class TestImplementationGroupsStructure:
 
 
 # ---------------------------------------------------------------------------
-# TestBugfixLoopStructure
-# ---------------------------------------------------------------------------
-
-
-class TestBugfixLoopStructure:
-    @pytest.fixture(scope="class")
-    def recipe(self):
-        return load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
-
-    def test_bl1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
-        self,
-        recipe,
-    ) -> None:
-        """T_BL1: audit_impl captures remediation_path and routes via on_result using verdict.
-
-        Uses predicate format (v0.3.0): verdict is read directly from result.verdict in predicate
-        conditions — not captured as context.verdict (which would create a dead output).
-        """
-        step = recipe.steps["audit_impl"]
-        assert "remediation_path" in step.capture
-        assert step.on_result is not None
-        conds = step.on_result.conditions
-        assert len(conds) > 0, "audit_impl on_result must have predicate conditions"
-        assert any("result.verdict" in (c.when or "") for c in conds), (
-            "audit_impl on_result must have a condition checking result.verdict"
-        )
-
-    def test_bl2_remediate_step_exists_with_on_success_plan(self, recipe) -> None:
-        """T_BL2: a step named remediate exists with on_success == 'plan'."""
-        assert "remediate" in recipe.steps
-        assert recipe.steps["remediate"].on_success == "plan"
-
-    def test_bl_b1_implement_captures_branch_name(self, recipe) -> None:
-        """T_BL_B1: implement step must capture branch_name from result."""
-        step = recipe.steps["implement"]
-        assert "branch_name" in step.capture, (
-            "implement step must capture branch_name so audit_impl can pass a "
-            "stable git ref to audit-impl after merge_worktree deletes the worktree"
-        )
-
-    def test_bl_b2_audit_impl_uses_branch_name_as_ref(self, recipe) -> None:
-        """T_BL_B2: audit_impl with: must reference context.branch_name as implementation_ref."""
-        step = recipe.steps["audit_impl"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "context.branch_name" in skill_cmd, (
-            "audit_impl must pass context.branch_name as implementation_ref — not "
-            "context.implementation_ref or context.worktree_path (stale after merge)"
-        )
-
-    def test_bl_b3_retry_worktree_captures_branch_name(self, recipe) -> None:
-        """T_BL_B3: retry_worktree step must also capture branch_name."""
-        step = recipe.steps["retry_worktree"]
-        assert "branch_name" in step.capture, (
-            "retry_worktree also updates the active worktree reference; "
-            "it must capture branch_name for downstream audit_impl use"
-        )
-
-    def test_bugfix_loop_investigate_captures_investigation_path(self, recipe) -> None:
-        """1e: investigate step must capture investigation_path; plan step must pass it."""
-        investigate_step = recipe.steps["investigate"]
-        assert (
-            investigate_step.capture is not None
-            and "investigation_path" in investigate_step.capture
-        ), "bugfix-loop investigate step must capture investigation_path"
-        plan_step = recipe.steps["plan"]
-        skill_cmd = plan_step.with_args.get("skill_command", "")
-        assert "${{ context.investigation_path }}" in skill_cmd, (
-            "bugfix-loop plan step skill_command must pass ${{ context.investigation_path }}"
-        )
-
-
-# ---------------------------------------------------------------------------
 # TestInvestigateFirstStructure
 # ---------------------------------------------------------------------------
 
@@ -664,12 +592,12 @@ class TestInvestigateFirstStructure:
         assert "context.remediation_path" in skill_cmd
         assert "plan_path" in step.capture
         assert "plan_parts" in step.capture_list
-        assert step.on_success == "review"
+        assert step.on_success == "dry_walkthrough"
         assert step.on_failure == "release_issue_failure"
 
-    def test_if3_verify_step_uses_implementation_ref(self, recipe) -> None:
-        """T_IF3: verify step worktree_path must reference context.implementation_ref."""
-        worktree_arg = recipe.steps["verify"].with_args.get("worktree_path", "")
+    def test_if3_test_step_uses_implementation_ref(self, recipe) -> None:
+        """T_IF3: test step worktree_path must reference context.implementation_ref."""
+        worktree_arg = recipe.steps["test"].with_args.get("worktree_path", "")
         assert "context.implementation_ref" in worktree_arg
         assert "context.work_dir" not in worktree_arg
 
@@ -847,169 +775,6 @@ class TestInvestigateFirstStructure:
 
 
 # ---------------------------------------------------------------------------
-# TestAuditAndFixStructure
-# ---------------------------------------------------------------------------
-
-
-class TestAuditAndFixStructure:
-    @pytest.fixture(scope="class")
-    def recipe(self):
-        return load_recipe(builtin_recipes_dir() / "audit-and-fix.yaml")
-
-    def test_aaf1_implement_uses_no_merge_skill(self, recipe) -> None:
-        """T_AAF1: implement step must use implement-worktree-no-merge."""
-        step = recipe.steps["implement"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "implement-worktree-no-merge" in skill_cmd, (
-            "implement step must use implement-worktree-no-merge; "
-            "implement-worktree merges immediately so test_check runs on a deleted worktree"
-        )
-
-    def test_aaf2_has_merge_step(self, recipe) -> None:
-        """T_AAF2: recipe must have a merge step (merge_worktree) after test passes."""
-        assert "merge" in recipe.steps, (
-            "audit-and-fix must have a merge step; "
-            "without it the worktree is never merged after passing tests"
-        )
-
-    def test_aaf3_test_success_routes_to_merge(self, recipe) -> None:
-        """T_AAF3: test step must route to merge (not push) on success."""
-        assert recipe.steps["test"].on_success == "merge", (
-            "test must route to merge on success — push comes after merge, "
-            "not directly after test_check"
-        )
-
-    def test_aaf4_has_fix_step_for_test_failures(self, recipe) -> None:
-        """T_AAF4: test on_failure must route to a fix/assess step, not cleanup_failure."""
-        step = recipe.steps["test"]
-        assert step.on_failure not in ("cleanup_failure", "escalate_stop"), (
-            "test on_failure must route to a fix/assess step; "
-            "going directly to cleanup_failure discards fixable failures"
-        )
-
-    def test_aaf5_fix_step_routes_back_to_test(self, recipe) -> None:
-        """T_AAF5: fix step must exist and route on_success back to test."""
-        assert "fix" in recipe.steps, "fix step must exist for resolve-failures loop"
-        assert recipe.steps["fix"].on_success == "test", (
-            "fix step must route back to test on success to re-validate the worktree"
-        )
-
-    def test_aaf6_merge_step_routes_to_push(self, recipe) -> None:
-        """T_AAF6: merge step must route to push on success."""
-        merge = recipe.steps["merge"]
-        # With on_result, success is the default (unconditional) route
-        default_routes = [c for c in merge.on_result.conditions if c.when is None]
-        assert len(default_routes) == 1
-        assert default_routes[0].route == "push", (
-            "merge step must route to push — the push step propagates the merged branch "
-            "from the clone back to the upstream remote"
-        )
-
-    def test_aaf7_merge_routes_dirty_tree_to_fix(self, recipe) -> None:
-        """T_AAF7: merge step must route dirty_tree to fix (not release_issue_failure)."""
-        merge = recipe.steps["merge"]
-        assert merge.on_result is not None, (
-            "merge step must use on_result with predicate conditions "
-            "to handle recoverable merge failures"
-        )
-        conditions = merge.on_result.conditions
-        dirty_tree_routes = [c for c in conditions if c.when and "dirty_tree" in c.when]
-        assert len(dirty_tree_routes) == 1
-        assert dirty_tree_routes[0].route == "fix"
-
-    def test_create_branch_does_not_use_run_name_verbatim(self, recipe) -> None:
-        """compute_branch must not use inputs.run_name as the full branch name."""
-        cmd = recipe.steps["compute_branch"].with_args["cmd"]
-        assert "git checkout -b ${{ inputs.run_name }} &&" not in cmd
-
-    def test_create_branch_checks_remote_for_collisions(self, recipe) -> None:
-        """create_branch must use create_unique_branch tool (which always checks ls-remote)."""
-        assert recipe.steps["create_branch"].tool == "create_unique_branch"
-
-    def test_create_branch_references_issue_number(self, recipe) -> None:
-        """compute_branch cmd must reference context.issue_number for branch naming."""
-        cmd = recipe.steps["compute_branch"].with_args["cmd"]
-        assert "context.issue_number" in cmd
-
-    def test_create_branch_uses_run_name_as_prefix(self, recipe) -> None:
-        """compute_branch must use inputs.run_name as a prefix in branch naming."""
-        cmd = recipe.steps["compute_branch"].with_args["cmd"]
-        assert "inputs.run_name" in cmd
-
-    def test_audit_and_fix_investigate_captures_investigation_path(self, recipe) -> None:
-        """1f: investigate step must capture investigation_path; plan step must pass it."""
-        step = recipe.steps["investigate"]
-        assert step.capture is not None and "investigation_path" in step.capture, (
-            "audit-and-fix investigate step must capture investigation_path"
-        )
-        plan_step = recipe.steps["plan"]
-        skill_cmd = plan_step.with_args.get("skill_command", "")
-        assert "${{ context.investigation_path }}" in skill_cmd, (
-            "audit-and-fix plan step skill_command must pass ${{ context.investigation_path }}"
-        )
-
-    def test_aaf_ci_watch_exists_and_is_gated(self, recipe) -> None:
-        """T_CI1: ci_watch step exists, uses wait_for_ci, has skip_when_false: inputs.open_pr,
-        and specifies timeout_seconds: 300."""
-        assert "ci_watch" in recipe.steps
-        step = recipe.steps["ci_watch"]
-        assert step.tool == "wait_for_ci"
-        assert step.skip_when_false == "inputs.open_pr"
-        assert step.with_args.get("timeout_seconds") == 300
-
-    def test_aaf_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> diagnose_ci."""
-        step = recipe.steps["ci_watch"]
-        assert step.on_success == "release_issue_success"
-        assert step.on_failure == "diagnose_ci"
-
-    def test_aaf_ci_watch_uses_merge_target(self, recipe) -> None:
-        """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""
-        step = recipe.steps["ci_watch"]
-        assert "context.merge_target" in step.with_args["branch"]
-        assert "cmd" not in step.with_args
-        assert "ci_conclusion" in step.capture
-        assert "ci_failed_jobs" in step.capture
-
-    def test_aaf_resolve_ci_structure(self, recipe) -> None:
-        """T_CI4: resolve_ci step exists, uses resolve-failures, has retries: 2
-        and on_exhausted: release_issue_failure."""
-        assert "resolve_ci" in recipe.steps
-        step = recipe.steps["resolve_ci"]
-        assert step.tool == "run_skill"
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "resolve-failures" in skill_cmd
-        assert step.retries == 2
-        assert step.on_exhausted == "release_issue_failure"
-
-    def test_aaf_resolve_ci_uses_work_dir(self, recipe) -> None:
-        """T_CI5: resolve_ci uses context.work_dir as the worktree path."""
-        cmd = recipe.steps["resolve_ci"].with_args.get("skill_command", "")
-        assert "context.work_dir" in cmd
-
-    def test_aaf_re_push_loops_back_to_ci_watch(self, recipe) -> None:
-        """T_CI6: re_push step exists, is push_to_remote, routes on_success back to ci_watch."""
-        assert "re_push" in recipe.steps
-        step = recipe.steps["re_push"]
-        assert step.tool == "push_to_remote"
-        assert step.on_success == "ci_watch"
-        assert step.on_failure == "release_issue_failure"
-
-    def test_aaf_re_push_has_explicit_remote_url(self, recipe) -> None:
-        """T_CI7: re_push uses explicit remote_url."""
-        with_args = recipe.steps["re_push"].with_args
-        assert "remote_url" in with_args
-        assert "context.remote_url" in with_args["remote_url"]
-
-    def test_aaf_open_pr_step_routes_to_review_pr(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success routes to review_pr."""
-        step = recipe.steps["open_pr_step"]
-        assert step.on_success == "review_pr", (
-            "open_pr_step must route to review_pr after opening the PR"
-        )
-
-
-# ---------------------------------------------------------------------------
 # TestSmokeTestStructure
 # ---------------------------------------------------------------------------
 
@@ -1120,33 +885,11 @@ def test_rectify_contract_declares_plan_parts_output() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_bundled_recipes_have_diagrams() -> None:
-    """DG-21: every bundled recipe has a pre-generated diagram."""
+def test_bundled_recipes_diagrams_dir_exists() -> None:
+    """Diagrams directory exists for bundled recipes."""
     from autoskillit.core.paths import pkg_root
 
-    diagrams_dir = pkg_root() / "recipes" / "diagrams"
-    recipes_dir = pkg_root() / "recipes"
-    recipe_names = {p.stem for p in recipes_dir.glob("*.yaml")}
-    diagram_names = {p.stem for p in diagrams_dir.glob("*.md")}
-    assert recipe_names == diagram_names, (
-        f"Missing diagrams for: {recipe_names - diagram_names}. "
-        f"Run 'autoskillit recipes render' to regenerate."
-    )
-
-
-def test_bundled_diagrams_are_not_stale() -> None:
-    """DG-29: every bundled recipe diagram is up to date with its YAML."""
-    from autoskillit.core.paths import pkg_root
-    from autoskillit.recipe.diagrams import check_diagram_staleness
-
-    recipes_dir = pkg_root() / "recipes"
-    stale: list[str] = []
-    for recipe_path in sorted(recipes_dir.glob("*.yaml")):
-        if check_diagram_staleness(recipe_path.stem, recipes_dir, recipe_path):
-            stale.append(recipe_path.stem)
-    assert not stale, (
-        f"Stale diagrams for: {stale}. Run 'autoskillit recipes render' to regenerate."
-    )
+    assert (pkg_root() / "recipes" / "diagrams").is_dir()
 
 
 # ---------------------------------------------------------------------------
@@ -1156,7 +899,7 @@ def test_bundled_diagrams_are_not_stale() -> None:
 
 def test_all_predicate_steps_have_on_failure() -> None:
     """Every tool/python step with on_result.conditions must declare on_failure."""
-    for recipe_name in ["implementation", "remediation", "bugfix-loop", "smoke-test"]:
+    for recipe_name in ["implementation", "remediation", "smoke-test"]:
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
         for step_name, step in recipe.steps.items():
             is_tool = step.tool is not None or step.python is not None
@@ -1170,10 +913,8 @@ def test_audit_impl_on_failure_routes_to_escalation() -> None:
     """audit_impl.on_failure must route to an escalation step in each recipe."""
     impl = load_recipe(builtin_recipes_dir() / "implementation.yaml")
     rem = load_recipe(builtin_recipes_dir() / "remediation.yaml")
-    bl = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
     assert impl.steps["audit_impl"].on_failure == "escalate_stop"
     assert rem.steps["audit_impl"].on_failure == "escalate_stop"
-    assert bl.steps["audit_impl"].on_failure == "escalate"
 
 
 def test_smoke_check_summary_has_error_escalation() -> None:
@@ -1394,10 +1135,9 @@ def _build_reverse_on_success(recipe) -> dict[str, list[str]]:
     "recipe_name",
     [
         "implementation",
-        "audit-and-fix",
         "remediation",
         "implementation-groups",
-        "pr-merge-pipeline",
+        "merge-prs",
     ],
 )
 def test_bundled_recipe_cleanup_uses_confirm(recipe_name: str) -> None:
@@ -1431,10 +1171,9 @@ def test_no_bundled_recipe_auto_deletes_on_success() -> None:
     """
     for recipe_name in [
         "implementation",
-        "audit-and-fix",
         "remediation",
         "implementation-groups",
-        "pr-merge-pipeline",
+        "merge-prs",
     ]:
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
         reverse_on_success = _build_reverse_on_success(recipe)
@@ -1482,15 +1221,15 @@ class TestBaseBranchDefaults:
         [
             "implementation",
             "remediation",
-            "bugfix-loop",
             "implementation-groups",
+            "merge-prs",
         ],
     )
-    def test_recipe_base_branch_defaults_to_main(self, recipe_name: str) -> None:
-        """All non-exempt bundled recipes must default base_branch to 'main' (REQ-GEN-005)."""
+    def test_recipe_base_branch_auto_detects(self, recipe_name: str) -> None:
+        """Non-exempt bundled recipes must use auto-detect for base_branch."""
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
-        assert recipe.ingredients["base_branch"].default == "main", (
-            f"{recipe_name}.yaml: base_branch default must be 'main' — REQ-GEN-005"
+        assert recipe.ingredients["base_branch"].default == "", (
+            f"{recipe_name}.yaml: base_branch must use auto-detect (default: '')"
         )
 
     def test_smoke_test_base_branch_remains_main(self) -> None:

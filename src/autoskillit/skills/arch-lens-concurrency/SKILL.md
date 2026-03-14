@@ -21,7 +21,7 @@ hooks:
 - Need to understand concurrent execution patterns
 - Documenting thread pools and worker management
 - Analyzing synchronization and thread safety
-- User invokes `/autoskillit:arch-lens-concurrency` or `/make-arch-diag concurrency`
+- User invokes `/autoskillit:arch-lens-concurrency` or `/autoskillit:make-arch-diag concurrency`
 
 ## Critical Constraints
 
@@ -270,7 +270,7 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/make-arch-diag` - Parent skill for lens selection
+- `/autoskillit:make-arch-diag` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:arch-lens-process-flow` - For general workflow view
 - `/autoskillit:arch-lens-error-resilience` - For parallel failure handling

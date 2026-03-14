@@ -50,9 +50,9 @@ def _write_yaml(path: Path, data: dict) -> Path:
 
 def test_load_recipe_smoke() -> None:
     """load_recipe(path) returns a Recipe with correct name."""
-    path = builtin_recipes_dir() / "audit-and-fix.yaml"
+    path = builtin_recipes_dir() / "implementation.yaml"
     recipe = load_recipe(path)
-    assert recipe.name == "audit-and-fix"
+    assert recipe.name == "implementation"
 
 
 def test_parse_recipe_accepts_raw_dict() -> None:
@@ -141,11 +141,11 @@ class TestRecipeParser:
     def test_project_recipe_overrides_builtin(self, tmp_path: Path) -> None:
         wf_dir = tmp_path / ".autoskillit" / "recipes"
         wf_dir.mkdir(parents=True)
-        override = {**VALID_RECIPE, "name": "bugfix-loop", "description": "Custom override"}
-        _write_yaml(wf_dir / "bugfix-loop.yaml", override)
+        override = {**VALID_RECIPE, "name": "implementation", "description": "Custom override"}
+        _write_yaml(wf_dir / "implementation.yaml", override)
 
         recipes = list_recipes(tmp_path).items
-        match = next(w for w in recipes if w.name == "bugfix-loop")
+        match = next(w for w in recipes if w.name == "implementation")
         assert match.source == RecipeSource.PROJECT
         assert match.description == "Custom override"
 
@@ -500,7 +500,6 @@ class TestListRecipes:
         result = list_recipes(tmp_path)
         recipes = result.items
         names = {w.name for w in recipes}
-        assert "bugfix-loop" in names
         assert "implementation" in names
         assert len(recipes) > 0
         assert all(r.source.value in ("project", "builtin") for r in recipes)

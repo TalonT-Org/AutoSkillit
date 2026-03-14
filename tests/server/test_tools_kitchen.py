@@ -249,6 +249,101 @@ async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypa
 
 
 # ---------------------------------------------------------------------------
+# open_kitchen with recipe name
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monkeypatch):
+    """open_kitchen(name='x') opens kitchen AND loads the recipe in one call."""
+    monkeypatch.chdir(tmp_path)
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    yaml_content = (
+        "name: test-recipe\ndescription: test\nsteps:\n  do:\n    tool: run_cmd\n"
+        "    with:\n      cmd: echo hi\n    on_success: done\n    on_failure: done\n"
+        "  done:\n    action: stop\n    message: Done\n"
+    )
+    (recipes_dir / "test-recipe.yaml").write_text(yaml_content)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": yaml_content,
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+    }
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(name="test-recipe", ctx=mock_ctx)
+
+    result = json.loads(result_str)
+    assert result["kitchen"] == "open"
+    assert "version" in result
+    assert "content" in result
+    assert "test-recipe" in result["content"]
+    mock_ctx.gate.enable.assert_called_once()
+    mock_ctx.enable_components.assert_called_once_with(tags={"kitchen"})
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_with_recipe_not_found(tmp_path, monkeypatch):
+    """open_kitchen(name='nonexistent') returns error with kitchen still open."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "error": "No recipe named 'nonexistent' found",
+    }
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(name="nonexistent", ctx=mock_ctx)
+
+    result = json.loads(result_str)
+    assert "error" in result
+    assert "nonexistent" in result["error"]
+    assert result["kitchen"] == "open"
+    # Kitchen should still be opened even if recipe fails
+    mock_ctx.gate.enable.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_without_recipe_returns_plain_text(tmp_path, monkeypatch):
+    """open_kitchen() without name returns plain text (not JSON)."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result = await open_kitchen(ctx=mock_ctx)
+
+    assert isinstance(result, str)
+    assert "Kitchen is open" in result
+    assert "content" not in result, "No-recipe open_kitchen should not contain recipe content key"
+
+
+# ---------------------------------------------------------------------------
 # Headless gate enforcement for kitchen tools
 # ---------------------------------------------------------------------------
 

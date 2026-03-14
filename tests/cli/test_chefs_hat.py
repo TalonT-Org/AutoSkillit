@@ -29,6 +29,7 @@ class TestChefsHat:
         monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
         monkeypatch.setattr(subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0})())
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         cli.chefs_hat()
         assert captured["cook_session"] is True
 
@@ -51,6 +52,7 @@ class TestChefsHat:
         monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
         monkeypatch.setattr(subprocess, "run", fake_run)
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         cli.chefs_hat()
         assert "--add-dir" in captured_cmd
         assert str(fake_skills_dir) in captured_cmd
@@ -76,6 +78,7 @@ class TestChefsHat:
         monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
         monkeypatch.setattr(subprocess, "run", fake_run)
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         with pytest.raises(SystemExit) as exc_info:
             app(["chef"])
         assert exc_info.value.code == 0

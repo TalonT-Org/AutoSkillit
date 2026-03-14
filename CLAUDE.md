@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 39 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, wait_for_merge_queue, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 26 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 53 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 39 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, wait_for_merge_queue, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 26 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 59 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -123,6 +123,7 @@ src/autoskillit/
 │   ├── __init__.py          #   Re-exports public surface
 │   ├── commands.py          #   ClaudeInteractiveCmd/ClaudeHeadlessCmd builders
 │   ├── db.py                #   Read-only SQLite execution with defence-in-depth
+│   ├── diff_annotator.py    #   Deterministic diff annotation and findings filter for review-pr
 │   ├── headless.py          #   Headless Claude session orchestration (L1 service)
 │   ├── linux_tracing.py     #   Linux-only /proc + psutil process tracing (accumulate snapshots)
 │   ├── anomaly_detection.py #   Post-hoc anomaly detection over ProcSnapshot series
@@ -195,6 +196,7 @@ src/autoskillit/
 │   └── _state.py            #   Server state extraction (lazy init, plugin dir resolution)
 ├── cli/                     # L3 CLI sub-package
 │   ├── __init__.py          #   Re-exports main entry point
+│   ├── _ansi.py             #   Terminal color utilities (supports_color, NO_COLOR/TERM=dumb)
 │   ├── _chefs_hat.py        #   chefs-hat command: ephemeral skill session launcher (claude --add-dir)
 │   ├── _doctor.py           #   Doctor command -- 7 project setup checks
 │   ├── _hooks.py            #   Unified PreToolUse hook registration helpers
@@ -217,12 +219,11 @@ src/autoskillit/
 │   └── __init__.py
 ├── recipes/                 # Bundled recipe YAML definitions
 │   ├── audit-and-fix.yaml
-│   ├── bugfix-loop.yaml
 │   ├── implementation-groups.yaml
 │   ├── implementation.yaml
 │   ├── remediation.yaml
 │   └── smoke-test.yaml
-└── skills/                  # 53 bundled skills (SKILL.md per skill)
+└── skills/                  # 59 bundled skills (SKILL.md per skill)
     ├── analyze-prs/              ├── arch-lens-c4-container/
     ├── arch-lens-concurrency/    ├── arch-lens-data-lineage/
     ├── arch-lens-deployment/     ├── arch-lens-development/
@@ -230,25 +231,28 @@ src/autoskillit/
     ├── arch-lens-operational/    ├── arch-lens-process-flow/
     ├── arch-lens-repository-access/ ├── arch-lens-scenarios/
     ├── arch-lens-security/       ├── arch-lens-state-lifecycle/
-    ├── audit-arch/               ├── audit-cohesion/
-    ├── audit-defense-standards/  ├── audit-friction/
-    ├── audit-impl/               ├── audit-tests/
-    ├── close-kitchen/            ├── collapse-issues/
-    ├── create-review-pr/         ├── diagnose-ci/
-    ├── dry-walkthrough/          ├── enrich-issues/
+    ├── audit-arch/               ├── audit-bugs/
+    ├── audit-cohesion/           ├── audit-defense-standards/
+    ├── audit-friction/           ├── audit-impl/
+    ├── audit-tests/              ├── close-kitchen/
+    ├── collapse-issues/          ├── design-guards/
+    ├── diagnose-ci/              ├── dry-walkthrough/
+    ├── elaborate-phase/          ├── enrich-issues/
     ├── implement-worktree/       ├── implement-worktree-no-merge/
     ├── investigate/              ├── issue-splitter/
-    ├── make-groups/              ├── make-plan/
+    ├── make-arch-diag/           ├── make-groups/
+    ├── make-plan/                ├── make-req/
     ├── merge-pr/                 ├── mermaid/
-    ├── migrate-recipes/          ├── open-kitchen/
-    ├── open-pr/                  ├── pipeline-summary/
-    ├── prepare-issue/            ├── process-issues/
-    ├── rectify/                  ├── report-bug/
-    ├── resolve-failures/         ├── resolve-merge-conflicts/
-    ├── resolve-review/           ├── retry-worktree/
-    ├── review-approach/          ├── review-pr/
-    ├── setup-project/            ├── smoke-task/
-    ├── sous-chef/                ├── triage-issues/
+    ├── migrate-recipes/          ├── open-integration-pr/
+    ├── open-kitchen/             ├── open-pr/
+    ├── pipeline-summary/         ├── prepare-issue/
+    ├── process-issues/           ├── rectify/
+    ├── report-bug/               ├── resolve-failures/
+    ├── resolve-merge-conflicts/  ├── resolve-review/
+    ├── retry-worktree/           ├── review-approach/
+    ├── review-pr/                ├── setup-project/
+    ├── smoke-task/               ├── sous-chef/
+    ├── triage-issues/            ├── verify-diag/
     └── write-recipe/
 ```
 

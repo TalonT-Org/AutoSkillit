@@ -1,7 +1,7 @@
 """Queue mode structural assertions for the bundled recipes.
 
 Tests that the queue-aware steps added in Part B are present and correctly
-wired in pr-merge-pipeline.yaml, implementation.yaml, and remediation.yaml.
+wired in merge-prs.yaml, implementation.yaml, and remediation.yaml.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from autoskillit.recipe.validator import validate_recipe
 
 @pytest.fixture(scope="module")
 def pmp_recipe():
-    return load_recipe(builtin_recipes_dir() / "pr-merge-pipeline.yaml")
+    return load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
 
 
 @pytest.fixture(scope="module")
@@ -32,52 +32,52 @@ def remed_recipe():
 
 
 # ---------------------------------------------------------------------------
-# pr-merge-pipeline.yaml — validate passes
+# merge-prs.yaml — validate passes
 # ---------------------------------------------------------------------------
 
 
-def test_pr_merge_pipeline_queue_recipe_is_valid(pmp_recipe) -> None:
+def test_merge_prs_queue_recipe_is_valid(pmp_recipe) -> None:
     """validate_recipe must pass with no errors after queue steps are added."""
     errors = validate_recipe(pmp_recipe)
     assert errors == [], f"validate_recipe errors: {errors}"
 
 
 # ---------------------------------------------------------------------------
-# pr-merge-pipeline.yaml — new queue mode steps present
+# merge-prs.yaml — new queue mode steps present
 # ---------------------------------------------------------------------------
 
 
-def test_pr_merge_pipeline_route_by_queue_mode_exists(pmp_recipe) -> None:
-    """route_by_queue_mode step must exist in pr-merge-pipeline."""
+def test_merge_prs_route_by_queue_mode_exists(pmp_recipe) -> None:
+    """route_by_queue_mode step must exist in merge-prs."""
     assert "route_by_queue_mode" in pmp_recipe.steps
 
 
-def test_pr_merge_pipeline_route_by_queue_mode_is_route_action(pmp_recipe) -> None:
+def test_merge_prs_route_by_queue_mode_is_route_action(pmp_recipe) -> None:
     """route_by_queue_mode must be an action: route step."""
     step = pmp_recipe.steps["route_by_queue_mode"]
     assert step.action == "route"
 
 
-def test_pr_merge_pipeline_enqueue_all_prs_exists(pmp_recipe) -> None:
+def test_merge_prs_enqueue_all_prs_exists(pmp_recipe) -> None:
     """enqueue_all_prs step must exist with tool=run_cmd."""
     assert "enqueue_all_prs" in pmp_recipe.steps
     step = pmp_recipe.steps["enqueue_all_prs"]
     assert step.tool == "run_cmd"
 
 
-def test_pr_merge_pipeline_wait_queue_pr_exists(pmp_recipe) -> None:
+def test_merge_prs_wait_queue_pr_exists(pmp_recipe) -> None:
     """wait_queue_pr step must exist with tool=wait_for_merge_queue."""
     assert "wait_queue_pr" in pmp_recipe.steps
     step = pmp_recipe.steps["wait_queue_pr"]
     assert step.tool == "wait_for_merge_queue"
 
 
-def test_pr_merge_pipeline_reenter_queue_exists(pmp_recipe) -> None:
+def test_merge_prs_reenter_queue_exists(pmp_recipe) -> None:
     """reenter_queue step must exist."""
     assert "reenter_queue" in pmp_recipe.steps
 
 
-def test_pr_merge_pipeline_next_queue_pr_or_done_is_route_action(pmp_recipe) -> None:
+def test_merge_prs_next_queue_pr_or_done_is_route_action(pmp_recipe) -> None:
     """next_queue_pr_or_done must be an action: route step."""
     assert "next_queue_pr_or_done" in pmp_recipe.steps
     step = pmp_recipe.steps["next_queue_pr_or_done"]
@@ -85,11 +85,11 @@ def test_pr_merge_pipeline_next_queue_pr_or_done_is_route_action(pmp_recipe) -> 
 
 
 # ---------------------------------------------------------------------------
-# pr-merge-pipeline.yaml — analyze_prs captures queue_mode
+# merge-prs.yaml — analyze_prs captures queue_mode
 # ---------------------------------------------------------------------------
 
 
-def test_pr_merge_pipeline_analyze_prs_captures_queue_mode(pmp_recipe) -> None:
+def test_merge_prs_analyze_prs_captures_queue_mode(pmp_recipe) -> None:
     """analyze_prs must capture queue_mode from the skill result."""
     step = pmp_recipe.steps["analyze_prs"]
     assert "queue_mode" in (step.capture or {}), (
@@ -97,28 +97,28 @@ def test_pr_merge_pipeline_analyze_prs_captures_queue_mode(pmp_recipe) -> None:
     )
 
 
-def test_pr_merge_pipeline_analyze_prs_routes_to_route_by_queue_mode(pmp_recipe) -> None:
+def test_merge_prs_analyze_prs_routes_to_route_by_queue_mode(pmp_recipe) -> None:
     """analyze_prs.on_success must route to route_by_queue_mode."""
     step = pmp_recipe.steps["analyze_prs"]
     assert step.on_success == "route_by_queue_mode"
 
 
 # ---------------------------------------------------------------------------
-# pr-merge-pipeline.yaml — classic path still intact
+# merge-prs.yaml — classic path still intact
 # ---------------------------------------------------------------------------
 
 
-def test_pr_merge_pipeline_classic_path_create_integration_branch_present(pmp_recipe) -> None:
+def test_merge_prs_classic_path_create_integration_branch_present(pmp_recipe) -> None:
     """create_integration_branch step must still be present (classic path)."""
     assert "create_integration_branch" in pmp_recipe.steps
 
 
-def test_pr_merge_pipeline_classic_path_merge_pr_present(pmp_recipe) -> None:
+def test_merge_prs_classic_path_merge_pr_present(pmp_recipe) -> None:
     """merge_pr step must still be present (classic path)."""
     assert "merge_pr" in pmp_recipe.steps
 
 
-def test_pr_merge_pipeline_classic_path_push_integration_branch_present(pmp_recipe) -> None:
+def test_merge_prs_classic_path_push_integration_branch_present(pmp_recipe) -> None:
     """push_integration_branch step must still be present (classic path)."""
     assert "push_integration_branch" in pmp_recipe.steps
 

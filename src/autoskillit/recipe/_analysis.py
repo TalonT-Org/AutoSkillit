@@ -472,7 +472,7 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                 if step.tool == "merge_worktree" and "result.cleanup_succeeded" in str(cap_val):
                     continue
                 # Exempt diagnose-ci diagnosis_path captures: in recipes without a resolve_ci
-                # step (e.g. pr-merge-pipeline), diagnosis_path is captured for observability
+                # step (e.g. merge-prs), diagnosis_path is captured for observability
                 # only — no downstream automated remediation consumes it.
                 if cap_key == "diagnosis_path" and "diagnose-ci" in step.with_args.get(
                     "skill_command", ""

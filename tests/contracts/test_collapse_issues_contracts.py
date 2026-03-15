@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from autoskillit.workspace.skills import bundled_skills_dir
 
 skills_dir = bundled_skills_dir()
@@ -32,8 +34,6 @@ def test_result_block_close_delimiter():
 def test_gh_label_create_uses_force():
     text = skill_text()
     # Every `gh label create` call must include --force
-    import re
-
     calls = re.findall(r"gh label create[^\n]*", text)
     assert calls, "Must document at least one gh label create call"
     for call in calls:
@@ -42,8 +42,6 @@ def test_gh_label_create_uses_force():
 
 def test_no_batch_labels_on_combined_issues():
     text = skill_text()
-    import re
-
     # batch:N labels must not appear in label creation or issue create commands
     label_lines = re.findall(r"(gh issue create[^\n]*|gh label create[^\n]*|--label[^\n]*)", text)
     for line in label_lines:
@@ -52,8 +50,6 @@ def test_no_batch_labels_on_combined_issues():
 
 def test_only_known_recipe_routes():
     text = skill_text()
-    import re
-
     recipe_labels = re.findall(r"recipe:(\w[\w-]*)", text)
     known = {"implementation", "remediation"}
     unknown = set(recipe_labels) - known
@@ -151,8 +147,6 @@ def test_collapse_issues_no_angle_bracket_body_placeholder():
     placeholder label and is not treated as a separate constraint. Explicit
     imperative prose must be used instead.
     """
-    import re
-
     text = skill_text()
     # Detect any angle-bracket token that references body content of issues
     pattern = re.compile(r"<[^>]*(body|content)\s+of\s+(issue|#)", re.IGNORECASE)

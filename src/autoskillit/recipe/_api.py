@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+import re
 import threading
 import time
 from collections.abc import Sequence
@@ -34,6 +36,7 @@ from autoskillit.recipe.io import (
 from autoskillit.recipe.io import (
     load_recipe as _load_recipe_from_path,
 )
+from autoskillit.recipe.schema import Recipe, StepResultCondition, StepResultRoute
 from autoskillit.recipe.validator import (
     build_quality_dict,
     compute_recipe_validity,
@@ -241,8 +244,6 @@ def list_all(project_dir: Path | None = None) -> dict[str, Any]:
 
 def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:
     """Return a new Recipe with the named sub_recipe placeholder step removed."""
-    from autoskillit.recipe.schema import Recipe
-
     new_steps = {k: v for k, v in recipe.steps.items() if k != step_name}
     return Recipe(
         name=recipe.name,
@@ -269,11 +270,6 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
     4. Merge ingredients: add sub-recipe's non-hidden ingredients into parent.
     5. Merge kitchen_rules: union (deduplicated), sub-recipe rules appended.
     """
-    import dataclasses
-    import re
-
-    from autoskillit.recipe.schema import Recipe, StepResultCondition, StepResultRoute
-
     placeholder = parent.steps[placeholder_name]
     on_success = placeholder.on_success or "done"
     on_failure = placeholder.on_failure or "escalate"

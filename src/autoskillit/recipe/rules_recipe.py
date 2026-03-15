@@ -67,6 +67,9 @@ def _detect_cycles(
     in `chain`, a cycle is detected. Otherwise, recurse into the sub-recipe
     if it can be loaded.
     """
+    # Deferred import: recipe.io → recipe.__init__ → recipe.validator → registry
+    # → rule modules (including this file) creates a circular import at module load
+    # time. This import is intentionally deferred to avoid that cycle.
     from autoskillit.recipe.io import builtin_sub_recipes_dir, find_sub_recipe_by_name, load_recipe
 
     if _loaded is None:

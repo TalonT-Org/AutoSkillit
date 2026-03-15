@@ -24,8 +24,7 @@ from autoskillit.server.helpers import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import GitHubFetcher, HeadlessExecutor
-    from autoskillit.execution import SkillResult
+    from autoskillit.core import GitHubFetcher, HeadlessExecutor, SkillResult
 
 logger = get_logger(__name__)
 

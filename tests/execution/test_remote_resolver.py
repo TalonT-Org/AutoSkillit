@@ -14,28 +14,28 @@ from autoskillit.execution import resolve_remote_repo
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_resolve_with_full_url_hint_returns_parsed_repo() -> None:
     """Full GitHub URL hint → parse and return without subprocess calls."""
     result = await resolve_remote_repo("/any/cwd", hint="https://github.com/owner/repo.git")
     assert result == "owner/repo"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_resolve_with_owner_repo_hint_returned_as_is() -> None:
     """Already-parsed owner/repo hint → return as-is without subprocess calls."""
     result = await resolve_remote_repo("/any/cwd", hint="owner/repo")
     assert result == "owner/repo"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_resolve_with_ssh_url_hint() -> None:
     """SSH URL hint → parsed correctly."""
     result = await resolve_remote_repo("/any/cwd", hint="git@github.com:owner/repo.git")
     assert result == "owner/repo"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_resolve_with_file_url_hint_falls_through_to_remotes(tmp_path: Path) -> None:
     """file:// hint is not a valid GitHub URL — resolver falls through to subprocess."""
     bare = tmp_path / "bare.git"
@@ -73,7 +73,7 @@ def _make_repo_with_remotes(
     return repo
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_resolve_tries_upstream_before_origin(tmp_path: Path) -> None:
     """Clone scenario: file:// origin + real URL upstream → returns upstream result."""
     clone_path = _make_repo_with_remotes(
@@ -85,7 +85,7 @@ async def test_resolve_tries_upstream_before_origin(tmp_path: Path) -> None:
     assert result == "testowner/testrepo"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_resolve_falls_back_to_origin_when_no_upstream(tmp_path: Path) -> None:
     """Non-clone context: only origin with real GitHub URL → returns origin result."""
     source_path = _make_repo_with_remotes(
@@ -96,7 +96,7 @@ async def test_resolve_falls_back_to_origin_when_no_upstream(tmp_path: Path) -> 
     assert result == "testowner/sourcerepo"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_resolve_returns_none_when_no_github_remote(tmp_path: Path) -> None:
     """Repo with only file:// or no remotes → None."""
     bare_repo = _make_repo_with_remotes(
@@ -107,7 +107,7 @@ async def test_resolve_returns_none_when_no_github_remote(tmp_path: Path) -> Non
     assert result is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_resolve_returns_none_when_no_remotes(tmp_path: Path) -> None:
     """Repo with no remotes at all → None."""
     repo = _make_repo_with_remotes(tmp_path)

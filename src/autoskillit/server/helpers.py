@@ -6,7 +6,6 @@ import asyncio
 import functools
 import json
 import os
-import re
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -377,7 +376,6 @@ async def _import_and_call(
     Returns dict with 'success', 'result' (or 'error').
     Handles sync and async callables, with timeout protection.
     """
-    import asyncio
     import importlib
     import inspect
 
@@ -443,15 +441,19 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     resolved: dict[str, str] = {}
 
     try:
-        result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            cwd=str(project_dir),
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            resolved["source_dir"] = result.stdout.strip()
+        from autoskillit.execution import REMOTE_PRECEDENCE
+
+        for remote in REMOTE_PRECEDENCE:
+            proc = subprocess.run(
+                ["git", "remote", "get-url", remote],
+                cwd=str(project_dir),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                resolved["source_dir"] = proc.stdout.strip()
+                break
     except (OSError, subprocess.TimeoutExpired):
         pass
 
@@ -475,27 +477,15 @@ def _find_recipe(name: str, cwd: Path) -> Any:
     return find_recipe_by_name(name, cwd)
 
 
-async def infer_repo_from_remote(cwd: str) -> str:
-    """Return 'owner/repo' from git remote URL, or '' on failure."""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "remote",
-            "get-url",
-            "origin",
-            cwd=cwd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
-        if proc.returncode != 0:
-            return ""
-        url = stdout.decode().strip()
-        m = re.search(r"github\.com[:/](.+?)(?:\.git)?$", url)
-        return m.group(1) if m else ""
-    except Exception as exc:
-        logger.warning("infer_repo_from_remote.error", exc=str(exc), exc_info=True)
-        return ""
+async def infer_repo_from_remote(cwd: str, hint: str | None = None) -> str:
+    """Return 'owner/repo' from git remote URL, or '' on failure.
+
+    hint: optional owner/repo string or full GitHub URL; parsed before
+          git remote inference. Passes through to resolve_remote_repo.
+    """
+    from autoskillit.execution import resolve_remote_repo
+
+    return await resolve_remote_repo(cwd, hint=hint) or ""
 
 
 async def _prime_quota_cache() -> None:

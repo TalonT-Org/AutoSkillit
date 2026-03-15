@@ -211,7 +211,7 @@ async def test_delegates_to_merge_queue_watcher(tool_ctx):
     tool_ctx.merge_queue_watcher = mock_watcher
 
     with patch(
-        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
+        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -241,7 +241,7 @@ async def test_infers_repo_from_git_remote_when_repo_empty(tool_ctx):
     tool_ctx.merge_queue_watcher = mock_watcher
 
     with patch(
-        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
+        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -288,3 +288,109 @@ async def test_watcher_none_returns_error(tool_ctx):
     assert result["success"] is False
     assert "pr_state" in result
     assert result["pr_state"] == "error"
+
+
+# ---------------------------------------------------------------------------
+# wait_for_ci: remote_url parameter
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_parses_remote_url_to_resolve_repo(tool_ctx):
+    """When remote_url is provided, wait_for_ci must parse it to owner/repo
+    and pass that to the watcher without calling any subprocess."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait.return_value = {
+        "conclusion": "success",
+        "run_id": 1,
+        "failed_jobs": [],
+        "head_sha": "abc123",
+    }
+    tool_ctx.ci_watcher = mock_watcher
+
+    result = json.loads(
+        await wait_for_ci(
+            branch="main",
+            remote_url="https://github.com/owner/repo.git",
+            cwd="/any/cwd",
+        )
+    )
+    assert result["conclusion"] == "success"
+    call_kwargs = mock_watcher.wait.call_args
+    assert call_kwargs.kwargs.get("repo") == "owner/repo"
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_remote_url_wins_over_empty_repo(tool_ctx):
+    """remote_url= supersedes repo='' — hint priority in resolve_remote_repo."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait.return_value = {
+        "conclusion": "success",
+        "run_id": 1,
+        "failed_jobs": [],
+        "head_sha": "abc",
+    }
+    tool_ctx.ci_watcher = mock_watcher
+    await wait_for_ci(
+        branch="main",
+        remote_url="https://github.com/owner/repo.git",
+        repo="",  # empty — remote_url must win
+        cwd="/any/cwd",
+    )
+    assert mock_watcher.wait.call_args.kwargs.get("repo") == "owner/repo"
+
+
+# ---------------------------------------------------------------------------
+# wait_for_merge_queue: remote_url parameter
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_merge_queue_parses_remote_url_to_resolve_repo(tool_ctx):
+    """When remote_url is provided, wait_for_merge_queue parses it to owner/repo
+    without calling any subprocess."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait.return_value = {"success": True, "pr_state": "merged", "pr_number": 42}
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    result = json.loads(
+        await wait_for_merge_queue(
+            pr_number=42,
+            target_branch="main",
+            remote_url="https://github.com/owner/repo.git",
+            cwd="/any/cwd",
+        )
+    )
+    assert result["pr_state"] == "merged"
+    call_kwargs = mock_watcher.wait.call_args
+    assert call_kwargs.kwargs.get("repo") == "owner/repo"
+
+
+@pytest.mark.anyio
+async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inference(
+    tool_ctx, tmp_path
+):
+    """
+    remote_url that parses to None (e.g. file://) does NOT short-circuit;
+    inference continues via resolve_remote_repo(cwd).
+    """
+    mock_watcher = AsyncMock()
+    mock_watcher.wait.return_value = {
+        "success": False,
+        "pr_state": "error",
+        "reason": "Invalid repo format: None",
+    }
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    # provide a file:// remote_url — should fall through, eventually fail gracefully
+    result = json.loads(
+        await wait_for_merge_queue(
+            pr_number=1,
+            target_branch="main",
+            remote_url="file:///tmp/clone",
+            cwd=str(tmp_path),  # real dir, no GitHub remotes
+        )
+    )
+    assert result["pr_state"] == "error"
+    # The file:// URL must not resolve to a GitHub repo, so watcher receives repo=None
+    assert mock_watcher.wait.call_args.kwargs.get("repo") is None

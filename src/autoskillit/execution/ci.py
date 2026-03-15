@@ -21,13 +21,25 @@ from typing import Any
 
 import httpx
 
-from autoskillit.core import get_logger
+from autoskillit.core import CIRunScope, get_logger
 
 _log = get_logger(__name__)
 
 # Backoff schedule constants
 _BACKOFF_BASE = 5  # seconds
 _BACKOFF_CAP = 30  # seconds
+
+# GitHub run-level conclusions that indicate a job-level failure worth inspecting.
+# "action_required" is intentionally excluded — it signals a billing/permissions
+# gate, not a job execution failure, so failed_jobs is always [] for it.
+FAILED_CONCLUSIONS: frozenset[str] = frozenset(
+    {
+        "failure",
+        "timed_out",
+        "startup_failure",
+        "cancelled",
+    }
+)
 
 
 def _parse_repo_from_remote(remote_url: str) -> str | None:
@@ -96,7 +108,7 @@ class DefaultCIWatcher:
         headers: dict[str, str],
         owner_repo: str,
         branch: str,
-        head_sha: str | None,
+        scope: CIRunScope,
         lookback_seconds: int,
     ) -> list[dict[str, Any]]:
         """Phase 1: Look-back — fetch recently completed runs for the branch."""
@@ -106,8 +118,10 @@ class DefaultCIWatcher:
             "per_page": 5,
             "status": "completed",
         }
-        if head_sha:
-            params["head_sha"] = head_sha
+        if scope.workflow:
+            params["workflow_id"] = scope.workflow
+        if scope.head_sha:
+            params["head_sha"] = scope.head_sha
 
         resp = await client.get(url, headers=headers, params=params)
         resp.raise_for_status()
@@ -132,7 +146,7 @@ class DefaultCIWatcher:
         headers: dict[str, str],
         owner_repo: str,
         branch: str,
-        head_sha: str | None,
+        scope: CIRunScope,
     ) -> list[dict[str, Any]]:
         """Fetch active (non-completed) runs for the branch."""
         url = f"https://api.github.com/repos/{owner_repo}/actions/runs"
@@ -140,8 +154,10 @@ class DefaultCIWatcher:
             "branch": branch,
             "per_page": 1,
         }
-        if head_sha:
-            params["head_sha"] = head_sha
+        if scope.workflow:
+            params["workflow_id"] = scope.workflow
+        if scope.head_sha:
+            params["head_sha"] = scope.head_sha
 
         resp = await client.get(url, headers=headers, params=params)
         resp.raise_for_status()
@@ -169,19 +185,25 @@ class DefaultCIWatcher:
         owner_repo: str,
         run_id: int,
     ) -> list[str]:
-        """Extract failed job names from a completed run."""
+        """Extract failed job names from a completed run.
+
+        Includes all failure-class conclusions: failure, timed_out,
+        startup_failure, cancelled.
+        """
         url = f"https://api.github.com/repos/{owner_repo}/actions/runs/{run_id}/jobs"
         resp = await client.get(url, headers=headers)
         resp.raise_for_status()
         data = resp.json()
-        return [j["name"] for j in data.get("jobs", []) if j.get("conclusion") == "failure"]
+        return [
+            j["name"] for j in data.get("jobs", []) if j.get("conclusion") in FAILED_CONCLUSIONS
+        ]
 
     async def wait(
         self,
         branch: str,
         *,
         repo: str | None = None,
-        head_sha: str | None = None,
+        scope: CIRunScope = CIRunScope(),
         timeout_seconds: int = 300,
         lookback_seconds: int = 120,
         cwd: str = "",
@@ -218,14 +240,15 @@ class DefaultCIWatcher:
                     "ci_watcher_lookback",
                     branch=branch,
                     repo=owner_repo,
-                    head_sha=head_sha or "(any)",
+                    head_sha=scope.head_sha or "(any)",
+                    workflow=scope.workflow or "(any)",
                 )
                 completed = await self._fetch_completed_runs(
                     client,
                     headers,
                     owner_repo,
                     branch,
-                    head_sha,
+                    scope,
                     lookback_seconds,
                 )
                 if completed:
@@ -239,7 +262,7 @@ class DefaultCIWatcher:
                             owner_repo,
                             run_id,
                         )
-                        if conclusion == "failure"
+                        if conclusion in FAILED_CONCLUSIONS
                         else []
                     )
                     _log.info("ci_watcher_lookback_hit", run_id=run_id, conclusion=conclusion)
@@ -255,7 +278,7 @@ class DefaultCIWatcher:
                         headers,
                         owner_repo,
                         branch,
-                        head_sha,
+                        scope,
                     )
                     if active:
                         found_run = active[0]
@@ -266,7 +289,7 @@ class DefaultCIWatcher:
                         headers,
                         owner_repo,
                         branch,
-                        head_sha,
+                        scope,
                         lookback_seconds,
                     )
                     if completed:
@@ -280,7 +303,7 @@ class DefaultCIWatcher:
                                 owner_repo,
                                 run_id,
                             )
-                            if conclusion == "failure"
+                            if conclusion in FAILED_CONCLUSIONS
                             else []
                         )
                         return {
@@ -320,7 +343,7 @@ class DefaultCIWatcher:
                                 owner_repo,
                                 run_id,
                             )
-                            if conclusion == "failure"
+                            if conclusion in FAILED_CONCLUSIONS
                             else []
                         )
                         _log.info("ci_watcher_completed", run_id=run_id, conclusion=conclusion)
@@ -363,6 +386,7 @@ class DefaultCIWatcher:
         *,
         repo: str | None = None,
         run_id: int | None = None,
+        scope: CIRunScope = CIRunScope(),
         cwd: str = "",
     ) -> dict[str, Any]:
         """Return current CI status without waiting.
@@ -393,7 +417,7 @@ class DefaultCIWatcher:
                             owner_repo,
                             run_id,
                         )
-                        if conclusion == "failure"
+                        if conclusion in FAILED_CONCLUSIONS
                         else []
                     )
                     return {
@@ -409,6 +433,8 @@ class DefaultCIWatcher:
 
                 url = f"https://api.github.com/repos/{owner_repo}/actions/runs"
                 params: dict[str, str | int] = {"branch": branch, "per_page": 5}
+                if scope.workflow:
+                    params["workflow_id"] = scope.workflow
                 resp = await client.get(url, headers=headers, params=params)
                 resp.raise_for_status()
                 data = resp.json()
@@ -423,7 +449,7 @@ class DefaultCIWatcher:
                             owner_repo,
                             r["id"],
                         )
-                        if r_conclusion == "failure"
+                        if r_conclusion in FAILED_CONCLUSIONS
                         else []
                     )
                     runs.append(

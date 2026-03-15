@@ -12,7 +12,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import get_logger
+from autoskillit.core import CIRunScope, get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
@@ -31,6 +31,7 @@ async def wait_for_ci(
     branch: str,
     repo: str | None = None,
     head_sha: str | None = None,
+    workflow: str | None = None,
     timeout_seconds: int = 300,
     cwd: str = ".",
     ctx: Context = CurrentContext(),
@@ -46,6 +47,8 @@ async def wait_for_ci(
               from git remote in cwd.
         head_sha: Specific commit SHA to match. If omitted, inferred from
                   HEAD in cwd.
+        workflow: Workflow filename to filter runs (e.g. "tests.yml"). If
+                  omitted, falls back to the project-level ci.workflow config.
         timeout_seconds: Maximum time to wait (default 300s).
         cwd: Working directory for git operations.
 
@@ -91,18 +94,27 @@ async def wait_for_ci(
         except OSError:
             pass
 
+    scope = CIRunScope(
+        workflow=workflow or tool_ctx.default_ci_scope.workflow,
+        head_sha=head_sha,
+    )
+
     await _notify(
         ctx,
         "info",
         f"Watching CI for branch {branch}",
         "autoskillit.wait_for_ci",
-        extra={"repo": repo or "(infer)", "head_sha": head_sha or "(any)"},
+        extra={
+            "repo": repo or "(infer)",
+            "head_sha": scope.head_sha or "(any)",
+            "workflow": scope.workflow or "(any)",
+        },
     )
 
     result = await tool_ctx.ci_watcher.wait(
         branch,
         repo=repo,
-        head_sha=head_sha,
+        scope=scope,
         timeout_seconds=timeout_seconds,
         cwd=cwd,
     )
@@ -205,6 +217,7 @@ async def get_ci_status(
     branch: str | None = None,
     run_id: int | None = None,
     repo: str | None = None,
+    workflow: str | None = None,
     cwd: str = ".",
 ) -> str:
     """Return current CI status for a branch or specific run without waiting.
@@ -217,6 +230,8 @@ async def get_ci_status(
         branch: Git branch name. Required if run_id is not provided.
         run_id: Specific run ID to check. If provided, branch is ignored.
         repo: GitHub owner/repo. If omitted, inferred from git remote in cwd.
+        workflow: Workflow filename to filter runs (e.g. "tests.yml"). If
+                  omitted, falls back to the project-level ci.workflow config.
         cwd: Working directory for git operations.
 
     Returns:
@@ -231,10 +246,13 @@ async def get_ci_status(
     if branch is None and run_id is None:
         return json.dumps({"runs": [], "error": "Provide branch or run_id"})
 
+    scope = CIRunScope(workflow=workflow or tool_ctx.default_ci_scope.workflow)
+
     result = await tool_ctx.ci_watcher.status(
         branch or "",
         repo=repo,
         run_id=run_id,
+        scope=scope,
         cwd=cwd,
     )
     return json.dumps(result)

@@ -152,6 +152,11 @@ class BranchingConfig:
     default_base_branch: str = "main"
 
 
+@dataclass
+class CIConfig:
+    workflow: str | None = None
+
+
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -183,6 +188,7 @@ class AutomationConfig:
     linux_tracing: LinuxTracingConfig = field(default_factory=LinuxTracingConfig)
     mcp_response: McpResponseConfig = field(default_factory=McpResponseConfig)
     branching: BranchingConfig = field(default_factory=BranchingConfig)
+    ci: CIConfig = field(default_factory=CIConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -217,6 +223,7 @@ class AutomationConfig:
         lt = sec("linux_tracing")
         mr = sec("mcp_response")
         br = sec("branching")
+        ci = sec("ci")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -236,6 +243,7 @@ class AutomationConfig:
         _lt = _field_defaults(LinuxTracingConfig)
         _mr = _field_defaults(McpResponseConfig)
         _br = _field_defaults(BranchingConfig)
+        _ci = _field_defaults(CIConfig)
 
         return cls(
             test_check=TestCheckConfig(
@@ -333,6 +341,9 @@ class AutomationConfig:
                 default_base_branch=str(
                     val(br, "default_base_branch", _br["default_base_branch"])
                 ),
+            ),
+            ci=CIConfig(
+                workflow=val(ci, "workflow", _ci["workflow"]) or None,
             ),
         )
 

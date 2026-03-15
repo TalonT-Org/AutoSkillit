@@ -497,6 +497,7 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.merge_target }}"
+      workflow: "tests.yml"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
     capture:
@@ -636,7 +637,7 @@ steps:
   diagnose_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }}"
+      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }} - - tests.yml"
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_ci"
       ci_failed_jobs: "${{ context.ci_failed_jobs }}"

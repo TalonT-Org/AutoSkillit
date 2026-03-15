@@ -80,7 +80,7 @@ Fetch top-level review bodies (summary reviews):
 gh api repos/{owner}/{repo}/pulls/{number}/reviews --paginate
 ```
 
-Fetch review thread node IDs (needed for resolveReviewThread mutation):
+Fetch review thread node IDs (needed for thread resolution in Step 6.5):
 ```bash
 gh api graphql \
   -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:1){nodes{databaseId}}}}}}}' \

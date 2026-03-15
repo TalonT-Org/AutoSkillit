@@ -13,6 +13,7 @@ def resolve_review_skill_md() -> str:
         / "resolve-review"
         / "SKILL.md"
     )
+    assert skill_path.exists(), f"SKILL.md not found at expected path: {skill_path}"
     return skill_path.read_text()
 
 
@@ -38,7 +39,6 @@ def test_skill_does_not_resolve_skipped_threads(resolve_review_skill_md: str) ->
     assert (
         "not resolve" in resolve_review_skill_md.lower()
         or "do not add" in resolve_review_skill_md.lower()
-        or "skip" in resolve_review_skill_md.lower()
     )
     # addressed_thread_ids must appear in the apply-fix section (between "apply the fix"
     # and "skip a finding"), confirming tracking is wired to the fix path, not the skip path.
@@ -54,22 +54,24 @@ def test_skill_does_not_resolve_skipped_threads(resolve_review_skill_md: str) ->
 
 def test_skill_logs_warning_on_resolve_failure(resolve_review_skill_md: str) -> None:
     """Thread resolution failure must log a warning and continue, not fail."""
-    # The resolve step must mention non-blocking failure handling.
-    content_lower = resolve_review_skill_md.lower()
-    assert "warn" in content_lower or "log" in content_lower
-    assert "continue" in content_lower or "proceed" in content_lower
-    # Step 6.5 must explicitly state failure does not affect exit code (positive assertion).
-    # Checking absence of "exit non-zero" is unreliable because the step itself says
-    # "must never cause the overall skill to exit non-zero" — containing the phrase.
+    # Narrow checks to the Step 6 (Resolve Addressed Review Threads) section,
+    # anchored at resolveReviewThread, to avoid false positives from unrelated sections.
     thread_start = resolve_review_skill_md.find("resolveReviewThread")
     assert thread_start != -1, "SKILL.md must contain resolveReviewThread"
     thread_context = resolve_review_skill_md[thread_start : thread_start + 600]
+    thread_context_lower = thread_context.lower()
+    assert "warn" in thread_context_lower or "log" in thread_context_lower, (
+        "Step 6 must mention warning or logging on resolve failure"
+    )
+    assert "continue" in thread_context_lower or "proceed" in thread_context_lower, (
+        "Step 6 must instruct to continue/proceed past resolve failure"
+    )
     assert (
-        "do not modify exit code" in thread_context.lower()
-        or "best-effort" in thread_context.lower()
-        or "does not affect" in thread_context.lower()
+        "do not modify exit code" in thread_context_lower
+        or "best-effort" in thread_context_lower
+        or "does not affect" in thread_context_lower
     ), (
-        "Step 6.5 must explicitly state thread resolution failure is"
+        "Step 6 must explicitly state thread resolution failure is"
         " best-effort / does not affect exit code"
     )
 

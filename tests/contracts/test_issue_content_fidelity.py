@@ -30,11 +30,7 @@ def _all_skill_mds() -> list[tuple[str, str]]:
 
 def _body_assembling_skills() -> list[tuple[str, str]]:
     """Skills that assemble combined bodies from multiple source issues."""
-    return [
-        (name, text)
-        for name, text in _all_skill_mds()
-        if "## From #" in text
-    ]
+    return [(name, text) for name, text in _all_skill_mds() if "## From #" in text]
 
 
 def test_body_assembling_skills_use_per_issue_fetch() -> None:

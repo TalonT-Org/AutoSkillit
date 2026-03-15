@@ -307,32 +307,20 @@ def test_remediation_open_pr_step_routes_to_extract_pr_number(remed_recipe) -> N
     assert step.on_success == "extract_pr_number"
 
 
-# ---------------------------------------------------------------------------
-# auto_merge ingredient — declared with correct defaults
-# ---------------------------------------------------------------------------
+@pytest.fixture(scope="module", params=["impl", "remed"])
+def any_recipe(request, impl_recipe, remed_recipe):
+    return impl_recipe if request.param == "impl" else remed_recipe
 
 
-def test_auto_merge_ingredient_in_implementation(impl_recipe) -> None:
-    assert "auto_merge" in impl_recipe.ingredients
-    ing = impl_recipe.ingredients["auto_merge"]
+def test_auto_merge_ingredient(any_recipe) -> None:
+    assert "auto_merge" in any_recipe.ingredients
+    ing = any_recipe.ingredients["auto_merge"]
     assert ing.default == "true"
     assert ing.required is False
 
 
-def test_auto_merge_ingredient_in_remediation(remed_recipe) -> None:
-    assert "auto_merge" in remed_recipe.ingredients
-    ing = remed_recipe.ingredients["auto_merge"]
-    assert ing.default == "true"
-    assert ing.required is False
-
-
-# ---------------------------------------------------------------------------
-# auto_merge — route_queue_mode evaluates it before queue_available
-# ---------------------------------------------------------------------------
-
-
-def test_route_queue_mode_auto_merge_condition_first_in_implementation(impl_recipe) -> None:
-    step = impl_recipe.steps["route_queue_mode"]
+def test_route_queue_mode_auto_merge_condition_first(any_recipe) -> None:
+    step = any_recipe.steps["route_queue_mode"]
     conds = step.on_result.conditions
     auto_merge_idx = next(i for i, c in enumerate(conds) if c.when and "auto_merge" in c.when)
     queue_available_idx = next(
@@ -341,34 +329,10 @@ def test_route_queue_mode_auto_merge_condition_first_in_implementation(impl_reci
     assert auto_merge_idx < queue_available_idx
 
 
-def test_route_queue_mode_auto_merge_condition_first_in_remediation(remed_recipe) -> None:
-    step = remed_recipe.steps["route_queue_mode"]
-    conds = step.on_result.conditions
-    auto_merge_idx = next(i for i, c in enumerate(conds) if c.when and "auto_merge" in c.when)
-    queue_available_idx = next(
-        i for i, c in enumerate(conds) if c.when and "queue_available" in c.when
-    )
-    assert auto_merge_idx < queue_available_idx
-
-
-# ---------------------------------------------------------------------------
-# auto_merge == false routes to confirm_cleanup
-# ---------------------------------------------------------------------------
-
-
-def test_auto_merge_false_routes_to_confirm_cleanup_in_implementation(impl_recipe) -> None:
-    step = impl_recipe.steps["route_queue_mode"]
+def test_auto_merge_false_routes_to_confirm_cleanup(any_recipe) -> None:
+    step = any_recipe.steps["route_queue_mode"]
     auto_merge_cond = next(
         c for c in step.on_result.conditions if c.when and "auto_merge" in c.when
     )
-    assert "false" in auto_merge_cond.when
-    assert auto_merge_cond.route == "confirm_cleanup"
-
-
-def test_auto_merge_false_routes_to_confirm_cleanup_in_remediation(remed_recipe) -> None:
-    step = remed_recipe.steps["route_queue_mode"]
-    auto_merge_cond = next(
-        c for c in step.on_result.conditions if c.when and "auto_merge" in c.when
-    )
-    assert "false" in auto_merge_cond.when
+    assert auto_merge_cond.when == "${{ inputs.auto_merge }} != 'true'"
     assert auto_merge_cond.route == "confirm_cleanup"

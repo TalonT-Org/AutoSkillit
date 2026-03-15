@@ -701,3 +701,28 @@ def test_write_clear_marker_is_atomic(tmp_path):
     assert t1 is not None
     assert t2 is not None
     assert t2 >= t1
+
+
+def test_flush_session_log_includes_write_path_warnings_in_summary(tmp_path):
+    """summary.json records write_path_warnings list."""
+    warnings = [
+        "Write tool wrote to /source/repo/temp/foo.md (outside cwd /clone)",
+        "Edit tool wrote to /source/repo/src/file.py (outside cwd /clone)",
+    ]
+    _flush(tmp_path, session_id="warn-session", write_path_warnings=warnings, proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "warn-session" / "summary.json").read_text())
+    assert summary["write_path_warnings"] == warnings
+
+
+def test_flush_session_log_empty_warnings_produce_empty_list(tmp_path):
+    """No warnings → write_path_warnings is [] in summary."""
+    _flush(tmp_path, session_id="clean-session", write_path_warnings=[], proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "clean-session" / "summary.json").read_text())
+    assert summary["write_path_warnings"] == []
+
+
+def test_flush_session_log_none_warnings_treated_as_empty(tmp_path):
+    """write_path_warnings=None (default) produces empty list in summary."""
+    _flush(tmp_path, session_id="default-warn", proc_snapshots=None)  # no write_path_warnings arg
+    summary = json.loads((tmp_path / "sessions" / "default-warn" / "summary.json").read_text())
+    assert summary["write_path_warnings"] == []

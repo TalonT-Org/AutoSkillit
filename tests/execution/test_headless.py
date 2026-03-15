@@ -18,6 +18,7 @@ from autoskillit.execution.headless import (
     _ensure_skill_prefix,
     _extract_worktree_path,
     _resolve_model,
+    _scan_jsonl_write_paths,
 )
 from tests.conftest import _make_result, _make_timeout_result
 
@@ -672,6 +673,7 @@ class TestBuildSkillResultCrossValidation:
         "retry_reason",
         "stderr",
         "token_usage",
+        "write_path_warnings",
     }
 
     def test_empty_stdout_exit_zero_is_failure(self):
@@ -2269,3 +2271,159 @@ class TestRunHeadlessCorePassesCwd:
         prompt_arg = last_cmd[p_idx + 1]
         assert "WORKING DIRECTORY ANCHOR" in prompt_arg
         assert "/some/test/cwd" in prompt_arg
+
+
+def _make_tool_use_line(name: str, input_dict: dict) -> str:
+    return json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "tool_use", "name": name, "id": "x", "input": input_dict}]
+            },
+        }
+    )
+
+
+class TestScanJsonlWritePaths:
+    CWD = "/clone/worktree"
+
+    def test_returns_empty_for_clean_write_inside_cwd(self):
+        line = _make_tool_use_line(
+            "Write", {"file_path": f"{self.CWD}/temp/out.md", "content": "x"}
+        )
+        assert _scan_jsonl_write_paths(line, self.CWD) == []
+
+    def test_detects_write_outside_cwd(self):
+        line = _make_tool_use_line(
+            "Write", {"file_path": "/source/repo/temp/stolen.md", "content": "x"}
+        )
+        warnings = _scan_jsonl_write_paths(line, self.CWD)
+        assert len(warnings) == 1
+        assert "/source/repo/temp/stolen.md" in warnings[0]
+
+    def test_detects_edit_outside_cwd(self):
+        line = _make_tool_use_line(
+            "Edit",
+            {
+                "file_path": "/source/repo/src/autoskillit/file.py",
+                "old_string": "a",
+                "new_string": "b",
+            },
+        )
+        warnings = _scan_jsonl_write_paths(line, self.CWD)
+        assert len(warnings) == 1
+        assert "Edit" in warnings[0]
+
+    def test_detects_bash_with_absolute_path_outside_cwd(self):
+        line = _make_tool_use_line(
+            "Bash", {"command": "cat /source/repo/README.md > /tmp/out.txt"}
+        )
+        warnings = _scan_jsonl_write_paths(line, self.CWD)
+        assert len(warnings) >= 1
+        assert any("/source/repo" in w for w in warnings)
+
+    def test_no_warnings_for_empty_stdout(self):
+        assert _scan_jsonl_write_paths("", self.CWD) == []
+
+    def test_no_warnings_for_malformed_jsonl(self):
+        assert _scan_jsonl_write_paths("not json at all\n{broken", self.CWD) == []
+
+    def test_no_warnings_for_read_only_tool_calls(self):
+        line = _make_tool_use_line("Read", {"file_path": "/source/repo/some_file.py"})
+        assert _scan_jsonl_write_paths(line, self.CWD) == []
+
+    def test_multiple_violations_in_one_session(self):
+        lines = "\n".join(
+            [
+                _make_tool_use_line("Write", {"file_path": "/source/repo/a.md", "content": "x"}),
+                _make_tool_use_line(
+                    "Edit",
+                    {"file_path": "/source/repo/b.py", "old_string": "a", "new_string": "b"},
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "result": "done",
+                        "session_id": "",
+                        "is_error": False,
+                    }
+                ),
+            ]
+        )
+        warnings = _scan_jsonl_write_paths(lines, self.CWD)
+        assert len(warnings) == 2
+
+    def test_no_warning_when_cwd_empty(self):
+        line = _make_tool_use_line("Write", {"file_path": "/any/path/file.md", "content": "x"})
+        assert _scan_jsonl_write_paths(line, "") == []
+
+    def test_no_warning_when_cwd_is_relative(self):
+        line = _make_tool_use_line("Write", {"file_path": "/any/path/file.md", "content": "x"})
+        assert _scan_jsonl_write_paths(line, "relative/path") == []
+
+
+class TestBuildSkillResultWritePathWarnings:
+    def test_write_path_warnings_empty_for_clean_session(self):
+        stdout = (
+            _make_tool_use_line(
+                "Write", {"file_path": "/clone/worktree/temp/out.md", "content": "x"}
+            )
+            + "\n"
+            + _success_session_json("Done %%DONE%%")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/clone/worktree")
+        assert sr.write_path_warnings == []
+
+    def test_write_path_warnings_populated_for_contaminated_session(self):
+        stdout = (
+            _make_tool_use_line(
+                "Write", {"file_path": "/source/repo/temp/stolen.md", "content": "x"}
+            )
+            + "\n"
+            + _success_session_json("Done %%DONE%%")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/clone/worktree")
+        assert len(sr.write_path_warnings) == 1
+        assert "/source/repo/temp/stolen.md" in sr.write_path_warnings[0]
+
+    def test_write_path_warnings_appear_in_to_json(self):
+        stdout = (
+            _make_tool_use_line("Write", {"file_path": "/source/repo/bad.md", "content": "x"})
+            + "\n"
+            + _success_session_json("Done %%DONE%%")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/clone/worktree")
+        data = json.loads(sr.to_json())
+        assert "write_path_warnings" in data
+        assert len(data["write_path_warnings"]) == 1
+
+    def test_write_path_warnings_independent_of_output_token_contamination(self):
+        """Warnings are populated even when _validate_output_paths also fires."""
+        # plan_path token must appear in an assistant text message for
+        # _validate_output_paths to detect it (it scans assistant_messages,
+        # not the final result record).
+        path_token_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "plan_path = /source/repo/temp/plan.md"}]
+                },
+            }
+        )
+        stdout = (
+            _make_tool_use_line("Write", {"file_path": "/source/repo/bad.md", "content": "x"})
+            + "\n"
+            + path_token_line
+            + "\n"
+            + _success_session_json("Done %%DONE%%")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/clone/worktree")
+        # subtype is path_contamination (from _validate_output_paths)
+        assert sr.subtype == "path_contamination"
+        # write_path_warnings also populated from JSONL scan
+        assert len(sr.write_path_warnings) >= 1

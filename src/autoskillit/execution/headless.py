@@ -11,6 +11,7 @@ Public API:
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 import re
 import time
@@ -239,6 +240,82 @@ def _validate_output_paths(
     return "; ".join(violations) if violations else None
 
 
+_WRITE_TOOL_NAMES: frozenset[str] = frozenset({"Write", "Edit"})
+_BASH_TOOL_NAME: str = "Bash"
+_ABS_PATH_PATTERN: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/~@+:-]+))')
+# Exclude paths of 4 chars or fewer (/tmp, /etc, /bin, /var) as low-signal noise.
+_MIN_BASH_PATH_LEN: int = 5
+
+
+def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
+    """Scan raw JSONL stdout for Write/Edit/Bash tool calls outside cwd.
+
+    Parses assistant records from the JSONL stream and extracts file_path
+    arguments from Write and Edit tool_use blocks, plus absolute paths from
+    Bash commands. Returns warning strings for any path outside cwd.
+
+    Non-blocking: caller decides whether to surface or suppress warnings.
+    Returns [] when stdout is empty or cwd is empty/relative.
+    """
+    if not stdout.strip() or not cwd or not os.path.isabs(cwd):
+        return []
+
+    cwd_prefix = cwd.rstrip("/") + "/"
+    warnings: list[str] = []
+
+    for raw_line in stdout.strip().splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict) or obj.get("type") != "assistant":
+            continue
+        msg = obj.get("message")
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
+                continue
+            tool_name = block.get("name", "")
+            inputs = block.get("input") or {}
+            if not isinstance(inputs, dict):
+                continue
+
+            if tool_name in _WRITE_TOOL_NAMES:
+                file_path = inputs.get("file_path", "")
+                if (
+                    isinstance(file_path, str)
+                    and os.path.isabs(file_path)
+                    and not file_path.startswith(cwd_prefix)
+                    and file_path != cwd.rstrip("/")
+                ):
+                    warnings.append(
+                        f"{tool_name} tool targeted '{file_path}' outside session cwd '{cwd}'"
+                    )
+
+            elif tool_name == _BASH_TOOL_NAME:
+                command = inputs.get("command", "")
+                if isinstance(command, str):
+                    for match in _ABS_PATH_PATTERN.finditer(command):
+                        path = match.group(1)
+                        if (
+                            len(path) >= _MIN_BASH_PATH_LEN
+                            and not path.startswith(cwd_prefix)
+                            and path != cwd.rstrip("/")
+                        ):
+                            warnings.append(
+                                f"Bash command contained path '{path}' outside session cwd '{cwd}'"
+                            )
+
+    return warnings
+
+
 def _apply_budget_guard(
     sr: SkillResult,
     skill_command: str,
@@ -418,6 +495,17 @@ def _build_skill_result(
         if path_contamination:
             logger.warning("path_contamination_detected", detail=path_contamination, cwd=cwd)
 
+    write_path_warnings: list[str] = []
+    if cwd:
+        write_path_warnings = _scan_jsonl_write_paths(result.stdout, cwd)
+        if write_path_warnings:
+            logger.warning(
+                "write_path_warnings_detected",
+                count=len(write_path_warnings),
+                cwd=cwd,
+                warnings=write_path_warnings[:5],
+            )
+
     if path_contamination:
         sr = SkillResult(
             success=False,
@@ -432,6 +520,7 @@ def _build_skill_result(
             token_usage=session.token_usage,
             worktree_path=extracted_worktree_path,
             cli_subtype=session.subtype,
+            write_path_warnings=write_path_warnings,
         )
     else:
         sr = SkillResult(
@@ -447,6 +536,7 @@ def _build_skill_result(
             token_usage=session.token_usage,
             worktree_path=extracted_worktree_path,
             cli_subtype=session.subtype,
+            write_path_warnings=write_path_warnings,
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
     logger.debug(
@@ -621,6 +711,7 @@ async def run_headless_core(
                     token_usage=skill_result.token_usage,
                     timing_seconds=timing_seconds,
                     audit_record=audit_record,
+                    write_path_warnings=skill_result.write_path_warnings,
                 )
             except Exception:
                 logger.debug("session_log_flush_failed", exc_info=True)

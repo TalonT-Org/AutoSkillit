@@ -8,6 +8,7 @@ import re
 
 import pytest
 
+from autoskillit.core import pkg_root
 from autoskillit.workspace.skills import SkillResolver
 
 # Skills whose output files are intentionally fixed-name (no timestamp needed).
@@ -209,4 +210,21 @@ def test_output_path_tokens_synchronized() -> None:
         f"_OUTPUT_PATH_TOKENS mismatch.\n"
         f"Missing: {expected_path_tokens - _OUTPUT_PATH_TOKENS}\n"
         f"Extra: {_OUTPUT_PATH_TOKENS - expected_path_tokens}"
+    )
+
+
+def test_resolve_failures_skill_switches_code_index_to_worktree():
+    """resolve-failures must set_project_path to worktree_path after env setup."""
+    skill_md = (pkg_root() / "skills" / "resolve-failures" / "SKILL.md").read_text()
+    # Must contain a set_project_path call with worktree_path as the path argument.
+    # Use a regex so minor whitespace or quoting variations don't cause false failures.
+    worktree_switch = re.search(r"set_project_path\([^)]*worktree_path[^)]*\)", skill_md)
+    assert worktree_switch is not None, (
+        "resolve-failures SKILL.md must switch code-index to {worktree_path} after env setup"
+    )
+    # The worktree switch must come after the initial PROJECT_ROOT init.
+    project_root_idx = skill_md.find("PROJECT_ROOT")
+    assert project_root_idx != -1, "resolve-failures SKILL.md must reference PROJECT_ROOT"
+    assert worktree_switch.start() > project_root_idx, (
+        "worktree_path code-index switch must appear after initial PROJECT_ROOT init"
     )

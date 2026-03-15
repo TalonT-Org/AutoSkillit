@@ -85,6 +85,20 @@ call is mandatory at the start of every headless session that uses code-index to
    - Log: "Committed {N} uncommitted file(s) before test run"
 3. If output is empty: continue (worktree is clean)
 
+### Step 0.7: Switch Code-Index to Worktree
+
+Call `set_project_path` with the worktree path so all subsequent code-index
+queries (`find_files`, `search_code_advanced`, `get_file_summary`, `get_symbol_body`)
+return worktree-relative paths instead of source-repo paths:
+
+```
+mcp__code-index__set_project_path(path="{worktree_path}")
+```
+
+This prevents the model from being exposed to source-repo absolute paths during
+investigation and fixing. Note: code-index tools are read-only; this switch does not
+affect git operations, which always use `git -C {worktree_path}` explicitly.
+
 ### Step 1: Understand Context
 1. Read the plan file to understand what was implemented and why
 2. Run `git log --oneline $(git merge-base HEAD origin/{base_branch})..HEAD`

@@ -529,6 +529,7 @@ class SkillResult:
     token_usage: dict[str, Any] | None = None
     worktree_path: str | None = None
     cli_subtype: str = field(default="")
+    write_path_warnings: list[str] = field(default_factory=list)
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -543,6 +544,7 @@ class SkillResult:
             "retry_reason": self.retry_reason,
             "stderr": self.stderr,
             "token_usage": self.token_usage,
+            "write_path_warnings": self.write_path_warnings,
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path

@@ -143,6 +143,46 @@ def detect_unpublished_branch(source_dir: str, branch: str) -> bool:
     return ls_remote.returncode == 2
 
 
+def _add_or_set_upstream(clone_path: Path, url: str) -> None:
+    """Add or update the upstream remote in the clone.
+
+    Handles the case where upstream already exists (clone_local copies .git as-is
+    and the source may already have an upstream remote).
+    """
+    result = subprocess.run(
+        ["git", "remote", "add", "upstream", url],
+        cwd=str(clone_path),
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        stderr = (
+            result.stderr.decode(errors="replace")
+            if isinstance(result.stderr, bytes)
+            else result.stderr
+        )
+        if "already exists" not in stderr:
+            raise RuntimeError(
+                f"git remote add upstream failed: {stderr.strip()}"
+                f"\nclone_path={clone_path}, url={url}"
+            )
+        # upstream already exists (e.g. clone_local copied it from source); update the URL
+        set_url = subprocess.run(
+            ["git", "remote", "set-url", "upstream", url],
+            cwd=str(clone_path),
+            capture_output=True,
+        )
+        if set_url.returncode != 0:
+            set_stderr = (
+                set_url.stderr.decode(errors="replace")
+                if isinstance(set_url.stderr, bytes)
+                else set_url.stderr
+            )
+            raise RuntimeError(
+                f"git remote set-url upstream failed: {set_stderr.strip()}"
+                f"\nclone_path={clone_path}, url={url}"
+            )
+
+
 def _resolve_clone_source(source: Path, detected_url: str) -> str:
     """Select the clone source for the proceed git-clone strategy.
 
@@ -286,28 +326,27 @@ def clone_repo(
     # Use caller-supplied override if provided; fall back to pre-clone detected URL
     effective_url = remote_url if remote_url else detected_url
 
-    # Enforce invariant: clone.origin == effective_url at creation time (INIT_ONLY field gate)
+    # Isolate the clone: store the real URL in 'upstream', set 'origin' to a local file:// URL
+    # that is unique to this clone path. Claude Code reads 'origin' to resolve the project root;
+    # a file:// URL cannot match any registered GitHub project, so the clone is treated as a
+    # fresh project rooted at clone_path — not aliased to the source repo.
     if effective_url:
-        rewrite_result = subprocess.run(
-            ["git", "remote", "set-url", "origin", effective_url],
+        _add_or_set_upstream(clone_path, effective_url)
+        set_origin = subprocess.run(
+            ["git", "remote", "set-url", "origin", f"file://{clone_path}"],
             cwd=str(clone_path),
             capture_output=True,
-            text=True,
         )
-        if rewrite_result.returncode != 0:
-            logger.warning(
-                "clone_repo_origin_rewrite_failed",
-                clone_path=str(clone_path),
-                remote_url=effective_url,
-                stderr=rewrite_result.stderr.strip(),
+        if set_origin.returncode != 0:
+            set_origin_stderr = (
+                set_origin.stderr.decode(errors="replace")
+                if isinstance(set_origin.stderr, bytes)
+                else set_origin.stderr
             )
-            if remote_url:
-                return {
-                    "error": "remote_url_rewrite_failed",
-                    "clone_path": str(clone_path),
-                    "remote_url": effective_url,
-                    "stderr": rewrite_result.stderr.strip(),
-                }
+            raise RuntimeError(
+                f"git remote set-url origin failed: {set_origin_stderr.strip()}"
+                f"\nclone_path={clone_path}"
+            )
 
     # Decontaminate: untrack inherited generated files
     ls_gen = subprocess.run(
@@ -466,7 +505,7 @@ def push_to_remote(
         }
 
     push_result = subprocess.run(
-        ["git", "push", "-u", "origin", branch],
+        ["git", "push", "-u", "upstream", branch],
         cwd=clone_path,
         capture_output=True,
         text=True,

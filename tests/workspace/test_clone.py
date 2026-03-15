@@ -278,13 +278,13 @@ def test_clone_output_stays_within_test_isolation_boundary(tmp_path: Path, git_r
 
 
 class TestCloneOriginContract:
-    """Contract: clone's git origin remote == the remote_url returned by clone_repo."""
+    """Contract: clone's origin is a unique file:// URL; real URL is in the upstream remote."""
 
-    def test_clone_origin_equals_remote_url_for_bare_upstream(self, tmp_path: Path) -> None:
-        """Clone's origin must be rewritten to the real upstream, not source_dir.
+    def test_clone_origin_is_file_url_and_upstream_holds_real_url(self, tmp_path: Path) -> None:
+        """Clone's origin must be a file:// URL (not source_dir or bare remote).
 
-        Before the fix: clone's origin = source_dir (local path), not the bare remote.
-        After the fix: clone's origin = bare_remote path = result["remote_url"].
+        After the fix: clone's origin = file://<clone_path>, upstream = real network URL.
+        This prevents Claude Code from aliasing the clone session to the source project.
         """
         bare_remote = tmp_path / "bare.git"
         bare_remote.mkdir()
@@ -312,7 +312,6 @@ class TestCloneOriginContract:
         remote_url = result["remote_url"]
 
         try:
-            # The clone's own origin must equal remote_url (the bare remote), NOT source_dir
             origin_in_clone = subprocess.run(
                 ["git", "remote", "get-url", "origin"],
                 cwd=str(clone_path),
@@ -320,13 +319,25 @@ class TestCloneOriginContract:
                 text=True,
                 check=True,
             ).stdout.strip()
+            upstream_in_clone = subprocess.run(
+                ["git", "remote", "get-url", "upstream"],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
 
-            assert origin_in_clone == remote_url, (
-                f"Clone's origin ({origin_in_clone!r}) should equal remote_url ({remote_url!r}), "
-                f"not source_dir ({str(source)!r})"
+            # origin is now a local file URL unique to this clone
+            assert origin_in_clone.startswith("file://"), (
+                f"Clone's origin ({origin_in_clone!r}) must be a file:// URL"
             )
             assert origin_in_clone != str(source), (
                 "Clone's origin must not be the local source_dir path"
+            )
+            # upstream holds the real push target
+            assert upstream_in_clone == remote_url, (
+                f"Clone's upstream ({upstream_in_clone!r}) should equal"
+                f" remote_url ({remote_url!r})"
             )
         finally:
             shutil.rmtree(clone_path.parent, ignore_errors=True)
@@ -351,12 +362,10 @@ class TestCloneOriginContract:
         finally:
             shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
 
-    def test_clone_local_strategy_origin_also_satisfies_contract(self, tmp_path: Path) -> None:
-        """clone_local strategy (copytree) should also satisfy the origin == remote_url contract.
+    def test_clone_local_strategy_also_sets_correct_remotes(self, tmp_path: Path) -> None:
+        """clone_local strategy (copytree) must also set origin=file:// and upstream=real URL.
 
-        Contract test — passes on main before the fix because copytree copies .git/config
-        verbatim (source's origin = bare_remote = remote_url). The rewrite in the fix is a
-        no-op for this path. This test guards against future regressions.
+        The rewrite applies to both the proceed (git clone) and clone_local (copytree) paths.
         """
         bare_remote = tmp_path / "bare.git"
         bare_remote.mkdir()
@@ -381,8 +390,21 @@ class TestCloneOriginContract:
                 text=True,
                 check=True,
             ).stdout.strip()
+            upstream_in_clone = subprocess.run(
+                ["git", "remote", "get-url", "upstream"],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
 
-            assert origin_in_clone == remote_url
+            assert origin_in_clone.startswith("file://"), (
+                f"clone_local origin ({origin_in_clone!r}) must be a file:// URL"
+            )
+            assert upstream_in_clone == remote_url, (
+                f"clone_local upstream ({upstream_in_clone!r}) should equal"
+                f" remote_url ({remote_url!r})"
+            )
         finally:
             shutil.rmtree(clone_path.parent, ignore_errors=True)
 
@@ -429,7 +451,10 @@ class TestCloneRepoRemoteUrlOverride:
         return source, bare
 
     def test_clone_repo_remote_url_override_applied(self, tmp_path: Path) -> None:
-        """When remote_url is provided, clone's origin is set to that URL (T_RU1)."""
+        """When remote_url is provided, clone's upstream is set to that URL (T_RU1).
+
+        After the fix: origin = file://<clone_path>, upstream = override_url.
+        """
         source, _bare = self._make_source_with_bare_remote(tmp_path)
         override_url = "https://github.com/example/repo.git"
 
@@ -444,13 +469,25 @@ class TestCloneRepoRemoteUrlOverride:
                 capture_output=True,
                 text=True,
             ).stdout.strip()
-            assert actual_origin == override_url
+            actual_upstream = subprocess.run(
+                ["git", "remote", "get-url", "upstream"],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            # origin is now a local file URL unique to this clone
+            assert actual_origin.startswith("file://")
+            # upstream holds the real push target (the override URL)
+            assert actual_upstream == override_url
             assert result["remote_url"] == override_url
         finally:
             shutil.rmtree(clone_path.parent, ignore_errors=True)
 
     def test_clone_repo_without_remote_url_uses_detected(self, tmp_path: Path) -> None:
-        """Without remote_url, clone uses the source's detected origin (T_RU2)."""
+        """Without remote_url, clone's upstream is set to the source's detected origin (T_RU2).
+
+        After the fix: origin = file://<clone_path>, upstream = detected bare remote path.
+        """
         source, bare = self._make_source_with_bare_remote(tmp_path)
 
         result = clone_repo(str(source), "test-run", strategy="proceed")
@@ -464,9 +501,16 @@ class TestCloneRepoRemoteUrlOverride:
                 capture_output=True,
                 text=True,
             ).stdout.strip()
-            # Without override, origin should equal the detected source origin (bare remote path)
-            assert actual_origin == result["remote_url"]
-            assert str(bare) in actual_origin
+            actual_upstream = subprocess.run(
+                ["git", "remote", "get-url", "upstream"],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            # origin is now a local file URL unique to this clone
+            assert actual_origin.startswith("file://")
+            # upstream holds the real push target (the detected bare remote)
+            assert actual_upstream == str(bare)
         finally:
             shutil.rmtree(clone_path.parent, ignore_errors=True)
 
@@ -832,7 +876,7 @@ class TestPushToRemoteProtectedBranch:
 
 class TestPushToRemoteMocked:
     def test_ds6_push_to_remote_calls_get_url_then_push(self) -> None:
-        """T_DS6: push_to_remote calls git remote get-url origin then git push -u origin."""
+        """T_DS6: push_to_remote calls git remote get-url origin then git push -u upstream."""
         mock_url = MagicMock()
         mock_url.returncode = 0
         mock_url.stdout = "git@github.com:org/repo.git\n"
@@ -850,9 +894,9 @@ class TestPushToRemoteMocked:
         first_call = mock_run.call_args_list[0]
         assert first_call[0][0] == ["git", "remote", "get-url", "origin"]
         assert first_call[1]["cwd"] == "/source"
-        # Second call: git push <url> <branch> from clone_path
+        # Second call: git push -u upstream <branch> from clone_path
         second_call = mock_run.call_args_list[1]
-        assert second_call[0][0] == ["git", "push", "-u", "origin", "main"]
+        assert second_call[0][0] == ["git", "push", "-u", "upstream", "main"]
         assert second_call[1]["cwd"] == "/clone"
 
     def test_ds7_push_to_remote_fails_when_no_origin(self) -> None:
@@ -978,7 +1022,7 @@ class TestPushToRemoteNonBare:
         assert "remote_url" in result
         assert str(remote) in result["remote_url"]
 
-        # Contract invariant: clone's own origin must equal the returned remote_url
+        # After the fix: origin is a file:// URL, upstream holds the real remote_url
         origin_in_clone = subprocess.run(
             ["git", "remote", "get-url", "origin"],
             cwd=result["clone_path"],
@@ -986,8 +1030,18 @@ class TestPushToRemoteNonBare:
             text=True,
             check=True,
         ).stdout.strip()
-        assert origin_in_clone == result["remote_url"], (
-            "Clone's origin must equal the returned remote_url"
+        upstream_in_clone = subprocess.run(
+            ["git", "remote", "get-url", "upstream"],
+            cwd=result["clone_path"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert origin_in_clone.startswith("file://"), (
+            "Clone's origin must be a file:// URL after the fix"
+        )
+        assert upstream_in_clone == result["remote_url"], (
+            "Clone's upstream must equal the returned remote_url"
         )
 
         import shutil

@@ -166,11 +166,16 @@ jobs:
       - name: Update pyproject.toml (integration)
         run: |
           python3 - <<'EOF'
-          import pathlib, os
+          import pathlib, os, sys
           p = pathlib.Path("pyproject.toml")
           old_ver = f'version = "{os.environ["OLD_VERSION"]}"'
           new_ver = f'version = "{os.environ["NEW_VERSION"]}"'
-          p.write_text(p.read_text().replace(old_ver, new_ver, 1))
+          old_content = p.read_text()
+          new_content = old_content.replace(old_ver, new_ver, 1)
+          if new_content == old_content:
+              print(f"ERROR: version pattern {old_ver!r} not found in pyproject.toml", file=sys.stderr)
+              sys.exit(1)
+          p.write_text(new_content)
           EOF
         env:
           OLD_VERSION: ${{ steps.integration_version.outputs.old }}

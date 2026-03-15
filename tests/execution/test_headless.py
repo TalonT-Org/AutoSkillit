@@ -18,6 +18,7 @@ from autoskillit.execution.headless import (
     _ensure_skill_prefix,
     _extract_worktree_path,
     _resolve_model,
+    _scan_jsonl_write_paths,
 )
 from tests.conftest import _make_result, _make_timeout_result
 
@@ -2272,36 +2273,28 @@ class TestRunHeadlessCorePassesCwd:
         assert "/some/test/cwd" in prompt_arg
 
 
-# ---------------------------------------------------------------------------
-# Test: _scan_jsonl_write_paths
-# ---------------------------------------------------------------------------
+def _make_tool_use_line(name: str, input_dict: dict) -> str:
+    return json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "tool_use", "name": name, "id": "x", "input": input_dict}]
+            },
+        }
+    )
 
 
 class TestScanJsonlWritePaths:
     CWD = "/clone/worktree"
 
-    def _tool_use_line(self, name: str, input_dict: dict) -> str:
-        return json.dumps(
-            {
-                "type": "assistant",
-                "message": {
-                    "content": [{"type": "tool_use", "name": name, "id": "x", "input": input_dict}]
-                },
-            }
-        )
-
     def test_returns_empty_for_clean_write_inside_cwd(self):
-        from autoskillit.execution.headless import _scan_jsonl_write_paths
-
-        line = self._tool_use_line(
+        line = _make_tool_use_line(
             "Write", {"file_path": f"{self.CWD}/temp/out.md", "content": "x"}
         )
         assert _scan_jsonl_write_paths(line, self.CWD) == []
 
     def test_detects_write_outside_cwd(self):
-        from autoskillit.execution.headless import _scan_jsonl_write_paths
-
-        line = self._tool_use_line(
+        line = _make_tool_use_line(
             "Write", {"file_path": "/source/repo/temp/stolen.md", "content": "x"}
         )
         warnings = _scan_jsonl_write_paths(line, self.CWD)
@@ -2309,9 +2302,7 @@ class TestScanJsonlWritePaths:
         assert "/source/repo/temp/stolen.md" in warnings[0]
 
     def test_detects_edit_outside_cwd(self):
-        from autoskillit.execution.headless import _scan_jsonl_write_paths
-
-        line = self._tool_use_line(
+        line = _make_tool_use_line(
             "Edit",
             {
                 "file_path": "/source/repo/src/autoskillit/file.py",
@@ -2324,37 +2315,28 @@ class TestScanJsonlWritePaths:
         assert "Edit" in warnings[0]
 
     def test_detects_bash_with_absolute_path_outside_cwd(self):
-        from autoskillit.execution.headless import _scan_jsonl_write_paths
-
-        line = self._tool_use_line(
+        line = _make_tool_use_line(
             "Bash", {"command": "cat /source/repo/README.md > /tmp/out.txt"}
         )
         warnings = _scan_jsonl_write_paths(line, self.CWD)
+        assert len(warnings) >= 1
         assert any("/source/repo" in w for w in warnings)
 
     def test_no_warnings_for_empty_stdout(self):
-        from autoskillit.execution.headless import _scan_jsonl_write_paths
-
         assert _scan_jsonl_write_paths("", self.CWD) == []
 
     def test_no_warnings_for_malformed_jsonl(self):
-        from autoskillit.execution.headless import _scan_jsonl_write_paths
-
         assert _scan_jsonl_write_paths("not json at all\n{broken", self.CWD) == []
 
     def test_no_warnings_for_read_only_tool_calls(self):
-        from autoskillit.execution.headless import _scan_jsonl_write_paths
-
-        line = self._tool_use_line("Read", {"file_path": "/source/repo/some_file.py"})
+        line = _make_tool_use_line("Read", {"file_path": "/source/repo/some_file.py"})
         assert _scan_jsonl_write_paths(line, self.CWD) == []
 
     def test_multiple_violations_in_one_session(self):
-        from autoskillit.execution.headless import _scan_jsonl_write_paths
-
         lines = "\n".join(
             [
-                self._tool_use_line("Write", {"file_path": "/source/repo/a.md", "content": "x"}),
-                self._tool_use_line(
+                _make_tool_use_line("Write", {"file_path": "/source/repo/a.md", "content": "x"}),
+                _make_tool_use_line(
                     "Edit",
                     {"file_path": "/source/repo/b.py", "old_string": "a", "new_string": "b"},
                 ),
@@ -2373,31 +2355,18 @@ class TestScanJsonlWritePaths:
         assert len(warnings) == 2
 
     def test_no_warning_when_cwd_empty(self):
-        from autoskillit.execution.headless import _scan_jsonl_write_paths
-
-        line = self._tool_use_line("Write", {"file_path": "/any/path/file.md", "content": "x"})
+        line = _make_tool_use_line("Write", {"file_path": "/any/path/file.md", "content": "x"})
         assert _scan_jsonl_write_paths(line, "") == []
 
-
-# ---------------------------------------------------------------------------
-# Test: _build_skill_result with write_path_warnings
-# ---------------------------------------------------------------------------
+    def test_no_warning_when_cwd_is_relative(self):
+        line = _make_tool_use_line("Write", {"file_path": "/any/path/file.md", "content": "x"})
+        assert _scan_jsonl_write_paths(line, "relative/path") == []
 
 
 class TestBuildSkillResultWritePathWarnings:
-    def _tool_use_ndjson(self, name: str, input_dict: dict) -> str:
-        return json.dumps(
-            {
-                "type": "assistant",
-                "message": {
-                    "content": [{"type": "tool_use", "name": name, "id": "x", "input": input_dict}]
-                },
-            }
-        )
-
     def test_write_path_warnings_empty_for_clean_session(self):
         stdout = (
-            self._tool_use_ndjson(
+            _make_tool_use_line(
                 "Write", {"file_path": "/clone/worktree/temp/out.md", "content": "x"}
             )
             + "\n"
@@ -2409,7 +2378,7 @@ class TestBuildSkillResultWritePathWarnings:
 
     def test_write_path_warnings_populated_for_contaminated_session(self):
         stdout = (
-            self._tool_use_ndjson(
+            _make_tool_use_line(
                 "Write", {"file_path": "/source/repo/temp/stolen.md", "content": "x"}
             )
             + "\n"
@@ -2422,7 +2391,7 @@ class TestBuildSkillResultWritePathWarnings:
 
     def test_write_path_warnings_appear_in_to_json(self):
         stdout = (
-            self._tool_use_ndjson("Write", {"file_path": "/source/repo/bad.md", "content": "x"})
+            _make_tool_use_line("Write", {"file_path": "/source/repo/bad.md", "content": "x"})
             + "\n"
             + _success_session_json("Done %%DONE%%")
         )
@@ -2446,7 +2415,7 @@ class TestBuildSkillResultWritePathWarnings:
             }
         )
         stdout = (
-            self._tool_use_ndjson("Write", {"file_path": "/source/repo/bad.md", "content": "x"})
+            _make_tool_use_line("Write", {"file_path": "/source/repo/bad.md", "content": "x"})
             + "\n"
             + path_token_line
             + "\n"

@@ -116,6 +116,7 @@ class GitHubConfig:
     token: str | None = None
     default_repo: str | None = None
     in_progress_label: str = "in-progress"
+    staged_label: str = "staged"
 
 
 @dataclass
@@ -300,6 +301,7 @@ class AutomationConfig:
                 token=val(gh, "token", _gh["token"]) or None,
                 default_repo=val(gh, "default_repo", _gh["default_repo"]) or None,
                 in_progress_label=str(val(gh, "in_progress_label", _gh["in_progress_label"])),
+                staged_label=str(val(gh, "staged_label", _gh["staged_label"])),
             ),
             report_bug=ReportBugConfig(
                 timeout=int(val(rb, "timeout", _rb["timeout"])),

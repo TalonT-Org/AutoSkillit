@@ -119,7 +119,7 @@ async def wait_for_ci(
 
     result = await tool_ctx.ci_watcher.wait(
         branch,
-        repo=resolved_repo,
+        repo=resolved_repo or None,
         scope=scope,
         timeout_seconds=timeout_seconds,
         cwd=cwd,

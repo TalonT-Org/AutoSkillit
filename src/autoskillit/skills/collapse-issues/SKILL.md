@@ -48,6 +48,10 @@ Grouping analysis is performed as in-context LLM reasoning. No parallel sessions
 - Use parallel session spawning (Agent/Task) for grouping analysis — it is in-context LLM reasoning
 - Create files outside `temp/collapse-issues/`
 - Skip emitting the `---collapse-issues-result---` block (emit even on error or no-collapse)
+- Summarize, paraphrase, truncate, or abbreviate the body of a source issue
+- Substitute a hyperlink, URL reference, or cross-reference for inlined body content
+- Use angle-bracket placeholder syntax (`<...>`) in the combined issue body — always paste actual retrieved content from fetch_github_issue
+- Use the body field from `gh issue list` for body assembly — only fetched_content[N] from per-issue fetch is authoritative
 
 **ALWAYS:**
 - Include `--force` on all label creation calls (`gh label create --force`) for idempotency
@@ -87,7 +91,7 @@ If repo cannot be resolved, emit result block with `{"error": "repo resolution f
 ### Step 3: Fetch Triaged Issues
 
 ```bash
-gh issue list --state open --json number,title,body,labels --limit 200 [--repo {repo}]
+gh issue list --state open --json number,title,labels --limit 200 [--repo {repo}]
 ```
 
 - Filter to issues that carry at least one `recipe:*` label (e.g., `recipe:implementation`, `recipe:remediation`)
@@ -135,7 +139,22 @@ If no groups meet the threshold: emit `no-collapse` result block and exit:
 ---/collapse-issues-result---
 ```
 
-### Step 5: Dry-run Gate
+### Step 5: Fetch Full Issue Content
+
+For each issue in each qualifying group (not standalone issues), call:
+
+    fetch_github_issue(issue_url, include_comments=true)
+
+where `issue_url` is constructed as:
+    https://github.com/{repo}/issues/{number}
+
+Store the returned `content` field for each issue. If `fetch_github_issue` returns
+`success: false` for an issue, log the failure and proceed using the issue title
+and a note that full body content was unavailable (do not fabricate body content).
+
+This step produces the `fetched_content[N]` mapping used in Step 7b.
+
+### Step 6: Dry-run Gate
 
 If `--dry-run` is set: print the proposed groups in human-readable form:
 
@@ -157,45 +176,69 @@ Emit result block with `"dry_run": true` and exit without any GitHub mutations:
 ---/collapse-issues-result---
 ```
 
-### Step 6: Create Combined Issues
+### Step 7: Create Combined Issues
 
 For each qualifying group (in-context LLM reasoning for title synthesis):
 
-**6a. Synthesize title:**
+**7a. Synthesize title:**
 
 Write a title that describes the combined scope of all issues in the group.
 Format: `"Combined: <descriptive scope phrase>"`
 
-**6b. Build combined issue body:**
+**7b. Build combined issue body:**
 
 ```
 <!-- Collapses: #N, #M, #P -->
 
 This issue combines related work originally tracked in #N, #M, and #P.
 
-## From #N: <original title of issue N>
+## From #N: {original title of issue N}
 
-<full body of issue N, verbatim>
+{Paste the complete, unmodified text of fetched_content[N].body here exactly
+as returned by fetch_github_issue. Do not summarize, paraphrase, truncate, or
+abbreviate any part of the body. Do not substitute a hyperlink, cross-reference,
+or descriptive sentence. Every heading, list item, code block, and paragraph
+from the original issue body must appear here without alteration.
+
+SWITCH TO COPY MODE: The preceding title-synthesis step required generative
+reasoning. This step requires strict verbatim reproduction — do not compose or
+generate new prose. Copy only.}
 
 ---
 
-## From #M: <original title of issue M>
+## From #M: {original title of issue M}
 
-<full body of issue M, verbatim>
+{Paste the complete, unmodified text of fetched_content[M].body here exactly
+as returned by fetch_github_issue. Do not summarize, paraphrase, truncate, or
+abbreviate any part of the body. Do not substitute a hyperlink, cross-reference,
+or descriptive sentence. Every heading, list item, code block, and paragraph
+from the original issue body must appear here without alteration.
+
+SWITCH TO COPY MODE: The preceding title-synthesis step required generative
+reasoning. This step requires strict verbatim reproduction — do not compose or
+generate new prose. Copy only.}
 
 ---
 
-## From #P: <original title of issue P>
+## From #P: {original title of issue P}
 
-<full body of issue P, verbatim>
+{Paste the complete, unmodified text of fetched_content[P].body here exactly
+as returned by fetch_github_issue. Do not summarize, paraphrase, truncate, or
+abbreviate any part of the body. Do not substitute a hyperlink, cross-reference,
+or descriptive sentence. Every heading, list item, code block, and paragraph
+from the original issue body must appear here without alteration.
+
+SWITCH TO COPY MODE: The preceding title-synthesis step required generative
+reasoning. This step requires strict verbatim reproduction — do not compose or
+generate new prose. Copy only.}
 ```
 
-**6c. Collect labels:**
+**7c. Collect labels:**
 
 Union of all non-`batch:*` labels from the original issues in the group. Typically this
 is the shared `recipe:*` label plus any `enhancement`/`bug` labels.
 
-**6d. Ensure labels exist** (skip if `--no-label`):
+**7d. Ensure labels exist** (skip if `--no-label`):
 
 ```bash
 gh label create "recipe:implementation" --force [--repo {repo}]
@@ -204,7 +247,7 @@ gh label create "enhancement" --force [--repo {repo}]
 
 Repeat for each unique label in the collected set (e.g., `recipe:remediation`, `bug`), always with `--force`.
 
-**6e. Create combined issue:**
+**7e. Create combined issue:**
 
 ```bash
 gh issue create \
@@ -217,11 +260,11 @@ gh issue create \
 
 Capture the new issue number from the URL in stdout output.
 
-### Step 7: Close Original Issues
+### Step 8: Close Original Issues
 
 For each original issue that was collapsed (one by one, in order):
 
-**7a. Post closing comment:**
+**8a. Post closing comment:**
 
 ```bash
 gh issue comment {orig_number} \
@@ -229,13 +272,13 @@ gh issue comment {orig_number} \
   [--repo {repo}]
 ```
 
-**7b. Close the issue:**
+**8b. Close the issue:**
 
 ```bash
 gh issue close {orig_number} [--repo {repo}]
 ```
 
-### Step 8: Emit Result Block
+### Step 9: Emit Result Block
 
 ```
 ---collapse-issues-result---

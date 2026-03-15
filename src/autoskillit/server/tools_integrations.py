@@ -932,6 +932,8 @@ async def release_issue(
                     "success": False,
                     "issue_number": issue_number,
                     "label": effective_label,
+                    "staged": False,
+                    "staged_label": None,
                 }
             )
 
@@ -954,6 +956,8 @@ async def release_issue(
                 return json.dumps(
                     {
                         "success": False,
+                        "issue_number": issue_number,
+                        "label": effective_label,
                         "error": (
                             f"Failed to ensure staged label: {ensure_result.get('error', '?')}"
                         ),
@@ -967,6 +971,8 @@ async def release_issue(
                 return json.dumps(
                     {
                         "success": False,
+                        "issue_number": issue_number,
+                        "label": effective_label,
                         "error": f"Failed to apply staged label: {apply_result.get('error', '?')}",
                     }
                 )

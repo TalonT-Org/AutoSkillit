@@ -6,10 +6,7 @@ import subprocess
 
 
 def test_resolve_ingredient_defaults_uses_upstream_when_origin_is_file_url(tmp_path):
-    """
-    resolve_ingredient_defaults must return the upstream URL when origin is file://.
-    Currently FAILS: function reads origin only and returns the file:// URL as source_dir.
-    """
+    """resolve_ingredient_defaults must return the upstream URL when origin is file://."""
     from autoskillit.server.helpers import resolve_ingredient_defaults
 
     # Create repo with file:// origin and real URL upstream

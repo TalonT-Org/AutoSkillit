@@ -80,3 +80,29 @@ Act on this list as follows:
 3. Each subsequent part's worktree must be created from the post-merge state of
    the base branch — not from the original base commit.
 4. **Never batch-implement** multiple parts from the same base commit.
+
+---
+
+## MULTIPLE ISSUES — MANDATORY
+
+When the user provides **more than one issue or task** in a single request:
+
+1. **If the user says "parallel"** (or "run in parallel", "simultaneously", "at the
+   same time", "concurrently") → launch N independent pipeline sessions **immediately**.
+   No questions, no pushback, no alternative suggestions.
+
+2. **If the user says "sequential"** (or "one at a time", "in order", "one by one") →
+   run them one at a time without asking.
+
+3. **If the user does not specify** → ask **exactly one question** using AskUserQuestion:
+   > "Do you want to run these sequentially (one at a time) or in parallel (all at once)?"
+   Present exactly **two options**. Nothing else.
+
+**NEVER:**
+- Claim "the recipe handles one issue at a time" — each pipeline instance is fully
+  independent (separate clones, branches, PRs). Parallel execution is fully supported.
+- Suggest switching to `implementation-groups` — that recipe is for coordinated
+  multi-issue planning with a shared plan, not independent parallel execution.
+- Suggest picking a subset of the given issues — the user chose the scope.
+- Offer any option other than sequential or parallel when asking.
+- Ask the user to clarify scope, prioritization, or issue ordering.

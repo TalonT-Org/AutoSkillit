@@ -201,3 +201,30 @@ def test_show_cook_preview_no_diagram(monkeypatch, tmp_path, capsys):
     assert "A thing" in captured.out
     # No diagram header
     assert "RECIPE" not in captured.out
+
+
+# MI1
+def test_orchestrator_prompt_contains_multi_issue_guidance():
+    """System prompt must document the sequential vs parallel decision for multiple issues."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    # The sous-chef content is injected into the prompt; the rule must be present
+    lower = prompt.lower()
+    assert "sequential" in lower, "Prompt must mention sequential execution mode"
+    assert "parallel" in lower, "Prompt must mention parallel execution mode"
+    assert "multiple" in lower or "issues" in lower, (
+        "Prompt must reference multiple issues context"
+    )
+
+
+# MI2
+def test_orchestrator_prompt_multi_issue_ask_only_two_options():
+    """When mode unspecified, prompt must prescribe asking sequential-or-parallel only."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    # Must tell the orchestrator to ask the user — no other alternatives offered
+    assert "sequential or parallel" in prompt.lower(), (
+        "Prompt must instruct orchestrator to ask 'sequential or parallel?'"
+    )

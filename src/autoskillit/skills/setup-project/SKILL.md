@@ -137,7 +137,7 @@ Consolidate subagent findings into a structured profile:
 - Current git branch (for `base_branch` default)
 - Discovered workflow patterns from conversation history (if opted in) — recurring tool sequences and skill chains, ranked by frequency, with candidate recipe drafts
 
-### Step 3: Write Analysis to temp/
+### Step 3: Write Analysis to temp/ (relative to the current working directory)
 
 Before presenting anything interactively, write the full analysis (project profile, workflow patterns, candidate workflows, shell command patterns) to:
 

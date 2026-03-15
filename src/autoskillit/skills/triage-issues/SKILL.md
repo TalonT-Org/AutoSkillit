@@ -35,7 +35,7 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Pause for human input on ambiguous classifications
-- Write the triage report and manifest to `temp/triage-issues/`
+- Write the triage report and manifest to `temp/triage-issues/` (relative to the current working directory)
 - Use `gh` CLI for all GitHub operations (not raw API calls)
 - Include rationale for every recipe classification
 - Record human decisions in the final report

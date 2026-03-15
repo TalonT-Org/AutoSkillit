@@ -125,7 +125,7 @@ Use graph with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `temp/autoskillit:arch-lens-module-dependency/arch_diag_module_dependency_{YYYY-MM-DD_HHMMSS}.md`
+Write the diagram to: `temp/autoskillit:arch-lens-module-dependency/arch_diag_module_dependency_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After writing the diagram file, emit a structured output line:
 

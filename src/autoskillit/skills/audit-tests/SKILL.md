@@ -32,7 +32,7 @@ Audit the test suite to identify useless tests, consolidation opportunities, qua
 - Use subagents for parallel exploration
 - Read both the test AND the code it tests before judging
 - Provide file paths, line numbers, and an explanation for each finding
-- Write the improvement plan to `temp/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md`
+- Write the improvement plan to `temp/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - Categorize findings by issue type and severity
 
 ---
@@ -151,7 +151,7 @@ After subagents complete:
 
 ### Step 3: Generate Improvement Plan
 
-Write a structured plan to: `temp/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md`
+Write a structured plan to: `temp/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 Organize the plan into phases grouped by issue type. Each finding must include:
 - **File path and line range**

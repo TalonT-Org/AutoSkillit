@@ -21,7 +21,7 @@ Creates comprehensive architecture diagrams for selected components or systems u
 - Ask user which component/system to diagram
 - Use the `/autoskillit:mermaid` skill for diagram creation
 - Include multiple views (data flow, component structure, sequence diagrams)
-- Save diagrams to `temp/make-arch-diag/{component-name}/`
+- Save diagrams to `temp/make-arch-diag/{component-name}/` (relative to the current working directory)
 - Use consistent color coding across all diagrams
 
 **NEVER:**

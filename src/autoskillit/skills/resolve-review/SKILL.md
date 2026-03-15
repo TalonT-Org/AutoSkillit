@@ -220,7 +220,7 @@ Test iterations: {n}
 Status: PASS
 ```
 
-Save full report to `temp/resolve-review/report_{pr_number}_{timestamp}.md`.
+Save full report to `temp/resolve-review/report_{pr_number}_{timestamp}.md`. (relative to the current working directory)
 
 Exit 0.
 

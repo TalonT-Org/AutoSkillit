@@ -406,7 +406,7 @@ After all subagents return:
 
 Ensure `temp/audit-cohesion/` exists (`mkdir -p`).
 
-Write to `temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md`.
+Write to `temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md`. (relative to the current working directory)
 
 The report WILL be long. This is expected and correct — thoroughness over brevity.
 

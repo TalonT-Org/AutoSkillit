@@ -65,7 +65,7 @@ Drop anything that doesn't meaningfully inform the decision.
 
 ### Step 4: Write Review
 
-Save to: `temp/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md`
+Save to: `temp/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ```markdown
 # Approach Review: {Topic}

@@ -2019,3 +2019,239 @@ class TestRetryBudgetEnforcement:
         )
         assert sr.needs_retry is False
         assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED
+
+
+# ---------------------------------------------------------------------------
+# Test: _inject_cwd_anchor (Step 1a)
+# ---------------------------------------------------------------------------
+
+
+class TestInjectCwdAnchor:
+    def test_appends_cwd_directive(self):
+        from autoskillit.execution.headless import _inject_cwd_anchor
+
+        result = _inject_cwd_anchor("/investigate foo", "/some/clone/path")
+        assert "WORKING DIRECTORY ANCHOR" in result
+        assert "/some/clone/path" in result
+        assert "/investigate foo" in result
+
+    def test_preserves_original_command(self):
+        from autoskillit.execution.headless import _inject_cwd_anchor
+
+        original = "Use /autoskillit:make-plan detailed prompt here"
+        result = _inject_cwd_anchor(original, "/clone/dir")
+        assert result.startswith(original)
+
+    def test_directive_mentions_temp_and_read_only(self):
+        from autoskillit.execution.headless import _inject_cwd_anchor
+
+        result = _inject_cwd_anchor("cmd", "/wd")
+        assert "temp/" in result
+        assert "READ-ONLY" in result
+
+
+# ---------------------------------------------------------------------------
+# Test: _extract_output_paths (Step 1b)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractOutputPaths:
+    def test_extracts_single_path(self):
+        from autoskillit.execution.headless import _extract_output_paths
+
+        msgs = ["plan_path = /correct/path/temp/make-plan/foo.md"]
+        result = _extract_output_paths(msgs)
+        assert result == {"plan_path": "/correct/path/temp/make-plan/foo.md"}
+
+    def test_extracts_multiple_tokens(self):
+        from autoskillit.execution.headless import _extract_output_paths
+
+        msg = (
+            "plan_path = /clone/temp/make-plan/plan.md\n"
+            "report_path = /clone/temp/report/report.md\n"
+            "investigation_path = /clone/temp/investigate/inv.md"
+        )
+        result = _extract_output_paths([msg])
+        assert result == {
+            "plan_path": "/clone/temp/make-plan/plan.md",
+            "report_path": "/clone/temp/report/report.md",
+            "investigation_path": "/clone/temp/investigate/inv.md",
+        }
+
+    def test_returns_empty_when_no_tokens(self):
+        from autoskillit.execution.headless import _extract_output_paths
+
+        result = _extract_output_paths(["no tokens here", "just regular text"])
+        assert result == {}
+
+    def test_ignores_non_absolute_paths(self):
+        from autoskillit.execution.headless import _extract_output_paths
+
+        result = _extract_output_paths(["plan_path = temp/make-plan/foo.md"])
+        assert result == {}
+
+    def test_extracts_from_multiple_messages(self):
+        from autoskillit.execution.headless import _extract_output_paths
+
+        msgs = [
+            "plan_path = /first/path",
+            "report_path = /second/path",
+        ]
+        result = _extract_output_paths(msgs)
+        assert result == {
+            "plan_path": "/first/path",
+            "report_path": "/second/path",
+        }
+
+    def test_last_occurrence_wins(self):
+        from autoskillit.execution.headless import _extract_output_paths
+
+        msgs = [
+            "plan_path = /first/path",
+            "plan_path = /second/path",
+        ]
+        result = _extract_output_paths(msgs)
+        assert result == {"plan_path": "/second/path"}
+
+
+# ---------------------------------------------------------------------------
+# Test: _validate_output_paths (Step 1c)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateOutputPaths:
+    def test_returns_none_when_all_paths_under_cwd(self):
+        from autoskillit.execution.headless import _validate_output_paths
+
+        paths = {
+            "plan_path": "/clone/path/temp/make-plan/foo.md",
+            "report_path": "/clone/path/temp/report/bar.md",
+        }
+        result = _validate_output_paths(paths, "/clone/path")
+        assert result is None
+
+    def test_returns_diagnostic_when_path_outside_cwd(self):
+        from autoskillit.execution.headless import _validate_output_paths
+
+        paths = {
+            "plan_path": "/source/repo/temp/make-plan/foo.md",
+        }
+        result = _validate_output_paths(paths, "/clone/path")
+        assert result is not None
+        assert "plan_path" in result
+        assert "/source/repo/temp/make-plan/foo.md" in result
+        assert "/clone/path" in result
+
+    def test_returns_none_for_empty_paths(self):
+        from autoskillit.execution.headless import _validate_output_paths
+
+        result = _validate_output_paths({}, "/clone/path")
+        assert result is None
+
+    def test_cwd_trailing_slash_handling(self):
+        from autoskillit.execution.headless import _validate_output_paths
+
+        paths = {"plan_path": "/clone/path/temp/foo.md"}
+        assert _validate_output_paths(paths, "/clone/path/") is None
+        assert _validate_output_paths(paths, "/clone/path") is None
+
+    def test_multiple_violations(self):
+        from autoskillit.execution.headless import _validate_output_paths
+
+        paths = {
+            "plan_path": "/wrong/temp/plan.md",
+            "report_path": "/wrong/temp/report.md",
+        }
+        result = _validate_output_paths(paths, "/clone")
+        assert result is not None
+        assert "plan_path" in result
+        assert "report_path" in result
+
+
+# ---------------------------------------------------------------------------
+# Test: _build_skill_result path contamination detection (Step 1d)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildSkillResultPathContamination:
+    @staticmethod
+    def _assistant_ndjson(text: str) -> str:
+        """Build an NDJSON assistant message line."""
+        return json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"text": text}]},
+            }
+        )
+
+    def test_path_contamination_detected(self):
+        """Output paths outside cwd override success to False."""
+        path = "/wrong/source/repo/temp/make-plan/foo.md"
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {path}")
+            + "\n"
+            + _success_session_json("Plan created.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/correct/clone")
+        assert sr.success is False
+        assert sr.subtype == "path_contamination"
+        assert sr.needs_retry is True
+        assert sr.retry_reason == RetryReason.RESUME
+
+    def test_no_contamination_when_paths_under_cwd(self):
+        """All output paths under cwd yields normal result."""
+        path = "/correct/clone/temp/make-plan/foo.md"
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {path}")
+            + "\n"
+            + _success_session_json("Plan created.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/correct/clone")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_no_contamination_when_cwd_empty(self):
+        """Empty cwd skips path validation (backward compat)."""
+        path = "/any/path/temp/foo.md"
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {path}") + "\n" + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="")
+        assert sr.success is True
+
+    def test_no_contamination_when_no_path_tokens(self):
+        """No output path tokens means validation passes."""
+        stdout = _success_session_json("Done with no file output.")
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/clone/path")
+        assert sr.success is True
+
+
+# ---------------------------------------------------------------------------
+# Test: run_headless_core passes cwd (Step 1f)
+# ---------------------------------------------------------------------------
+
+
+class TestRunHeadlessCorePassesCwd:
+    @pytest.mark.anyio
+    async def test_cwd_anchor_injected_into_prompt(self, tool_ctx):
+        """Verify run_headless_core injects cwd anchor into the skill prompt."""
+        from autoskillit.execution.headless import run_headless_core
+
+        payload = _success_session_json("Result text %%ORDER_UP%%")
+        tool_ctx.runner.push(
+            SubprocessResult(0, payload, "", TerminationReason.NATURAL_EXIT, pid=1)
+        )
+        await run_headless_core(
+            "/autoskillit:investigate test",
+            "/some/test/cwd",
+            tool_ctx,
+        )
+        assert tool_ctx.runner.call_args_list, "Runner was never called"
+        last_cmd = tool_ctx.runner.call_args_list[-1][0]  # cmd is first element
+        cmd_str = " ".join(last_cmd)
+        assert "WORKING DIRECTORY ANCHOR" in cmd_str
+        assert "/some/test/cwd" in cmd_str

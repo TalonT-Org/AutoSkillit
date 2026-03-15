@@ -158,3 +158,70 @@ def test_no_shared_scratch_files(skill_name: str) -> None:
             f"Skill '{skill_name}' writes to shared scratch file '{scratch_file}'.\n"
             f"Use skill-scoped path: temp/{skill_name}/... with timestamp instead."
         )
+
+
+@pytest.mark.parametrize("skill_name", _get_file_producing_skills())
+def test_file_producing_skills_have_cwd_anchor(skill_name: str) -> None:
+    """Every file-producing skill must anchor temp/ writes to the current working directory."""
+    resolver = SkillResolver()
+    info = resolver.resolve(skill_name)
+    assert info is not None
+    content = info.path.read_text()
+
+    assert re.search(r"current working directory", content, re.IGNORECASE), (
+        f"Skill '{skill_name}' writes to temp/ but does not anchor paths to the "
+        f"current working directory. Add '(relative to the current working directory)' "
+        f"after the output path instruction."
+    )
+
+
+def test_output_path_tokens_synchronized() -> None:
+    """_OUTPUT_PATH_TOKENS must contain all path-bearing tokens from UNSPACED_OUTPUT_TOKEN."""
+    from autoskillit.execution.headless import _OUTPUT_PATH_TOKENS
+
+    # Non-path tokens whose values are not filesystem paths
+    non_path_tokens = frozenset(
+        {
+            "verdict",
+            "branch_name",
+            "group_files",
+            "pr_url",
+            "decision",
+            "needs_plan",
+            "deletion_regression",
+            "pr_number",
+            "pr_branch",
+            "pr_title",
+            "total_issues",
+            "batch_count",
+            "recipe_distribution",
+            "integration_branch",
+            "pr_count",
+            "simple_count",
+            "needs_check_count",
+            "ci_blocked_count",
+            "review_blocked_count",
+            "queue_mode",
+            "failure_type",
+            "is_fixable",
+            "escalation_required",
+            "escalation_reason",
+            "merged",
+            "worktree_path",  # handled separately by _extract_worktree_path
+        }
+    )
+
+    # Extract all token names from the UNSPACED_OUTPUT_TOKEN regex
+    token_pattern = re.compile(r"[a-z_]+")
+    # Get the pattern source, extract just the token alternation
+    raw = UNSPACED_OUTPUT_TOKEN.pattern
+    # Find everything between ^(?: and )=
+    match = re.search(r"\(\?:(.+?)\)=", raw, re.DOTALL)
+    assert match, "Could not parse UNSPACED_OUTPUT_TOKEN pattern"
+    all_tokens = set(token_pattern.findall(match.group(1)))
+    path_tokens = all_tokens - non_path_tokens
+
+    assert path_tokens <= _OUTPUT_PATH_TOKENS, (
+        f"Tokens in UNSPACED_OUTPUT_TOKEN but missing from _OUTPUT_PATH_TOKENS: "
+        f"{path_tokens - _OUTPUT_PATH_TOKENS}"
+    )

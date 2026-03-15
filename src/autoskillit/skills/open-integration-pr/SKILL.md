@@ -126,7 +126,7 @@ The loaded skill will read the PR context file written in step 1 above.
 
 **3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.
 
-The arch-lens skills write their output to `temp/arch-lens-{lens-name}/`. After each skill
+The arch-lens skills write their output to `temp/arch-lens-{lens-name}/`. After each skill (relative to the current working directory)
 runs, read the generated markdown file and extract the mermaid code block(s).
 
 After extracting the mermaid block, inspect its content for `★` or `●` characters:
@@ -135,7 +135,7 @@ After extracting the mermaid block, inspect its content for `★` or `●` chara
 
 ### Step 7: Compose PR Body
 
-Write to `temp/open-integration-pr/pr_body_{timestamp}.md`.
+Write to `temp/open-integration-pr/pr_body_{timestamp}.md`. (relative to the current working directory)
 
 ```markdown
 ## Integration Summary

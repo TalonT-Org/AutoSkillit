@@ -84,7 +84,7 @@ Prioritize guards by:
 
 Ensure `temp/design-guards/` exists (`mkdir -p`).
 
-Save to: `temp/design-guards/defense_guards_{YYYY-MM-DD_HHMMSS}.md`
+Save to: `temp/design-guards/defense_guards_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ```markdown
 # Defense Guards: {Report Title}

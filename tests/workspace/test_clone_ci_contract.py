@@ -15,25 +15,14 @@ from pathlib import Path
 import pytest
 
 from autoskillit.execution import resolve_remote_repo
-from autoskillit.execution.ci import _parse_repo_from_remote
 from autoskillit.workspace import clone_repo
-
-# ---------------------------------------------------------------------------
-# Explicit contract documentation
-# ---------------------------------------------------------------------------
-
-
-def test_parse_repo_from_file_url_returns_none() -> None:
-    """Documents the explicit contract — file:// → None."""
-    assert _parse_repo_from_remote("file:///home/user/run-123/repo") is None
-
 
 # ---------------------------------------------------------------------------
 # Primary cross-boundary integration test
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_resolve_remote_repo_after_clone_uses_upstream(tmp_path: Path) -> None:
     """
     clone_repo sets file:// origin and upstream=real_url.
@@ -82,7 +71,7 @@ async def test_resolve_remote_repo_after_clone_uses_upstream(tmp_path: Path) -> 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_infer_repo_from_remote_returns_empty_for_file_url(
     clone_isolation_repo: Path,
 ) -> None:

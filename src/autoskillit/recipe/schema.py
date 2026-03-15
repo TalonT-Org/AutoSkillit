@@ -83,7 +83,7 @@ class RecipeStep:
     skip_when_false: str | None = None
     model: str | None = None
     description: str = ""
-    sub_recipe: str | None = None  # Name of sub-recipe file (no extension); new discriminator
+    sub_recipe: str | None = None  # Name of sub-recipe file (no extension)
     gate: str | None = None  # Ingredient name whose value controls lazy loading
 
 

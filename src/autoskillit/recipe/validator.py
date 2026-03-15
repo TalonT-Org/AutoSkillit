@@ -73,8 +73,6 @@ def validate_recipe(recipe: Recipe) -> list[str]:
     ingredient_names = set(recipe.ingredients.keys())
 
     for step_name, step in recipe.steps.items():
-        # sub_recipe steps are placeholder steps — they are a distinct discriminator
-        # and exclude all other discriminators (tool/action/python/constant).
         if step.sub_recipe is not None:
             other_discriminators = [
                 d for d in ("tool", "action", "python", "constant") if getattr(step, d) is not None

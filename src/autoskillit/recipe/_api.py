@@ -549,7 +549,6 @@ def load_and_validate(
             active_recipe, combined_recipe = _build_active_recipe(
                 recipe, ingredient_overrides, _pdir
             )
-            # active_recipe is now the recipe to validate and serve
 
             # Stage: structural validation on active recipe
             errors = validate_recipe(active_recipe)

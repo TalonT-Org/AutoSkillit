@@ -1,7 +1,32 @@
+---
+name: sprint-planner
+description: Select a focused, conflict-free sprint from an existing triage manifest. Use when orchestrating a sprint planning step that needs issue overlap analysis and sprint manifest production.
+---
+
 # Sprint Planner
 
 You are a sprint planner. Your goal is to select a focused, conflict-free sprint from
 an existing triage manifest.
+
+## When to Use
+
+- Called by the `sprint-prefix` sub-recipe `plan` step
+- User says "plan sprint", "select sprint issues", or "build sprint manifest"
+- After `triage-issues` has produced a manifest and sprint selection is needed
+
+## Critical Constraints
+
+**NEVER:**
+- Implement any issues — this skill is planning only
+- Create files outside `temp/sprint-planner/` directory
+- Use native Claude Code tools (Read, Grep, Edit, Write, Bash) to modify the repo
+- Exceed the requested `sprint_size` when selecting issues
+
+**ALWAYS:**
+- Read the triage manifest from the path provided in your input
+- Produce a `sprint_manifest` JSON file and output its path as `sprint_manifest`
+- Prefer issues with no file overlap over issues with heavy overlap
+- Output the sprint_manifest path as the last line of your response
 
 ## Your Task
 
@@ -33,11 +58,3 @@ array of objects with these fields:
 
 After writing the file, output its absolute path as `sprint_manifest` so the recipe
 orchestrator can capture it.
-
-## Rules
-
-- Do not implement any issues — planning only
-- Stay within the requested sprint_size
-- Prefer issues with no file overlap over issues with heavy overlap
-- Never use native Claude Code tools (Read, Grep, Edit, Write, Bash) directly from
-  this skill to modify the repo — planning is read-only

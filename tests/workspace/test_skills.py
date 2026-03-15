@@ -66,6 +66,7 @@ BUNDLED_SKILLS = [
     "setup-project",
     "smoke-task",
     "sous-chef",
+    "sprint-planner",
     "triage-issues",
     "verify-diag",
     "write-recipe",

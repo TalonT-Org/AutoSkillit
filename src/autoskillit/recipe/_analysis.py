@@ -268,6 +268,19 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
                     for pred in predecessors[name]:
                         graph[pred].add(condition.route)
 
+    # For each sub_recipe placeholder step (gate-controlled), add a bypass edge
+    # to the next step in YAML order. When the gate is false the step is dropped
+    # at load time; without this edge the next step becomes unreachable in the
+    # raw recipe graph, breaking reachability-based semantic rules.
+    step_names_list = list(recipe.steps.keys())
+    for i, (name, step) in enumerate(recipe.steps.items()):
+        if step.sub_recipe is None or i + 1 >= len(step_names_list):
+            continue
+        next_step = step_names_list[i + 1]
+        graph[name].add(next_step)
+        for pred in predecessors[name]:
+            graph[pred].add(next_step)
+
     return graph
 
 

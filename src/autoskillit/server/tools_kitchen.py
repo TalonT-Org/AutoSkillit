@@ -11,15 +11,6 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit import __version__
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, TOOL_CATEGORIES, atomic_write, pkg_root
 from autoskillit.server import mcp
-
-
-def _get_ctx():
-    """Module-level wrapper for autoskillit.server._get_ctx, patchable in tests."""
-    from autoskillit.server import _get_ctx as _fn
-
-    return _fn()
-
-
 from autoskillit.server.helpers import (
     _apply_triage_gate,
     _find_recipe,
@@ -29,6 +20,13 @@ from autoskillit.server.helpers import (
     resolve_ingredient_defaults,
     track_response_size,
 )
+
+
+def _get_ctx():
+    """Module-level wrapper for autoskillit.server._get_ctx, patchable in tests."""
+    from autoskillit.server import _get_ctx as _fn
+
+    return _fn()
 
 
 def _write_hook_config() -> None:

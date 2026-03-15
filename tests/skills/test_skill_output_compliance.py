@@ -210,3 +210,23 @@ def test_output_path_tokens_synchronized() -> None:
         f"Missing: {expected_path_tokens - _OUTPUT_PATH_TOKENS}\n"
         f"Extra: {_OUTPUT_PATH_TOKENS - expected_path_tokens}"
     )
+
+
+def test_resolve_failures_skill_switches_code_index_to_worktree():
+    """resolve-failures must set_project_path to worktree_path after env setup."""
+    from pathlib import Path
+
+    skill_md = (
+        Path(__file__).parent.parent.parent / "src/autoskillit/skills/resolve-failures/SKILL.md"
+    ).read_text()
+    # Must contain a set_project_path call pointing at worktree_path (lowercase)
+    assert 'set_project_path(path="{worktree_path}")' in skill_md, (
+        "resolve-failures SKILL.md must switch code-index to {worktree_path} after env setup"
+    )
+    # The worktree switch must come after the initial PROJECT_ROOT init
+    project_root_idx = skill_md.find("PROJECT_ROOT")
+    worktree_switch_idx = skill_md.rfind('set_project_path(path="{worktree_path}")')
+    assert project_root_idx != -1 and worktree_switch_idx != -1
+    assert worktree_switch_idx > project_root_idx, (
+        "worktree_path code-index switch must appear after initial PROJECT_ROOT init"
+    )

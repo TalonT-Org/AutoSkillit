@@ -12,6 +12,7 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import get_logger
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
+from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.helpers import (
     _apply_triage_gate,
     _notify,
@@ -46,8 +47,6 @@ async def list_recipes() -> str:
     """
     if (h := _require_not_headless("list_recipes")) is not None:
         return h
-    from autoskillit.server._state import _get_ctx_or_none
-
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps([])
@@ -171,8 +170,6 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     """
     if (h := _require_not_headless("load_recipe")) is not None:
         return h
-    from autoskillit.server._state import _get_ctx_or_none
-
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"error": "Server not initialized"})
@@ -219,8 +216,6 @@ async def validate_recipe(script_path: str) -> str:
     """
     if (h := _require_not_headless("validate_recipe")) is not None:
         return h
-    from autoskillit.server._state import _get_ctx_or_none
-
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"valid": False, "errors": ["Server not initialized"]})

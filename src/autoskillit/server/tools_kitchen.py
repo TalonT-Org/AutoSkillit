@@ -8,8 +8,10 @@ from pathlib import Path
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
+from autoskillit import __version__
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, TOOL_CATEGORIES, atomic_write, pkg_root
 from autoskillit.server import mcp
+from autoskillit.server._state import _get_ctx
 from autoskillit.server.helpers import (
     _apply_triage_gate,
     _find_recipe,
@@ -112,11 +114,7 @@ async def open_kitchen(
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     _categories = _build_tool_category_listing()
 
-    from autoskillit import __version__
-
     if name is not None:
-        from autoskillit.server import _get_ctx
-
         tool_ctx = _get_ctx()
         if tool_ctx.recipes is None:
             return json.dumps({"error": "Server not initialized", "kitchen": "open"})

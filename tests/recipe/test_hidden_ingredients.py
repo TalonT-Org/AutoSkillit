@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from autoskillit.recipe._api import format_ingredients_table
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 
@@ -41,9 +39,7 @@ def test_hidden_ingredient_parsed() -> None:
                 "hidden": True,
             }
         },
-        "steps": {
-            "do_it": {"tool": "run_cmd", "with": {"cmd": "echo hi"}, "on_success": "done"}
-        },
+        "steps": {"do_it": {"tool": "run_cmd", "with": {"cmd": "echo hi"}, "on_success": "done"}},
     }
     recipe = _parse_recipe(data)
     assert recipe.ingredients["sprint_mode"].hidden is True
@@ -63,9 +59,7 @@ def test_hidden_ingredient_default_false() -> None:
                 "required": True,
             }
         },
-        "steps": {
-            "do_it": {"tool": "run_cmd", "with": {"cmd": "echo hi"}, "on_success": "done"}
-        },
+        "steps": {"do_it": {"tool": "run_cmd", "with": {"cmd": "echo hi"}, "on_success": "done"}},
     }
     recipe = _parse_recipe(data)
     assert recipe.ingredients["task"].hidden is False

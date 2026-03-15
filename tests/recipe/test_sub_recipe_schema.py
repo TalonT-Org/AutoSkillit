@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from autoskillit.recipe.io import _parse_step
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 from autoskillit.recipe.validator import validate_recipe
@@ -14,9 +12,7 @@ def _make_minimal_recipe(steps: dict, ingredients: dict | None = None) -> Recipe
         name="test-recipe",
         description="Test",
         ingredients=ingredients or {},
-        steps={
-            name: RecipeStep(**step_kwargs) for name, step_kwargs in steps.items()
-        },
+        steps={name: RecipeStep(**step_kwargs) for name, step_kwargs in steps.items()},
         kitchen_rules=["no native tools"],
     )
 

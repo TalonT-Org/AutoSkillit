@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import Severity
+from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe
+
+logger = get_logger(__name__)
 
 
 @semantic_rule(
@@ -46,7 +49,7 @@ def _unknown_sub_recipe(ctx: ValidationContext) -> list[RuleFinding]:
 def _circular_sub_recipe(ctx: ValidationContext) -> list[RuleFinding]:
     """Detect circular sub-recipe references using DFS."""
     findings: list[RuleFinding] = []
-    _detect_cycles(ctx.recipe, set(), findings)
+    _detect_cycles(ctx.recipe, set(), findings, project_dir=ctx.project_dir)
     return findings
 
 
@@ -55,6 +58,7 @@ def _detect_cycles(
     chain: set[str],
     findings: list[RuleFinding],
     *,
+    project_dir: Path | None = None,
     _loaded: dict[str, Recipe] | None = None,
 ) -> None:
     """DFS cycle detection across the sub-recipe reference graph.
@@ -63,7 +67,7 @@ def _detect_cycles(
     in `chain`, a cycle is detected. Otherwise, recurse into the sub-recipe
     if it can be loaded.
     """
-    from autoskillit.recipe.io import builtin_sub_recipes_dir, load_recipe
+    from autoskillit.recipe.io import builtin_sub_recipes_dir, find_sub_recipe_by_name, load_recipe
 
     if _loaded is None:
         _loaded = {}
@@ -87,13 +91,19 @@ def _detect_cycles(
             continue
         # Try to load the sub-recipe to inspect its steps
         if sr_name not in _loaded:
-            candidate = builtin_sub_recipes_dir() / f"{sr_name}.yaml"
-            if candidate.is_file():
-                try:
-                    _loaded[sr_name] = load_recipe(candidate)
-                except Exception:
+            candidate: Path | None = None
+            if project_dir is not None:
+                candidate = find_sub_recipe_by_name(sr_name, project_dir)
+            if candidate is None:
+                candidate = builtin_sub_recipes_dir() / f"{sr_name}.yaml"
+                if not candidate.is_file():
                     continue
-            else:
+            try:
+                _loaded[sr_name] = load_recipe(candidate)
+            except Exception:
+                logger.warning("sub_recipe_load_failed", name=sr_name, exc_info=True)
                 continue
         sub_recipe = _loaded[sr_name]
-        _detect_cycles(sub_recipe, chain | {sr_name}, findings, _loaded=_loaded)
+        _detect_cycles(
+            sub_recipe, chain | {sr_name}, findings, project_dir=project_dir, _loaded=_loaded
+        )

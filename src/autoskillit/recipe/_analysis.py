@@ -11,6 +11,7 @@ Neither contracts.py nor io.py imports _analysis.py, so no cycle exists.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import igraph
 
@@ -213,6 +214,7 @@ class ValidationContext:
     available_recipes: frozenset[str] = field(default_factory=frozenset)
     available_skills: frozenset[str] = field(default_factory=frozenset)
     available_sub_recipes: frozenset[str] = field(default_factory=frozenset)
+    project_dir: Path | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -559,6 +561,7 @@ def make_validation_context(
     available_recipes: frozenset[str] = frozenset(),
     available_skills: frozenset[str] = frozenset(),
     available_sub_recipes: frozenset[str] = frozenset(),
+    project_dir: Path | None = None,
 ) -> ValidationContext:
     """Build a ``ValidationContext`` from a recipe.
 
@@ -574,4 +577,5 @@ def make_validation_context(
         available_recipes=available_recipes,
         available_skills=available_skills,
         available_sub_recipes=available_sub_recipes,
+        project_dir=project_dir,
     )

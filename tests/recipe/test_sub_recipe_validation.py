@@ -5,12 +5,8 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
 from autoskillit.recipe._analysis import make_validation_context
-from autoskillit.recipe._api import _build_active_recipe
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
-from autoskillit.recipe.validator import validate_recipe
 
 
 def _make_parent_recipe(
@@ -100,7 +96,7 @@ def test_circular_sub_recipe_detected(tmp_path: Path) -> None:
         },
         kitchen_rules=["no native tools"],
     )
-    ctx = make_validation_context(recipe)
+    ctx = make_validation_context(recipe, project_dir=tmp_path)
     findings = run_semantic_rules(ctx)
     circular_findings = [f for f in findings if f.rule == "circular-sub-recipe"]
     assert circular_findings, "Expected circular-sub-recipe finding but got none"
@@ -126,9 +122,7 @@ def test_unknown_sub_recipe_name_detected() -> None:
         },
         kitchen_rules=["no native tools"],
     )
-    ctx = make_validation_context(
-        recipe, available_sub_recipes=frozenset({"other-sub"})
-    )
+    ctx = make_validation_context(recipe, available_sub_recipes=frozenset({"other-sub"}))
     findings = run_semantic_rules(ctx)
     unknown_findings = [f for f in findings if f.rule == "unknown-sub-recipe"]
     assert unknown_findings, "Expected unknown-sub-recipe finding but got none"
@@ -155,9 +149,7 @@ def test_known_sub_recipe_name_passes() -> None:
         },
         kitchen_rules=["no native tools"],
     )
-    ctx = make_validation_context(
-        recipe, available_sub_recipes=frozenset({"sprint-prefix"})
-    )
+    ctx = make_validation_context(recipe, available_sub_recipes=frozenset({"sprint-prefix"}))
     findings = run_semantic_rules(ctx)
     unknown_findings = [f for f in findings if f.rule == "unknown-sub-recipe"]
     assert not unknown_findings

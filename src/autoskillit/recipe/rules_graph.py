@@ -329,6 +329,8 @@ def _check_merge_base_unpublished(ctx: ValidationContext) -> list[RuleFinding]:
        lacks a push barrier — fire the rule.
     """
     recipe = ctx.recipe
+    if not recipe.steps:
+        return []
     findings = []
     entry = next(iter(recipe.steps))
     step_names = set(recipe.steps.keys())

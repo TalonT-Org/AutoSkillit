@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import json
-import textwrap
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 
 def _make_mock_recipes(load_result: dict) -> MagicMock:
@@ -39,12 +36,8 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
     mock_tool_ctx = _make_mock_ctx(mock_recipes)
 
     with (
-        patch(
-            "autoskillit.server.tools_recipe._require_not_headless", return_value=None
-        ),
-        patch(
-            "autoskillit.server.tools_recipe._get_ctx_or_none", return_value=mock_tool_ctx
-        ),
+        patch("autoskillit.server.tools_recipe._require_not_headless", return_value=None),
+        patch("autoskillit.server.tools_recipe._get_ctx_or_none", return_value=mock_tool_ctx),
         patch(
             "autoskillit.server.helpers.resolve_ingredient_defaults",
             return_value={},
@@ -57,9 +50,7 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
     ):
         from autoskillit.server.tools_recipe import load_recipe as _load_recipe_tool
 
-        result_str = await _load_recipe_tool(
-            name="test-recipe", overrides={"sprint_mode": "true"}
-        )
+        result_str = await _load_recipe_tool(name="test-recipe", overrides={"sprint_mode": "true"})
         result = json.loads(result_str)
         assert "error" not in result
 
@@ -84,9 +75,7 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
     mock_mcp_ctx.enable_components = AsyncMock()
 
     with (
-        patch(
-            "autoskillit.server.tools_kitchen._require_not_headless", return_value=None
-        ),
+        patch("autoskillit.server.tools_kitchen._require_not_headless", return_value=None),
         patch(
             "autoskillit.server.tools_kitchen._open_kitchen_handler",
             new_callable=AsyncMock,
@@ -140,9 +129,7 @@ async def test_unknown_override_key_ignored(tmp_path: Path) -> None:
         kitchen_rules=["no native tools"],
     )
     # Override for an ingredient that doesn't exist
-    active, combined = _build_active_recipe(
-        recipe, {"nonexistent_key": "true"}, tmp_path
-    )
+    active, combined = _build_active_recipe(recipe, {"nonexistent_key": "true"}, tmp_path)
     # Should not crash, recipe unchanged
     assert active is recipe
     assert combined is None

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -46,9 +45,7 @@ def test_unknown_sub_recipe_rule_fires() -> None:
 def test_unknown_sub_recipe_rule_passes_when_name_known() -> None:
     """No finding when sub_recipe name is in available_sub_recipes."""
     recipe = _make_recipe_with_sub_recipe("sprint-prefix")
-    ctx = make_validation_context(
-        recipe, available_sub_recipes=frozenset({"sprint-prefix"})
-    )
+    ctx = make_validation_context(recipe, available_sub_recipes=frozenset({"sprint-prefix"}))
     findings = run_semantic_rules(ctx)
     unknown = [f for f in findings if f.rule == "unknown-sub-recipe"]
     assert not unknown
@@ -70,9 +67,7 @@ def test_unknown_sub_recipe_rule_skips_non_sub_recipe_steps() -> None:
         },
         kitchen_rules=["no native tools"],
     )
-    ctx = make_validation_context(
-        recipe, available_sub_recipes=frozenset({"sprint-prefix"})
-    )
+    ctx = make_validation_context(recipe, available_sub_recipes=frozenset({"sprint-prefix"}))
     findings = run_semantic_rules(ctx)
     unknown = [f for f in findings if f.rule == "unknown-sub-recipe"]
     assert not unknown
@@ -82,7 +77,8 @@ def test_unknown_sub_recipe_rule_fails_open_when_registry_empty() -> None:
     """No finding when available_sub_recipes is empty (fail-open behavior)."""
     recipe = _make_recipe_with_sub_recipe("any-name")
     ctx = make_validation_context(
-        recipe, available_sub_recipes=frozenset()  # empty = fail open
+        recipe,
+        available_sub_recipes=frozenset(),  # empty = fail open
     )
     findings = run_semantic_rules(ctx)
     unknown = [f for f in findings if f.rule == "unknown-sub-recipe"]
@@ -99,9 +95,8 @@ def test_circular_sub_recipe_rule_fires(tmp_path: Path) -> None:
     ctx = make_validation_context(recipe)
     findings = run_semantic_rules(ctx)
     # Rule should have run (no crash) even if no cycle found (sprint-prefix doesn't exist)
-    all_rules_names = {f.rule for f in findings}
     # circular-sub-recipe only fires if a cycle is detected; no crash is the key assertion
-    assert True  # reached here without exception
+    assert isinstance(findings, list)  # reached here without exception
 
 
 def test_circular_sub_recipe_rule_passes_for_acyclic() -> None:
@@ -123,8 +118,7 @@ def test_rules_recipe_registered() -> None:
 
 def test_all_bundled_recipes_pass_rules_recipe() -> None:
     """All bundled recipes (including dev-sprint) pass rules_recipe semantic rules."""
-    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-    from autoskillit.recipe.io import builtin_sub_recipes_dir
+    from autoskillit.recipe.io import builtin_recipes_dir, builtin_sub_recipes_dir, load_recipe
 
     recipes_dir = builtin_recipes_dir()
     if not recipes_dir.is_dir():
@@ -139,9 +133,7 @@ def test_all_bundled_recipes_pass_rules_recipe() -> None:
 
     for recipe_path in sorted(recipes_dir.glob("*.yaml")):
         recipe = load_recipe(recipe_path)
-        ctx = make_validation_context(
-            recipe, available_sub_recipes=known_sub_recipes
-        )
+        ctx = make_validation_context(recipe, available_sub_recipes=known_sub_recipes)
         findings = run_semantic_rules(ctx)
         recipe_rules = [
             f for f in findings if f.rule in ("unknown-sub-recipe", "circular-sub-recipe")

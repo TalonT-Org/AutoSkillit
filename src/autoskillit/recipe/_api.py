@@ -576,6 +576,7 @@ def load_and_validate(
                 available_recipes=known,
                 available_skills=known_skills,
                 available_sub_recipes=known_sub_recipes,
+                project_dir=_pdir,
             )
             semantic_findings = run_semantic_rules(val_ctx)
             semantic_suggestions = findings_to_dicts(semantic_findings)

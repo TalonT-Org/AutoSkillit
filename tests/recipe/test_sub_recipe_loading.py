@@ -5,10 +5,7 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
-from autoskillit.recipe._api import _build_active_recipe, _drop_sub_recipe_step, _merge_sub_recipe
-from autoskillit.recipe.io import _parse_recipe, load_recipe
+from autoskillit.recipe._api import _build_active_recipe
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 
 
@@ -167,9 +164,7 @@ def test_merged_step_done_routes_to_on_success(tmp_path: Path) -> None:
     parent = _make_parent_recipe(on_success="clone")
     active, _ = _build_active_recipe(parent, {"sprint_mode": "true"}, tmp_path)
     # The sub-recipe step's on_success (was "done") should now route to parent's on_success
-    sprint_step = next(
-        (s for name, s in active.steps.items() if "check_sprint" in name), None
-    )
+    sprint_step = next((s for name, s in active.steps.items() if "check_sprint" in name), None)
     assert sprint_step is not None
     assert sprint_step.on_success == "clone"
 
@@ -195,9 +190,7 @@ def test_merged_step_escalate_routes_to_on_failure(tmp_path: Path) -> None:
 
     parent = _make_parent_recipe(on_failure="escalate")
     active, _ = _build_active_recipe(parent, {"sprint_mode": "true"}, tmp_path)
-    sprint_step = next(
-        (s for name, s in active.steps.items() if "check_sprint" in name), None
-    )
+    sprint_step = next((s for name, s in active.steps.items() if "check_sprint" in name), None)
     assert sprint_step is not None
     assert sprint_step.on_failure == "escalate"
 

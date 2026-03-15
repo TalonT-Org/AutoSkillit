@@ -2427,3 +2427,55 @@ class TestBuildSkillResultWritePathWarnings:
         assert sr.subtype == "path_contamination"
         # write_path_warnings also populated from JSONL scan
         assert len(sr.write_path_warnings) >= 1
+
+
+class TestBuildSkillResultChannelBPatternRecovery:
+    """When Channel B wins and pattern is absent from result but present in
+    assistant_messages, _build_skill_result should recover and produce success=True.
+    """
+
+    def test_build_skill_result_channel_b_recovers_pattern_from_assistant_messages(
+        self,
+    ) -> None:
+        """Channel B wins before stdout drain; pattern found in assistant_messages
+        → recovery produces success=True with block in result.
+        """
+        block = "---prepare-issue-result---\n{}\n---/prepare-issue-result---"
+        # Assistant message has the block but NOT a standalone %%ORDER_UP%% marker,
+        # so _recover_from_separate_marker will not activate. The new
+        # _recover_block_from_assistant_messages must find the block here instead.
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": block}],
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "",  # stdout not yet drained — Channel B won the race
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.COMPLETED,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["---prepare-issue-result---"],
+        )
+        assert sr.success is True
+        assert "---prepare-issue-result---" in sr.result

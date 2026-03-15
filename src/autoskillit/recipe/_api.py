@@ -270,6 +270,11 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
     4. Merge ingredients: add sub-recipe's non-hidden ingredients into parent.
     5. Merge kitchen_rules: union (deduplicated), sub-recipe rules appended.
     """
+    if placeholder_name not in parent.steps:
+        raise KeyError(
+            f"_merge_sub_recipe: placeholder step '{placeholder_name}' not found in "
+            f"recipe '{parent.name}'. Available steps: {list(parent.steps.keys())}"
+        )
     placeholder = parent.steps[placeholder_name]
     on_success = placeholder.on_success or "done"
     on_failure = placeholder.on_failure or "escalate"
@@ -316,7 +321,7 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
             on_success=_fix_route(sub_step.on_success),
             on_failure=_fix_route(sub_step.on_failure),
             on_context_limit=_fix_route(sub_step.on_context_limit),
-            on_exhausted=_fix_route(sub_step.on_exhausted) or "escalate",
+            on_exhausted=_fix_route(sub_step.on_exhausted),
             on_result=_fix_result_route(sub_step.on_result),
         )
         prefixed_steps[new_name] = new_step
@@ -380,20 +385,31 @@ def _build_active_recipe(
     combined: Any | None = None
     working = recipe
 
-    for step_name, step in sub_recipe_steps:
-        gate_name = step.gate or ""
-        gate_ingredient = working.ingredients.get(gate_name)
-        gate_default = gate_ingredient.default if gate_ingredient else "false"
-        gate_value = overrides.get(gate_name, gate_default or "false")
+    # Re-read each step from working.steps to get the current state after prior
+    # merge/drop operations, rather than using the stale reference from recipe.steps.
+    for step_name, _orig_step in sub_recipe_steps:
+        current_step = working.steps.get(step_name)
+        if current_step is None or current_step.sub_recipe is None:
+            continue
+        gate_name = current_step.gate or ""
+        gate_ingredient = working.ingredients.get(gate_name) if gate_name else None
+        gate_default: str = (gate_ingredient.default or "false") if gate_ingredient else "false"
+        gate_value = overrides.get(gate_name, gate_default)
 
         if gate_value.lower() in ("true", "1", "yes"):
-            sr_path = find_sub_recipe_by_name(step.sub_recipe, project_dir)
+            sr_path = find_sub_recipe_by_name(current_step.sub_recipe, project_dir)
             if sr_path is None:
                 raise FileNotFoundError(
-                    f"Sub-recipe '{step.sub_recipe}' not found. "
-                    f"Expected in recipes/sub-recipes/{step.sub_recipe}.yaml"
+                    f"Sub-recipe '{current_step.sub_recipe}' not found. "
+                    f"Expected in recipes/sub-recipes/{current_step.sub_recipe}.yaml"
                 )
-            sub_recipe = _load_recipe_from_path(sr_path)
+            try:
+                sub_recipe = _load_recipe_from_path(sr_path)
+            except (YAMLError, ValueError, OSError) as exc:
+                raise ValueError(
+                    f"Failed to load sub-recipe '{current_step.sub_recipe}' "
+                    f"(gate: {gate_name}={gate_value}): {exc}"
+                ) from exc
             working = _merge_sub_recipe(working, step_name, sub_recipe)
             combined = working
         else:

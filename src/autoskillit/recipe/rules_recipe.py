@@ -49,13 +49,13 @@ def _unknown_sub_recipe(ctx: ValidationContext) -> list[RuleFinding]:
 def _circular_sub_recipe(ctx: ValidationContext) -> list[RuleFinding]:
     """Detect circular sub-recipe references using DFS."""
     findings: list[RuleFinding] = []
-    _detect_cycles(ctx.recipe, set(), findings, project_dir=ctx.project_dir)
+    _detect_cycles(ctx.recipe, [], findings, project_dir=ctx.project_dir)
     return findings
 
 
 def _detect_cycles(
     recipe: Recipe,
-    chain: set[str],
+    chain: list[str],
     findings: list[RuleFinding],
     *,
     project_dir: Path | None = None,
@@ -75,11 +75,12 @@ def _detect_cycles(
     if _loaded is None:
         _loaded = {}
 
+    chain_set = set(chain)
     for step_name, step in recipe.steps.items():
         if step.sub_recipe is None:
             continue
         sr_name = step.sub_recipe
-        if sr_name in chain:
+        if sr_name in chain_set:
             findings.append(
                 RuleFinding(
                     rule="circular-sub-recipe",
@@ -87,7 +88,7 @@ def _detect_cycles(
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': sub_recipe '{sr_name}' creates a circular "
-                        f"reference. Chain: {' → '.join(sorted(chain))} → {sr_name}"
+                        f"reference. Chain: {' → '.join(chain)} → {sr_name}"
                     ),
                 )
             )
@@ -108,5 +109,5 @@ def _detect_cycles(
                 continue
         sub_recipe = _loaded[sr_name]
         _detect_cycles(
-            sub_recipe, chain | {sr_name}, findings, project_dir=project_dir, _loaded=_loaded
+            sub_recipe, chain + [sr_name], findings, project_dir=project_dir, _loaded=_loaded
         )

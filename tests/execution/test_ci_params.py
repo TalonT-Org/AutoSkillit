@@ -213,7 +213,7 @@ async def test_wait_calls_fetch_jobs_for_timed_out_run(httpx_mock):
     import re
 
     httpx_mock.add_response(
-        url=re.compile(r"actions/runs\?"),
+        url=re.compile(r"https://api\.github\.com/repos/owner/repo/actions/runs\?"),
         json={
             "workflow_runs": [
                 {
@@ -226,7 +226,7 @@ async def test_wait_calls_fetch_jobs_for_timed_out_run(httpx_mock):
         },
     )
     httpx_mock.add_response(
-        url=re.compile(r"actions/runs/5/jobs"),
+        url=re.compile(r"https://api\.github\.com/repos/owner/repo/actions/runs/5/jobs"),
         json={"jobs": [{"name": "unit", "conclusion": "timed_out"}]},
     )
     watcher = DefaultCIWatcher(token="tok")

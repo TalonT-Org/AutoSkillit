@@ -295,13 +295,25 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
 
 
 def _check_expected_patterns(result: str, patterns: Sequence[str]) -> bool:
-    """Return True if all expected_output_patterns are found in result, or if
+    """Return True if ALL expected_output_patterns are found in result, or if
     no patterns are configured. This check MUST run on all session outcome paths,
     including the Channel B bypass path.
+
+    AND semantics are intentional: patterns represent content contracts (e.g.,
+    block start/end delimiters) that must all be present simultaneously.
+
+    If any pattern is an invalid regex, returns False rather than raising.
     """
     if not patterns:
         return True
-    return all(re.search(p, result) for p in patterns)
+    for p in patterns:
+        try:
+            if not re.search(p, result):
+                return False
+        except re.error:
+            logger.warning("invalid_expected_output_pattern", pattern=p)
+            return False
+    return True
 
 
 def _check_session_content(
@@ -373,6 +385,11 @@ def _compute_success(
             # _build_skill_result before this call (via
             # _recover_block_from_assistant_messages). If we are here, recovery
             # did not find the block — treat as retriable via the dead-end guard.
+            #
+            # PRECONDITION: _recover_block_from_assistant_messages MUST be called
+            # (and its recovered session substituted) before this function when
+            # channel_confirmation=CHANNEL_B and expected_output_patterns is set.
+            # Callers that bypass _build_skill_result must honour this contract.
             logger.warning(
                 "channel_b_pattern_check_failed",
                 patterns=list(expected_output_patterns),

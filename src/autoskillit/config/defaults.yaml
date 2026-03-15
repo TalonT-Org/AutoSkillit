@@ -70,6 +70,7 @@ github:
   token: null
   default_repo: null
   in_progress_label: "in-progress"
+  staged_label: "staged"
 
 report_bug:
   timeout: 600

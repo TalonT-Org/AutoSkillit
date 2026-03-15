@@ -238,11 +238,21 @@ class TestClaimReleaseGates:
     """Claim/release issue gate steps are present and correctly wired in all 4 recipes."""
 
     RECIPES = ["implementation", "implementation-groups", "remediation"]
+    # Recipes where ci_watch routes directly to release_issue_success
     RECIPES_WITH_RELEASE_SUCCESS = [
         "implementation-groups",
     ]
+    # Recipes where ci_watch routes to check_merge_queue (merge-queue path)
     RECIPES_WITHOUT_RELEASE_SUCCESS = [
         "implementation",
+        "remediation",
+    ]
+    # Recipes that have the release_issue_success step (independent of ci_watch routing)
+    RECIPES_WITH_RELEASE_SUCCESS_STEP = [
+        "implementation-groups",
+        "implementation",
+    ]
+    RECIPES_WITHOUT_RELEASE_SUCCESS_STEP = [
         "remediation",
     ]
 
@@ -250,6 +260,9 @@ class TestClaimReleaseGates:
         """All RECIPES must appear in exactly one of the split lists."""
         assert set(self.RECIPES_WITH_RELEASE_SUCCESS) | set(
             self.RECIPES_WITHOUT_RELEASE_SUCCESS
+        ) == set(self.RECIPES)
+        assert set(self.RECIPES_WITH_RELEASE_SUCCESS_STEP) | set(
+            self.RECIPES_WITHOUT_RELEASE_SUCCESS_STEP
         ) == set(self.RECIPES)
 
     def test_claim_issue_step_present(self):
@@ -280,17 +293,17 @@ class TestClaimReleaseGates:
             assert "release_issue_failure" in cache[name]["steps"], (
                 f"{name}: missing release_issue_failure"
             )
-        for name in self.RECIPES_WITH_RELEASE_SUCCESS:
+        for name in self.RECIPES_WITH_RELEASE_SUCCESS_STEP:
             assert "release_issue_success" in cache[name]["steps"], (
                 f"{name}: missing release_issue_success"
             )
-        for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS:
+        for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS_STEP:
             assert "release_issue_success" not in cache[name]["steps"], (
                 f"{name}: release_issue_success must be absent — label stays on success"
             )
 
     def test_release_issue_success_routes_to_confirm_cleanup(self):
-        for name in self.RECIPES_WITH_RELEASE_SUCCESS:
+        for name in self.RECIPES_WITH_RELEASE_SUCCESS_STEP:
             data = yaml.safe_load(_recipe_path(name).read_text())
             step = data["steps"]["release_issue_success"]
             assert step["on_success"] == "confirm_cleanup", (

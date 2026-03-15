@@ -51,6 +51,21 @@ relevant arch-lens lenses, and open a GitHub Pull Request.
 
 **Precondition:** The feature branch is already published to the remote by the `push_to_remote` recipe step that precedes this skill invocation. Do NOT push the branch yourself.
 
+### Step 0: Stable Branch Guard
+
+Parse the positional arguments:
+- arg[1] = plan_paths
+- arg[2] = feature_branch (the branch being PRed)
+- arg[3] = base_branch (PR target)
+
+If base_branch == "stable" AND feature_branch != "main":
+    Print to stderr:
+        ERROR: PRs targeting 'stable' are only allowed from 'main'.
+        Source branch '$feature_branch' is not 'main'.
+        Stable branch policy: only integration PRs from main are permitted.
+        Tip: Open a PR to 'integration' first, then promote via the integration pipeline.
+    Exit with code 1.
+
 ### Step 1: Parse Arguments
 
 Parse three positional arguments: `plan_paths`, `feature_branch`, `base_branch`.

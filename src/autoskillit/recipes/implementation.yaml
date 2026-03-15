@@ -532,12 +532,12 @@ steps:
     capture:
       queue_available: "${{ result.stdout | trim }}"
     on_success: route_queue_mode
-    on_failure: confirm_cleanup
+    on_failure: release_issue_success
     skip_when_false: "inputs.open_pr"
     note: >
       Detects whether the target branch has an active merge queue via GraphQL.
       Captures "true" or "false" into context.queue_available.
-      On failure (gh error, parse error), degrades gracefully to confirm_cleanup
+      On failure (gh error, parse error), degrades gracefully to release_issue_success
       (non-queue path). Skipped when open_pr=false — no PR was opened.
 
   route_queue_mode:
@@ -547,7 +547,7 @@ steps:
         route: confirm_cleanup
       - when: "${{ context.queue_available }} == true"
         route: enable_auto_merge
-      - route: confirm_cleanup
+      - route: release_issue_success
     skip_when_false: "inputs.open_pr"
 
   enable_auto_merge:
@@ -574,17 +574,19 @@ steps:
       queue_pr_state: "${{ result.pr_state }}"
     on_result:
       - when: "${{ result.pr_state }} == merged"
-        route: confirm_cleanup
+        route: release_issue_success
       - when: "${{ result.pr_state }} == ejected"
         route: queue_ejected_fix
-      - route: confirm_cleanup
-    on_failure: confirm_cleanup
+      - when: "${{ result.pr_state }} == timeout"
+        route: release_issue_timeout
+      - route: release_issue_timeout
+    on_failure: release_issue_timeout
     skip_when_false: "inputs.open_pr"
     note: >
       Waits up to 15 minutes for the PR to merge through the queue.
-      merged → proceed to confirm_cleanup (done).
+      merged → release_issue_success to transition issue state then confirm_cleanup.
       ejected → conflict fix cycle then re-enter.
-      timeout → confirm_cleanup (pipeline done; human monitors queue).
+      timeout → release_issue_timeout (release claim without staged label; merge unconfirmed).
 
   queue_ejected_fix:
     tool: run_skill
@@ -680,6 +682,37 @@ steps:
       Pushes the CI-fixed feature branch back to the remote after resolve_ci succeeds.
       Routes back to ci_watch to verify the fix resolves CI. On push failure, escalates
       via cleanup_failure.
+
+  release_issue_success:
+    description: "Transition issue from in-progress to staged after successful pipeline completion"
+    tool: release_issue
+    optional: true
+    skip_when_false: inputs.issue_url
+    with:
+      issue_url: ${{ inputs.issue_url }}
+      target_branch: ${{ inputs.base_branch }}
+    on_success: confirm_cleanup
+    on_failure: confirm_cleanup
+    note: >
+      Called on the success path after PR merge is confirmed.
+      Passes target_branch so release_issue can determine whether to apply the
+      staged label (non-default target) or just remove in-progress (default target).
+      optional=true ensures pipeline still reaches confirm_cleanup if this step errors.
+
+  release_issue_timeout:
+    description: "Release in-progress claim after queue timeout without applying staged label"
+    tool: release_issue
+    optional: true
+    skip_when_false: inputs.issue_url
+    with:
+      issue_url: ${{ inputs.issue_url }}
+    on_success: confirm_cleanup
+    on_failure: confirm_cleanup
+    note: >
+      Called when wait_for_merge_queue times out or errors. Releases the in-progress
+      claim without passing target_branch, so the staged label is not applied. The
+      merge is unconfirmed; a human must verify queue state independently.
+      Routes to confirm_cleanup so the pipeline completes cleanly.
 
   release_issue_failure:
     description: "Release the in-progress claim after pipeline failure"

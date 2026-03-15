@@ -49,6 +49,17 @@ async def test_resolve_with_file_url_hint_falls_through_to_remotes(tmp_path: Pat
     assert result is None
 
 
+@pytest.mark.anyio
+async def test_resolve_with_non_parseable_hint_falls_through_to_remotes(tmp_path: Path) -> None:
+    """hint that is neither owner/repo format nor a parseable GitHub URL falls through."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "--initial-branch=main", str(repo)], check=True)
+    # hint is an arbitrary string — neither owner/repo nor a GitHub URL
+    result = await resolve_remote_repo(str(repo), hint="not-a-url")
+    assert result is None
+
+
 # ---------------------------------------------------------------------------
 # Subprocess resolution tests (real git repos)
 # ---------------------------------------------------------------------------

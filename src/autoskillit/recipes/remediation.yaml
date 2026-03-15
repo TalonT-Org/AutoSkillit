@@ -51,6 +51,9 @@ ingredients:
   open_pr:
     description: PR instead of direct merge
     default: "true"
+  auto_merge:
+    description: Enroll the PR in the merge queue automatically after checks pass
+    default: "true"
   issue_url:
     description: GitHub issue to close on merge
     required: false
@@ -524,6 +527,8 @@ steps:
   route_queue_mode:
     action: route
     on_result:
+      - when: "${{ inputs.auto_merge }} == false"
+        route: confirm_cleanup
       - when: "${{ context.queue_available }} == true"
         route: enable_auto_merge
       - route: confirm_cleanup

@@ -173,7 +173,7 @@ def test_merge_prs_routes_escalation_to_stop(recipe):
     assert "escalate_stop" in recipe["steps"], "escalate_stop must be a defined step in the recipe"
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def skill_contracts_yaml():
     from autoskillit.core.io import load_yaml
 
@@ -181,7 +181,7 @@ def skill_contracts_yaml():
     return load_yaml(contracts_path)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def merge_prs_recipe():
     from autoskillit.core.io import load_yaml
 
@@ -246,9 +246,6 @@ def test_resolve_merge_conflicts_in_skill_contracts():
     )
 
 
-# ── New: conflict decision report guards ────────────────────────────────────
-
-
 def test_resolve_merge_conflicts_emits_conflict_report_path():
     """resolve-merge-conflicts SKILL.md must declare conflict_report_path= emit."""
     skill_md_path = SKILLS_ROOT / "resolve-merge-conflicts" / "SKILL.md"
@@ -273,7 +270,7 @@ def test_resolve_merge_conflicts_report_has_required_columns():
     """Report table must include all five required columns per REQ-RPT-001."""
     skill_md_path = SKILLS_ROOT / "resolve-merge-conflicts" / "SKILL.md"
     text = skill_md_path.read_text()
-    for column in ("Category", "Confidence", "Strategy", "Justification"):
+    for column in ("File", "Category", "Confidence", "Strategy", "Justification"):
         assert column in text, (
             f"resolve-merge-conflicts/SKILL.md report format must include "
             f"'{column}' column per REQ-RPT-001"
@@ -307,6 +304,16 @@ def test_merge_prs_captures_conflict_report_from_resolve_integration(merge_prs_r
     assert any("conflict_report_path" in v for v in capture_block.values()), (
         "merge-prs.yaml resolve_integration_conflicts step must capture "
         "conflict_report_path per REQ-PIP-001"
+    )
+
+
+def test_merge_prs_captures_conflict_report_from_resolve_ejected(merge_prs_recipe):
+    """resolve_ejected_conflicts step must also capture conflict_report_path."""
+    step = merge_prs_recipe["steps"]["resolve_ejected_conflicts"]
+    capture_block = {**(step.get("capture") or {}), **(step.get("capture_list") or {})}
+    assert any("conflict_report_path" in v for v in capture_block.values()), (
+        "merge-prs.yaml resolve_ejected_conflicts step must capture "
+        "conflict_report_path via capture_list"
     )
 
 

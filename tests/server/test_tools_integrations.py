@@ -1127,6 +1127,9 @@ _REQUIRED_FAILURE_KEYS = frozenset(
     {"success", "error", "session_id", "stderr", "subtype", "exit_code"}
 )
 
+# Intentional scope: only prepare_issue and enrich_issues call
+# _build_headless_error_response. claim_issue, release_issue, and report_bug
+# use separate error-response paths and are covered by their own tests.
 _HEADLESS_FAILURE_SCENARIOS = [
     pytest.param(
         "prepare_issue",
@@ -1241,7 +1244,7 @@ async def test_headless_tool_failure_paths_include_all_diagnostic_fields(
 
     response = json.loads(await tool_fn(**kwargs))
     missing = _REQUIRED_FAILURE_KEYS - set(response.keys())
-    assert not missing, f"{tool_name} failure scenario '{tool_name}' missing keys: {missing}"
+    assert not missing, f"tool={tool_name!r} missing failure response keys: {missing}"
     assert response["success"] is False
     assert response["stderr"] == skill_result_kwargs["stderr"]
     assert response["session_id"] == skill_result_kwargs["session_id"]

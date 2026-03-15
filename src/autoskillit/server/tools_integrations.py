@@ -844,7 +844,8 @@ async def enrich_issues(
 
     Returns JSON with: enriched[], skipped_already_enriched[], skipped_too_vague[],
     skipped_mixed_concerns[], dry_run.
-    On gate closed or skill failure: {success: false, error: "..."}
+    On gate closed or skill failure: {success: false, status: "failed", error: "...",
+    session_id, stderr, subtype, exit_code} (unified contract via _build_headless_error_response).
 
     Args:
         issue_number: Enrich a single issue by number (optional).

@@ -567,7 +567,7 @@ def load_and_validate(
             if combined_recipe is not None:
                 # Dual validation: also validate the combined (merged) graph
                 combined_errors = validate_recipe(combined_recipe)
-                errors.extend(f"[combined] {e}" for e in combined_errors if e not in errors)
+                errors.extend(f"[combined] {e}" for e in combined_errors)
             t0 = _t("validate_recipe", t0, name)
 
             # Stage: semantic rules (builds ValidationContext once — shared computation)

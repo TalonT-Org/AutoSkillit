@@ -22,13 +22,6 @@ from autoskillit.server.helpers import (
 )
 
 
-def _get_ctx():
-    """Module-level wrapper for autoskillit.server._get_ctx, patchable in tests."""
-    from autoskillit.server import _get_ctx as _fn
-
-    return _fn()
-
-
 def _write_hook_config() -> None:
     """Write user-configured quota values to temp/.autoskillit_hook_config.json.
 
@@ -121,6 +114,8 @@ async def open_kitchen(
     _categories = _build_tool_category_listing()
 
     if name is not None:
+        from autoskillit.server import _get_ctx
+
         tool_ctx = _get_ctx()
         if tool_ctx.recipes is None:
             return json.dumps({"error": "Server not initialized", "kitchen": "open"})

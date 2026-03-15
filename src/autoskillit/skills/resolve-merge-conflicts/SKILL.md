@@ -11,7 +11,7 @@ description: >
 ## Arguments (positional)
 
 - `{worktree_path}` — absolute path to the existing worktree (must exist; rebase was aborted cleanly)
-- `{plan_path}` — absolute path to the implementation plan (`temp/make-plan/…_plan_….md`)
+- `{plan_path}` — absolute path to the implementation plan (`temp/make-plan/…_plan_….md`, relative to the current working directory)
 - `{base_branch}` — the integration branch to rebase onto (e.g. `integration/run-N`)
 
 ## Critical Constraints

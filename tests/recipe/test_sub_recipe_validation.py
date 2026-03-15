@@ -230,8 +230,9 @@ def test_dual_validation_standalone_errors_surfaced(tmp_path: Path) -> None:
     (recipes_dir / "test-recipe.yaml").write_text(recipe_content)
 
     result = load_and_validate("test-recipe", project_dir=tmp_path)
-    assert result.get("valid") is False or any(
-        "gate" in str(s) for s in result.get("suggestions", [])
+    assert result.get("valid") is False, f"Expected valid=False, got {result.get('valid')}"
+    assert any("gate" in str(s) for s in result.get("suggestions", [])), (
+        f"Expected gate-related suggestion, got: {result.get('suggestions')}"
     )
 
 

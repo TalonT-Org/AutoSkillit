@@ -77,17 +77,24 @@ async def test_infer_repo_from_remote_returns_empty_for_file_url(
 ) -> None:
     """Regression guard: file:// origin, no upstream → infer_repo_from_remote returns ''.
 
-    Uses clone_isolation_repo fixture. Removes the upstream remote so only the
-    file:// origin remains, simulating a repo with no real GitHub remote.
+    Uses a temporary copy of clone_isolation_repo so the session-scoped
+    fixture is not mutated by removing the upstream remote.
     """
+    import shutil
+
     from autoskillit.server.helpers import infer_repo_from_remote
 
-    # Remove the upstream remote so only file:// origin remains
-    subprocess.run(
-        ["git", "remote", "remove", "upstream"],
-        cwd=str(clone_isolation_repo),
-        check=True,
-    )
+    work_copy = clone_isolation_repo.parent / "work_copy"
+    shutil.copytree(clone_isolation_repo, work_copy)
+    try:
+        # Remove the upstream remote so only file:// origin remains
+        subprocess.run(
+            ["git", "remote", "remove", "upstream"],
+            cwd=str(work_copy),
+            check=True,
+        )
 
-    result = await infer_repo_from_remote(str(clone_isolation_repo))
-    assert result == ""
+        result = await infer_repo_from_remote(str(work_copy))
+        assert result == ""
+    finally:
+        shutil.rmtree(work_copy, ignore_errors=True)

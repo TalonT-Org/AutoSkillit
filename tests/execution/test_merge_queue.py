@@ -224,3 +224,20 @@ class TestDefaultMergeQueueWatcher:
         assert result["success"] is True
         assert result["pr_state"] == "merged"
         assert len(toggle_calls) == 1, "graphql error caught; stuck-path toggle must fire"
+
+    @pytest.mark.anyio
+    async def test_graphql_errors_raise(self):
+        """GraphQL error responses should raise, not silently return []."""
+        watcher = self._make_watcher()
+
+        async def _mock_post(*args, **kwargs):
+            resp = httpx.Response(
+                200,
+                json={"errors": [{"message": "some error"}]},
+                request=httpx.Request("POST", "http://x"),
+            )
+            return resp
+
+        watcher._client.post = _mock_post  # type: ignore[method-assign]
+        with pytest.raises(RuntimeError, match="GraphQL error"):
+            await watcher._fetch_queue_entries("owner", "repo", "main")

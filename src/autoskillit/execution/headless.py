@@ -529,7 +529,7 @@ def _build_skill_result(
     path_contamination: str | None = None
     if not cwd:
         logger.debug("path_contamination_check_skipped", reason="cwd not provided")
-    elif cwd:
+    else:
         extracted_paths = _extract_output_paths(session.assistant_messages)
         path_contamination = _validate_output_paths(extracted_paths, cwd)
         if path_contamination:

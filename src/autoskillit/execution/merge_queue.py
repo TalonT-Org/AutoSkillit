@@ -85,8 +85,8 @@ class DefaultMergeQueueWatcher:
         while time.monotonic() < deadline:
             try:
                 pr_info = await self._fetch_pr_state(pr_number, owner, repo_name)
-            except Exception as exc:
-                _log.warning("merge_queue.pr_state_error", pr_number=pr_number, exc=str(exc))
+            except Exception:
+                _log.warning("merge_queue.pr_state_error", pr_number=pr_number, exc_info=True)
                 await asyncio.sleep(poll_interval)
                 continue
 
@@ -102,8 +102,8 @@ class DefaultMergeQueueWatcher:
 
             try:
                 entries = await self._fetch_queue_entries(owner, repo_name, target_branch)
-            except Exception as exc:
-                _log.warning("merge_queue.entries_error", exc=str(exc))
+            except Exception:
+                _log.warning("merge_queue.entries_error", exc_info=True)
                 entries = []
 
             entry = next((e for e in entries if e.get("pr_number") == pr_number), None)
@@ -175,6 +175,8 @@ class DefaultMergeQueueWatcher:
         )
         resp.raise_for_status()
         payload = resp.json()
+        if payload.get("errors"):
+            raise RuntimeError(f"GraphQL error: {payload['errors']}")
         nodes = (
             payload.get("data", {})
             .get("repository", {})

@@ -261,6 +261,19 @@ def test_headless_error_result_fields():
     assert "token_usage" in parsed
 
 
+def test_headless_error_result_field_parity():
+    import json
+
+    from autoskillit.pipeline.gate import gate_error_result, headless_error_result
+
+    gate = json.loads(gate_error_result())
+    headless = json.loads(headless_error_result())
+    assert set(gate.keys()) == set(headless.keys())
+    assert headless["token_usage"] is None
+    assert headless["cli_subtype"] == ""
+    assert headless["write_path_warnings"] == []
+
+
 def test_headless_error_result_accepts_custom_message():
     import json
 

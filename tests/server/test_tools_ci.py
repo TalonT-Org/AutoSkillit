@@ -266,7 +266,7 @@ async def test_explicit_repo_skips_subprocess(tool_ctx):
     tool_ctx.merge_queue_watcher = mock_watcher
 
     with patch(
-        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
+        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         await wait_for_merge_queue(

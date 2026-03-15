@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 _HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", "temp", ".autoskillit_hook_config.json")
 _CHECK_MARK = "\u2713"  # ✓
 _CROSS_MARK = "\u2717"  # ✗
+_WARN_MARK = "\u26a0"  # ⚠
 
 
 def _is_pipeline_mode() -> bool:
@@ -472,7 +473,7 @@ def _fmt_list_recipes(data: ListRecipesResult, pipeline: bool) -> str:
     lines.append(f"\n{count} recipe(s) available")
     errors = data.get("errors") or []
     if errors:
-        lines.append(f"\n⚠ {len(errors)} recipe file(s) had load errors")
+        lines.append(f"\n{_WARN_MARK} {len(errors)} recipe file(s) had load errors")
     return "\n".join(lines)
 
 

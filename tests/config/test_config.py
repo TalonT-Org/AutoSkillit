@@ -595,3 +595,9 @@ class TestBranchingConfig:
             f"BranchingConfig.default_base_branch Python default ({python_default!r}) "
             f"disagrees with defaults.yaml ({yaml_default!r})"
         )
+
+
+def test_resolve_ingredient_defaults_in_config():
+    from autoskillit.config import resolve_ingredient_defaults
+
+    assert callable(resolve_ingredient_defaults)

@@ -390,7 +390,7 @@ simple_count = {simple_pr_count}
 needs_check_count = {needs_check_pr_count}
 ci_blocked_count = {ci_blocked_pr_count}
 review_blocked_count = {review_blocked_pr_count}
-queue_mode = ${QUEUE_MODE}   # true when merge queue has ≥1 MERGEABLE entry; false otherwise
+queue_mode = {queue_mode}   # true when merge queue has ≥1 MERGEABLE entry; false otherwise
 ```
 
 ## Related Skills

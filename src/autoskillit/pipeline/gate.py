@@ -82,14 +82,16 @@ def headless_error_result(message: str | None = None) -> str:
     return json.dumps(
         {
             "success": False,
+            "result": message if message is not None else _DEFAULT_HEADLESS_MESSAGE,
+            "session_id": "",
             "subtype": "headless_error",
+            "cli_subtype": "",
             "is_error": True,
             "exit_code": -1,
             "needs_retry": False,
             "retry_reason": "none",
-            "result": message if message is not None else _DEFAULT_HEADLESS_MESSAGE,
-            "session_id": "",
             "stderr": "",
-            "token_usage": {},
+            "token_usage": None,
+            "write_path_warnings": [],
         }
     )

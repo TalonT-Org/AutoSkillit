@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 
 from autoskillit.core import SKILL_TOOLS, Severity
@@ -10,7 +11,11 @@ from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.workspace import SkillResolver
 
-_BUNDLED_SKILL_NAMES: frozenset[str] = frozenset(s.name for s in SkillResolver().list_all())
+
+@functools.lru_cache(maxsize=1)
+def _get_bundled_skill_names() -> frozenset[str]:
+    return frozenset(s.name for s in SkillResolver().list_all())
+
 
 _SKILL_TOKEN_RE = re.compile(r"/autoskillit:(\S+)")
 
@@ -33,7 +38,7 @@ def _has_dynamic_skill_name(skill_cmd: str) -> bool:
 )
 def _check_unknown_skill_command(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
-    known = ctx.available_skills or _BUNDLED_SKILL_NAMES
+    known = ctx.available_skills or _get_bundled_skill_names()
     for step_name, step in ctx.recipe.steps.items():
         if step.tool not in SKILL_TOOLS:
             continue

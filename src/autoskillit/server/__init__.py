@@ -49,6 +49,7 @@ __all__ = [
 # because tool modules import `mcp` from this package at import time.
 import os  # noqa: E402
 
+from autoskillit.config import resolve_ingredient_defaults  # noqa: E402, F401
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
 from autoskillit.server import (  # noqa: E402, F401
     helpers,
@@ -63,7 +64,6 @@ from autoskillit.server import (  # noqa: E402, F401
     tools_workspace,
 )
 from autoskillit.server._factory import make_context  # noqa: E402, F401
-from autoskillit.server.helpers import resolve_ingredient_defaults  # noqa: E402, F401
 from autoskillit.server.tools_kitchen import _build_tool_category_listing  # noqa: E402, F401
 
 # Apply global visibility transform: all sessions start with kitchen tools hidden.

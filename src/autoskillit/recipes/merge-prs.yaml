@@ -220,6 +220,7 @@ steps:
       target_branch: "${{ inputs.base_branch }}"
       timeout_seconds: 900
       cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
     capture:
       queue_pr_state: "${{ result.pr_state }}"
     on_result:

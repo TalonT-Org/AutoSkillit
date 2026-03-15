@@ -371,7 +371,7 @@ Flag duplicates (same name in different agents).
 ### Step 0: Initialize Code Index
 
 ```
-mcp__code-index__set_project_path(path="/path/to/your/project")
+mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
 ```
 
 ### Step 1: Launch Parallel Subagents

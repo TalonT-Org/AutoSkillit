@@ -5,6 +5,7 @@ either `from autoskillit.config import AutomationConfig` or the explicit
 `from autoskillit.config.settings import AutomationConfig`.
 """
 
+from autoskillit.config.ingredient_defaults import resolve_ingredient_defaults
 from autoskillit.config.settings import (
     AutomationConfig,
     BranchingConfig,
@@ -51,4 +52,5 @@ __all__ = [
     "TokenUsageConfig",
     "WorktreeSetupConfig",
     "load_config",
+    "resolve_ingredient_defaults",
 ]

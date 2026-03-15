@@ -180,8 +180,8 @@ def show_cook_preview(
     Gateway imports only (no cross-package submodule imports).
     """
     from autoskillit.cli._ansi import diagram_to_terminal, ingredients_to_terminal
+    from autoskillit.config import resolve_ingredient_defaults
     from autoskillit.recipe import format_ingredients_table, load_recipe_diagram
-    from autoskillit.server import resolve_ingredient_defaults
 
     diagram = load_recipe_diagram(recipe_name, recipes_dir)
     if diagram:

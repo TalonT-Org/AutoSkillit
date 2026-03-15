@@ -231,21 +231,22 @@ def anyio_backend():
     return "asyncio"
 
 
-@pytest.fixture
-def clone_isolation_repo(tmp_path):
+@pytest.fixture(scope="session")
+def clone_isolation_repo(tmp_path_factory):
     """
     Creates a clone-isolated git repo mirroring what clone_repo produces:
     - origin → file://{clone_path}  (isolation)
     - upstream → https://github.com/testowner/testrepo.git  (real remote)
 
-    Use this fixture in any test that needs to simulate the post-clone state
-    without running the full clone_repo pipeline.
+    Session-scoped to avoid repeated git subprocess calls per test.
+    Use shutil.copytree in tests that mutate remotes.
     """
-    repo = tmp_path / "clone"
+    base = tmp_path_factory.mktemp("clone_isolation")
+    repo = base / "clone"
     repo.mkdir()
     subprocess.run(["git", "init", str(repo)], check=True)
     subprocess.run(
-        ["git", "remote", "add", "origin", f"file://{tmp_path}/other"], cwd=str(repo), check=True
+        ["git", "remote", "add", "origin", f"file://{base}/other"], cwd=str(repo), check=True
     )
     subprocess.run(
         ["git", "remote", "add", "upstream", "https://github.com/testowner/testrepo.git"],

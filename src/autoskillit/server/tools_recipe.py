@@ -9,6 +9,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
+from autoskillit.config import resolve_ingredient_defaults
 from autoskillit.core import get_logger
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
@@ -18,7 +19,6 @@ from autoskillit.server.helpers import (
     _notify,
     _require_enabled,
     _require_not_headless,
-    resolve_ingredient_defaults,
     track_response_size,
 )
 

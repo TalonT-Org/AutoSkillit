@@ -5,12 +5,11 @@ on:
     types: [closed]
     branches: [main]
 
-permissions:
-  contents: write
-  administration: write
-
 jobs:
   bump-and-sync:
+    permissions:
+      contents: write
+      administration: write
     if: >
       github.event.pull_request.merged == true &&
       github.event.pull_request.head.ref == 'integration'
@@ -82,6 +81,7 @@ jobs:
           fi
 
       - name: Allow force-push on integration branch
+        id: allow-force-push
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -116,8 +116,8 @@ jobs:
           echo "$PAYLOAD" | gh api "repos/$REPO/branches/$BRANCH/protection" \
             --method PUT --input -
           echo "INTEGRATION_PROTECTION_UPDATED=true" >> "$GITHUB_ENV"
-          # Save restore payload (allow_force_pushes: false) for cleanup step
-          echo "$PROTECTION" | jq '{
+          # Save restore payload (allow_force_pushes: false) as step output
+          RESTORE_PAYLOAD=$(echo "$PROTECTION" | jq -c '{
             required_status_checks: (if .required_status_checks then {
               strict: .required_status_checks.strict,
               contexts: (.required_status_checks.contexts // [])
@@ -135,7 +135,8 @@ jobs:
             } else null end),
             allow_force_pushes: false,
             allow_deletions: (.allow_deletions.enabled // false)
-          }' > /tmp/integration-protection-restore.json
+          }')
+          echo "restore_payload=$RESTORE_PAYLOAD" >> "$GITHUB_OUTPUT"
           echo "Configured integration branch to allow force-push"
 
       - name: Force-push integration to match main
@@ -217,7 +218,7 @@ jobs:
             exit 0
           fi
           REPO="${{ github.repository }}"
-          cat /tmp/integration-protection-restore.json | \
+          echo '${{ steps.allow-force-push.outputs.restore_payload }}' | \
             gh api "repos/$REPO/branches/integration/protection" \
               --method PUT --input -
           echo "Restored integration branch protection"

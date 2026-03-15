@@ -13,7 +13,6 @@ def test_rule_flags_skills_with_empty_output_patterns() -> None:
     recipe = load_recipe(recipe_path)
     findings = run_semantic_rules(recipe)
     pattern_findings = [f for f in findings if f.rule == "missing-output-patterns"]
-    assert isinstance(pattern_findings, list)
     # With all patterns populated, no warnings should fire
     assert not pattern_findings, (
         f"missing-output-patterns rule fired {len(pattern_findings)} warning(s): "

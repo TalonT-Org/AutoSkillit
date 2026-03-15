@@ -39,11 +39,14 @@ branch already checked out.
 - Fetch both inline comments (`pulls/{number}/comments`) and top-level review
   bodies (`pulls/{number}/reviews`) via the GitHub API
 - Commit each distinct fix separately with a message describing what was addressed
-- Run `task test-check` after applying all fixes to catch regressions
+- Run `{test_command}` (from config, default: `task test-check`) after applying all fixes to catch regressions
 - Gracefully degrade (exit 0, report skip) if `gh` is unavailable or no PR is found
 - Report a structured summary: findings fetched, fixes applied, fixes skipped (with reasons)
 
 ## Workflow
+
+Read `test_check.command` from `.autoskillit/config.yaml` (default: `task test-check`).
+Store the resolved command as `{test_command}` for use in all test-running steps.
 
 ### Step 0: Validate Arguments
 
@@ -169,7 +172,7 @@ Record each skip with: `(file, line, reason)`.
 ### Step 5: Run Tests
 
 ```bash
-task test-check
+{test_command}
 ```
 
 - Pass → proceed to Step 6 (Resolve Addressed Review Threads)

@@ -106,8 +106,9 @@ src/autoskillit/
 │   ├── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
 │   └── github_url.py        #   parse_github_repo — canonical GitHub URL parser (str → owner/repo | None)
 ├── config/                  # L1 configuration sub-package
-│   ├── __init__.py          #   Re-exports AutomationConfig + GitHubConfig
+│   ├── __init__.py          #   Re-exports AutomationConfig + GitHubConfig + resolve_ingredient_defaults
 │   ├── defaults.yaml        #   Bundled package defaults (always loaded as first layer)
+│   ├── ingredient_defaults.py #  resolve_ingredient_defaults — auto-detect source_dir + base_branch
 │   └── settings.py          #   Dataclass config + dynaconf-backed layered resolution
 ├── pipeline/                # L1 pipeline state sub-package
 │   ├── __init__.py          #   Re-exports ToolContext, DefaultGateState, AuditLog, TokenLog

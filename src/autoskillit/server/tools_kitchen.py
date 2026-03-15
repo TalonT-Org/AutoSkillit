@@ -9,6 +9,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit import __version__
+from autoskillit.config import resolve_ingredient_defaults
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, TOOL_CATEGORIES, atomic_write, pkg_root
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
@@ -17,7 +18,6 @@ from autoskillit.server.helpers import (
     _hook_config_path,
     _prime_quota_cache,
     _require_not_headless,
-    resolve_ingredient_defaults,
     track_response_size,
 )
 

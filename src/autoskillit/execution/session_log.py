@@ -96,6 +96,9 @@ def flush_session_log(
     token_usage.json, step_timing.json, and (if audit_record) audit_log.json
     to the session directory for recovery at next server startup.
     """
+    effective_write_path_warnings: list[str] = (
+        write_path_warnings if write_path_warnings is not None else []
+    )
     log_root = resolve_log_dir(log_dir)
     dir_name = session_id if session_id else f"no_session_{start_ts.replace(':', '-')}"
 
@@ -191,7 +194,7 @@ def flush_session_log(
         "peak_oom_score": peak_oom_score,
         "peak_fd_ratio": round(peak_fd_ratio, 3),
         "termination_reason": termination_reason,
-        "write_path_warnings": write_path_warnings or [],
+        "write_path_warnings": effective_write_path_warnings,
     }
     summary_path = session_dir / "summary.json"
     _atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
@@ -236,7 +239,6 @@ def flush_session_log(
         "step_name": step_name,
         "input_tokens": token_usage.get("input_tokens", 0) if token_usage else 0,
         "output_tokens": token_usage.get("output_tokens", 0) if token_usage else 0,
-        "write_path_warnings_count": len(write_path_warnings) if write_path_warnings else 0,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

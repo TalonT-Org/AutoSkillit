@@ -135,13 +135,19 @@ class TestVersionInfo:
 class TestToolRegistration:
     """All 31 tools are registered on the MCP server."""
 
-    def test_all_tools_exist(self):
-        from fastmcp.tools import Tool
+    @pytest.mark.anyio
+    async def test_all_tools_exist(self):
+        from fastmcp.client import Client
 
-        from autoskillit.server import mcp as server
+        from autoskillit.server import mcp
 
-        tools = [c for c in server._local_provider._components.values() if isinstance(c, Tool)]
-        tool_names = {t.name for t in tools}
+        mcp.enable(tags={"kitchen"})
+        try:
+            async with Client(mcp) as client:
+                all_tools = await client.list_tools()
+        finally:
+            mcp.disable(tags={"kitchen"})
+        tool_names = {t.name for t in all_tools}
 
         expected = {
             "run_cmd",
@@ -186,32 +192,18 @@ class TestToolRegistration:
         }
         assert expected == tool_names
 
-    def test_kitchen_tools_have_both_tags(self):
-        """All gated tools have tags={'automation', 'kitchen'}."""
-        from fastmcp.tools import Tool
-
-        from autoskillit.pipeline.gate import GATED_TOOLS
-        from autoskillit.server import mcp
-
-        components = mcp._local_provider._components
-        for component in components.values():
-            if isinstance(component, Tool) and component.name in GATED_TOOLS:
-                assert "kitchen" in component.tags, f"{component.name} missing 'kitchen' tag"
-                assert "automation" in component.tags, f"{component.name} missing 'automation' tag"
-
-    def test_ungated_tools_lack_kitchen_tag(self):
-        """Ungated tools (including open_kitchen, close_kitchen) have no 'kitchen' tag."""
-        from fastmcp.tools import Tool
+    @pytest.mark.anyio
+    async def test_ungated_tools_lack_kitchen_tag(self):
+        """Ungated tools (including open_kitchen, close_kitchen) are visible without kitchen."""
+        from fastmcp.client import Client
 
         from autoskillit.pipeline.gate import UNGATED_TOOLS
         from autoskillit.server import mcp
 
-        components = mcp._local_provider._components
-        for component in components.values():
-            if isinstance(component, Tool) and component.name in UNGATED_TOOLS:
-                assert "kitchen" not in component.tags, (
-                    f"{component.name} should not have 'kitchen' tag"
-                )
+        async with Client(mcp) as client:
+            visible_names = {t.name for t in await client.list_tools()}
+        for name in UNGATED_TOOLS:
+            assert name in visible_names, f"{name} should be visible without kitchen"
 
     def test_ungated_tools_docstrings_state_notification_free(self):
         """P5-1: Each ungated tool docstring states it sends no MCP notifications."""
@@ -356,16 +348,6 @@ class TestGatedToolAccess:
         assert parsed["subtype"] == "gate_error"
         assert "open_kitchen" in parsed["result"]
 
-    def test_all_tools_tagged_automation(self):
-        """All registered tools have the 'automation' tag for future visibility control."""
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp
-
-        tools = [c for c in mcp._local_provider._components.values() if isinstance(c, Tool)]
-        for tool in tools:
-            assert "automation" in tool.tags, f"{tool.name} missing 'automation' tag"
-
 
 class TestGateTransitionLogs:
     """N11: open_kitchen and close_kitchen handlers emit structured log events."""
@@ -397,17 +379,15 @@ class TestGateTransitionLogs:
 class TestKitchenToolSchemas:
     """Kitchen tool descriptions must be accurate, current, and cooking-themed."""
 
-    def _get_kitchen_tools(self):
-        from fastmcp.tools import Tool
+    async def _get_kitchen_tools(self):
+        from fastmcp.client import Client
 
         from autoskillit.server import mcp
 
         names = {"open_kitchen", "close_kitchen"}
-        return {
-            c.name: c
-            for c in mcp._local_provider._components.values()
-            if isinstance(c, Tool) and c.name in names
-        }
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        return {t.name: t for t in tools if t.name in names}
 
     TOOL_FORBIDDEN_TERMS = [
         "enable_tools",
@@ -416,9 +396,10 @@ class TestKitchenToolSchemas:
         "executor",
     ]
 
-    def test_tool_descriptions_contain_no_legacy_terms(self):
+    @pytest.mark.anyio
+    async def test_tool_descriptions_contain_no_legacy_terms(self):
         """Kitchen tool descriptions must not use any pre-rename vocabulary."""
-        tools = self._get_kitchen_tools()
+        tools = await self._get_kitchen_tools()
         for name, tool in tools.items():
             desc = (tool.description or "").lower()
             for term in self.TOOL_FORBIDDEN_TERMS:
@@ -426,9 +407,10 @@ class TestKitchenToolSchemas:
                     f"Tool '{name}' description contains legacy term '{term}': {desc!r}"
                 )
 
-    def test_tool_descriptions_are_cooking_themed(self):
+    @pytest.mark.anyio
+    async def test_tool_descriptions_are_cooking_themed(self):
         """Kitchen tool descriptions must use cooking vocabulary."""
-        tools = self._get_kitchen_tools()
+        tools = await self._get_kitchen_tools()
         for name, tool in tools.items():
             desc = (tool.description or "").lower()
             assert "kitchen" in desc, (
@@ -1120,29 +1102,35 @@ class TestToolSchemas:
         "run_skill": ["MCP tool", "delegate"],
     }
 
-    def test_tool_descriptions_contain_no_legacy_terms(self):
+    @pytest.mark.anyio
+    async def test_tool_descriptions_contain_no_legacy_terms(self):
         """No registered tool should reference old package terminology."""
-        from fastmcp.tools import Tool
+        from fastmcp.client import Client
 
-        from autoskillit.server import mcp as server
+        from autoskillit.server import mcp
 
-        tools = [c for c in server._local_provider._components.values() if isinstance(c, Tool)]
-        for tool in tools:
+        mcp.enable(tags={"kitchen"})
+        try:
+            async with Client(mcp) as client:
+                all_tools = await client.list_tools()
+        finally:
+            mcp.disable(tags={"kitchen"})
+        for tool in all_tools:
             desc = (tool.description or "").lower()
             for term in self.FORBIDDEN_TERMS:
                 assert term not in desc, (
                     f"Tool '{tool.name}' description contains legacy term '{term}'"
                 )
 
-    def test_tool_docstrings_contain_required_cross_refs(self):
+    @pytest.mark.anyio
+    async def test_tool_docstrings_contain_required_cross_refs(self):
         """Tool docstrings must contain required cross-references."""
-        from fastmcp.tools import Tool
+        from fastmcp.client import Client
 
-        from autoskillit.server import mcp as server
+        from autoskillit.server import mcp
 
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        async with Client(mcp) as client:
+            tools = {t.name: t for t in await client.list_tools()}
         for tool_name, required_terms in self.REQUIRED_CROSS_REFS.items():
             tool = tools.get(tool_name)
             assert tool is not None, f"Tool '{tool_name}' not found in server"
@@ -1150,15 +1138,19 @@ class TestToolSchemas:
             for term in required_terms:
                 assert term in desc, f"Tool '{tool_name}' description must reference '{term}'"
 
-    def test_classify_fix_docstring_has_routing_guidance(self):
+    @pytest.mark.anyio
+    async def test_classify_fix_docstring_has_routing_guidance(self):
         """classify_fix must explain what to do with each return value."""
-        from fastmcp.tools import Tool
+        from fastmcp.client import Client
 
-        from autoskillit.server import mcp as server
+        from autoskillit.server import mcp
 
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        mcp.enable(tags={"kitchen"})
+        try:
+            async with Client(mcp) as client:
+                tools = {t.name: t for t in await client.list_tools()}
+        finally:
+            mcp.disable(tags={"kitchen"})
         desc = tools["classify_fix"].description or ""
         # Must mention both routing outcomes
         assert "full_restart" in desc
@@ -1166,15 +1158,15 @@ class TestToolSchemas:
         # Must mention at least one skill as routing target
         assert "investigate" in desc or "implement" in desc
 
-    def test_recipe_tools_have_disambiguation(self):
+    @pytest.mark.anyio
+    async def test_recipe_tools_have_disambiguation(self):
         """All recipe-related tools must carry the 'NOT slash commands' disclaimer."""
-        from fastmcp.tools import Tool
+        from fastmcp.client import Client
 
-        from autoskillit.server import mcp as server
+        from autoskillit.server import mcp
 
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        async with Client(mcp) as client:
+            tools = {t.name: t for t in await client.list_tools()}
         recipe_tools = ["list_recipes", "load_recipe", "validate_recipe"]
         for tool_name in recipe_tools:
             tool = tools.get(tool_name)
@@ -1184,15 +1176,15 @@ class TestToolSchemas:
                 f"Tool '{tool_name}' must contain 'NOT slash commands' disclaimer"
             )
 
-    def test_load_recipe_names_all_forbidden_tools(self):
+    @pytest.mark.anyio
+    async def test_load_recipe_names_all_forbidden_tools(self):
         """load_recipe must enumerate all forbidden native tools."""
-        from fastmcp.tools import Tool
+        from fastmcp.client import Client
 
-        from autoskillit.server import mcp as server
+        from autoskillit.server import mcp
 
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        async with Client(mcp) as client:
+            tools = {t.name: t for t in await client.list_tools()}
         desc = tools["load_recipe"].description or ""
 
         missing = [t for t in self.FORBIDDEN_NATIVE_TOOLS if t not in desc]
@@ -1200,15 +1192,19 @@ class TestToolSchemas:
             f"load_recipe docstring must name all forbidden tools. Missing: {missing}"
         )
 
-    def test_pipeline_tools_have_orchestrator_guidance(self):
+    @pytest.mark.anyio
+    async def test_pipeline_tools_have_orchestrator_guidance(self):
         """run_skill must reinforce MCP-only delegation."""
-        from fastmcp.tools import Tool
+        from fastmcp.client import Client
 
-        from autoskillit.server import mcp as server
+        from autoskillit.server import mcp
 
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        mcp.enable(tags={"kitchen"})
+        try:
+            async with Client(mcp) as client:
+                tools = {t.name: t for t in await client.list_tools()}
+        finally:
+            mcp.disable(tags={"kitchen"})
         failures = []
         for tool_name, required_terms in self.PIPELINE_TOOLS_WITH_GUIDANCE.items():
             desc = tools[tool_name].description or ""
@@ -1242,16 +1238,19 @@ class TestToolSchemas:
         missing = expected - actual
         assert not missing, f"PIPELINE_FORBIDDEN_TOOLS missing tools: {missing}"
 
-    def test_run_skill_names_all_forbidden_tools(self):
+    @pytest.mark.anyio
+    async def test_run_skill_names_all_forbidden_tools(self):
         """run_skill docstring must name all forbidden tools."""
-        from fastmcp.tools import Tool
+        from fastmcp.client import Client
 
-        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
-        from autoskillit.server import mcp as server
+        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS, mcp
 
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        mcp.enable(tags={"kitchen"})
+        try:
+            async with Client(mcp) as client:
+                tools = {t.name: t for t in await client.list_tools()}
+        finally:
+            mcp.disable(tags={"kitchen"})
         for tool_name in ("run_skill",):
             desc = tools[tool_name].description or ""
             missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in desc]

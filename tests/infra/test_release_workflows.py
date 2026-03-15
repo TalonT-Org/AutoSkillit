@@ -40,6 +40,19 @@ def _find_step(job: dict, name_fragment: str) -> dict | None:
     )
 
 
+def _find_integration_commit_step(job: dict) -> dict | None:
+    """Return the integration version commit/push step."""
+    return next(
+        (
+            s
+            for s in job.get("steps", [])
+            if "integration version" in s.get("name", "").lower()
+            and ("commit" in s.get("name", "").lower() or "push" in s.get("name", "").lower())
+        ),
+        None,
+    )
+
+
 # ── version-bump.yml ──────────────────────────────────────────────────────────
 
 
@@ -162,43 +175,37 @@ class TestVersionBumpWorkflow:
     def test_integration_version_compute_step_exists(self):
         wf = _load(VERSION_BUMP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
-        steps = job.get("steps", [])
-        assert any(
-            "integration" in s.get("name", "").lower() and "version" in s.get("name", "").lower()
-            for s in steps
-        )
+        assert _find_step(job, "Compute integration patch version") is not None
 
     def test_integration_commit_push_step_exists(self):
         wf = _load(VERSION_BUMP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
-        steps = job.get("steps", [])
-        assert any(
-            "integration version" in s.get("name", "").lower()
-            and ("commit" in s.get("name", "").lower() or "push" in s.get("name", "").lower())
-            for s in steps
-        )
+        assert _find_integration_commit_step(job) is not None
 
     def test_restore_protection_is_after_integration_commit(self):
         wf = _load(VERSION_BUMP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
         steps = job.get("steps", [])
         names = [s.get("name", "") for s in steps]
-        restore_idx = next(i for i, n in enumerate(names) if "Restore integration" in n)
+        restore_idx = next((i for i, n in enumerate(names) if "Restore integration" in n), None)
+        assert restore_idx is not None, "Workflow must have a 'Restore integration' step"
         commit_idx = next(
-            i
-            for i, n in enumerate(names)
-            if "integration version" in n.lower() and "commit" in n.lower()
+            (
+                i
+                for i, n in enumerate(names)
+                if "integration version" in n.lower() and "commit" in n.lower()
+            ),
+            None,
         )
+        assert commit_idx is not None, "Workflow must have an integration version commit step"
         assert restore_idx > commit_idx
 
     def test_integration_push_is_not_force_push(self):
         wf = _load(VERSION_BUMP_WORKFLOW)
         job = next(iter(wf.get("jobs", {}).values()))
-        int_commit_step = next(
-            s
-            for s in job.get("steps", [])
-            if "integration version" in s.get("name", "").lower()
-            and ("commit" in s.get("name", "").lower() or "push" in s.get("name", "").lower())
+        int_commit_step = _find_integration_commit_step(job)
+        assert int_commit_step is not None, (
+            "Workflow must have an integration version commit/push step"
         )
         run_script = int_commit_step.get("run", "")
         assert "push --force" not in run_script
@@ -206,18 +213,26 @@ class TestVersionBumpWorkflow:
         assert "integration" in run_script
 
     def test_patch_increment_logic(self):
-        """The integration version must be exactly one patch above main's bumped version."""
-        main_version = "0.3.2"
-        major, minor, patch = main_version.split(".")
-        integration_version = f"{major}.{minor}.{int(patch) + 1}"
-        assert integration_version == "0.3.3"
+        """The integration version computation step uses shell $((PATCH + 1)) arithmetic."""
+        wf = _load(VERSION_BUMP_WORKFLOW)
+        job = next(iter(wf.get("jobs", {}).values()))
+        step = _find_step(job, "Compute integration patch version")
+        assert step is not None, "Workflow must have a 'Compute integration patch version' step"
+        run_block = step.get("run", "")
+        assert "$((PATCH + 1))" in run_block, (
+            "Integration version step must use shell $((PATCH + 1)) arithmetic"
+        )
 
     def test_patch_increment_does_not_overflow_minor(self):
-        """Patch increment never touches minor — that's release.yml's job."""
-        main_version = "0.3.99"
-        major, minor, patch = main_version.split(".")
-        integration_version = f"{major}.{minor}.{int(patch) + 1}"
-        assert integration_version == "0.3.100"
+        """Patch increment in the integration step must not modify MINOR."""
+        wf = _load(VERSION_BUMP_WORKFLOW)
+        job = next(iter(wf.get("jobs", {}).values()))
+        step = _find_step(job, "Compute integration patch version")
+        assert step is not None, "Workflow must have a 'Compute integration patch version' step"
+        run_block = step.get("run", "")
+        assert "$((MINOR + 1))" not in run_block, (
+            "Integration version step must not increment MINOR — only PATCH"
+        )
 
 
 # ── release.yml ───────────────────────────────────────────────────────────────

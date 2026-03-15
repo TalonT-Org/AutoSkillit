@@ -358,7 +358,7 @@ class TestImplementationPipelineStructure:
         step = recipe.steps["ci_watch"]
         assert step.on_success == "check_merge_queue"
         assert step.on_failure == "diagnose_ci"
-        assert "release_issue_success" not in recipe.steps
+        assert "release_issue_success" in recipe.steps
 
     def test_ip_ci_watch_uses_merge_target(self, recipe) -> None:
         """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""

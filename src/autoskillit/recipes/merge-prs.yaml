@@ -599,7 +599,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl \"${{ context.all_plan_paths }}\" ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.all_conflict_report_paths }}"
+      skill_command: "/autoskillit:audit-impl \"${{ context.all_plan_paths }}\" ${{ context.integration_branch }} ${{ inputs.base_branch }} \"${{ context.all_conflict_report_paths }}\""
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:
@@ -635,7 +635,7 @@ steps:
   open_integration_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:open-integration-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }} ${{ context.all_conflict_report_paths }}"
+      skill_command: "/autoskillit:open-integration-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }} \"${{ context.all_conflict_report_paths }}\""
       cwd: "${{ context.work_dir }}"
       step_name: "open_integration_pr"
     capture:

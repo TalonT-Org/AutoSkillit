@@ -1,0 +1,140 @@
+name: sprint-prefix
+description: >
+  Sprint workflow prefix: triage open issues, plan the sprint for maximum
+  parallelism, get user approval, then dispatch each approved issue to the
+  parent recipe for implementation or remediation.
+summary: triage → sprint-plan → confirm → dispatch → report
+autoskillit_version: "0.3.1"
+
+ingredients:
+  source_dir:
+    description: Source repository (inherited from parent recipe context)
+    required: false
+    default: ""
+  base_branch:
+    description: Merge target branch (inherited from parent recipe context)
+    default: ""
+  run_name:
+    description: Run name prefix (inherited from parent recipe context)
+    default: "sprint"
+  sprint_size:
+    description: Maximum number of issues to include in the sprint
+    default: "4"
+  enrich:
+    description: Enrich issues with structured requirements before planning
+    default: "true"
+  dry_run:
+    description: Triage and selection only — skip dispatch and implementation
+    default: "false"
+
+kitchen_rules:
+  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash,
+     Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work
+     is delegated through run_skill or MCP tools."
+  - "Route to on_failure — never investigate or fix failures directly from the
+     orchestrator. The downstream skill handles diagnosis."
+  - "After the confirm step: if the user approves, route to dispatch.
+     If the user wants to adjust the sprint (add/remove issues), re-run
+     plan with the adjusted context before re-presenting confirm.
+     If the user aborts, route to done."
+  - "The dispatch step calls process-issues with the sprint_manifest. It handles
+     per-issue implementation/remediation orchestration internally."
+  - "After dispatch completes (success or failure), always route to report."
+
+steps:
+  triage:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:triage-issues
+      cwd: ${{ inputs.source_dir }}
+      step_name: triage
+    capture:
+      triage_manifest: "${{ result.triage_manifest }}"
+    on_success: plan
+    on_failure: escalate
+    note: >
+      Analyzes open GitHub issues, classifies them, and partitions them into
+      conflict-free parallel groups. The triage_manifest captures the output
+      for use in sprint planning.
+
+  plan:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:sprint-planner
+      cwd: ${{ inputs.source_dir }}
+      step_name: plan
+      triage_manifest: ${{ context.triage_manifest }}
+      sprint_size: ${{ inputs.sprint_size }}
+      enrich: ${{ inputs.enrich }}
+    capture:
+      sprint_manifest: "${{ result.sprint_manifest }}"
+    on_success: confirm
+    on_failure: escalate
+    note: >
+      Sprint planner skill: reads triage_manifest, analyzes issue overlap,
+      optionally calls issue-splitter/collapse-issues/enrich-issues MCP tools,
+      and produces a sprint_manifest with the planned sprint composition.
+
+  confirm:
+    action: confirm
+    message: >
+      Sprint Plan Ready. Review the sprint below and confirm to proceed,
+      or abort to cancel.
+
+      Sprint manifest: ${{ context.sprint_manifest }}
+
+      To proceed: approve this sprint.
+      To adjust: describe which issues to add, remove, or swap.
+      To abort: say "abort".
+    on_success: dispatch
+    on_failure: done
+    note: >
+      Presents the sprint to the user. on_success routes to dispatch when
+      the user approves. on_failure routes to done when the user aborts.
+      For sprint adjustments, the orchestrator should re-run the plan step
+      with updated context before returning to confirm.
+
+  dispatch:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:process-issues
+      cwd: ${{ inputs.source_dir }}
+      step_name: dispatch
+      sprint_manifest: ${{ context.sprint_manifest }}
+      base_branch: ${{ inputs.base_branch }}
+      run_name: ${{ inputs.run_name }}
+      dry_run: ${{ inputs.dry_run }}
+    capture:
+      dispatch_results: "${{ result.dispatch_results }}"
+    on_success: report
+    on_failure: report
+    note: >
+      Dispatches each approved sprint issue to the parent recipe via process-issues.
+      Routes to report regardless of success/failure so the sprint summary is
+      always produced.
+
+  report:
+    action: stop
+    message: >
+      Sprint complete.
+
+      Results summary: ${{ context.dispatch_results }}
+
+      Sprint manifest: ${{ context.sprint_manifest }}
+
+      Review individual PRs before merging. Run the merge-prs pipeline when
+      ready to integrate.
+    with:
+      sprint_manifest: "${{ context.sprint_manifest }}"
+      dispatch_results: "${{ context.dispatch_results }}"
+
+  done:
+    action: stop
+    message: >
+      Sprint aborted by user. No issues were dispatched.
+
+  escalate:
+    action: stop
+    message: >
+      Sprint failed. A step returned failure before the sprint could complete.
+      Check the logs for the failing step and retry after resolving the issue.

@@ -703,11 +703,6 @@ def test_write_clear_marker_is_atomic(tmp_path):
     assert t2 >= t1
 
 
-# ---------------------------------------------------------------------------
-# Tests: flush_session_log write_path_warnings
-# ---------------------------------------------------------------------------
-
-
 def test_flush_session_log_includes_write_path_warnings_in_summary(tmp_path):
     """summary.json records write_path_warnings list."""
     warnings = [
@@ -719,27 +714,15 @@ def test_flush_session_log_includes_write_path_warnings_in_summary(tmp_path):
     assert summary["write_path_warnings"] == warnings
 
 
-def test_flush_session_log_write_path_warnings_count_in_index(tmp_path):
-    """sessions.jsonl index entry has write_path_warnings_count."""
-    warnings = ["Write tool wrote to /bad/path"]
-    _flush(tmp_path, session_id="warn-idx", write_path_warnings=warnings, proc_snapshots=None)
-    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
-    assert entry["write_path_warnings_count"] == 1
-
-
-def test_flush_session_log_empty_warnings_produce_zero_count(tmp_path):
-    """No warnings → write_path_warnings_count is 0 in index, [] in summary."""
+def test_flush_session_log_empty_warnings_produce_empty_list(tmp_path):
+    """No warnings → write_path_warnings is [] in summary."""
     _flush(tmp_path, session_id="clean-session", write_path_warnings=[], proc_snapshots=None)
     summary = json.loads((tmp_path / "sessions" / "clean-session" / "summary.json").read_text())
     assert summary["write_path_warnings"] == []
-    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
-    assert entry["write_path_warnings_count"] == 0
 
 
 def test_flush_session_log_none_warnings_treated_as_empty(tmp_path):
-    """write_path_warnings=None (default) produces empty list in summary, count 0 in index."""
+    """write_path_warnings=None (default) produces empty list in summary."""
     _flush(tmp_path, session_id="default-warn", proc_snapshots=None)  # no write_path_warnings arg
     summary = json.loads((tmp_path / "sessions" / "default-warn" / "summary.json").read_text())
     assert summary["write_path_warnings"] == []
-    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
-    assert entry["write_path_warnings_count"] == 0

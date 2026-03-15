@@ -155,13 +155,32 @@ def _add_or_set_upstream(clone_path: Path, url: str) -> None:
         capture_output=True,
     )
     if result.returncode != 0:
-        # upstream already exists (e.g. clone_local copied it from source)
-        subprocess.run(
+        stderr = (
+            result.stderr.decode(errors="replace")
+            if isinstance(result.stderr, bytes)
+            else result.stderr
+        )
+        if "already exists" not in stderr:
+            raise RuntimeError(
+                f"git remote add upstream failed: {stderr.strip()}"
+                f"\nclone_path={clone_path}, url={url}"
+            )
+        # upstream already exists (e.g. clone_local copied it from source); update the URL
+        set_url = subprocess.run(
             ["git", "remote", "set-url", "upstream", url],
             cwd=str(clone_path),
-            check=True,
             capture_output=True,
         )
+        if set_url.returncode != 0:
+            set_stderr = (
+                set_url.stderr.decode(errors="replace")
+                if isinstance(set_url.stderr, bytes)
+                else set_url.stderr
+            )
+            raise RuntimeError(
+                f"git remote set-url upstream failed: {set_stderr.strip()}"
+                f"\nclone_path={clone_path}, url={url}"
+            )
 
 
 def _resolve_clone_source(source: Path, detected_url: str) -> str:
@@ -313,12 +332,21 @@ def clone_repo(
     # fresh project rooted at clone_path — not aliased to the source repo.
     if effective_url:
         _add_or_set_upstream(clone_path, effective_url)
-        subprocess.run(
+        set_origin = subprocess.run(
             ["git", "remote", "set-url", "origin", f"file://{clone_path}"],
             cwd=str(clone_path),
-            check=True,
             capture_output=True,
         )
+        if set_origin.returncode != 0:
+            set_origin_stderr = (
+                set_origin.stderr.decode(errors="replace")
+                if isinstance(set_origin.stderr, bytes)
+                else set_origin.stderr
+            )
+            raise RuntimeError(
+                f"git remote set-url origin failed: {set_origin_stderr.strip()}"
+                f"\nclone_path={clone_path}"
+            )
 
     # Decontaminate: untrack inherited generated files
     ls_gen = subprocess.run(

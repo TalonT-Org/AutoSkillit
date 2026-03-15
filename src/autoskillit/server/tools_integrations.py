@@ -56,7 +56,7 @@ def _build_headless_error_response(
     *,
     error: str,
     status: str = "failed",
-) -> dict:
+) -> dict[str, Any]:
     """Canonical error response for tools that invoke headless sessions.
 
     Every failure path that derives a response from a SkillResult MUST use this
@@ -69,10 +69,24 @@ def _build_headless_error_response(
         "status": status,
         "error": error,
         "session_id": result.session_id,
-        "stderr": result.stderr,
-        "subtype": result.subtype,
-        "exit_code": result.exit_code,
+        "stderr": result.stderr or "",
+        "subtype": result.subtype or "",
+        "exit_code": result.exit_code if result.exit_code is not None else -1,
     }
+
+
+def _retry_reason_to_error(result: SkillResult) -> str:
+    """Extract a human-readable error string from a failed SkillResult.
+
+    Uses result.retry_reason.value when retry_reason is a RetryReason enum member
+    and not NONE; otherwise falls back to result.subtype or a generic message.
+    """
+    if isinstance(result.retry_reason, RetryReason) and result.retry_reason not in (
+        RetryReason.NONE,
+        None,
+    ):
+        return result.retry_reason.value
+    return result.subtype or "skill session failed"
 
 
 # Strong references to in-flight non-blocking report tasks (prevents GC).
@@ -780,12 +794,9 @@ async def prepare_issue(
     )
 
     if not result.success:
-        error = (
-            result.retry_reason.value
-            if result.retry_reason and result.retry_reason != RetryReason.NONE
-            else result.subtype or "skill session failed"
+        return json.dumps(
+            _build_headless_error_response(result, error=_retry_reason_to_error(result))
         )
-        return json.dumps(_build_headless_error_response(result, error=error))
 
     if result.result is None or not result.result.strip():
         return json.dumps(
@@ -879,12 +890,9 @@ async def enrich_issues(
     )
 
     if not result.success:
-        error = (
-            result.retry_reason.value
-            if result.retry_reason and result.retry_reason != RetryReason.NONE
-            else result.subtype or "skill session failed"
+        return json.dumps(
+            _build_headless_error_response(result, error=_retry_reason_to_error(result))
         )
-        return json.dumps(_build_headless_error_response(result, error=error))
 
     if result.result is None or not result.result.strip():
         return json.dumps(

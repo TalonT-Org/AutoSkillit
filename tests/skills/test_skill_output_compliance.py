@@ -176,52 +176,37 @@ def test_file_producing_skills_have_cwd_anchor(skill_name: str) -> None:
 
 
 def test_output_path_tokens_synchronized() -> None:
-    """_OUTPUT_PATH_TOKENS must contain all path-bearing tokens from UNSPACED_OUTPUT_TOKEN."""
+    """_OUTPUT_PATH_TOKENS must match the expected path-bearing token set exactly."""
     from autoskillit.execution.headless import _OUTPUT_PATH_TOKENS
 
-    # Non-path tokens whose values are not filesystem paths
-    non_path_tokens = frozenset(
+    # Static known-set of tokens whose values are filesystem paths.
+    # Update this set when adding new path-bearing structured output tokens.
+    expected_path_tokens = frozenset(
         {
-            "verdict",
-            "branch_name",
-            "group_files",
-            "pr_url",
-            "decision",
-            "needs_plan",
-            "deletion_regression",
-            "pr_number",
-            "pr_branch",
-            "pr_title",
-            "total_issues",
-            "batch_count",
-            "recipe_distribution",
-            "integration_branch",
-            "pr_count",
-            "simple_count",
-            "needs_check_count",
-            "ci_blocked_count",
-            "review_blocked_count",
-            "queue_mode",
-            "failure_type",
-            "is_fixable",
-            "escalation_required",
-            "escalation_reason",
-            "merged",
-            "worktree_path",  # handled separately by _extract_worktree_path
+            "plan_path",
+            "plan_parts",
+            "investigation_path",
+            "diagnosis_path",
+            "report_path",
+            "review_path",
+            "groups_path",
+            "manifest_path",
+            "summary_path",
+            "analysis_path",
+            "remediation_path",
+            "diagram_path",
+            "triage_report",
+            "triage_manifest",
+            "pr_order_file",
+            "analysis_file",
+            "conflict_report_path",
+            "config_path",
+            "recipe_path",
         }
     )
 
-    # Extract all token names from the UNSPACED_OUTPUT_TOKEN regex
-    token_pattern = re.compile(r"[a-z_]+")
-    # Get the pattern source, extract just the token alternation
-    raw = UNSPACED_OUTPUT_TOKEN.pattern
-    # Find everything between ^(?: and )=
-    match = re.search(r"\(\?:(.+?)\)=", raw, re.DOTALL)
-    assert match, "Could not parse UNSPACED_OUTPUT_TOKEN pattern"
-    all_tokens = set(token_pattern.findall(match.group(1)))
-    path_tokens = all_tokens - non_path_tokens
-
-    assert path_tokens <= _OUTPUT_PATH_TOKENS, (
-        f"Tokens in UNSPACED_OUTPUT_TOKEN but missing from _OUTPUT_PATH_TOKENS: "
-        f"{path_tokens - _OUTPUT_PATH_TOKENS}"
+    assert _OUTPUT_PATH_TOKENS == expected_path_tokens, (
+        f"_OUTPUT_PATH_TOKENS mismatch.\n"
+        f"Missing: {expected_path_tokens - _OUTPUT_PATH_TOKENS}\n"
+        f"Extra: {_OUTPUT_PATH_TOKENS - expected_path_tokens}"
     )

@@ -79,6 +79,8 @@ def _inject_completion_directive(skill_command: str, marker: str) -> str:
 
 def _inject_cwd_anchor(skill_command: str, cwd: str) -> str:
     """Append a working directory anchor directive to prevent path contamination."""
+    if not cwd or not os.path.isabs(cwd):
+        return skill_command
     directive = (
         f"\n\nWORKING DIRECTORY ANCHOR: Your working directory is {cwd}. "
         f"All relative paths (temp/, .autoskillit/, etc.) MUST resolve against {cwd}. "
@@ -202,7 +204,6 @@ _OUTPUT_PATH_TOKENS: frozenset[str] = frozenset(
         "conflict_report_path",
         "config_path",
         "recipe_path",
-        "group_files",
     }
 )
 
@@ -228,6 +229,8 @@ def _validate_output_paths(
     cwd: str,
 ) -> str | None:
     """Return a diagnostic string if any path is outside cwd, else None."""
+    if not os.path.isabs(cwd) or cwd == "/":
+        return None
     cwd_prefix = cwd.rstrip("/") + "/"
     violations = []
     for token, path in extracted_paths.items():
@@ -407,7 +410,9 @@ def _build_skill_result(
 
     # Path contamination detection
     path_contamination: str | None = None
-    if cwd:
+    if not cwd:
+        logger.debug("path_contamination_check_skipped", reason="cwd not provided")
+    elif cwd:
         extracted_paths = _extract_output_paths(session.assistant_messages)
         path_contamination = _validate_output_paths(extracted_paths, cwd)
         if path_contamination:

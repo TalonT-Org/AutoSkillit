@@ -2049,6 +2049,18 @@ class TestInjectCwdAnchor:
         assert "temp/" in result
         assert "READ-ONLY" in result
 
+    def test_skips_when_cwd_empty(self):
+        from autoskillit.execution.headless import _inject_cwd_anchor
+
+        result = _inject_cwd_anchor("cmd", "")
+        assert result == "cmd"
+
+    def test_skips_when_cwd_relative(self):
+        from autoskillit.execution.headless import _inject_cwd_anchor
+
+        result = _inject_cwd_anchor("cmd", "relative/path")
+        assert result == "cmd"
+
 
 # ---------------------------------------------------------------------------
 # Test: _extract_output_paths (Step 1b)
@@ -2213,7 +2225,7 @@ class TestBuildSkillResultPathContamination:
         assert sr.subtype != "path_contamination"
 
     def test_no_contamination_when_cwd_empty(self):
-        """Empty cwd skips path validation (backward compat)."""
+        """Empty cwd skips path validation — direct callers without clone context."""
         path = "/any/path/temp/foo.md"
         stdout = (
             self._assistant_ndjson(f"plan_path = {path}") + "\n" + _success_session_json("Done.")
@@ -2251,7 +2263,9 @@ class TestRunHeadlessCorePassesCwd:
             tool_ctx,
         )
         assert tool_ctx.runner.call_args_list, "Runner was never called"
-        last_cmd = tool_ctx.runner.call_args_list[-1][0]  # cmd is first element
-        cmd_str = " ".join(last_cmd)
-        assert "WORKING DIRECTORY ANCHOR" in cmd_str
-        assert "/some/test/cwd" in cmd_str
+        last_cmd = tool_ctx.runner.call_args_list[-1][0]
+        # cmd is ["env", ...vars, "claude", "-p", <prompt>, ...]
+        p_idx = last_cmd.index("-p")
+        prompt_arg = last_cmd[p_idx + 1]
+        assert "WORKING DIRECTORY ANCHOR" in prompt_arg
+        assert "/some/test/cwd" in prompt_arg

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from autoskillit.config import AutomationConfig
-from autoskillit.config.settings import GitHubConfig
+from autoskillit.config.settings import GitHubConfig, _make_dynaconf
 
 
 class TestGitHubConfigStagedLabel:
@@ -20,8 +20,6 @@ class TestGitHubConfigStagedLabel:
     def test_github_config_staged_label_from_env(self, monkeypatch):
         """staged_label is loaded from AUTOSKILLIT_GITHUB__STAGED_LABEL env var."""
         monkeypatch.setenv("AUTOSKILLIT_GITHUB__STAGED_LABEL", "awaiting-promotion")
-        from autoskillit.config.settings import _make_dynaconf
-
         d = _make_dynaconf()
         cfg = AutomationConfig.from_dynaconf(d)
         assert cfg.github.staged_label == "awaiting-promotion"

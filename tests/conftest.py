@@ -1,5 +1,6 @@
 """Shared test fixtures for autoskillit."""
 
+import subprocess
 import sys
 from pathlib import Path as _Path
 
@@ -228,6 +229,30 @@ def _clear_headless_env(monkeypatch):
 def anyio_backend():
     """Lock all @pytest.mark.anyio tests to the asyncio backend."""
     return "asyncio"
+
+
+@pytest.fixture
+def clone_isolation_repo(tmp_path):
+    """
+    Creates a clone-isolated git repo mirroring what clone_repo produces:
+    - origin → file://{clone_path}  (isolation)
+    - upstream → https://github.com/testowner/testrepo.git  (real remote)
+
+    Use this fixture in any test that needs to simulate the post-clone state
+    without running the full clone_repo pipeline.
+    """
+    repo = tmp_path / "clone"
+    repo.mkdir()
+    subprocess.run(["git", "init", str(repo)], check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", f"file://{tmp_path}/other"], cwd=str(repo), check=True
+    )
+    subprocess.run(
+        ["git", "remote", "add", "upstream", "https://github.com/testowner/testrepo.git"],
+        cwd=str(repo),
+        check=True,
+    )
+    return repo
 
 
 @pytest.fixture

@@ -441,15 +441,17 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     resolved: dict[str, str] = {}
 
     try:
-        result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            cwd=str(project_dir),
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            resolved["source_dir"] = result.stdout.strip()
+        for remote in ("upstream", "origin"):
+            proc = subprocess.run(
+                ["git", "remote", "get-url", remote],
+                cwd=str(project_dir),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                resolved["source_dir"] = proc.stdout.strip()
+                break
     except (OSError, subprocess.TimeoutExpired):
         pass
 

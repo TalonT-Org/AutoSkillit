@@ -83,18 +83,22 @@ async def test_resolve_remote_repo_after_clone_uses_upstream(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
-async def test_infer_repo_from_remote_returns_empty_for_file_url(tmp_path: Path) -> None:
-    """Regression guard: file:// origin, no upstream → infer_repo_from_remote returns ''."""
+async def test_infer_repo_from_remote_returns_empty_for_file_url(
+    clone_isolation_repo: Path,
+) -> None:
+    """Regression guard: file:// origin, no upstream → infer_repo_from_remote returns ''.
+
+    Uses clone_isolation_repo fixture. Removes the upstream remote so only the
+    file:// origin remains, simulating a repo with no real GitHub remote.
+    """
     from autoskillit.server.helpers import infer_repo_from_remote
 
-    # Repo with only file:// origin, no upstream
-    repo_path = tmp_path / "repo"
-    repo_path.mkdir()
-    subprocess.run(["git", "init", "--initial-branch=main", str(repo_path)], check=True)
+    # Remove the upstream remote so only file:// origin remains
     subprocess.run(
-        ["git", "-C", str(repo_path), "remote", "add", "origin", "file:///some/local/path"],
+        ["git", "remote", "remove", "upstream"],
+        cwd=str(clone_isolation_repo),
         check=True,
     )
 
-    result = await infer_repo_from_remote(str(repo_path))
+    result = await infer_repo_from_remote(str(clone_isolation_repo))
     assert result == ""

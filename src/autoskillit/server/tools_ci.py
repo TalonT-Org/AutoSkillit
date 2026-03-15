@@ -13,12 +13,12 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import CIRunScope, get_logger
+from autoskillit.execution.remote_resolver import resolve_remote_repo
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
     _require_enabled,
     _run_subprocess,
-    infer_repo_from_remote,
     track_response_size,
 )
 
@@ -30,6 +30,7 @@ logger = get_logger(__name__)
 async def wait_for_ci(
     branch: str,
     repo: str | None = None,
+    remote_url: str = "",
     head_sha: str | None = None,
     workflow: str | None = None,
     timeout_seconds: int = 300,
@@ -45,6 +46,9 @@ async def wait_for_ci(
         branch: Git branch name to watch CI for.
         repo: GitHub owner/repo (e.g. "owner/repo"). If omitted, inferred
               from git remote in cwd.
+        remote_url: Full GitHub remote URL (e.g. "https://github.com/owner/repo.git").
+                    Parsed to owner/repo before inference. Takes priority over repo
+                    when both are provided.
         head_sha: Specific commit SHA to match. If omitted, inferred from
                   HEAD in cwd.
         workflow: Workflow filename to filter runs (e.g. "tests.yml"). If
@@ -99,13 +103,18 @@ async def wait_for_ci(
         head_sha=head_sha,
     )
 
+    resolved_repo = await resolve_remote_repo(
+        cwd=cwd,
+        hint=remote_url or repo or None,
+    )
+
     await _notify(
         ctx,
         "info",
         f"Watching CI for branch {branch}",
         "autoskillit.wait_for_ci",
         extra={
-            "repo": repo or "(infer)",
+            "repo": resolved_repo or "(infer)",
             "head_sha": scope.head_sha or "(any)",
             "workflow": scope.workflow or "(any)",
         },
@@ -113,7 +122,7 @@ async def wait_for_ci(
 
     result = await tool_ctx.ci_watcher.wait(
         branch,
-        repo=repo,
+        repo=resolved_repo,
         scope=scope,
         timeout_seconds=timeout_seconds,
         cwd=cwd,
@@ -265,6 +274,7 @@ async def wait_for_merge_queue(
     target_branch: str,
     cwd: str,
     repo: str = "",
+    remote_url: str = "",
     timeout_seconds: int = 600,
     poll_interval: int = 15,
     ctx: Context = CurrentContext(),
@@ -276,6 +286,9 @@ async def wait_for_merge_queue(
         target_branch: Branch the merge queue targets (e.g. "integration").
         cwd: Working directory for git remote resolution when repo is not provided.
         repo: Optional "owner/name" string. Inferred from git remote if empty.
+        remote_url: Full GitHub remote URL (e.g. "https://github.com/owner/repo.git").
+                    Parsed to owner/repo before inference. Takes priority over repo
+                    when both are provided.
         timeout_seconds: Total polling budget (default 600s).
         poll_interval: Seconds between polls (default 15s).
 
@@ -310,10 +323,10 @@ async def wait_for_merge_queue(
             }
         )
 
-    # Resolve repo from git remote when not provided
-    resolved_repo = repo
-    if not resolved_repo:
-        resolved_repo = await infer_repo_from_remote(cwd)
+    resolved_repo = await resolve_remote_repo(
+        cwd=cwd,
+        hint=remote_url or repo or None,
+    )
 
     result = await tool_ctx.merge_queue_watcher.wait(
         pr_number=pr_number,

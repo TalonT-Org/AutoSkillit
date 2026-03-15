@@ -500,6 +500,7 @@ steps:
       workflow: "tests.yml"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
@@ -520,7 +521,7 @@ steps:
     tool: run_cmd
     with:
       cmd: >
-        REPO=$(git remote get-url origin | sed 's|.*github\.com[:/]||; s|\.git$||') &&
+        REPO=$( { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github\.com[:/]||; s|\.git$||') &&
         OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
         BRANCH="${{ inputs.base_branch }}" &&
         gh api graphql -f query="query {
@@ -571,6 +572,7 @@ steps:
       target_branch: "${{ inputs.base_branch }}"
       timeout_seconds: 900
       cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
     capture:
       queue_pr_state: "${{ result.pr_state }}"
     on_result:

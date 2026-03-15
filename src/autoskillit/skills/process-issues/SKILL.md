@@ -84,7 +84,7 @@ Parse arguments:
 1. Read `github.default_repo` from `.autoskillit/config.yaml` if present.
 2. Infer from git remote:
    ```bash
-   git remote get-url origin | sed 's|.*github.com[:/]||; s|\.git$||'
+   { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github.com[:/]||; s|\.git$||'
    ```
    This yields `owner/repo`.
 

@@ -144,6 +144,63 @@ jobs:
           git fetch origin main
           git push --force origin origin/main:refs/heads/integration
 
+      - name: Checkout integration branch
+        run: |
+          set -euo pipefail
+          git checkout integration
+
+      - name: Compute integration patch version
+        id: integration_version
+        run: |
+          set -euo pipefail
+          CURRENT=$(python3 -c "
+          import tomllib, pathlib
+          print(tomllib.loads(pathlib.Path('pyproject.toml').read_bytes())['project']['version'])
+          ")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          NEW="$MAJOR.$MINOR.$((PATCH + 1))"
+          echo "old=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Update pyproject.toml (integration)
+        run: |
+          python3 - <<'EOF'
+          import pathlib, os
+          p = pathlib.Path("pyproject.toml")
+          old_ver = f'version = "{os.environ["OLD_VERSION"]}"'
+          new_ver = f'version = "{os.environ["NEW_VERSION"]}"'
+          p.write_text(p.read_text().replace(old_ver, new_ver, 1))
+          EOF
+        env:
+          OLD_VERSION: ${{ steps.integration_version.outputs.old }}
+          NEW_VERSION: ${{ steps.integration_version.outputs.new }}
+
+      - name: Update plugin.json (integration)
+        run: |
+          python3 - <<'EOF'
+          import json, pathlib, os
+          p = pathlib.Path("src/autoskillit/.claude-plugin/plugin.json")
+          data = json.loads(p.read_text())
+          data["version"] = os.environ["NEW_VERSION"]
+          p.write_text(json.dumps(data, indent=2) + "\n")
+          EOF
+        env:
+          NEW_VERSION: ${{ steps.integration_version.outputs.new }}
+
+      - name: Regenerate uv.lock (integration)
+        run: uv lock
+
+      - name: Commit and push integration version bump
+        run: |
+          set -euo pipefail
+          git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+          else
+            git commit -m "chore: bump integration version to ${{ steps.integration_version.outputs.new }}"
+            git push origin integration
+          fi
+
       - name: Restore integration branch protection
         if: always()
         env:

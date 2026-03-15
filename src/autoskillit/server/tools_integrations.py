@@ -13,8 +13,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import _atomic_write, _parse_issue_ref, get_logger
-from autoskillit.core.types import RetryReason
+from autoskillit.core import RetryReason, _atomic_write, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
@@ -26,7 +25,7 @@ from autoskillit.server.helpers import (
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher, HeadlessExecutor
-    from autoskillit.execution.session import SkillResult
+    from autoskillit.execution import SkillResult
 
 logger = get_logger(__name__)
 

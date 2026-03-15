@@ -60,6 +60,7 @@ def gate_error_result(message: str | None = None) -> str:
             "retry_reason": "none",
             "stderr": "",
             "token_usage": None,
+            "write_path_warnings": [],
         }
     )
 

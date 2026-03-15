@@ -71,6 +71,11 @@ kitchen_rules:
   - "QUEUE LOOP: In queue mode, context.current_pr_index tracks the current PR being waited on.
     Initialize to 0 after enqueue_all_prs. Advance by 1 in next_queue_pr_or_done after each
     successful merge. Read pr_number from pr_order_file[current_pr_index].number."
+  - "CONFLICT REPORT PATHS: context.all_conflict_report_paths accumulates conflict_report_path
+    values from resolve_ejected_conflicts and resolve_integration_conflicts via capture_list.
+    Pass it as the 5th argument to open_integration_pr and 4th argument to audit_impl.
+    It is empty string when no conflict resolution occurred — downstream skills treat empty
+    string as absent."
 
 steps:
   clone:
@@ -262,6 +267,8 @@ steps:
       step_name: "resolve_ejected_conflicts"
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
+    capture_list:
+      all_conflict_report_paths: "${{ result.conflict_report_path }}"
     on_result:
       - when: "${{ result.escalation_required }} == true"
         route: cleanup_failure
@@ -592,7 +599,7 @@ steps:
   audit_impl:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:audit-impl \"${{ context.all_plan_paths }}\" ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl \"${{ context.all_plan_paths }}\" ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.all_conflict_report_paths }}"
       cwd: "${{ context.work_dir }}"
       step_name: "audit_impl"
     capture:
@@ -628,7 +635,7 @@ steps:
   open_integration_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:open-integration-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }}"
+      skill_command: "/autoskillit:open-integration-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }} ${{ context.all_conflict_report_paths }}"
       cwd: "${{ context.work_dir }}"
       step_name: "open_integration_pr"
     capture:
@@ -687,6 +694,8 @@ steps:
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
       conflict_escalation_reason: "${{ result.escalation_reason }}"
+    capture_list:
+      all_conflict_report_paths: "${{ result.conflict_report_path }}"
     on_result:
       - when: "${{ result.escalation_required }} == true"
         route: cleanup_failure

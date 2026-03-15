@@ -494,3 +494,39 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+
+  prepare-issue:
+    inputs: []
+    outputs: []
+    expected_output_patterns:
+    - "---prepare-issue-result---"
+
+  enrich-issues:
+    inputs: []
+    outputs: []
+    expected_output_patterns:
+    - "---enrich-issues-result---"
+
+  report-bug:
+    inputs: []
+    outputs: []
+    expected_output_patterns:
+    - "---bug-fingerprint---"
+
+  collapse-issues:
+    inputs: []
+    outputs: []
+    expected_output_patterns:
+    - "---collapse-issues-result---"
+
+  issue-splitter:
+    inputs: []
+    outputs: []
+    expected_output_patterns:
+    - "---issue-splitter-result---"
+
+  process-issues:
+    inputs: []
+    outputs: []
+    expected_output_patterns:
+    - "---process-issues-result---"

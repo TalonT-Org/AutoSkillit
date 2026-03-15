@@ -777,6 +777,174 @@ class TestPrepareIssueTool:
         assert result["success"] is False
         assert result["subtype"] == "gate_error"
 
+    @pytest.mark.anyio
+    async def test_prepare_issue_success_with_result_block(self, tool_ctx):
+        """Happy path: executor returns success=True with a valid result block."""
+        result_text = (
+            f"{_PREPARE_RESULT_START}\n"
+            '{"issue_url": "https://github.com/o/r/issues/1", "issue_number": 1, '
+            '"route": "recipe:implementation", "issue_type": "enhancement", '
+            '"confidence": 0.9, "rationale": "ok", "labels_applied": [], '
+            '"dry_run": false, "sub_issues": []}\n'
+            f"{_PREPARE_RESULT_END}"
+        )
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result=result_text,
+            session_id="sid123",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await prepare_issue("Test title", "Test body"))
+
+        assert result["success"] is True
+        assert result["status"] == "complete"
+        assert result["issue_number"] == 1
+        assert "error" not in result
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_success_empty_result_channel_b_drain_race(self, tool_ctx):
+        """Channel B drain race: executor returns success=True but result is empty.
+        Response must be success=False with diagnostics — THE KEY CONTRADICTION TEST.
+        """
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result="",
+            session_id="sid123",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await prepare_issue("Test title", "Test body"))
+
+        assert result["success"] is False
+        assert result["session_id"] == "sid123"
+        assert result["subtype"] == "success"
+        assert "no result block" in result["error"].lower() or "empty" in result["error"].lower()
+        assert result["status"] != "complete"  # contradiction must be impossible
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_failure_with_diagnostics(self, tool_ctx):
+        """Executor failure: response must surface session_id, stderr, subtype, exit_code."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result="",
+            session_id="sid456",
+            subtype="missing_completion_marker",
+            is_error=True,
+            exit_code=1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="Claude exited unexpectedly",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await prepare_issue("Test title", "Test body"))
+
+        assert result["success"] is False
+        assert result["session_id"] == "sid456"
+        assert result["stderr"] == "Claude exited unexpectedly"
+        assert result["subtype"] == "missing_completion_marker"
+        assert result["exit_code"] == 1
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_passes_expected_output_patterns_to_executor(self, tool_ctx):
+        """output_pattern_resolver is consulted and patterns are passed to executor.run()."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result="",
+            session_id="sid",
+            subtype="error",
+            is_error=True,
+            exit_code=1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+        tool_ctx.output_pattern_resolver = lambda cmd: ["---prepare-issue-result---"]
+
+        await prepare_issue("Title", "Body")
+
+        call_kwargs = mock_executor.run.call_args.kwargs
+        assert call_kwargs.get("expected_output_patterns") == ["---prepare-issue-result---"]
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_response_success_field_never_overwritten_by_parsed_spread(
+        self, tool_ctx
+    ):
+        """When parsed block contains 'success': false, the outer success=True is preserved."""
+        result_text = (
+            f"{_PREPARE_RESULT_START}\n"
+            '{"success": false, "error": "skill-internal error"}\n'
+            f"{_PREPARE_RESULT_END}"
+        )
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result=result_text,
+            session_id="sid",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await prepare_issue("Title", "Body"))
+
+        assert result["success"] is True
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "skill_success,skill_result_text",
+        [
+            (True, ""),  # drain race: session ok but no output
+            (False, ""),  # session failure
+        ],
+    )
+    async def test_prepare_issue_contradictory_state_is_impossible(
+        self, tool_ctx, skill_success, skill_result_text
+    ):
+        """status=complete and success=False must never co-exist in any response."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=skill_success,
+            result=skill_result_text,
+            session_id="sid",
+            subtype="success" if skill_success else "error",
+            is_error=not skill_success,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await prepare_issue("Title", "Body"))
+
+        if result["status"] == "complete":
+            assert result["success"] is True, "status=complete implies success=True"
+        if result["success"] is False:
+            assert result["status"] != "complete", "success=False implies status!=complete"
+
 
 class TestEnrichIssuesTool:
     def test_enrich_issues_is_gated(self):
@@ -792,6 +960,130 @@ class TestEnrichIssuesTool:
         result = json.loads(await enrich_issues())
         assert result["success"] is False
         assert result["subtype"] == "gate_error"
+
+    @pytest.mark.anyio
+    async def test_enrich_issues_success_empty_result_includes_diagnostics(self, tool_ctx):
+        """Channel B drain race for enrich_issues: success=True with empty result → failure response."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result="",
+            session_id="sid789",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await enrich_issues())
+
+        assert result["success"] is False
+        assert result["session_id"] == "sid789"
+
+    @pytest.mark.anyio
+    async def test_enrich_issues_failure_includes_session_id_and_stderr(self, tool_ctx):
+        """Executor failure: response includes session_id and stderr for diagnosis."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result="",
+            session_id="sid-fail",
+            subtype="missing_completion_marker",
+            is_error=True,
+            exit_code=2,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="Session timed out",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await enrich_issues())
+
+        assert result["success"] is False
+        assert result["session_id"] == "sid-fail"
+        assert result["stderr"] == "Session timed out"
+
+    @pytest.mark.anyio
+    async def test_enrich_issues_passes_expected_output_patterns_to_executor(self, tool_ctx):
+        """output_pattern_resolver is consulted and patterns are passed to executor.run()."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result="",
+            session_id="sid",
+            subtype="error",
+            is_error=True,
+            exit_code=1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+        tool_ctx.output_pattern_resolver = lambda cmd: ["---enrich-issues-result---"]
+
+        await enrich_issues()
+
+        call_kwargs = mock_executor.run.call_args.kwargs
+        assert call_kwargs.get("expected_output_patterns") == ["---enrich-issues-result---"]
+
+
+class TestReportBugTool:
+    @pytest.mark.anyio
+    async def test_report_bug_failure_includes_session_id_and_stderr(self, tool_ctx, tmp_path):
+        """Blocking failure response must include session_id and stderr for diagnosis."""
+        tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+        tool_ctx.config.report_bug.github_filing = False
+
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result="",
+            session_id="fail-session-id",
+            subtype="missing_completion_marker",
+            is_error=True,
+            exit_code=1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="Claude crashed",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await report_bug("some error", str(tmp_path), severity="blocking"))
+
+        assert result["success"] is False
+        assert result["session_id"] == "fail-session-id"
+        assert result["stderr"] == "Claude crashed"
+
+    @pytest.mark.anyio
+    async def test_report_bug_passes_expected_output_patterns_to_executor(
+        self, tool_ctx, tmp_path
+    ):
+        """output_pattern_resolver is consulted and patterns are passed to executor.run()."""
+        tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+        tool_ctx.config.report_bug.github_filing = False
+
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result="## Report\nfindings",
+            session_id="sid",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+        tool_ctx.output_pattern_resolver = lambda cmd: ["---bug-fingerprint---"]
+
+        await report_bug("error ctx", str(tmp_path), severity="blocking")
+
+        call_kwargs = mock_executor.run.call_args.kwargs
+        assert call_kwargs.get("expected_output_patterns") == ["---bug-fingerprint---"]
 
 
 class TestGetPrReviews:

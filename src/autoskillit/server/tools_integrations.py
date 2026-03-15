@@ -229,6 +229,10 @@ async def report_bug(
 
         log_dir = config.linux_tracing.log_dir if config.linux_tracing is not None else ""
 
+        expected_output_patterns: list[str] = []
+        if tool_ctx.output_pattern_resolver:
+            expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
         if severity == "blocking":
             result = await _run_report_session(
                 skill_command,
@@ -241,6 +245,7 @@ async def report_bug(
                 effective_model,
                 step_name,
                 log_dir=log_dir,
+                expected_output_patterns=expected_output_patterns,
             )
             if not result["success"]:
                 await _notify(
@@ -265,6 +270,7 @@ async def report_bug(
                 effective_model,
                 step_name,
                 log_dir=log_dir,
+                expected_output_patterns=expected_output_patterns,
             )
         )
         _pending_report_tasks.add(task)
@@ -537,6 +543,7 @@ async def _run_report_session(
     model: str,
     step_name: str,
     log_dir: str,
+    expected_output_patterns: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run the headless session, write the report, and handle GitHub filing.
 
@@ -544,7 +551,12 @@ async def _run_report_session(
     """
     cfg = config.report_bug
     skill_result = await executor.run(
-        skill_command, cwd, model=model, step_name=step_name, timeout=float(cfg.timeout)
+        skill_command,
+        cwd,
+        model=model,
+        step_name=step_name,
+        timeout=float(cfg.timeout),
+        expected_output_patterns=expected_output_patterns or [],
     )
 
     report_text = skill_result.result or skill_result.stderr or "No report generated."
@@ -559,6 +571,10 @@ async def _run_report_session(
             "status": "failed",
             "report": report_text,
             "report_path": str(report_path),
+            "session_id": skill_result.session_id,
+            "stderr": skill_result.stderr,
+            "subtype": skill_result.subtype,
+            "exit_code": skill_result.exit_code,
         }
 
     diag = _read_session_diagnostics(skill_result.session_id, log_dir)
@@ -589,6 +605,16 @@ async def _run_report_session(
 def _extract_label_names(raw_labels: list[Any]) -> list[str]:
     """Extract label name strings from a mixed list of dicts or strings."""
     return [lbl["name"] if isinstance(lbl, dict) else str(lbl) for lbl in raw_labels]
+
+
+def _without_success_key(d: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of d with the 'success' key removed.
+
+    Used when merging parsed skill block data into a response dict where
+    result.success is the authoritative success signal — preventing the block's
+    own 'success' field from silently overwriting the outer key.
+    """
+    return {k: v for k, v in d.items() if k != "success"}
 
 
 def _build_prepare_skill_command(
@@ -711,17 +737,66 @@ async def prepare_issue(
 
     skill_command = _build_prepare_skill_command(title, body, repo, labels, dry_run, split)
 
+    expected_output_patterns: list[str] = []
+    if tool_ctx.output_pattern_resolver:
+        expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
     result = await tool_ctx.executor.run(
         skill_command,
         str(Path.cwd()),
+        expected_output_patterns=expected_output_patterns,
     )
 
-    parsed = _parse_prepare_result(result.result or "")
+    if not result.success:
+        parsed = _parse_prepare_result(result.result or "")
+        return json.dumps(
+            {
+                "success": False,
+                "status": "failed",
+                "error": parsed.get("error", "skill session failed"),
+                "session_id": result.session_id,
+                "stderr": result.stderr,
+                "subtype": result.subtype,
+                "exit_code": result.exit_code,
+            }
+        )
+
+    if not result.result.strip():
+        return json.dumps(
+            {
+                "success": False,
+                "status": "failed",
+                "error": "session completed but output was empty (drain race)",
+                "session_id": result.session_id,
+                "subtype": result.subtype,
+                "exit_code": result.exit_code,
+            }
+        )
+
+    parsed = _parse_prepare_result(result.result)
+    # Distinguish block-parse failures (block absent or malformed JSON) from skill-level data.
+    # The sentinel errors from _parse_prepare_result signal a block-extraction failure —
+    # these are not the same as skill-internal errors embedded in a valid block.
+    _BLOCK_PARSE_ERRORS = {"no result block found", "result block contained invalid JSON"}
+    if parsed.get("error") in _BLOCK_PARSE_ERRORS:
+        return json.dumps(
+            {
+                "success": False,
+                "status": "failed",
+                "error": parsed["error"],
+                "session_id": result.session_id,
+                "subtype": result.subtype,
+                "exit_code": result.exit_code,
+            }
+        )
+
+    # Block parsed successfully. result.success=True is the authoritative signal —
+    # the parsed block's "success" field (if any) must not overwrite it.
     return json.dumps(
         {
-            "success": result.success,
-            "status": "complete" if result.success else "failed",
-            **parsed,
+            "success": True,
+            "status": "complete",
+            **_without_success_key(parsed),
         }
     )
 
@@ -781,15 +856,40 @@ async def enrich_issues(
 
     skill_command = _build_enrich_skill_command(issue_number, batch, dry_run, repo)
 
+    expected_output_patterns: list[str] = []
+    if tool_ctx.output_pattern_resolver:
+        expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
     result = await tool_ctx.executor.run(
         skill_command,
         str(Path.cwd()),
+        expected_output_patterns=expected_output_patterns,
     )
 
     if not result.success:
-        return json.dumps({"success": False, "error": result.stderr or "skill session failed"})
+        return json.dumps(
+            {
+                "success": False,
+                "error": result.stderr or "skill session failed",
+                "session_id": result.session_id,
+                "stderr": result.stderr,
+                "subtype": result.subtype,
+                "exit_code": result.exit_code,
+            }
+        )
 
-    parsed = _parse_enrich_result(result.result or "")
+    if not result.result.strip():
+        return json.dumps(
+            {
+                "success": False,
+                "error": "session completed but output was empty (drain race)",
+                "session_id": result.session_id,
+                "subtype": result.subtype,
+                "exit_code": result.exit_code,
+            }
+        )
+
+    parsed = _parse_enrich_result(result.result)
     return json.dumps(parsed)
 
 

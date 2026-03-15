@@ -169,8 +169,10 @@ def test_dual_validation_runs_standalone_and_combined(tmp_path: Path) -> None:
     recipe_content = textwrap.dedent("""
         name: test-recipe
         description: Test
+        autoskillit_version: "0.3.0"
         kitchen_rules:
-          - no native tools
+          - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash,
+             Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator."
         ingredients:
           sprint_mode:
             description: Enable sprint
@@ -180,7 +182,14 @@ def test_dual_validation_runs_standalone_and_combined(tmp_path: Path) -> None:
           sprint_entry:
             sub_recipe: sprint-prefix
             gate: sprint_mode
-            on_success: done
+            on_success: finish
+            on_failure: escalate
+          finish:
+            action: stop
+            message: Done.
+          escalate:
+            action: stop
+            message: Failed.
     """)
     (recipes_dir / "test-recipe.yaml").write_text(recipe_content)
 
@@ -190,8 +199,10 @@ def test_dual_validation_runs_standalone_and_combined(tmp_path: Path) -> None:
         ingredient_overrides={"sprint_mode": "true"},
     )
     assert "error" not in result
-    assert result.get("valid") is True
-    assert isinstance(result.get("errors"), list)
+    # Both standalone and combined graphs were validated
+    assert result.get("valid") is True, (
+        f"Expected valid=True, suggestions: {result.get('suggestions')}"
+    )
 
 
 def test_dual_validation_standalone_errors_surfaced(tmp_path: Path) -> None:

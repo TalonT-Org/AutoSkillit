@@ -297,11 +297,8 @@ async def test_watcher_none_returns_error(tool_ctx):
 
 @pytest.mark.anyio
 async def test_wait_for_ci_parses_remote_url_to_resolve_repo(tool_ctx):
-    """
-    When remote_url is provided, wait_for_ci must parse it to owner/repo
-    and pass that to the watcher without calling any subprocess.
-    Fails: remote_url parameter does not exist on wait_for_ci.
-    """
+    """When remote_url is provided, wait_for_ci must parse it to owner/repo
+    and pass that to the watcher without calling any subprocess."""
     mock_watcher = AsyncMock()
     mock_watcher.wait.return_value = {
         "conclusion": "success",
@@ -350,11 +347,8 @@ async def test_wait_for_ci_remote_url_wins_over_empty_repo(tool_ctx):
 
 @pytest.mark.anyio
 async def test_wait_for_merge_queue_parses_remote_url_to_resolve_repo(tool_ctx):
-    """
-    When remote_url is provided, wait_for_merge_queue parses it to owner/repo
-    without calling any subprocess.
-    Fails: remote_url parameter does not exist on wait_for_merge_queue.
-    """
+    """When remote_url is provided, wait_for_merge_queue parses it to owner/repo
+    without calling any subprocess."""
     mock_watcher = AsyncMock()
     mock_watcher.wait.return_value = {"success": True, "pr_state": "merged", "pr_number": 42}
     tool_ctx.merge_queue_watcher = mock_watcher

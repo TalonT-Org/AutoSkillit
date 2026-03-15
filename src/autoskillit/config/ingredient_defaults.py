@@ -10,15 +10,17 @@ from autoskillit.core import get_logger
 logger = get_logger(__name__)
 
 
+_REMOTE_PRECEDENCE = ("upstream", "origin")
+
+
 def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     """Resolve auto-detect ingredient values from the project environment."""
     from autoskillit.config.settings import load_config
-    from autoskillit.execution import REMOTE_PRECEDENCE
 
     resolved: dict[str, str] = {}
 
     try:
-        for remote in REMOTE_PRECEDENCE:
+        for remote in _REMOTE_PRECEDENCE:
             proc = subprocess.run(
                 ["git", "remote", "get-url", remote],
                 cwd=str(project_dir),

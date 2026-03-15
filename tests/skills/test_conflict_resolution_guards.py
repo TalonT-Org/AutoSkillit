@@ -291,7 +291,7 @@ def test_resolve_merge_conflicts_report_has_summary_header():
 
 
 def test_resolve_merge_conflicts_contract_has_conflict_report_path(skill_contracts_yaml):
-    """skill_contracts.yaml must include conflict_report_path in resolve-merge-conflicts outputs."""
+    """skill_contracts.yaml must include conflict_report_path in resolve-merge-conflicts."""
     outputs = skill_contracts_yaml["skills"]["resolve-merge-conflicts"]["outputs"]
     output_names = [o["name"] for o in outputs]
     assert "conflict_report_path" in output_names, (
@@ -304,10 +304,7 @@ def test_merge_prs_captures_conflict_report_from_resolve_integration(merge_prs_r
     """resolve_integration_conflicts step must capture conflict_report_path per REQ-PIP-001."""
     step = merge_prs_recipe["steps"]["resolve_integration_conflicts"]
     capture_block = {**(step.get("capture") or {}), **(step.get("capture_list") or {})}
-    assert any(
-        "conflict_report_path" in v
-        for v in capture_block.values()
-    ), (
+    assert any("conflict_report_path" in v for v in capture_block.values()), (
         "merge-prs.yaml resolve_integration_conflicts step must capture "
         "conflict_report_path per REQ-PIP-001"
     )
